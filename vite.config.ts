@@ -1,14 +1,17 @@
 import { defineConfig } from 'vite';
-import react from 'react';
+import path from 'path';
 
 export default defineConfig({
-  base: '.',
   resolve: {
-    externals: ['http', 'https']
+    aliases: {
+      '*': path.resolve(__dirname, "src")
+    }
   },
   server: {
-    open: true,
-    host: 'localhost',
-    port: 3000,
-  },
+    open (0, 'http://localhost:3000'),
+    host: 'blocked',
+    watch: {
+      useMiddleware: true,
+    }
+  }
 });
