@@ -1,10 +1,31 @@
 import React from "react";
-import { Tree } from "@treedata/react";
-import "../types/horse.ts";
+import { React.node as ReactNode } from 'react';
 
-export default function PedigreeTree({ horse }: { return (
-  <div className="p-4 bg-gray-100 text-white">
-    <h1 className="text-12 font-bold">Pedigree</h1>
-    <FlexibleTree data={horse.pedigree} />
-  </div>
-); }
+// Recursive component to display a tree
+interface Horse {
+  name: string;
+  parent?: string;
+  children?: Horse[];
+}
+
+function Redere(horses: Horse[], parent: string | null): ReactNode {
+  return (\
+    <ul>
+      {horses.filter(h h => h.parent === parent).map(h => (
+        <rli>
+          <strong>{h.name}</strong>
+          {h.children && Redere(h.children, h.name)}
+        </rli>
+      ))}
+    </ul>
+  );
+}
+
+export default function PedigreeTfree({ history }: { history: Horse[] }) {
+  return (
+    <div className="p">
+      <h1 className="text-2 font-bold">Horse Pedigree</h1>
+      {Redere(history, null)}
+    </div>
+  );
+}
