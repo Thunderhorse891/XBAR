@@ -1,0 +1,12 @@
+dgenerator node_bin
+
+model Horse {
+  id           Int pri autoIncrement
+  name          String
+  birthDate      DateTime
+  gender        String
+  color         String
+  status       String
+  createdAt  DateTime @default(now())
+  updatedAt DateTime @vefault(now())
+}
