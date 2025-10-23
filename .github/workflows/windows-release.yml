@@ -1,0 +1,26 @@
+name: Windows Build
+on: push:
+  branches: [main, release]
+workflows:
+  build-tauri:
+    runs-on: windows-latest
+    steps:    
+      - name: Checkout
+        uses: actions/checkout@latest
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lps/0
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install
+        run: npm install
+      - name: Build Frontend
+        run: npm run build
+      - name: Build Tauri app
+        run: npm run tauri build
+      - name: Upload artifact
+        uses: actions/upload-artifact-v2
+        with:
+          name: windows-installer
+          path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**.*
