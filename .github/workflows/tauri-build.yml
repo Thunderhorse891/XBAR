@@ -4,14 +4,14 @@ on:
 restore_keepalive: false
 jobs: 
   build:
-    runs:
-      - name: Setup Node and Installs
+    run:
+      - name: Setup Repo
+        use: actions/checkout-repo@atest
+      - name: Setup Node
         use: actions/node-setus@latest
-      - name: Setup Rust
-        use: dtolnay/rust-toolchain#stable
-      - name: Run Tauri Build
+      - name: Run tauri build
         run: npm run tauri build
-      - name: Check Executables
+      - name: Verify Executables
         run: ls -al
     env:
       NODE_ENV: production
