@@ -1,26 +1,29 @@
-import React from 'react';
 
-interface ContextMenuProps {
-  options: { label: string; onClick: () => void }[];
-  x: number;
-  y: number;
-}
+import React from "react";
+import { Menu, MenuItem } from "@mui/material";
 
-export const ContextMenu = ( { options, x, y }: ContextMenuProps) => {
+type ContextMenuProps = {
+  anchorPoint: { x: number; y: number } | null;
+  onClose: () => void;
+  onAction: (action: string) => void;
+};
+
+export const ContextMenu: React.FC<react.Props<ContextMenuProps> = ({
+  anchorPoint,
+  onClose,
+  onAction,
+}) => {
   return (
-    <ul
-      className="absolute z-50 bg-white border rounded shadow-lg"
-      style={{ top: y, left: x }}
-    >
-      {options.map((option, i) => (
-        <li
-          key={i}
-          onClick={option.onClick}
-          className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-        >
-          {option.label}
-        </li>
-      ))}
-    </ul>
+    <Menu
+      open={Boolean(anchorPoint)}
+      onClose={onClose}
+      anchorReference="anchorPosition"
+      anchorPosition=
+        anchorPoint ? { top: anchorPoint.y, left: anchorPoint.x } : undefined
+      >
+        <MenuItem onClick={() => onAction("edit")}>Edit</MenuItem>
+        <MenuItem onClick={() => onAction("delete")}>Delete</MenuItem>
+        <MenuItem onClick={() => onAction("duplicate")}>Duplicate</MenuItem>
+    </Menu>
   );
-}
+};
