@@ -1,0 +1,17 @@
+name: Minimal Build
+
+on:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: write
+
+defaults: 
+  runs: packages: install
+jjobs:
+  build:
+    runs-on: ubuntu-latest
+    steps: 
+      - name: Run echo test
+        run: echo "Successful Minimal Workflow!"
