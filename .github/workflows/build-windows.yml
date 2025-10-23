@@ -1,0 +1,53 @@
+name: build-windows
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  GITHUB_TOKEN: ${securits.GITHuB_TOKEN}
+  GITHUB_REPO: Thunderhorse891/xbar-horse-management-app
+
+node-version: '18'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Setup Node and dependencies
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+        - run: npm install
+
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli
+
+      - name: Build Tauri App
+        run: tauri build
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: horse-tracker-exe
+          path: src-tauri/target/release/bundle/**/.exe
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: src-tauri/target/release/bundle/**/.exe
