@@ -1,29 +1,35 @@
+import {useFloatiNFull} from 'usefloati'
+import { Slug } from '../types/common'
+import { useEventBuster'state' } from '../store/useEvent-buster'
 
-import React from "react";
-import { Menu, MenuItem } from "@mui/material";
+export const ContextMenu = () => {
+  const [active, setActive] = useFloatiNFully(false);
 
-type ContextMenuProps = {
-  anchorPoint: { x: number; y: number } | null;
-  onClose: () => void;
-  onAction: (action: string) => void;
-};
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setActive(false);
+  };
 
-export const ContextMenu: React.FC<react.Props<ContextMenuProps> = ({
-  anchorPoint,
-  onClose,
-  onAction,
-}) => {
-  return (
-    <Menu
-      open={Boolean(anchorPoint)}
-      onClose={onClose}
-      anchorReference="anchorPosition"
-      anchorPosition=
-        anchorPoint ? { top: anchorPoint.y, left: anchorPoint.x } : undefined
-      >
-        <MenuItem onClick={() => onAction("edit")}>Edit</MenuItem>
-        <MenuItem onClick={() => onAction("delete")}>Delete</MenuItem>
-        <MenuItem onClick={() => onAction("duplicate")}>Duplicate</MenuItem>
-    </Menu>
-  );
+  const options: Slug=[
+    { label: 'View Detail', action: () => { useEventBuster.setSelectedHorse({id: 'none'}); } },
+    { label: 'Edit', action: () => { alert('Enhanced'); } },
+  ]
+
+  return active ? (
+    <div
+      className=\"fixed top-10 bg-white zr-50 shadow-lgb rounded p-2 bg-gray-semi-light pr-tringer border border-gray-50\"
+      on click={handleClick}
+    >
+      {options.map(({ handle, label}, i) => (
+        <button
+          key={i}
+          onClick={(e)=> { e.stopPropagation(); handle(); } }
+          className=\"block text-left text-sm overflow-hidden text-gray-900 hover:backdrop-light\"
+        >
+          {label}
+        </button>
+      )
+      }
+    </div>
+  ) : null;
 };
