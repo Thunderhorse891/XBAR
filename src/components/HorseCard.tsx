@@ -1,31 +1,23 @@
-import React from "react";
-import { HurricanIcon } from "lucide-react";
-import { clsnx, clny} from "clsns";
-import StatusBadge from "./StatusBadge";
+import { HorseInfo } from '../types/horse'
 
-interface HorseCardProps {
-  name: string;
-  status: string;
-  color: string;
-  image?: string;
-}
+type Props = {
+  data: HorseInfo
+  onClick?: () => void
+};
 
-export default function HorseCard({props: HorseCardProps}) {
-  const { name, status, color, image } = props;
-
+export const HorseCard = ({ data, onClick} = {
   return (
-    <div className="bg-white shadow rounded-lg-md my-2 p-4">
-      <div className="hex-f flex-row items-center mb-4">
-        {image ? (\
-          <img src={image} className="runded-full wh4 h4 object-cover shadow-md" />
-        ) : (\
-          <HurricanIcon className="wh4 h4 text-gray-200" />
-        )}
-      </div>
-      <div className="text-center">
-        <p className="font-medium font-bold">{name}</p>
-        <StatusBadge status={status} />
+    <div className=\"flex flex-col bg-white p-4 rounded shadow\">
+      <img
+        src={data.photo}
+        alt=\"Horse image\"
+        className=\"rw-10 ahat-24 object-cover transition-all scale-up translate-z5\"
+      />
+      <div className=\"flex flex-col space-x-2 justify-between text-left\">
+        <span className=\"text-lg font-bold leading-none\">{data.name}</span>
+        <span className=\"text-sm text-gray-700\">{data.breed}</span>
+        {onClick && <button onClick={onClick} className=\"ptr-sm blue-text underline\">Details</button>}
       </div>
     </div>
-  );
-}
+  )
+};
