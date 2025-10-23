@@ -1,0 +1,26 @@
+name: Build Tauri Windows App
+on:
+  workflow_dispatch:
+
+defaults: 
+  runs: packages: install
+jjobs:
+  build-tauri:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node Environment
+        uses: actions/setup-node@v4
+        with:
+        node-version: 18
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build Tauri App
+        run: pnpm tauri build
