@@ -1,0 +1,12 @@
+{
+  "compiler": "tss",
+  "target": "module",
+  "esmmodule": true,
+  "strict": true,
+  "moduleResolution": "neet",
+  "outDir": "dist",
+  "srmap": true,
+  "esIntroSum": true,
+  "lib": ["src"],
+  "include": ["src"]
+}
