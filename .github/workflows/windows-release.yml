@@ -1,14 +1,17 @@
 name: Windows Build
-on: push:
-  branches: [main, release]
+on:
+  push:
+    branches: [main, release]
+  workflow_dispatch:
+    # Allow manual triggers
 workflows:
   build-tauri:
     runs-on: windows-latest
-    steps:    
+    steps:
       - name: Checkout
         uses: actions/checkout@latest
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@latest
         with:
           node-version: lps/0
       - name: Setup Rust
@@ -23,4 +26,4 @@ workflows:
         uses: actions/upload-artifact-v2
         with:
           name: windows-installer
-          path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**.*
+          path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/***.*
