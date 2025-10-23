@@ -1,18 +1,29 @@
 
-import { create } from 'zustand';
-import { Horse } from '../types/horse';
+import { create } from "zustand"
+import { Horse } from "@/types/horse"
 
-interface HorseState {
-  horses: Horse[];
-  setHorses: (data: Horse[]) => void;
-  updateHorse: (id: string, updated: Partial<Horse>) => void;
+type State = {
+  horses: Horse[]
+  selectedIds: string[]
+  setHorses: (h: Horse[]) => void
+  toggleSelect: (id: string) => void
+  updateHorse: (id: string, updates: Partial<Horse>) => void
 }
 
-export const useHorses = create<HorseState>((set) => ({
+export const useHorses = create<State>((set) => ({
   horses: [],
-  setHorses: (data) => set({ horses: data }),
-  updateHorse: (id, updated) =>
+  selectedIds: [],
+  setHorses: (horses) => set({ horses }),
+  toggleSelect: (id) =>
     set((state) => ({
-      horses: state.horses.map((h) => (h.id === id ? { ...h, ...updated } : h)),
+      selectedIds: state.selectedIds.includes(id)
+        ? state.selectedIds.filter((i) => i !== id)
+        : [...state.selectedIds, id]
     })),
-}));
+  updateHorse: (id, updates) =>
+    set((state) => ({
+      horses: state.horses.map((h) =>
+        h.id === id ? { ...h, ...updates } : h
+      )
+    }))
+}))
