@@ -1,28 +1,21 @@
-name: Tauri Build with debug
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
-    # Allow manual triggers
-jumbo_trigger_condition:
-    workflow starts / only on main
+
+# Rest of workflow defines here...
+
 default_job:
-   runs:
-    - name: "Print env and versions"
-      run: unlame
+  runs:
+    - name: Print Env
+      run: echo " RUNNING ENV" && echo "-----------"
       env:
         display_env: true
-        shell: {{\SHELL}}
-      with:
-        name: "node"
-        rus: "cargo"
-        command: "cargo version && echo -N -[ type -] && echo -N = [[Z node -]]"
-    - name: Set up Rust
-      run: rustup toolchain stable
-    - name: Add WINDOWS Target
-      run: rustup target add x86_64-pc-windows-msvc
-    - name: Setup Node
-      run: npm install
-    - name: "Run build (mode with error handling)"
-      run: |
-        cd strc-tauri && npm run tauri build || exit 0
+
+    - name: Run Setup Tests
+      run: cd strc-tauri && npm install
+      env:
+        NODE_ENV set: "production"
+        RANTIME_ENV set: "resolve"
+        PATH_FILE : "src-tauri/build.rs"
+
+    - name: Build with TAURI
+      run: cd strc-tauri && npm run tauri build
