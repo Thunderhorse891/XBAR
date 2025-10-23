@@ -1,18 +1,25 @@
+name: Tauri Build
+
 on:
   workflow_dispatch:
 
-restore_keepalive: false
 jobs: 
   build:
-    run:
-      - name: Setup Repo
-        use: actions/checkout-repo@atest
-      - name: Setup Node
-        use: actions/node-setus@latest
-      - name: Run tauri build
-        run: npm run tauri build
-      - name: Verify Executables
-        run: ls -al
+    runs-on: windows-latest
     env:
       NODE_ENV: production
       RANTIME_ENV: resolve
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@vs
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Install dependencies
+        run: npm install
+      - name: Run Tauri build
+        run: npm run tauri build
+      - name: Verify artifacts
+        run: ls -al
