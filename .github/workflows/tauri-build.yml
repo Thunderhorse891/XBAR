@@ -1,21 +1,18 @@
 on:
   workflow_dispatch:
 
-# Rest of workflow defines here...
-
-default_job:
-  runs:
-    - name: Print Env
-      run: echo " RUNNING ENV" && echo "-----------"
-      env:
-        display_env: true
-
-    - name: Run Setup Tests
-      run: cd strc-tauri && npm install
-      env:
-        NODE_ENV set: "production"
-        RANTIME_ENV set: "resolve"
-        PATH_FILE : "src-tauri/build.rs"
-
-    - name: Build with TAURI
-      run: cd strc-tauri && npm run tauri build
+restore_keepalive: false
+jobs: 
+  build:
+    runs:
+      - name: Setup Node and Installs
+        use: actions/node-setus@latest
+      - name: Setup Rust
+        use: dtolnay/rust-toolchain#stable
+      - name: Run Tauri Build
+        run: npm run tauri build
+      - name: Check Executables
+        run: ls -al
+    env:
+      NODE_ENV: production
+      RANTIME_ENV: resolve
