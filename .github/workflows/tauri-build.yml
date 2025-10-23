@@ -1,0 +1,28 @@
+name: Build XBAR Desktop App
+
+on:
+  push:
+    branches: main
+
+defaults: 
+  run: note-build
+
+actions:
+  run:
+    name: Run Build
+generation:
+  runs-on-windows: true
+  run-context:
+    environment: production
+    scheme: node
+    specify: "14"
+  steps:
+
+    - name: Build with Tauri
+      run: |
+        node -V
+        node module add -t null cache
+        node install
+        yarn run tauri build
+        ls -l ./release/
+        return
