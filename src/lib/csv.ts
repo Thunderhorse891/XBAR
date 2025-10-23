@@ -1,35 +1,21 @@
 
-import Papa from "papaparse"
-import { Horse } from "@/types/horse"
+import Papa from "papaparse";
+import { OCRHorse } from "@/types/horse";
 
-export function parseHorseCSV(csv: string): Horse[] {
-  const { data } = Papa.parse(csv, { header: true })
-  return data.map((row: any) => ({
-    id: row.ID,
-    name: row.Name,
-    breed: row.Breed,
-    birthDate: row.BirthDate,
-    status: row.Status.toLowerCase(),
-    photo: row.PhotoURL || "",
-    ocrSource: {
-      fileName: row.OCR_File,
-      confidence: parseFloat(row.OCR_Confidence),
-      extractedAt: row.OCR_Timestamp
+export function parseCSV(csvContent: string): OCRHorse[] {
+  const parsed = Papa.parse<OCRHorse>(csvContent, {
+    header: true,
+    skipEmptyLines: true,
+  });
+
+  return parsed.data.map((row) => ({
+    ...row,
+    age: Number(row.age),
+    medicalHistory: row.medicalHistory?.split(";") ?? [],
+    breedingInfo: {
+      sire: row.breedingInfo ?.sire || "",
+      dam: row.breedingInfo ?.dam || "",
+      offspring: row.breedingInfo ?.offspring?.split(",") ?? [],
     },
-    medical: {
-      vaccinations: row.Vaccinations?.split(";") || [],
-      lastCheckup: row.LastCheckup,
-      notes: row.MedicalNotes
-    },
-    breeding: {
-      sire: row.Sire,
-      dam: row.Dam,
-      offspring: row.Offspring?.split(",") || []
-    },
-    sales: {
-      listed: row.ForSale === "true",
-      price: row.Price ? parseFloat(row.Price) : undefined,
-      soldAt: row.SoldAt || undefined
-    }
-  }))
+  }));
 }
