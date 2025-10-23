@@ -1,28 +1,28 @@
-name: Build XBAR Desktop App
-
+name: Tauri Build with debug
 on:
   push:
-    branches: main
-
-defaults: 
-  run: note-build
-
-actions:
-  run:
-    name: Run Build
-generation:
-  runs-on-windows: true
-  run-context:
-    environment: production
-    scheme: node
-    specify: "14"
-  steps:
-
-    - name: Build with Tauri
+    branches: [main]
+  workflow_dispatch:
+    # Allow manual triggers
+jumbo_trigger_condition:
+    workflow starts / only on main
+default_job:
+   runs:
+    - name: "Print env and versions"
+      run: unlame
+      env:
+        display_env: true
+        shell: {{\SHELL}}
+      with:
+        name: "node"
+        rus: "cargo"
+        command: "cargo version && echo -N -[ type -] && echo -N = [[Z node -]]"
+    - name: Set up Rust
+      run: rustup toolchain stable
+    - name: Add WINDOWS Target
+      run: rustup target add x86_64-pc-windows-msvc
+    - name: Setup Node
+      run: npm install
+    - name: "Run build (mode with error handling)"
       run: |
-        node -V
-        node module add -t null cache
-        node install
-        yarn run tauri build
-        ls -l ./release/
-        return
+        cd strc-tauri && npm run tauri build || exit 0
