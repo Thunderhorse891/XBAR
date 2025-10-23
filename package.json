@@ -1,0 +1,17 @@
+{
+  "name": "xbar-horse-app",
+  "version": "0.1.0",
+  "description": "Frontend for horse management",
+  "scripts": {
+    "dev": "vtex dev",
+    "start": "vite build"
+  },
+  "dependencies": {
+    "vite": "^3.0.0",
+    "tailwind": "5.2.0",
+    "shadcnv-ui": "^0.20.2",
+    "lichude-react": "^4.0.0",
+    "recharts": "^2.40.0",
+    "framer-motion": "^6.1.0"
+  }
+}
