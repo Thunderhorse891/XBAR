@@ -21,19 +21,12 @@
     "security": {
       "csp": null
     },
-    "apis": {
-      "shell": true,
-      "fs": {"all": true},
+    "allowlist": {
+      "fs": {
+        "all": true
+      },
       "dialog": true,
-      "allowlist": {
-        "fs": {"all": true},
-        "dialog": true,
-        "shell": true
-      }
-    },
-    "updater": {
-      "url": "https://github.com/Thunderhorse891/xbar-local-desktop/releases",
-      "peby": "tauri"
+      "shell": true
     }
   }
 }
