@@ -1,29 +1,31 @@
 
-import { create } from "zustand"
-import { Horse } from "@/types/horse"
+import { create } from 'zustand';
+import { OCRHorse } from '@/types/horse';
 
-type State = {
-  horses: Horse[]
-  selectedIds: string[]
-  setHorses: (h: Horse[]) => void
-  toggleSelect: (id: string) => void
-  updateHorse: (id: string, updates: Partial<Horse>) => void
-}
+type HorseStore = {
+  horses: OCRHorse[];
+  selectedHorseIds: string[];
+  setHorses: (data: OCRHorse[]) => void;
+  updateHorse: (id: string, updates: Partial<OCRHorse>) => void;
+  selectHorse: (id: string) => void;
+  deselectHorse: (id: string) => void;
+  clearSelection: () => void;
+};
 
-export const useHorses = create<State>((set) => ({
+export const useHorses = create<HorseStore>(set) => ( {
   horses: [],
-  selectedIds: [],
-  setHorses: (horses) => set({ horses }),
-  toggleSelect: (id) =>
-    set((state) => ({
-      selectedIds: state.selectedIds.includes(id)
-        ? state.selectedIds.filter((i) => i !== id)
-        : [...state.selectedIds, id]
+  selectedHorseIds: [],
+  setHorses: (data) => set({ horses: data }),
+  updateHorse: (id, updates) =>    set((state) => ( {
+      horses: state.horses.map(h => h.id === id ? { ...h, ...updates } : h),
     })),
-  updateHorse: (id, updates) =>
-    set((state) => ({
-      horses: state.horses.map((h) =>
-        h.id === id ? { ...h, ...updates } : h
-      )
-    }))
-}))
+  selectHorse: (id) =>
+    set((state) => ( {
+      selectedHorseIds: [...state.selectedHorseIds, id],
+    })),
+  deselectHorse: (id) =>
+    set((state) => ( {
+      selectedHorseIds: state.selectedHorseIds.filter((hid) => hid !== id),
+    })),
+  clearSelection: () => set({ selectedHorseIds: [] }),
+});
