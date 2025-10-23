@@ -11,15 +11,15 @@ jobs:
       RANTIME_ENV: resolve
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@vs
       - name: Setup Node
         uses: actions/setup-node@v3
         with:
           node-version: '18'
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
       - name: Install dependencies
         run: npm install
-      - name: Run Tauri build
+      - name: Run Tauri Build
         run: npm run tauri build
-      - name: Verify artifacts
+      - name: Check Executables
         run: ls -al
