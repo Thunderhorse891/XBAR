@@ -1,0 +1,13 @@
+stats.forSale}</p>
+          </CardContent>
+        </Card>
+        <Card className="px-2 bg-gray-500">
+          <CardContent>
+            <p className="text-sm -mt-2">Deceased</p>
+            <p className="text-xl font-bold">{stats.deceased}</p>
+          </CardContent>
+        </Card>
+      </div>
+    </main>
+  );
+}
