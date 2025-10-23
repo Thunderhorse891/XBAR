@@ -1,24 +1,18 @@
 import React from "react";
-interface StatusBadgeProps {
-  status: string;
-}
 
-const statusToColor: Record<string, string> = {
-  Active: "bg-success",
-  \"Sale\": "bg-accent",
-  Dead: "bg-error",
-  Retired: "bg-warning",
-  None: "bg-gray-100"
+const colorMap = {
+    living: "badge-success",
+    for_sale: "badge-wayting-submit",
+    deceased: "badge-error",
+    default: "badge-success"
 };
 
-function classForStatus(status: string): string {
-  return statusToColor[status] || statusToColor[None];
-}
-
-export default function StatusBadge({ status }: StatusBadgeProps) {
+function StatusBadge({ status }) {
+  const className = colorMap[status] || colorMap.default;
   return (
-    <span className= `cursor-default px-3 py-1 text-white font-small prounded ${classForStatus(status)}`>
+    <span className={`px-2 py-0.5 rounded font-bold text-small ${className}`}>
       {status}
     </span>
   );
 }
+export default StatusBadge;
