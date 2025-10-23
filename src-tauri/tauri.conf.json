@@ -1,0 +1,17 @@
+{
+  "package": "com.xbar.horseapp",
+  "description": "A horse management dashboard app",
+  "window_system": {
+    "title": "XBar Horse App"
+  },
+  "build": {
+    "devMod": "node",
+    "dist": {
+      "out": "desktop-build"
+    }
+  },
+  "extensions": {
+    "boundle": "home.html",
+    "cli": "main.ts"
+  }
+}
