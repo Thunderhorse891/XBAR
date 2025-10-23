@@ -51,3 +51,4 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: src-tauri/target/release/bundle/**/.exe
+          x-github-release-note: "This was auto-signed from the build"
