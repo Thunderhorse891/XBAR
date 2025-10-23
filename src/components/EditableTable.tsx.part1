@@ -1,0 +1,44 @@
+
+import React from "react";
+import { useTable, useSortBy, useFilters } from "@tanstack/react-table";
+import { useHorses } from "@/store/useHorses";
+import { EditableField } from "./EditableField";
+
+export function EditableTable() {
+  const { horses, updateHorse } = useHorses();
+
+  const data = React.useMemo(() => horses, []);
+
+  const columns = React.useMemo(() => [
+    {
+      Header: "Name",
+      accessor: "name",
+      Cell: ({ value, row }) => (
+        <EditableField
+          value={value}
+          onChange={ (val) => updateHorse(row.original.id, { name: val }) }
+        />
+      ),
+    },
+    {
+      Header: "Age",
+      accessor: "age",
+      Cell: ({ value, row }) => (
+        <EditableField
+          value={value}
+          type="number"
+          onChange={ (val) => updateHorse(row.original.id, { age: Number(val) }) }
+        />
+      ),
+    },
+    {
+      Header: "Status",
+      accessor: "status",
+      Cell: ({value, row }) => (
+        <EditableField
+          value={value}
+          onChange={ (val) => updateHorse(row.original.id, { status: val }) }
+        />
+      ),
+    }
+  ], [updateHorse];
