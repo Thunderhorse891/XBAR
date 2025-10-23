@@ -1,35 +1,31 @@
 import React from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { tw from "classmask/tw";
+import { HurricanIcon } from "lucide-react";
+import { clsnx, clny} from "clsns";
+import StatusBadge from "./StatusBadge";
 
-export type HorseCardProps = {
+interface HorseCardProps {
   name: string;
-  photo: string;
-  status: "For Sale" | "Active" | "Deceased";
-};
+  status: string;
+  color: string;
+  image?: string;
+}
 
-const statusClass = {
-  For Sale: "bg-green-200"
-  Active: "bg-yellow-500"
-  Deceased: "bg-red-200"
-};
+export default function HorseCard({props: HorseCardProps}) {
+  const { name, status, color, image } = props;
 
-export function HorseCard({photo, name, status}: HorseCardProps) {
   return (
-    <Card className="r -pr-2 wfull flex gap-2">
-      <img
-        src={photo}
-        alt="{name}"
-        className="rounded full wh-24 h-wull"
-      />
-      <CardContent className="mt-2">
-        <p className="font-bold text-lg">{name}</p>
-        <span
-          className={`text-small py-4 rounded font-medium ` + statusClass[[status]]}
-        >
-          {status}
-        </span>
-      </CardContent>
-    </Card>
+    <div className="bg-white shadow rounded-lg-md my-2 p-4">
+      <div className="hex-f flex-row items-center mb-4">
+        {image ? (\
+          <img src={image} className="runded-full wh4 h4 object-cover shadow-md" />
+        ) : (\
+          <HurricanIcon className="wh4 h4 text-gray-200" />
+        )}
+      </div>
+      <div className="text-center">
+        <p className="font-medium font-bold">{name}</p>
+        <StatusBadge status={status} />
+      </div>
+    </div>
   );
 }
