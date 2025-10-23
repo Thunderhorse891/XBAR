@@ -2,17 +2,16 @@ name: build-windows
 
 on:
   push:
-    branches: [main]
+    branches: ["main"]
     paths:
       - '**'
-  workflow_dispatch:
 
 permissions:
   contents: write
 
 env:
-  GITHUB_TOKEN: ${securits.GITHuB_TOKEN}
-  GITHUB_REPO: Thunderhorse891/xbar-horse-management-app
+  GITHUB_TOKEN: ${{securits.GITHuB_TOKEN}}
+  GITHUB_REPO: "Thunderhorse891/xbar-horse-management-app"
 
 node-version: '18'
 
@@ -51,4 +50,3 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: src-tauri/target/release/bundle/**/.exe
-          x-github-release-note: "This was auto-signed from the build"
