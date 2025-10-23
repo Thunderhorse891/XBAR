@@ -1,17 +1,32 @@
 {
-  "package": "com.xbar.horseapp",
-  "description": "A horse management dashboard app",
-  "window_system": {
-    "title": "XBar Horse App"
-  },
   "build": {
-    "devMod": "node",
-    "dist": {
-      "out": "desktop-build"
-    }
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "devPath": "http://localhost:3000",
+    "distDir": "../dist"
   },
-  "extensions": {
-    "boundle": "home.html",
-    "cli": "main.ts"
+  "package": {
+    "productName": "XBAR",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "windows": [
+      {
+        "title": "XBAR",
+        "width": 1280,
+        "height": 800,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    },
+    "allowlist": {
+      "fs": {
+        "all": true
+      },
+      "dialog": true,
+      "shell": true
+    }
   }
 }
