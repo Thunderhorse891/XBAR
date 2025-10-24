@@ -1,0 +1,13 @@
+[package]
+name="xbar-horse-management-app"
+version="0.1.0"
+description="X bar Horse Management App"
+authors=["XBAR Beta Team"]
+
+license="MIT"
+
+[dependencies]
+tauri="30.0.0"
+random="0.8.15"
+tauri-builders="1.10.3"
+serial=1
