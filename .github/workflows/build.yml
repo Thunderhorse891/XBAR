@@ -1,17 +1,14 @@
-name: Minimal Build
+name: Build Tauri App
+on: [workflow_dispatch]
 
-on:
-  push:
-    branches: ["main"]
-
-permissions:
-  contents: write
-
-defaults: 
-  runs: packages: install
-jjobs:
+jobs:
   build:
-    runs-on: ubuntu-latest
-    steps: 
-      - name: Run echo test
-        run: echo "Successful Minimal Workflow!"
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - run: npm install -g pnpm
+      - run: pnpm install
+      - run: pnpm tauri build
