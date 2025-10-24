@@ -1,47 +1,5 @@
 {
-  "build": {
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build",
-    "devPath": "http://localhost:3000",
-    "distDir": "../dist"
-  },
-  "app": {
-    "withGlobalTauri": false
-  },
-  "package": {
-    "productName": "XBAR Horse Management",
-    "version": "0.1.0"
-  },
-  "tauri": {
-    "allowlist": {
-      "all": false,
-      "fs": {
-        "scope": ["$APPDATA/*", "$LOCALDATA/*"]
-      },
-      "dialog": {
-        "open": true,
-        "save": true
-      },
-      "shell": {
-        "open": true
-      }
-    },
-    "windows": [
-      {
-        "title": "XBAR Horse Management",
-        "width": 1280,
-        "height": 800,
-        "resizable": true,
-        "minWidth": 800,
-        "minHeight": 600
-      }
-    ],
-    "security": {
-      "csp": "default-src 'self'"
-    },
-    "bundle": {
-      "active": true,
-      "targets": "all"
-    }
-  }
+  "package": { "name": "xbar-horse-management-app", "product": "Xbar Horse", "version": "0.1.0" },
+  "build": { "target": "app/main.rs" },
+  "app": { "name": "XBAR Horse Mgr", "window": { "title": "XBAR" } }
 }
