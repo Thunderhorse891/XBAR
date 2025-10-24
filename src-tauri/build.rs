@@ -1,3 +1,3 @@
 fn main() {
-    tauri_build::build();
+    // Optional build-time logic can go here
 }
