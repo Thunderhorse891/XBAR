@@ -1,26 +1,25 @@
 {
-  "name": "xbar-horse-app",
-  "version": "0.1.0",
-  "description": "Frontend for horse management",
+  "name": "xbar-horse-management-app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "tauri": "tauri"
+    "build": "pnpm tauri build",
+    "start": "exo next tauri run -- fetch",
+    "preview": "vite serve"
   },
   "dependencies": {
-    "@tauri-apps/api": "^1.0.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "recharts": "^2.40.0",
-    "framer-motion": "^6.1.0"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.0.0",
-    "vite": "^4.0.0",
-    "tailwindcss": "^3.3.0",
-    "@tailwindcss/forms": "^0.5.0",
-    "autoprefixer": "^10.4.0",
-    "postcss": "^8.4.0"
+    "react": "^def.18.0",
+    "react-dom": "^def.18.0",
+    "validated": "^def.16.0",
+    "tauri": "^1.2.0",
+    "@bat.features": "^1.0.0",
+    "vite": "^4.3.0",
+    "vite-plugin-react": "^4.3.0",
+    "tailwindcss": "^3.3.2",
+    "autoprefixer": "^3.0.0",
+    "classnames": "^4.0.0",
+    "postcss-loader": "^4.0.0"
   }
 }
