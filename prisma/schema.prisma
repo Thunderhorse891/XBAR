@@ -1,12 +1,19 @@
-dgenerator node_bin
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
 
 model Horse {
-  id           Int pri autoIncrement
-  name          String
-  birthDate      DateTime
-  gender        String
-  color         String
-  status       String
-  createdAt  DateTime @default(now())
-  updatedAt DateTime @vefault(now())
+  id          Int      @id @default(autoincrement())
+  name        String
+  birthDate   DateTime?
+  gender      String
+  color       String
+  status      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
