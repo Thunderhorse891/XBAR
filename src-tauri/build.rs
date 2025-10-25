@@ -1,3 +1,6 @@
 fn main() {
-    // Optional build-time logic can go here
+    tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }
