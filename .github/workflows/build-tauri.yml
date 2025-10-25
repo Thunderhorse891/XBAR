@@ -7,17 +7,26 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
       
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 18
           
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           
-      - run: npm install -g pnpm
-      - run: pnpm install
-      - run: cargo install tauri-cli
-      - run: cargo tauri build
+      - name: Install Windows Build Tools
+        run: choco install -y visualstudio2022buildtools visualstudio2022-workload-vctools
+          
+      - name: Install dependencies
+        run: |
+          npm install -g pnpm
+          pnpm install
+          
+      - name: Build Tauri App
+        run: pnpm tauri build
