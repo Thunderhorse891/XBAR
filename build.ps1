@@ -13,8 +13,17 @@ foreach ($path in $requiredPaths) {
 
 Write-Host "✅ Project structure validated" -ForegroundColor Green
 
+# Install dependencies
+Write-Host "📦 Installing dependencies..." -ForegroundColor Yellow
+npm install
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "❌ Dependency installation failed" -ForegroundColor Red
+    exit 1
+}
+
 # Build process
-Write-Host "📦 Building web assets..." -ForegroundColor Yellow
+Write-Host "🌐 Building web assets..." -ForegroundColor Yellow
 npm run build
 
 if ($LASTEXITCODE -ne 0) {
@@ -23,7 +32,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "🖥️  Building desktop application..." -ForegroundColor Yellow
-npm run tauri build
+cargo tauri build
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "❌ Tauri build failed" -ForegroundColor Red
