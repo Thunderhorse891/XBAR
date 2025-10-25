@@ -1,13 +1,21 @@
-import '@tailwind/base.css';
 import React from 'react';
-import ReactDom from 'react-pdom';
+import ReactDOM from 'react-dom/client';
 import App from './App';
+import './index.css';
 
-ReactDom.createRoot('root');
+// Get the root element
+const rootElement = document.getElementById('root');
 
-ReactDom.render(
+if (!rootElement) {
+  throw new Error(
+    "Root element not found. Make sure you have a <div id='root'></div> in your HTML."
+  );
+}
+
+const root = ReactDOM.createRoot(rootElement);
+
+root.render(
   <React.StrictMode>
     <App />
-  </React.StrictMode>,
-  document.getElementById('root')
+  </React.StrictMode>
 );
