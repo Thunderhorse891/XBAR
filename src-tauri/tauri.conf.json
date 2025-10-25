@@ -1,5 +1,36 @@
 {
-  "package": { "name": "xbar-horse-management-app", "product": "Xbar Horse", "version": "0.1.0" },
-  "build": { "target": "app/main.rs" },
-  "app": { "name": "XBAR Horse Mgr", "window": { "title": "XBAR" } }
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "devPath": "../dist",
+    "distDir": "../dist"
+  },
+  "package": {
+    "productName": "XBAR Horse Management",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": {
+        "all": false,
+        "open": true
+      }
+    },
+    "bundle": {
+      "active": true,
+      "targets": "all"
+    },
+    "security": {
+      "csp": null
+    },
+    "windows": [
+      {
+        "title": "XBAR Horse Management",
+        "width": 1200,
+        "height": 800,
+        "resizable": true
+      }
+    ]
+  }
 }
