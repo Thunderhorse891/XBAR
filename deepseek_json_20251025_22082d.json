@@ -22,3 +22,15 @@
     "postcss": "^8.4.0"
   }
 }
+{
+  "dependencies": {
+    // Add these when you implement features:
+    "recharts": "^2.40.0",           // For charts/graphs
+    "framer-motion": "^6.1.0",       // For animations
+    "@prisma/client": "^5.0.0"       // For database
+  },
+  "devDependencies": {
+    "prisma": "^5.0.0",              // Database tools
+    "typescript": "^5.0.0"           // Type safety
+  }
+}
