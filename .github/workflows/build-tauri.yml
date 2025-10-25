@@ -20,4 +20,5 @@ jobs:
       - run: npm install -g pnpm
       - run: pnpm install
       - run: cargo install tauri-cli
-      - run: pnpm tauri build
+      - run: cargo tauri build
+        working-directory: ./src-tauri
