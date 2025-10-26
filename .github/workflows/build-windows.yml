@@ -27,17 +27,19 @@ jobs:
         with:
           toolchain: stable
 
+      - name: Install Windows Build Tools
+        run: choco install -y visualstudio2022buildtools visualstudio2022-workload-vctools
+        shell: pwsh
+
       - name: Install dependencies
         run: |
           npm install -g pnpm
           pnpm install
-
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli
+        shell: pwsh
 
       - name: Build Tauri App
-        run: cargo tauri build
-        working-directory: ./src-tauri
+        run: pnpm tauri build
+        shell: pwsh
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
