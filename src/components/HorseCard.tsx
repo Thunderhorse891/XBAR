@@ -9,9 +9,9 @@ type Props = {
 export const HorseCard: React.FC<Props> = ({ data, onClick }) => {
   return (
     <div className="flex flex-col bg-white p-4 rounded-lg shadow hover:shadow-md transition-shadow">
-      {data.photo && (
+      {data.profileImage && (
         <img
-          src={data.photo}
+          src={data.profileImage}
           alt={`${data.name}`}
           className="w-full h-40 object-cover rounded mb-3"
         />

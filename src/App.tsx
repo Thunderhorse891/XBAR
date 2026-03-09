@@ -4,9 +4,9 @@ import MainLayout from './routes/layouts/MainLayout';
 import Dashboard from './pages/Dashboard';
 import Horses from './routes/Horses';
 import HorseDetail from './routes/HorseDetail';
-import Breeding from './routes/Breeding';
-import Medical from './routes/Medical';
-import Sales from './routes/Sales';
+import { Breeding } from './routes/Breeding';
+import { Medical } from './routes/Medical';
+import { Sales } from './routes/Sales';
 
 export default function App() {
   return (

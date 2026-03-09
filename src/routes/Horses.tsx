@@ -7,11 +7,16 @@ export default function Horses() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState<'Cards' | 'Table'>('Table');
+  const [sortBy, setSortBy] = useState<'name' | 'age' | 'status'>('name');
   const [search, setSearch] = useState(searchParams.get('search') || '');
 
-  const filtered = horses.filter(h =>
-    [h.name, h.breed, h.owner, h.color].some(v => v?.toLowerCase().includes(search.toLowerCase()))
-  );
+  const filtered = horses
+    .filter((h) => [h.name, h.breed, h.owner, h.color].some((v) => v?.toLowerCase().includes(search.toLowerCase())))
+    .sort((a, b) => {
+      if (sortBy === 'name') return a.name.localeCompare(b.name);
+      if (sortBy === 'age') return b.age - a.age;
+      return (a.status ?? '').localeCompare(b.status ?? '');
+    });
 
   const statusStyle = (status?: string) => {
     if (status === 'Active') return { bg: 'rgba(10,132,255,0.1)', color: '#0a84ff' };
@@ -28,6 +33,15 @@ export default function Horses() {
           <p style={{ margin: 0, fontSize: 13, color: '#8e8e93' }}>{filtered.length} of {horses.length} horses</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as 'name' | 'age' | 'status')}
+            style={{ padding: '7px 10px', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 10, fontSize: 12, fontFamily: 'inherit', background: '#fff' }}
+          >
+            <option value="name">Sort: Name</option>
+            <option value="age">Sort: Age</option>
+            <option value="status">Sort: Status</option>
+          </select>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search horses..."
             style={{ padding: '7px 14px', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 10, fontSize: 13, fontFamily: 'inherit', outline: 'none', width: 200, background: 'rgba(118,118,128,0.12)', color: '#1c1c1e' }} />
           <div style={{ display: 'flex', background: 'rgba(118,118,128,0.12)', borderRadius: 9, padding: 2 }}>
@@ -45,7 +59,15 @@ export default function Horses() {
         </div>
       </div>
 
-      {viewMode === 'Cards' && (
+      {filtered.length === 0 && (
+        <div style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 14, padding: 32, textAlign: 'center' }}>
+          <div style={{ fontSize: 30, marginBottom: 8 }}>🔍</div>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>No horses found</div>
+          <div style={{ fontSize: 13, color: '#8e8e93' }}>Try a different search term or clear filters.</div>
+        </div>
+      )}
+
+      {viewMode === 'Cards' && filtered.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
           {filtered.map(h => {
             const ss = statusStyle(h.status);
@@ -71,7 +93,7 @@ export default function Horses() {
         </div>
       )}
 
-      {viewMode === 'Table' && (
+      {viewMode === 'Table' && filtered.length > 0 && (
         <div style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.05)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
