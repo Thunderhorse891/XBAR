@@ -1,64 +1,87 @@
 import React, { useState } from 'react';
-import { useHorses } from '@/store/useHorses';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useHorses } from '@/store/useHorses';
+
+const card = { background: '#fff', borderRadius: 14, padding: '20px 22px', boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.05)' };
 
 export default function HorseDetail() {
   const { id } = useParams<{ id: string }>();
   const { horses } = useHorses();
   const navigate = useNavigate();
-  const horse = horses.find((h) => h.id === id);
+  const horse = horses.find(h => h.id === id);
+  const [tab, setTab] = useState<'overview' | 'medical' | 'breeding'>('overview');
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'medical'>('overview');
+  if (!horse) return (
+    <div style={card}>
+      <p style={{ color: '#8e8e93' }}>Horse not found.</p>
+      <button onClick={() => navigate('/horses')} style={{ color: '#0a84ff', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13 }}>← Back to Horses</button>
+    </div>
+  );
 
-  if (!horse) {
-    return (
-      <div className="p-4">
-        <p className="text-gray-500">No horse found with ID <strong>{id}</strong>.</p>
-        <button onClick={() => navigate('/horses')} className="mt-3 text-blue-600 underline text-sm">
-          Back to Horses
-        </button>
-      </div>
-    );
-  }
+  const statusStyle = horse.status === 'Active' ? { bg: 'rgba(10,132,255,0.1)', color: '#0a84ff' }
+    : horse.status === 'For Sale' ? { bg: 'rgba(52,199,89,0.1)', color: '#34c759' }
+    : { bg: 'rgba(142,142,147,0.12)', color: '#8e8e93' };
 
   return (
-    <main className="p-4 max-w-3xl">
-      <button onClick={() => navigate(-1)} className="text-sm text-blue-600 underline mb-4 block">
-        ← Back
-      </button>
-      <h1 className="text-2xl font-bold mb-2">{horse.name}</h1>
+    <div>
+      <button onClick={() => navigate('/horses')} style={{ background: 'none', border: 'none', color: '#0a84ff', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', fontWeight: 500, marginBottom: 20, padding: 0 }}>← Back to Horses</button>
 
-      <div className="flex gap-2 mb-4 border-b border-gray-200 pb-2">
-        {(['overview', 'medical'] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-1 rounded text-sm font-medium transition-colors ${
-              activeTab === tab ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+          <div style={{ width: 56, height: 56, borderRadius: 16, background: 'linear-gradient(135deg, #e8f4ff, #c0dcff)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>🐴</div>
+          <div>
+            <h1 style={{ margin: '0 0 4px', fontSize: 24, fontWeight: 700, letterSpacing: -0.5 }}>{horse.name}</h1>
+            <p style={{ margin: 0, color: '#8e8e93', fontSize: 13 }}>{horse.breed} · {horse.color} · {horse.age} yrs</p>
+          </div>
+        </div>
+        <span style={{ fontSize: 12, fontWeight: 600, padding: '6px 14px', borderRadius: 20, background: statusStyle.bg, color: statusStyle.color }}>{horse.status}</span>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 2, background: 'rgba(118,118,128,0.12)', borderRadius: 10, padding: 3, width: 'fit-content', marginBottom: 16 }}>
+        {(['overview', 'medical', 'breeding'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            style={{ padding: '6px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', transition: 'all 0.15s', textTransform: 'capitalize',
+              background: tab === t ? '#fff' : 'transparent',
+              color: tab === t ? '#1c1c1e' : '#8e8e93',
+              fontWeight: tab === t ? 600 : 400,
+              boxShadow: tab === t ? '0 1px 3px rgba(0,0,0,0.12)' : 'none' }}>
+            {t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
 
-      {activeTab === 'overview' && (
-        <div className="bg-white border rounded-lg p-4 space-y-2 text-sm">
-          <p><span className="font-medium">Status:</span> {horse.status ?? '—'}</p>
-          <p><span className="font-medium">Color:</span> {horse.color}</p>
-          <p><span className="font-medium">Breed:</span> {horse.breed}</p>
-          <p><span className="font-medium">Age:</span> {horse.age}</p>
-          <p><span className="font-medium">Owner:</span> {horse.owner}</p>
-          <p><span className="font-medium">Gender:</span> {horse.gender ?? '—'}</p>
-          <p><span className="font-medium">Last Vet Visit:</span> {horse.lastVetVisit}</p>
+      {tab === 'overview' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={card}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#8e8e93', letterSpacing: 0.5, marginBottom: 14 }}>HORSE DETAILS</div>
+            {[['Owner', horse.owner], ['Gender', horse.gender ?? '—'], ['Color', horse.color], ['Age', `${horse.age} years`], ['Breed', horse.breed], ['Last Vet Visit', horse.lastVetVisit], ['Registered', horse.registered ? '✓ Yes' : '⚠ No']].map(([label, val]) => (
+              <div key={label as string} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f2f2f7', fontSize: 13 }}>
+                <span style={{ color: '#8e8e93' }}>{label}</span>
+                <span style={{ fontWeight: 500 }}>{val}</span>
+              </div>
+            ))}
+          </div>
+          <div style={card}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#8e8e93', letterSpacing: 0.5, marginBottom: 14 }}>NOTES</div>
+            <p style={{ margin: 0, fontSize: 13, color: '#3a3a3c', lineHeight: 1.7 }}>{horse.medicalNotes || 'No notes on file.'}</p>
+          </div>
         </div>
       )}
 
-      {activeTab === 'medical' && (
-        <div className="bg-white border rounded-lg p-4">
-          <p className="text-sm text-gray-600">{horse.medicalNotes || 'No medical notes.'}</p>
+      {tab === 'medical' && (
+        <div style={card}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#8e8e93', letterSpacing: 0.5, marginBottom: 14 }}>MEDICAL HISTORY</div>
+          <p style={{ margin: 0, color: '#8e8e93', fontSize: 13 }}>No medical records on file. Add records to get started.</p>
         </div>
       )}
-    </main>
+
+      {tab === 'breeding' && (
+        <div style={card}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#8e8e93', letterSpacing: 0.5, marginBottom: 14 }}>BREEDING RECORDS</div>
+          <p style={{ margin: 0, color: '#8e8e93', fontSize: 13 }}>No breeding records on file. Add records to get started.</p>
+        </div>
+      )}
+    </div>
   );
 }

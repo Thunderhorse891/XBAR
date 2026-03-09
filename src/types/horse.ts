@@ -12,7 +12,7 @@ export interface Horse {
   status?: 'Active' | 'Retired' | 'Deceased' | 'For Sale';
   microchipId?: string;
   profileImage?: string;
-  photo?: string;
+  registered?: boolean;
 }
 
 export type OCRHorse = Horse & {
