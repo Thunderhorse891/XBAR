@@ -1,10 +1,10 @@
-import sqlite3 from "sqlite3";
-type Database = return typeof sqlite3;
+import Database from 'better-sqlite3';
+import path from 'path';
 
-const createDbSession =(): Database => {
-  return sqlite3.open('./xbar.db');
-};
+const dbPath = path.resolve(process.cwd(), 'database/xbar.db');
+
+export type DatabaseConnection = Database.Database;
+
+export const createDbSession = (): DatabaseConnection => new Database(dbPath);
 
 export default createDbSession;
-
-export type { Database };

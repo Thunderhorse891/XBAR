@@ -9,8 +9,30 @@
 body {
   margin: 0;
   padding: 0;
+  background: radial-gradient(circle at top left, #f7fbff, #f2f2f7 45%, #ececf2);
+  color: #1c1c1e;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+::selection {
+  background: rgba(10, 132, 255, 0.22);
+}
+
+button,
+input {
+  transition: box-shadow 0.2s ease, transform 0.2s ease, background-color 0.2s ease;
+}
+
+button:focus-visible,
+input:focus-visible,
+a:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.28);
 }
 
 ::-webkit-scrollbar {
@@ -29,4 +51,14 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.25);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
 }
