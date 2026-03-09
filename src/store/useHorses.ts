@@ -1,4 +1,3 @@
-
 import { create } from 'zustand';
 import { OCRHorse } from '@/types/horse';
 
@@ -12,20 +11,21 @@ type HorseStore = {
   clearSelection: () => void;
 };
 
-export const useHorses = create<HorseStore>(set) => ( {
+export const useHorses = create<HorseStore>((set) => ({
   horses: [],
   selectedHorseIds: [],
   setHorses: (data) => set({ horses: data }),
-  updateHorse: (id, updates) =>    set((state) => ( {
-      horses: state.horses.map(h => h.id === id ? { ...h, ...updates } : h),
+  updateHorse: (id, updates) =>
+    set((state) => ({
+      horses: state.horses.map((h) => (h.id === id ? { ...h, ...updates } : h)),
     })),
   selectHorse: (id) =>
-    set((state) => ( {
+    set((state) => ({
       selectedHorseIds: [...state.selectedHorseIds, id],
     })),
   deselectHorse: (id) =>
-    set((state) => ( {
+    set((state) => ({
       selectedHorseIds: state.selectedHorseIds.filter((hid) => hid !== id),
     })),
   clearSelection: () => set({ selectedHorseIds: [] }),
-});
+}));

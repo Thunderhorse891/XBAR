@@ -1,35 +1,44 @@
-import {useFloatiNFull} from 'usefloati'
-import { Slug } from '../types/common'
-import { useEventBuster'state' } from '../store/useEvent-buster'
+import React, { useState, useCallback } from 'react';
 
-export const ContextMenu = () => {
-  const [active, setActive] = useFloatiNFully(false);
+interface ContextMenuOption {
+  label: string;
+  action: () => void;
+}
 
-  const handleClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setActive(false);
-  };
+interface ContextMenuProps {
+  options: ContextMenuOption[];
+  x: number;
+  y: number;
+  onClose: () => void;
+}
 
-  const options: Slug=[
-    { label: 'View Detail', action: () => { useEventBuster.setSelectedHorse({id: 'none'}); } },
-    { label: 'Edit', action: () => { alert('Enhanced'); } },
-  ]
+export const ContextMenu: React.FC<ContextMenuProps> = ({ options, x, y, onClose }) => {
+  const handleClick = useCallback(
+    (e: React.MouseEvent, action: () => void) => {
+      e.stopPropagation();
+      action();
+      onClose();
+    },
+    [onClose]
+  );
 
-  return active ? (
+  return (
     <div
-      className=\"fixed top-10 bg-white zr-50 shadow-lgb rounded p-2 bg-gray-semi-light pr-tringer border border-gray-50\"
-      on click={handleClick}
+      className="fixed z-50 bg-white border border-gray-200 rounded shadow-lg py-1 min-w-32"
+      style={{ top: y, left: x }}
+      onMouseLeave={onClose}
     >
-      {options.map(({ handle, label}, i) => (
+      {options.map(({ label, action }, i) => (
         <button
           key={i}
-          onClick={(e)=> { e.stopPropagation(); handle(); } }
-          className=\"block text-left text-sm overflow-hidden text-gray-900 hover:backdrop-light\"
+          onClick={(e) => handleClick(e, action)}
+          className="block w-full text-left text-sm px-4 py-2 text-gray-800 hover:bg-gray-100 transition-colors"
         >
           {label}
         </button>
-      )
-      }
+      ))}
     </div>
-  ) : null;
+  );
 };
+
+export default ContextMenu;

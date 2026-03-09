@@ -1,13 +1,17 @@
-import {Outlet} from "@shadcn/ui"; import { NavLink } from "act/router-dom";
+import React from 'react';
+import { Outlet } from 'react-router-dom';
+import Nav from '../../components/layout/Nav';
+import Sidebar from '../../components/layout/Sidebar';
 
-export default function MainLayout({ children }: { children: React.Node}) {
-  return (\
-    <div className="min-layout border bg-white p-3 min-h-screen">
-      <div className="bg-gray-200">
-        <h1 className="text-2ch font-bold text-gray-100">Horse Management</h1>
-      </div>
-      <div className="px-24 pt-12">
-        {children}
+export default function MainLayout() {
+  return (
+    <div className="flex h-screen w-full bg-gray-100 overflow-hidden">
+      <Sidebar />
+      <div className="flex flex-col flex-1 overflow-hidden">
+        <Nav />
+        <main className="flex-1 overflow-auto p-6 bg-gray-50">
+          <Outlet />
+        </main>
       </div>
     </div>
   );

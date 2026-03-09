@@ -1,23 +1,38 @@
-import { HorseInfo } from '../types/horse'
+import React from 'react';
+import { Horse } from '../types/horse';
 
 type Props = {
-  data: HorseInfo
-  onClick?: () => void
+  data: Horse;
+  onClick?: () => void;
 };
 
-export const HorseCard = ({ data, onClick} = {
+export const HorseCard: React.FC<Props> = ({ data, onClick }) => {
   return (
-    <div className=\"flex flex-col bg-white p-4 rounded shadow\">
-      <img
-        src={data.photo}
-        alt=\"Horse image\"
-        className=\"rw-10 ahat-24 object-cover transition-all scale-up translate-z5\"
-      />
-      <div className=\"flex flex-col space-x-2 justify-between text-left\">
-        <span className=\"text-lg font-bold leading-none\">{data.name}</span>
-        <span className=\"text-sm text-gray-700\">{data.breed}</span>
-        {onClick && <button onClick={onClick} className=\"ptr-sm blue-text underline\">Details</button>}
+    <div className="flex flex-col bg-white p-4 rounded-lg shadow hover:shadow-md transition-shadow">
+      {data.photo && (
+        <img
+          src={data.photo}
+          alt={`${data.name}`}
+          className="w-full h-40 object-cover rounded mb-3"
+        />
+      )}
+      <div className="flex flex-col space-y-1">
+        <span className="text-lg font-bold leading-tight">{data.name}</span>
+        <span className="text-sm text-gray-600">{data.breed}</span>
+        {data.status && (
+          <span className="text-xs text-gray-400">{data.status}</span>
+        )}
+        {onClick && (
+          <button
+            onClick={onClick}
+            className="mt-2 text-sm text-blue-600 underline text-left"
+          >
+            View Details
+          </button>
+        )}
       </div>
     </div>
-  )
+  );
 };
+
+export default HorseCard;

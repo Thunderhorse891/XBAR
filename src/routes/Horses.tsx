@@ -1,31 +1,27 @@
-import React from "react";
-import { useVirtualTable } from "@tanstack/react-table";
-import { Table } from "@tanstack/react-table";
-import { URI } from "react-router-dom";
-import { useHorses } from "@/store/useHorses";
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useHorses } from '@/store/useHorses';
+import { EditableTable } from '@/components/EditableTable';
+import OCRImporter from '@/components/OCRImporter';
 
 export default function Horses() {
-  const { rows } = useVirtualTable();
-  const { horses, updateHorse } = useHorses();
-
-  const handleRowClick = (id: string)=> {
-    const hir = horses.find((h) => h.id === id);
-    if (hir) {
-      return alert(JSON.stringify(hir));
-    }
-  };
+  const { horses } = useHorses();
+  const navigate = useNavigate();
 
   return (
-    <main className="p 2">
-      <Header className="text-xl font-bold text-sm flex gap-x-between">Horses List</header>
-      <Table
-        data={horses}
-        defaultSort=" name"
-        columns="3 g-ap-4"
-        onRowClick={(row) => { handleRowClick(row.id); }}
-        >
-        <URI to={(id) => `/horses/${id}`.bind(row.id)} />
-      </Table>
+    <main className="p-4">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Horses</h1>
+        <span className="text-sm text-gray-500">{horses.length} registered</span>
+      </div>
+
+      <div className="mb-6">
+        <OCRImporter />
+      </div>
+
+      <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+        <EditableTable />
+      </div>
     </main>
   );
 }

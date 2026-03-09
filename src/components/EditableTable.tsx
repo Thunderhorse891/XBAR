@@ -1,81 +1,92 @@
-
 import React from 'react';
-import { useTable } from '@tanstack/react-table';
+import {
+  useReactTable,
+  getCoreRowModel,
+  flexRender,
+  createColumnHelper,
+} from '@tanstack/react-table';
 import { useHorses } from '../store/useHorses';
+import { OCRHorse } from '../types/horse';
 import EditableField from './EditableField';
+
+const columnHelper = createColumnHelper<OCRHorse>();
 
 export function EditableTable() {
   const { horses, updateHorse } = useHorses();
 
-  const columns = React.useMemo(
-    () => [
-      {
-        Header: 'Name',
-        accessor: 'name',
-        Cell: ({ row }: any) => (
-          <EditableField
-            value={row.original.name}
-            onSave={(val) => updateHorse(row.original.id, { name: val })}
-          />
-        ),
-      },
-      {
-        Header: 'Breed',
-        accessor: 'breed',
-        Cell: ({ row }: any) => (
-          <EditableField
-            value={row.original.breed}
-            onSave={(val) => updateHorse(row.original.id, { breed: val })}
-          />
-        ),
-      },
-      {
-        Header: 'Status',
-        accessor: 'status',
-        Cell: ({ row }: any) => (
-          <EditableField
-            value={row.original.status}
-            onSave={(val) => updateHorse(row.original.id, { status: val })}
-          />
-        ),
-      },
-    ],
-    [updateHorse]
-  );
+  const columns = [
+    columnHelper.accessor('name', {
+      header: 'Name',
+      cell: ({ row }) => (
+        <EditableField
+          value={row.original.name}
+          onSave={(val) => updateHorse(row.original.id, { name: val })}
+        />
+      ),
+    }),
+    columnHelper.accessor('breed', {
+      header: 'Breed',
+      cell: ({ row }) => (
+        <EditableField
+          value={row.original.breed}
+          onSave={(val) => updateHorse(row.original.id, { breed: val })}
+        />
+      ),
+    }),
+    columnHelper.accessor('status', {
+      header: 'Status',
+      cell: ({ row }) => (
+        <EditableField
+          value={row.original.status ?? ''}
+          onSave={(val) => updateHorse(row.original.id, { status: val as OCRHorse['status'] })}
+        />
+      ),
+    }),
+    columnHelper.accessor('owner', {
+      header: 'Owner',
+      cell: ({ row }) => (
+        <EditableField
+          value={row.original.owner}
+          onSave={(val) => updateHorse(row.original.id, { owner: val })}
+        />
+      ),
+    }),
+  ];
 
-  const { getTableProps, getTableBodyProps, headerGroups, rows, prepareRow } =
-    useTable({
-      columns,
-      data: horses,
-    });
+  const table = useReactTable({
+    data: horses,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+  });
 
   return (
-    <table {...getTableProps()} className="w-full table-auto border">
-      <thead>
-        {headerGroups.map((headerGroup) => (
-          <tr {...headerGroup.getHeaderGroupProps()}>
-            {headerGroup.headers.map((column) => (
-              <th {...column.getHeaderProps()} className="border px-4 py-2">
-                {column.render('Header')}
-              </th>
-            ))}
-          </tr>
-        ))}
-      </thead>
-      <tbody {...getTableBodyProps()}>
-        {rows.map((row) => {
-          prepareRow(row);
-          return (
-            <tr {...row.getRowProps()}>
-              {row.cells.map((cell) => (
-                <td {...cell.getCellProps()} className="border px-4 py-2">
-                  {cell.render('Cell')}
+    <div className="overflow-x-auto">
+      <table className="w-full table-auto border-collapse border border-gray-200">
+        <thead className="bg-gray-50">
+          {table.getHeaderGroups().map((headerGroup) => (
+            <tr key={headerGroup.id}>
+              {headerGroup.headers.map((header) => (
+                <th key={header.id} className="border border-gray-200 px-4 py-2 text-left text-sm font-medium text-gray-600">
+                  {flexRender(header.column.columnDef.header, header.getContext())}
+                </th>
+              ))}
+            </tr>
+          ))}
+        </thead>
+        <tbody>
+          {table.getRowModel().rows.map((row) => (
+            <tr key={row.id} className="hover:bg-gray-50">
+              {row.getVisibleCells().map((cell) => (
+                <td key={cell.id} className="border border-gray-200 px-4 py-2 text-sm">
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </td>
               ))}
             </tr>
-          );
-        })}
-      </tbody>
-    </table>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
+
+export default EditableTable;

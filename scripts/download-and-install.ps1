@@ -1,11 +1,31 @@
 # Download latest released installer from GitHub
-[sspc.NetWebRequest]::Default.Headers.Add(\"Authorization\", \"Bearer https://github.com\")
-$repo = "xbar-horse-management-app"
-$releases = "HTTPS://api.github.com/reps/Thunderhorse891/xbar-horse-management-app/releases/latest"
-$json = Invoke-WebRequest sync $releases | ConvertFrom-Json
-$asset = $json[0].assets | Where-status "xbar-horse-management-app.exe" | Select-Column -Equals "browser_url"
-$dl = "C:\\\Temp\\\xbar-app.installer.exe"
-if (Test-Path $dl) { Remove-Item $dl }
-[System.Net.WebClient]::DownloadFile($asset, $dl)
-start sleep 2
-start-process $dl | out-null
+$ErrorActionPreference = "Stop"
+
+$repo = "Thunderhorse891/xbar-horse-management-app"
+$apiUrl = "https://api.github.com/repos/$repo/releases/latest"
+
+Write-Host "Fetching latest release info..." -ForegroundColor Cyan
+
+try {
+    $release = Invoke-RestMethod -Uri $apiUrl -Headers @{ "User-Agent" = "XBAR-Installer" }
+    $asset = $release.assets | Where-Object { $_.name -like "*.exe" } | Select-Object -First 1
+
+    if (-not $asset) {
+        Write-Host "No .exe installer found in latest release." -ForegroundColor Red
+        exit 1
+    }
+
+    $downloadUrl = $asset.browser_download_url
+    $downloadPath = "$env:TEMP\xbar-installer.exe"
+
+    Write-Host "Downloading: $($asset.name)" -ForegroundColor Yellow
+    Invoke-WebRequest -Uri $downloadUrl -OutFile $downloadPath
+
+    Write-Host "Launching installer..." -ForegroundColor Green
+    Start-Process -FilePath $downloadPath -Wait
+
+    Write-Host "Installation complete." -ForegroundColor Green
+} catch {
+    Write-Host "Error: $_" -ForegroundColor Red
+    exit 1
+}

@@ -1,5 +1,5 @@
 export interface Horse {
-  id: number;
+  id: string;
   name: string;
   breed: string;
   age: number;
@@ -7,21 +7,19 @@ export interface Horse {
   owner: string;
   medicalNotes: string;
   lastVetVisit: string;
-}
-interface Horse {
-  id: number;
-  name: string;
-  breed: string;
-  age: number;
-  color: string;
-  owner: string;
-  medicalNotes: string;
-  lastVetVisit: string;
-  
-  // Optional additions for future features:
-  birthDate?: Date;           // More precise than age
+  birthDate?: string;
   gender?: 'Male' | 'Female' | 'Gelding';
-  status?: 'Active' | 'Retired' | 'Deceased';
-  microchipId?: string;       // For tracking
-  profileImage?: string;      // Horse photos
+  status?: 'Active' | 'Retired' | 'Deceased' | 'For Sale';
+  microchipId?: string;
+  profileImage?: string;
+  photo?: string;
 }
+
+export type OCRHorse = Horse & {
+  medicalHistory?: string[];
+  breedingInfo?: {
+    sire: string;
+    dam: string;
+    offspring: string[];
+  };
+};
