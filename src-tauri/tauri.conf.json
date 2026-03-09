@@ -14,8 +14,7 @@
       "all": false,
       "shell": { "all": false, "open": true },
       "fs": { "all": true, "scope": ["$APPDATA/*", "$DOCUMENT/*"] },
-      "dialog": { "all": true },
-      "updater": { "active": false }
+      "dialog": { "all": true }
     },
     "bundle": {
       "active": true,
@@ -31,11 +30,6 @@
     },
     "security": {
       "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'"
-    },
-    "systemTray": {
-      "iconPath": "icons/icon.ico",
-      "iconAsTemplate": false,
-      "menuOnLeftClick": false
     },
     "windows": [
       {
