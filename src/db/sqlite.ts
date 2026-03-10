@@ -1,6 +1,4 @@
-import Database from 'better-sqlite3';
-import path from 'path';
-
-const databaseName = path.resolve(process.cwd(), 'database/xbar.db');
-export const db = new Database(databaseName);
+import sqlite3 from "sqlite3";
+const databaseName = "xbar.db";
+export const db = sqlite3.open(databaseName);
 export default db;
