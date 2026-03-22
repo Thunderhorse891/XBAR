@@ -26,7 +26,21 @@
         "icons/128x128@2x.png",
         "icons/icon.icns",
         "icons/icon.ico"
-      ]
+      ],
+      "windows": {
+        "wix": {
+          "language": "en-US",
+          "upgradeCode": "F8A9C2E1-3B47-4D6F-9821-7C5E0A3B8D64",
+          "skipWebviewInstall": false,
+          "enableElevatedUpdateTask": false,
+          "componentGroupRefs": [],
+          "componentRefs": [],
+          "featureGroupRefs": [],
+          "featureRefs": [],
+          "fragmentPaths": [],
+          "mergeRefs": []
+        }
+      }
     },
     "security": {
       "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'"

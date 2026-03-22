@@ -51,4 +51,6 @@ jobs:
         uses: softprops/action-gh-release@v1
         if: success()
         with:
-          files: src-tauri/target/release/bundle/nsis/*.exe
+          files: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*.exe
