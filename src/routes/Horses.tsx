@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useHorses } from '@/store/useHorses';
+import WixSync from '@/components/WixSync';
 
 export default function Horses() {
   const { horses } = useHorses();
@@ -27,6 +28,7 @@ export default function Horses() {
 
   return (
     <div>
+      <WixSync />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 20 }}>
         <div>
           <h1 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700, letterSpacing: -0.5 }}>Horses</h1>
