@@ -1,12 +1,18 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import MainLayout from './routes/layouts/MainLayout';
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
-import Horses from './routes/Horses';
+import Breeding from './routes/Breeding';
+import Documents from './routes/Documents';
 import HorseDetail from './routes/HorseDetail';
-import { Breeding } from './routes/Breeding';
-import { Medical } from './routes/Medical';
-import { Sales } from './routes/Sales';
+import Horses from './routes/Horses';
+import MainLayout from './routes/layouts/MainLayout';
+import Medical from './routes/Medical';
+import OwnerPortal from './routes/OwnerPortal';
+import Ownership from './routes/Ownership';
+import RanchAssets from './routes/RanchAssets';
+import Sales from './routes/Sales';
+import Settings from './routes/Settings';
+import Subscriptions from './routes/Subscriptions';
+import Weather from './routes/Weather';
 
 export default function App() {
   return (
@@ -16,9 +22,16 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="horses" element={<Horses />} />
           <Route path="horses/:id" element={<HorseDetail />} />
-          <Route path="breeding" element={<Breeding />} />
+          <Route path="documents" element={<Documents />} />
+          <Route path="ownership" element={<Ownership />} />
           <Route path="medical" element={<Medical />} />
+          <Route path="breeding" element={<Breeding />} />
           <Route path="sales" element={<Sales />} />
+          <Route path="weather" element={<Weather />} />
+          <Route path="assets" element={<RanchAssets />} />
+          <Route path="subscriptions" element={<Subscriptions />} />
+          <Route path="portal" element={<OwnerPortal />} />
+          <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -1,188 +1,299 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useHorses } from '@/store/useHorses';
-
-const tasks = [
-  { id: 1, title: 'Finalize spring vaccination packets', status: 'In Progress', priority: 'High' },
-  { id: 2, title: 'Approve mare transfer documents', status: 'In Review', priority: 'High' },
-  { id: 3, title: 'Reconcile feed invoice variance', status: 'In Progress', priority: 'Medium' },
-  { id: 4, title: 'Close monthly breeder compliance log', status: 'Complete', priority: 'Low' },
-];
-
-const alerts = [
-  { title: 'Vet review due', desc: 'BONNY LIL MAN ROGERS requires follow-up mobility review within 24 hours.', urgent: true },
-  { title: 'Transfer paperwork check', desc: 'Review non-registered horses and finalize transfer-paper statuses.', urgent: false },
-  { title: 'Owner profile completion', desc: 'Some records are missing owner or location metadata.', urgent: false },
-];
-
-const activity = [
-  { actor: 'Ops Desk', action: 'Updated transfer docs for', subject: 'WIGGY N RED', time: '12m ago' },
-  { actor: 'Trainer', action: 'Logged conditioning session for', subject: 'HANCOCK SILVER POCO', time: '38m ago' },
-  { actor: 'Finance', action: 'Posted vet expense for', subject: 'BONNY LIL MAN ROGERS', time: '1h ago' },
-  { actor: 'Health', action: 'Flagged vaccination follow-up for', subject: 'RT BLUE DOLLY 1321', time: '3h ago' },
-];
-
-const financial = [
-  { month: 'Oct', value: 118000 }, { month: 'Nov', value: 123000 },
-  { month: 'Dec', value: 126500 }, { month: 'Jan', value: 129500 },
-  { month: 'Feb', value: 132000 }, { month: 'Mar', value: 136500 },
-];
-
-const priorityConfig: Record<string, { color: string; bg: string; dot: string }> = {
-  High:   { color: '#ff3b30', bg: 'rgba(255,59,48,0.08)', dot: '#ff3b30' },
-  Medium: { color: '#ff9500', bg: 'rgba(255,149,0,0.08)', dot: '#ff9500' },
-  Low:    { color: '#34c759', bg: 'rgba(52,199,89,0.08)', dot: '#34c759' },
-};
-
-function AnimatedNumber({ value }: { value: number }) {
-  const [display, setDisplay] = useState(0);
-  useEffect(() => {
-    let start = 0;
-    const step = value / (600 / 16);
-    const timer = setInterval(() => {
-      start += step;
-      if (start >= value) { setDisplay(value); clearInterval(timer); }
-      else setDisplay(Math.floor(start));
-    }, 16);
-    return () => clearInterval(timer);
-  }, [value]);
-  return <>{display}</>;
-}
-
-function BarChart() {
-  const [animate, setAnimate] = useState(false);
-  const maxVal = Math.max(...financial.map(d => d.value));
-  useEffect(() => { const t = setTimeout(() => setAnimate(true), 300); return () => clearTimeout(t); }, []);
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 100 }}>
-      {financial.map((d, i) => (
-        <div key={d.month} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
-          <div style={{ width: '100%', borderRadius: '5px 5px 0 0', background: 'linear-gradient(180deg, #0a84ff, #0060d0)', transition: `height 0.6s cubic-bezier(.34,1.56,.64,1) ${i * 0.08}s`, height: animate ? `${(d.value / maxVal) * 85}px` : '0px' }} />
-          <div style={{ fontSize: 10, color: '#8e8e93', fontWeight: 500 }}>{d.month}</div>
-          <div style={{ fontSize: 9, color: '#aeaeb2' }}>${(d.value / 1000).toFixed(0)}k</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-const card = { background: '#fff', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.05)' };
+import { Link } from 'react-router-dom';
+import { MetricCard, PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
+import { formatCompactCurrency, formatCurrency, formatPercent } from '@/lib/format';
+import { useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
 
 export default function Dashboard() {
-  const { horses } = useHorses();
-  const navigate = useNavigate();
+  const horses = useXbarStore((state) => state.horses);
+  const documents = useXbarStore((state) => state.documents);
+  const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
+  const weather = useXbarStore((state) => state.weather);
+  const subscription = useXbarStore((state) => state.subscription);
+  const salesLeads = useXbarStore((state) => state.salesLeads);
+  const portal = useXbarStore((state) => state.portal);
+  const ocrBatches = useXbarStore((state) => state.ocrBatches);
+  const roleWorkspace = useCurrentRoleWorkspace();
 
-  const stats = [
-    { label: 'Total Horses', value: horses.length, sub: '+2 this quarter', color: '#0a84ff' },
-    { label: 'Registered', value: horses.filter(h => h.registered).length, sub: 'AQHA current', color: '#34c759' },
-    { label: 'Transfer Backlog', value: horses.filter(h => !h.registered).length, sub: 'Needs attention', color: '#ff9500' },
-    { label: 'Monthly Margin', value: 54400, sub: '↑ 3.4% vs last month', color: '#5856d6', prefix: '$' },
-  ];
+  const saleReady = horses.filter((horse) => horse.readiness.score >= 80);
+  const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Extracting');
+  const ownershipAttention = ownershipRecords.filter((record) => record.transferStatus !== 'Clear');
+  const medicalWatch = horses.filter((horse) => horse.status === 'Medical Review');
+  const totalInsuredValue = horses.reduce((sum, horse) => sum + horse.insuredValue, 0);
+  const attentionHorses = horses.filter((horse) => horse.alerts.length > 0 || horse.readiness.score < 75).slice(0, 4);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <h1 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700, letterSpacing: -0.5 }}>Dashboard</h1>
+    <>
+      <PageHeader
+        eyebrow="XBAR LLC"
+        title="Dashboard"
+        description="A live operating view across portfolio readiness, ownership integrity, document intake, weather exposure, and external access."
+        actions={
+          <>
+            <Link to="/horses" className="button button--ghost">
+              View Horses
+            </Link>
+            <Link to="/documents" className="button button--primary">
+              Open OCR Queue
+            </Link>
+          </>
+        }
+      />
 
-      {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
-        {stats.map(s => (
-          <div key={s.label} style={{ ...card, position: 'relative', overflow: 'hidden' }}>
-            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${s.color}, ${s.color}44)`, borderRadius: '14px 14px 0 0' }} />
-            <div style={{ fontSize: 11, color: '#8e8e93', fontWeight: 500, marginBottom: 8, marginTop: 4 }}>{s.label}</div>
-            <div style={{ fontSize: 32, fontWeight: 700, letterSpacing: -1, lineHeight: 1, color: '#1c1c1e' }}>
-              {s.prefix}{s.prefix ? s.value.toLocaleString() : <AnimatedNumber value={s.value} />}
-            </div>
-            <div style={{ fontSize: 11, color: s.color, marginTop: 6, fontWeight: 500 }}>{s.sub}</div>
-          </div>
-        ))}
+      <div className="metric-grid">
+        <MetricCard label="Horse portfolio" value={`${horses.length}`} detail={`${saleReady.length} with market-ready packets`} />
+        <MetricCard
+          label="Insured value"
+          value={formatCompactCurrency(totalInsuredValue)}
+          detail={`${ownershipAttention.length} ownership items still need attention`}
+          tone="slate"
+        />
+        <MetricCard
+          label="Document review"
+          value={`${reviewQueue.length}`}
+          detail={`${ocrBatches.reduce((sum, batch) => sum + batch.fileCount, 0)} intake files flowing through OCR`}
+          tone="amber"
+        />
+        <MetricCard
+          label="Owner portal"
+          value={`${portal.activeOwners}/${portal.invitedOwners}`}
+          detail={`${portal.openInquiries} live inquiries and ${portal.savedHorses} saved horses`}
+          tone="emerald"
+        />
       </div>
 
-      {/* Middle row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 12 }}>
-        {/* Tasks */}
-        <div style={card}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-            <span style={{ fontSize: 14, fontWeight: 700 }}>Operations Taskboard</span>
-            <span style={{ fontSize: 11, color: '#8e8e93', background: '#f2f2f7', padding: '3px 10px', borderRadius: 20, fontWeight: 500 }}>
-              {tasks.filter(t => t.status === 'Complete').length}/{tasks.length} complete
-            </span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {tasks.map(task => {
-              const pc = priorityConfig[task.priority];
-              return (
-                <div key={task.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', borderRadius: 10, background: '#f9f9fb', border: '1px solid rgba(0,0,0,0.04)', cursor: 'pointer', transition: 'background 0.15s' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#f2f2f7')}
-                  onMouseLeave={e => (e.currentTarget.style.background = '#f9f9fb')}>
+      <div className="dashboard-grid dashboard-grid--primary">
+        <Panel
+          eyebrow="Portfolio watch"
+          title="High-context horse signals"
+          description="The horses below are carrying the most immediate operational weight across sales, medical, and ownership."
+        >
+          <div className="stack-list">
+            {attentionHorses.map((horse) => (
+              <Link key={horse.id} to={`/horses/${horse.id}`} className="stack-item stack-item--interactive">
+                <div className="stack-item__top">
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: task.status === 'Complete' ? '#8e8e93' : '#1c1c1e', textDecoration: task.status === 'Complete' ? 'line-through' : 'none', marginBottom: 2 }}>{task.title}</div>
-                    <div style={{ fontSize: 11, color: task.status === 'Complete' ? '#34c759' : '#8e8e93', fontWeight: 500 }}>{task.status}</div>
+                    <div className="stack-item__title">{horse.name}</div>
+                    <div className="stack-item__copy">
+                      {horse.segment} · {horse.location.barn} · {horse.owner}
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: pc.dot }} />
-                    <span style={{ background: pc.bg, color: pc.color, fontSize: 10, padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>{task.priority}</span>
+                  <Pill tone={horse.status === 'Medical Review' ? 'rose' : horse.readiness.score >= 85 ? 'emerald' : 'amber'}>
+                    {horse.status}
+                  </Pill>
+                </div>
+                <div className="inline-metrics">
+                  <span>Readiness {formatPercent(horse.readiness.score)}</span>
+                  <span>{horse.documents.length} documents</span>
+                  <span>{horse.alerts.length} alerts</span>
+                </div>
+                <ProgressBar value={horse.readiness.score} tone={horse.readiness.score >= 85 ? 'emerald' : 'amber'} />
+              </Link>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel
+          eyebrow="Documents and OCR"
+          title="Ingestion queue"
+          description="External OCR providers are not wired yet, but the intake, review, and match architecture is live in the product model."
+        >
+          <div className="stack-list">
+            {ocrBatches.map((batch) => (
+              <div key={batch.id} className="stack-item">
+                <div className="stack-item__top">
+                  <div>
+                    <div className="stack-item__title">{batch.label}</div>
+                    <div className="stack-item__copy">
+                      {batch.fileCount} files · {batch.receivedAt} · {batch.source}
+                    </div>
+                  </div>
+                  <Pill tone={batch.state === 'Completed' ? 'emerald' : batch.state === 'Reviewing' ? 'amber' : 'blue'}>
+                    {batch.state}
+                  </Pill>
+                </div>
+                <div className="inline-metrics">
+                  <span>{batch.matchedCount} matched</span>
+                  <span>{batch.needsReviewCount} need review</span>
+                  <span>{batch.processedCount}/{batch.fileCount} processed</span>
+                </div>
+                <ProgressBar value={(batch.processedCount / batch.fileCount) * 100} />
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+
+      <div className="dashboard-grid dashboard-grid--secondary">
+        <Panel
+          eyebrow="Ownership"
+          title="Integrity and transfer posture"
+          description="Legal owner, co-owner, and transfer states are surfaced as first-class operating signals."
+        >
+          <div className="stack-list">
+            {ownershipRecords.map((record) => {
+              const horse = horses.find((item) => item.id === record.horseId);
+              return (
+                <div key={record.id} className="stack-item">
+                  <div className="stack-item__top">
+                    <div>
+                      <div className="stack-item__title">{horse?.name ?? record.legalOwner}</div>
+                      <div className="stack-item__copy">Legal owner: {record.legalOwner}</div>
+                    </div>
+                    <Pill tone={record.transferStatus === 'Clear' ? 'emerald' : 'amber'}>{record.transferStatus}</Pill>
+                  </div>
+                  <div className="inline-metrics">
+                    <span>{record.pendingDocuments.length || 0} pending docs</span>
+                    <span>Confidence {record.confidence}%</span>
+                    <span>Due {record.complianceDeadline}</span>
                   </div>
                 </div>
               );
             })}
           </div>
-        </div>
+        </Panel>
 
-        {/* Alerts */}
-        <div style={card}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-            <span style={{ fontSize: 14, fontWeight: 700 }}>Critical Alerts</span>
-            <span style={{ background: 'rgba(255,59,48,0.1)', color: '#ff3b30', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20 }}>{alerts.length} items</span>
+        <Panel
+          eyebrow="Environment"
+          title="Weather and ranch conditions"
+          description="Operational weather now sits alongside portfolio risk so turnout, transport, and breeding timing stay visible."
+        >
+          <div className="weather-shell">
+            <div className="weather-shell__headline">
+              <div>
+                <div className="weather-shell__temp">{weather.currentTempF}F</div>
+                <div className="weather-shell__copy">{weather.condition}</div>
+              </div>
+              <Pill tone={weather.riskLevel === 'Action' ? 'rose' : weather.riskLevel === 'Watch' ? 'amber' : 'emerald'}>
+                {weather.riskLevel}
+              </Pill>
+            </div>
+            <div className="key-grid">
+              <div className="key-grid__item">
+                <div className="key-grid__label">Wind</div>
+                <div className="key-grid__value">{weather.windMph} mph</div>
+              </div>
+              <div className="key-grid__item">
+                <div className="key-grid__label">Humidity</div>
+                <div className="key-grid__value">{weather.humidity}%</div>
+              </div>
+            </div>
+            <div className="detail-block">
+              <strong>Pasture impact:</strong> {weather.pastureImpact}
+            </div>
+            <div className="detail-block">
+              <strong>Transport:</strong> {weather.transportImpact}
+            </div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {alerts.map((a, i) => (
-              <div key={i} style={{ paddingBottom: i < alerts.length - 1 ? 12 : 0, borderBottom: i < alerts.length - 1 ? '1px solid #f2f2f7' : 'none' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
-                  {a.urgent && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#ff3b30', flexShrink: 0 }} />}
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>{a.title}</span>
+        </Panel>
+
+        <Panel
+          eyebrow="Commercial layer"
+          title="Plan, seats, and external access"
+          description="Subscriptions, owner portal, and listing controls are now treated as product architecture instead of afterthought settings."
+        >
+          <div className="stack-list">
+            <div className="stack-item">
+              <div className="stack-item__top">
+                <div>
+                  <div className="stack-item__title">{subscription.tier}</div>
+                  <div className="stack-item__copy">{subscription.billingState} · renews {subscription.renewalDate}</div>
                 </div>
-                <div style={{ fontSize: 11, color: '#6d6d72', lineHeight: 1.55, paddingLeft: a.urgent ? 13 : 0 }}>{a.desc}</div>
+                <Pill tone="blue">{formatCurrency(subscription.monthlyRate)}/mo</Pill>
+              </div>
+              <div className="inline-metrics">
+                <span>{subscription.usage.seatsUsed}/{subscription.usage.seatLimit} seats</span>
+                <span>{subscription.usage.portalSeatsUsed}/{subscription.usage.portalSeatLimit} portal seats</span>
+                <span>{subscription.usage.ocrProcessed}/{subscription.usage.ocrLimit} OCR pages</span>
+              </div>
+            </div>
+            <div className="stack-item">
+              <div className="stack-item__title">Portal readiness</div>
+              <div className="inline-metrics">
+                <span>{portal.activeOwners} active owners</span>
+                <span>{portal.savedHorses} saved horses</span>
+                <span>{portal.openInquiries} open inquiries</span>
+              </div>
+              <div className="detail-block subtle">
+                Google and Facebook login scaffolding are intentionally staged, not falsely marked live.
+              </div>
+            </div>
+          </div>
+        </Panel>
+      </div>
+
+      <div className="dashboard-grid dashboard-grid--secondary">
+        <Panel eyebrow="Role focus" title={roleWorkspace.label} description={roleWorkspace.summary} meta={<Pill tone="blue">{roleWorkspace.primaryModules.length} priority modules</Pill>}>
+          <div className="token-row">
+            {roleWorkspace.primaryModules.map((module) => (
+              <Pill key={module} tone="blue">
+                {module}
+              </Pill>
+            ))}
+          </div>
+          <div className="bullet-list">
+            {roleWorkspace.permissions.map((permission) => (
+              <div key={permission} className="bullet-list__item">
+                {permission}
               </div>
             ))}
           </div>
-        </div>
+        </Panel>
+
+        <Panel eyebrow="Lead intelligence" title="Buyer and social signals" description="Lead capture, saved horse behavior, and owner portal handoff can now sit in the same operating picture.">
+          <div className="stack-list">
+            {salesLeads.map((lead) => {
+              const horse = horses.find((item) => item.id === lead.horseId);
+              return (
+                <div key={lead.id} className="stack-item">
+                  <div className="stack-item__top">
+                    <div>
+                      <div className="stack-item__title">{lead.name}</div>
+                      <div className="stack-item__copy">
+                        {lead.channel} · {horse?.name}
+                      </div>
+                    </div>
+                    <Pill tone={lead.stage === 'Offer' ? 'emerald' : lead.stage === 'Qualified' ? 'blue' : 'amber'}>
+                      {lead.stage}
+                    </Pill>
+                  </div>
+                  <div className="inline-metrics">
+                    <span>Last touch {lead.lastTouch}</span>
+                    <span>{lead.savedListing ? 'Saved listing' : 'No saved listing yet'}</span>
+                    <span>{lead.ownerPortalReady ? 'Portal ready' : 'Portal not sent'}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Panel>
       </div>
 
-      {/* Bottom row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        {/* Activity */}
-        <div style={card}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-            <span style={{ fontSize: 14, fontWeight: 700 }}>Recent Activity</span>
-            <span style={{ fontSize: 11, color: '#0a84ff', fontWeight: 500 }}>Live stream</span>
+      {medicalWatch.length ? (
+        <Panel eyebrow="Medical watch" title="Open care attention" description="The product now exposes urgent horse care as a real lane inside the dashboard instead of burying it behind basic cards.">
+          <div className="table-shell">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Horse</th>
+                  <th>Latest note</th>
+                  <th>Owner</th>
+                  <th>Last visit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {medicalWatch.map((horse) => (
+                  <tr key={horse.id}>
+                    <td>{horse.name}</td>
+                    <td>{horse.medicalTimeline[0]?.title ?? 'No medical entry'}</td>
+                    <td>{horse.assignments.veterinarian}</td>
+                    <td>{horse.lastVetVisit}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          {activity.map((a, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 0', borderBottom: i < activity.length - 1 ? '1px solid #f2f2f7' : 'none', gap: 12 }}>
-              <div style={{ display: 'flex', gap: 10, flex: 1 }}>
-                <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg, #e8f4ff, #bdd8ff)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#0a84ff', flexShrink: 0 }}>
-                  {a.actor.split(' ').map(w => w[0]).join('').slice(0, 2)}
-                </div>
-                <div style={{ fontSize: 12, color: '#3a3a3c', lineHeight: 1.5 }}>
-                  <strong style={{ color: '#1c1c1e' }}>{a.actor}</strong> {a.action} <strong style={{ color: '#0a84ff' }}>{a.subject}</strong>
-                </div>
-              </div>
-              <span style={{ fontSize: 11, color: '#aeaeb2', whiteSpace: 'nowrap', fontWeight: 500, paddingTop: 1 }}>{a.time}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Chart */}
-        <div style={card}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <span style={{ fontSize: 14, fontWeight: 700 }}>Financial Trend</span>
-            <span style={{ fontSize: 11, color: '#8e8e93', fontWeight: 500 }}>Last 6 months</span>
-          </div>
-          <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: -0.5, marginBottom: 14 }}>
-            $136,500 <span style={{ fontSize: 13, color: '#34c759', fontWeight: 600 }}>↑ 3.4%</span>
-          </div>
-          <BarChart />
-        </div>
-      </div>
-    </div>
+        </Panel>
+      ) : null}
+    </>
   );
 }

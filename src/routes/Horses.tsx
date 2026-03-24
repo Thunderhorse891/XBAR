@@ -1,133 +1,188 @@
-import React, { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useHorses } from '@/store/useHorses';
+import { useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { MetricCard, PageHeader, Pill, ProgressBar } from '@/components/app-ui';
+import { formatCompactCurrency, formatPercent } from '@/lib/format';
+import { useXbarStore } from '@/store/useXbarStore';
+import type { HorseSegment, HorseStatus } from '@/types/xbar';
+
+type ViewMode = 'Portfolio' | 'Registry';
+type SegmentFilter = 'All' | HorseSegment;
+
+const statusTone: Record<HorseStatus, 'blue' | 'slate' | 'amber' | 'rose' | 'emerald'> = {
+  'In Training': 'blue',
+  'Broodmare Program': 'emerald',
+  'Sale Prep': 'amber',
+  'Medical Review': 'rose',
+  Pasture: 'slate',
+  Retired: 'slate',
+};
 
 export default function Horses() {
-  const { horses } = useHorses();
-  const navigate = useNavigate();
+  const horses = useXbarStore((state) => state.horses);
+  const savedHorseIds = useXbarStore((state) => state.savedHorseIds);
   const [searchParams] = useSearchParams();
-  const [viewMode, setViewMode] = useState<'Cards' | 'Table'>('Table');
-  const [sortBy, setSortBy] = useState<'name' | 'age' | 'status'>('name');
-  const [search, setSearch] = useState(searchParams.get('search') || '');
+  const [viewMode, setViewMode] = useState<ViewMode>('Portfolio');
+  const [segmentFilter, setSegmentFilter] = useState<SegmentFilter>('All');
+  const [search, setSearch] = useState(searchParams.get('search') ?? '');
 
-  const filtered = horses
-    .filter((h) => [h.name, h.breed, h.owner, h.color].some((v) => v?.toLowerCase().includes(search.toLowerCase())))
-    .sort((a, b) => {
-      if (sortBy === 'name') return a.name.localeCompare(b.name);
-      if (sortBy === 'age') return b.age - a.age;
-      return (a.status ?? '').localeCompare(b.status ?? '');
-    });
+  const filtered = horses.filter((horse) => {
+    const matchesSearch =
+      !search.trim() ||
+      [horse.name, horse.barnName, horse.owner, horse.ownerEntity, horse.aqhaNumber, horse.location.barn]
+        .join(' ')
+        .toLowerCase()
+        .includes(search.trim().toLowerCase());
+    const matchesSegment = segmentFilter === 'All' || horse.segment === segmentFilter;
+    return matchesSearch && matchesSegment;
+  });
 
-  const statusStyle = (status?: string) => {
-    if (status === 'Active') return { bg: 'rgba(10,132,255,0.1)', color: '#0a84ff' };
-    if (status === 'For Sale') return { bg: 'rgba(52,199,89,0.1)', color: '#34c759' };
-    if (status === 'Retired') return { bg: 'rgba(142,142,147,0.12)', color: '#8e8e93' };
-    return { bg: 'rgba(255,59,48,0.08)', color: '#ff3b30' };
-  };
+  const saleReady = filtered.filter((horse) => horse.readiness.score >= 80);
+  const medicalWatch = filtered.filter((horse) => horse.status === 'Medical Review');
+  const transferRisk = filtered.filter((horse) => horse.documents.some((documentId) => documentId.includes('transfer')));
+  const segments: SegmentFilter[] = ['All', 'Sale Prospect', 'Stud', 'Show String', 'Retired'];
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 20 }}>
-        <div>
-          <h1 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700, letterSpacing: -0.5 }}>Horses</h1>
-          <p style={{ margin: 0, fontSize: 13, color: '#8e8e93' }}>{filtered.length} of {horses.length} horses</p>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as 'name' | 'age' | 'status')}
-            style={{ padding: '7px 10px', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 10, fontSize: 12, fontFamily: 'inherit', background: '#fff' }}
-          >
-            <option value="name">Sort: Name</option>
-            <option value="age">Sort: Age</option>
-            <option value="status">Sort: Status</option>
-          </select>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search horses..."
-            style={{ padding: '7px 14px', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 10, fontSize: 13, fontFamily: 'inherit', outline: 'none', width: 200, background: 'rgba(118,118,128,0.12)', color: '#1c1c1e' }} />
-          <div style={{ display: 'flex', background: 'rgba(118,118,128,0.12)', borderRadius: 9, padding: 2 }}>
-            {(['Cards', 'Table'] as const).map(v => (
-              <button key={v} onClick={() => setViewMode(v)}
-                style={{ padding: '5px 14px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', transition: 'all 0.15s',
-                  background: viewMode === v ? '#fff' : 'transparent',
-                  color: viewMode === v ? '#1c1c1e' : '#8e8e93',
-                  fontWeight: viewMode === v ? 600 : 400,
-                  boxShadow: viewMode === v ? '0 1px 3px rgba(0,0,0,0.12)' : 'none' }}>
-                {v}
+    <>
+      <PageHeader
+        eyebrow="Records"
+        title="Horses"
+        description="Horse profiles now behave like asset dossiers: registry metadata, ownership structure, media readiness, OCR facts, and operating signals all sit in one place."
+        actions={
+          <div className="view-toggle">
+            {(['Portfolio', 'Registry'] as ViewMode[]).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                className={`view-toggle__button${viewMode === mode ? ' view-toggle__button--active' : ''}`}
+                onClick={() => setViewMode(mode)}
+              >
+                {mode}
               </button>
             ))}
           </div>
-        </div>
+        }
+      />
+
+      <div className="metric-grid">
+        <MetricCard label="Portfolio" value={`${filtered.length}`} detail={`${saleReady.length} with sale-grade packets`} />
+        <MetricCard label="Sale value" value={formatCompactCurrency(saleReady.reduce((sum, horse) => sum + horse.sale.askPrice, 0))} detail="Active private-market pricing" tone="amber" />
+        <MetricCard label="Medical watch" value={`${medicalWatch.length}`} detail="Care-sensitive horses needing extra visibility" tone="rose" />
+        <MetricCard label="Transfer risk" value={`${transferRisk.length}`} detail={`${savedHorseIds.length} horses already saved in portal flows`} tone="slate" />
       </div>
 
-      {filtered.length === 0 && (
-        <div style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 14, padding: 32, textAlign: 'center' }}>
-          <div style={{ fontSize: 30, marginBottom: 8 }}>🔍</div>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>No horses found</div>
-          <div style={{ fontSize: 13, color: '#8e8e93' }}>Try a different search term or clear filters.</div>
+      <div className="filter-bar">
+        <div className="filter-row">
+          {segments.map((segment) => (
+            <button
+              key={segment}
+              type="button"
+              className={`filter-chip${segmentFilter === segment ? ' filter-chip--active' : ''}`}
+              onClick={() => setSegmentFilter(segment)}
+            >
+              {segment}
+            </button>
+          ))}
         </div>
-      )}
 
-      {viewMode === 'Cards' && filtered.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
-          {filtered.map(h => {
-            const ss = statusStyle(h.status);
-            return (
-              <div key={h.id} onClick={() => navigate(`/horses/${h.id}`)}
-                style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.05)', cursor: 'pointer', transition: 'all 0.2s' }}
-                onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.1)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)'; e.currentTarget.style.transform = 'none'; }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                  <div style={{ width: 42, height: 42, borderRadius: 12, background: 'linear-gradient(135deg, #e8f4ff, #c0dcff)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>🐴</div>
-                  <span style={{ fontSize: 10, fontWeight: 600, padding: '4px 10px', borderRadius: 20, background: ss.bg, color: ss.color }}>{h.status}</span>
-                </div>
-                <div style={{ fontWeight: 700, fontSize: 14, color: '#1c1c1e', marginBottom: 3 }}>{h.name}</div>
-                <div style={{ fontSize: 12, color: '#6d6d72', marginBottom: 10 }}>{h.breed} · {h.color} · {h.age} yrs</div>
-                <div style={{ height: 1, background: '#f2f2f7', marginBottom: 10 }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#8e8e93' }}>
-                  <span>{h.owner}</span>
-                  <span style={{ color: h.registered ? '#34c759' : '#ff9500', fontWeight: 600 }}>{h.registered ? '✓ Registered' : '⚠ Unregistered'}</span>
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          className="field-input"
+          placeholder="Search by horse, AQHA, owner, or barn"
+        />
+      </div>
+
+      {viewMode === 'Portfolio' ? (
+        <div className="horse-grid">
+          {filtered.map((horse) => (
+            <Link key={horse.id} to={`/horses/${horse.id}`} className="horse-card">
+              <div className="horse-card__media">
+                <img src={horse.profileImage} alt="" className="horse-card__image" />
+                <div className="horse-card__media-copy">
+                  <Pill tone={statusTone[horse.status]}>{horse.status}</Pill>
+                  <Pill tone="slate">{horse.segment}</Pill>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      )}
 
-      {viewMode === 'Table' && filtered.length > 0 && (
-        <div style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.05)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <div className="horse-card__body">
+                <div className="horse-card__top">
+                  <div>
+                    <div className="horse-card__title">{horse.name}</div>
+                    <div className="horse-card__subtitle">
+                      {horse.registry} · {horse.aqhaNumber} · {horse.sex}
+                    </div>
+                  </div>
+                  {savedHorseIds.includes(horse.id) ? <Pill tone="blue">Saved</Pill> : null}
+                </div>
+
+                <p className="horse-card__summary">{horse.summary}</p>
+
+                <div className="horse-card__meta">
+                  <span>{horse.owner}</span>
+                  <span>{horse.location.barn}</span>
+                  <span>{horse.documents.length} docs</span>
+                </div>
+
+                <div className="horse-card__readiness">
+                  <div className="horse-card__readiness-head">
+                    <span>Sale readiness</span>
+                    <strong>{formatPercent(horse.readiness.score)}</strong>
+                  </div>
+                  <ProgressBar value={horse.readiness.score} tone={horse.readiness.score >= 85 ? 'emerald' : horse.readiness.score >= 70 ? 'amber' : 'rose'} />
+                </div>
+
+                <div className="token-row">
+                  {horse.tags.slice(0, 3).map((tag) => (
+                    <Pill key={tag}>{tag}</Pill>
+                  ))}
+                </div>
+
+                <div className="horse-card__footer">
+                  <span>{horse.sale.watchlistCount} watchers</span>
+                  <span>{formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)}</span>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <div className="table-shell">
+          <table className="data-table">
             <thead>
-              <tr style={{ background: '#f9f9fb', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
-                {['Name', 'Breed', 'Color', 'Age', 'Owner', 'Status', 'Registered', 'Last Vet'].map(h => (
-                  <th key={h} style={{ padding: '11px 16px', textAlign: 'left', fontSize: 11, color: '#8e8e93', fontWeight: 600, letterSpacing: 0.3 }}>{h}</th>
-                ))}
+              <tr>
+                <th>Horse</th>
+                <th>Segment</th>
+                <th>Owner</th>
+                <th>Location</th>
+                <th>Docs</th>
+                <th>Readiness</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((h, i) => {
-                const ss = statusStyle(h.status);
-                return (
-                  <tr key={h.id} onClick={() => navigate(`/horses/${h.id}`)}
-                    style={{ borderBottom: i < filtered.length - 1 ? '1px solid #f2f2f7' : 'none', cursor: 'pointer', transition: 'background 0.1s' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#f9f9fb')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                    <td style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13 }}>{h.name}</td>
-                    <td style={{ padding: '12px 16px', fontSize: 13, color: '#3a3a3c' }}>{h.breed}</td>
-                    <td style={{ padding: '12px 16px', fontSize: 13, color: '#3a3a3c' }}>{h.color}</td>
-                    <td style={{ padding: '12px 16px', fontSize: 13, color: '#3a3a3c' }}>{h.age} yrs</td>
-                    <td style={{ padding: '12px 16px', fontSize: 13, color: '#3a3a3c' }}>{h.owner}</td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20, background: ss.bg, color: ss.color }}>{h.status}</span>
-                    </td>
-                    <td style={{ padding: '12px 16px', fontSize: 12, color: h.registered ? '#34c759' : '#ff9500', fontWeight: 600 }}>{h.registered ? '✓ Yes' : '⚠ No'}</td>
-                    <td style={{ padding: '12px 16px', fontSize: 12, color: '#8e8e93' }}>{h.lastVetVisit}</td>
-                  </tr>
-                );
-              })}
+              {filtered.map((horse) => (
+                <tr key={horse.id}>
+                  <td>
+                    <Link to={`/horses/${horse.id}`} className="table-link">
+                      {horse.name}
+                    </Link>
+                  </td>
+                  <td>{horse.segment}</td>
+                  <td>{horse.owner}</td>
+                  <td>
+                    {horse.location.barn} · {horse.location.pasture}
+                  </td>
+                  <td>{horse.documents.length}</td>
+                  <td>{formatPercent(horse.readiness.score)}</td>
+                  <td>
+                    <Pill tone={statusTone[horse.status]}>{horse.status}</Pill>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       )}
-    </div>
+    </>
   );
 }

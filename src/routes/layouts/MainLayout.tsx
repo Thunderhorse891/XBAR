@@ -1,112 +1,193 @@
-import React, { useState } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import type { ComponentType, KeyboardEvent, SVGProps } from 'react';
+import { useState } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Pill } from '@/components/app-ui';
+import {
+  AddIcon,
+  AssetsIcon,
+  BellIcon,
+  BreedingIcon,
+  DashboardIcon,
+  DocumentsIcon,
+  HorsesIcon,
+  MedicalIcon,
+  OwnershipIcon,
+  PortalIcon,
+  SalesIcon,
+  SearchIcon,
+  SettingsIcon,
+  SubscriptionIcon,
+  WeatherIcon,
+} from '@/components/icons';
+import { useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
+import type { UserRole } from '@/types/xbar';
 
-const NAV = [
-  { label: 'Dashboard', path: '/', icon: '▦' },
-  { label: 'Horses', path: '/horses', icon: '⬡' },
-  { label: 'Medical', path: '/medical', icon: '✚' },
-  { label: 'Breeding', path: '/breeding', icon: '◈' },
-  { label: 'Sales', path: '/sales', icon: '◉' },
+type NavItem = {
+  label: string;
+  path: string;
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
+};
+
+const operations: NavItem[] = [
+  { label: 'Dashboard', path: '/', icon: DashboardIcon },
+  { label: 'Horses', path: '/horses', icon: HorsesIcon },
+  { label: 'Documents', path: '/documents', icon: DocumentsIcon },
+  { label: 'Ownership', path: '/ownership', icon: OwnershipIcon },
 ];
 
-export default function MainLayout() {
-  const [search, setSearch] = useState('');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const navigate = useNavigate();
+const programs: NavItem[] = [
+  { label: 'Medical', path: '/medical', icon: MedicalIcon },
+  { label: 'Breeding', path: '/breeding', icon: BreedingIcon },
+  { label: 'Sales', path: '/sales', icon: SalesIcon },
+];
 
-  const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && search.trim()) {
-      navigate(`/horses?search=${encodeURIComponent(search)}`);
+const platform: NavItem[] = [
+  { label: 'Weather', path: '/weather', icon: WeatherIcon },
+  { label: 'Ranch Assets', path: '/assets', icon: AssetsIcon },
+  { label: 'Subscriptions', path: '/subscriptions', icon: SubscriptionIcon },
+  { label: 'Owner Portal', path: '/portal', icon: PortalIcon },
+  { label: 'Settings', path: '/settings', icon: SettingsIcon },
+];
+
+const routeLabels: Record<string, string> = {
+  '/': 'Dashboard',
+  '/horses': 'Horses',
+  '/documents': 'Documents',
+  '/ownership': 'Ownership',
+  '/medical': 'Medical',
+  '/breeding': 'Breeding',
+  '/sales': 'Sales',
+  '/weather': 'Weather',
+  '/assets': 'Ranch Assets',
+  '/subscriptions': 'Subscriptions',
+  '/portal': 'Owner Portal',
+  '/settings': 'Settings',
+};
+
+function NavSection({ title, items }: { title: string; items: NavItem[] }) {
+  return (
+    <div className="nav-section">
+      <div className="nav-section__title">{title}</div>
+      <div className="nav-section__items">
+        {items.map(({ label, path, icon: Icon }) => (
+          <NavLink key={label} to={path} end={path === '/'} className={({ isActive }) => `nav-link${isActive ? ' nav-link--active' : ''}`}>
+            <Icon className="nav-link__icon" />
+            <span>{label}</span>
+          </NavLink>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function MainLayout() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [search, setSearch] = useState('');
+  const currentRole = useXbarStore((state) => state.currentRole);
+  const setCurrentRole = useXbarStore((state) => state.setCurrentRole);
+  const subscription = useXbarStore((state) => state.subscription);
+  const documents = useXbarStore((state) => state.documents);
+  const roleWorkspace = useCurrentRoleWorkspace();
+
+  const pendingReview = documents.filter((document) => document.state === 'Needs Review').length;
+  const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse Profile' : routeLabels[location.pathname] ?? 'Dashboard';
+
+  const handleSearch = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' && search.trim()) {
+      navigate(`/horses?search=${encodeURIComponent(search.trim())}`);
     }
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', fontFamily: "-apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif", background: 'transparent', color: '#1c1c1e', overflow: 'hidden' }}>
-
-      {/* Sidebar */}
-      <div style={{ width: sidebarCollapsed ? 74 : 220, transition: 'width 0.2s ease', background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderRight: '1px solid rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-        <div style={{ padding: '20px 18px 16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 9, background: 'linear-gradient(145deg, #0a84ff, #0060d0)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(10,132,255,0.35)' }}>
-              <span style={{ color: '#fff', fontWeight: 800, fontSize: 14 }}>X</span>
-            </div>
-            {!sidebarCollapsed && <div>
-              <div style={{ fontWeight: 700, fontSize: 15, color: '#1c1c1e', letterSpacing: -0.3 }}>XBAR</div>
-              <div style={{ fontSize: 10, color: '#8e8e93', letterSpacing: 0.5 }}>Horse Management</div>
-            </div>}
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="brand-lockup">
+          <div className="brand-lockup__mark">
+            <img src="/xbar-logo-sleek.png" alt="XBAR logo" />
+          </div>
+          <div>
+            <div className="brand-lockup__title">XBAR LLC</div>
+            <div className="brand-lockup__subtitle">Equine records platform</div>
           </div>
         </div>
 
-        <div style={{ height: 1, background: 'rgba(0,0,0,0.06)', margin: '0 14px' }} />
-
-        <nav style={{ flex: 1, padding: '10px' }}>
-          {!sidebarCollapsed && <div style={{ fontSize: 10, color: '#8e8e93', fontWeight: 600, letterSpacing: 0.8, padding: '8px 10px 6px' }}>MAIN MENU</div>}
-          {NAV.map(({ label, path, icon }) => (
-            <NavLink key={label} to={path} end={path === '/'}
-              style={({ isActive }) => ({
-                display: 'flex', alignItems: 'center', gap: 9, width: '100%', textAlign: 'left' as const,
-                padding: '8px 10px', borderRadius: 8, marginBottom: 1, border: 'none', cursor: 'pointer',
-                fontSize: 13.5, fontFamily: 'inherit', textDecoration: 'none', transition: 'all 0.15s',
-                background: isActive ? '#0a84ff' : 'transparent',
-                color: isActive ? '#fff' : '#3a3a3c',
-                fontWeight: isActive ? 600 : 400,
-              })}>
-              <span style={{ fontSize: 12, opacity: 0.7 }}>{icon}</span>
-              {!sidebarCollapsed && label}
-            </NavLink>
-          ))}
-        </nav>
-
-        <div style={{ padding: '12px 16px', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: sidebarCollapsed ? 'center' : 'flex-start' }}>
-            <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg, #5856d6, #af52de)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff', fontWeight: 700 }}>EW</div>
-            {!sidebarCollapsed && <div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#1c1c1e' }}>Erin Wyrick</div>
-              <div style={{ fontSize: 10, color: '#8e8e93' }}>Ranch Owner</div>
-            </div>}
+        <div className="sidebar-card">
+          <div className="sidebar-card__eyebrow">Workspace</div>
+          <div className="sidebar-card__title">{roleWorkspace.label}</div>
+          <p className="sidebar-card__body">{roleWorkspace.summary}</p>
+          <div className="sidebar-card__tags">
+            {roleWorkspace.primaryModules.map((module) => (
+              <Pill key={module}>{module}</Pill>
+            ))}
           </div>
         </div>
-      </div>
 
-      {/* Main */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {/* Topbar */}
-        <div style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(0,0,0,0.07)', padding: '12px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button
-              onClick={() => setSidebarCollapsed((s) => !s)}
-              aria-label="Toggle sidebar"
-              style={{ border: 'none', borderRadius: 8, background: 'rgba(118,118,128,0.12)', fontSize: 14, padding: '6px 9px', cursor: 'pointer', color: '#3a3a3c' }}
-            >
-              ☰
-            </button>
-            <div style={{ fontSize: 10, color: '#8e8e93', letterSpacing: 0.5 }}>XBAR HORSE MANAGEMENT SYSTEM</div>
+        <NavSection title="Operations" items={operations} />
+        <NavSection title="Programs" items={programs} />
+        <NavSection title="Platform" items={platform} />
+
+        <div className="sidebar-footer">
+          <div className="sidebar-footer__title">Plan status</div>
+          <div className="sidebar-footer__row">
+            <span>{subscription.tier}</span>
+            <Pill tone="blue">{subscription.billingState}</Pill>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ position: 'relative' }}>
+          <div className="sidebar-footer__meta">
+            {subscription.usage.seatsUsed}/{subscription.usage.seatLimit} seats in use
+          </div>
+        </div>
+      </aside>
+
+      <div className="shell-main">
+        <header className="topbar">
+          <div>
+            <div className="topbar__eyebrow">XBAR Records</div>
+            <div className="topbar__title">{currentLabel}</div>
+          </div>
+
+          <div className="topbar__controls">
+            <label className="search-shell">
+              <SearchIcon className="search-shell__icon" />
               <input
                 value={search}
-                onChange={e => setSearch(e.target.value)}
+                onChange={(event) => setSearch(event.target.value)}
                 onKeyDown={handleSearch}
-                placeholder="Search horses..."
-                style={{ paddingLeft: 30, paddingRight: 14, paddingTop: 7, paddingBottom: 7, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 10, fontSize: 13, fontFamily: 'inherit', outline: 'none', width: 200, background: 'rgba(118,118,128,0.12)', color: '#1c1c1e' }}
+                placeholder="Search horses, documents, or owners"
+                className="search-shell__input"
               />
-            </div>
-            <button
-              aria-label="Notifications"
-              style={{ width: 34, height: 34, borderRadius: 10, border: '1px solid rgba(0,0,0,0.08)', background: 'rgba(255,255,255,0.8)', cursor: 'pointer' }}
+            </label>
+
+            <select
+              className="role-select"
+              value={currentRole}
+              onChange={(event) => setCurrentRole(event.target.value as UserRole)}
+              aria-label="Workspace role"
             >
-              🔔
+              <option value="Admin">Admin</option>
+              <option value="Ranch Manager">Ranch Manager</option>
+              <option value="Owner">Owner</option>
+              <option value="Medical Lead">Medical Lead</option>
+              <option value="Sales Lead">Sales Lead</option>
+            </select>
+
+            <button className="icon-button" type="button" onClick={() => navigate('/documents')} aria-label="Open document review">
+              <BellIcon className="icon-button__icon" />
+              {pendingReview ? <span className="icon-button__dot">{pendingReview}</span> : null}
             </button>
-            <button
-              onClick={() => navigate('/horses')}
-              style={{ padding: '7px 16px', background: '#0a84ff', color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, boxShadow: '0 2px 8px rgba(10,132,255,0.3)' }}>
-              + Add Horse
+
+            <button className="button button--ghost" type="button" onClick={() => navigate('/documents')}>
+              OCR Intake
+            </button>
+
+            <button className="button button--primary" type="button" onClick={() => navigate('/horses')}>
+              <AddIcon className="button__icon" />
+              New Horse
             </button>
           </div>
-        </div>
+        </header>
 
-        <main style={{ flex: 1, overflow: 'auto', padding: 24 }}>
+        <main className="shell-content">
           <Outlet />
         </main>
       </div>
