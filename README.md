@@ -39,15 +39,15 @@ Builds automatically trigger on every push to `main` and produce a Windows insta
 
 ```powershell
 npm install
-npm run dev       # Start Vite dev server
-cargo tauri dev   # Launch Tauri app in dev mode
+npm run dev         # Start Vite dev server
+npm run tauri dev   # Launch the Tauri desktop app
 ```
 
 ## Tech Stack
 
 - **Frontend:** React 18, TypeScript, Tailwind CSS, Zustand, TanStack Table
 - **Desktop:** Tauri v1 (Rust)
-- **Database:** SQLite via better-sqlite3
+- **Database:** Local in-app data store
 - **Build:** Vite 5
 
 This app is offline-first. No cloud required.

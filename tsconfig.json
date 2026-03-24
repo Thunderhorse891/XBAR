@@ -21,5 +21,10 @@
     }
   },
   "include": ["src"],
+  "exclude": [
+    "src/components/OCRImporter.tsx",
+    "src/db",
+    "src/lib/sqlite.ts"
+  ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

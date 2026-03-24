@@ -2,16 +2,29 @@ $ErrorActionPreference = "Stop"
 
 Write-Host "🚀 Setting up XBAR Horse Tracker..." -ForegroundColor Cyan
 
+$nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+if (-not $nodeCommand) {
+    Write-Host "❌ Node.js is required but not found." -ForegroundColor Red
+    Write-Host "   Install with: https://nodejs.org/" -ForegroundColor Yellow
+    exit 1
+}
+
+$nodeDir = Split-Path -Parent $nodeCommand.Source
+$npmCommand = Join-Path $nodeDir "npm.cmd"
+if (-not (Test-Path $npmCommand)) {
+    $npmCommand = "npm"
+}
+
 # Check prerequisites
 $requirements = @(
-    @{Name="Node.js"; Command="node --version"; Install="https://nodejs.org/"},
-    @{Name="Rust"; Command="cargo --version"; Install="winget install Rustlang.Rust"},
-    @{Name="pnpm"; Command="pnpm --version"; Install="npm install -g pnpm"}
+    @{Name="Node.js"; Command={ & $nodeCommand.Source --version }; Install="https://nodejs.org/"},
+    @{Name="Rust"; Command={ cargo --version }; Install="winget install Rustlang.Rust"},
+    @{Name="npm"; Command={ & $npmCommand --version }; Install="Install Node.js from https://nodejs.org/"}
 )
 
 foreach ($req in $requirements) {
     try {
-        $null = Invoke-Expression $req.Command 2>$null
+        $null = & $req.Command 2>$null
         Write-Host "✅ $($req.Name) found" -ForegroundColor Green
     } catch {
         Write-Host "❌ $($req.Name) is required but not found." -ForegroundColor Red
@@ -24,22 +37,13 @@ Write-Host "✅ All prerequisites found!" -ForegroundColor Green
 
 # Install dependencies
 Write-Host "📦 Installing dependencies..." -ForegroundColor Yellow
-pnpm install
+& $npmCommand install
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "❌ Dependency installation failed" -ForegroundColor Red
     exit 1
 }
 
-# Install Tauri CLI
-Write-Host "🔧 Installing Tauri CLI..." -ForegroundColor Yellow
-cargo install tauri-cli
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "❌ Tauri CLI installation failed" -ForegroundColor Red
-    exit 1
-}
-
 # Launch development mode
 Write-Host "🎯 Starting development server..." -ForegroundColor Green
-cargo tauri dev
+& $npmCommand run tauri dev
