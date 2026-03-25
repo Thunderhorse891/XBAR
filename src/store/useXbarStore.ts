@@ -23,15 +23,19 @@ import {
   subscriptionTierConfig,
   todayStamp,
 } from '@/lib/xbarRuntime';
+import { workspaceStateStorage } from '@/lib/workspaceStorage';
+import {
+  createOwnershipRecord,
+  summarizeBatch,
+  validateAssetPatch,
+  validateHorseNoteInput,
+  validateLeadInput,
+  validateLocationPatch,
+  validateNewHorseInput,
+} from '@/store/xbarStoreLogic';
 import type {
-  AssetCondition,
-  AssetStatus,
-  DocumentSource,
   HorseNote,
   HorseRecord,
-  HorseSegment,
-  HorseSex,
-  HorseStatus,
   OCRBatch,
   PortalSnapshot,
   SalesLead,
@@ -46,62 +50,12 @@ import type {
   SubscriptionProfile,
   WeatherSnapshot,
 } from '@/types/xbar';
+import type { AssetPatch, LeadInput, LocationPatch, MediaUploadInput, NewHorseInput, OCRIntakeInput } from '@/store/xbarStoreLogic';
 
 type ActionResult = {
   ok: boolean;
   message: string;
   id?: string;
-};
-
-type NewHorseInput = {
-  name: string;
-  barnName: string;
-  segment: HorseSegment;
-  status: HorseStatus;
-  sex: HorseSex;
-  owner: string;
-  ownerEntity: string;
-  aqhaNumber?: string;
-  registrationNumber?: string;
-  barn: string;
-  pasture: string;
-};
-
-type OCRIntakeInput = {
-  files: File[];
-  horseId?: string;
-  source: DocumentSource;
-  uploadedBy: string;
-  label?: string;
-};
-
-type MediaUploadInput = {
-  horseId: string;
-  files: File[];
-  kind?: 'Hero' | 'Conformation' | 'Sale Still' | 'Pedigree' | 'Document Cover';
-  makePrimary?: boolean;
-};
-
-type LeadInput = {
-  name: string;
-  channel: SalesLead['channel'];
-  horseId: string;
-  portalReady?: boolean;
-};
-
-type AssetPatch = {
-  status?: AssetStatus;
-  condition?: AssetCondition;
-  assignedTo?: string;
-  location?: string;
-  nextService?: string;
-  notes?: string;
-};
-
-type LocationPatch = {
-  barn?: string;
-  pasture?: string;
-  stall?: string;
 };
 
 type XbarStore = {
@@ -259,50 +213,6 @@ function createHorseRecord(input: NewHorseInput): HorseRecord {
   };
 }
 
-function createOwnershipRecord(horse: HorseRecord): OwnershipRecord {
-  return {
-    id: createId('ownership'),
-    horseId: horse.id,
-    legalOwner: horse.owner,
-    transferStatus: 'Attention Required',
-    pendingDocuments: ['Ownership memo', 'Registration proof'],
-    complianceDeadline: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-    confidence: 35,
-    auditTrail: [
-      `${todayStamp()} Ownership record created from horse intake`,
-      `${todayStamp()} Supporting ownership documents still need upload`,
-    ],
-  };
-}
-
-function summarizeBatch(batch: OCRBatch, documents: DocumentRecord[]): OCRBatch {
-  const batchDocuments = documents.filter((document) => document.batchId === batch.id);
-  if (!batchDocuments.length) {
-    return batch;
-  }
-
-  const fileCount = batchDocuments.length;
-  const processedCount = batchDocuments.filter((document) => document.state !== 'Queued').length;
-  const needsReviewCount = batchDocuments.filter((document) => document.state === 'Needs Review' || document.state === 'Extracting').length;
-  const matchedCount = batchDocuments.filter((document) => document.state === 'Matched' || document.state === 'Ready').length;
-
-  let state: OCRBatch['state'] = 'Processing';
-  if (needsReviewCount > 0) {
-    state = 'Reviewing';
-  } else if (matchedCount >= fileCount) {
-    state = 'Completed';
-  }
-
-  return {
-    ...batch,
-    fileCount,
-    processedCount,
-    needsReviewCount,
-    matchedCount,
-    state,
-  };
-}
-
 function promoteDocument(horse: HorseRecord, document: DocumentRecord): HorseRecord {
   const nextDocumentIds = horse.documents.includes(document.id) ? horse.documents : [...horse.documents, document.id];
   const nextFacts = [...horse.ocrFacts];
@@ -391,6 +301,11 @@ export const useXbarStore = create<XbarStore>()(
           };
         }),
       addHorse: (input) => {
+        const validationError = validateNewHorseInput(input);
+        if (validationError) {
+          return { ok: false, message: validationError };
+        }
+
         const horse = createHorseRecord(input);
         const ownershipRecord = createOwnershipRecord(horse);
         set((state) => ({
@@ -405,6 +320,10 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Select at least one file for intake.' };
         }
 
+        if (!uploadedBy.trim()) {
+          return { ok: false, message: 'Uploaded by is required before starting intake.' };
+        }
+
         const state = get();
         const storageIncrease = estimateStorageGb(fileList);
         const pageIncrease = estimateOcrPages(fileList);
@@ -417,67 +336,72 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'OCR page limit reached for the current plan. Upgrade or archive older intake first.' };
         }
 
-        const selectedHorse = state.horses.find((horse) => horse.id === horseId);
-        const batchId = createId('batch');
-        const documents = (await Promise.all(
-          fileList.map((file) =>
-            buildDocumentRecord({
-              file,
-              uploadedBy,
-              source,
-              selectedHorse,
-              horses: get().horses,
-              existingDocuments: get().documents,
-            }),
-          ),
-        )).map((document) => ({
-          ...document,
-          batchId,
-        }));
+        try {
+          const selectedHorse = state.horses.find((horse) => horse.id === horseId);
+          const batchId = createId('batch');
+          const documents = (await Promise.all(
+            fileList.map((file) =>
+              buildDocumentRecord({
+                file,
+                uploadedBy,
+                source,
+                selectedHorse,
+                horses: get().horses,
+                existingDocuments: get().documents,
+              }),
+            ),
+          )).map((document) => ({
+            ...document,
+            batchId,
+          }));
 
-        const batch: OCRBatch = {
-          id: batchId,
-          label: label?.trim() || `${source} intake`,
-          receivedAt: nowStamp(),
-          source,
-          fileCount: documents.length,
-          processedCount: documents.length,
-          needsReviewCount: documents.filter((document) => document.state === 'Needs Review' || document.state === 'Extracting').length,
-          matchedCount: documents.filter((document) => document.state === 'Matched' || document.state === 'Ready').length,
-          state: documents.some((document) => document.state === 'Needs Review' || document.state === 'Extracting')
-            ? 'Reviewing'
-            : 'Completed',
-        };
+          const batch: OCRBatch = {
+            id: batchId,
+            label: label?.trim() || `${source} intake`,
+            receivedAt: nowStamp(),
+            source,
+            fileCount: documents.length,
+            processedCount: documents.length,
+            needsReviewCount: documents.filter((document) => document.state === 'Needs Review' || document.state === 'Extracting').length,
+            matchedCount: documents.filter((document) => document.state === 'Matched' || document.state === 'Ready').length,
+            state: documents.some((document) => document.state === 'Needs Review' || document.state === 'Extracting')
+              ? 'Reviewing'
+              : 'Completed',
+          };
 
-        set((current) => {
-          const allDocuments = [...documents, ...current.documents];
-          const nextHorses = current.horses.map((horse) => {
-            const matchedDocuments = documents.filter(
-              (document) => document.horseId === horse.id && (document.state === 'Matched' || document.state === 'Ready'),
-            );
-            return matchedDocuments.reduce(promoteDocument, horse);
+          set((current) => {
+            const allDocuments = [...documents, ...current.documents];
+            const nextHorses = current.horses.map((horse) => {
+              const matchedDocuments = documents.filter(
+                (document) => document.horseId === horse.id && (document.state === 'Matched' || document.state === 'Ready'),
+              );
+              return matchedDocuments.reduce(promoteDocument, horse);
+            });
+
+            return {
+              documents: allDocuments,
+              ocrBatches: [batch, ...current.ocrBatches],
+              horses: nextHorses,
+              subscription: {
+                ...current.subscription,
+                usage: {
+                  ...current.subscription.usage,
+                  storageUsedGb: normalizeUsage(current.subscription.usage.storageUsedGb + storageIncrease),
+                  ocrProcessed: current.subscription.usage.ocrProcessed + pageIncrease,
+                },
+              },
+            };
           });
 
           return {
-            documents: allDocuments,
-            ocrBatches: [batch, ...current.ocrBatches],
-            horses: nextHorses,
-            subscription: {
-              ...current.subscription,
-              usage: {
-                ...current.subscription.usage,
-                storageUsedGb: normalizeUsage(current.subscription.usage.storageUsedGb + storageIncrease),
-                ocrProcessed: current.subscription.usage.ocrProcessed + pageIncrease,
-              },
-            },
+            ok: true,
+            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the OCR queue.`,
+            id: batch.id,
           };
-        });
-
-        return {
-          ok: true,
-          message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the OCR queue.`,
-          id: batch.id,
-        };
+        } catch (error) {
+          console.error('OCR intake failed', error);
+          return { ok: false, message: 'OCR intake failed. Check the selected files and try again.' };
+        }
       },
       reviewDocument: (documentId, horseId) => {
         const state = get();
@@ -532,64 +456,82 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const state = get();
+        if (!state.horses.some((horse) => horse.id === horseId)) {
+          return { ok: false, message: 'Horse record not found for this media upload.' };
+        }
+
         const storageIncrease = estimateStorageGb(fileList);
         if (state.subscription.usage.storageUsedGb + storageIncrease > state.subscription.usage.storageLimitGb) {
           return { ok: false, message: 'Storage limit reached for this plan. Upgrade before uploading more media.' };
         }
 
-        const assets = await Promise.all(
-          fileList.map(async (file) => ({
-            id: createId('media'),
-            label: file.name.replace(/\.[^.]+$/, ''),
-            kind: kind ?? guessGalleryKind(file.name),
-            url: await readFileAsDataUrl(file),
-            status: 'Approved' as const,
-          })),
-        );
+        try {
+          const assets = await Promise.all(
+            fileList.map(async (file) => ({
+              id: createId('media'),
+              label: file.name.replace(/\.[^.]+$/, ''),
+              kind: kind ?? guessGalleryKind(file.name),
+              url: await readFileAsDataUrl(file),
+              status: 'Approved' as const,
+            })),
+          );
 
-        set((current) => ({
-          horses: current.horses.map((horse) =>
-            horse.id === horseId
-              ? {
-                  ...horse,
-                  profileImage: makePrimary ? assets[0]?.url ?? horse.profileImage : horse.profileImage,
-                  gallery: [...assets, ...horse.gallery],
-                  readiness: {
-                    ...horse.readiness,
-                    score: Math.min(100, horse.readiness.score + 5),
-                    packetStatus: horse.readiness.packetStatus === 'Needs Photos' ? 'Ready' : horse.readiness.packetStatus,
-                    blockers: horse.readiness.blockers.filter((blocker) => blocker !== 'Hero image missing'),
-                  },
-                  sale: {
-                    ...horse.sale,
-                    socialReady: true,
-                  },
-                  activity: [
-                    {
-                      id: createId('activity'),
-                      date: todayStamp(),
-                      title: 'Media uploaded',
-                      summary: `${assets.length} media asset${assets.length === 1 ? '' : 's'} added to the horse profile.`,
-                      owner: 'Media Desk',
-                      category: 'Sales' as const,
+          set((current) => ({
+            horses: current.horses.map((horse) =>
+              horse.id === horseId
+                ? {
+                    ...horse,
+                    profileImage: makePrimary ? assets[0]?.url ?? horse.profileImage : horse.profileImage,
+                    gallery: [...assets, ...horse.gallery],
+                    readiness: {
+                      ...horse.readiness,
+                      score: Math.min(100, horse.readiness.score + 5),
+                      packetStatus: horse.readiness.packetStatus === 'Needs Photos' ? 'Ready' : horse.readiness.packetStatus,
+                      blockers: horse.readiness.blockers.filter((blocker) => blocker !== 'Hero image missing'),
                     },
-                    ...horse.activity,
-                  ],
-                }
-              : horse,
-          ),
-          subscription: {
-            ...current.subscription,
-            usage: {
-              ...current.subscription.usage,
-              storageUsedGb: normalizeUsage(current.subscription.usage.storageUsedGb + storageIncrease),
+                    sale: {
+                      ...horse.sale,
+                      socialReady: true,
+                    },
+                    activity: [
+                      {
+                        id: createId('activity'),
+                        date: todayStamp(),
+                        title: 'Media uploaded',
+                        summary: `${assets.length} media asset${assets.length === 1 ? '' : 's'} added to the horse profile.`,
+                        owner: 'Media Desk',
+                        category: 'Sales' as const,
+                      },
+                      ...horse.activity,
+                    ],
+                  }
+                : horse,
+            ),
+            subscription: {
+              ...current.subscription,
+              usage: {
+                ...current.subscription.usage,
+                storageUsedGb: normalizeUsage(current.subscription.usage.storageUsedGb + storageIncrease),
+              },
             },
-          },
-        }));
+          }));
 
-        return { ok: true, message: `${assets.length} media asset${assets.length === 1 ? '' : 's'} uploaded.`, id: horseId };
+          return { ok: true, message: `${assets.length} media asset${assets.length === 1 ? '' : 's'} uploaded.`, id: horseId };
+        } catch (error) {
+          console.error('Media upload failed', error);
+          return { ok: false, message: 'Media upload failed. Check the selected files and try again.' };
+        }
       },
       createSalesLead: ({ horseId, name, channel, portalReady }) => {
+        const validationError = validateLeadInput({ horseId, name, channel, portalReady });
+        if (validationError) {
+          return { ok: false, message: validationError };
+        }
+
+        if (!get().horses.some((horse) => horse.id === horseId)) {
+          return { ok: false, message: 'Horse record not found for this lead.' };
+        }
+
         const lead: SalesLead = {
           id: createId('lead'),
           name: name.trim(),
@@ -640,17 +582,35 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: `${lead.name} is now in the buyer pipeline.`, id: lead.id };
       },
       updateAsset: (assetId, patch) => {
+        if (!get().ranchAssets.some((asset) => asset.id === assetId)) {
+          return { ok: false, message: 'Asset record not found.' };
+        }
+
+        const validationError = validateAssetPatch(patch);
+        if (validationError) {
+          return { ok: false, message: validationError };
+        }
+
         set((state) => ({
           ranchAssets: state.ranchAssets.map((asset) => (asset.id === assetId ? { ...asset, ...patch } : asset)),
         }));
         return { ok: true, message: 'Asset record updated.', id: assetId };
       },
       addHorseNote: (horseId, note) => {
+        const validationError = validateHorseNoteInput(note);
+        if (validationError) {
+          return { ok: false, message: validationError };
+        }
+
+        if (!get().horses.some((horse) => horse.id === horseId)) {
+          return { ok: false, message: 'Horse record not found for this note.' };
+        }
+
         const nextNote: HorseNote = {
           id: createId('note'),
-          title: note.title,
-          body: note.body,
-          author: note.author,
+          title: note.title.trim(),
+          body: note.body.trim(),
+          author: note.author.trim(),
           tone: note.tone,
           createdAt: todayStamp(),
         };
@@ -680,6 +640,15 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: 'Horse note saved.', id: nextNote.id };
       },
       updateHorseLocation: (horseId, patch) => {
+        const validationError = validateLocationPatch(patch);
+        if (validationError) {
+          return { ok: false, message: validationError };
+        }
+
+        if (!get().horses.some((horse) => horse.id === horseId)) {
+          return { ok: false, message: 'Horse record not found for this location update.' };
+        }
+
         set((state) => ({
           horses: state.horses.map((horse) =>
             horse.id === horseId
@@ -732,7 +701,7 @@ export const useXbarStore = create<XbarStore>()(
     }),
     {
       name: 'xbar-live-workspace',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => workspaceStateStorage),
       partialize: (state) => ({
         currentRole: state.currentRole,
         horses: state.horses,

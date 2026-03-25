@@ -1,59 +1,14 @@
-import { useState } from 'react';
-import type { MouseEvent as ReactMouseEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
-import ContextMenu from '@/components/ContextMenu';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { formatCompactCurrency } from '@/lib/format';
-import { buildHorseProfileUrl, copyTextToClipboard } from '@/lib/xbarRuntime';
 import { useXbarStore } from '@/store/useXbarStore';
 
 export default function Sales() {
-  const navigate = useNavigate();
   const horses = useXbarStore((state) => state.horses);
   const salesLeads = useXbarStore((state) => state.salesLeads);
   const portal = useXbarStore((state) => state.portal);
-  const savedHorseIds = useXbarStore((state) => state.savedHorseIds);
-  const toggleSavedHorse = useXbarStore((state) => state.toggleSavedHorse);
-  const [message, setMessage] = useState('');
-  const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
   const saleHorses = horses.filter(
     (horse) => horse.sale.askPrice > 0 || horse.sale.listingState === 'Buyer Review' || horse.sale.listingState === 'Market Ready',
   );
-  const menuHorse = menuState ? horses.find((horse) => horse.id === menuState.horseId) ?? null : null;
-
-  const openHorseMenu = (event: ReactMouseEvent<HTMLDivElement>, horseId: string) => {
-    event.preventDefault();
-    setMenuState({ horseId, x: event.clientX, y: event.clientY });
-  };
-
-  const closeMenu = () => setMenuState(null);
-
-  const handleCopyListingSummary = async (horseId: string) => {
-    const horse = horses.find((item) => item.id === horseId);
-    if (!horse) return;
-
-    const copied = await copyTextToClipboard(
-      `${horse.name} | ${horse.sale.listingState} | ${formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)} | ${horse.sale.watchlistCount} watchers | ${horse.readiness.packetStatus}`,
-    );
-    setMessage(copied ? `${horse.name} listing summary copied.` : 'Clipboard copy was blocked by the browser.');
-  };
-
-  const handleCopyListingLink = async (horseId: string) => {
-    const horse = horses.find((item) => item.id === horseId);
-    if (!horse) return;
-
-    const copied = await copyTextToClipboard(buildHorseProfileUrl(horse.id));
-    setMessage(copied ? `${horse.name} listing link copied.` : 'Clipboard copy was blocked by the browser.');
-  };
-
-  const handlePortalToggle = (horseId: string) => {
-    const horse = horses.find((item) => item.id === horseId);
-    if (!horse) return;
-
-    const saved = savedHorseIds.includes(horseId);
-    toggleSavedHorse(horseId);
-    setMessage(saved ? `${horse.name} removed from the owner-facing watchlist.` : `${horse.name} saved for portal and social follow-up.`);
-  };
 
   return (
     <>
@@ -63,8 +18,6 @@ export default function Sales() {
         description="The sales module now treats buyer flow, listing packets, transfer blockers, and owner portal handoff as real product surfaces."
       />
 
-      {message ? <div className="status-banner">{message}</div> : null}
-
       <div className="metric-grid">
         <MetricCard label="Sale horses" value={`${saleHorses.length}`} detail="Profiles carrying active pricing or buyer-review posture" />
         <MetricCard label="Buyer pipeline" value={`${salesLeads.length}`} detail="Leads across social, referral, and direct inquiry channels" tone="blue" />
@@ -73,7 +26,7 @@ export default function Sales() {
       </div>
 
       <div className="interaction-note">
-        Hover metrics and headings for full context. Right-click a sale card for listing actions like copying a share link or saving it into the portal.
+        Hover metrics and headings for full context. Use this page for listing posture, buyer flow, and packet visibility rather than hidden quick-action menus.
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
@@ -82,9 +35,7 @@ export default function Sales() {
             {saleHorses.map((horse) => (
               <div
                 key={horse.id}
-                className="horse-card horse-card--interactive"
-                title={`${horse.name} · Right-click for listing actions`}
-                onContextMenu={(event) => openHorseMenu(event, horse.id)}
+                className="horse-card"
               >
                 <div className="horse-card__media">
                   <img src={horse.profileImage} alt="" className="horse-card__image" />
@@ -141,7 +92,7 @@ export default function Sales() {
         <Panel
           eyebrow="Connectors"
           title="Social connectors and portal syndication"
-          description="This makes the Facebook and Google selling foundation visible inside Sales instead of hiding it only in the owner portal module."
+          description="This keeps Facebook and Google selling status visible inside Sales instead of hiding it only in the owner portal module."
         >
           <div className="stack-list">
             <div className="stack-item">
@@ -204,40 +155,6 @@ export default function Sales() {
           </div>
         </Panel>
       </div>
-
-      {menuState && menuHorse ? (
-        <ContextMenu
-          x={menuState.x}
-          y={menuState.y}
-          onClose={closeMenu}
-          options={[
-            {
-              label: 'Open horse profile',
-              hint: 'Jump into the full record before sharing',
-              action: () => navigate(`/horses/${menuHorse.id}`),
-            },
-            {
-              label: 'Copy listing link',
-              hint: 'Share the horse profile route',
-              action: () => {
-                void handleCopyListingLink(menuHorse.id);
-              },
-            },
-            {
-              label: 'Copy packet summary',
-              hint: 'Price, watchers, and packet posture',
-              action: () => {
-                void handleCopyListingSummary(menuHorse.id);
-              },
-            },
-            {
-              label: savedHorseIds.includes(menuHorse.id) ? 'Remove from portal saved' : 'Save into portal',
-              hint: 'Keep this listing visible for owner and buyer flows',
-              action: () => handlePortalToggle(menuHorse.id),
-            },
-          ]}
-        />
-      ) : null}
     </>
   );
 }

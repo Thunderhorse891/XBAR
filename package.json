@@ -7,12 +7,11 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "test:store": "tsc -p tsconfig.test.json && node --test .codex-test-dist/tests/xbarStoreLogic.test.js",
     "tauri": "tauri"
   },
   "dependencies": {
     "@tauri-apps/api": "^1.6.0",
-    "@tanstack/react-table": "^8.11.0",
-    "papaparse": "^5.4.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.22.0",
@@ -21,7 +20,6 @@
   "devDependencies": {
     "@tauri-apps/cli": "^1.6.0",
     "@types/node": "^20.11.0",
-    "@types/papaparse": "^5.3.14",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.2.0",

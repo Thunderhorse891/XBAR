@@ -49,8 +49,8 @@ export default function Documents() {
     <>
       <PageHeader
         eyebrow="Documents"
-        title="Document intake and OCR"
-        description="Upload files, route them into review, and promote approved facts into horse profiles. OCR provider wiring is not connected yet, so extraction stays local to this workspace."
+        title="Document intake and review"
+        description="Upload files, route them into review, and promote approved facts into horse profiles. External OCR providers are not connected yet, so document extraction stays local to this workspace."
       />
 
       {message ? <div className="status-banner">{message}</div> : null}
@@ -59,13 +59,13 @@ export default function Documents() {
         <MetricCard label="Document vault" value={`${documents.length}`} detail="Registration, medical, transfer, insurance, and media records" />
         <MetricCard label="Needs review" value={`${reviewQueue.length}`} detail="Human review queue before facts become trusted profile data" tone="amber" />
         <MetricCard label="Matched" value={`${matched.length}`} detail="Documents already attached to horse profiles and packets" tone="emerald" />
-        <MetricCard label="OCR usage" value={`${subscription.usage.ocrProcessed}/${subscription.usage.ocrLimit}`} detail="Live local intake pages against the current plan" tone="blue" />
+        <MetricCard label="Processing usage" value={`${subscription.usage.ocrProcessed}/${subscription.usage.ocrLimit}`} detail="Local document pages processed against the current plan" tone="blue" />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel
           eyebrow="Live intake"
-          title="Upload files into the OCR queue"
+          title="Upload files into the document queue"
           description="This writes directly into the current workspace. You can route files to a horse now or let the intake layer attempt a local match from file names and extracted text."
           action={
             <Pill tone={uploadOpen ? 'blue' : 'slate'}>
@@ -124,7 +124,7 @@ export default function Documents() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Batch intake" title="OCR queue states" description="New uploads appear here immediately and stay in the current workspace until you review or attach them.">
+        <Panel eyebrow="Batch intake" title="Document queue states" description="New uploads appear here immediately and stay in the current workspace until you review or attach them.">
           <div className="stack-list">
             {ocrBatches.map((batch) => (
               <div key={batch.id} className="stack-item">

@@ -1,6 +1,4 @@
 import { useState } from 'react';
-import type { MouseEvent as ReactMouseEvent } from 'react';
-import ContextMenu from '@/components/ContextMenu';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { useXbarStore } from '@/store/useXbarStore';
 import type { AssetCondition, AssetStatus } from '@/types/xbar';
@@ -15,10 +13,8 @@ export default function RanchAssets() {
   const serviceSoon = ranchAssets.filter((asset) => asset.condition !== 'Excellent');
   const [selectedAssetId, setSelectedAssetId] = useState(ranchAssets[0]?.id ?? '');
   const [message, setMessage] = useState('');
-  const [menuState, setMenuState] = useState<{ assetId: string; x: number; y: number } | null>(null);
 
   const selectedAsset = ranchAssets.find((asset) => asset.id === selectedAssetId) ?? ranchAssets[0];
-  const menuAsset = menuState ? ranchAssets.find((asset) => asset.id === menuState.assetId) ?? null : null;
   const [form, setForm] = useState({
     status: selectedAsset?.status ?? 'Available',
     condition: selectedAsset?.condition ?? 'Excellent',
@@ -48,23 +44,6 @@ export default function RanchAssets() {
     setMessage(result.message);
   };
 
-  const openAssetMenu = (event: ReactMouseEvent<HTMLTableRowElement>, assetId: string) => {
-    event.preventDefault();
-    setMenuState({ assetId, x: event.clientX, y: event.clientY });
-  };
-
-  const closeMenu = () => setMenuState(null);
-
-  const applyAssetQuickUpdate = (assetId: string, patch: Parameters<typeof updateAsset>[1], successMessage: string) => {
-    const result = updateAsset(assetId, patch);
-    if (result.ok) {
-      handleAssetSelection(assetId);
-      setMessage(successMessage);
-    } else {
-      setMessage(result.message);
-    }
-  };
-
   return (
     <>
       <PageHeader
@@ -83,7 +62,7 @@ export default function RanchAssets() {
       </div>
 
       <div className="interaction-note">
-        Hover the headings for context. Right-click an asset row to select it fast or flag maintenance without leaving the register.
+        Hover the headings for context. Click an asset row to load it into the editor on the right.
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
@@ -105,9 +84,7 @@ export default function RanchAssets() {
                   <tr
                     key={asset.id}
                     onClick={() => handleAssetSelection(asset.id)}
-                    onContextMenu={(event) => openAssetMenu(event, asset.id)}
                     className={asset.id === selectedAssetId ? 'table-row--selected' : ''}
-                    title={`${asset.name} · Right-click for toolkit actions`}
                   >
                     <td>{asset.name}</td>
                     <td>{asset.category}</td>
@@ -182,42 +159,6 @@ export default function RanchAssets() {
           </div>
         </Panel>
       </div>
-
-      {menuState && menuAsset ? (
-        <ContextMenu
-          x={menuState.x}
-          y={menuState.y}
-          onClose={closeMenu}
-          options={[
-            {
-              label: 'Open in toolkit editor',
-              hint: 'Load this record into the form on the right',
-              action: () => handleAssetSelection(menuAsset.id),
-            },
-            {
-              label: 'Mark available',
-              hint: 'Clear assignment and return it to inventory',
-              action: () => applyAssetQuickUpdate(menuAsset.id, { status: 'Available', assignedTo: 'Unassigned' }, `${menuAsset.name} marked available.`),
-            },
-            {
-              label: 'Flag service soon',
-              hint: 'Keep it active but visible for maintenance',
-              action: () => applyAssetQuickUpdate(menuAsset.id, { condition: 'Service Soon', status: 'In Service' }, `${menuAsset.name} flagged for service.`),
-            },
-            {
-              label: 'Escalate attention',
-              hint: 'Raise a stronger maintenance warning',
-              tone: 'danger',
-              action: () =>
-                applyAssetQuickUpdate(
-                  menuAsset.id,
-                  { condition: 'Attention Required', status: 'In Service' },
-                  `${menuAsset.name} escalated to attention required.`,
-                ),
-            },
-          ]}
-        />
-      ) : null}
     </>
   );
 }

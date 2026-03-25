@@ -308,7 +308,7 @@ export default function HorseDetail() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Documents and OCR" title="Packet coverage, extraction, and review">
+        <Panel eyebrow="Documents" title="Packet coverage, extraction, and review">
           <div className="stack-list">
             {documents.map((document) => (
               <div key={document.id} className="stack-item">
@@ -357,7 +357,7 @@ export default function HorseDetail() {
           </div>
           <div className="inline-actions">
             <button className="button button--ghost button--compact" type="button" onClick={handleDocumentUpload}>
-              Add to OCR intake
+              Add to document intake
             </button>
           </div>
         </Panel>

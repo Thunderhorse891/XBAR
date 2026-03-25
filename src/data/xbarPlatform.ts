@@ -161,7 +161,7 @@ export const subscriptionSeed: SubscriptionProfile = {
   brandedListings: true,
   featureFlags: [
     'Role-aware dashboards',
-    'Owner portal foundation',
+    'Owner portal access',
     'Branded sale packets',
     'OCR review queue',
     'Weather operations layer',

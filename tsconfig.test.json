@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": ".codex-test-dist",
+    "rootDir": ".",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {},
+    "declaration": false,
+    "sourceMap": false,
+    "allowImportingTsExtensions": false
+  },
+  "include": ["src/store/xbarStoreLogic.ts", "src/types/xbar.ts", "src/lib/xbarRuntime.ts", "tests/**/*.ts"]
+}

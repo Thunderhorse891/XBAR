@@ -1,12 +1,9 @@
 import { useState } from 'react';
-import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import ContextMenu from '@/components/ContextMenu';
 import { MetricCard, PageHeader, Pill, ProgressBar } from '@/components/app-ui';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
-import { buildHorseProfileUrl, copyTextToClipboard } from '@/lib/xbarRuntime';
 import { useXbarStore } from '@/store/useXbarStore';
-import type { HorseRecord, HorseSegment, HorseSex, HorseStatus } from '@/types/xbar';
+import type { HorseSegment, HorseSex, HorseStatus } from '@/types/xbar';
 
 type ViewMode = 'Portfolio' | 'Registry';
 type SegmentFilter = 'All' | HorseSegment;
@@ -36,7 +33,6 @@ export default function Horses() {
   const [segmentFilter, setSegmentFilter] = useState<SegmentFilter>('All');
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [message, setMessage] = useState('');
-  const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
   const [form, setForm] = useState({
     name: '',
     barnName: '',
@@ -67,45 +63,6 @@ export default function Horses() {
   const saleReady = filtered.filter((horse) => horse.readiness.score >= 80);
   const medicalWatch = filtered.filter((horse) => horse.status === 'Medical Review');
   const transferRisk = filtered.filter((horse) => horse.documents.some((documentId) => documentId.includes('transfer')));
-  const menuHorse = menuState ? horses.find((horse) => horse.id === menuState.horseId) ?? null : null;
-
-  const closeMenu = () => setMenuState(null);
-
-  const openHorseMenu = (event: ReactMouseEvent | ReactKeyboardEvent, horse: HorseRecord) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    if ('clientX' in event && 'clientY' in event) {
-      setMenuState({ horseId: horse.id, x: event.clientX, y: event.clientY });
-      return;
-    }
-
-    const target = event.currentTarget as HTMLElement;
-    const bounds = target.getBoundingClientRect();
-    setMenuState({
-      horseId: horse.id,
-      x: bounds.left + Math.min(bounds.width - 24, 180),
-      y: bounds.top + 48,
-    });
-  };
-
-  const handleSaveToggle = (horse: HorseRecord) => {
-    const saved = savedHorseIds.includes(horse.id);
-    toggleSavedHorse(horse.id);
-    setMessage(saved ? `${horse.name} removed from saved portal horses.` : `${horse.name} saved into the portal watchlist.`);
-  };
-
-  const handleCopyRegistrySnapshot = async (horse: HorseRecord) => {
-    const copied = await copyTextToClipboard(
-      `${horse.name} | ${horse.registry} ${horse.aqhaNumber} | ${horse.ownerEntity} | ${horse.location.barn} | ${horse.status}`,
-    );
-    setMessage(copied ? `${horse.name} registry snapshot copied.` : 'Clipboard copy was blocked by the browser.');
-  };
-
-  const handleCopyProfileLink = async (horse: HorseRecord) => {
-    const copied = await copyTextToClipboard(buildHorseProfileUrl(horse.id));
-    setMessage(copied ? `${horse.name} profile link copied.` : 'Clipboard copy was blocked by the browser.');
-  };
 
   const handleCreateHorse = () => {
     const result = addHorse(form);
@@ -267,7 +224,7 @@ export default function Horses() {
       </div>
 
       <div className="interaction-note">
-        Hover the key labels for full copy. Right-click a horse card for quick actions like opening the profile, saving it to the portal, or copying a share link.
+        Hover the key labels for full copy. Use the card buttons or row links below to move through the portfolio cleanly.
       </div>
 
       {viewMode === 'Portfolio' ? (
@@ -277,15 +234,7 @@ export default function Horses() {
             return (
               <div
                 key={horse.id}
-                className="horse-card horse-card--interactive"
-                title={`${horse.name} · Right-click for quick actions`}
-                onContextMenu={(event) => openHorseMenu(event, horse)}
-                onKeyDown={(event) => {
-                  if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
-                    openHorseMenu(event, horse);
-                  }
-                }}
-                tabIndex={0}
+                className="horse-card"
               >
                 <div className="horse-card__media">
                   <img src={horse.profileImage} alt="" className="horse-card__image" />
@@ -364,8 +313,6 @@ export default function Horses() {
               {filtered.map((horse) => (
                 <tr
                   key={horse.id}
-                  onContextMenu={(event) => openHorseMenu(event, horse)}
-                  title={`${horse.name} · Right-click for quick actions`}
                 >
                   <td>
                     <Link to={`/horses/${horse.id}`} className="table-link">
@@ -388,40 +335,6 @@ export default function Horses() {
           </table>
         </div>
       )}
-
-      {menuState && menuHorse ? (
-        <ContextMenu
-          x={menuState.x}
-          y={menuState.y}
-          onClose={closeMenu}
-          options={[
-            {
-              label: 'Open horse profile',
-              hint: 'Jump into the full dossier',
-              action: () => navigate(`/horses/${menuHorse.id}`),
-            },
-            {
-              label: savedHorseIds.includes(menuHorse.id) ? 'Remove from portal saved' : 'Save into portal',
-              hint: savedHorseIds.includes(menuHorse.id) ? 'Remove from owner-facing watchlist' : 'Keep this horse visible for portal flows',
-              action: () => handleSaveToggle(menuHorse),
-            },
-            {
-              label: 'Copy profile link',
-              hint: 'Share this horse profile route',
-              action: () => {
-                void handleCopyProfileLink(menuHorse);
-              },
-            },
-            {
-              label: 'Copy registry snapshot',
-              hint: 'Copy AQHA and owner details',
-              action: () => {
-                void handleCopyRegistrySnapshot(menuHorse);
-              },
-            },
-          ]}
-        />
-      ) : null}
     </>
   );
 }

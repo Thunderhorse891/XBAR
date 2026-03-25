@@ -17,7 +17,7 @@ export default function Subscriptions() {
       <PageHeader
         eyebrow="Subscriptions"
         title="Plan and feature gating"
-        description="This module changes the current workspace plan posture: limits update immediately, and OCR/storage rules follow the active tier."
+        description="This module changes the current workspace plan posture: limits update immediately, and document-processing/storage rules follow the active tier."
       />
 
       {message ? <div className="status-banner">{message}</div> : null}
@@ -25,7 +25,7 @@ export default function Subscriptions() {
       <div className="metric-grid">
         <MetricCard label="Current tier" value={subscription.tier} detail={`${subscription.billingState} · renews ${subscription.renewalDate}`} />
         <MetricCard label="Seats" value={`${subscription.usage.seatsUsed}/${subscription.usage.seatLimit}`} detail="Internal users on the current plan" tone="blue" />
-        <MetricCard label="OCR usage" value={`${subscription.usage.ocrProcessed}/${subscription.usage.ocrLimit}`} detail="Monthly page volume against plan limit" tone="amber" />
+        <MetricCard label="Processing usage" value={`${subscription.usage.ocrProcessed}/${subscription.usage.ocrLimit}`} detail="Monthly document-page volume against the current plan limit" tone="amber" />
         <MetricCard label="Storage" value={`${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB`} detail="Operational document and media footprint" tone="slate" />
       </div>
 
@@ -56,7 +56,7 @@ export default function Subscriptions() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Usage" title="Seat, OCR, storage, and portal capacity">
+        <Panel eyebrow="Usage" title="Seat, processing, storage, and portal capacity">
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__top">
@@ -97,7 +97,7 @@ export default function Subscriptions() {
                   </Pill>
                 </div>
                 <div className="stack-item__copy">
-                  {formatCurrency(config.monthlyRate)}/mo · {config.limits.seatLimit} seats · {config.limits.ocrLimit} OCR pages · {config.limits.storageLimitGb} GB storage
+                  {formatCurrency(config.monthlyRate)}/mo · {config.limits.seatLimit} seats · {config.limits.ocrLimit} processing pages · {config.limits.storageLimitGb} GB storage
                 </div>
                 <div className="token-row">
                   {config.featureFlags.map((flag) => (

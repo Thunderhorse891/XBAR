@@ -5,12 +5,11 @@ import type {
   DocumentType,
   GalleryAsset,
   HorseRecord,
-  OCRBatch,
   PortalSnapshot,
   SalesLead,
   SubscriptionProfile,
   SubscriptionTier,
-} from '@/types/xbar';
+} from '../types/xbar.js';
 
 const GIGABYTE = 1024 * 1024 * 1024;
 
@@ -38,7 +37,7 @@ export const subscriptionTierConfig: Record<
     brandedListings: true,
     featureFlags: [
       'Role-aware dashboards',
-      'Owner portal foundation',
+      'Owner portal access',
       'Branded sale packets',
       'OCR review queue',
       'Weather operations layer',
@@ -158,39 +157,6 @@ export function derivePortalSnapshot(
   };
 }
 
-export function buildHorseProfileUrl(horseId: string) {
-  const basePath = import.meta.env.BASE_URL || '/';
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const normalizedBase = basePath.endsWith('/') ? basePath : `${basePath}/`;
-  return `${origin}${normalizedBase}#/horses/${horseId}`;
-}
-
-export async function copyTextToClipboard(text: string) {
-  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return true;
-  }
-
-  if (typeof document === 'undefined') {
-    return false;
-  }
-
-  const textArea = document.createElement('textarea');
-  textArea.value = text;
-  textArea.setAttribute('readonly', 'true');
-  textArea.style.position = 'absolute';
-  textArea.style.left = '-9999px';
-  document.body.appendChild(textArea);
-  textArea.select();
-
-  try {
-    document.execCommand('copy');
-    return true;
-  } finally {
-    document.body.removeChild(textArea);
-  }
-}
-
 export async function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -206,7 +172,7 @@ async function readFileTextPreview(file: File) {
     /\.(txt|csv|json|md)$/i.test(file.name);
 
   if (!fileIsTextLike) {
-    return `${file.name} uploaded through the local intake engine. Cloud OCR can replace this preview when a provider is attached.`;
+    return `${file.name} uploaded through the local intake engine. External OCR is not connected yet, so image and PDF extraction is limited in this public preview.`;
   }
 
   try {

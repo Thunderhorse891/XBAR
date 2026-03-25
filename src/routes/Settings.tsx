@@ -9,7 +9,7 @@ export default function Settings() {
       <PageHeader
         eyebrow="Settings"
         title="Roles, access, and platform posture"
-        description="This page shows the current role model, access posture, and which platform systems are not connected yet."
+        description="This page shows the current role model, access posture, and which platform systems are still browser-local or not connected yet."
       />
 
       <div className="dashboard-grid dashboard-grid--primary">
@@ -34,12 +34,13 @@ export default function Settings() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Connection status" title="What is not connected yet">
+        <Panel eyebrow="Connection status" title="What is browser-local or not connected yet">
           <div className="bullet-list">
             <div className="bullet-list__item">Google and Facebook auth are not connected yet.</div>
-            <div className="bullet-list__item">OCR queue, review, and extracted entities are live in the workspace, but external OCR providers are not connected yet.</div>
+            <div className="bullet-list__item">Document intake, review, and extracted entities are live in the workspace, but external OCR providers are not connected yet.</div>
             <div className="bullet-list__item">Owner portal, buyer watchlists, and sale packet surfaces are in the product, but external user sessions are still local-only.</div>
             <div className="bullet-list__item">Subscription tiers and limits are in the product, but billing is not connected yet.</div>
+            <div className="bullet-list__item">This public preview persists in the current browser workspace. It is not a shared multi-user backend yet.</div>
           </div>
         </Panel>
       </div>

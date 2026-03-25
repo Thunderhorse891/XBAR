@@ -26,14 +26,14 @@ export default function Dashboard() {
       <PageHeader
         eyebrow="XBAR LLC"
         title="Dashboard"
-        description="A live operating view across portfolio readiness, ownership integrity, document intake, weather exposure, and external access."
+        description="A live operating view across portfolio readiness, ownership integrity, document intake, weather exposure, and external access in this browser workspace."
         actions={
           <>
             <Link to="/horses" className="button button--ghost">
               View Horses
             </Link>
             <Link to="/documents" className="button button--primary">
-              Open OCR Queue
+              Open Documents
             </Link>
           </>
         }
@@ -50,7 +50,7 @@ export default function Dashboard() {
         <MetricCard
           label="Document review"
           value={`${reviewQueue.length}`}
-          detail={`${ocrBatches.reduce((sum, batch) => sum + batch.fileCount, 0)} intake files flowing through OCR`}
+          detail={`${ocrBatches.reduce((sum, batch) => sum + batch.fileCount, 0)} intake files flowing through the local document queue`}
           tone="amber"
         />
         <MetricCard
@@ -93,9 +93,9 @@ export default function Dashboard() {
         </Panel>
 
         <Panel
-          eyebrow="Documents and OCR"
-          title="Ingestion queue"
-          description="The intake, review, and match workflow is live in this workspace. External OCR provider wiring is not connected yet."
+          eyebrow="Documents"
+          title="Intake queue"
+          description="The intake, review, and match workflow is live in this workspace. External OCR providers are not connected yet."
         >
           <div className="stack-list">
             {ocrBatches.map((batch) => (
