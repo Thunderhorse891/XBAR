@@ -80,6 +80,17 @@ export default function Horses() {
     ).buyerSafe,
   );
 
+  const handleSavedHorseToggle = (horseId: string) => {
+    const horse = horses.find((item) => item.id === horseId);
+    const wasSaved = savedHorseIds.includes(horseId);
+    toggleSavedHorse(horseId);
+    pushToast({
+      title: wasSaved ? 'Removed from portal' : 'Saved to portal',
+      message: horse ? `${horse.name} ${wasSaved ? 'was removed from' : 'is now in'} the saved-horse workspace.` : 'Portal state updated.',
+      tone: 'success',
+    });
+  };
+
   const openHorseMenu = (horseId: string, x: number, y: number) => {
     setMenuState({ horseId, x, y });
   };
@@ -101,7 +112,7 @@ export default function Horses() {
         {
           id: 'toggle-saved',
           label: menuSaved ? 'Remove from portal' : 'Save to portal',
-          onSelect: () => toggleSavedHorse(menuHorse.id),
+          onSelect: () => handleSavedHorseToggle(menuHorse.id),
         },
         {
           id: 'open-sales',
@@ -155,7 +166,7 @@ export default function Horses() {
       <PageHeader
         eyebrow="Horse ledger"
         title="Horse Portfolio"
-        description="Trust, location, and sale posture in one view."
+        description="Trust, location, buyers."
         actions={
           <div className="page-actions">
             <div className="view-toggle">
@@ -287,9 +298,9 @@ export default function Horses() {
 
       <section className="ledger-stage">
         <div className="ledger-stage__copy">
-          <div className="eyebrow">Active book</div>
-          <h2 className="ledger-stage__title">Buyer-safe records with barn-floor speed.</h2>
-          <p className="ledger-stage__description">Right-click for actions. Open any profile. Keep sale, care, and transfer posture visible at a glance.</p>
+          <div className="eyebrow">Active ledger</div>
+          <h2 className="ledger-stage__title">Fast records with real-world ranch context.</h2>
+          <p className="ledger-stage__description">Right-click records. Open profiles. Keep buyer and care posture visible.</p>
         </div>
         <div className="ledger-stage__stats">
           <div className="ledger-stat">
@@ -338,8 +349,6 @@ export default function Horses() {
           placeholder="Search by horse, AQHA, owner, or barn"
         />
       </div>
-
-      <div className="interaction-note">Right-click or use the action icon for quick actions.</div>
 
       {viewMode === 'Portfolio' ? (
         filtered.length ? (
@@ -437,8 +446,8 @@ export default function Horses() {
                       <span>{horse.sale.watchlistCount} watching</span>
                     </div>
                     <div className="inline-actions inline-actions--card">
-                      <button className="button button--ghost button--compact" type="button" onClick={() => toggleSavedHorse(horse.id)}>
-                      {saved ? 'Remove from saved' : 'Save to portal'}
+                      <button className="button button--ghost button--compact" type="button" onClick={() => handleSavedHorseToggle(horse.id)}>
+                        {saved ? 'Remove from saved' : 'Save to portal'}
                       </button>
                       <Link to={`/horses/${horse.id}`} className="button button--primary button--compact">
                         Open profile
@@ -461,7 +470,7 @@ export default function Horses() {
             }
           />
         )
-      ) : (
+      ) : filtered.length ? (
         <div className="table-shell">
           <table className="data-table">
             <thead>
@@ -506,6 +515,16 @@ export default function Horses() {
             </tbody>
           </table>
         </div>
+      ) : (
+        <EmptyState
+          title="No horses match this registry view"
+          description="Change the segment filter, clear the search, or add a horse record."
+          action={
+            <button className="button button--primary button--compact" type="button" onClick={() => setSearchParams({ new: '1' })}>
+              Add horse
+            </button>
+          }
+        />
       )}
 
       <ContextMenu open={Boolean(menuState && menuHorse)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />

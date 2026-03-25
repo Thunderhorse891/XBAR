@@ -1,5 +1,5 @@
 import { MetricCard, PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrency, formatDateLabel } from '@/lib/format';
 import { buildRevenueBlueprint } from '@/lib/xbarGrowth';
 import { subscriptionTierConfig } from '@/lib/xbarRuntime';
 import { useUiStore } from '@/store/useUiStore';
@@ -27,7 +27,7 @@ export default function Subscriptions() {
       </div>
 
       <div className="metric-grid">
-        <MetricCard label="Current tier" value={subscription.tier} detail={`${subscription.billingState} · renews ${subscription.renewalDate}`} />
+        <MetricCard label="Current tier" value={subscription.tier} detail={`${subscription.billingState} · renews ${formatDateLabel(subscription.renewalDate)}`} />
         <MetricCard label="Current ARR" value={formatCurrency(revenuePlan.currentArr)} detail="Annualized recurring revenue for one customer at the active tier" tone="blue" />
         <MetricCard label="Customers to $10M" value={`${revenuePlan.customersNeededAtCurrentTier}`} detail="If the business sold only the current tier" tone="amber" />
         <MetricCard label="Recommended mix" value={formatCurrency(revenuePlan.recommendedMixArr)} detail={revenuePlan.recommendedMixLabel} tone="slate" />

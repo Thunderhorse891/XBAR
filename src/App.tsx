@@ -1,4 +1,5 @@
 import { HashRouter, Route, Routes } from 'react-router-dom';
+import ErrorBoundary from './components/ErrorBoundary';
 import { ToastViewport } from './components/ToastViewport';
 import Dashboard from './pages/Dashboard';
 import Breeding from './routes/Breeding';
@@ -20,27 +21,29 @@ import Weather from './routes/Weather';
 export default function App() {
   return (
     <HashRouter>
-      <ToastViewport />
-      <Routes>
-        <Route path="/profiles/:id" element={<BuyerProfile />} />
-        <Route path="/" element={<MainLayout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="horses" element={<Horses />} />
-          <Route path="horses/:id" element={<HorseDetail />} />
-          <Route path="documents" element={<Documents />} />
-          <Route path="ownership" element={<Ownership />} />
-          <Route path="medical" element={<Medical />} />
-          <Route path="breeding" element={<Breeding />} />
-          <Route path="sales" element={<Sales />} />
-          <Route path="weather" element={<Weather />} />
-          <Route path="assets" element={<RanchAssets />} />
-          <Route path="subscriptions" element={<Subscriptions />} />
-          <Route path="portal" element={<OwnerPortal />} />
-          <Route path="settings" element={<Settings />} />
+      <ErrorBoundary>
+        <ToastViewport />
+        <Routes>
+          <Route path="/profiles/:id" element={<BuyerProfile />} />
+          <Route path="/" element={<MainLayout />}>
+            <Route index element={<Dashboard />} />
+            <Route path="horses" element={<Horses />} />
+            <Route path="horses/:id" element={<HorseDetail />} />
+            <Route path="documents" element={<Documents />} />
+            <Route path="ownership" element={<Ownership />} />
+            <Route path="medical" element={<Medical />} />
+            <Route path="breeding" element={<Breeding />} />
+            <Route path="sales" element={<Sales />} />
+            <Route path="weather" element={<Weather />} />
+            <Route path="assets" element={<RanchAssets />} />
+            <Route path="subscriptions" element={<Subscriptions />} />
+            <Route path="portal" element={<OwnerPortal />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="*" element={<NotFound />} />
+          </Route>
           <Route path="*" element={<NotFound />} />
-        </Route>
-        <Route path="*" element={<NotFound />} />
-      </Routes>
+        </Routes>
+      </ErrorBoundary>
     </HashRouter>
   );
 }

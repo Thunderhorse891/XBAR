@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
@@ -6,6 +8,7 @@ import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 
 export default function Medical() {
+  const navigate = useNavigate();
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
@@ -26,6 +29,22 @@ export default function Medical() {
   const [eventBody, setEventBody] = useState('');
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
   const [eventError, setEventError] = useState('');
+  const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
+  const menuHorse = horses.find((horse) => horse.id === menuState?.horseId);
+  const menuItems = menuHorse
+    ? [
+        {
+          id: 'open-profile',
+          label: 'Open horse profile',
+          onSelect: () => navigate(`/horses/${menuHorse.id}`),
+        },
+        {
+          id: 'prepare-event',
+          label: 'Log care event',
+          onSelect: () => setSelectedHorseId(menuHorse.id),
+        },
+      ]
+    : [];
 
   return (
     <>
@@ -47,7 +66,14 @@ export default function Medical() {
           {medicalWatch.length ? (
             <div className="stack-list">
               {medicalWatch.map((horse) => (
-                <div key={horse.id} className="stack-item">
+                <div
+                  key={horse.id}
+                  className="stack-item"
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    setMenuState({ horseId: horse.id, x: event.clientX, y: event.clientY });
+                  }}
+                >
                   <div className="stack-item__top">
                     <div>
                       <div className="stack-item__title">{horse.name}</div>
@@ -209,6 +235,8 @@ export default function Medical() {
           <EmptyState title="No medical timeline yet" description="Create a care event to start building a clinical history for the ranch." />
         )}
       </Panel>
+
+      <ContextMenu open={Boolean(menuHorse)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
     </>
   );
 }

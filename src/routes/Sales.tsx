@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
@@ -8,6 +9,7 @@ import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useXbarStore } from '@/store/useXbarStore';
 
 export default function Sales() {
+  const navigate = useNavigate();
   const horses = useXbarStore((state) => state.horses);
   const salesLeads = useXbarStore((state) => state.salesLeads);
   const portal = useXbarStore((state) => state.portal);
@@ -27,6 +29,47 @@ export default function Sales() {
   const [leadNotes, setLeadNotes] = useState(selectedLead?.notes ?? '');
   const [leadOutcome, setLeadOutcome] = useState(selectedLead?.outcome ?? 'Won');
   const [leadError, setLeadError] = useState('');
+  const [menuState, setMenuState] = useState<{ type: 'lead' | 'horse'; id: string; x: number; y: number } | null>(null);
+  const menuLead = menuState?.type === 'lead' ? salesLeads.find((lead) => lead.id === menuState.id) : undefined;
+  const menuHorse = menuState?.type === 'horse' ? saleHorses.find((horse) => horse.id === menuState.id) : undefined;
+  const menuItems = menuLead
+    ? [
+        {
+          id: 'qualified',
+          label: 'Mark qualified',
+          onSelect: () => {
+            const result = updateSalesLead(menuLead.id, { stage: 'Qualified', lastTouch: new Date().toISOString().slice(0, 10) });
+            pushToast({ title: result.ok ? 'Lead updated' : 'Lead update blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+          },
+        },
+        {
+          id: 'offer',
+          label: 'Move to offer',
+          onSelect: () => {
+            const result = updateSalesLead(menuLead.id, { stage: 'Offer', lastTouch: new Date().toISOString().slice(0, 10) });
+            pushToast({ title: result.ok ? 'Lead updated' : 'Lead update blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+          },
+        },
+        {
+          id: 'open-horse',
+          label: 'Open horse profile',
+          onSelect: () => navigate(`/horses/${menuLead.horseId}`),
+        },
+      ]
+    : menuHorse
+      ? [
+          {
+            id: 'open-horse',
+            label: 'Open horse profile',
+            onSelect: () => navigate(`/horses/${menuHorse.id}`),
+          },
+          {
+            id: 'preview-profile',
+            label: 'Preview buyer profile',
+            onSelect: () => navigate(`/profiles/${menuHorse.id}`),
+          },
+        ]
+      : [];
 
   return (
     <>
@@ -48,7 +91,14 @@ export default function Sales() {
           {saleHorses.length ? (
             <div className="horse-grid">
               {saleHorses.map((horse) => (
-                <div key={horse.id} className="horse-card">
+                <div
+                  key={horse.id}
+                  className="horse-card"
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    setMenuState({ type: 'horse', id: horse.id, x: event.clientX, y: event.clientY });
+                  }}
+                >
                   {(() => {
                     const packet = buildHorsePacketCompleteness(
                       horse,
@@ -112,6 +162,10 @@ export default function Sales() {
                       setLeadNotes(lead.notes ?? '');
                       setLeadOutcome(lead.outcome ?? 'Won');
                       setLeadError('');
+                    }}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      setMenuState({ type: 'lead', id: lead.id, x: event.clientX, y: event.clientY });
                     }}
                   >
                     <div className="stack-item__top">
@@ -319,6 +373,8 @@ export default function Sales() {
           </div>
         </Panel>
       </div>
+
+      <ContextMenu open={Boolean(menuState)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
     </>
   );
 }

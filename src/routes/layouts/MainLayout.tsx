@@ -141,7 +141,6 @@ export default function MainLayout() {
       <div className="shell-main">
         <header className="topbar">
           <div className="topbar__context">
-            <div className="topbar__eyebrow hover-copy" title="Active view">Live view</div>
             <div className="topbar__title-row">
               <div className="topbar__title hover-copy" title={currentLabel}>{currentLabel}</div>
               <Pill tone={pendingReview ? 'amber' : 'emerald'}>{pendingReview ? `${pendingReview} in review` : 'Queue clear'}</Pill>

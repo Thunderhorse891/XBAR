@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
@@ -10,6 +12,7 @@ const ownershipRoles: OwnershipStake['role'][] = ['Co-Owner', 'Managing Partner'
 const transferStatuses: TransferStatus[] = ['Clear', 'Pending Signatures', 'AQHA Review', 'Attention Required'];
 
 export default function Ownership() {
+  const navigate = useNavigate();
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const horses = useXbarStore((state) => state.horses);
   const updateOwnershipRecord = useXbarStore((state) => state.updateOwnershipRecord);
@@ -29,6 +32,7 @@ export default function Ownership() {
   const [auditNote, setAuditNote] = useState('');
   const [coOwner, setCoOwner] = useState({ name: '', share: '25', role: 'Co-Owner' as OwnershipStake['role'], contact: '' });
   const [formError, setFormError] = useState('');
+  const [menuState, setMenuState] = useState<{ recordId: string; x: number; y: number } | null>(null);
 
   useEffect(() => {
     if (!selectedRecord) {
@@ -40,6 +44,38 @@ export default function Ownership() {
     setComplianceDeadline(selectedRecord.complianceDeadline);
     setPendingDocuments(selectedRecord.pendingDocuments.join(', '));
   }, [selectedRecord]);
+
+  const menuRecord = ownershipRecords.find((record) => record.id === menuState?.recordId);
+  const menuHorse = horses.find((horse) => horse.id === menuRecord?.horseId);
+  const menuItems = menuRecord
+    ? [
+        ...(menuHorse
+          ? [
+              {
+                id: 'open-horse',
+                label: 'Open horse profile',
+                onSelect: () => navigate(`/horses/${menuHorse.id}`),
+              },
+            ]
+          : []),
+        {
+          id: 'mark-clear',
+          label: 'Mark transfer clear',
+          onSelect: () => {
+            const result = updateOwnershipRecord(menuRecord.id, { transferStatus: 'Clear' });
+            pushToast({ title: result.ok ? 'Transfer updated' : 'Transfer update blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+          },
+        },
+        {
+          id: 'mark-aqha',
+          label: 'Set AQHA review',
+          onSelect: () => {
+            const result = updateOwnershipRecord(menuRecord.id, { transferStatus: 'AQHA Review' });
+            pushToast({ title: result.ok ? 'Transfer updated' : 'Transfer update blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+          },
+        },
+      ]
+    : [];
 
   return (
     <>
@@ -63,10 +99,19 @@ export default function Ownership() {
               {ownershipRecords.map((record) => {
                 const horse = horses.find((item) => item.id === record.horseId);
                 return (
-                  <button key={record.id} type="button" className={`stack-item stack-item--interactive${record.id === selectedRecordId ? ' stack-item--selected' : ''}`} onClick={() => {
-                    setSelectedRecordId(record.id);
-                    setFormError('');
-                  }}>
+                  <button
+                    key={record.id}
+                    type="button"
+                    className={`stack-item stack-item--interactive${record.id === selectedRecordId ? ' stack-item--selected' : ''}`}
+                    onClick={() => {
+                      setSelectedRecordId(record.id);
+                      setFormError('');
+                    }}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      setMenuState({ recordId: record.id, x: event.clientX, y: event.clientY });
+                    }}
+                  >
                     <div className="stack-item__top">
                       <div>
                         <div className="stack-item__title">{horse?.name ?? record.legalOwner}</div>
@@ -274,6 +319,8 @@ export default function Ownership() {
           <EmptyState title="No ownership record loaded" description="Select a transfer record to review the audit trail and add new notes." />
         )}
       </Panel>
+
+      <ContextMenu open={Boolean(menuRecord)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
     </>
   );
 }

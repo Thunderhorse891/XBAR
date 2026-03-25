@@ -62,6 +62,15 @@ export default function HorseDetail() {
   const packet = buildHorsePacketCompleteness(horse, documents, ownershipRecord);
   const buyerReadyDocuments = documents.filter((document) => buildDocumentTrustProfile(document, [horse]).readyForProfile);
 
+  const handleSavedHorseToggle = () => {
+    toggleSavedHorse(horse.id);
+    pushToast({
+      title: saved ? 'Removed from portal' : 'Saved to portal',
+      message: `${horse.name} ${saved ? 'was removed from' : 'is now in'} the saved-horse workspace.`,
+      tone: 'success',
+    });
+  };
+
   const handleMediaUpload = async () => {
     if (!mediaFiles.length) {
       pushToast({ title: 'Media upload blocked', message: 'Select at least one image before uploading.', tone: 'error' });
@@ -192,7 +201,7 @@ export default function HorseDetail() {
             <Link className="button button--primary button--compact" to={packet.sharePath}>
               Preview buyer profile
             </Link>
-            <button className="button button--ghost button--compact" type="button" onClick={() => toggleSavedHorse(horse.id)}>
+            <button className="button button--ghost button--compact" type="button" onClick={handleSavedHorseToggle}>
               {saved ? 'Saved in portal' : 'Save to portal'}
             </button>
             <Pill tone={horse.readiness.score >= 85 ? 'emerald' : horse.readiness.score >= 70 ? 'amber' : 'rose'}>
@@ -208,13 +217,13 @@ export default function HorseDetail() {
           <img src={horse.profileImage} alt="" className="detail-hero__image" />
           <div className="detail-hero__media-copy">
             <div className="detail-hero__eyebrow">Media vault</div>
-            <h2>Profile hero and gallery tools are active.</h2>
-            <p>Upload sale stills, hero images, pedigree boards, and packet covers directly into this horse profile.</p>
+            <h2>Gallery and packet assets live here.</h2>
+            <p>Upload sale stills, hero images, pedigree boards, and packet covers directly into the record.</p>
           </div>
         </div>
 
         <div className="detail-hero__side">
-          <Panel title="Sale readiness" description="The profile shows where this horse stands as an asset, not just a record.">
+          <Panel title="Sale readiness" description="Live packet status.">
             <div className="stack-list">
               <div className="stack-item">
                 <div className="stack-item__top">
@@ -287,7 +296,12 @@ export default function HorseDetail() {
           </div>
           {locationError ? <div className="field-error">{locationError}</div> : null}
           <div className="inline-actions">
-            <button className="button button--ghost button--compact" type="button" onClick={handleLocationUpdate}>
+            <button
+              className="button button--ghost button--compact"
+              type="button"
+              onClick={handleLocationUpdate}
+              disabled={!location.barn.trim() && !location.pasture.trim() && !location.stall.trim()}
+            >
               Save location
             </button>
           </div>
@@ -337,7 +351,7 @@ export default function HorseDetail() {
             </label>
           </div>
           <div className="inline-actions">
-            <button className="button button--primary button--compact" type="button" onClick={handleMediaUpload} disabled={isMediaUploading}>
+            <button className="button button--primary button--compact" type="button" onClick={handleMediaUpload} disabled={isMediaUploading || !mediaFiles.length}>
               {isMediaUploading ? 'Uploading media...' : 'Upload media'}
             </button>
           </div>
@@ -443,7 +457,7 @@ export default function HorseDetail() {
             </label>
           </div>
           <div className="inline-actions">
-            <button className="button button--ghost button--compact" type="button" onClick={handleDocumentUpload} disabled={isDocumentUploading}>
+            <button className="button button--ghost button--compact" type="button" onClick={handleDocumentUpload} disabled={isDocumentUploading || !docFiles.length}>
               {isDocumentUploading ? 'Uploading documents...' : 'Add to document intake'}
             </button>
           </div>
@@ -526,7 +540,7 @@ export default function HorseDetail() {
           </div>
           {leadError ? <div className="field-error">{leadError}</div> : null}
           <div className="inline-actions">
-            <button className="button button--primary button--compact" type="button" onClick={handleLeadCreate}>
+            <button className="button button--primary button--compact" type="button" onClick={handleLeadCreate} disabled={!leadName.trim()}>
               Add buyer lead
             </button>
           </div>
@@ -569,7 +583,7 @@ export default function HorseDetail() {
               </div>
               {noteError ? <div className="field-error">{noteError}</div> : null}
               <div className="inline-actions">
-                <button className="button button--ghost button--compact" type="button" onClick={handleAddNote}>
+                <button className="button button--ghost button--compact" type="button" onClick={handleAddNote} disabled={!noteTitle.trim() || !noteBody.trim()}>
                   Save note
                 </button>
               </div>

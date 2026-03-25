@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { ContextMenu } from '@/components/ContextMenu';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { EmptyState } from '@/components/EmptyState';
 import { formatDateTimeLabel, formatPercent } from '@/lib/format';
@@ -11,6 +12,7 @@ import type { DocumentSource } from '@/types/xbar';
 const sources: DocumentSource[] = ['Manual Upload', 'Bulk Intake', 'Owner Portal', 'Sales Packet'];
 
 export default function Documents() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const documents = useXbarStore((state) => state.documents);
   const horses = useXbarStore((state) => state.horses);
@@ -29,12 +31,53 @@ export default function Documents() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formErrors, setFormErrors] = useState<{ uploadedBy?: string; files?: string }>({});
   const [reviewAssignments, setReviewAssignments] = useState<Record<string, string>>({});
+  const [menuState, setMenuState] = useState<{ documentId: string; x: number; y: number } | null>(null);
 
   const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Extracting');
   const matched = documents.filter((document) => document.state === 'Matched' || document.state === 'Ready');
   const duplicates = documents.filter((document) => document.duplicateRisk === 'Possible Duplicate');
   const buyerSafeDocuments = documents.filter((document) => buildDocumentTrustProfile(document, horses).readyForProfile);
   const uploadOpen = searchParams.get('upload') === '1';
+  const menuDocument = documents.find((document) => document.id === menuState?.documentId);
+  const menuHorseId = menuDocument ? reviewAssignments[menuDocument.id] ?? menuDocument.horseId : undefined;
+  const menuItems = menuDocument
+    ? [
+        {
+          id: 'approve',
+          label: 'Approve document',
+          onSelect: () => {
+            const result = reviewDocument(menuDocument.id, menuHorseId);
+            pushToast({
+              title: result.ok ? 'Document approved' : 'Approval blocked',
+              message: result.message,
+              tone: result.ok ? 'success' : 'error',
+            });
+          },
+        },
+        {
+          id: 'discard',
+          label: 'Discard document',
+          onSelect: () => {
+            const result = discardDocument(menuDocument.id);
+            pushToast({
+              title: result.ok ? 'Document discarded' : 'Discard blocked',
+              message: result.message,
+              tone: result.ok ? 'warning' : 'error',
+            });
+          },
+          tone: 'danger' as const,
+        },
+        ...(menuHorseId
+          ? [
+              {
+                id: 'open-horse',
+                label: 'Open horse profile',
+                onSelect: () => navigate(`/horses/${menuHorseId}`),
+              },
+            ]
+          : []),
+      ]
+    : [];
 
   const handleIntake = async () => {
     const nextErrors: { uploadedBy?: string; files?: string } = {};
@@ -214,7 +257,14 @@ export default function Documents() {
                   const trust = buildDocumentTrustProfile(document, horses);
                   const topCandidate = trust.candidateMatches[0];
                   return (
-                    <tr key={document.id}>
+                    <tr
+                      key={document.id}
+                      className="table-row--interactive"
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        setMenuState({ documentId: document.id, x: event.clientX, y: event.clientY });
+                      }}
+                    >
                       <td>
                         <div className="table-cell__stack">
                           <strong>{document.title}</strong>
@@ -366,6 +416,8 @@ export default function Documents() {
           </div>
         </Panel>
       ) : null}
+
+      <ContextMenu open={Boolean(menuDocument)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
     </>
   );
 }

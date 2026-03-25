@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
@@ -6,6 +8,7 @@ import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 
 export default function Breeding() {
+  const navigate = useNavigate();
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const addBreedingEvent = useXbarStore((state) => state.addBreedingEvent);
@@ -17,13 +20,29 @@ export default function Breeding() {
   const [eventBody, setEventBody] = useState('');
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
   const [eventError, setEventError] = useState('');
+  const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
+  const menuHorse = breedingHorses.find((horse) => horse.id === menuState?.horseId);
+  const menuItems = menuHorse
+    ? [
+        {
+          id: 'open-horse',
+          label: 'Open horse profile',
+          onSelect: () => navigate(`/horses/${menuHorse.id}`),
+        },
+        {
+          id: 'prepare-event',
+          label: 'Log breeding event',
+          onSelect: () => setSelectedHorseId(menuHorse.id),
+        },
+      ]
+    : [];
 
   return (
     <>
       <PageHeader
         eyebrow="Breeding"
         title="Breeding program"
-        description="Stud and mare workflows now have a real home in the product: program visibility, contract coverage, milestone timing, and packet readiness."
+        description="Studs, mares, milestones."
       />
 
       <div className="metric-grid">
@@ -34,11 +53,18 @@ export default function Breeding() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Program board" title="Stud and mare pipeline" description="The breeding lane now tracks real horses and program timing instead of behaving like a blank placeholder.">
+        <Panel eyebrow="Program board" title="Stud and mare pipeline" description="Live program horses.">
           {breedingHorses.length ? (
             <div className="stack-list">
               {breedingHorses.map((horse) => (
-                <div key={horse.id} className="stack-item">
+                <div
+                  key={horse.id}
+                  className="stack-item"
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    setMenuState({ horseId: horse.id, x: event.clientX, y: event.clientY });
+                  }}
+                >
                   <div className="stack-item__top">
                     <div>
                       <div className="stack-item__title">{horse.name}</div>
@@ -61,7 +87,7 @@ export default function Breeding() {
           )}
         </Panel>
 
-        <Panel eyebrow="Milestones" title="Program timing and disclosures" description="Even before live breeding integrations, the system can hold the milestone structure and contract traceability.">
+        <Panel eyebrow="Milestones" title="Program timing" description="Recent breeding events.">
           {breedingHorses.some((horse) => horse.breedingTimeline.length) ? (
             <div className="stack-list">
               {breedingHorses.flatMap((horse) =>
@@ -86,7 +112,7 @@ export default function Breeding() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Program action" title="Add breeding event" description="Record milestones, contract motion, foaling dates, and program notes from this page.">
+        <Panel eyebrow="Program action" title="Add breeding event" description="Log a milestone.">
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
               <span className="field-label">Horse</span>
@@ -153,7 +179,7 @@ export default function Breeding() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Contracts" title="Breeding contract coverage" description="Breeding contracts already in the document vault surface here so program timing and paperwork stay connected.">
+        <Panel eyebrow="Contracts" title="Contract coverage" description="Breeding documents already linked to the vault.">
           {breedingDocs.length ? (
             <div className="stack-list">
               {breedingDocs.map((document) => (
@@ -176,6 +202,8 @@ export default function Breeding() {
           )}
         </Panel>
       </div>
+
+      <ContextMenu open={Boolean(menuHorse)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
     </>
   );
 }
