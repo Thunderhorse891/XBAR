@@ -17,7 +17,7 @@ export default function Subscriptions() {
       <PageHeader
         eyebrow="Subscriptions"
         title="Plan and feature gating"
-        description="This module now changes the live local plan posture: limits update immediately, and OCR/storage enforcement respects the active tier."
+        description="This module changes the current workspace plan posture: limits update immediately, and OCR/storage rules follow the active tier."
       />
 
       {message ? <div className="status-banner">{message}</div> : null}
@@ -113,7 +113,7 @@ export default function Subscriptions() {
                       type="button"
                       onClick={() => {
                         changeSubscriptionTier(tier);
-                        setMessage(`${tier} is now active in the live preview.`);
+                        setMessage(`${tier} is now active in this workspace.`);
                       }}
                     >
                       Switch to {tier}

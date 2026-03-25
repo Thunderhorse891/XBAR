@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { useEffect, useRef, useState } from 'react';
 
 type Tone = 'blue' | 'slate' | 'emerald' | 'amber' | 'rose';
 
@@ -13,6 +15,81 @@ function toHoverText(value: ReactNode): string | undefined {
   }
 
   return undefined;
+}
+
+function HoverText({
+  as = 'span',
+  className,
+  value,
+  children,
+}: {
+  as?: 'div' | 'span' | 'p' | 'h1' | 'h2';
+  className?: string;
+  value: ReactNode;
+  children: ReactNode;
+}) {
+  const tooltip = toHoverText(value);
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState({ left: 0, top: 0 });
+  const ref = useRef<HTMLElement | null>(null);
+  const Component = as;
+
+  const updatePosition = () => {
+    if (!ref.current) return;
+    const bounds = ref.current.getBoundingClientRect();
+    const maxWidth = Math.min(340, window.innerWidth - 24);
+    const centeredLeft = bounds.left + bounds.width / 2 - maxWidth / 2;
+    setPosition({
+      left: Math.min(Math.max(12, centeredLeft), window.innerWidth - maxWidth - 12),
+      top: Math.max(12, bounds.bottom + 10),
+    });
+  };
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleViewportChange = () => updatePosition();
+    window.addEventListener('scroll', handleViewportChange, true);
+    window.addEventListener('resize', handleViewportChange);
+    return () => {
+      window.removeEventListener('scroll', handleViewportChange, true);
+      window.removeEventListener('resize', handleViewportChange);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <Component
+        ref={(node) => {
+          ref.current = node as HTMLElement | null;
+        }}
+        className={className}
+        data-hover={tooltip}
+        onMouseEnter={() => {
+          if (!tooltip) return;
+          updatePosition();
+          setOpen(true);
+        }}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => {
+          if (!tooltip) return;
+          updatePosition();
+          setOpen(true);
+        }}
+        onBlur={() => setOpen(false)}
+      >
+        {children}
+      </Component>
+      {open && tooltip && typeof document !== 'undefined'
+        ? createPortal(
+            <div className="hover-bubble" style={position} role="tooltip">
+              {tooltip}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
 }
 
 export function PageHeader({
@@ -30,16 +107,16 @@ export function PageHeader({
     <header className="page-header">
       <div className="page-header__copy">
         {eyebrow ? (
-          <div className="eyebrow hover-copy" title={eyebrow}>
+          <HoverText as="div" className="eyebrow hover-copy" value={eyebrow}>
             {eyebrow}
-          </div>
+          </HoverText>
         ) : null}
-        <h1 className="page-title hover-copy" title={title}>
+        <HoverText as="h1" className="page-title hover-copy" value={title}>
           {title}
-        </h1>
-        <p className="page-description hover-copy" title={description}>
+        </HoverText>
+        <HoverText as="p" className="page-description hover-copy" value={description}>
           {description}
-        </p>
+        </HoverText>
       </div>
       {actions ? <div className="page-actions">{actions}</div> : null}
     </header>
@@ -68,20 +145,20 @@ export function Panel({
       <div className="panel__header">
         <div>
           {eyebrow ? (
-            <div className="panel__eyebrow hover-copy" title={eyebrow}>
+            <HoverText as="div" className="panel__eyebrow hover-copy" value={eyebrow}>
               {eyebrow}
-            </div>
+            </HoverText>
           ) : null}
           <div className="panel__title-row">
-            <h2 className="panel__title hover-copy" title={title}>
+            <HoverText as="h2" className="panel__title hover-copy" value={title}>
               {title}
-            </h2>
+            </HoverText>
             {meta ? <div className="panel__meta">{meta}</div> : null}
           </div>
           {description ? (
-            <p className="panel__description hover-copy" title={description}>
+            <HoverText as="p" className="panel__description hover-copy" value={description}>
               {description}
-            </p>
+            </HoverText>
           ) : null}
         </div>
         {action ? <div className="panel__action">{action}</div> : null}
@@ -103,16 +180,16 @@ export function MetricCard({
   tone?: Tone;
 }) {
   return (
-    <div className={`metric-card metric-card--${tone}`} title={`${label}: ${value}. ${detail}`}>
-      <div className="metric-card__label hover-copy" title={label}>
+    <div className={`metric-card metric-card--${tone}`}>
+      <HoverText as="div" className="metric-card__label hover-copy" value={label}>
         {label}
-      </div>
-      <div className="metric-card__value hover-copy" title={value}>
+      </HoverText>
+      <HoverText as="div" className="metric-card__value hover-copy" value={value}>
         {value}
-      </div>
-      <div className="metric-card__detail hover-copy" title={detail}>
+      </HoverText>
+      <HoverText as="div" className="metric-card__detail hover-copy" value={detail}>
         {detail}
-      </div>
+      </HoverText>
     </div>
   );
 }
@@ -126,9 +203,9 @@ export function Pill({
 }) {
   const title = toHoverText(children);
   return (
-    <span className={`pill pill--${tone} hover-copy`} title={title}>
+    <HoverText as="span" className={`pill pill--${tone} hover-copy`} value={title}>
       {children}
-    </span>
+    </HoverText>
   );
 }
 
@@ -155,12 +232,12 @@ export function KeyValue({
 }) {
   return (
     <div className="key-value">
-      <span className="key-value__label hover-copy" title={label}>
+      <HoverText as="span" className="key-value__label hover-copy" value={label}>
         {label}
-      </span>
-      <span className="key-value__value hover-copy" title={toHoverText(value)}>
+      </HoverText>
+      <HoverText as="span" className="key-value__value hover-copy" value={toHoverText(value)}>
         {value}
-      </span>
+      </HoverText>
     </div>
   );
 }

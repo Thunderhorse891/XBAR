@@ -1,7 +1,9 @@
-import React, { useState, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 interface ContextMenuOption {
   label: string;
+  hint?: string;
+  tone?: 'default' | 'danger';
   action: () => void;
 }
 
@@ -12,7 +14,24 @@ interface ContextMenuProps {
   onClose: () => void;
 }
 
-export const ContextMenu: React.FC<ContextMenuProps> = ({ options, x, y, onClose }) => {
+export default function ContextMenu({ options, x, y, onClose }: ContextMenuProps) {
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  const position = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return { left: x, top: y };
+    }
+
+    const estimatedWidth = 280;
+    const estimatedHeight = Math.max(140, options.length * 56);
+    const padding = 16;
+
+    return {
+      left: Math.min(x, window.innerWidth - estimatedWidth - padding),
+      top: Math.min(y, window.innerHeight - estimatedHeight - padding),
+    };
+  }, [options.length, x, y]);
+
   const handleClick = useCallback(
     (e: React.MouseEvent, action: () => void) => {
       e.stopPropagation();
@@ -22,23 +41,52 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ options, x, y, onClose
     [onClose]
   );
 
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        onClose();
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    }
+
+    window.addEventListener('mousedown', handlePointerDown);
+    window.addEventListener('scroll', onClose, true);
+    window.addEventListener('resize', onClose);
+    window.addEventListener('keydown', handleEscape);
+
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown);
+      window.removeEventListener('scroll', onClose, true);
+      window.removeEventListener('resize', onClose);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [onClose]);
+
   return (
     <div
-      className="fixed z-50 bg-white border border-gray-200 rounded shadow-lg py-1 min-w-32"
-      style={{ top: y, left: x }}
-      onMouseLeave={onClose}
+      ref={menuRef}
+      className="context-menu"
+      style={position}
+      role="menu"
+      aria-label="Quick actions"
     >
-      {options.map(({ label, action }, i) => (
+      {options.map(({ label, hint, tone = 'default', action }, i) => (
         <button
           key={i}
           onClick={(e) => handleClick(e, action)}
-          className="block w-full text-left text-sm px-4 py-2 text-gray-800 hover:bg-gray-100 transition-colors"
+          className={`context-menu__item${tone === 'danger' ? ' context-menu__item--danger' : ''}`}
+          type="button"
+          role="menuitem"
         >
-          {label}
+          <span className="context-menu__label">{label}</span>
+          {hint ? <span className="context-menu__hint">{hint}</span> : null}
         </button>
       ))}
     </div>
   );
-};
-
-export default ContextMenu;
+}

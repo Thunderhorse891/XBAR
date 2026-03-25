@@ -95,7 +95,7 @@ export default function Dashboard() {
         <Panel
           eyebrow="Documents and OCR"
           title="Ingestion queue"
-          description="External OCR providers are not wired yet, but the intake, review, and match architecture is live in the product model."
+          description="The intake, review, and match workflow is live in this workspace. External OCR provider wiring is not connected yet."
         >
           <div className="stack-list">
             {ocrBatches.map((batch) => (
@@ -214,7 +214,7 @@ export default function Dashboard() {
                 <span>{portal.openInquiries} open inquiries</span>
               </div>
               <div className="detail-block subtle">
-                Google and Facebook login scaffolding are intentionally staged, not falsely marked live.
+                Google and Facebook login are not connected yet.
               </div>
             </div>
           </div>

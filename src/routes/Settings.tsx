@@ -9,7 +9,7 @@ export default function Settings() {
       <PageHeader
         eyebrow="Settings"
         title="Roles, access, and platform posture"
-        description="This page makes the role-aware foundation explicit so the product can evolve into true admin, manager, owner, medical, and sales workspaces."
+        description="This page shows the current role model, access posture, and which platform systems are not connected yet."
       />
 
       <div className="dashboard-grid dashboard-grid--primary">
@@ -34,12 +34,12 @@ export default function Settings() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Foundations" title="What is intentionally scaffolded">
+        <Panel eyebrow="Connection status" title="What is not connected yet">
           <div className="bullet-list">
-            <div className="bullet-list__item">Google and Facebook auth are modeled but not falsely presented as live.</div>
-            <div className="bullet-list__item">OCR queue, review, and extracted entities are structured before provider wiring.</div>
-            <div className="bullet-list__item">Owner portal, buyer watchlists, and branded sale packets already have product surfaces.</div>
-            <div className="bullet-list__item">Subscription tiers and feature gates now exist as first-class architecture.</div>
+            <div className="bullet-list__item">Google and Facebook auth are not connected yet.</div>
+            <div className="bullet-list__item">OCR queue, review, and extracted entities are live in the workspace, but external OCR providers are not connected yet.</div>
+            <div className="bullet-list__item">Owner portal, buyer watchlists, and sale packet surfaces are in the product, but external user sessions are still local-only.</div>
+            <div className="bullet-list__item">Subscription tiers and limits are in the product, but billing is not connected yet.</div>
           </div>
         </Panel>
       </div>

@@ -142,9 +142,9 @@ export default function HorseDetail() {
         <div className="detail-hero__media">
           <img src={horse.profileImage} alt="" className="detail-hero__image" />
           <div className="detail-hero__media-copy">
-            <div className="detail-hero__eyebrow">Media foundation</div>
-            <h2>Profile hero and gallery architecture are live.</h2>
-            <p>Upload real sale stills, hero images, pedigree boards, and packet covers directly into this horse profile.</p>
+            <div className="detail-hero__eyebrow">Media vault</div>
+            <h2>Profile hero and gallery tools are active.</h2>
+            <p>Upload sale stills, hero images, pedigree boards, and packet covers directly into this horse profile.</p>
           </div>
         </div>
 
@@ -225,7 +225,7 @@ export default function HorseDetail() {
       </div>
 
       <div className="detail-grid">
-        <Panel eyebrow="Media" title="Gallery and packet assets" description="These uploads persist locally in the live workspace so sales packets can evolve while someone is previewing the product.">
+        <Panel eyebrow="Media" title="Gallery and packet assets" description="These uploads stay in the current workspace so sales packets and horse profiles can evolve as you work.">
           <div className="media-strip">
             {horse.gallery.map((asset) => (
               <div key={asset.id} className="media-tile">

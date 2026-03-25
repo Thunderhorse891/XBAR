@@ -50,7 +50,7 @@ export default function Documents() {
       <PageHeader
         eyebrow="Documents"
         title="Document intake and OCR"
-        description="The live local intake engine is active here: upload files, route them into review, and promote trusted facts into horse profiles while a future cloud OCR provider remains optional."
+        description="Upload files, route them into review, and promote approved facts into horse profiles. OCR provider wiring is not connected yet, so extraction stays local to this workspace."
       />
 
       {message ? <div className="status-banner">{message}</div> : null}
@@ -66,7 +66,7 @@ export default function Documents() {
         <Panel
           eyebrow="Live intake"
           title="Upload files into the OCR queue"
-          description="This now writes to the app state and persists locally. You can route directly to a horse or let the intake layer attempt a match from filenames and extracted text."
+          description="This writes directly into the current workspace. You can route files to a horse now or let the intake layer attempt a local match from file names and extracted text."
           action={
             <Pill tone={uploadOpen ? 'blue' : 'slate'}>
               {uploadOpen ? 'Top-bar launch' : `${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB used`}
@@ -124,7 +124,7 @@ export default function Documents() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Batch intake" title="OCR queue states" description="This queue is no longer fake. New uploads appear here immediately and persist in the preview.">
+        <Panel eyebrow="Batch intake" title="OCR queue states" description="New uploads appear here immediately and stay in the current workspace until you review or attach them.">
           <div className="stack-list">
             {ocrBatches.map((batch) => (
               <div key={batch.id} className="stack-item">
