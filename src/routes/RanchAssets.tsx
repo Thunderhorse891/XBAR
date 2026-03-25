@@ -47,9 +47,9 @@ export default function RanchAssets() {
   return (
     <>
       <PageHeader
-        eyebrow="Ranch assets"
-        title="Ranch assets and kits"
-        description="This module now behaves like a real operational register for tack, tools, kits, and equipment instead of a decorative table."
+        eyebrow="Ranch toolkit"
+        title="Ranch toolkit and kits"
+        description="This module now behaves like a real operational register for tack, tools, kits, feed, and equipment instead of a decorative table."
       />
 
       {message ? <div className="status-banner">{message}</div> : null}

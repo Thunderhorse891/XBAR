@@ -78,6 +78,74 @@ export default function Sales() {
           </div>
         </Panel>
       </div>
+
+      <div className="dashboard-grid dashboard-grid--primary">
+        <Panel
+          eyebrow="Connectors"
+          title="Social connectors and portal syndication"
+          description="This makes the Facebook and Google selling foundation visible inside Sales instead of hiding it only in the owner portal module."
+        >
+          <div className="stack-list">
+            <div className="stack-item">
+              <div className="stack-item__top">
+                <div>
+                  <div className="stack-item__title">Facebook listing handoff</div>
+                  <div className="stack-item__copy">Meta-facing listing distribution and buyer capture foundation.</div>
+                </div>
+                <Pill tone={portal.facebookAuthReady ? 'emerald' : 'amber'}>
+                  {portal.facebookAuthReady ? 'Connected' : 'Scaffolded'}
+                </Pill>
+              </div>
+              <div className="inline-metrics">
+                <span>{portal.savedHorses} horses already eligible for social packet flows</span>
+                <span>{salesLeads.filter((lead) => lead.channel === 'Facebook').length} Facebook-sourced leads</span>
+              </div>
+            </div>
+            <div className="stack-item">
+              <div className="stack-item__top">
+                <div>
+                  <div className="stack-item__title">Google and owner portal access</div>
+                  <div className="stack-item__copy">Buyer-safe review access for shared packets, favorites, and inquiry follow-up.</div>
+                </div>
+                <Pill tone={portal.googleAuthReady ? 'emerald' : 'blue'}>
+                  {portal.googleAuthReady ? 'Connected' : 'Foundation ready'}
+                </Pill>
+              </div>
+              <div className="inline-metrics">
+                <span>{portal.openInquiries} open inquiries</span>
+                <span>{portal.activeOwners} active external users staged</span>
+              </div>
+            </div>
+          </div>
+        </Panel>
+
+        <Panel
+          eyebrow="Packet posture"
+          title="Share-ready listing coverage"
+          description="A quick selling view of which horses are visually ready for portal, social, and buyer review motion."
+        >
+          <div className="stack-list">
+            {saleHorses.slice(0, 4).map((horse) => (
+              <div key={horse.id} className="stack-item">
+                <div className="stack-item__top">
+                  <div>
+                    <div className="stack-item__title">{horse.name}</div>
+                    <div className="stack-item__copy">{horse.documents.length} documents · {horse.gallery.length} media assets</div>
+                  </div>
+                  <Pill tone={horse.sale.socialReady ? 'emerald' : 'amber'}>
+                    {horse.sale.socialReady ? 'Share-ready' : 'Needs packet work'}
+                  </Pill>
+                </div>
+                <div className="inline-metrics">
+                  <span>{horse.sale.watchlistCount} watchers</span>
+                  <span>{horse.sale.inquiryCount} inquiries</span>
+                  <span>{horse.readiness.packetStatus}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
     </>
   );
 }

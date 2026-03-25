@@ -441,6 +441,10 @@ a:focus-visible {
   letter-spacing: -0.04em;
 }
 
+.hover-copy {
+  cursor: help;
+}
+
 .page-description,
 .panel__description,
 .stack-item__copy,

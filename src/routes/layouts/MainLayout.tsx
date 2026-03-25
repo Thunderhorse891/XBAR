@@ -43,7 +43,7 @@ const programs: NavItem[] = [
 
 const platform: NavItem[] = [
   { label: 'Weather', path: '/weather', icon: WeatherIcon },
-  { label: 'Ranch Assets', path: '/assets', icon: AssetsIcon },
+  { label: 'Ranch Toolkit', path: '/assets', icon: AssetsIcon },
   { label: 'Subscriptions', path: '/subscriptions', icon: SubscriptionIcon },
   { label: 'Owner Portal', path: '/portal', icon: PortalIcon },
   { label: 'Settings', path: '/settings', icon: SettingsIcon },
@@ -58,7 +58,7 @@ const routeLabels: Record<string, string> = {
   '/breeding': 'Breeding',
   '/sales': 'Sales',
   '/weather': 'Weather',
-  '/assets': 'Ranch Assets',
+  '/assets': 'Ranch Toolkit',
   '/subscriptions': 'Subscriptions',
   '/portal': 'Owner Portal',
   '/settings': 'Settings',
@@ -70,7 +70,7 @@ function NavSection({ title, items }: { title: string; items: NavItem[] }) {
       <div className="nav-section__title">{title}</div>
       <div className="nav-section__items">
         {items.map(({ label, path, icon: Icon }) => (
-          <NavLink key={label} to={path} end={path === '/'} className={({ isActive }) => `nav-link${isActive ? ' nav-link--active' : ''}`}>
+          <NavLink key={label} to={path} end={path === '/'} title={label} className={({ isActive }) => `nav-link${isActive ? ' nav-link--active' : ''}`}>
             <Icon className="nav-link__icon" />
             <span>{label}</span>
           </NavLink>
@@ -107,15 +107,15 @@ export default function MainLayout() {
             <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" />
           </div>
           <div>
-            <div className="brand-lockup__title">XBAR LLC</div>
-            <div className="brand-lockup__subtitle">Equine records platform</div>
+            <div className="brand-lockup__title hover-copy" title="XBAR LLC">XBAR LLC</div>
+            <div className="brand-lockup__subtitle hover-copy" title="Equine records platform">Equine records platform</div>
           </div>
         </div>
 
         <div className="sidebar-card">
-          <div className="sidebar-card__eyebrow">Workspace</div>
-          <div className="sidebar-card__title">{roleWorkspace.label}</div>
-          <p className="sidebar-card__body">{roleWorkspace.summary}</p>
+          <div className="sidebar-card__eyebrow hover-copy" title="Workspace">Workspace</div>
+          <div className="sidebar-card__title hover-copy" title={roleWorkspace.label}>{roleWorkspace.label}</div>
+          <p className="sidebar-card__body hover-copy" title={roleWorkspace.summary}>{roleWorkspace.summary}</p>
           <div className="sidebar-card__tags">
             {roleWorkspace.primaryModules.map((module) => (
               <Pill key={module}>{module}</Pill>
@@ -128,7 +128,7 @@ export default function MainLayout() {
         <NavSection title="Platform" items={platform} />
 
         <div className="sidebar-footer">
-          <div className="sidebar-footer__title">Plan status</div>
+          <div className="sidebar-footer__title hover-copy" title="Plan status">Plan status</div>
           <div className="sidebar-footer__row">
             <span>{subscription.tier}</span>
             <Pill tone="blue">{subscription.billingState}</Pill>
@@ -142,8 +142,8 @@ export default function MainLayout() {
       <div className="shell-main">
         <header className="topbar">
           <div>
-            <div className="topbar__eyebrow">XBAR Records</div>
-            <div className="topbar__title">{currentLabel}</div>
+            <div className="topbar__eyebrow hover-copy" title="XBAR Records">XBAR Records</div>
+            <div className="topbar__title hover-copy" title={currentLabel}>{currentLabel}</div>
           </div>
 
           <div className="topbar__controls">
@@ -154,6 +154,7 @@ export default function MainLayout() {
                 onChange={(event) => setSearch(event.target.value)}
                 onKeyDown={handleSearch}
                 placeholder="Search horses, documents, or owners"
+                title="Search horses, documents, or owners"
                 className="search-shell__input"
               />
             </label>
@@ -171,16 +172,16 @@ export default function MainLayout() {
               <option value="Sales Lead">Sales Lead</option>
             </select>
 
-            <button className="icon-button" type="button" onClick={() => navigate('/documents')} aria-label="Open document review">
+            <button className="icon-button" type="button" onClick={() => navigate('/documents')} aria-label="Open document review" title="Open document review">
               <BellIcon className="icon-button__icon" />
               {pendingReview ? <span className="icon-button__dot">{pendingReview}</span> : null}
             </button>
 
-            <button className="button button--ghost" type="button" onClick={() => navigate('/documents?upload=1')}>
+            <button className="button button--ghost" type="button" onClick={() => navigate('/documents?upload=1')} title="Open OCR intake">
               OCR Intake
             </button>
 
-            <button className="button button--primary" type="button" onClick={() => navigate('/horses?new=1')}>
+            <button className="button button--primary" type="button" onClick={() => navigate('/horses?new=1')} title="Create a new horse record">
               <AddIcon className="button__icon" />
               New Horse
             </button>

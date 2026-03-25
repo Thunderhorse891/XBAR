@@ -2,6 +2,19 @@ import type { ReactNode } from 'react';
 
 type Tone = 'blue' | 'slate' | 'emerald' | 'amber' | 'rose';
 
+function toHoverText(value: ReactNode): string | undefined {
+  if (typeof value === 'string' || typeof value === 'number') {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    const parts = value.map((item) => toHoverText(item)).filter(Boolean);
+    return parts.length ? parts.join(' ') : undefined;
+  }
+
+  return undefined;
+}
+
 export function PageHeader({
   eyebrow,
   title,
@@ -16,9 +29,17 @@ export function PageHeader({
   return (
     <header className="page-header">
       <div className="page-header__copy">
-        {eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}
-        <h1 className="page-title">{title}</h1>
-        <p className="page-description">{description}</p>
+        {eyebrow ? (
+          <div className="eyebrow hover-copy" title={eyebrow}>
+            {eyebrow}
+          </div>
+        ) : null}
+        <h1 className="page-title hover-copy" title={title}>
+          {title}
+        </h1>
+        <p className="page-description hover-copy" title={description}>
+          {description}
+        </p>
       </div>
       {actions ? <div className="page-actions">{actions}</div> : null}
     </header>
@@ -46,12 +67,22 @@ export function Panel({
     <section className={`panel ${className}`.trim()}>
       <div className="panel__header">
         <div>
-          {eyebrow ? <div className="panel__eyebrow">{eyebrow}</div> : null}
+          {eyebrow ? (
+            <div className="panel__eyebrow hover-copy" title={eyebrow}>
+              {eyebrow}
+            </div>
+          ) : null}
           <div className="panel__title-row">
-            <h2 className="panel__title">{title}</h2>
+            <h2 className="panel__title hover-copy" title={title}>
+              {title}
+            </h2>
             {meta ? <div className="panel__meta">{meta}</div> : null}
           </div>
-          {description ? <p className="panel__description">{description}</p> : null}
+          {description ? (
+            <p className="panel__description hover-copy" title={description}>
+              {description}
+            </p>
+          ) : null}
         </div>
         {action ? <div className="panel__action">{action}</div> : null}
       </div>
@@ -72,10 +103,16 @@ export function MetricCard({
   tone?: Tone;
 }) {
   return (
-    <div className={`metric-card metric-card--${tone}`}>
-      <div className="metric-card__label">{label}</div>
-      <div className="metric-card__value">{value}</div>
-      <div className="metric-card__detail">{detail}</div>
+    <div className={`metric-card metric-card--${tone}`} title={`${label}: ${value}. ${detail}`}>
+      <div className="metric-card__label hover-copy" title={label}>
+        {label}
+      </div>
+      <div className="metric-card__value hover-copy" title={value}>
+        {value}
+      </div>
+      <div className="metric-card__detail hover-copy" title={detail}>
+        {detail}
+      </div>
     </div>
   );
 }
@@ -87,7 +124,12 @@ export function Pill({
   children: ReactNode;
   tone?: Tone;
 }) {
-  return <span className={`pill pill--${tone}`}>{children}</span>;
+  const title = toHoverText(children);
+  return (
+    <span className={`pill pill--${tone} hover-copy`} title={title}>
+      {children}
+    </span>
+  );
 }
 
 export function ProgressBar({
@@ -113,8 +155,12 @@ export function KeyValue({
 }) {
   return (
     <div className="key-value">
-      <span className="key-value__label">{label}</span>
-      <span className="key-value__value">{value}</span>
+      <span className="key-value__label hover-copy" title={label}>
+        {label}
+      </span>
+      <span className="key-value__value hover-copy" title={toHoverText(value)}>
+        {value}
+      </span>
     </div>
   );
 }
