@@ -1204,12 +1204,6 @@ a:focus-visible {
   width: min(340px, 100%);
 }
 
-.interaction-note {
-  margin-top: -6px;
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-
 .field-input--compact {
   width: 100%;
   min-width: 180px;
