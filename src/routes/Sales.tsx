@@ -6,7 +6,9 @@ export default function Sales() {
   const horses = useXbarStore((state) => state.horses);
   const salesLeads = useXbarStore((state) => state.salesLeads);
   const portal = useXbarStore((state) => state.portal);
-  const saleHorses = horses.filter((horse) => horse.sale.askPrice > 0 || horse.sale.listingState !== 'Hold');
+  const saleHorses = horses.filter(
+    (horse) => horse.sale.askPrice > 0 || horse.sale.listingState === 'Buyer Review' || horse.sale.listingState === 'Market Ready',
+  );
 
   return (
     <>

@@ -218,7 +218,7 @@ function createHorseRecord(input: NewHorseInput): HorseRecord {
     ],
     gallery: [],
     sale: {
-      listingState: 'Private',
+      listingState: 'Hold',
       askPrice: 0,
       buyerConfidence: 50,
       inquiryCount: 0,
@@ -256,6 +256,50 @@ function createHorseRecord(input: NewHorseInput): HorseRecord {
       },
     ],
     notes: [],
+  };
+}
+
+function createOwnershipRecord(horse: HorseRecord): OwnershipRecord {
+  return {
+    id: createId('ownership'),
+    horseId: horse.id,
+    legalOwner: horse.owner,
+    transferStatus: 'Attention Required',
+    pendingDocuments: ['Ownership memo', 'Registration proof'],
+    complianceDeadline: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    confidence: 35,
+    auditTrail: [
+      `${todayStamp()} Ownership record created from horse intake`,
+      `${todayStamp()} Supporting ownership documents still need upload`,
+    ],
+  };
+}
+
+function summarizeBatch(batch: OCRBatch, documents: DocumentRecord[]): OCRBatch {
+  const batchDocuments = documents.filter((document) => document.batchId === batch.id);
+  if (!batchDocuments.length) {
+    return batch;
+  }
+
+  const fileCount = batchDocuments.length;
+  const processedCount = batchDocuments.filter((document) => document.state !== 'Queued').length;
+  const needsReviewCount = batchDocuments.filter((document) => document.state === 'Needs Review' || document.state === 'Extracting').length;
+  const matchedCount = batchDocuments.filter((document) => document.state === 'Matched' || document.state === 'Ready').length;
+
+  let state: OCRBatch['state'] = 'Processing';
+  if (needsReviewCount > 0) {
+    state = 'Reviewing';
+  } else if (matchedCount >= fileCount) {
+    state = 'Completed';
+  }
+
+  return {
+    ...batch,
+    fileCount,
+    processedCount,
+    needsReviewCount,
+    matchedCount,
+    state,
   };
 }
 
@@ -348,8 +392,10 @@ export const useXbarStore = create<XbarStore>()(
         }),
       addHorse: (input) => {
         const horse = createHorseRecord(input);
+        const ownershipRecord = createOwnershipRecord(horse);
         set((state) => ({
           horses: [horse, ...state.horses],
+          ownershipRecords: [ownershipRecord, ...state.ownershipRecords],
         }));
         return { ok: true, message: `${horse.name} is now live in the horse portfolio.`, id: horse.id };
       },
@@ -372,7 +418,8 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const selectedHorse = state.horses.find((horse) => horse.id === horseId);
-        const documents = await Promise.all(
+        const batchId = createId('batch');
+        const documents = (await Promise.all(
           fileList.map((file) =>
             buildDocumentRecord({
               file,
@@ -383,10 +430,13 @@ export const useXbarStore = create<XbarStore>()(
               existingDocuments: get().documents,
             }),
           ),
-        );
+        )).map((document) => ({
+          ...document,
+          batchId,
+        }));
 
         const batch: OCRBatch = {
-          id: createId('batch'),
+          id: batchId,
           label: label?.trim() || `${source} intake`,
           receivedAt: nowStamp(),
           source,
@@ -464,12 +514,7 @@ export const useXbarStore = create<XbarStore>()(
         set((current) => {
           const nextDocuments = current.documents.map((item) => (item.id === documentId ? nextDocument : item));
           const nextHorses = current.horses.map((horse) => (horse.id === matchedHorse.id ? promoteDocument(horse, nextDocument) : horse));
-          const nextBatches = current.ocrBatches.map((batch) => {
-            if (batch.label.toLowerCase().includes(document.uploadedBy.toLowerCase())) {
-              return batch;
-            }
-            return batch;
-          });
+          const nextBatches = current.ocrBatches.map((batch) => summarizeBatch(batch, nextDocuments));
 
           return {
             documents: nextDocuments,

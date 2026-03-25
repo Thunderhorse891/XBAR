@@ -190,6 +190,7 @@ export interface DocumentEntities {
 
 export interface DocumentRecord {
   id: string;
+  batchId?: string;
   title: string;
   type: DocumentType;
   horseId?: string;
