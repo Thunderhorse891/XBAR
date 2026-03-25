@@ -127,7 +127,7 @@ export default function HorseDetail() {
       <PageHeader
         eyebrow={horse.ownerEntity}
         title={horse.name}
-        description={horse.summary}
+        description={`${horse.segment} · ${horse.status} · ${horse.location.barn}`}
         actions={
           <>
             <Link className="button button--primary button--compact" to={packet.sharePath}>

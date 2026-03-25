@@ -53,7 +53,7 @@ export default function Documents() {
       <PageHeader
         eyebrow="Documents"
         title="Document intake and review"
-        description="Upload files, route them into review, and promote approved facts into horse profiles. External OCR providers are not connected yet, so document extraction stays local to this workspace."
+        description="Scan, review, trust, promote."
       />
 
       {message ? <div className="status-banner">{message}</div> : null}

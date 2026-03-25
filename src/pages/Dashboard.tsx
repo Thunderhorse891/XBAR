@@ -53,15 +53,15 @@ export default function Dashboard() {
     <>
       <PageHeader
         eyebrow="XBAR LLC"
-        title="Dashboard"
-        description="A premium operating system for records, ownership integrity, buyer trust, and ranch execution across desktop, web, and mobile workflows."
+        title="Control Deck"
+        description="Trusted records. Buyer readiness. Ranch execution."
         actions={
           <>
             <Link to="/horses" className="button button--ghost">
-              View Horses
+              Horses
             </Link>
             <Link to="/documents" className="button button--primary">
-              Open Documents
+              Documents
             </Link>
           </>
         }
@@ -69,35 +69,41 @@ export default function Dashboard() {
 
       <section className="command-stage">
         <div className="command-stage__copy">
-          <div className="eyebrow">Production upgrade</div>
-          <h2 className="command-stage__title">Build the category leader around trust, speed, and premium buyer outcomes.</h2>
-          <p className="command-stage__description">
-            Generic ranch tools stop at chores and logs. XBAR wins by turning paperwork chaos, ownership risk, and sale delays into one premium records and revenue engine.
-          </p>
+          <div className="eyebrow">Premium ranch records</div>
+          <h2 className="command-stage__title">Run XBAR like a high-value asset platform.</h2>
+          <p className="command-stage__description">Cleaner records. Faster sales. Sharper field control.</p>
           <div className="inline-actions">
             <Link to="/documents" className="button button--primary button--compact">
-              Clear trust blockers
+              Clear blockers
             </Link>
             <Link to="/subscriptions" className="button button--ghost button--compact">
-              Open ARR plan
+              ARR path
             </Link>
+          </div>
+        </div>
+        <div className="command-stage__visual">
+          <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" className="command-stage__logo" />
+          <div className="command-stage__visual-card">
+            <span className="command-stage__label">Signal stack</span>
+            <strong>Trust / Buyers / Ops</strong>
+            <span className="command-stage__detail">Built to outperform generic ranch tools.</span>
           </div>
         </div>
         <div className="command-stage__stats">
           <div className="command-stage__stat">
             <span className="command-stage__label">Buyer-safe profiles</span>
             <strong>{buyerReadyProfiles.length}</strong>
-            <span className="command-stage__detail">Ready to convert with confidence</span>
+            <span className="command-stage__detail">Ready to share</span>
           </div>
           <div className="command-stage__stat">
             <span className="command-stage__label">$10M ARR path</span>
             <strong>{Math.round(revenuePlan.targetArr / 1_000_000)}M</strong>
-            <span className="command-stage__detail">{revenuePlan.customersNeededAtCurrentTier} customers at current tier</span>
+            <span className="command-stage__detail">{revenuePlan.customersNeededAtCurrentTier} customers at this tier</span>
           </div>
           <div className="command-stage__stat">
             <span className="command-stage__label">Trust queue</span>
             <strong>{reviewQueue.length}</strong>
-            <span className="command-stage__detail">Docs still blocking premium workflows</span>
+            <span className="command-stage__detail">Records still unresolved</span>
           </div>
         </div>
       </section>
@@ -127,8 +133,8 @@ export default function Dashboard() {
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel
           eyebrow="Command center"
-          title="What the team should do next"
-          description="A premium product needs to behave like an operating system: visible priorities, clear routes, and a fast path from signal to action."
+          title="Now"
+          description="Priority moves."
         >
           <div className="stack-list">
             {commandCenter.map((item) => (
@@ -150,8 +156,8 @@ export default function Dashboard() {
 
         <Panel
           eyebrow="Portfolio watch"
-          title="High-context horse signals"
-          description="The horses below are carrying the most immediate operational weight across sales, medical, and ownership."
+          title="Watchlist"
+          description="High-weight horses."
         >
           <div className="stack-list">
             {attentionHorses.map((horse) => (
@@ -182,8 +188,8 @@ export default function Dashboard() {
       <div className="dashboard-grid dashboard-grid--secondary">
         <Panel
           eyebrow="Mobile and field tools"
-          title="Tools that make the app indispensable in the real world"
-          description="These are the workflows that need to feel faster, cleaner, and more premium than generic ranch software on a phone or desktop."
+          title="Field tools"
+          description="Built for phone and desktop."
         >
           <div className="stack-list">
             {fieldTools.map((tool) => (
@@ -203,8 +209,8 @@ export default function Dashboard() {
 
         <Panel
           eyebrow="Product moat"
-          title="Why this can beat generic ranch tools"
-          description="The winning product is not broader first. It is sharper, more trusted, and more revenue-linked first."
+          title="Moat"
+          description="Why XBAR can win."
         >
           <div className="stack-list">
             <div className="stack-item">
@@ -212,28 +218,28 @@ export default function Dashboard() {
                 <div className="stack-item__title">Record trust graph</div>
                 <Pill tone="emerald">Premium wedge</Pill>
               </div>
-              <div className="stack-item__copy">Every document should create verified, traceable facts that improve buyer trust and ownership integrity.</div>
+              <div className="stack-item__copy">Every document becomes structured, trusted truth.</div>
             </div>
             <div className="stack-item">
               <div className="stack-item__top">
                 <div className="stack-item__title">Buyer deal room</div>
                 <Pill tone="blue">Revenue engine</Pill>
               </div>
-              <div className="stack-item__copy">Profiles, packet trust, watchlists, and inquiry handoff should feel closer to premium enterprise sales software than a horse listing site.</div>
+              <div className="stack-item__copy">Profiles and packet trust should feel like premium deal software.</div>
             </div>
             <div className="stack-item">
               <div className="stack-item__top">
                 <div className="stack-item__title">Mobile field execution</div>
                 <Pill tone="amber">Real-world use</Pill>
               </div>
-              <div className="stack-item__copy">Teams need to capture updates from the barn, trailer, pasture, and show ground without friction or data loss.</div>
+              <div className="stack-item__copy">Capture updates from the barn, pasture, or trailer fast.</div>
             </div>
             <div className="stack-item">
               <div className="stack-item__top">
                 <div className="stack-item__title">Ownership and compliance radar</div>
                 <Pill tone="rose">Hard to replace</Pill>
               </div>
-              <div className="stack-item__copy">Transfer status, signatures, due dates, and audit notes are operational pain points most ranch tools barely touch.</div>
+              <div className="stack-item__copy">Transfer risk and title clarity are pain points most tools barely touch.</div>
             </div>
           </div>
         </Panel>
@@ -243,7 +249,7 @@ export default function Dashboard() {
         <Panel
           eyebrow="Documents"
           title="Intake queue"
-          description="The intake, review, and match workflow is live in this workspace. External OCR providers are not connected yet."
+          description="OCR throughput."
         >
           <div className="stack-list">
             {ocrBatches.map((batch) => (
@@ -272,8 +278,8 @@ export default function Dashboard() {
 
         <Panel
           eyebrow="Ownership"
-          title="Integrity and transfer posture"
-          description="Legal owner, co-owner, and transfer states are surfaced as first-class operating signals."
+          title="Ownership"
+          description="Integrity and transfer status."
         >
           <div className="stack-list">
             {ownershipRecords.map((record) => {
@@ -302,8 +308,8 @@ export default function Dashboard() {
       <div className="dashboard-grid dashboard-grid--secondary">
         <Panel
           eyebrow="Environment"
-          title="Weather and ranch conditions"
-          description="Operational weather now sits alongside portfolio risk so turnout, transport, and breeding timing stay visible."
+          title="Weather"
+          description="Field conditions."
         >
           <div className="weather-shell">
             <div className="weather-shell__headline">
@@ -336,8 +342,8 @@ export default function Dashboard() {
 
         <Panel
           eyebrow="Commercial layer"
-          title="Plan, seats, ARR path, and external access"
-          description="Subscriptions, owner portal, and revenue design are product architecture, not afterthought settings."
+          title="Commercial"
+          description="Plans, ARR, portal."
         >
           <div className="stack-list">
             <div className="stack-item">
@@ -362,7 +368,7 @@ export default function Dashboard() {
                 <span>{revenuePlan.recommendedMixLabel}</span>
               </div>
               <div className="detail-block subtle">
-                Setup fees help cash flow, but subscriptions and premium retention are what get the business to durable eight-figure revenue.
+                Setup helps cash flow. Subscriptions build the business.
               </div>
             </div>
             <div className="stack-item">
@@ -396,7 +402,7 @@ export default function Dashboard() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Lead intelligence" title="Buyer and social signals" description="Lead capture, saved horse behavior, and owner portal handoff can now sit in the same operating picture.">
+        <Panel eyebrow="Lead intelligence" title="Buyer signals" description="Pipeline view.">
           <div className="stack-list">
             {salesLeads.map((lead) => {
               const horse = horses.find((item) => item.id === lead.horseId);
@@ -426,7 +432,7 @@ export default function Dashboard() {
       </div>
 
       {medicalWatch.length ? (
-        <Panel eyebrow="Medical watch" title="Open care attention" description="The product now exposes urgent horse care as a real lane inside the dashboard instead of burying it behind basic cards.">
+        <Panel eyebrow="Medical watch" title="Care attention" description="Open medical items.">
           <div className="table-shell">
             <table className="data-table">
               <thead>

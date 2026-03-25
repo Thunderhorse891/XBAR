@@ -13,7 +13,7 @@ export default function Ownership() {
       <PageHeader
         eyebrow="Ownership"
         title="Ownership integrity"
-        description="This module treats legal owner, co-owner shares, transfer status, compliance dates, and audit history as operational truth instead of hidden notes."
+        description="Legal owners, splits, transfer status."
       />
 
       <div className="metric-grid">
@@ -24,7 +24,7 @@ export default function Ownership() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Transfer queue" title="Open ownership work" description="This is where transfers and title hygiene stay visible before they block a sale or travel decision.">
+        <Panel eyebrow="Transfer queue" title="Open ownership work" description="Transfers and title hygiene.">
           <div className="stack-list">
             {ownershipRecords.map((record) => {
               const horse = horses.find((item) => item.id === record.horseId);
@@ -48,7 +48,7 @@ export default function Ownership() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Share structure" title="Legal owners and co-owner splits" description="Horse ownership now reads like portfolio structure, not a single owner field.">
+        <Panel eyebrow="Share structure" title="Legal owners and co-owner splits" description="Structured ownership.">
           <div className="stack-list">
             {horses.filter((horse) => horse.ownership.length > 1).map((horse) => (
               <div key={horse.id} className="stack-item">
@@ -66,7 +66,7 @@ export default function Ownership() {
         </Panel>
       </div>
 
-      <Panel eyebrow="Audit trail" title="Traceability" description="Each record keeps its own operating history so a title question or ownership dispute has a clean paper trail.">
+      <Panel eyebrow="Audit trail" title="Traceability" description="Clean paper trail.">
         <div className="detail-grid">
           {ownershipRecords.map((record) => {
             const horse = horses.find((item) => item.id === record.horseId);

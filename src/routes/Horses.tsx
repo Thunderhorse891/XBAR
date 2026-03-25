@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { ContextMenu } from '@/components/ContextMenu';
 import { MetricCard, PageHeader, Pill, ProgressBar } from '@/components/app-ui';
+import { DotsIcon } from '@/components/icons';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
+import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useXbarStore } from '@/store/useXbarStore';
 import type { HorseSegment, HorseSex, HorseStatus } from '@/types/xbar';
 
@@ -25,6 +28,8 @@ const horseSexes: HorseSex[] = ['Mare', 'Stud', 'Gelding', 'Filly', 'Colt'];
 export default function Horses() {
   const navigate = useNavigate();
   const horses = useXbarStore((state) => state.horses);
+  const documents = useXbarStore((state) => state.documents);
+  const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const savedHorseIds = useXbarStore((state) => state.savedHorseIds);
   const toggleSavedHorse = useXbarStore((state) => state.toggleSavedHorse);
   const addHorse = useXbarStore((state) => state.addHorse);
@@ -33,6 +38,7 @@ export default function Horses() {
   const [segmentFilter, setSegmentFilter] = useState<SegmentFilter>('All');
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [message, setMessage] = useState('');
+  const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
   const [form, setForm] = useState({
     name: '',
     barnName: '',
@@ -63,6 +69,44 @@ export default function Horses() {
   const saleReady = filtered.filter((horse) => horse.readiness.score >= 80);
   const medicalWatch = filtered.filter((horse) => horse.status === 'Medical Review');
   const transferRisk = filtered.filter((horse) => horse.documents.some((documentId) => documentId.includes('transfer')));
+  const buyerReady = filtered.filter((horse) =>
+    buildHorsePacketCompleteness(
+      horse,
+      documents.filter((document) => document.horseId === horse.id),
+      ownershipRecords.find((record) => record.horseId === horse.id),
+    ).buyerSafe,
+  );
+
+  const openHorseMenu = (horseId: string, x: number, y: number) => {
+    setMenuState({ horseId, x, y });
+  };
+
+  const menuHorse = filtered.find((horse) => horse.id === menuState?.horseId) ?? horses.find((horse) => horse.id === menuState?.horseId);
+  const menuSaved = menuHorse ? savedHorseIds.includes(menuHorse.id) : false;
+  const menuItems = menuHorse
+    ? [
+        {
+          id: 'open-profile',
+          label: 'Open profile',
+          onSelect: () => navigate(`/horses/${menuHorse.id}`),
+        },
+        {
+          id: 'preview-profile',
+          label: 'Preview buyer profile',
+          onSelect: () => navigate(`/profiles/${menuHorse.id}`),
+        },
+        {
+          id: 'toggle-saved',
+          label: menuSaved ? 'Remove from portal' : 'Save to portal',
+          onSelect: () => toggleSavedHorse(menuHorse.id),
+        },
+        {
+          id: 'open-sales',
+          label: 'Open sales board',
+          onSelect: () => navigate('/sales'),
+        },
+      ]
+    : [];
 
   const handleCreateHorse = () => {
     const result = addHorse(form);
@@ -90,8 +134,8 @@ export default function Horses() {
     <>
       <PageHeader
         eyebrow="Records"
-        title="Horses"
-        description="Horse profiles now behave like asset dossiers: registry metadata, ownership structure, media readiness, OCR facts, and operating signals all sit in one place."
+        title="Horse Ledger"
+        description="Premium records, fast actions, buyer-ready detail."
         actions={
           <div className="view-toggle">
             {(['Portfolio', 'Registry'] as ViewMode[]).map((mode) => (
@@ -112,14 +156,14 @@ export default function Horses() {
 
       {createOpen ? (
         <section className="panel">
-          <div className="panel__header">
-            <div>
-              <div className="panel__eyebrow">Live intake</div>
-              <h2 className="panel__title">Create a horse record</h2>
-              <p className="panel__description">This writes a new horse into the current workspace and keeps it there between refreshes on this browser.</p>
-            </div>
-            <button className="button button--ghost button--compact" type="button" onClick={() => setSearchParams({})}>
-              Close
+            <div className="panel__header">
+              <div>
+                <div className="panel__eyebrow">Live intake</div>
+                <h2 className="panel__title">Create a horse record</h2>
+                <p className="panel__description">Adds a new premium record to this workspace.</p>
+              </div>
+              <button className="button button--ghost button--compact" type="button" onClick={() => setSearchParams({})}>
+                Close
             </button>
           </div>
           <div className="form-grid">
@@ -195,10 +239,10 @@ export default function Horses() {
       ) : null}
 
       <div className="metric-grid">
-        <MetricCard label="Portfolio" value={`${filtered.length}`} detail={`${saleReady.length} with sale-grade packets`} />
-        <MetricCard label="Sale value" value={formatCompactCurrency(saleReady.reduce((sum, horse) => sum + horse.sale.askPrice, 0))} detail="Active private-market pricing" tone="amber" />
-        <MetricCard label="Medical watch" value={`${medicalWatch.length}`} detail="Care-sensitive horses needing extra visibility" tone="rose" />
-        <MetricCard label="Transfer risk" value={`${transferRisk.length}`} detail={`${savedHorseIds.length} horses already saved in portal flows`} tone="slate" />
+        <MetricCard label="Portfolio" value={`${filtered.length}`} detail={`${saleReady.length} market ready`} />
+        <MetricCard label="Buyer-safe" value={`${buyerReady.length}`} detail="Profiles cleared for premium share links" tone="emerald" />
+        <MetricCard label="Medical watch" value={`${medicalWatch.length}`} detail="Care-sensitive records" tone="rose" />
+        <MetricCard label="Sale value" value={formatCompactCurrency(saleReady.reduce((sum, horse) => sum + horse.sale.askPrice, 0))} detail={`${transferRisk.length} transfer risks`} tone="amber" />
       </div>
 
       <div className="filter-bar">
@@ -223,24 +267,31 @@ export default function Horses() {
         />
       </div>
 
-      <div className="interaction-note">
-        Hover the key labels for full copy. Use the card buttons or row links below to move through the portfolio cleanly.
-      </div>
+      <div className="interaction-note">Right-click any horse for quick actions.</div>
 
       {viewMode === 'Portfolio' ? (
         <div className="horse-grid">
           {filtered.map((horse) => {
             const saved = savedHorseIds.includes(horse.id);
+            const packet = buildHorsePacketCompleteness(
+              horse,
+              documents.filter((document) => document.horseId === horse.id),
+              ownershipRecords.find((record) => record.horseId === horse.id),
+            );
             return (
               <div
                 key={horse.id}
                 className="horse-card"
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  openHorseMenu(horse.id, event.clientX, event.clientY);
+                }}
               >
                 <div className="horse-card__media">
                   <img src={horse.profileImage} alt="" className="horse-card__image" />
                   <div className="horse-card__media-copy">
                     <Pill tone={statusTone[horse.status]}>{horse.status}</Pill>
-                    <Pill tone="slate">{horse.segment}</Pill>
+                    <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
                   </div>
                 </div>
 
@@ -249,10 +300,23 @@ export default function Horses() {
                     <div>
                       <div className="horse-card__title">{horse.name}</div>
                       <div className="horse-card__subtitle">
-                        {horse.registry} · {horse.aqhaNumber} · {horse.sex}
+                        {horse.segment} · {horse.registry} · {horse.sex}
                       </div>
                     </div>
-                    {saved ? <Pill tone="blue">Saved</Pill> : null}
+                    <div className="status-inline">
+                      {saved ? <Pill tone="blue">Saved</Pill> : null}
+                      <button
+                        className="icon-button icon-button--compact"
+                        type="button"
+                        aria-label="Open quick actions"
+                        onClick={(event) => {
+                          const bounds = event.currentTarget.getBoundingClientRect();
+                          openHorseMenu(horse.id, bounds.left, bounds.bottom + 8);
+                        }}
+                      >
+                        <DotsIcon className="icon-button__icon" />
+                      </button>
+                    </div>
                   </div>
 
                   <p className="horse-card__summary">{horse.summary}</p>
@@ -265,20 +329,19 @@ export default function Horses() {
 
                   <div className="horse-card__readiness">
                     <div className="horse-card__readiness-head">
-                      <span>Sale readiness</span>
-                      <strong>{formatPercent(horse.readiness.score)}</strong>
+                      <span>Packet trust</span>
+                      <strong>{formatPercent(packet.score)}</strong>
                     </div>
-                    <ProgressBar value={horse.readiness.score} tone={horse.readiness.score >= 85 ? 'emerald' : horse.readiness.score >= 70 ? 'amber' : 'rose'} />
+                    <ProgressBar value={packet.score} tone={packet.tone} />
                   </div>
 
                   <div className="token-row">
-                    {horse.tags.slice(0, 3).map((tag) => (
-                      <Pill key={tag}>{tag}</Pill>
-                    ))}
+                    <Pill tone="slate">{horse.location.pasture}</Pill>
+                    <Pill tone="slate">{horse.registrationNumber}</Pill>
                   </div>
 
                   <div className="horse-card__footer">
-                    <span>{horse.sale.watchlistCount} watchers</span>
+                    <span>{horse.sale.watchlistCount} saved</span>
                     <span>{formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)}</span>
                   </div>
 
@@ -313,6 +376,10 @@ export default function Horses() {
               {filtered.map((horse) => (
                 <tr
                   key={horse.id}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    openHorseMenu(horse.id, event.clientX, event.clientY);
+                  }}
                 >
                   <td>
                     <Link to={`/horses/${horse.id}`} className="table-link">
@@ -335,6 +402,8 @@ export default function Horses() {
           </table>
         </div>
       )}
+
+      <ContextMenu open={Boolean(menuState && menuHorse)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
     </>
   );
 }

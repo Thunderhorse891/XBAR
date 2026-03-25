@@ -9,7 +9,7 @@ export default function Weather() {
       <PageHeader
         eyebrow="Weather"
         title="Weather operations"
-        description="Weather is treated as a real operating input now: transport, turnout, breeding, and pasture impact all sit in the same product language as the rest of the ranch."
+        description="Turnout, transport, breeding."
       />
 
       <div className="metric-grid">

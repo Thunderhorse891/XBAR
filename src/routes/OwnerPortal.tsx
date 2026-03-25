@@ -23,7 +23,7 @@ export default function OwnerPortal() {
       <PageHeader
         eyebrow="Owner portal"
         title="Owner and buyer access"
-        description="This page now tracks buyer-profile links, saved horses, invite counts, and inquiry traffic. Google and Facebook login are not connected yet in the public preview."
+        description="Saved horses, buyer links, inquiry flow."
       />
 
       <div className="metric-grid">

@@ -19,7 +19,7 @@ export default function Sales() {
       <PageHeader
         eyebrow="Sales"
         title="Sales and listing readiness"
-        description="The sales module now treats buyer flow, listing packets, transfer blockers, and owner portal handoff as real product surfaces."
+        description="Buyer flow, packets, listing trust."
       />
 
       <div className="metric-grid">

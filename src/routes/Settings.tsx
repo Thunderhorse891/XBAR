@@ -9,7 +9,7 @@ export default function Settings() {
       <PageHeader
         eyebrow="Settings"
         title="Roles, access, and platform posture"
-        description="This page shows the current role model, access posture, and which platform systems are still browser-local or not connected yet."
+        description="Roles, access, connection status."
       />
 
       <div className="dashboard-grid dashboard-grid--primary">

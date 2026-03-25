@@ -108,7 +108,7 @@ export default function MainLayout() {
           </div>
           <div>
             <div className="brand-lockup__title hover-copy" title="XBAR LLC">XBAR LLC</div>
-            <div className="brand-lockup__subtitle hover-copy" title="Equine records platform">Equine records platform</div>
+            <div className="brand-lockup__subtitle hover-copy" title="Premium records operating system">Premium records OS</div>
           </div>
         </div>
 
@@ -153,7 +153,7 @@ export default function MainLayout() {
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 onKeyDown={handleSearch}
-                placeholder="Search horses, documents, or owners"
+                placeholder="Search horses or owners"
                 title="Search horses, documents, or owners"
                 className="search-shell__input"
               />
@@ -178,7 +178,7 @@ export default function MainLayout() {
             </button>
 
             <button className="button button--ghost" type="button" onClick={() => navigate('/documents?upload=1')} title="Open document intake">
-              Document Intake
+              Intake
             </button>
 
             <button className="button button--primary" type="button" onClick={() => navigate('/horses?new=1')} title="Create a new horse record">

@@ -19,7 +19,7 @@ export default function Subscriptions() {
       <PageHeader
         eyebrow="Subscriptions"
         title="Plan and feature gating"
-        description="This module now connects product packaging to the commercial goal: premium plans, durable retention, and a realistic path to $10M in annual subscription revenue."
+        description="Premium plans and the $10M ARR path."
       />
 
       {message ? <div className="status-banner">{message}</div> : null}
@@ -86,7 +86,7 @@ export default function Subscriptions() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--secondary">
-        <Panel eyebrow="Revenue blueprint" title="Path to $10M in annual subscriptions" description="A premium product earns premium pricing by solving the hard trust and revenue problems generic tools leave behind.">
+        <Panel eyebrow="Revenue blueprint" title="Path to $10M in annual subscriptions" description="Revenue scenarios.">
           <div className="stack-list">
             {revenuePlan.scenarios.map((scenario) => (
               <div key={scenario.tier} className="stack-item">
@@ -105,7 +105,7 @@ export default function Subscriptions() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Premium pricing levers" title="What justifies higher subscription plans" description="If the product is going to command real revenue, it needs category-defining workflows, not commodity feature checklists.">
+        <Panel eyebrow="Premium pricing levers" title="What justifies higher subscription plans" description="Why teams pay more.">
           <div className="bullet-list">
             {revenuePlan.motions.map((motion) => (
               <div key={motion} className="bullet-list__item">
