@@ -29,6 +29,8 @@ export type DocumentType =
   | 'Media Kit'
   | 'Ownership Memo';
 
+export type DocumentSource = 'Manual Upload' | 'Bulk Intake' | 'Owner Portal' | 'Sales Packet';
+
 export type ProcessingState =
   | 'Queued'
   | 'Extracting'
@@ -193,7 +195,7 @@ export interface DocumentRecord {
   horseId?: string;
   uploadedBy: string;
   uploadedAt: string;
-  source: 'Manual Upload' | 'Bulk Intake' | 'Owner Portal' | 'Sales Packet';
+  source: DocumentSource;
   state: ProcessingState;
   confidence: number;
   duplicateRisk: 'Low' | 'Review' | 'Possible Duplicate';

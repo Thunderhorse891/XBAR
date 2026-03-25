@@ -1,23 +1,26 @@
+import { useState } from 'react';
 import { MetricCard, PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
 import { formatCurrency } from '@/lib/format';
+import { subscriptionTierConfig } from '@/lib/xbarRuntime';
 import { useXbarStore } from '@/store/useXbarStore';
+import type { SubscriptionTier } from '@/types/xbar';
+
+const tiers: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
 
 export default function Subscriptions() {
   const subscription = useXbarStore((state) => state.subscription);
-  const tiers = [
-    { name: 'Starter', detail: 'Registry basics, limited OCR, no owner portal', tone: 'slate' as const },
-    { name: 'Professional', detail: 'Current plan: branded packets, role views, owner portal foundation', tone: 'blue' as const },
-    { name: 'Ranch Ops', detail: 'Higher seat counts, deeper OCR throughput, expanded portal capacity', tone: 'emerald' as const },
-    { name: 'Enterprise', detail: 'Custom integrations, branded domains, and portfolio-grade governance', tone: 'amber' as const },
-  ];
+  const changeSubscriptionTier = useXbarStore((state) => state.changeSubscriptionTier);
+  const [message, setMessage] = useState('');
 
   return (
     <>
       <PageHeader
         eyebrow="Subscriptions"
         title="Plan and feature gating"
-        description="This module makes the business model visible: tiering, seat posture, OCR limits, storage, owner portal capacity, and upgrade state all live in the product."
+        description="This module now changes the live local plan posture: limits update immediately, and OCR/storage enforcement respects the active tier."
       />
+
+      {message ? <div className="status-banner">{message}</div> : null}
 
       <div className="metric-grid">
         <MetricCard label="Current tier" value={subscription.tier} detail={`${subscription.billingState} · renews ${subscription.renewalDate}`} />
@@ -82,15 +85,44 @@ export default function Subscriptions() {
 
       <Panel eyebrow="Tier design" title="Product packaging">
         <div className="detail-grid">
-          {tiers.map((tier) => (
-            <div key={tier.name} className="stack-item">
-              <div className="stack-item__top">
-                <div className="stack-item__title">{tier.name}</div>
-                <Pill tone={tier.tone}>{tier.name === subscription.tier ? 'Current' : 'Available'}</Pill>
+          {tiers.map((tier) => {
+            const config = subscriptionTierConfig[tier];
+            const current = tier === subscription.tier;
+            return (
+              <div key={tier} className="stack-item">
+                <div className="stack-item__top">
+                  <div className="stack-item__title">{tier}</div>
+                  <Pill tone={current ? 'blue' : tier === 'Enterprise' ? 'amber' : tier === 'Ranch Ops' ? 'emerald' : 'slate'}>
+                    {current ? 'Current' : 'Available'}
+                  </Pill>
+                </div>
+                <div className="stack-item__copy">
+                  {formatCurrency(config.monthlyRate)}/mo · {config.limits.seatLimit} seats · {config.limits.ocrLimit} OCR pages · {config.limits.storageLimitGb} GB storage
+                </div>
+                <div className="token-row">
+                  {config.featureFlags.map((flag) => (
+                    <Pill key={flag} tone="blue">
+                      {flag}
+                    </Pill>
+                  ))}
+                </div>
+                {!current ? (
+                  <div className="inline-actions">
+                    <button
+                      className="button button--ghost button--compact"
+                      type="button"
+                      onClick={() => {
+                        changeSubscriptionTier(tier);
+                        setMessage(`${tier} is now active in the live preview.`);
+                      }}
+                    >
+                      Switch to {tier}
+                    </button>
+                  </div>
+                ) : null}
               </div>
-              <div className="stack-item__copy">{tier.detail}</div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </Panel>
     </>

@@ -176,11 +176,11 @@ export default function MainLayout() {
               {pendingReview ? <span className="icon-button__dot">{pendingReview}</span> : null}
             </button>
 
-            <button className="button button--ghost" type="button" onClick={() => navigate('/documents')}>
+            <button className="button button--ghost" type="button" onClick={() => navigate('/documents?upload=1')}>
               OCR Intake
             </button>
 
-            <button className="button button--primary" type="button" onClick={() => navigate('/horses')}>
+            <button className="button button--primary" type="button" onClick={() => navigate('/horses?new=1')}>
               <AddIcon className="button__icon" />
               New Horse
             </button>

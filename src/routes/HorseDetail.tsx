@@ -1,8 +1,14 @@
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { KeyValue, PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
 import { ChevronLeftIcon } from '@/components/icons';
 import { formatCompactCurrency, formatDateLabel, formatPercent } from '@/lib/format';
 import { useHorseRecord, useXbarStore } from '@/store/useXbarStore';
+import type { DocumentSource, GalleryAsset, SalesLead } from '@/types/xbar';
+
+const mediaKinds: GalleryAsset['kind'][] = ['Hero', 'Conformation', 'Sale Still', 'Pedigree', 'Document Cover'];
+const leadChannels: SalesLead['channel'][] = ['Facebook', 'Instagram', 'Referral', 'Site Inquiry'];
+const docSources: DocumentSource[] = ['Manual Upload', 'Bulk Intake', 'Owner Portal', 'Sales Packet'];
 
 export default function HorseDetail() {
   const { id } = useParams<{ id: string }>();
@@ -10,16 +16,101 @@ export default function HorseDetail() {
   const documents = useXbarStore((state) => state.documents.filter((document) => document.horseId === id));
   const ownershipRecord = useXbarStore((state) => state.ownershipRecords.find((record) => record.horseId === id));
   const salesLeads = useXbarStore((state) => state.salesLeads.filter((lead) => lead.horseId === id));
+  const savedHorseIds = useXbarStore((state) => state.savedHorseIds);
+  const toggleSavedHorse = useXbarStore((state) => state.toggleSavedHorse);
+  const uploadHorseMedia = useXbarStore((state) => state.uploadHorseMedia);
+  const createOCRIntake = useXbarStore((state) => state.createOCRIntake);
+  const addHorseNote = useXbarStore((state) => state.addHorseNote);
+  const updateHorseLocation = useXbarStore((state) => state.updateHorseLocation);
+  const createSalesLead = useXbarStore((state) => state.createSalesLead);
+
+  const [message, setMessage] = useState('');
+  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
+  const [mediaKind, setMediaKind] = useState<GalleryAsset['kind']>('Hero');
+  const [makePrimary, setMakePrimary] = useState(true);
+  const [docFiles, setDocFiles] = useState<File[]>([]);
+  const [docSource, setDocSource] = useState<DocumentSource>('Manual Upload');
+  const [noteTitle, setNoteTitle] = useState('Field update');
+  const [noteBody, setNoteBody] = useState('');
+  const [leadName, setLeadName] = useState('');
+  const [leadChannel, setLeadChannel] = useState<SalesLead['channel']>('Facebook');
+  const [location, setLocation] = useState({
+    barn: horse?.location.barn ?? '',
+    pasture: horse?.location.pasture ?? '',
+    stall: horse?.location.stall ?? '',
+  });
 
   if (!horse) {
     return (
-      <Panel title="Horse not found" description="The requested horse profile is not available in the current mock portfolio.">
+      <Panel title="Horse not found" description="The requested horse profile is not available in the current portfolio.">
         <Link to="/horses" className="button button--ghost">
           Back to Horses
         </Link>
       </Panel>
     );
   }
+
+  const saved = savedHorseIds.includes(horse.id);
+
+  const handleMediaUpload = async () => {
+    const result = await uploadHorseMedia({
+      horseId: horse.id,
+      files: mediaFiles,
+      kind: mediaKind,
+      makePrimary,
+    });
+    setMessage(result.message);
+    if (result.ok) {
+      setMediaFiles([]);
+      setMakePrimary(false);
+    }
+  };
+
+  const handleDocumentUpload = async () => {
+    const result = await createOCRIntake({
+      files: docFiles,
+      horseId: horse.id,
+      source: docSource,
+      uploadedBy: 'Horse Profile',
+      label: `${horse.barnName} profile intake`,
+    });
+    setMessage(result.message);
+    if (result.ok) {
+      setDocFiles([]);
+    }
+  };
+
+  const handleAddNote = () => {
+    const result = addHorseNote(horse.id, {
+      title: noteTitle,
+      body: noteBody,
+      author: 'Field Ops',
+      tone: 'info',
+    });
+    setMessage(result.message);
+    if (result.ok) {
+      setNoteBody('');
+      setNoteTitle('Field update');
+    }
+  };
+
+  const handleLocationUpdate = () => {
+    const result = updateHorseLocation(horse.id, location);
+    setMessage(result.message);
+  };
+
+  const handleLeadCreate = () => {
+    const result = createSalesLead({
+      name: leadName,
+      channel: leadChannel,
+      horseId: horse.id,
+      portalReady: saved,
+    });
+    setMessage(result.message);
+    if (result.ok) {
+      setLeadName('');
+    }
+  };
 
   return (
     <>
@@ -28,12 +119,17 @@ export default function HorseDetail() {
         Back to horses
       </Link>
 
+      {message ? <div className="status-banner">{message}</div> : null}
+
       <PageHeader
         eyebrow={horse.ownerEntity}
         title={horse.name}
         description={horse.summary}
         actions={
           <>
+            <button className="button button--ghost button--compact" type="button" onClick={() => toggleSavedHorse(horse.id)}>
+              {saved ? 'Saved in portal' : 'Save to portal'}
+            </button>
             <Pill tone={horse.readiness.score >= 85 ? 'emerald' : horse.readiness.score >= 70 ? 'amber' : 'rose'}>
               {horse.status}
             </Pill>
@@ -48,7 +144,7 @@ export default function HorseDetail() {
           <div className="detail-hero__media-copy">
             <div className="detail-hero__eyebrow">Media foundation</div>
             <h2>Profile hero and gallery architecture are live.</h2>
-            <p>Each horse now has room for a hero image, sale stills, pedigree boards, and document-backed presentation assets.</p>
+            <p>Upload real sale stills, hero images, pedigree boards, and packet covers directly into this horse profile.</p>
           </div>
         </div>
 
@@ -106,11 +202,30 @@ export default function HorseDetail() {
             <KeyValue label="Barn / stall" value={`${horse.location.barn} · ${horse.location.stall}`} />
             <KeyValue label="Pasture" value={horse.location.pasture} />
           </div>
+          <div className="form-grid form-grid--tight">
+            <label className="field-stack">
+              <span className="field-label">Barn</span>
+              <input className="field-input" value={location.barn} onChange={(event) => setLocation((current) => ({ ...current, barn: event.target.value }))} />
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Pasture</span>
+              <input className="field-input" value={location.pasture} onChange={(event) => setLocation((current) => ({ ...current, pasture: event.target.value }))} />
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Stall</span>
+              <input className="field-input" value={location.stall} onChange={(event) => setLocation((current) => ({ ...current, stall: event.target.value }))} />
+            </label>
+          </div>
+          <div className="inline-actions">
+            <button className="button button--ghost button--compact" type="button" onClick={handleLocationUpdate}>
+              Save location
+            </button>
+          </div>
         </Panel>
       </div>
 
       <div className="detail-grid">
-        <Panel eyebrow="Media" title="Gallery and packet assets">
+        <Panel eyebrow="Media" title="Gallery and packet assets" description="These uploads persist locally in the live workspace so sales packets can evolve while someone is previewing the product.">
           <div className="media-strip">
             {horse.gallery.map((asset) => (
               <div key={asset.id} className="media-tile">
@@ -126,6 +241,31 @@ export default function HorseDetail() {
                 </div>
               </div>
             ))}
+          </div>
+          <div className="form-grid form-grid--tight">
+            <label className="field-stack">
+              <span className="field-label">Media kind</span>
+              <select className="field-input" value={mediaKind} onChange={(event) => setMediaKind(event.target.value as GalleryAsset['kind'])}>
+                {mediaKinds.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {kind}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Upload images</span>
+              <input className="field-input field-input--file" type="file" multiple accept="image/*" onChange={(event) => setMediaFiles(Array.from(event.target.files ?? []))} />
+            </label>
+            <label className="field-stack field-stack--checkbox">
+              <input type="checkbox" checked={makePrimary} onChange={(event) => setMakePrimary(event.target.checked)} />
+              <span>Use first upload as hero image</span>
+            </label>
+          </div>
+          <div className="inline-actions">
+            <button className="button button--primary button--compact" type="button" onClick={handleMediaUpload}>
+              Upload media
+            </button>
           </div>
         </Panel>
 
@@ -199,6 +339,27 @@ export default function HorseDetail() {
               </div>
             )}
           </div>
+          <div className="form-grid form-grid--tight">
+            <label className="field-stack">
+              <span className="field-label">Document source</span>
+              <select className="field-input" value={docSource} onChange={(event) => setDocSource(event.target.value as DocumentSource)}>
+                {docSources.map((source) => (
+                  <option key={source} value={source}>
+                    {source}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field-stack field-stack--wide">
+              <span className="field-label">Upload documents</span>
+              <input className="field-input field-input--file" type="file" multiple accept=".pdf,.txt,.csv,image/*" onChange={(event) => setDocFiles(Array.from(event.target.files ?? []))} />
+            </label>
+          </div>
+          <div className="inline-actions">
+            <button className="button button--ghost button--compact" type="button" onClick={handleDocumentUpload}>
+              Add to OCR intake
+            </button>
+          </div>
         </Panel>
       </div>
 
@@ -251,6 +412,27 @@ export default function HorseDetail() {
               </div>
             ) : null}
           </div>
+          <div className="form-grid form-grid--tight">
+            <label className="field-stack">
+              <span className="field-label">Lead name</span>
+              <input className="field-input" value={leadName} onChange={(event) => setLeadName(event.target.value)} />
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Lead channel</span>
+              <select className="field-input" value={leadChannel} onChange={(event) => setLeadChannel(event.target.value as SalesLead['channel'])}>
+                {leadChannels.map((channel) => (
+                  <option key={channel} value={channel}>
+                    {channel}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="inline-actions">
+            <button className="button button--primary button--compact" type="button" onClick={handleLeadCreate}>
+              Add buyer lead
+            </button>
+          </div>
         </Panel>
       </div>
 
@@ -269,24 +451,44 @@ export default function HorseDetail() {
               </div>
             ))}
           </div>
-          <div className="timeline">
-            {[...horse.activity, ...horse.notes.map((note) => ({
-              id: note.id,
-              date: note.createdAt,
-              title: note.title,
-              summary: note.body,
-              owner: note.author,
-              category: 'Operations' as const,
-            }))].map((entry) => (
-              <div key={entry.id} className="timeline__item">
-                <div className="timeline__date">{formatDateLabel(entry.date)}</div>
-                <div>
-                  <div className="timeline__title">{entry.title}</div>
-                  <div className="timeline__copy">{entry.summary}</div>
-                  <div className="timeline__meta">{entry.owner}</div>
-                </div>
+          <div className="stack-list">
+            <div className="stack-item">
+              <div className="stack-item__title">Add field note</div>
+              <div className="form-grid form-grid--tight">
+                <label className="field-stack">
+                  <span className="field-label">Note title</span>
+                  <input className="field-input" value={noteTitle} onChange={(event) => setNoteTitle(event.target.value)} />
+                </label>
+                <label className="field-stack field-stack--wide">
+                  <span className="field-label">Note</span>
+                  <textarea className="field-textarea" value={noteBody} onChange={(event) => setNoteBody(event.target.value)} rows={4} />
+                </label>
               </div>
-            ))}
+              <div className="inline-actions">
+                <button className="button button--ghost button--compact" type="button" onClick={handleAddNote}>
+                  Save note
+                </button>
+              </div>
+            </div>
+            <div className="timeline">
+              {[...horse.activity, ...horse.notes.map((note) => ({
+                id: note.id,
+                date: note.createdAt,
+                title: note.title,
+                summary: note.body,
+                owner: note.author,
+                category: 'Operations' as const,
+              }))].map((entry) => (
+                <div key={entry.id} className="timeline__item">
+                  <div className="timeline__date">{formatDateLabel(entry.date)}</div>
+                  <div>
+                    <div className="timeline__title">{entry.title}</div>
+                    <div className="timeline__copy">{entry.summary}</div>
+                    <div className="timeline__meta">{entry.owner}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </Panel>
