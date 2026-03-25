@@ -530,6 +530,7 @@ a:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  cursor: pointer;
   transition: border-color 180ms ease, background-color 180ms ease;
 }
 
@@ -717,85 +718,6 @@ a:focus-visible {
   letter-spacing: -0.03em;
 }
 
-.hover-copy {
-  cursor: default !important;
-  text-decoration: none;
-}
-
-.hover-bubble {
-  position: fixed;
-  z-index: 80;
-  max-width: min(340px, calc(100vw - 24px));
-  padding: 10px 12px;
-  border-radius: 4px;
-  background: rgba(13, 21, 36, 0.96);
-  color: #f5f8fd;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 6px 18px rgba(13, 21, 36, 0.22);
-  font-size: 0.85rem;
-  line-height: 1.45;
-  pointer-events: none;
-}
-
-:where(
-  .nav-link,
-  .button,
-  .icon-button,
-  .brand-lockup__title,
-  .brand-lockup__subtitle,
-  .sidebar-card__eyebrow,
-  .sidebar-card__title,
-  .sidebar-card__body,
-  .topbar__eyebrow,
-  .topbar__title
-)[title] {
-  position: relative;
-}
-
-:where(
-  .nav-link,
-  .button,
-  .icon-button,
-  .brand-lockup__title,
-  .brand-lockup__subtitle,
-  .sidebar-card__eyebrow,
-  .sidebar-card__title,
-  .sidebar-card__body,
-  .topbar__eyebrow,
-  .topbar__title
-)[title]:hover::after,
-:where(
-  .nav-link,
-  .button,
-  .icon-button,
-  .brand-lockup__title,
-  .brand-lockup__subtitle,
-  .sidebar-card__eyebrow,
-  .sidebar-card__title,
-  .sidebar-card__body,
-  .topbar__eyebrow,
-  .topbar__title
-)[title]:focus-visible::after {
-  content: attr(title);
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 8px);
-  transform: translateX(-50%);
-  z-index: 70;
-  min-width: 120px;
-  max-width: min(320px, 70vw);
-  padding: 10px 12px;
-  border-radius: 4px;
-  background: rgba(13, 21, 36, 0.96);
-  color: #f5f8fd;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 6px 18px rgba(13, 21, 36, 0.22);
-  white-space: normal;
-  font-size: 0.82rem;
-  line-height: 1.4;
-  pointer-events: none;
-}
-
 .page-description,
 .panel__description,
 .stack-item__copy,
@@ -959,6 +881,7 @@ a:focus-visible {
 }
 
 .stack-item--interactive {
+  cursor: pointer;
   transition: background-color 180ms ease, border-color 180ms ease;
 }
 
@@ -1283,6 +1206,10 @@ a:focus-visible {
   flex-direction: column;
   min-height: 100%;
   transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.horse-card--interactive {
+  cursor: pointer;
 }
 
 .horse-card:hover {

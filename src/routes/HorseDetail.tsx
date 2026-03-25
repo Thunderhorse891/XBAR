@@ -50,7 +50,7 @@ export default function HorseDetail() {
 
   if (!horse) {
     return (
-      <Panel title="Horse not found" description="The requested horse profile is not available in the current portfolio.">
+      <Panel title="Horse not found" description="Record not found in this workspace.">
         <Link to="/horses" className="button button--ghost">
           Back to Horses
         </Link>
@@ -217,8 +217,8 @@ export default function HorseDetail() {
           <img src={horse.profileImage} alt="" className="detail-hero__image" />
           <div className="detail-hero__media-copy">
             <div className="detail-hero__eyebrow">Media vault</div>
-            <h2>Gallery and packet assets live here.</h2>
-            <p>Upload sale stills, hero images, pedigree boards, and packet covers directly into the record.</p>
+            <h2>Gallery and packet assets.</h2>
+            <p>Upload sale stills, hero images, and packet covers.</p>
           </div>
         </div>
 
@@ -309,7 +309,7 @@ export default function HorseDetail() {
       </div>
 
       <div className="detail-grid">
-        <Panel eyebrow="Media" title="Gallery and packet assets" description="These uploads stay in the current workspace so sales packets and horse profiles can evolve as you work.">
+        <Panel eyebrow="Media" title="Gallery and packet assets" description="Images and packet files.">
           {horse.gallery.length ? (
             <div className="media-strip">
               {horse.gallery.map((asset) => (
@@ -357,7 +357,7 @@ export default function HorseDetail() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Profile notes" title="Operational summary and packet posture">
+        <Panel eyebrow="Profile notes" title="Operational summary">
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__title">Medical note</div>
@@ -384,7 +384,7 @@ export default function HorseDetail() {
       </div>
 
       <div className="detail-grid">
-        <Panel eyebrow="Ownership" title="Shares, transfer posture, and audit notes">
+        <Panel eyebrow="Ownership" title="Shares and transfer posture">
           <div className="stack-list">
             {horse.ownership.map((stake) => (
               <div key={stake.id} className="stack-item">
@@ -404,7 +404,7 @@ export default function HorseDetail() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Documents" title="Packet coverage, extraction, and review">
+        <Panel eyebrow="Documents" title="Packet coverage">
           <div className="stack-list">
             {documents.length ? (
               documents.map((document) => (
@@ -484,7 +484,7 @@ export default function HorseDetail() {
           )}
         </Panel>
 
-        <Panel eyebrow="Breeding and sales" title="Program context and buyer posture">
+        <Panel eyebrow="Breeding and sales" title="Program and buyer posture">
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__title">Listing state</div>
@@ -547,7 +547,7 @@ export default function HorseDetail() {
         </Panel>
       </div>
 
-      <Panel eyebrow="Activity" title="Notes, alerts, and audit trail">
+      <Panel eyebrow="Activity" title="Notes and alerts">
         <div className="detail-grid">
           <div className="stack-list">
             {horse.alerts.map((alert) => (

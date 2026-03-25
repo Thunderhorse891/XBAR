@@ -76,7 +76,7 @@ export default function Sales() {
       <PageHeader
         eyebrow="Sales"
         title="Sales and listing readiness"
-        description="Buyer flow, packets, listing trust."
+        description="Buyers, listings, follow-up."
       />
 
       <div className="metric-grid">
@@ -87,13 +87,14 @@ export default function Sales() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Listing portfolio" title="Sale-ready horse presentation" description="Profiles below now behave like premium sales assets, not just bare horse cards.">
+        <Panel eyebrow="Listing portfolio" title="Sale-ready horse presentation" description="Live listings.">
           {saleHorses.length ? (
             <div className="horse-grid">
               {saleHorses.map((horse) => (
                 <div
                   key={horse.id}
-                  className="horse-card"
+                  className="horse-card horse-card--interactive"
+                  onClick={() => navigate(`/horses/${horse.id}`)}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     setMenuState({ type: 'horse', id: horse.id, x: event.clientX, y: event.clientY });
@@ -127,7 +128,7 @@ export default function Sales() {
                             <span>{formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)}</span>
                           </div>
                           <div className="inline-actions inline-actions--card">
-                            <Link className="button button--ghost button--compact" to={packet.sharePath}>
+                            <Link className="button button--ghost button--compact" to={packet.sharePath} onClick={(event) => event.stopPropagation()}>
                               Preview buyer profile
                             </Link>
                           </div>
@@ -143,7 +144,7 @@ export default function Sales() {
           )}
         </Panel>
 
-        <Panel eyebrow="Leads" title="Buyer and inquiry flow" description="Lead capture, saved listings, and owner-facing handoff are visible here. Social login is not connected yet.">
+        <Panel eyebrow="Leads" title="Buyer and inquiry flow" description="Lead pipeline.">
           {salesLeads.length ? (
             <div className="stack-list">
               {salesLeads.map((lead) => {
@@ -195,7 +196,7 @@ export default function Sales() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Lead lifecycle" title={selectedLead ? `${selectedLead.name} pipeline controls` : 'Lead lifecycle'} description="Move the lead, set follow-up timing, and capture notes or offer posture from here.">
+        <Panel eyebrow="Lead lifecycle" title={selectedLead ? `${selectedLead.name} pipeline controls` : 'Lead lifecycle'} description="Edit stage, follow-up, notes.">
           {selectedLead ? (
             <>
               <div className="form-grid form-grid--tight">
@@ -272,13 +273,13 @@ export default function Sales() {
           )}
         </Panel>
 
-        <Panel eyebrow="Preview mode" title="Social and portal handoff" description="These connectors are still preview surfaces until external auth and syndication are wired.">
+        <Panel eyebrow="Connectors" title="Social and portal handoff" description="Connector status.">
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__top">
                 <div>
                   <div className="stack-item__title">Facebook listing handoff</div>
-                  <div className="stack-item__copy">Preview only. Real Meta publishing and lead ingestion are not connected yet.</div>
+                  <div className="stack-item__copy">Meta publishing is not connected yet.</div>
                 </div>
                 <Pill tone={portal.facebookAuthReady ? 'emerald' : 'amber'}>
                   {portal.facebookAuthReady ? 'Connected' : 'Preview only'}
@@ -289,87 +290,13 @@ export default function Sales() {
               <div className="stack-item__top">
                 <div>
                   <div className="stack-item__title">Google and owner portal access</div>
-                  <div className="stack-item__copy">External login is not connected. Buyer profile previews still work locally.</div>
+                  <div className="stack-item__copy">External login is not connected.</div>
                 </div>
                 <Pill tone={portal.googleAuthReady ? 'emerald' : 'amber'}>
                   {portal.googleAuthReady ? 'Connected' : 'Preview only'}
                 </Pill>
               </div>
             </div>
-          </div>
-        </Panel>
-      </div>
-
-      <div className="dashboard-grid dashboard-grid--primary">
-        <Panel
-          eyebrow="Connectors"
-          title="Social connectors and portal syndication"
-          description="This keeps Facebook and Google selling status visible inside Sales instead of hiding it only in the owner portal module."
-        >
-          <div className="stack-list">
-            <div className="stack-item">
-              <div className="stack-item__top">
-                <div>
-                  <div className="stack-item__title">Facebook listing handoff</div>
-                  <div className="stack-item__copy">Meta-facing listing distribution and buyer capture posture.</div>
-                </div>
-                <Pill tone={portal.facebookAuthReady ? 'emerald' : 'amber'}>
-                  {portal.facebookAuthReady ? 'Connected' : 'Preview only'}
-                </Pill>
-              </div>
-              <div className="inline-metrics">
-                <span>{portal.savedHorses} horses already eligible for social packet flows</span>
-                <span>{salesLeads.filter((lead) => lead.channel === 'Facebook').length} Facebook-sourced leads</span>
-              </div>
-            </div>
-            <div className="stack-item">
-              <div className="stack-item__top">
-                <div>
-                  <div className="stack-item__title">Google and owner portal access</div>
-                  <div className="stack-item__copy">Buyer-safe review access for shared packets, favorites, and inquiry follow-up.</div>
-                </div>
-                <Pill tone={portal.googleAuthReady ? 'emerald' : 'blue'}>
-                  {portal.googleAuthReady ? 'Connected' : 'Preview only'}
-                </Pill>
-              </div>
-              <div className="inline-metrics">
-                <span>{portal.openInquiries} open inquiries</span>
-                <span>{portal.activeOwners} active external users staged</span>
-              </div>
-            </div>
-          </div>
-        </Panel>
-
-        <Panel
-          eyebrow="Packet posture"
-          title="Share-ready listing coverage"
-          description="A quick selling view of which horses are visually ready for portal, social, and buyer review motion."
-        >
-          <div className="stack-list">
-            {saleHorses.slice(0, 4).map((horse) => {
-              const packet = buildHorsePacketCompleteness(
-                horse,
-                documents.filter((document) => document.horseId === horse.id),
-                ownershipRecords.find((record) => record.horseId === horse.id),
-              );
-
-              return (
-                <div key={horse.id} className="stack-item">
-                  <div className="stack-item__top">
-                    <div>
-                      <div className="stack-item__title">{horse.name}</div>
-                      <div className="stack-item__copy">{horse.documents.length} documents · {horse.gallery.length} media assets</div>
-                    </div>
-                    <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
-                  </div>
-                  <div className="inline-metrics">
-                    <span>{horse.sale.watchlistCount} watchers</span>
-                    <span>{horse.sale.inquiryCount} inquiries</span>
-                    <span>{packet.score}% packet trust</span>
-                  </div>
-                </div>
-              );
-            })}
           </div>
         </Panel>
       </div>

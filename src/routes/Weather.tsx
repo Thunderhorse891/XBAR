@@ -34,7 +34,7 @@ export default function Weather() {
       />
 
       <div className="callout callout--warning">
-        <strong>Preview data:</strong> Weather is seeded locally in this build. No live weather API is connected yet. Last updated {formatDateTimeLabel(weather.updatedAt)}.
+        <strong>Preview data:</strong> Live API not connected. Updated {formatDateTimeLabel(weather.updatedAt)}.
       </div>
 
       <div className="metric-grid">

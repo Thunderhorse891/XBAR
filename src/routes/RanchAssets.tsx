@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
@@ -10,14 +12,17 @@ const statuses: AssetStatus[] = ['Available', 'Assigned', 'In Service'];
 const conditions: AssetCondition[] = ['Excellent', 'Service Soon', 'Attention Required'];
 
 export default function RanchAssets() {
+  const navigate = useNavigate();
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
   const updateAsset = useXbarStore((state) => state.updateAsset);
   const pushToast = useUiStore((state) => state.pushToast);
   const assigned = ranchAssets.filter((asset) => asset.status === 'Assigned');
   const serviceSoon = ranchAssets.filter((asset) => asset.condition !== 'Excellent');
   const [selectedAssetId, setSelectedAssetId] = useState(ranchAssets[0]?.id ?? '');
+  const [menuState, setMenuState] = useState<{ assetId: string; x: number; y: number } | null>(null);
 
   const selectedAsset = ranchAssets.find((asset) => asset.id === selectedAssetId) ?? ranchAssets[0];
+  const menuAsset = ranchAssets.find((asset) => asset.id === menuState?.assetId);
   const [form, setForm] = useState({
     status: selectedAsset?.status ?? 'Available',
     condition: selectedAsset?.condition ?? 'Excellent',
@@ -51,23 +56,54 @@ export default function RanchAssets() {
     });
   };
 
+  const menuItems = menuAsset
+    ? [
+        {
+          id: 'select-asset',
+          label: 'Select asset',
+          onSelect: () => handleAssetSelection(menuAsset.id),
+        },
+        {
+          id: 'mark-available',
+          label: 'Mark available',
+          onSelect: () => {
+            const result = updateAsset(menuAsset.id, { status: 'Available' });
+            pushToast({
+              title: result.ok ? 'Asset updated' : 'Asset update blocked',
+              message: result.message,
+              tone: result.ok ? 'success' : 'error',
+            });
+          },
+        },
+        ...(menuAsset.category === 'Medical Kit'
+          ? [
+              {
+                id: 'open-medical',
+                label: 'Open medical workspace',
+                onSelect: () => navigate('/medical'),
+              },
+            ]
+          : []),
+      ]
+    : [];
+
   return (
     <>
       <PageHeader
         eyebrow="Ranch toolkit"
         title="Ranch toolkit and kits"
-        description="This module now behaves like a real operational register for tack, tools, kits, feed, and equipment instead of a decorative table."
+        description="Tack, kits, equipment."
       />
 
       <div className="metric-grid">
-        <MetricCard label="Tracked assets" value={`${ranchAssets.length}`} detail="Tack, equipment, medical kits, and supply stock" />
-        <MetricCard label="Assigned" value={`${assigned.length}`} detail="Assets currently tied to a horse, barn, or workflow" tone="blue" />
-        <MetricCard label="Service soon" value={`${serviceSoon.length}`} detail="Items already drifting toward maintenance or refill work" tone="amber" />
+        <MetricCard label="Tracked assets" value={`${ranchAssets.length}`} detail="Tack, kits, stock" />
+        <MetricCard label="Assigned" value={`${assigned.length}`} detail="Tied to active work" tone="blue" />
+        <MetricCard label="Service soon" value={`${serviceSoon.length}`} detail="Needs maintenance or refill" tone="amber" />
         <MetricCard label="Availability" value={`${ranchAssets.length - assigned.length}`} detail="Assets ready for reassignment" tone="emerald" />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Inventory" title="Operational asset register">
+        <Panel eyebrow="Inventory" title="Asset register" description="Click rows. Right-click tools.">
           {ranchAssets.length ? (
             <div className="table-shell">
               <table className="data-table">
@@ -86,6 +122,11 @@ export default function RanchAssets() {
                     <tr
                       key={asset.id}
                       onClick={() => handleAssetSelection(asset.id)}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        handleAssetSelection(asset.id);
+                        setMenuState({ assetId: asset.id, x: event.clientX, y: event.clientY });
+                      }}
                       className={`${asset.id === selectedAssetId ? 'table-row--selected ' : ''}table-row--interactive`.trim()}
                     >
                       <td>{asset.name}</td>
@@ -104,11 +145,11 @@ export default function RanchAssets() {
               </table>
             </div>
           ) : (
-            <EmptyState compact title="No assets tracked" description="Add tack, kits, and equipment to start building the ranch toolkit register." />
+            <EmptyState compact title="No assets tracked" description="Add gear to start the register." />
           )}
         </Panel>
 
-        <Panel eyebrow="Toolkit ops" title="Update assignment and maintenance">
+        <Panel eyebrow="Toolkit ops" title="Update assignment and maintenance" description="Fast edits.">
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
               <span className="field-label">Asset</span>
@@ -164,6 +205,8 @@ export default function RanchAssets() {
           </div>
         </Panel>
       </div>
+
+      <ContextMenu open={Boolean(menuAsset)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
     </>
   );
 }

@@ -15,7 +15,7 @@ export default function BuyerProfile() {
     return (
       <main className="buyer-shell">
         <div className="buyer-shell__inner">
-          <Panel title="Buyer profile unavailable" description="The requested horse record is not available in the current workspace.">
+          <Panel title="Buyer profile unavailable" description="Record not found in this workspace.">
             <Link className="button button--ghost" to="/horses">
               Back to horses
             </Link>
@@ -69,13 +69,13 @@ export default function BuyerProfile() {
           <MetricCard
             label="Buyer confidence"
             value={formatPercent(horse.sale.buyerConfidence)}
-            detail="Commercial posture from the sales workspace"
+            detail="Sales posture"
             tone="blue"
           />
           <MetricCard
             label="Verified documents"
             value={`${visibleDocuments.length}`}
-            detail="Documents currently strong enough for a buyer-facing profile"
+            detail="Ready for buyer view"
             tone="emerald"
           />
           <MetricCard
@@ -101,7 +101,7 @@ export default function BuyerProfile() {
             </div>
             <div className="inline-actions">
               <div className="detail-block subtle">
-                Buyer-facing access is preview-only in this local build. Inquiry capture still routes through the internal sales workspace.
+                Preview only. Inquiry capture still routes through Sales.
               </div>
             </div>
           </Panel>
@@ -143,13 +143,13 @@ export default function BuyerProfile() {
                 ))
               ) : (
                 <div className="detail-block subtle">
-                  No documents clear the current buyer-facing threshold yet. Keep using the admin review workbench until more packet checks pass.
+                  No documents clear the buyer threshold yet.
                 </div>
               )}
             </div>
           </Panel>
 
-          <Panel eyebrow="Extracted highlights" title="Structured facts promoted from OCR">
+          <Panel eyebrow="Extracted highlights" title="OCR facts">
             <div className="token-row">
               {horse.ocrFacts.length ? (
                 horse.ocrFacts.map((fact) => (

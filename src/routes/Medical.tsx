@@ -51,24 +51,25 @@ export default function Medical() {
       <PageHeader
         eyebrow="Medical"
         title="Medical control"
-        description="This module turns care history into an operating lane with watchlists, care calendars, document-linked notes, and kit readiness."
+        description="Watchlists, care, kits."
       />
 
       <div className="metric-grid">
-        <MetricCard label="Watchlist" value={`${medicalWatch.length}`} detail="Horses currently carrying medical sensitivity" tone="rose" />
-        <MetricCard label="Timeline entries" value={`${medicalEvents.length}`} detail="Care records flowing through profiles and documents" />
-        <MetricCard label="Medical kits" value={`${kits.length}`} detail="Tracked kits and readiness for treatment or travel" tone="blue" />
-        <MetricCard label="Vet-linked docs" value={`${documents.filter((document) => document.type === 'Vet Record' || document.type === 'Coggins').length}`} detail="Profiles already connected to medical documents" tone="emerald" />
+        <MetricCard label="Watchlist" value={`${medicalWatch.length}`} detail="Horses needing care attention" tone="rose" />
+        <MetricCard label="Timeline entries" value={`${medicalEvents.length}`} detail="Care records on file" />
+        <MetricCard label="Medical kits" value={`${kits.length}`} detail="Travel and treatment kits" tone="blue" />
+        <MetricCard label="Vet-linked docs" value={`${documents.filter((document) => document.type === 'Vet Record' || document.type === 'Coggins').length}`} detail="Medical docs linked" tone="emerald" />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Care watch" title="Horses needing visibility" description="Active medical risk now has its own product lane instead of disappearing into general notes.">
+        <Panel eyebrow="Care watch" title="Horses needing visibility" description="Watchlist.">
           {medicalWatch.length ? (
             <div className="stack-list">
               {medicalWatch.map((horse) => (
                 <div
                   key={horse.id}
-                  className="stack-item"
+                  className="stack-item stack-item--interactive"
+                  onClick={() => navigate(`/horses/${horse.id}`)}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     setMenuState({ horseId: horse.id, x: event.clientX, y: event.clientY });
@@ -90,11 +91,11 @@ export default function Medical() {
               ))}
             </div>
           ) : (
-            <EmptyState compact title="No horses on medical watch" description="Add a medical event below to move a horse into the care watchlist." />
+            <EmptyState compact title="No horses on medical watch" description="Add a care event to start the watchlist." />
           )}
         </Panel>
 
-        <Panel eyebrow="Kit readiness" title="Travel and treatment assets" description="Medical kits and equipment have their own readiness picture so care execution is not just a note in the margin.">
+        <Panel eyebrow="Kit readiness" title="Travel and treatment assets" description="Kit status.">
           {kits.length ? (
             <div className="stack-list">
               {kits.map((asset) => (
@@ -113,13 +114,13 @@ export default function Medical() {
               ))}
             </div>
           ) : (
-            <EmptyState compact title="No medical kits tracked" description="Add kits in Ranch Toolkit to see travel and treatment readiness here." />
+            <EmptyState compact title="No medical kits tracked" description="Add kits in Ranch Toolkit." />
           )}
         </Panel>
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Care action" title="Log a medical event" description="Schedule visits, record care notes, and push a horse onto the medical watchlist from this page.">
+        <Panel eyebrow="Care action" title="Log a medical event" description="Add care history.">
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
               <span className="field-label">Horse</span>
@@ -185,7 +186,7 @@ export default function Medical() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Next up" title="Care cadence" description="Use these dates to schedule transport, treatment, and vet follow-up.">
+        <Panel eyebrow="Next up" title="Care cadence" description="Recent events.">
           {medicalEvents.length ? (
             <div className="stack-list">
               {medicalEvents.slice(0, 5).map((event) => (
@@ -202,12 +203,12 @@ export default function Medical() {
               ))}
             </div>
           ) : (
-            <EmptyState compact title="No care cadence yet" description="Medical events saved here will roll into the watchlist and recent activity tables." />
+            <EmptyState compact title="No care cadence yet" description="Saved events will appear here." />
           )}
         </Panel>
       </div>
 
-      <Panel eyebrow="Timeline" title="Recent care activity" description="Care notes, exam cadence, and follow-up actions are structured here so profiles can inherit them cleanly.">
+      <Panel eyebrow="Timeline" title="Recent care activity" description="Clinical history.">
         {medicalEvents.length ? (
           <div className="table-shell">
             <table className="data-table">
@@ -232,7 +233,7 @@ export default function Medical() {
             </table>
           </div>
         ) : (
-          <EmptyState title="No medical timeline yet" description="Create a care event to start building a clinical history for the ranch." />
+          <EmptyState title="No medical timeline yet" description="Create a care event to start the timeline." />
         )}
       </Panel>
 

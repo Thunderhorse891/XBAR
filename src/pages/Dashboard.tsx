@@ -149,7 +149,7 @@ export default function Dashboard() {
         <div className="dashboard-stage__hero">
           <div className="eyebrow">Live operations</div>
           <h2 className="dashboard-stage__title">Clear the queue. Keep transfers clean. Move buyers faster.</h2>
-          <p className="dashboard-stage__description">Built for working records, not decorative farm software.</p>
+          <p className="dashboard-stage__description">Working records first.</p>
           <div className="inline-actions">
             <Link to="/documents" className="button button--primary button--compact">
               Review intake
@@ -252,7 +252,7 @@ export default function Dashboard() {
               ))}
             </div>
           ) : (
-            <EmptyState compact title="No priorities right now" description="As activity builds, the command center will bubble the next high-weight moves here." />
+            <EmptyState compact title="No priorities right now" description="New work will appear here." />
           )}
         </Panel>
 
@@ -290,7 +290,7 @@ export default function Dashboard() {
               ))}
             </div>
           ) : (
-            <EmptyState compact title="No horses on watch" description="Medical and readiness alerts will surface here when a profile needs attention." />
+            <EmptyState compact title="No horses on watch" description="Alerts will appear here." />
           )}
         </Panel>
       </div>
@@ -321,7 +321,7 @@ export default function Dashboard() {
               ))}
             </div>
           ) : (
-            <EmptyState compact title="No intake batches" description="Upload documents to start the review queue." />
+            <EmptyState compact title="No intake batches" description="Upload documents to start the queue." />
           )}
         </Panel>
 
@@ -358,7 +358,7 @@ export default function Dashboard() {
               })}
             </div>
           ) : (
-            <EmptyState compact title="No ownership queue" description="Transfers will appear here once horses and ownership records are active." />
+            <EmptyState compact title="No ownership queue" description="Transfers will appear here." />
           )}
         </Panel>
       </div>
@@ -401,7 +401,7 @@ export default function Dashboard() {
               })}
             </div>
           ) : (
-            <EmptyState compact title="No buyer leads yet" description="Create a lead from a horse profile or the sales board to start tracking outreach." />
+            <EmptyState compact title="No buyer leads yet" description="Create a lead to start outreach." />
           )}
         </Panel>
 

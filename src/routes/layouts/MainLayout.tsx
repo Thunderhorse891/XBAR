@@ -70,7 +70,7 @@ function NavSection({ title, items }: { title: string; items: NavItem[] }) {
       <div className="nav-section__title">{title}</div>
       <div className="nav-section__items">
         {items.map(({ label, path, icon: Icon }) => (
-          <NavLink key={label} to={path} end={path === '/'} title={label} className={({ isActive }) => `nav-link${isActive ? ' nav-link--active' : ''}`}>
+          <NavLink key={label} to={path} end={path === '/'} className={({ isActive }) => `nav-link${isActive ? ' nav-link--active' : ''}`}>
             <Icon className="nav-link__icon" />
             <span>{label}</span>
           </NavLink>
@@ -107,14 +107,14 @@ export default function MainLayout() {
             <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" />
           </div>
           <div>
-            <div className="brand-lockup__title hover-copy" title="XBAR LLC">XBAR</div>
-            <div className="brand-lockup__subtitle hover-copy" title="Premium records operating system">Records OS</div>
+            <div className="brand-lockup__title">XBAR</div>
+            <div className="brand-lockup__subtitle">Records OS</div>
           </div>
         </div>
 
         <div className="sidebar-card">
-          <div className="sidebar-card__eyebrow hover-copy" title="Workspace">Workspace</div>
-          <div className="sidebar-card__title hover-copy" title={roleWorkspace.label}>{roleWorkspace.label}</div>
+          <div className="sidebar-card__eyebrow">Workspace</div>
+          <div className="sidebar-card__title">{roleWorkspace.label}</div>
           <div className="sidebar-card__tags">
             {roleWorkspace.primaryModules.map((module) => (
               <Pill key={module}>{module}</Pill>
@@ -127,7 +127,7 @@ export default function MainLayout() {
         <NavSection title="Platform" items={platform} />
 
         <div className="sidebar-footer">
-          <div className="sidebar-footer__title hover-copy" title="Plan status">Plan status</div>
+          <div className="sidebar-footer__title">Plan status</div>
           <div className="sidebar-footer__row">
             <span>{subscription.tier}</span>
             <Pill tone="blue">{subscription.billingState}</Pill>
@@ -142,7 +142,7 @@ export default function MainLayout() {
         <header className="topbar">
           <div className="topbar__context">
             <div className="topbar__title-row">
-              <div className="topbar__title hover-copy" title={currentLabel}>{currentLabel}</div>
+              <div className="topbar__title">{currentLabel}</div>
               <Pill tone={pendingReview ? 'amber' : 'emerald'}>{pendingReview ? `${pendingReview} in review` : 'Queue clear'}</Pill>
             </div>
           </div>
@@ -155,7 +155,6 @@ export default function MainLayout() {
                 onChange={(event) => setSearch(event.target.value)}
                 onKeyDown={handleSearch}
                 placeholder="Search records"
-                title="Search horses, documents, or owners"
                 className="search-shell__input"
               />
             </label>
@@ -173,16 +172,16 @@ export default function MainLayout() {
               <option value="Sales Lead">Sales Lead</option>
             </select>
 
-            <button className="icon-button" type="button" onClick={() => navigate('/documents')} aria-label="Open document review" title="Open document review">
+            <button className="icon-button" type="button" onClick={() => navigate('/documents')} aria-label="Open document review">
               <BellIcon className="icon-button__icon" />
               {pendingReview ? <span className="icon-button__dot">{pendingReview}</span> : null}
             </button>
 
-            <button className="button button--ghost" type="button" onClick={() => navigate('/documents?upload=1')} title="Open document intake">
+            <button className="button button--ghost" type="button" onClick={() => navigate('/documents?upload=1')}>
               Intake
             </button>
 
-            <button className="button button--primary" type="button" onClick={() => navigate('/horses?new=1')} title="Create a new horse record">
+            <button className="button button--primary" type="button" onClick={() => navigate('/horses?new=1')}>
               <AddIcon className="button__icon" />
               New
             </button>

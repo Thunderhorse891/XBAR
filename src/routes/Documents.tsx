@@ -120,11 +120,11 @@ export default function Documents() {
       <PageHeader
         eyebrow="Documents"
         title="Document intake and review"
-        description="Scan, review, trust, promote."
+        description="Intake, review, trust."
       />
 
       <div className="callout callout--warning">
-        <strong>Preview mode:</strong> External OCR is not connected in this build. Image and PDF intake stays local and uses simulated extraction states.
+        <strong>OCR preview:</strong> Provider not connected.
       </div>
 
       <div className="metric-grid">
@@ -137,8 +137,8 @@ export default function Documents() {
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel
           eyebrow="Live intake"
-          title="Upload files into the document queue"
-          description="This writes directly into the current workspace. You can route files to a horse now or let the intake layer attempt a local match from file names and extracted text."
+          title="Upload files"
+          description="Send files into the queue."
           action={
             <Pill tone={uploadOpen ? 'blue' : 'slate'}>
               {uploadOpen ? 'Top-bar launch' : `${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB used`}
@@ -204,7 +204,7 @@ export default function Documents() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Batch intake" title="Document queue states" description="New uploads appear here immediately and stay in the current workspace until you review or attach them.">
+        <Panel eyebrow="Batch intake" title="Queue states" description="Recent batches.">
           {ocrBatches.length ? (
             <div className="stack-list">
               {ocrBatches.map((batch) => (
@@ -232,13 +232,13 @@ export default function Documents() {
             <EmptyState
               compact
               title="No intake batches yet"
-              description="Upload a batch to start the review queue and document trust workflow."
+              description="Upload a batch to start the queue."
             />
           )}
         </Panel>
       </div>
 
-      <Panel eyebrow="Review workbench" title="Confidence and match review" description="Approve low-confidence documents and route them into the correct horse profile.">
+      <Panel eyebrow="Review workbench" title="Confidence and match review" description="Approve and assign.">
         {reviewQueue.length ? (
           <div className="table-shell">
             <table className="data-table">
@@ -349,12 +349,12 @@ export default function Documents() {
         ) : (
           <EmptyState
             title="Review queue is clear"
-            description="Nothing is waiting for manual OCR review right now."
+            description="Nothing is waiting on review."
           />
         )}
       </Panel>
 
-      <Panel eyebrow="Extracted data" title="Entity extraction preview" description="Trusted entities are what get promoted into horse profiles once review clears.">
+      <Panel eyebrow="Extracted data" title="Entity extraction preview" description="Structured fields.">
         {documents.length ? (
           <div className="detail-grid">
             {documents.slice(0, 6).map((document) => {
@@ -393,7 +393,7 @@ export default function Documents() {
           <EmptyState
             compact
             title="No extracted entities yet"
-            description="Upload documents to generate preview entities and trust scoring."
+            description="Upload documents to generate entity previews."
           />
         )}
       </Panel>

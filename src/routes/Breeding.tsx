@@ -42,7 +42,7 @@ export default function Breeding() {
       <PageHeader
         eyebrow="Breeding"
         title="Breeding program"
-        description="Studs, mares, milestones."
+        description="Studs, mares, timing."
       />
 
       <div className="metric-grid">
@@ -53,13 +53,14 @@ export default function Breeding() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Program board" title="Stud and mare pipeline" description="Live program horses.">
+        <Panel eyebrow="Program board" title="Stud and mare pipeline" description="Program horses.">
           {breedingHorses.length ? (
             <div className="stack-list">
               {breedingHorses.map((horse) => (
                 <div
                   key={horse.id}
-                  className="stack-item"
+                  className="stack-item stack-item--interactive"
+                  onClick={() => navigate(`/horses/${horse.id}`)}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     setMenuState({ horseId: horse.id, x: event.clientX, y: event.clientY });
@@ -87,7 +88,7 @@ export default function Breeding() {
           )}
         </Panel>
 
-        <Panel eyebrow="Milestones" title="Program timing" description="Recent breeding events.">
+        <Panel eyebrow="Milestones" title="Program timing" description="Recent events.">
           {breedingHorses.some((horse) => horse.breedingTimeline.length) ? (
             <div className="stack-list">
               {breedingHorses.flatMap((horse) =>
@@ -179,7 +180,7 @@ export default function Breeding() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Contracts" title="Contract coverage" description="Breeding documents already linked to the vault.">
+        <Panel eyebrow="Contracts" title="Contract coverage" description="Linked paperwork.">
           {breedingDocs.length ? (
             <div className="stack-list">
               {breedingDocs.map((document) => (

@@ -299,8 +299,8 @@ export default function Horses() {
       <section className="ledger-stage">
         <div className="ledger-stage__copy">
           <div className="eyebrow">Active ledger</div>
-          <h2 className="ledger-stage__title">Fast records with real-world ranch context.</h2>
-          <p className="ledger-stage__description">Right-click records. Open profiles. Keep buyer and care posture visible.</p>
+          <h2 className="ledger-stage__title">Fast records with ranch context.</h2>
+          <p className="ledger-stage__description">Click profiles. Right-click records. Move fast.</p>
         </div>
         <div className="ledger-stage__stats">
           <div className="ledger-stat">
@@ -363,7 +363,8 @@ export default function Horses() {
             return (
               <div
                 key={horse.id}
-                className="horse-card"
+                className="horse-card horse-card--interactive"
+                onClick={() => navigate(`/horses/${horse.id}`)}
                 onContextMenu={(event) => {
                   event.preventDefault();
                   openHorseMenu(horse.id, event.clientX, event.clientY);
@@ -381,6 +382,7 @@ export default function Horses() {
                       type="button"
                       aria-label="Open quick actions"
                       onClick={(event) => {
+                        event.stopPropagation();
                         const bounds = event.currentTarget.getBoundingClientRect();
                         openHorseMenu(horse.id, bounds.left, bounds.bottom + 8);
                       }}
@@ -446,10 +448,21 @@ export default function Horses() {
                       <span>{horse.sale.watchlistCount} watching</span>
                     </div>
                     <div className="inline-actions inline-actions--card">
-                      <button className="button button--ghost button--compact" type="button" onClick={() => handleSavedHorseToggle(horse.id)}>
+                      <button
+                        className="button button--ghost button--compact"
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleSavedHorseToggle(horse.id);
+                        }}
+                      >
                         {saved ? 'Remove from saved' : 'Save to portal'}
                       </button>
-                      <Link to={`/horses/${horse.id}`} className="button button--primary button--compact">
+                      <Link
+                        to={`/horses/${horse.id}`}
+                        className="button button--primary button--compact"
+                        onClick={(event) => event.stopPropagation()}
+                      >
                         Open profile
                       </Link>
                     </div>

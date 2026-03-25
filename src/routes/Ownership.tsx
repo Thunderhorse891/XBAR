@@ -82,14 +82,14 @@ export default function Ownership() {
       <PageHeader
         eyebrow="Ownership"
         title="Ownership integrity"
-        description="Legal owners, splits, transfer status."
+        description="Owners, splits, transfer status."
       />
 
       <div className="metric-grid">
-        <MetricCard label="Ownership files" value={`${ownershipRecords.length}`} detail="Tracked legal ownership records" />
-        <MetricCard label="Open transfers" value={`${pending.length}`} detail="Packets still waiting on signatures or AQHA review" tone="amber" />
-        <MetricCard label="Co-owner splits" value={`${withCoOwners.length}`} detail="Horses with structured ownership shares" tone="blue" />
-        <MetricCard label="Confidence" value={`${Math.round(ownershipRecords.reduce((sum, record) => sum + record.confidence, 0) / ownershipRecords.length)}%`} detail="Average certainty across current ownership records" tone="emerald" />
+        <MetricCard label="Ownership files" value={`${ownershipRecords.length}`} detail="Tracked ownership records" />
+        <MetricCard label="Open transfers" value={`${pending.length}`} detail="Waiting on signatures or AQHA" tone="amber" />
+        <MetricCard label="Co-owner splits" value={`${withCoOwners.length}`} detail="Structured shares" tone="blue" />
+        <MetricCard label="Confidence" value={`${Math.round(ownershipRecords.reduce((sum, record) => sum + record.confidence, 0) / ownershipRecords.length)}%`} detail="Average record certainty" tone="emerald" />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
@@ -129,7 +129,7 @@ export default function Ownership() {
               })}
             </div>
           ) : (
-            <EmptyState compact title="No ownership records" description="Create horses and transfers to start the ownership integrity queue." />
+            <EmptyState compact title="No ownership records" description="Create a horse or transfer to start the queue." />
           )}
         </Panel>
 
@@ -150,13 +150,13 @@ export default function Ownership() {
               ))}
             </div>
           ) : (
-            <EmptyState compact title="No co-owner splits yet" description="Add a co-owner below to structure legal shares directly from this page." />
+            <EmptyState compact title="No co-owner splits yet" description="Add a co-owner below." />
           )}
         </Panel>
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Transfer editor" title={selectedHorse ? `${selectedHorse.name} ownership controls` : 'Ownership controls'} description="Update legal owner, transfer status, deadlines, and pending paper from here.">
+        <Panel eyebrow="Transfer editor" title={selectedHorse ? `${selectedHorse.name} ownership controls` : 'Ownership controls'} description="Update transfer fields.">
           {selectedRecord ? (
             <>
               <div className="form-grid form-grid--tight">
@@ -215,11 +215,11 @@ export default function Ownership() {
               </div>
             </>
           ) : (
-            <EmptyState compact title="No ownership record selected" description="Choose a record from the transfer queue to update legal details." />
+            <EmptyState compact title="No ownership record selected" description="Choose a record from the queue." />
           )}
         </Panel>
 
-        <Panel eyebrow="Co-owner editor" title="Add co-owner or partner" description="Structure multi-party ownership here instead of burying it inside a horse profile.">
+        <Panel eyebrow="Co-owner editor" title="Add co-owner or partner" description="Add a split.">
           {selectedHorse ? (
             <>
               <div className="form-grid form-grid--tight">
@@ -273,7 +273,7 @@ export default function Ownership() {
               </div>
             </>
           ) : (
-            <EmptyState compact title="No horse selected" description="Choose a transfer record first, then add a co-owner or partner split." />
+            <EmptyState compact title="No horse selected" description="Choose a transfer record first." />
           )}
         </Panel>
       </div>
@@ -316,7 +316,7 @@ export default function Ownership() {
             </div>
           </div>
         ) : (
-          <EmptyState title="No ownership record loaded" description="Select a transfer record to review the audit trail and add new notes." />
+          <EmptyState title="No ownership record loaded" description="Select a transfer record to review notes." />
         )}
       </Panel>
 

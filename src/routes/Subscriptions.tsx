@@ -19,17 +19,17 @@ export default function Subscriptions() {
       <PageHeader
         eyebrow="Subscriptions"
         title="Plan and feature gating"
-        description="Premium plans and the $10M ARR path."
+        description="Plans, limits, revenue."
       />
 
       <div className="callout callout--warning">
-        <strong>Billing preview:</strong> Tier changes on this page only update the local workspace model. Stripe and real billing are not connected yet.
+        <strong>Billing preview:</strong> Stripe is not connected.
       </div>
 
       <div className="metric-grid">
         <MetricCard label="Current tier" value={subscription.tier} detail={`${subscription.billingState} · renews ${formatDateLabel(subscription.renewalDate)}`} />
-        <MetricCard label="Current ARR" value={formatCurrency(revenuePlan.currentArr)} detail="Annualized recurring revenue for one customer at the active tier" tone="blue" />
-        <MetricCard label="Customers to $10M" value={`${revenuePlan.customersNeededAtCurrentTier}`} detail="If the business sold only the current tier" tone="amber" />
+        <MetricCard label="Current ARR" value={formatCurrency(revenuePlan.currentArr)} detail="Annual value at this tier" tone="blue" />
+        <MetricCard label="Customers to $10M" value={`${revenuePlan.customersNeededAtCurrentTier}`} detail="At this tier only" tone="amber" />
         <MetricCard label="Recommended mix" value={formatCurrency(revenuePlan.recommendedMixArr)} detail={revenuePlan.recommendedMixLabel} tone="slate" />
       </div>
 
@@ -60,7 +60,7 @@ export default function Subscriptions() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Usage" title="Seat, processing, storage, and portal capacity">
+        <Panel eyebrow="Usage" title="Seats, processing, storage, portal">
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__top">
@@ -88,14 +88,14 @@ export default function Subscriptions() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--secondary">
-        <Panel eyebrow="Revenue blueprint" title="Path to $10M in annual subscriptions" description="Revenue scenarios.">
+        <Panel eyebrow="Revenue blueprint" title="Path to $10M ARR" description="Revenue scenarios.">
           <div className="stack-list">
             {revenuePlan.scenarios.map((scenario) => (
               <div key={scenario.tier} className="stack-item">
                 <div className="stack-item__top">
                   <div>
                     <div className="stack-item__title">{scenario.tier}</div>
-                    <div className="stack-item__copy">{formatCurrency(scenario.annualContractValue)} annual recurring value per customer</div>
+                    <div className="stack-item__copy">{formatCurrency(scenario.annualContractValue)} per customer</div>
                   </div>
                   <Pill tone={scenario.tier === subscription.tier ? 'blue' : scenario.tier === 'Enterprise' ? 'amber' : 'emerald'}>
                     {scenario.customersNeeded} customers
@@ -107,7 +107,7 @@ export default function Subscriptions() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Premium pricing levers" title="What justifies higher subscription plans" description="Why teams pay more.">
+        <Panel eyebrow="Premium pricing levers" title="Why teams pay more" description="Pricing drivers.">
           <div className="bullet-list">
             {revenuePlan.motions.map((motion) => (
               <div key={motion} className="bullet-list__item">
@@ -116,12 +116,12 @@ export default function Subscriptions() {
             ))}
           </div>
           <div className="detail-block subtle">
-            The strategic center of gravity is trust: document intelligence, ownership clarity, buyer-safe profiles, and mobile field execution.
+            Trust, ownership clarity, buyer-safe profiles, and mobile execution.
           </div>
         </Panel>
       </div>
 
-      <Panel eyebrow="Tier design" title="Product packaging">
+      <Panel eyebrow="Tier design" title="Product packaging" description="Preview tiers.">
         <div className="detail-grid">
           {tiers.map((tier) => {
             const config = subscriptionTierConfig[tier];
