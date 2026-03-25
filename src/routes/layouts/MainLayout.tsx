@@ -104,7 +104,7 @@ export default function MainLayout() {
       <aside className="sidebar">
         <div className="brand-lockup">
           <div className="brand-lockup__mark">
-            <img src="/xbar-logo-sleek.png" alt="XBAR logo" />
+            <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" />
           </div>
           <div>
             <div className="brand-lockup__title">XBAR LLC</div>

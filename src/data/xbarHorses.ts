@@ -1,25 +1,27 @@
 import { HorseRecord } from '@/types/xbar';
 
+const assetUrl = (fileName: string) => `${import.meta.env.BASE_URL}${fileName}`;
+
 const placeholderMedia = (horseName: string) => [
   {
     id: `${horseName}-hero`,
     label: `${horseName} hero still`,
     kind: 'Hero' as const,
-    url: '/xbar-logo-sleek.png',
+    url: assetUrl('xbar-logo-sleek.png'),
     status: 'Approved' as const,
   },
   {
     id: `${horseName}-sale`,
     label: `${horseName} sale packet cover`,
     kind: 'Sale Still' as const,
-    url: '/xbar-logo-sleek.png',
+    url: assetUrl('xbar-logo-sleek.png'),
     status: 'Draft' as const,
   },
   {
     id: `${horseName}-pedigree`,
     label: `${horseName} pedigree board`,
     kind: 'Pedigree' as const,
-    url: '/xbar-logo.png',
+    url: assetUrl('xbar-logo.png'),
     status: 'Pending' as const,
   },
 ];
@@ -46,7 +48,7 @@ export const horsesSeed: HorseRecord[] = [
     owner: 'Erin Wyrick',
     ownerEntity: 'XBAR LLC',
     insuredValue: 185000,
-    profileImage: '/xbar-logo-sleek.png',
+    profileImage: assetUrl('xbar-logo-sleek.png'),
     tags: ['sale-ready', 'aqha-verified', 'owner-portal-visible'],
     bloodline: {
       sire: 'Red Buck Hancock',
@@ -205,7 +207,7 @@ export const horsesSeed: HorseRecord[] = [
     owner: 'Erin Wyrick',
     ownerEntity: 'XBAR LLC',
     insuredValue: 240000,
-    profileImage: '/xbar-logo-sleek.png',
+    profileImage: assetUrl('xbar-logo-sleek.png'),
     tags: ['stallion', 'breeding-program', 'insurance-current'],
     bloodline: {
       sire: 'Hancock Driftwood',
@@ -341,7 +343,7 @@ export const horsesSeed: HorseRecord[] = [
     owner: 'Erin Wyrick',
     ownerEntity: 'XBAR LLC',
     insuredValue: 128000,
-    profileImage: '/xbar-logo-sleek.png',
+    profileImage: assetUrl('xbar-logo-sleek.png'),
     tags: ['medical-watch', 'travel-sensitive'],
     bloodline: {
       sire: 'Lil Man Hancock',
@@ -475,7 +477,7 @@ export const horsesSeed: HorseRecord[] = [
     owner: 'Jason Wyrick',
     ownerEntity: 'Blue Line Partners',
     insuredValue: 142000,
-    profileImage: '/xbar-logo-sleek.png',
+    profileImage: assetUrl('xbar-logo-sleek.png'),
     tags: ['title-cleanup', 'sale-packet-open'],
     bloodline: {
       sire: 'Roan Drift Cutter',
@@ -609,7 +611,7 @@ export const horsesSeed: HorseRecord[] = [
     owner: 'XBAR LLC',
     ownerEntity: 'XBAR LLC',
     insuredValue: 96000,
-    profileImage: '/xbar-logo-sleek.png',
+    profileImage: assetUrl('xbar-logo-sleek.png'),
     tags: ['training-string', 'no-open-alerts'],
     bloodline: {
       sire: 'High Noon Rebel',
@@ -710,7 +712,7 @@ export const horsesSeed: HorseRecord[] = [
     owner: 'Jason Wyrick',
     ownerEntity: 'XBAR Legacy',
     insuredValue: 42000,
-    profileImage: '/xbar-logo-sleek.png',
+    profileImage: assetUrl('xbar-logo-sleek.png'),
     tags: ['retired', 'owner-portal'],
     bloodline: {
       sire: 'Midnight Valor',

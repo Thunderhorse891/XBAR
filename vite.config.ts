@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig({
+  base: process.env.GITHUB_ACTIONS ? '/xbar-horse-management-app/' : '/',
   plugins: [react()],
   resolve: {
     alias: {
