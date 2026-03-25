@@ -1,5 +1,8 @@
 import { useState } from 'react';
+import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
+import { formatDateLabel } from '@/lib/format';
+import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import type { AssetCondition, AssetStatus } from '@/types/xbar';
 
@@ -9,10 +12,10 @@ const conditions: AssetCondition[] = ['Excellent', 'Service Soon', 'Attention Re
 export default function RanchAssets() {
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
   const updateAsset = useXbarStore((state) => state.updateAsset);
+  const pushToast = useUiStore((state) => state.pushToast);
   const assigned = ranchAssets.filter((asset) => asset.status === 'Assigned');
   const serviceSoon = ranchAssets.filter((asset) => asset.condition !== 'Excellent');
   const [selectedAssetId, setSelectedAssetId] = useState(ranchAssets[0]?.id ?? '');
-  const [message, setMessage] = useState('');
 
   const selectedAsset = ranchAssets.find((asset) => asset.id === selectedAssetId) ?? ranchAssets[0];
   const [form, setForm] = useState({
@@ -41,7 +44,11 @@ export default function RanchAssets() {
 
   const handleSave = () => {
     const result = updateAsset(selectedAssetId, form);
-    setMessage(result.message);
+    pushToast({
+      title: result.ok ? 'Asset updated' : 'Asset update blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
   };
 
   return (
@@ -52,8 +59,6 @@ export default function RanchAssets() {
         description="This module now behaves like a real operational register for tack, tools, kits, feed, and equipment instead of a decorative table."
       />
 
-      {message ? <div className="status-banner">{message}</div> : null}
-
       <div className="metric-grid">
         <MetricCard label="Tracked assets" value={`${ranchAssets.length}`} detail="Tack, equipment, medical kits, and supply stock" />
         <MetricCard label="Assigned" value={`${assigned.length}`} detail="Assets currently tied to a horse, barn, or workflow" tone="blue" />
@@ -61,46 +66,46 @@ export default function RanchAssets() {
         <MetricCard label="Availability" value={`${ranchAssets.length - assigned.length}`} detail="Assets ready for reassignment" tone="emerald" />
       </div>
 
-      <div className="interaction-note">
-        Hover the headings for context. Click an asset row to load it into the editor on the right.
-      </div>
-
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel eyebrow="Inventory" title="Operational asset register">
-          <div className="table-shell">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Asset</th>
-                  <th>Category</th>
-                  <th>Status</th>
-                  <th>Condition</th>
-                  <th>Assigned to</th>
-                  <th>Next service</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ranchAssets.map((asset) => (
-                  <tr
-                    key={asset.id}
-                    onClick={() => handleAssetSelection(asset.id)}
-                    className={asset.id === selectedAssetId ? 'table-row--selected' : ''}
-                  >
-                    <td>{asset.name}</td>
-                    <td>{asset.category}</td>
-                    <td>{asset.status}</td>
-                    <td>
-                      <Pill tone={asset.condition === 'Attention Required' ? 'rose' : asset.condition === 'Service Soon' ? 'amber' : 'emerald'}>
-                        {asset.condition}
-                      </Pill>
-                    </td>
-                    <td>{asset.assignedTo}</td>
-                    <td>{asset.nextService}</td>
+          {ranchAssets.length ? (
+            <div className="table-shell">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Asset</th>
+                    <th>Category</th>
+                    <th>Status</th>
+                    <th>Condition</th>
+                    <th>Assigned to</th>
+                    <th>Next service</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {ranchAssets.map((asset) => (
+                    <tr
+                      key={asset.id}
+                      onClick={() => handleAssetSelection(asset.id)}
+                      className={`${asset.id === selectedAssetId ? 'table-row--selected ' : ''}table-row--interactive`.trim()}
+                    >
+                      <td>{asset.name}</td>
+                      <td>{asset.category}</td>
+                      <td>{asset.status}</td>
+                      <td>
+                        <Pill tone={asset.condition === 'Attention Required' ? 'rose' : asset.condition === 'Service Soon' ? 'amber' : 'emerald'}>
+                          {asset.condition}
+                        </Pill>
+                      </td>
+                      <td>{asset.assignedTo}</td>
+                      <td>{formatDateLabel(asset.nextService)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState compact title="No assets tracked" description="Add tack, kits, and equipment to start building the ranch toolkit register." />
+          )}
         </Panel>
 
         <Panel eyebrow="Toolkit ops" title="Update assignment and maintenance">

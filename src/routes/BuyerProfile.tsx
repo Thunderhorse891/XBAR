@@ -40,7 +40,7 @@ export default function BuyerProfile() {
           Back to horse workspace
         </Link>
 
-        <div className={`status-banner${packet.buyerSafe ? '' : ' status-banner--warning'}`}>
+        <div className={`callout${packet.buyerSafe ? '' : ' callout--warning'}`}>
           {packet.buyerProfileNote}
         </div>
 

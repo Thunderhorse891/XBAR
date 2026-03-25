@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
+import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Pill, ProgressBar } from '@/components/app-ui';
 import { DotsIcon } from '@/components/icons';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
+import { useUiStore } from '@/store/useUiStore';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useXbarStore } from '@/store/useXbarStore';
 import type { HorseSegment, HorseSex, HorseStatus } from '@/types/xbar';
@@ -33,11 +35,12 @@ export default function Horses() {
   const savedHorseIds = useXbarStore((state) => state.savedHorseIds);
   const toggleSavedHorse = useXbarStore((state) => state.toggleSavedHorse);
   const addHorse = useXbarStore((state) => state.addHorse);
+  const pushToast = useUiStore((state) => state.pushToast);
   const [searchParams, setSearchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState<ViewMode>('Portfolio');
   const [segmentFilter, setSegmentFilter] = useState<SegmentFilter>('All');
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
-  const [message, setMessage] = useState('');
+  const [formErrors, setFormErrors] = useState<Partial<Record<'name' | 'barnName' | 'owner' | 'ownerEntity' | 'barn' | 'pasture', string>>>({});
   const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
   const [form, setForm] = useState({
     name: '',
@@ -45,12 +48,12 @@ export default function Horses() {
     segment: 'Sale Prospect' as HorseSegment,
     status: 'Sale Prep' as HorseStatus,
     sex: 'Mare' as HorseSex,
-    owner: 'Erin Wyrick',
-    ownerEntity: 'XBAR LLC',
+    owner: '',
+    ownerEntity: '',
     aqhaNumber: '',
     registrationNumber: '',
-    barn: 'Barn A',
-    pasture: 'Pasture 4',
+    barn: '',
+    pasture: '',
   });
 
   const createOpen = searchParams.get('new') === '1';
@@ -68,7 +71,7 @@ export default function Horses() {
 
   const saleReady = filtered.filter((horse) => horse.readiness.score >= 80);
   const medicalWatch = filtered.filter((horse) => horse.status === 'Medical Review');
-  const transferRisk = filtered.filter((horse) => horse.documents.some((documentId) => documentId.includes('transfer')));
+  const transferRisk = filtered.filter((horse) => ownershipRecords.find((record) => record.horseId === horse.id)?.transferStatus !== 'Clear');
   const buyerReady = filtered.filter((horse) =>
     buildHorsePacketCompleteness(
       horse,
@@ -109,8 +112,25 @@ export default function Horses() {
     : [];
 
   const handleCreateHorse = () => {
+    const nextErrors: Partial<Record<'name' | 'barnName' | 'owner' | 'ownerEntity' | 'barn' | 'pasture', string>> = {};
+    if (form.name.trim().length < 3) nextErrors.name = 'Registered name is required.';
+    if (form.barnName.trim().length < 2) nextErrors.barnName = 'Barn name is required.';
+    if (form.owner.trim().length < 2) nextErrors.owner = 'Owner is required.';
+    if (form.ownerEntity.trim().length < 2) nextErrors.ownerEntity = 'Owner entity is required.';
+    if (form.barn.trim().length < 2) nextErrors.barn = 'Barn is required.';
+    if (form.pasture.trim().length < 2) nextErrors.pasture = 'Pasture is required.';
+
+    setFormErrors(nextErrors);
+    if (Object.keys(nextErrors).length) {
+      return;
+    }
+
     const result = addHorse(form);
-    setMessage(result.message);
+    pushToast({
+      title: result.ok ? 'Horse created' : 'Horse not created',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
     if (result.ok && result.id) {
       setForm({
         name: '',
@@ -118,12 +138,12 @@ export default function Horses() {
         segment: 'Sale Prospect',
         status: 'Sale Prep',
         sex: 'Mare',
-        owner: 'Erin Wyrick',
-        ownerEntity: 'XBAR LLC',
+        owner: '',
+        ownerEntity: '',
         aqhaNumber: '',
         registrationNumber: '',
-        barn: 'Barn A',
-        pasture: 'Pasture 4',
+        barn: '',
+        pasture: '',
       });
       setSearchParams({});
       navigate(`/horses/${result.id}`);
@@ -133,26 +153,29 @@ export default function Horses() {
   return (
     <>
       <PageHeader
-        eyebrow="Records"
-        title="Horse Ledger"
-        description="Premium records, fast actions, buyer-ready detail."
+        eyebrow="Horse ledger"
+        title="Horse Portfolio"
+        description="Trust, location, and sale posture in one view."
         actions={
-          <div className="view-toggle">
-            {(['Portfolio', 'Registry'] as ViewMode[]).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                className={`view-toggle__button${viewMode === mode ? ' view-toggle__button--active' : ''}`}
-                onClick={() => setViewMode(mode)}
-              >
-                {mode}
-              </button>
-            ))}
+          <div className="page-actions">
+            <div className="view-toggle">
+              {(['Portfolio', 'Registry'] as ViewMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={`view-toggle__button${viewMode === mode ? ' view-toggle__button--active' : ''}`}
+                  onClick={() => setViewMode(mode)}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+            <button className="button button--primary button--compact" type="button" onClick={() => setSearchParams({ new: '1' })}>
+              New horse
+            </button>
           </div>
         }
       />
-
-      {message ? <div className="status-banner">{message}</div> : null}
 
       {createOpen ? (
         <section className="panel">
@@ -169,11 +192,19 @@ export default function Horses() {
           <div className="form-grid">
             <label className="field-stack">
               <span className="field-label">Registered name</span>
-              <input className="field-input" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
+              <input className="field-input" value={form.name} onChange={(event) => {
+                setForm((current) => ({ ...current, name: event.target.value }));
+                setFormErrors((current) => ({ ...current, name: undefined }));
+              }} />
+              {formErrors.name ? <span className="field-error">{formErrors.name}</span> : null}
             </label>
             <label className="field-stack">
               <span className="field-label">Barn name</span>
-              <input className="field-input" value={form.barnName} onChange={(event) => setForm((current) => ({ ...current, barnName: event.target.value }))} />
+              <input className="field-input" value={form.barnName} onChange={(event) => {
+                setForm((current) => ({ ...current, barnName: event.target.value }));
+                setFormErrors((current) => ({ ...current, barnName: undefined }));
+              }} />
+              {formErrors.barnName ? <span className="field-error">{formErrors.barnName}</span> : null}
             </label>
             <label className="field-stack">
               <span className="field-label">Segment</span>
@@ -207,11 +238,19 @@ export default function Horses() {
             </label>
             <label className="field-stack">
               <span className="field-label">Owner</span>
-              <input className="field-input" value={form.owner} onChange={(event) => setForm((current) => ({ ...current, owner: event.target.value }))} />
+              <input className="field-input" value={form.owner} onChange={(event) => {
+                setForm((current) => ({ ...current, owner: event.target.value }));
+                setFormErrors((current) => ({ ...current, owner: undefined }));
+              }} />
+              {formErrors.owner ? <span className="field-error">{formErrors.owner}</span> : null}
             </label>
             <label className="field-stack">
               <span className="field-label">Owner entity</span>
-              <input className="field-input" value={form.ownerEntity} onChange={(event) => setForm((current) => ({ ...current, ownerEntity: event.target.value }))} />
+              <input className="field-input" value={form.ownerEntity} onChange={(event) => {
+                setForm((current) => ({ ...current, ownerEntity: event.target.value }));
+                setFormErrors((current) => ({ ...current, ownerEntity: undefined }));
+              }} />
+              {formErrors.ownerEntity ? <span className="field-error">{formErrors.ownerEntity}</span> : null}
             </label>
             <label className="field-stack">
               <span className="field-label">AQHA number</span>
@@ -223,20 +262,53 @@ export default function Horses() {
             </label>
             <label className="field-stack">
               <span className="field-label">Barn</span>
-              <input className="field-input" value={form.barn} onChange={(event) => setForm((current) => ({ ...current, barn: event.target.value }))} />
+              <input className="field-input" value={form.barn} onChange={(event) => {
+                setForm((current) => ({ ...current, barn: event.target.value }));
+                setFormErrors((current) => ({ ...current, barn: undefined }));
+              }} />
+              {formErrors.barn ? <span className="field-error">{formErrors.barn}</span> : null}
             </label>
             <label className="field-stack">
               <span className="field-label">Pasture</span>
-              <input className="field-input" value={form.pasture} onChange={(event) => setForm((current) => ({ ...current, pasture: event.target.value }))} />
+              <input className="field-input" value={form.pasture} onChange={(event) => {
+                setForm((current) => ({ ...current, pasture: event.target.value }));
+                setFormErrors((current) => ({ ...current, pasture: undefined }));
+              }} />
+              {formErrors.pasture ? <span className="field-error">{formErrors.pasture}</span> : null}
             </label>
           </div>
           <div className="inline-actions">
-            <button className="button button--primary" type="button" onClick={handleCreateHorse}>
+            <button className="button button--primary" type="button" onClick={handleCreateHorse} disabled={!form.name.trim() || !form.barnName.trim() || !form.owner.trim() || !form.ownerEntity.trim() || !form.barn.trim() || !form.pasture.trim()}>
               Create horse
             </button>
           </div>
         </section>
       ) : null}
+
+      <section className="ledger-stage">
+        <div className="ledger-stage__copy">
+          <div className="eyebrow">Active book</div>
+          <h2 className="ledger-stage__title">Buyer-safe records with barn-floor speed.</h2>
+          <p className="ledger-stage__description">Right-click for actions. Open any profile. Keep sale, care, and transfer posture visible at a glance.</p>
+        </div>
+        <div className="ledger-stage__stats">
+          <div className="ledger-stat">
+            <span className="ledger-stat__label">Portfolio</span>
+            <strong className="ledger-stat__value">{filtered.length}</strong>
+            <span className="ledger-stat__detail">{saleReady.length} sale ready</span>
+          </div>
+          <div className="ledger-stat">
+            <span className="ledger-stat__label">Buyer-safe</span>
+            <strong className="ledger-stat__value">{buyerReady.length}</strong>
+            <span className="ledger-stat__detail">Profiles cleared to share</span>
+          </div>
+          <div className="ledger-stat">
+            <span className="ledger-stat__label">Medical watch</span>
+            <strong className="ledger-stat__value">{medicalWatch.length}</strong>
+            <span className="ledger-stat__detail">Care-sensitive records</span>
+          </div>
+        </div>
+      </section>
 
       <div className="metric-grid">
         <MetricCard label="Portfolio" value={`${filtered.length}`} detail={`${saleReady.length} market ready`} />
@@ -267,9 +339,10 @@ export default function Horses() {
         />
       </div>
 
-      <div className="interaction-note">Right-click any horse for quick actions.</div>
+      <div className="interaction-note">Right-click or use the action icon for quick actions.</div>
 
       {viewMode === 'Portfolio' ? (
+        filtered.length ? (
         <div className="horse-grid">
           {filtered.map((horse) => {
             const saved = savedHorseIds.includes(horse.id);
@@ -289,42 +362,65 @@ export default function Horses() {
               >
                 <div className="horse-card__media">
                   <img src={horse.profileImage} alt="" className="horse-card__image" />
-                  <div className="horse-card__media-copy">
-                    <Pill tone={statusTone[horse.status]}>{horse.status}</Pill>
-                    <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
+                  <div className="horse-card__media-top">
+                    <div className="status-inline">
+                      <Pill tone={statusTone[horse.status]}>{horse.status}</Pill>
+                      <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
+                    </div>
+                    <button
+                      className="icon-button icon-button--compact"
+                      type="button"
+                      aria-label="Open quick actions"
+                      onClick={(event) => {
+                        const bounds = event.currentTarget.getBoundingClientRect();
+                        openHorseMenu(horse.id, bounds.left, bounds.bottom + 8);
+                      }}
+                    >
+                      <DotsIcon className="icon-button__icon" />
+                    </button>
+                  </div>
+                  <div className="horse-card__media-bottom">
+                    <div className="horse-card__kicker">{horse.segment}</div>
+                    <div className="horse-card__title">{horse.name}</div>
+                    <div className="horse-card__subtitle">
+                      {horse.registry} · {horse.sex} · {horse.location.barn}
+                    </div>
                   </div>
                 </div>
 
                 <div className="horse-card__body">
-                  <div className="horse-card__top">
-                    <div>
-                      <div className="horse-card__title">{horse.name}</div>
-                      <div className="horse-card__subtitle">
-                        {horse.segment} · {horse.registry} · {horse.sex}
-                      </div>
+                  <div className="horse-card__metric-band">
+                    <div className="horse-card__metric">
+                      <span>Packet</span>
+                      <strong>{formatPercent(packet.score)}</strong>
                     </div>
-                    <div className="status-inline">
-                      {saved ? <Pill tone="blue">Saved</Pill> : null}
-                      <button
-                        className="icon-button icon-button--compact"
-                        type="button"
-                        aria-label="Open quick actions"
-                        onClick={(event) => {
-                          const bounds = event.currentTarget.getBoundingClientRect();
-                          openHorseMenu(horse.id, bounds.left, bounds.bottom + 8);
-                        }}
-                      >
-                        <DotsIcon className="icon-button__icon" />
-                      </button>
+                    <div className="horse-card__metric">
+                      <span>Value</span>
+                      <strong>{formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)}</strong>
+                    </div>
+                    <div className="horse-card__metric">
+                      <span>Portal</span>
+                      <strong>{saved ? 'Saved' : 'Open'}</strong>
                     </div>
                   </div>
 
-                  <p className="horse-card__summary">{horse.summary}</p>
-
-                  <div className="horse-card__meta">
-                    <span>{horse.owner}</span>
-                    <span>{horse.location.barn}</span>
-                    <span>{horse.documents.length} docs</span>
+                  <div className="horse-card__meta-grid">
+                    <div className="horse-card__meta-cell">
+                      <span>Owner</span>
+                      <strong>{horse.owner}</strong>
+                    </div>
+                    <div className="horse-card__meta-cell">
+                      <span>Pasture</span>
+                      <strong>{horse.location.pasture}</strong>
+                    </div>
+                    <div className="horse-card__meta-cell">
+                      <span>Registry</span>
+                      <strong>{horse.registrationNumber}</strong>
+                    </div>
+                    <div className="horse-card__meta-cell">
+                      <span>Documents</span>
+                      <strong>{horse.documents.length}</strong>
+                    </div>
                   </div>
 
                   <div className="horse-card__readiness">
@@ -335,29 +431,36 @@ export default function Horses() {
                     <ProgressBar value={packet.score} tone={packet.tone} />
                   </div>
 
-                  <div className="token-row">
-                    <Pill tone="slate">{horse.location.pasture}</Pill>
-                    <Pill tone="slate">{horse.registrationNumber}</Pill>
-                  </div>
-
                   <div className="horse-card__footer">
-                    <span>{horse.sale.watchlistCount} saved</span>
-                    <span>{formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)}</span>
-                  </div>
-
-                  <div className="inline-actions inline-actions--card">
-                    <button className="button button--ghost button--compact" type="button" onClick={() => toggleSavedHorse(horse.id)}>
+                    <div className="status-inline">
+                      {saved ? <Pill tone="blue">Saved</Pill> : null}
+                      <span>{horse.sale.watchlistCount} watching</span>
+                    </div>
+                    <div className="inline-actions inline-actions--card">
+                      <button className="button button--ghost button--compact" type="button" onClick={() => toggleSavedHorse(horse.id)}>
                       {saved ? 'Remove from saved' : 'Save to portal'}
-                    </button>
-                    <Link to={`/horses/${horse.id}`} className="button button--primary button--compact">
-                      Open profile
-                    </Link>
+                      </button>
+                      <Link to={`/horses/${horse.id}`} className="button button--primary button--compact">
+                        Open profile
+                      </Link>
+                    </div>
                   </div>
                 </div>
               </div>
             );
           })}
         </div>
+        ) : (
+          <EmptyState
+            title="No horses match this view"
+            description="Change the segment filter, clear the search, or add a horse record."
+            action={
+              <button className="button button--primary button--compact" type="button" onClick={() => setSearchParams({ new: '1' })}>
+                Add horse
+              </button>
+            }
+          />
+        )
       ) : (
         <div className="table-shell">
           <table className="data-table">
@@ -376,6 +479,8 @@ export default function Horses() {
               {filtered.map((horse) => (
                 <tr
                   key={horse.id}
+                  className="table-row--interactive"
+                  onClick={() => navigate(`/horses/${horse.id}`)}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     openHorseMenu(horse.id, event.clientX, event.clientY);

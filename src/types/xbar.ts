@@ -301,6 +301,10 @@ export interface SalesLead {
   horseId: string;
   stage: 'New' | 'Qualified' | 'Offer' | 'Closed';
   lastTouch: string;
+  nextFollowUp?: string;
+  notes?: string;
+  offerAmount?: number;
+  outcome?: 'Won' | 'Lost';
   savedListing: boolean;
   ownerPortalReady: boolean;
 }

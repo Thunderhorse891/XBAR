@@ -1,4 +1,5 @@
 import { HashRouter, Route, Routes } from 'react-router-dom';
+import { ToastViewport } from './components/ToastViewport';
 import Dashboard from './pages/Dashboard';
 import Breeding from './routes/Breeding';
 import BuyerProfile from './routes/BuyerProfile';
@@ -7,6 +8,7 @@ import HorseDetail from './routes/HorseDetail';
 import Horses from './routes/Horses';
 import MainLayout from './routes/layouts/MainLayout';
 import Medical from './routes/Medical';
+import NotFound from './routes/NotFound';
 import OwnerPortal from './routes/OwnerPortal';
 import Ownership from './routes/Ownership';
 import RanchAssets from './routes/RanchAssets';
@@ -18,6 +20,7 @@ import Weather from './routes/Weather';
 export default function App() {
   return (
     <HashRouter>
+      <ToastViewport />
       <Routes>
         <Route path="/profiles/:id" element={<BuyerProfile />} />
         <Route path="/" element={<MainLayout />}>
@@ -34,7 +37,9 @@ export default function App() {
           <Route path="subscriptions" element={<Subscriptions />} />
           <Route path="portal" element={<OwnerPortal />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="*" element={<NotFound />} />
         </Route>
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </HashRouter>
   );

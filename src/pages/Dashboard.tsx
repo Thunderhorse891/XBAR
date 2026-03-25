@@ -22,6 +22,7 @@ export default function Dashboard() {
   const ownershipAttention = ownershipRecords.filter((record) => record.transferStatus !== 'Clear');
   const medicalWatch = horses.filter((horse) => horse.status === 'Medical Review');
   const totalInsuredValue = horses.reduce((sum, horse) => sum + horse.insuredValue, 0);
+  const averageReadiness = horses.length ? Math.round(horses.reduce((sum, horse) => sum + horse.readiness.score, 0) / horses.length) : 0;
   const attentionHorses = horses.filter((horse) => horse.alerts.length > 0 || horse.readiness.score < 75).slice(0, 4);
   const buyerReadyProfiles = horses.filter((horse) =>
     buildHorsePacketCompleteness(
@@ -52,58 +53,81 @@ export default function Dashboard() {
   return (
     <>
       <PageHeader
-        eyebrow="XBAR LLC"
+        eyebrow="XBAR control"
         title="Control Deck"
-        description="Trusted records. Buyer readiness. Ranch execution."
+        description="Records, buyers, and ranch execution in one surface."
         actions={
           <>
             <Link to="/horses" className="button button--ghost">
-              Horses
+              Ledger
             </Link>
             <Link to="/documents" className="button button--primary">
-              Documents
+              Clear queue
             </Link>
           </>
         }
       />
 
-      <section className="command-stage">
-        <div className="command-stage__copy">
-          <div className="eyebrow">Premium ranch records</div>
-          <h2 className="command-stage__title">Run XBAR like a high-value asset platform.</h2>
-          <p className="command-stage__description">Cleaner records. Faster sales. Sharper field control.</p>
+      <section className="dashboard-stage">
+        <div className="dashboard-stage__hero">
+          <div className="eyebrow">Premium operations</div>
+          <h2 className="dashboard-stage__title">Built for serious horse operations, not generic farm software.</h2>
+          <p className="dashboard-stage__description">Trusted intake, cleaner transfers, faster buyer links, and mobile-ready ranch control.</p>
           <div className="inline-actions">
             <Link to="/documents" className="button button--primary button--compact">
-              Clear blockers
+              Review intake
             </Link>
-            <Link to="/subscriptions" className="button button--ghost button--compact">
-              ARR path
+            <Link to="/portal" className="button button--ghost button--compact">
+              Buyer links
             </Link>
+          </div>
+          <div className="dashboard-stage__chips">
+            <Pill tone="blue">{roleWorkspace.label}</Pill>
+            <Pill tone="emerald">{buyerReadyProfiles.length} buyer-safe</Pill>
+            <Pill tone={ownershipAttention.length ? 'amber' : 'emerald'}>
+              {ownershipAttention.length ? `${ownershipAttention.length} transfer blockers` : 'Transfers clear'}
+            </Pill>
           </div>
         </div>
-        <div className="command-stage__visual">
-          <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" className="command-stage__logo" />
-          <div className="command-stage__visual-card">
-            <span className="command-stage__label">Signal stack</span>
-            <strong>Trust / Buyers / Ops</strong>
-            <span className="command-stage__detail">Built to outperform generic ranch tools.</span>
-          </div>
+
+        <div className="dashboard-stage__board">
+          {commandCenter.slice(0, 4).map((item) => (
+            <Link key={item.id} to={item.href} className={`signal-card signal-card--${item.tone}`}>
+              <div className="signal-card__module">{item.module}</div>
+              <div className="signal-card__title">{item.title}</div>
+              <div className="signal-card__copy">{item.summary}</div>
+              <div className="signal-card__value">{item.value}</div>
+            </Link>
+          ))}
         </div>
-        <div className="command-stage__stats">
-          <div className="command-stage__stat">
-            <span className="command-stage__label">Buyer-safe profiles</span>
-            <strong>{buyerReadyProfiles.length}</strong>
-            <span className="command-stage__detail">Ready to share</span>
+
+        <div className="dashboard-stage__aside">
+          <div className="dashboard-brand-panel">
+            <div className="dashboard-brand-panel__mark">
+              <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" className="dashboard-brand-panel__logo" />
+            </div>
+            <div className="dashboard-brand-panel__copy">
+              <span>Portfolio readiness</span>
+              <strong>{averageReadiness}%</strong>
+            </div>
           </div>
-          <div className="command-stage__stat">
-            <span className="command-stage__label">$10M ARR path</span>
-            <strong>{Math.round(revenuePlan.targetArr / 1_000_000)}M</strong>
-            <span className="command-stage__detail">{revenuePlan.customersNeededAtCurrentTier} customers at this tier</span>
-          </div>
-          <div className="command-stage__stat">
-            <span className="command-stage__label">Trust queue</span>
-            <strong>{reviewQueue.length}</strong>
-            <span className="command-stage__detail">Records still unresolved</span>
+
+          <div className="dashboard-kpi-list">
+            <div className="dashboard-kpi">
+              <span className="dashboard-kpi__label">Trust queue</span>
+              <strong className="dashboard-kpi__value">{reviewQueue.length}</strong>
+              <span className="dashboard-kpi__detail">Records waiting on review</span>
+            </div>
+            <div className="dashboard-kpi">
+              <span className="dashboard-kpi__label">Hot buyers</span>
+              <strong className="dashboard-kpi__value">{salesLeads.filter((lead) => lead.stage === 'Qualified' || lead.stage === 'Offer').length}</strong>
+              <span className="dashboard-kpi__detail">Qualified and offer-stage leads</span>
+            </div>
+            <div className="dashboard-kpi">
+              <span className="dashboard-kpi__label">$10M path</span>
+              <strong className="dashboard-kpi__value">{Math.round(revenuePlan.targetArr / 1_000_000)}M</strong>
+              <span className="dashboard-kpi__detail">{revenuePlan.customersNeededAtCurrentTier} customers at this tier</span>
+            </div>
           </div>
         </div>
       </section>
@@ -133,7 +157,7 @@ export default function Dashboard() {
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel
           eyebrow="Command center"
-          title="Now"
+          title="Priority board"
           description="Priority moves."
         >
           <div className="stack-list">
@@ -209,7 +233,7 @@ export default function Dashboard() {
 
         <Panel
           eyebrow="Product moat"
-          title="Moat"
+          title="Why XBAR wins"
           description="Why XBAR can win."
         >
           <div className="stack-list">
@@ -278,7 +302,7 @@ export default function Dashboard() {
 
         <Panel
           eyebrow="Ownership"
-          title="Ownership"
+          title="Transfer status"
           description="Integrity and transfer status."
         >
           <div className="stack-list">

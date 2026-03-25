@@ -107,15 +107,14 @@ export default function MainLayout() {
             <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" />
           </div>
           <div>
-            <div className="brand-lockup__title hover-copy" title="XBAR LLC">XBAR LLC</div>
-            <div className="brand-lockup__subtitle hover-copy" title="Premium records operating system">Premium records OS</div>
+            <div className="brand-lockup__title hover-copy" title="XBAR LLC">XBAR</div>
+            <div className="brand-lockup__subtitle hover-copy" title="Premium records operating system">Records OS</div>
           </div>
         </div>
 
         <div className="sidebar-card">
           <div className="sidebar-card__eyebrow hover-copy" title="Workspace">Workspace</div>
           <div className="sidebar-card__title hover-copy" title={roleWorkspace.label}>{roleWorkspace.label}</div>
-          <p className="sidebar-card__body hover-copy" title={roleWorkspace.summary}>{roleWorkspace.summary}</p>
           <div className="sidebar-card__tags">
             {roleWorkspace.primaryModules.map((module) => (
               <Pill key={module}>{module}</Pill>
@@ -141,9 +140,12 @@ export default function MainLayout() {
 
       <div className="shell-main">
         <header className="topbar">
-          <div>
-            <div className="topbar__eyebrow hover-copy" title="XBAR Records">XBAR Records</div>
-            <div className="topbar__title hover-copy" title={currentLabel}>{currentLabel}</div>
+          <div className="topbar__context">
+            <div className="topbar__eyebrow hover-copy" title="Active view">Live view</div>
+            <div className="topbar__title-row">
+              <div className="topbar__title hover-copy" title={currentLabel}>{currentLabel}</div>
+              <Pill tone={pendingReview ? 'amber' : 'emerald'}>{pendingReview ? `${pendingReview} in review` : 'Queue clear'}</Pill>
+            </div>
           </div>
 
           <div className="topbar__controls">
@@ -153,7 +155,7 @@ export default function MainLayout() {
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 onKeyDown={handleSearch}
-                placeholder="Search horses or owners"
+                placeholder="Search records"
                 title="Search horses, documents, or owners"
                 className="search-shell__input"
               />
@@ -183,7 +185,7 @@ export default function MainLayout() {
 
             <button className="button button--primary" type="button" onClick={() => navigate('/horses?new=1')} title="Create a new horse record">
               <AddIcon className="button__icon" />
-              New Horse
+              New
             </button>
           </div>
         </header>

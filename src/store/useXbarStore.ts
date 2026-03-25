@@ -37,6 +37,7 @@ import type {
   HorseNote,
   HorseRecord,
   OCRBatch,
+  OwnershipStake,
   PortalSnapshot,
   SalesLead,
   SubscriptionTier,
@@ -76,12 +77,26 @@ type XbarStore = {
   addHorse: (input: NewHorseInput) => ActionResult;
   createOCRIntake: (input: OCRIntakeInput) => Promise<ActionResult>;
   reviewDocument: (documentId: string, horseId?: string) => ActionResult;
+  discardDocument: (documentId: string) => ActionResult;
   uploadHorseMedia: (input: MediaUploadInput) => Promise<ActionResult>;
   createSalesLead: (input: LeadInput) => ActionResult;
+  updateSalesLead: (
+    leadId: string,
+    patch: Partial<Pick<SalesLead, 'stage' | 'lastTouch' | 'nextFollowUp' | 'notes' | 'offerAmount' | 'savedListing' | 'ownerPortalReady' | 'outcome'>>,
+  ) => ActionResult;
   updateAsset: (assetId: string, patch: AssetPatch) => ActionResult;
   addHorseNote: (horseId: string, note: Pick<HorseNote, 'title' | 'body' | 'author' | 'tone'>) => ActionResult;
+  addMedicalEvent: (horseId: string, event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string }) => ActionResult;
+  addBreedingEvent: (horseId: string, event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string }) => ActionResult;
   updateHorseLocation: (horseId: string, patch: LocationPatch) => ActionResult;
+  updateOwnershipRecord: (
+    recordId: string,
+    patch: Partial<Pick<OwnershipRecord, 'legalOwner' | 'transferStatus' | 'complianceDeadline' | 'pendingDocuments'>>,
+  ) => ActionResult;
+  addOwnershipAuditEntry: (recordId: string, entry: string) => ActionResult;
+  addOwnershipStake: (horseId: string, stake: Omit<OwnershipStake, 'id'>) => ActionResult;
   changeSubscriptionTier: (tier: SubscriptionTier) => void;
+  refreshWeatherSnapshot: () => ActionResult;
 };
 
 const initialState = {
@@ -267,6 +282,33 @@ function promoteDocument(horse: HorseRecord, document: DocumentRecord): HorseRec
   };
 }
 
+function createTimelineEvent(params: {
+  title: string;
+  summary: string;
+  owner: string;
+  date: string;
+  category: 'Medical' | 'Breeding' | 'Ownership' | 'Sales' | 'Operations';
+}) {
+  return {
+    id: createId('event'),
+    title: params.title.trim(),
+    summary: params.summary.trim(),
+    owner: params.owner.trim(),
+    date: params.date,
+    category: params.category,
+  } as const;
+}
+
+function touchWeatherSnapshot(current: WeatherSnapshot): WeatherSnapshot {
+  return {
+    ...current,
+    updatedAt: nowStamp(),
+    currentTempF: Math.max(28, current.currentTempF + (Math.random() > 0.5 ? 1 : -1)),
+    windMph: Math.max(0, current.windMph + (Math.random() > 0.5 ? 1 : -1)),
+    humidity: Math.min(100, Math.max(10, current.humidity + (Math.random() > 0.5 ? 2 : -2))),
+  };
+}
+
 export const useXbarStore = create<XbarStore>()(
   persist(
     (set, get) => ({
@@ -449,6 +491,31 @@ export const useXbarStore = create<XbarStore>()(
 
         return { ok: true, message: `${matchedHorse.name} now has this document attached.`, id: matchedHorse.id };
       },
+      discardDocument: (documentId) => {
+        const document = get().documents.find((item) => item.id === documentId);
+        if (!document) {
+          return { ok: false, message: 'Document not found.' };
+        }
+
+        set((current) => {
+          const nextDocuments = current.documents.map((item) =>
+            item.id === documentId
+              ? {
+                  ...item,
+                  state: 'Archived' as const,
+                  summary: `${item.title} was discarded from the review queue.`,
+                }
+              : item,
+          );
+
+          return {
+            documents: nextDocuments,
+            ocrBatches: current.ocrBatches.map((batch) => summarizeBatch(batch, nextDocuments)),
+          };
+        });
+
+        return { ok: true, message: `${document.title} was removed from active review.`, id: document.id };
+      },
       uploadHorseMedia: async ({ horseId, files, kind, makePrimary }) => {
         const fileList = files.filter(Boolean);
         if (!fileList.length) {
@@ -539,6 +606,8 @@ export const useXbarStore = create<XbarStore>()(
           horseId,
           stage: 'New',
           lastTouch: todayStamp(),
+          nextFollowUp: '',
+          notes: '',
           savedListing: false,
           ownerPortalReady: Boolean(portalReady),
         };
@@ -580,6 +649,36 @@ export const useXbarStore = create<XbarStore>()(
         });
 
         return { ok: true, message: `${lead.name} is now in the buyer pipeline.`, id: lead.id };
+      },
+      updateSalesLead: (leadId, patch) => {
+        const lead = get().salesLeads.find((item) => item.id === leadId);
+        if (!lead) {
+          return { ok: false, message: 'Lead not found.' };
+        }
+
+        set((current) => {
+          const salesLeads = current.salesLeads.map((item) =>
+            item.id === leadId
+              ? {
+                  ...item,
+                  ...patch,
+                  lastTouch: patch.lastTouch ?? item.lastTouch,
+                }
+              : item,
+          );
+
+          return {
+            salesLeads,
+            ...syncDerivedValues({
+              horses: current.horses,
+              salesLeads,
+              savedHorseIds: current.savedHorseIds,
+              portal: current.portal,
+            }),
+          };
+        });
+
+        return { ok: true, message: `${lead.name} updated.`, id: leadId };
       },
       updateAsset: (assetId, patch) => {
         if (!get().ranchAssets.some((asset) => asset.id === assetId)) {
@@ -639,6 +738,71 @@ export const useXbarStore = create<XbarStore>()(
 
         return { ok: true, message: 'Horse note saved.', id: nextNote.id };
       },
+      addMedicalEvent: (horseId, event) => {
+        if (!event.title.trim() || !event.body.trim() || !event.author.trim() || !event.date.trim()) {
+          return { ok: false, message: 'Medical events need a title, note, owner, and date.' };
+        }
+
+        if (!get().horses.some((horse) => horse.id === horseId)) {
+          return { ok: false, message: 'Horse record not found for this medical event.' };
+        }
+
+        const nextEvent = createTimelineEvent({
+          title: event.title,
+          summary: event.body,
+          owner: event.author,
+          date: event.date,
+          category: 'Medical',
+        });
+
+        set((state) => ({
+          horses: state.horses.map((horse) =>
+            horse.id === horseId
+              ? {
+                  ...horse,
+                  status: 'Medical Review',
+                  lastVetVisit: event.date,
+                  medicalNotes: event.body,
+                  medicalTimeline: [nextEvent, ...horse.medicalTimeline],
+                  activity: [nextEvent, ...horse.activity],
+                }
+              : horse,
+          ),
+        }));
+
+        return { ok: true, message: 'Medical event added.', id: nextEvent.id };
+      },
+      addBreedingEvent: (horseId, event) => {
+        if (!event.title.trim() || !event.body.trim() || !event.author.trim() || !event.date.trim()) {
+          return { ok: false, message: 'Breeding events need a title, note, owner, and date.' };
+        }
+
+        if (!get().horses.some((horse) => horse.id === horseId)) {
+          return { ok: false, message: 'Horse record not found for this breeding event.' };
+        }
+
+        const nextEvent = createTimelineEvent({
+          title: event.title,
+          summary: event.body,
+          owner: event.author,
+          date: event.date,
+          category: 'Breeding',
+        });
+
+        set((state) => ({
+          horses: state.horses.map((horse) =>
+            horse.id === horseId
+              ? {
+                  ...horse,
+                  breedingTimeline: [nextEvent, ...horse.breedingTimeline],
+                  activity: [nextEvent, ...horse.activity],
+                }
+              : horse,
+          ),
+        }));
+
+        return { ok: true, message: 'Breeding event added.', id: nextEvent.id };
+      },
       updateHorseLocation: (horseId, patch) => {
         const validationError = validateLocationPatch(patch);
         if (validationError) {
@@ -676,6 +840,103 @@ export const useXbarStore = create<XbarStore>()(
 
         return { ok: true, message: 'Horse location updated.', id: horseId };
       },
+      updateOwnershipRecord: (recordId, patch) => {
+        const record = get().ownershipRecords.find((item) => item.id === recordId);
+        if (!record) {
+          return { ok: false, message: 'Ownership record not found.' };
+        }
+
+        set((state) => ({
+          ownershipRecords: state.ownershipRecords.map((item) =>
+            item.id === recordId
+              ? {
+                  ...item,
+                  ...patch,
+                }
+              : item,
+          ),
+          horses: state.horses.map((horse) =>
+            horse.id === record.horseId
+              ? {
+                  ...horse,
+                  owner: patch.legalOwner ?? horse.owner,
+                  ownership: horse.ownership.map((stake, index) =>
+                    index === 0
+                      ? {
+                          ...stake,
+                          name: patch.legalOwner ?? stake.name,
+                        }
+                      : stake,
+                  ),
+                }
+              : horse,
+          ),
+        }));
+
+        return { ok: true, message: 'Ownership record updated.', id: recordId };
+      },
+      addOwnershipAuditEntry: (recordId, entry) => {
+        const trimmed = entry.trim();
+        if (!trimmed) {
+          return { ok: false, message: 'Enter an audit note before saving.' };
+        }
+
+        if (!get().ownershipRecords.some((record) => record.id === recordId)) {
+          return { ok: false, message: 'Ownership record not found.' };
+        }
+
+        set((state) => ({
+          ownershipRecords: state.ownershipRecords.map((record) =>
+            record.id === recordId
+              ? {
+                  ...record,
+                  auditTrail: [`${todayStamp()} ${trimmed}`, ...record.auditTrail],
+                }
+              : record,
+          ),
+        }));
+
+        return { ok: true, message: 'Audit note added.', id: recordId };
+      },
+      addOwnershipStake: (horseId, stake) => {
+        if (!stake.name.trim() || !stake.contact.trim() || !Number.isFinite(stake.share) || stake.share <= 0) {
+          return { ok: false, message: 'Co-owner name, share, and contact are required.' };
+        }
+
+        if (!get().horses.some((horse) => horse.id === horseId)) {
+          return { ok: false, message: 'Horse record not found for this ownership update.' };
+        }
+
+        const nextStake: OwnershipStake = {
+          id: createId('stake'),
+          ...stake,
+          name: stake.name.trim(),
+          contact: stake.contact.trim(),
+        };
+
+        set((state) => ({
+          horses: state.horses.map((horse) =>
+            horse.id === horseId
+              ? {
+                  ...horse,
+                  ownership: [...horse.ownership, nextStake],
+                  activity: [
+                    createTimelineEvent({
+                      title: 'Ownership updated',
+                      summary: `${nextStake.name} added as ${nextStake.role}.`,
+                      owner: 'Ownership Desk',
+                      date: todayStamp(),
+                      category: 'Ownership',
+                    }),
+                    ...horse.activity,
+                  ],
+                }
+              : horse,
+          ),
+        }));
+
+        return { ok: true, message: `${nextStake.name} added to the ownership split.`, id: nextStake.id };
+      },
       changeSubscriptionTier: (tier) =>
         set((state) => {
           const config = subscriptionTierConfig[tier];
@@ -698,6 +959,12 @@ export const useXbarStore = create<XbarStore>()(
             },
           };
         }),
+      refreshWeatherSnapshot: () => {
+        set((state) => ({
+          weather: touchWeatherSnapshot(state.weather),
+        }));
+        return { ok: true, message: 'Weather brief refreshed from local preview data.' };
+      },
     }),
     {
       name: 'xbar-live-workspace',

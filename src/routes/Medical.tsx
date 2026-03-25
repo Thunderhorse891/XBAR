@@ -1,18 +1,31 @@
+import { useState } from 'react';
+import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
+import { formatDateLabel } from '@/lib/format';
+import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 
 export default function Medical() {
   const horses = useXbarStore((state) => state.horses);
+  const documents = useXbarStore((state) => state.documents);
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
+  const addMedicalEvent = useXbarStore((state) => state.addMedicalEvent);
+  const pushToast = useUiStore((state) => state.pushToast);
   const medicalWatch = horses.filter((horse) => horse.status === 'Medical Review');
   const medicalEvents = horses.flatMap((horse) =>
     horse.medicalTimeline.map((event) => ({
       horseName: horse.name,
       veterinarian: horse.assignments.veterinarian,
+      horseId: horse.id,
       ...event,
     })),
   );
   const kits = ranchAssets.filter((asset) => asset.category === 'Medical Kit');
+  const [selectedHorseId, setSelectedHorseId] = useState(medicalWatch[0]?.id ?? horses[0]?.id ?? '');
+  const [eventTitle, setEventTitle] = useState('Vet follow-up');
+  const [eventBody, setEventBody] = useState('');
+  const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
+  const [eventError, setEventError] = useState('');
 
   return (
     <>
@@ -26,74 +39,175 @@ export default function Medical() {
         <MetricCard label="Watchlist" value={`${medicalWatch.length}`} detail="Horses currently carrying medical sensitivity" tone="rose" />
         <MetricCard label="Timeline entries" value={`${medicalEvents.length}`} detail="Care records flowing through profiles and documents" />
         <MetricCard label="Medical kits" value={`${kits.length}`} detail="Tracked kits and readiness for treatment or travel" tone="blue" />
-        <MetricCard label="Vet-linked docs" value={`${horses.filter((horse) => horse.documents.some((id) => id.includes('vet') || id.includes('coggins'))).length}`} detail="Profiles already connected to medical documents" tone="emerald" />
+        <MetricCard label="Vet-linked docs" value={`${documents.filter((document) => document.type === 'Vet Record' || document.type === 'Coggins').length}`} detail="Profiles already connected to medical documents" tone="emerald" />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel eyebrow="Care watch" title="Horses needing visibility" description="Active medical risk now has its own product lane instead of disappearing into general notes.">
-          <div className="stack-list">
-            {medicalWatch.map((horse) => (
-              <div key={horse.id} className="stack-item">
-                <div className="stack-item__top">
-                  <div>
-                    <div className="stack-item__title">{horse.name}</div>
-                    <div className="stack-item__copy">{horse.medicalTimeline[0]?.title ?? horse.medicalNotes}</div>
+          {medicalWatch.length ? (
+            <div className="stack-list">
+              {medicalWatch.map((horse) => (
+                <div key={horse.id} className="stack-item">
+                  <div className="stack-item__top">
+                    <div>
+                      <div className="stack-item__title">{horse.name}</div>
+                      <div className="stack-item__copy">{horse.medicalTimeline[0]?.title ?? horse.medicalNotes}</div>
+                    </div>
+                    <Pill tone="rose">Watch</Pill>
                   </div>
-                  <Pill tone="rose">Watch</Pill>
+                  <div className="inline-metrics">
+                    <span>{horse.assignments.veterinarian}</span>
+                    <span>Last visit {formatDateLabel(horse.lastVetVisit)}</span>
+                    <span>{horse.documents.length} linked docs</span>
+                  </div>
                 </div>
-                <div className="inline-metrics">
-                  <span>{horse.assignments.veterinarian}</span>
-                  <span>Last visit {horse.lastVetVisit}</span>
-                  <span>{horse.documents.length} linked docs</span>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState compact title="No horses on medical watch" description="Add a medical event below to move a horse into the care watchlist." />
+          )}
         </Panel>
 
         <Panel eyebrow="Kit readiness" title="Travel and treatment assets" description="Medical kits and equipment have their own readiness picture so care execution is not just a note in the margin.">
-          <div className="stack-list">
-            {kits.map((asset) => (
-              <div key={asset.id} className="stack-item">
-                <div className="stack-item__top">
-                  <div>
-                    <div className="stack-item__title">{asset.name}</div>
-                    <div className="stack-item__copy">{asset.location}</div>
+          {kits.length ? (
+            <div className="stack-list">
+              {kits.map((asset) => (
+                <div key={asset.id} className="stack-item">
+                  <div className="stack-item__top">
+                    <div>
+                      <div className="stack-item__title">{asset.name}</div>
+                      <div className="stack-item__copy">{asset.location}</div>
+                    </div>
+                    <Pill tone={asset.condition === 'Attention Required' ? 'rose' : asset.condition === 'Service Soon' ? 'amber' : 'emerald'}>
+                      {asset.condition}
+                    </Pill>
                   </div>
-                  <Pill tone={asset.condition === 'Attention Required' ? 'rose' : asset.condition === 'Service Soon' ? 'amber' : 'emerald'}>
-                    {asset.condition}
-                  </Pill>
+                  <div className="stack-item__copy">{asset.notes}</div>
                 </div>
-                <div className="stack-item__copy">{asset.notes}</div>
-              </div>
-            ))}
+              ))}
+            </div>
+          ) : (
+            <EmptyState compact title="No medical kits tracked" description="Add kits in Ranch Toolkit to see travel and treatment readiness here." />
+          )}
+        </Panel>
+      </div>
+
+      <div className="dashboard-grid dashboard-grid--primary">
+        <Panel eyebrow="Care action" title="Log a medical event" description="Schedule visits, record care notes, and push a horse onto the medical watchlist from this page.">
+          <div className="form-grid form-grid--tight">
+            <label className="field-stack">
+              <span className="field-label">Horse</span>
+              <select className="field-input" value={selectedHorseId} onChange={(event) => setSelectedHorseId(event.target.value)}>
+                {horses.map((horse) => (
+                  <option key={horse.id} value={horse.id}>
+                    {horse.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Event date</span>
+              <input className="field-input" type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} />
+            </label>
+            <label className="field-stack field-stack--wide">
+              <span className="field-label">Event title</span>
+              <input className="field-input" value={eventTitle} onChange={(event) => {
+                setEventTitle(event.target.value);
+                setEventError('');
+              }} />
+            </label>
+            <label className="field-stack field-stack--wide">
+              <span className="field-label">Care note</span>
+              <textarea className="field-textarea" rows={4} value={eventBody} onChange={(event) => {
+                setEventBody(event.target.value);
+                setEventError('');
+              }} />
+            </label>
           </div>
+          {eventError ? <div className="field-error">{eventError}</div> : null}
+          <div className="inline-actions">
+            <button
+              className="button button--primary button--compact"
+              type="button"
+              onClick={() => {
+                if (!selectedHorseId || !eventTitle.trim() || !eventBody.trim() || !eventDate.trim()) {
+                  setEventError('Horse, date, title, and care note are required.');
+                  return;
+                }
+
+                const result = addMedicalEvent(selectedHorseId, {
+                  title: eventTitle,
+                  body: eventBody,
+                  author: 'Medical Desk',
+                  date: eventDate,
+                });
+
+                pushToast({
+                  title: result.ok ? 'Medical event added' : 'Medical event blocked',
+                  message: result.message,
+                  tone: result.ok ? 'success' : 'error',
+                });
+
+                if (result.ok) {
+                  setEventBody('');
+                  setEventError('');
+                }
+              }}
+            >
+              Save medical event
+            </button>
+          </div>
+        </Panel>
+
+        <Panel eyebrow="Next up" title="Care cadence" description="Use these dates to schedule transport, treatment, and vet follow-up.">
+          {medicalEvents.length ? (
+            <div className="stack-list">
+              {medicalEvents.slice(0, 5).map((event) => (
+                <div key={event.id} className="stack-item">
+                  <div className="stack-item__top">
+                    <div>
+                      <div className="stack-item__title">{event.horseName}</div>
+                      <div className="stack-item__copy">{event.title}</div>
+                    </div>
+                    <Pill tone="blue">{formatDateLabel(event.date)}</Pill>
+                  </div>
+                  <div className="stack-item__copy">{event.summary}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState compact title="No care cadence yet" description="Medical events saved here will roll into the watchlist and recent activity tables." />
+          )}
         </Panel>
       </div>
 
       <Panel eyebrow="Timeline" title="Recent care activity" description="Care notes, exam cadence, and follow-up actions are structured here so profiles can inherit them cleanly.">
-        <div className="table-shell">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Horse</th>
-                <th>Event</th>
-                <th>Owner</th>
-                <th>Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {medicalEvents.map((event) => (
-                <tr key={event.id}>
-                  <td>{event.horseName}</td>
-                  <td>{event.title}</td>
-                  <td>{event.veterinarian}</td>
-                  <td>{event.date}</td>
+        {medicalEvents.length ? (
+          <div className="table-shell">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Horse</th>
+                  <th>Event</th>
+                  <th>Owner</th>
+                  <th>Date</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {medicalEvents.map((event) => (
+                  <tr key={event.id}>
+                    <td>{event.horseName}</td>
+                    <td>{event.title}</td>
+                    <td>{event.veterinarian}</td>
+                    <td>{formatDateLabel(event.date)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState title="No medical timeline yet" description="Create a care event to start building a clinical history for the ranch." />
+        )}
       </Panel>
     </>
   );

@@ -1,11 +1,22 @@
+import { useState } from 'react';
+import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
+import { formatDateLabel } from '@/lib/format';
+import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 
 export default function Breeding() {
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
+  const addBreedingEvent = useXbarStore((state) => state.addBreedingEvent);
+  const pushToast = useUiStore((state) => state.pushToast);
   const breedingHorses = horses.filter((horse) => horse.segment === 'Stud' || horse.sex === 'Mare');
   const breedingDocs = documents.filter((document) => document.type === 'Breeding Contract');
+  const [selectedHorseId, setSelectedHorseId] = useState(breedingHorses[0]?.id ?? '');
+  const [eventTitle, setEventTitle] = useState('Breeding milestone');
+  const [eventBody, setEventBody] = useState('');
+  const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
+  const [eventError, setEventError] = useState('');
 
   return (
     <>
@@ -24,45 +35,145 @@ export default function Breeding() {
 
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel eyebrow="Program board" title="Stud and mare pipeline" description="The breeding lane now tracks real horses and program timing instead of behaving like a blank placeholder.">
-          <div className="stack-list">
-            {breedingHorses.map((horse) => (
-              <div key={horse.id} className="stack-item">
-                <div className="stack-item__top">
-                  <div>
-                    <div className="stack-item__title">{horse.name}</div>
-                    <div className="stack-item__copy">
-                      {horse.sex} · {horse.bloodline.family}
-                    </div>
-                  </div>
-                  <Pill tone={horse.segment === 'Stud' ? 'emerald' : 'blue'}>{horse.segment}</Pill>
-                </div>
-                <div className="inline-metrics">
-                  <span>{horse.assignments.ranchManager}</span>
-                  <span>{horse.location.barn}</span>
-                  <span>{horse.breedingTimeline.length} milestones</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
-
-        <Panel eyebrow="Milestones" title="Program timing and disclosures" description="Even before live breeding integrations, the system can hold the milestone structure and contract traceability.">
-          <div className="stack-list">
-            {breedingHorses.flatMap((horse) =>
-              horse.breedingTimeline.map((event) => (
-                <div key={event.id} className="stack-item">
+          {breedingHorses.length ? (
+            <div className="stack-list">
+              {breedingHorses.map((horse) => (
+                <div key={horse.id} className="stack-item">
                   <div className="stack-item__top">
                     <div>
                       <div className="stack-item__title">{horse.name}</div>
-                      <div className="stack-item__copy">{event.title}</div>
+                      <div className="stack-item__copy">
+                        {horse.sex} · {horse.bloodline.family}
+                      </div>
                     </div>
-                    <Pill tone="slate">{event.date}</Pill>
+                    <Pill tone={horse.segment === 'Stud' ? 'emerald' : 'blue'}>{horse.segment}</Pill>
                   </div>
-                  <div className="stack-item__copy">{event.summary}</div>
+                  <div className="inline-metrics">
+                    <span>{horse.assignments.ranchManager}</span>
+                    <span>{horse.location.barn}</span>
+                    <span>{horse.breedingTimeline.length} milestones</span>
+                  </div>
                 </div>
-              )),
-            )}
+              ))}
+            </div>
+          ) : (
+            <EmptyState compact title="No breeding horses in program" description="Move a mare or stud into the breeding lane to start tracking milestones." />
+          )}
+        </Panel>
+
+        <Panel eyebrow="Milestones" title="Program timing and disclosures" description="Even before live breeding integrations, the system can hold the milestone structure and contract traceability.">
+          {breedingHorses.some((horse) => horse.breedingTimeline.length) ? (
+            <div className="stack-list">
+              {breedingHorses.flatMap((horse) =>
+                horse.breedingTimeline.map((event) => (
+                  <div key={event.id} className="stack-item">
+                    <div className="stack-item__top">
+                      <div>
+                        <div className="stack-item__title">{horse.name}</div>
+                        <div className="stack-item__copy">{event.title}</div>
+                      </div>
+                      <Pill tone="slate">{formatDateLabel(event.date)}</Pill>
+                    </div>
+                    <div className="stack-item__copy">{event.summary}</div>
+                  </div>
+                )),
+              )}
+            </div>
+          ) : (
+            <EmptyState compact title="No breeding milestones yet" description="Log breeding events to track contracts, foaling, and program timing." />
+          )}
+        </Panel>
+      </div>
+
+      <div className="dashboard-grid dashboard-grid--primary">
+        <Panel eyebrow="Program action" title="Add breeding event" description="Record milestones, contract motion, foaling dates, and program notes from this page.">
+          <div className="form-grid form-grid--tight">
+            <label className="field-stack">
+              <span className="field-label">Horse</span>
+              <select className="field-input" value={selectedHorseId} onChange={(event) => setSelectedHorseId(event.target.value)}>
+                <option value="">Select horse</option>
+                {breedingHorses.map((horse) => (
+                  <option key={horse.id} value={horse.id}>
+                    {horse.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Event date</span>
+              <input className="field-input" type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} />
+            </label>
+            <label className="field-stack field-stack--wide">
+              <span className="field-label">Milestone</span>
+              <input className="field-input" value={eventTitle} onChange={(event) => {
+                setEventTitle(event.target.value);
+                setEventError('');
+              }} />
+            </label>
+            <label className="field-stack field-stack--wide">
+              <span className="field-label">Program note</span>
+              <textarea className="field-textarea" rows={4} value={eventBody} onChange={(event) => {
+                setEventBody(event.target.value);
+                setEventError('');
+              }} />
+            </label>
           </div>
+          {eventError ? <div className="field-error">{eventError}</div> : null}
+          <div className="inline-actions">
+            <button
+              className="button button--primary button--compact"
+              type="button"
+              onClick={() => {
+                if (!selectedHorseId || !eventTitle.trim() || !eventBody.trim() || !eventDate.trim()) {
+                  setEventError('Horse, date, milestone, and note are required.');
+                  return;
+                }
+
+                const result = addBreedingEvent(selectedHorseId, {
+                  title: eventTitle,
+                  body: eventBody,
+                  author: 'Breeding Desk',
+                  date: eventDate,
+                });
+
+                pushToast({
+                  title: result.ok ? 'Breeding event added' : 'Breeding event blocked',
+                  message: result.message,
+                  tone: result.ok ? 'success' : 'error',
+                });
+
+                if (result.ok) {
+                  setEventBody('');
+                  setEventError('');
+                }
+              }}
+            >
+              Save breeding event
+            </button>
+          </div>
+        </Panel>
+
+        <Panel eyebrow="Contracts" title="Breeding contract coverage" description="Breeding contracts already in the document vault surface here so program timing and paperwork stay connected.">
+          {breedingDocs.length ? (
+            <div className="stack-list">
+              {breedingDocs.map((document) => (
+                <div key={document.id} className="stack-item">
+                  <div className="stack-item__top">
+                    <div>
+                      <div className="stack-item__title">{document.title}</div>
+                      <div className="stack-item__copy">{document.horseId ?? 'Unassigned horse'}</div>
+                    </div>
+                    <Pill tone={document.state === 'Ready' ? 'emerald' : document.state === 'Needs Review' ? 'amber' : 'blue'}>
+                      {document.state}
+                    </Pill>
+                  </div>
+                  <div className="stack-item__copy">{document.summary}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState compact title="No breeding contracts linked" description="Upload breeding contracts in Documents to tie program paperwork into this lane." />
+          )}
         </Panel>
       </div>
     </>

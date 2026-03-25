@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -26,6 +27,10 @@ export default function OwnerPortal() {
         description="Saved horses, buyer links, inquiry flow."
       />
 
+      <div className="callout callout--warning">
+        <strong>Preview only:</strong> External owner login, Google auth, and Facebook auth are not connected yet. Buyer profile previews and saved-horse logic are local-only in this build.
+      </div>
+
       <div className="metric-grid">
         <MetricCard label="Invited owners" value={`${portal.invitedOwners}`} detail={`${portal.activeOwners} already active in the current workspace`} />
         <MetricCard label="Saved horses" value={`${portal.savedHorses}`} detail="Behavior signal available to the sales and ownership layers" tone="blue" />
@@ -39,14 +44,14 @@ export default function OwnerPortal() {
             <div className="stack-item">
               <div className="stack-item__top">
                 <div className="stack-item__title">Google login</div>
-                <Pill tone={portal.googleAuthReady ? 'emerald' : 'amber'}>{portal.googleAuthReady ? 'Connected' : 'Not connected'}</Pill>
+                <Pill tone={portal.googleAuthReady ? 'emerald' : 'amber'}>{portal.googleAuthReady ? 'Connected' : 'Preview only'}</Pill>
               </div>
               <div className="stack-item__copy">Provider contract and role mapping can land here later, but the live login flow is not wired yet.</div>
             </div>
             <div className="stack-item">
               <div className="stack-item__top">
                 <div className="stack-item__title">Facebook login</div>
-                <Pill tone={portal.facebookAuthReady ? 'emerald' : 'amber'}>{portal.facebookAuthReady ? 'Connected' : 'Not connected'}</Pill>
+                <Pill tone={portal.facebookAuthReady ? 'emerald' : 'amber'}>{portal.facebookAuthReady ? 'Connected' : 'Preview only'}</Pill>
               </div>
               <div className="stack-item__copy">Meta-facing buyer access can connect here later without changing the rest of the app shell.</div>
             </div>
@@ -54,37 +59,41 @@ export default function OwnerPortal() {
         </Panel>
 
         <Panel eyebrow="Shared profiles" title="External-facing horse visibility">
-          <div className="stack-list">
-            {sharedHorses.map((horse) => {
-              const packet = buildHorsePacketCompleteness(
-                horse,
-                documents.filter((document) => document.horseId === horse.id),
-                ownershipRecords.find((record) => record.horseId === horse.id),
-              );
+          {sharedHorses.length ? (
+            <div className="stack-list">
+              {sharedHorses.map((horse) => {
+                const packet = buildHorsePacketCompleteness(
+                  horse,
+                  documents.filter((document) => document.horseId === horse.id),
+                  ownershipRecords.find((record) => record.horseId === horse.id),
+                );
 
-              return (
-                <div key={horse.id} className="stack-item">
-                  <div className="stack-item__top">
-                    <div className="stack-item__title">{horse.name}</div>
-                    <div className="status-inline">
-                      <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
-                      <Pill tone="blue">{horse.sale.listingState}</Pill>
+                return (
+                  <div key={horse.id} className="stack-item">
+                    <div className="stack-item__top">
+                      <div className="stack-item__title">{horse.name}</div>
+                      <div className="status-inline">
+                        <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
+                        <Pill tone="blue">{horse.sale.listingState}</Pill>
+                      </div>
+                    </div>
+                    <div className="inline-metrics">
+                      <span>{horse.sale.watchlistCount} watchers</span>
+                      <span>{packet.trustSummary}</span>
+                      <span>{horse.documents.length} visible docs</span>
+                    </div>
+                    <div className="inline-actions">
+                      <Link className="button button--ghost button--compact" to={packet.sharePath}>
+                        Preview share link
+                      </Link>
                     </div>
                   </div>
-                  <div className="inline-metrics">
-                    <span>{horse.sale.watchlistCount} watchers</span>
-                    <span>{packet.trustSummary}</span>
-                    <span>{horse.documents.length} visible docs</span>
-                  </div>
-                  <div className="inline-actions">
-                    <Link className="button button--ghost button--compact" to={packet.sharePath}>
-                      Preview share link
-                    </Link>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          ) : (
+            <EmptyState compact title="No saved horses to share" description="Save a horse to the portal from the horse ledger or profile to preview buyer-facing access here." />
+          )}
         </Panel>
       </div>
     </>

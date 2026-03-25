@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { EmptyState } from '@/components/EmptyState';
 import { KeyValue, PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
 import { ChevronLeftIcon } from '@/components/icons';
 import { formatCompactCurrency, formatDateLabel, formatPercent } from '@/lib/format';
+import { useUiStore } from '@/store/useUiStore';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useHorseRecord, useXbarStore } from '@/store/useXbarStore';
 import type { DocumentSource, GalleryAsset, SalesLead } from '@/types/xbar';
@@ -24,17 +26,22 @@ export default function HorseDetail() {
   const addHorseNote = useXbarStore((state) => state.addHorseNote);
   const updateHorseLocation = useXbarStore((state) => state.updateHorseLocation);
   const createSalesLead = useXbarStore((state) => state.createSalesLead);
+  const pushToast = useUiStore((state) => state.pushToast);
 
-  const [message, setMessage] = useState('');
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [mediaKind, setMediaKind] = useState<GalleryAsset['kind']>('Hero');
   const [makePrimary, setMakePrimary] = useState(true);
+  const [isMediaUploading, setIsMediaUploading] = useState(false);
   const [docFiles, setDocFiles] = useState<File[]>([]);
   const [docSource, setDocSource] = useState<DocumentSource>('Manual Upload');
+  const [isDocumentUploading, setIsDocumentUploading] = useState(false);
   const [noteTitle, setNoteTitle] = useState('Field update');
   const [noteBody, setNoteBody] = useState('');
+  const [noteError, setNoteError] = useState('');
   const [leadName, setLeadName] = useState('');
   const [leadChannel, setLeadChannel] = useState<SalesLead['channel']>('Facebook');
+  const [leadError, setLeadError] = useState('');
+  const [locationError, setLocationError] = useState('');
   const [location, setLocation] = useState({
     barn: horse?.location.barn ?? '',
     pasture: horse?.location.pasture ?? '',
@@ -56,20 +63,37 @@ export default function HorseDetail() {
   const buyerReadyDocuments = documents.filter((document) => buildDocumentTrustProfile(document, [horse]).readyForProfile);
 
   const handleMediaUpload = async () => {
+    if (!mediaFiles.length) {
+      pushToast({ title: 'Media upload blocked', message: 'Select at least one image before uploading.', tone: 'error' });
+      return;
+    }
+
+    setIsMediaUploading(true);
     const result = await uploadHorseMedia({
       horseId: horse.id,
       files: mediaFiles,
       kind: mediaKind,
       makePrimary,
     });
-    setMessage(result.message);
+    pushToast({
+      title: result.ok ? 'Media uploaded' : 'Media upload blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
     if (result.ok) {
       setMediaFiles([]);
       setMakePrimary(false);
     }
+    setIsMediaUploading(false);
   };
 
   const handleDocumentUpload = async () => {
+    if (!docFiles.length) {
+      pushToast({ title: 'Document upload blocked', message: 'Select at least one document before uploading.', tone: 'error' });
+      return;
+    }
+
+    setIsDocumentUploading(true);
     const result = await createOCRIntake({
       files: docFiles,
       horseId: horse.id,
@@ -77,41 +101,78 @@ export default function HorseDetail() {
       uploadedBy: 'Horse Profile',
       label: `${horse.barnName} profile intake`,
     });
-    setMessage(result.message);
+    pushToast({
+      title: result.ok ? 'Document intake updated' : 'Document upload blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
     if (result.ok) {
       setDocFiles([]);
     }
+    setIsDocumentUploading(false);
   };
 
   const handleAddNote = () => {
+    if (!noteTitle.trim() || !noteBody.trim()) {
+      setNoteError('Enter both a note title and note body.');
+      return;
+    }
+
     const result = addHorseNote(horse.id, {
       title: noteTitle,
       body: noteBody,
       author: 'Field Ops',
       tone: 'info',
     });
-    setMessage(result.message);
+    pushToast({
+      title: result.ok ? 'Note saved' : 'Note blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
     if (result.ok) {
       setNoteBody('');
       setNoteTitle('Field update');
+      setNoteError('');
     }
   };
 
   const handleLocationUpdate = () => {
+    if (!location.barn.trim() && !location.pasture.trim() && !location.stall.trim()) {
+      setLocationError('Enter at least one location field before saving.');
+      return;
+    }
+
     const result = updateHorseLocation(horse.id, location);
-    setMessage(result.message);
+    pushToast({
+      title: result.ok ? 'Location saved' : 'Location blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
+    if (result.ok) {
+      setLocationError('');
+    }
   };
 
   const handleLeadCreate = () => {
+    if (!leadName.trim()) {
+      setLeadError('Lead name is required.');
+      return;
+    }
+
     const result = createSalesLead({
       name: leadName,
       channel: leadChannel,
       horseId: horse.id,
       portalReady: saved,
     });
-    setMessage(result.message);
+    pushToast({
+      title: result.ok ? 'Lead created' : 'Lead blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
     if (result.ok) {
       setLeadName('');
+      setLeadError('');
     }
   };
 
@@ -121,8 +182,6 @@ export default function HorseDetail() {
         <ChevronLeftIcon className="inline-link__icon" />
         Back to horses
       </Link>
-
-      {message ? <div className="status-banner">{message}</div> : null}
 
       <PageHeader
         eyebrow={horse.ownerEntity}
@@ -226,6 +285,7 @@ export default function HorseDetail() {
               <input className="field-input" value={location.stall} onChange={(event) => setLocation((current) => ({ ...current, stall: event.target.value }))} />
             </label>
           </div>
+          {locationError ? <div className="field-error">{locationError}</div> : null}
           <div className="inline-actions">
             <button className="button button--ghost button--compact" type="button" onClick={handleLocationUpdate}>
               Save location
@@ -236,22 +296,26 @@ export default function HorseDetail() {
 
       <div className="detail-grid">
         <Panel eyebrow="Media" title="Gallery and packet assets" description="These uploads stay in the current workspace so sales packets and horse profiles can evolve as you work.">
-          <div className="media-strip">
-            {horse.gallery.map((asset) => (
-              <div key={asset.id} className="media-tile">
-                <div className="media-tile__image-shell">
-                  <img src={asset.url} alt="" className="media-tile__image" />
+          {horse.gallery.length ? (
+            <div className="media-strip">
+              {horse.gallery.map((asset) => (
+                <div key={asset.id} className="media-tile">
+                  <div className="media-tile__image-shell">
+                    <img src={asset.url} alt="" className="media-tile__image" />
+                  </div>
+                  <div className="media-tile__label">{asset.label}</div>
+                  <div className="media-tile__meta">
+                    <Pill tone={asset.status === 'Approved' ? 'emerald' : asset.status === 'Pending' ? 'amber' : 'slate'}>
+                      {asset.status}
+                    </Pill>
+                    <span>{asset.kind}</span>
+                  </div>
                 </div>
-                <div className="media-tile__label">{asset.label}</div>
-                <div className="media-tile__meta">
-                  <Pill tone={asset.status === 'Approved' ? 'emerald' : asset.status === 'Pending' ? 'amber' : 'slate'}>
-                    {asset.status}
-                  </Pill>
-                  <span>{asset.kind}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState compact title="No media uploaded" description="Upload hero images, conformation shots, or sale stills for this horse." />
+          )}
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
               <span className="field-label">Media kind</span>
@@ -273,8 +337,8 @@ export default function HorseDetail() {
             </label>
           </div>
           <div className="inline-actions">
-            <button className="button button--primary button--compact" type="button" onClick={handleMediaUpload}>
-              Upload media
+            <button className="button button--primary button--compact" type="button" onClick={handleMediaUpload} disabled={isMediaUploading}>
+              {isMediaUploading ? 'Uploading media...' : 'Upload media'}
             </button>
           </div>
         </Panel>
@@ -328,26 +392,30 @@ export default function HorseDetail() {
 
         <Panel eyebrow="Documents" title="Packet coverage, extraction, and review">
           <div className="stack-list">
-            {documents.map((document) => (
-              <div key={document.id} className="stack-item">
-                <div className="stack-item__top">
-                  <div>
-                    <div className="stack-item__title">{document.title}</div>
-                    <div className="stack-item__copy">{document.type} · {document.source}</div>
+            {documents.length ? (
+              documents.map((document) => (
+                <div key={document.id} className="stack-item">
+                  <div className="stack-item__top">
+                    <div>
+                      <div className="stack-item__title">{document.title}</div>
+                      <div className="stack-item__copy">{document.type} · {document.source}</div>
+                    </div>
+                    <Pill tone={document.state === 'Needs Review' ? 'rose' : document.state === 'Extracting' ? 'amber' : 'emerald'}>
+                      {document.state}
+                    </Pill>
                   </div>
-                  <Pill tone={document.state === 'Needs Review' ? 'rose' : document.state === 'Extracting' ? 'amber' : 'emerald'}>
-                    {document.state}
-                  </Pill>
+                  <div className="stack-item__copy">{document.summary}</div>
+                  <div className="inline-metrics">
+                    <span>Confidence {formatPercent(document.confidence * 100)}</span>
+                    <span>Trust {formatPercent(buildDocumentTrustProfile(document, [horse]).trustScore)}</span>
+                    <span>{document.duplicateRisk}</span>
+                    <span>{formatDateLabel(document.uploadedAt)}</span>
+                  </div>
                 </div>
-                <div className="stack-item__copy">{document.summary}</div>
-                <div className="inline-metrics">
-                  <span>Confidence {formatPercent(document.confidence * 100)}</span>
-                  <span>Trust {formatPercent(buildDocumentTrustProfile(document, [horse]).trustScore)}</span>
-                  <span>{document.duplicateRisk}</span>
-                  <span>{document.uploadedAt}</span>
-                </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <EmptyState compact title="No documents linked" description="Upload documents to build packet trust for this horse." />
+            )}
             {!!horse.ocrFacts.length && (
               <div className="token-row">
                 {horse.ocrFacts.map((fact) => (
@@ -375,8 +443,8 @@ export default function HorseDetail() {
             </label>
           </div>
           <div className="inline-actions">
-            <button className="button button--ghost button--compact" type="button" onClick={handleDocumentUpload}>
-              Add to document intake
+            <button className="button button--ghost button--compact" type="button" onClick={handleDocumentUpload} disabled={isDocumentUploading}>
+              {isDocumentUploading ? 'Uploading documents...' : 'Add to document intake'}
             </button>
           </div>
         </Panel>
@@ -384,18 +452,22 @@ export default function HorseDetail() {
 
       <div className="detail-grid">
         <Panel eyebrow="Medical" title="Timeline and care notes">
-          <div className="timeline">
-            {horse.medicalTimeline.map((event) => (
-              <div key={event.id} className="timeline__item">
-                <div className="timeline__date">{formatDateLabel(event.date)}</div>
-                <div>
-                  <div className="timeline__title">{event.title}</div>
-                  <div className="timeline__copy">{event.summary}</div>
-                  <div className="timeline__meta">{event.owner}</div>
+          {horse.medicalTimeline.length ? (
+            <div className="timeline">
+              {horse.medicalTimeline.map((event) => (
+                <div key={event.id} className="timeline__item">
+                  <div className="timeline__date">{formatDateLabel(event.date)}</div>
+                  <div>
+                    <div className="timeline__title">{event.title}</div>
+                    <div className="timeline__copy">{event.summary}</div>
+                    <div className="timeline__meta">{event.owner}</div>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState compact title="No medical timeline yet" description="Add medical events from the Medical module or after a new exam." />
+          )}
         </Panel>
 
         <Panel eyebrow="Breeding and sales" title="Program context and buyer posture">
@@ -416,7 +488,7 @@ export default function HorseDetail() {
                 </div>
               ))
             ) : (
-              <div className="detail-block subtle">No live breeding program on this horse, but the structure is here for mares and studs that need it.</div>
+              <EmptyState compact title="No breeding program yet" description="Add breeding milestones from the Breeding module when this horse enters the program." />
             )}
             {salesLeads.length ? (
               <div className="stack-item">
@@ -429,12 +501,17 @@ export default function HorseDetail() {
                   ))}
                 </div>
               </div>
-            ) : null}
+            ) : (
+              <EmptyState compact title="No active buyer leads" description="Add a lead below to start tracking contact and offer movement." />
+            )}
           </div>
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
               <span className="field-label">Lead name</span>
-              <input className="field-input" value={leadName} onChange={(event) => setLeadName(event.target.value)} />
+              <input className="field-input" value={leadName} onChange={(event) => {
+                setLeadName(event.target.value);
+                setLeadError('');
+              }} />
             </label>
             <label className="field-stack">
               <span className="field-label">Lead channel</span>
@@ -447,6 +524,7 @@ export default function HorseDetail() {
               </select>
             </label>
           </div>
+          {leadError ? <div className="field-error">{leadError}</div> : null}
           <div className="inline-actions">
             <button className="button button--primary button--compact" type="button" onClick={handleLeadCreate}>
               Add buyer lead
@@ -476,13 +554,20 @@ export default function HorseDetail() {
               <div className="form-grid form-grid--tight">
                 <label className="field-stack">
                   <span className="field-label">Note title</span>
-                  <input className="field-input" value={noteTitle} onChange={(event) => setNoteTitle(event.target.value)} />
+                  <input className="field-input" value={noteTitle} onChange={(event) => {
+                    setNoteTitle(event.target.value);
+                    setNoteError('');
+                  }} />
                 </label>
                 <label className="field-stack field-stack--wide">
                   <span className="field-label">Note</span>
-                  <textarea className="field-textarea" value={noteBody} onChange={(event) => setNoteBody(event.target.value)} rows={4} />
+                  <textarea className="field-textarea" value={noteBody} onChange={(event) => {
+                    setNoteBody(event.target.value);
+                    setNoteError('');
+                  }} rows={4} />
                 </label>
               </div>
+              {noteError ? <div className="field-error">{noteError}</div> : null}
               <div className="inline-actions">
                 <button className="button button--ghost button--compact" type="button" onClick={handleAddNote}>
                   Save note

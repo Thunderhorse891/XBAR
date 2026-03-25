@@ -1,8 +1,8 @@
-import { useState } from 'react';
 import { MetricCard, PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
 import { formatCurrency } from '@/lib/format';
 import { buildRevenueBlueprint } from '@/lib/xbarGrowth';
 import { subscriptionTierConfig } from '@/lib/xbarRuntime';
+import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import type { SubscriptionTier } from '@/types/xbar';
 
@@ -11,7 +11,7 @@ const tiers: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Ente
 export default function Subscriptions() {
   const subscription = useXbarStore((state) => state.subscription);
   const changeSubscriptionTier = useXbarStore((state) => state.changeSubscriptionTier);
-  const [message, setMessage] = useState('');
+  const pushToast = useUiStore((state) => state.pushToast);
   const revenuePlan = buildRevenueBlueprint(subscription);
 
   return (
@@ -22,7 +22,9 @@ export default function Subscriptions() {
         description="Premium plans and the $10M ARR path."
       />
 
-      {message ? <div className="status-banner">{message}</div> : null}
+      <div className="callout callout--warning">
+        <strong>Billing preview:</strong> Tier changes on this page only update the local workspace model. Stripe and real billing are not connected yet.
+      </div>
 
       <div className="metric-grid">
         <MetricCard label="Current tier" value={subscription.tier} detail={`${subscription.billingState} · renews ${subscription.renewalDate}`} />
@@ -149,10 +151,14 @@ export default function Subscriptions() {
                       type="button"
                       onClick={() => {
                         changeSubscriptionTier(tier);
-                        setMessage(`${tier} is now active in this workspace.`);
+                        pushToast({
+                          title: 'Plan preview updated',
+                          message: `${tier} is now active in this local workspace preview.`,
+                          tone: 'success',
+                        });
                       }}
                     >
-                      Switch to {tier}
+                      Preview {tier}
                     </button>
                   </div>
                 ) : null}
