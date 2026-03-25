@@ -1,6 +1,7 @@
 import type {
   AssetCondition,
   DocumentRecord,
+  DocumentEntities,
   DocumentSource,
   DocumentType,
   GalleryAsset,
@@ -105,6 +106,19 @@ export function normalizeStorage(value: number) {
   return Math.round(value * 1000) / 1000;
 }
 
+function normalizeToken(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function includesNormalized(haystack: string, needle: string) {
+  const normalizedNeedle = normalizeToken(needle);
+  return normalizedNeedle.length >= 3 && haystack.includes(normalizedNeedle);
+}
+
 export function estimateStorageGb(files: File[]) {
   const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
   return normalizeStorage(totalBytes / GIGABYTE);
@@ -183,39 +197,118 @@ async function readFileTextPreview(file: File) {
   }
 }
 
-function getHorseSearchTokens(horse: HorseRecord) {
-  return [
-    horse.name,
-    horse.barnName,
-    horse.aqhaNumber,
-    horse.registrationNumber,
-    horse.owner,
-    horse.ownerEntity,
-  ]
-    .filter(Boolean)
-    .map((value) => value.toLowerCase());
+function extractFirstMatch(haystack: string, candidates: string[]) {
+  return [...candidates]
+    .filter((candidate) => Boolean(candidate))
+    .sort((left, right) => right.length - left.length)
+    .find((candidate) => includesNormalized(haystack, candidate));
 }
 
-export function findHorseMatch(horses: HorseRecord[], haystack: string) {
-  const search = haystack.toLowerCase();
-  let bestMatch: HorseRecord | undefined;
+function extractRegistrationNumber(haystack: string) {
+  return haystack.match(/\b[A-Z]{2,5}-[A-Z0-9-]{3,}\b/i)?.[0]?.toUpperCase();
+}
+
+function extractExamDate(haystack: string) {
+  return haystack.match(/\b20\d{2}-\d{2}-\d{2}\b/)?.[0];
+}
+
+function extractVeterinarian(haystack: string) {
+  return haystack.match(/\bDr\.?\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\b/)?.[0];
+}
+
+function extractTransferStatus(haystack: string, type: DocumentType) {
+  const normalized = normalizeToken(haystack);
+  if (type !== 'Transfer Packet') {
+    return undefined;
+  }
+
+  if (normalized.includes('aqha review')) return 'AQHA Review';
+  if (normalized.includes('attention required') || normalized.includes('missing signature')) return 'Attention Required';
+  if (normalized.includes('pending signatures') || normalized.includes('signature')) return 'Pending Signatures';
+  return 'Pending Signatures';
+}
+
+function buildKnownOwners(horses: HorseRecord[]) {
+  return Array.from(new Set(horses.flatMap((horse) => [horse.owner, horse.ownerEntity]).filter(Boolean)));
+}
+
+function extractDocumentEntities(params: {
+  fileName: string;
+  previewText: string;
+  inferredType: DocumentType;
+  horses: HorseRecord[];
+}) {
+  const { fileName, previewText, inferredType, horses } = params;
+  const haystack = `${fileName} ${previewText}`;
+
+  return {
+    horseName: extractFirstMatch(haystack, horses.flatMap((horse) => [horse.name, horse.barnName])),
+    registrationNumber: extractRegistrationNumber(haystack),
+    ownerName: extractFirstMatch(haystack, buildKnownOwners(horses)),
+    examDate: inferredType === 'Vet Record' || inferredType === 'Coggins' ? extractExamDate(haystack) : undefined,
+    veterinarian: inferredType === 'Vet Record' || inferredType === 'Coggins' ? extractVeterinarian(haystack) : undefined,
+    transferStatus: extractTransferStatus(haystack, inferredType),
+  } satisfies DocumentEntities;
+}
+
+export type HorseMatchResult = {
+  horse: HorseRecord;
+  confidence: number;
+  reason: string;
+};
+
+function scoreHorseMatch(horse: HorseRecord, search: string, entities?: DocumentEntities) {
   let confidence = 0;
+  let reason = '';
 
-  horses.forEach((horse) => {
-    const tokens = getHorseSearchTokens(horse);
-    if (tokens.some((token) => token.length > 6 && search.includes(token))) {
-      bestMatch = horse;
-      confidence = 0.93;
-      return;
-    }
+  const exactChecks: Array<[string | undefined, number, string]> = [
+    [entities?.horseName && normalizeToken(entities.horseName) === normalizeToken(horse.name) ? horse.name : undefined, 0.99, 'Extracted horse name matches profile'],
+    [entities?.registrationNumber && normalizeToken(entities.registrationNumber) === normalizeToken(horse.registrationNumber) ? horse.registrationNumber : undefined, 0.98, 'Extracted registration number matches profile'],
+    [entities?.ownerName && normalizeToken(entities.ownerName) === normalizeToken(horse.owner) ? horse.owner : undefined, 0.91, 'Extracted owner name matches profile'],
+  ];
 
-    if (search.includes(horse.barnName.toLowerCase())) {
-      bestMatch = horse;
-      confidence = Math.max(confidence, 0.82);
+  exactChecks.forEach(([value, nextConfidence, nextReason]) => {
+    if (value && nextConfidence > confidence) {
+      confidence = nextConfidence;
+      reason = nextReason;
     }
   });
 
-  return { horse: bestMatch, confidence };
+  const searchChecks: Array<[string, number, string]> = [
+    [horse.name, 0.97, 'Horse name appears in the document'],
+    [horse.registrationNumber, 0.95, 'Registration number appears in the document'],
+    [horse.aqhaNumber, 0.94, 'Registry number appears in the document'],
+    [horse.barnName, 0.83, 'Barn name appears in the document'],
+    [horse.owner, 0.78, 'Owner reference appears in the document'],
+    [horse.ownerEntity, 0.73, 'Owner entity appears in the document'],
+  ];
+
+  searchChecks.forEach(([value, nextConfidence, nextReason]) => {
+    if (includesNormalized(search, value) && nextConfidence > confidence) {
+      confidence = nextConfidence;
+      reason = nextReason;
+    }
+  });
+
+  return confidence > 0 ? { horse, confidence, reason } : null;
+}
+
+export function rankHorseMatches(horses: HorseRecord[], haystack: string, entities?: DocumentEntities) {
+  const normalizedSearch = normalizeToken(haystack);
+
+  return horses
+    .map((horse) => scoreHorseMatch(horse, normalizedSearch, entities))
+    .filter((match): match is HorseMatchResult => Boolean(match))
+    .sort((left, right) => right.confidence - left.confidence)
+    .slice(0, 3);
+}
+
+export function findHorseMatch(horses: HorseRecord[], haystack: string) {
+  const [bestMatch] = rankHorseMatches(horses, haystack);
+  return {
+    horse: bestMatch?.horse,
+    confidence: bestMatch?.confidence ?? 0,
+  };
 }
 
 export async function buildDocumentRecord(params: {
@@ -229,30 +322,60 @@ export async function buildDocumentRecord(params: {
   const { file, uploadedBy, source, selectedHorse, horses, existingDocuments } = params;
   const previewText = await readFileTextPreview(file);
   const inferredType = guessDocumentType(file.name);
-  const match = selectedHorse
-    ? { horse: selectedHorse, confidence: 0.99 }
-    : findHorseMatch(horses, `${file.name} ${previewText}`);
+  const extractedEntities = extractDocumentEntities({
+    fileName: file.name,
+    previewText,
+    inferredType,
+    horses,
+  });
+  const candidateMatches = selectedHorse
+    ? [{ horse: selectedHorse, confidence: 0.99, reason: 'Document was manually attached during intake' }]
+    : rankHorseMatches(horses, `${file.name} ${previewText}`, extractedEntities);
 
-  const matchedHorse = match.horse;
-  const duplicateRisk = existingDocuments.some((document) => document.title === file.name)
-    ? 'Possible Duplicate'
-    : existingDocuments.some((document) => document.horseId && document.horseId === matchedHorse?.id && document.type === inferredType)
-      ? 'Review'
-      : 'Low';
+  const matchedHorse = candidateMatches[0]?.horse;
+  const exactTitleDuplicate = existingDocuments.some((document) => normalizeToken(document.title) === normalizeToken(file.name.replace(/\.[^.]+$/, '')));
+  const sameHorseDuplicate = existingDocuments.some(
+    (document) =>
+      document.horseId &&
+      document.horseId === matchedHorse?.id &&
+      document.type === inferredType &&
+      (document.entities.registrationNumber === extractedEntities.registrationNumber || normalizeToken(document.title) === normalizeToken(file.name)),
+  );
+  const duplicateRisk = exactTitleDuplicate ? 'Possible Duplicate' : sameHorseDuplicate ? 'Review' : 'Low';
+
+  const entities: DocumentEntities = {
+    horseName: extractedEntities.horseName ?? matchedHorse?.name,
+    registrationNumber: extractedEntities.registrationNumber ?? matchedHorse?.registrationNumber,
+    ownerName: extractedEntities.ownerName ?? matchedHorse?.owner,
+    examDate: extractedEntities.examDate ?? (inferredType === 'Vet Record' || inferredType === 'Coggins' ? todayStamp() : undefined),
+    veterinarian: extractedEntities.veterinarian,
+    transferStatus: extractedEntities.transferStatus,
+  };
+  const entityCount = Object.values(entities).filter(Boolean).length;
+
+  let confidence = candidateMatches[0]?.confidence ?? 0.54;
+  confidence = Math.max(confidence, 0.48 + entityCount * 0.07);
+  if (duplicateRisk === 'Review') {
+    confidence -= 0.08;
+  }
+  if (duplicateRisk === 'Possible Duplicate') {
+    confidence -= 0.18;
+  }
+  confidence = Math.max(0.42, Math.min(0.99, Math.round(confidence * 100) / 100));
 
   let state: DocumentRecord['state'] = 'Needs Review';
-  if (match.confidence >= 0.96 && duplicateRisk === 'Low') {
-    state = 'Ready';
-  } else if (match.confidence >= 0.8 && duplicateRisk !== 'Possible Duplicate') {
-    state = 'Matched';
-  } else if (!matchedHorse) {
+  if (duplicateRisk === 'Possible Duplicate') {
     state = 'Needs Review';
-  } else {
+  } else if (confidence >= 0.94 && matchedHorse) {
+    state = 'Ready';
+  } else if (confidence >= 0.8 && matchedHorse) {
+    state = 'Matched';
+  } else if (matchedHorse) {
     state = 'Extracting';
   }
 
-  const registrationNumber = matchedHorse?.registrationNumber;
-  const ownerName = matchedHorse?.owner;
+  const matchReason = candidateMatches[0]?.reason?.toLowerCase() ?? 'the intake engine found a weak candidate match';
+  const trustLabel = `${Math.round(confidence * 100)}% trust`;
 
   return {
     id: createId('doc'),
@@ -263,18 +386,12 @@ export async function buildDocumentRecord(params: {
     uploadedAt: todayStamp(),
     source,
     state,
-    confidence: match.confidence || 0.58,
+    confidence,
     duplicateRisk,
     extractedTextPreview: previewText,
     summary: matchedHorse
-      ? `${inferredType} intake staged for ${matchedHorse.name}.`
+      ? `${inferredType} staged for ${matchedHorse.name} with ${trustLabel} based on ${matchReason}.`
       : `${inferredType} intake needs review before it can be attached to a horse profile.`,
-    entities: {
-      horseName: matchedHorse?.name,
-      registrationNumber,
-      ownerName,
-      examDate: inferredType === 'Vet Record' || inferredType === 'Coggins' ? todayStamp() : undefined,
-      transferStatus: inferredType === 'Transfer Packet' ? 'Pending Signatures' : undefined,
-    },
+    entities,
   } satisfies DocumentRecord;
 }

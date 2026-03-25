@@ -6,12 +6,22 @@
     "rootDir": ".",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "types": ["node"],
+    "types": ["node", "vite/client"],
     "baseUrl": ".",
-    "paths": {},
+    "paths": {
+      "@/*": ["src/*"]
+    },
     "declaration": false,
     "sourceMap": false,
     "allowImportingTsExtensions": false
   },
-  "include": ["src/store/xbarStoreLogic.ts", "src/types/xbar.ts", "src/lib/xbarRuntime.ts", "tests/**/*.ts"]
+  "include": [
+    "src/store/xbarStoreLogic.ts",
+    "src/types/xbar.ts",
+    "src/lib/xbarRuntime.ts",
+    "src/lib/xbarPhaseTwo.ts",
+    "src/lib/xbarGrowth.ts",
+    "src/vite-env.d.ts",
+    "tests/**/*.ts"
+  ]
 }

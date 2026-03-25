@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { MetricCard, PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
 import { formatCurrency } from '@/lib/format';
+import { buildRevenueBlueprint } from '@/lib/xbarGrowth';
 import { subscriptionTierConfig } from '@/lib/xbarRuntime';
 import { useXbarStore } from '@/store/useXbarStore';
 import type { SubscriptionTier } from '@/types/xbar';
@@ -11,22 +12,23 @@ export default function Subscriptions() {
   const subscription = useXbarStore((state) => state.subscription);
   const changeSubscriptionTier = useXbarStore((state) => state.changeSubscriptionTier);
   const [message, setMessage] = useState('');
+  const revenuePlan = buildRevenueBlueprint(subscription);
 
   return (
     <>
       <PageHeader
         eyebrow="Subscriptions"
         title="Plan and feature gating"
-        description="This module changes the current workspace plan posture: limits update immediately, and document-processing/storage rules follow the active tier."
+        description="This module now connects product packaging to the commercial goal: premium plans, durable retention, and a realistic path to $10M in annual subscription revenue."
       />
 
       {message ? <div className="status-banner">{message}</div> : null}
 
       <div className="metric-grid">
         <MetricCard label="Current tier" value={subscription.tier} detail={`${subscription.billingState} · renews ${subscription.renewalDate}`} />
-        <MetricCard label="Seats" value={`${subscription.usage.seatsUsed}/${subscription.usage.seatLimit}`} detail="Internal users on the current plan" tone="blue" />
-        <MetricCard label="Processing usage" value={`${subscription.usage.ocrProcessed}/${subscription.usage.ocrLimit}`} detail="Monthly document-page volume against the current plan limit" tone="amber" />
-        <MetricCard label="Storage" value={`${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB`} detail="Operational document and media footprint" tone="slate" />
+        <MetricCard label="Current ARR" value={formatCurrency(revenuePlan.currentArr)} detail="Annualized recurring revenue for one customer at the active tier" tone="blue" />
+        <MetricCard label="Customers to $10M" value={`${revenuePlan.customersNeededAtCurrentTier}`} detail="If the business sold only the current tier" tone="amber" />
+        <MetricCard label="Recommended mix" value={formatCurrency(revenuePlan.recommendedMixArr)} detail={revenuePlan.recommendedMixLabel} tone="slate" />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
@@ -79,6 +81,40 @@ export default function Subscriptions() {
               </div>
               <ProgressBar value={(subscription.usage.portalSeatsUsed / subscription.usage.portalSeatLimit) * 100} tone="emerald" />
             </div>
+          </div>
+        </Panel>
+      </div>
+
+      <div className="dashboard-grid dashboard-grid--secondary">
+        <Panel eyebrow="Revenue blueprint" title="Path to $10M in annual subscriptions" description="A premium product earns premium pricing by solving the hard trust and revenue problems generic tools leave behind.">
+          <div className="stack-list">
+            {revenuePlan.scenarios.map((scenario) => (
+              <div key={scenario.tier} className="stack-item">
+                <div className="stack-item__top">
+                  <div>
+                    <div className="stack-item__title">{scenario.tier}</div>
+                    <div className="stack-item__copy">{formatCurrency(scenario.annualContractValue)} annual recurring value per customer</div>
+                  </div>
+                  <Pill tone={scenario.tier === subscription.tier ? 'blue' : scenario.tier === 'Enterprise' ? 'amber' : 'emerald'}>
+                    {scenario.customersNeeded} customers
+                  </Pill>
+                </div>
+                <div className="stack-item__copy">{scenario.summary}</div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel eyebrow="Premium pricing levers" title="What justifies higher subscription plans" description="If the product is going to command real revenue, it needs category-defining workflows, not commodity feature checklists.">
+          <div className="bullet-list">
+            {revenuePlan.motions.map((motion) => (
+              <div key={motion} className="bullet-list__item">
+                {motion}
+              </div>
+            ))}
+          </div>
+          <div className="detail-block subtle">
+            The strategic center of gravity is trust: document intelligence, ownership clarity, buyer-safe profiles, and mobile field execution.
           </div>
         </Panel>
       </div>

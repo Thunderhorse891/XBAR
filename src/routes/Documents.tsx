@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
+import { formatPercent } from '@/lib/format';
+import { buildDocumentTrustProfile } from '@/lib/xbarPhaseTwo';
 import { useXbarStore } from '@/store/useXbarStore';
 import type { DocumentSource } from '@/types/xbar';
 
@@ -26,6 +28,7 @@ export default function Documents() {
   const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Extracting');
   const matched = documents.filter((document) => document.state === 'Matched' || document.state === 'Ready');
   const duplicates = documents.filter((document) => document.duplicateRisk === 'Possible Duplicate');
+  const buyerSafeDocuments = documents.filter((document) => buildDocumentTrustProfile(document, horses).readyForProfile);
   const uploadOpen = searchParams.get('upload') === '1';
 
   const handleIntake = async () => {
@@ -58,7 +61,7 @@ export default function Documents() {
       <div className="metric-grid">
         <MetricCard label="Document vault" value={`${documents.length}`} detail="Registration, medical, transfer, insurance, and media records" />
         <MetricCard label="Needs review" value={`${reviewQueue.length}`} detail="Human review queue before facts become trusted profile data" tone="amber" />
-        <MetricCard label="Matched" value={`${matched.length}`} detail="Documents already attached to horse profiles and packets" tone="emerald" />
+        <MetricCard label="Buyer-safe docs" value={`${buyerSafeDocuments.length}`} detail="Approved documents strong enough for buyer-facing packet surfaces" tone="emerald" />
         <MetricCard label="Processing usage" value={`${subscription.usage.ocrProcessed}/${subscription.usage.ocrLimit}`} detail="Local document pages processed against the current plan" tone="blue" />
       </div>
 
@@ -157,19 +160,42 @@ export default function Documents() {
               <tr>
                 <th>Document</th>
                 <th>Suggested horse</th>
-                <th>State</th>
-                <th>Confidence</th>
+                <th>Trust</th>
+                <th>Review signal</th>
                 <th>Assign horse</th>
                 <th>Action</th>
               </tr>
             </thead>
             <tbody>
-              {reviewQueue.map((document) => (
+              {reviewQueue.map((document) => {
+                const trust = buildDocumentTrustProfile(document, horses);
+                const topCandidate = trust.candidateMatches[0];
+                return (
                 <tr key={document.id}>
-                  <td>{document.title}</td>
-                  <td>{document.entities.horseName ?? 'Unresolved'}</td>
-                  <td>{document.state}</td>
-                  <td>{Math.round(document.confidence * 100)}%</td>
+                  <td>
+                    <div className="table-cell__stack">
+                      <strong>{document.title}</strong>
+                      <span>{document.type}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="table-cell__stack">
+                      <span>{document.entities.horseName ?? topCandidate?.horseName ?? 'Unresolved'}</span>
+                      <span>{topCandidate ? `${topCandidate.confidence}% · ${topCandidate.reason}` : 'No strong match candidate yet'}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="table-cell__stack">
+                      <Pill tone={trust.tone}>{formatPercent(trust.trustScore)}</Pill>
+                      <span>{trust.entityCount}/{trust.totalEntities} entities</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="table-cell__stack">
+                      <span>{document.state}</span>
+                      <span>{trust.reviewReasons[0] ?? 'Cleared for next review step'}</span>
+                    </div>
+                  </td>
                   <td>
                     <select
                       className="field-input field-input--compact"
@@ -202,7 +228,7 @@ export default function Documents() {
                     </button>
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
         </div>
@@ -210,41 +236,55 @@ export default function Documents() {
 
       <Panel eyebrow="Extracted data" title="Entity extraction preview" description="Trusted entities are what get promoted into horse profiles once review clears.">
         <div className="detail-grid">
-          {documents.slice(0, 6).map((document) => (
-            <div key={document.id} className="stack-item">
-              <div className="stack-item__top">
-                <div className="stack-item__title">{document.title}</div>
-                <Pill tone={document.duplicateRisk === 'Possible Duplicate' ? 'rose' : document.state === 'Ready' ? 'emerald' : 'blue'}>
-                  {document.type}
-                </Pill>
-              </div>
-              <div className="stack-item__copy">{document.summary}</div>
-              <div className="token-row">
-                {Object.entries(document.entities)
-                  .filter(([, value]) => Boolean(value))
-                  .map(([label, value]) => (
-                    <Pill key={label} tone="blue">
-                      {label}: {value}
+          {documents.slice(0, 6).map((document) => {
+            const trust = buildDocumentTrustProfile(document, horses);
+            return (
+              <div key={document.id} className="stack-item">
+                <div className="stack-item__top">
+                  <div className="stack-item__title">{document.title}</div>
+                  <div className="status-inline">
+                    <Pill tone={trust.tone}>{formatPercent(trust.trustScore)} trust</Pill>
+                    <Pill tone={document.duplicateRisk === 'Possible Duplicate' ? 'rose' : document.state === 'Ready' ? 'emerald' : 'blue'}>
+                      {document.type}
                     </Pill>
-                  ))}
+                  </div>
+                </div>
+                <div className="stack-item__copy">{document.summary}</div>
+                <div className="inline-metrics">
+                  <span>{trust.entityCount}/{trust.totalEntities} entities</span>
+                  <span>{trust.candidateMatches[0]?.horseName ?? 'No match candidate'}</span>
+                  <span>{matched.includes(document) ? 'Attached to packet flow' : 'Still in trust workbench'}</span>
+                </div>
+                <div className="token-row">
+                  {Object.entries(document.entities)
+                    .filter(([, value]) => Boolean(value))
+                    .map(([label, value]) => (
+                      <Pill key={label} tone="blue">
+                        {label}: {value}
+                      </Pill>
+                    ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </Panel>
 
       {duplicates.length ? (
         <Panel eyebrow="Duplicates" title="Potential duplicate uploads">
           <div className="stack-list">
-            {duplicates.map((document) => (
-              <div key={document.id} className="stack-item">
-                <div className="stack-item__top">
-                  <div className="stack-item__title">{document.title}</div>
-                  <Pill tone="rose">{document.duplicateRisk}</Pill>
+            {duplicates.map((document) => {
+              const trust = buildDocumentTrustProfile(document, horses);
+              return (
+                <div key={document.id} className="stack-item">
+                  <div className="stack-item__top">
+                    <div className="stack-item__title">{document.title}</div>
+                    <Pill tone="rose">{document.duplicateRisk}</Pill>
+                  </div>
+                  <div className="stack-item__copy">{trust.duplicateSummary}</div>
                 </div>
-                <div className="stack-item__copy">{document.summary}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Panel>
       ) : null}

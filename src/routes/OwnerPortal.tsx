@@ -1,24 +1,36 @@
+import { Link } from 'react-router-dom';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
+import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useXbarStore } from '@/store/useXbarStore';
 
 export default function OwnerPortal() {
   const portal = useXbarStore((state) => state.portal);
   const horses = useXbarStore((state) => state.horses);
+  const documents = useXbarStore((state) => state.documents);
   const savedHorseIds = useXbarStore((state) => state.savedHorseIds);
+  const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
+  const sharedHorses = horses.filter((horse) => savedHorseIds.includes(horse.id));
+  const liveProfiles = sharedHorses.filter((horse) =>
+    buildHorsePacketCompleteness(
+      horse,
+      documents.filter((document) => document.horseId === horse.id),
+      ownershipRecords.find((record) => record.horseId === horse.id),
+    ).buyerSafe,
+  );
 
   return (
     <>
       <PageHeader
         eyebrow="Owner portal"
         title="Owner and buyer access"
-        description="This page holds external access posture, saved horses, invite counts, and inquiry traffic. Google and Facebook login are not connected yet in the public preview."
+        description="This page now tracks buyer-profile links, saved horses, invite counts, and inquiry traffic. Google and Facebook login are not connected yet in the public preview."
       />
 
       <div className="metric-grid">
         <MetricCard label="Invited owners" value={`${portal.invitedOwners}`} detail={`${portal.activeOwners} already active in the current workspace`} />
         <MetricCard label="Saved horses" value={`${portal.savedHorses}`} detail="Behavior signal available to the sales and ownership layers" tone="blue" />
         <MetricCard label="Open inquiries" value={`${portal.openInquiries}`} detail="Buyer and owner requests waiting on response" tone="amber" />
-        <MetricCard label="Shared horses" value={`${savedHorseIds.length}`} detail="Profiles currently mirrored into external-facing flows" tone="emerald" />
+        <MetricCard label="Live buyer links" value={`${liveProfiles.length}`} detail="Saved horses currently clear enough for buyer-facing profile previews" tone="emerald" />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
@@ -43,19 +55,35 @@ export default function OwnerPortal() {
 
         <Panel eyebrow="Shared profiles" title="External-facing horse visibility">
           <div className="stack-list">
-            {horses.filter((horse) => savedHorseIds.includes(horse.id)).map((horse) => (
-              <div key={horse.id} className="stack-item">
-                <div className="stack-item__top">
-                  <div className="stack-item__title">{horse.name}</div>
-                  <Pill tone="blue">{horse.sale.listingState}</Pill>
+            {sharedHorses.map((horse) => {
+              const packet = buildHorsePacketCompleteness(
+                horse,
+                documents.filter((document) => document.horseId === horse.id),
+                ownershipRecords.find((record) => record.horseId === horse.id),
+              );
+
+              return (
+                <div key={horse.id} className="stack-item">
+                  <div className="stack-item__top">
+                    <div className="stack-item__title">{horse.name}</div>
+                    <div className="status-inline">
+                      <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
+                      <Pill tone="blue">{horse.sale.listingState}</Pill>
+                    </div>
+                  </div>
+                  <div className="inline-metrics">
+                    <span>{horse.sale.watchlistCount} watchers</span>
+                    <span>{packet.trustSummary}</span>
+                    <span>{horse.documents.length} visible docs</span>
+                  </div>
+                  <div className="inline-actions">
+                    <Link className="button button--ghost button--compact" to={packet.sharePath}>
+                      Preview share link
+                    </Link>
+                  </div>
                 </div>
-                <div className="inline-metrics">
-                  <span>{horse.sale.watchlistCount} watchers</span>
-                  <span>{horse.sale.socialReady ? 'Share-ready packet' : 'Packet staging'}</span>
-                  <span>{horse.documents.length} visible docs</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Panel>
       </div>

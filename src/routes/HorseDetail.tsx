@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { KeyValue, PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
 import { ChevronLeftIcon } from '@/components/icons';
 import { formatCompactCurrency, formatDateLabel, formatPercent } from '@/lib/format';
+import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useHorseRecord, useXbarStore } from '@/store/useXbarStore';
 import type { DocumentSource, GalleryAsset, SalesLead } from '@/types/xbar';
 
@@ -51,6 +52,8 @@ export default function HorseDetail() {
   }
 
   const saved = savedHorseIds.includes(horse.id);
+  const packet = buildHorsePacketCompleteness(horse, documents, ownershipRecord);
+  const buyerReadyDocuments = documents.filter((document) => buildDocumentTrustProfile(document, [horse]).readyForProfile);
 
   const handleMediaUpload = async () => {
     const result = await uploadHorseMedia({
@@ -127,6 +130,9 @@ export default function HorseDetail() {
         description={horse.summary}
         actions={
           <>
+            <Link className="button button--primary button--compact" to={packet.sharePath}>
+              Preview buyer profile
+            </Link>
             <button className="button button--ghost button--compact" type="button" onClick={() => toggleSavedHorse(horse.id)}>
               {saved ? 'Saved in portal' : 'Save to portal'}
             </button>
@@ -153,14 +159,17 @@ export default function HorseDetail() {
             <div className="stack-list">
               <div className="stack-item">
                 <div className="stack-item__top">
-                  <div className="stack-item__title">{formatPercent(horse.readiness.score)}</div>
-                  <Pill tone="amber">{horse.readiness.packetStatus}</Pill>
+                  <div className="stack-item__title">{formatPercent(packet.score)}</div>
+                  <div className="status-inline">
+                    <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
+                    <Pill tone={packet.tone}>{horse.readiness.packetStatus}</Pill>
+                  </div>
                 </div>
-                <ProgressBar value={horse.readiness.score} tone={horse.readiness.score >= 85 ? 'emerald' : 'amber'} />
+                <ProgressBar value={packet.score} tone={packet.tone} />
                 <div className="bullet-list">
-                  {horse.readiness.blockers.map((blocker) => (
-                    <div key={blocker} className="bullet-list__item">
-                      {blocker}
+                  {packet.requirements.map((requirement) => (
+                    <div key={requirement.key} className="bullet-list__item">
+                      {requirement.label}: {requirement.detail}
                     </div>
                   ))}
                 </div>
@@ -171,6 +180,7 @@ export default function HorseDetail() {
                   <span>{horse.sale.watchlistCount} watchers</span>
                   <span>{horse.sale.inquiryCount} inquiries</span>
                 </div>
+                <div className="detail-block subtle">{packet.buyerProfileNote}</div>
               </div>
             </div>
           </Panel>
@@ -280,7 +290,15 @@ export default function HorseDetail() {
               <div className="inline-metrics">
                 <span>{horse.documents.length} linked docs</span>
                 <span>{horse.gallery.length} media slots</span>
-                <span>{horse.sale.socialReady ? 'Social packet ready' : 'Social packet staged'}</span>
+                <span>{buyerReadyDocuments.length} buyer-safe docs</span>
+                <span>{packet.shareSlug}</span>
+              </div>
+            </div>
+            <div className="stack-item">
+              <div className="stack-item__title">Buyer profile</div>
+              <div className="inline-metrics">
+                <span>{packet.buyerProfileStatus}</span>
+                <span>{packet.trustSummary}</span>
               </div>
             </div>
           </div>
@@ -324,6 +342,7 @@ export default function HorseDetail() {
                 <div className="stack-item__copy">{document.summary}</div>
                 <div className="inline-metrics">
                   <span>Confidence {formatPercent(document.confidence * 100)}</span>
+                  <span>Trust {formatPercent(buildDocumentTrustProfile(document, [horse]).trustScore)}</span>
                   <span>{document.duplicateRisk}</span>
                   <span>{document.uploadedAt}</span>
                 </div>

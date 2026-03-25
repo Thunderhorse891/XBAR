@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
 import { MetricCard, PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
 import { formatCompactCurrency, formatCurrency, formatPercent } from '@/lib/format';
+import { buildCommandCenter, buildFieldTools, buildRevenueBlueprint } from '@/lib/xbarGrowth';
+import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
 
 export default function Dashboard() {
@@ -12,6 +14,7 @@ export default function Dashboard() {
   const salesLeads = useXbarStore((state) => state.salesLeads);
   const portal = useXbarStore((state) => state.portal);
   const ocrBatches = useXbarStore((state) => state.ocrBatches);
+  const ranchAssets = useXbarStore((state) => state.ranchAssets);
   const roleWorkspace = useCurrentRoleWorkspace();
 
   const saleReady = horses.filter((horse) => horse.readiness.score >= 80);
@@ -20,13 +23,38 @@ export default function Dashboard() {
   const medicalWatch = horses.filter((horse) => horse.status === 'Medical Review');
   const totalInsuredValue = horses.reduce((sum, horse) => sum + horse.insuredValue, 0);
   const attentionHorses = horses.filter((horse) => horse.alerts.length > 0 || horse.readiness.score < 75).slice(0, 4);
+  const buyerReadyProfiles = horses.filter((horse) =>
+    buildHorsePacketCompleteness(
+      horse,
+      documents.filter((document) => document.horseId === horse.id),
+      ownershipRecords.find((record) => record.horseId === horse.id),
+    ).buyerSafe,
+  );
+  const commandCenter = buildCommandCenter({
+    horses,
+    documents,
+    ownershipRecords,
+    salesLeads,
+    ranchAssets,
+    weather,
+    ocrBatches,
+  });
+  const fieldTools = buildFieldTools({
+    horses,
+    documents,
+    ownershipRecords,
+    salesLeads,
+    portal,
+    weather,
+  });
+  const revenuePlan = buildRevenueBlueprint(subscription);
 
   return (
     <>
       <PageHeader
         eyebrow="XBAR LLC"
         title="Dashboard"
-        description="A live operating view across portfolio readiness, ownership integrity, document intake, weather exposure, and external access in this browser workspace."
+        description="A premium operating system for records, ownership integrity, buyer trust, and ranch execution across desktop, web, and mobile workflows."
         actions={
           <>
             <Link to="/horses" className="button button--ghost">
@@ -38,6 +66,41 @@ export default function Dashboard() {
           </>
         }
       />
+
+      <section className="command-stage">
+        <div className="command-stage__copy">
+          <div className="eyebrow">Production upgrade</div>
+          <h2 className="command-stage__title">Build the category leader around trust, speed, and premium buyer outcomes.</h2>
+          <p className="command-stage__description">
+            Generic ranch tools stop at chores and logs. XBAR wins by turning paperwork chaos, ownership risk, and sale delays into one premium records and revenue engine.
+          </p>
+          <div className="inline-actions">
+            <Link to="/documents" className="button button--primary button--compact">
+              Clear trust blockers
+            </Link>
+            <Link to="/subscriptions" className="button button--ghost button--compact">
+              Open ARR plan
+            </Link>
+          </div>
+        </div>
+        <div className="command-stage__stats">
+          <div className="command-stage__stat">
+            <span className="command-stage__label">Buyer-safe profiles</span>
+            <strong>{buyerReadyProfiles.length}</strong>
+            <span className="command-stage__detail">Ready to convert with confidence</span>
+          </div>
+          <div className="command-stage__stat">
+            <span className="command-stage__label">$10M ARR path</span>
+            <strong>{Math.round(revenuePlan.targetArr / 1_000_000)}M</strong>
+            <span className="command-stage__detail">{revenuePlan.customersNeededAtCurrentTier} customers at current tier</span>
+          </div>
+          <div className="command-stage__stat">
+            <span className="command-stage__label">Trust queue</span>
+            <strong>{reviewQueue.length}</strong>
+            <span className="command-stage__detail">Docs still blocking premium workflows</span>
+          </div>
+        </div>
+      </section>
 
       <div className="metric-grid">
         <MetricCard label="Horse portfolio" value={`${horses.length}`} detail={`${saleReady.length} with market-ready packets`} />
@@ -62,6 +125,29 @@ export default function Dashboard() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
+        <Panel
+          eyebrow="Command center"
+          title="What the team should do next"
+          description="A premium product needs to behave like an operating system: visible priorities, clear routes, and a fast path from signal to action."
+        >
+          <div className="stack-list">
+            {commandCenter.map((item) => (
+              <Link key={item.id} to={item.href} className="stack-item stack-item--interactive">
+                <div className="stack-item__top">
+                  <div>
+                    <div className="stack-item__title">{item.title}</div>
+                    <div className="stack-item__copy">{item.summary}</div>
+                  </div>
+                  <div className="status-inline">
+                    <Pill tone={item.tone}>{item.value}</Pill>
+                    <Pill tone="slate">{item.module}</Pill>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </Panel>
+
         <Panel
           eyebrow="Portfolio watch"
           title="High-context horse signals"
@@ -91,7 +177,69 @@ export default function Dashboard() {
             ))}
           </div>
         </Panel>
+      </div>
 
+      <div className="dashboard-grid dashboard-grid--secondary">
+        <Panel
+          eyebrow="Mobile and field tools"
+          title="Tools that make the app indispensable in the real world"
+          description="These are the workflows that need to feel faster, cleaner, and more premium than generic ranch software on a phone or desktop."
+        >
+          <div className="stack-list">
+            {fieldTools.map((tool) => (
+              <Link key={tool.id} to={tool.href} className="stack-item stack-item--interactive">
+                <div className="stack-item__top">
+                  <div>
+                    <div className="panel__eyebrow">{tool.eyebrow}</div>
+                    <div className="stack-item__title">{tool.title}</div>
+                    <div className="stack-item__copy">{tool.summary}</div>
+                  </div>
+                  <Pill tone={tool.tone}>{tool.metric}</Pill>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel
+          eyebrow="Product moat"
+          title="Why this can beat generic ranch tools"
+          description="The winning product is not broader first. It is sharper, more trusted, and more revenue-linked first."
+        >
+          <div className="stack-list">
+            <div className="stack-item">
+              <div className="stack-item__top">
+                <div className="stack-item__title">Record trust graph</div>
+                <Pill tone="emerald">Premium wedge</Pill>
+              </div>
+              <div className="stack-item__copy">Every document should create verified, traceable facts that improve buyer trust and ownership integrity.</div>
+            </div>
+            <div className="stack-item">
+              <div className="stack-item__top">
+                <div className="stack-item__title">Buyer deal room</div>
+                <Pill tone="blue">Revenue engine</Pill>
+              </div>
+              <div className="stack-item__copy">Profiles, packet trust, watchlists, and inquiry handoff should feel closer to premium enterprise sales software than a horse listing site.</div>
+            </div>
+            <div className="stack-item">
+              <div className="stack-item__top">
+                <div className="stack-item__title">Mobile field execution</div>
+                <Pill tone="amber">Real-world use</Pill>
+              </div>
+              <div className="stack-item__copy">Teams need to capture updates from the barn, trailer, pasture, and show ground without friction or data loss.</div>
+            </div>
+            <div className="stack-item">
+              <div className="stack-item__top">
+                <div className="stack-item__title">Ownership and compliance radar</div>
+                <Pill tone="rose">Hard to replace</Pill>
+              </div>
+              <div className="stack-item__copy">Transfer status, signatures, due dates, and audit notes are operational pain points most ranch tools barely touch.</div>
+            </div>
+          </div>
+        </Panel>
+      </div>
+
+      <div className="dashboard-grid dashboard-grid--secondary">
         <Panel
           eyebrow="Documents"
           title="Intake queue"
@@ -121,9 +269,7 @@ export default function Dashboard() {
             ))}
           </div>
         </Panel>
-      </div>
 
-      <div className="dashboard-grid dashboard-grid--secondary">
         <Panel
           eyebrow="Ownership"
           title="Integrity and transfer posture"
@@ -151,7 +297,9 @@ export default function Dashboard() {
             })}
           </div>
         </Panel>
+      </div>
 
+      <div className="dashboard-grid dashboard-grid--secondary">
         <Panel
           eyebrow="Environment"
           title="Weather and ranch conditions"
@@ -188,8 +336,8 @@ export default function Dashboard() {
 
         <Panel
           eyebrow="Commercial layer"
-          title="Plan, seats, and external access"
-          description="Subscriptions, owner portal, and listing controls are now treated as product architecture instead of afterthought settings."
+          title="Plan, seats, ARR path, and external access"
+          description="Subscriptions, owner portal, and revenue design are product architecture, not afterthought settings."
         >
           <div className="stack-list">
             <div className="stack-item">
@@ -207,6 +355,17 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="stack-item">
+              <div className="stack-item__title">$10M ARR blueprint</div>
+              <div className="inline-metrics">
+                <span>{formatCompactCurrency(revenuePlan.currentArr)} current ARR equivalent</span>
+                <span>{formatCompactCurrency(revenuePlan.arrGap)} remaining gap</span>
+                <span>{revenuePlan.recommendedMixLabel}</span>
+              </div>
+              <div className="detail-block subtle">
+                Setup fees help cash flow, but subscriptions and premium retention are what get the business to durable eight-figure revenue.
+              </div>
+            </div>
+            <div className="stack-item">
               <div className="stack-item__title">Portal readiness</div>
               <div className="inline-metrics">
                 <span>{portal.activeOwners} active owners</span>
@@ -219,9 +378,7 @@ export default function Dashboard() {
             </div>
           </div>
         </Panel>
-      </div>
 
-      <div className="dashboard-grid dashboard-grid--secondary">
         <Panel eyebrow="Role focus" title={roleWorkspace.label} description={roleWorkspace.summary} meta={<Pill tone="blue">{roleWorkspace.primaryModules.length} priority modules</Pill>}>
           <div className="token-row">
             {roleWorkspace.primaryModules.map((module) => (

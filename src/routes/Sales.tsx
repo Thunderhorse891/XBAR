@@ -1,11 +1,15 @@
+import { Link } from 'react-router-dom';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { formatCompactCurrency } from '@/lib/format';
+import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useXbarStore } from '@/store/useXbarStore';
 
 export default function Sales() {
   const horses = useXbarStore((state) => state.horses);
   const salesLeads = useXbarStore((state) => state.salesLeads);
   const portal = useXbarStore((state) => state.portal);
+  const documents = useXbarStore((state) => state.documents);
+  const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const saleHorses = horses.filter(
     (horse) => horse.sale.askPrice > 0 || horse.sale.listingState === 'Buyer Review' || horse.sale.listingState === 'Market Ready',
   );
@@ -33,27 +37,43 @@ export default function Sales() {
         <Panel eyebrow="Listing portfolio" title="Sale-ready horse presentation" description="Profiles below now behave like premium sales assets, not just bare horse cards.">
           <div className="horse-grid">
             {saleHorses.map((horse) => (
-              <div
-                key={horse.id}
-                className="horse-card"
-              >
+              <div key={horse.id} className="horse-card">
+                {(() => {
+                  const packet = buildHorsePacketCompleteness(
+                    horse,
+                    documents.filter((document) => document.horseId === horse.id),
+                    ownershipRecords.find((record) => record.horseId === horse.id),
+                  );
+
+                  return (
+                    <>
                 <div className="horse-card__media">
                   <img src={horse.profileImage} alt="" className="horse-card__image" />
                   <div className="horse-card__media-copy">
-                    <Pill tone={horse.sale.socialReady ? 'emerald' : 'amber'}>
-                      {horse.sale.socialReady ? 'Packet ready' : 'Packet staged'}
-                    </Pill>
+                    <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
                   </div>
                 </div>
                 <div className="horse-card__body">
                   <div className="horse-card__title">{horse.name}</div>
                   <div className="horse-card__subtitle">{horse.sale.listingState}</div>
                   <p className="horse-card__summary">{horse.summary}</p>
+                  <div className="inline-metrics">
+                    <span>{packet.score}% packet trust</span>
+                    <span>{packet.shareSlug}</span>
+                  </div>
                   <div className="horse-card__footer">
                     <span>{horse.sale.watchlistCount} watchers</span>
                     <span>{formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)}</span>
                   </div>
+                  <div className="inline-actions inline-actions--card">
+                    <Link className="button button--ghost button--compact" to={packet.sharePath}>
+                      Preview buyer profile
+                    </Link>
+                  </div>
                 </div>
+                    </>
+                  );
+                })()}
               </div>
             ))}
           </div>
@@ -134,24 +154,30 @@ export default function Sales() {
           description="A quick selling view of which horses are visually ready for portal, social, and buyer review motion."
         >
           <div className="stack-list">
-            {saleHorses.slice(0, 4).map((horse) => (
-              <div key={horse.id} className="stack-item">
-                <div className="stack-item__top">
-                  <div>
-                    <div className="stack-item__title">{horse.name}</div>
-                    <div className="stack-item__copy">{horse.documents.length} documents · {horse.gallery.length} media assets</div>
+            {saleHorses.slice(0, 4).map((horse) => {
+              const packet = buildHorsePacketCompleteness(
+                horse,
+                documents.filter((document) => document.horseId === horse.id),
+                ownershipRecords.find((record) => record.horseId === horse.id),
+              );
+
+              return (
+                <div key={horse.id} className="stack-item">
+                  <div className="stack-item__top">
+                    <div>
+                      <div className="stack-item__title">{horse.name}</div>
+                      <div className="stack-item__copy">{horse.documents.length} documents · {horse.gallery.length} media assets</div>
+                    </div>
+                    <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
                   </div>
-                  <Pill tone={horse.sale.socialReady ? 'emerald' : 'amber'}>
-                    {horse.sale.socialReady ? 'Share-ready' : 'Needs packet work'}
-                  </Pill>
+                  <div className="inline-metrics">
+                    <span>{horse.sale.watchlistCount} watchers</span>
+                    <span>{horse.sale.inquiryCount} inquiries</span>
+                    <span>{packet.score}% packet trust</span>
+                  </div>
                 </div>
-                <div className="inline-metrics">
-                  <span>{horse.sale.watchlistCount} watchers</span>
-                  <span>{horse.sale.inquiryCount} inquiries</span>
-                  <span>{horse.readiness.packetStatus}</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Panel>
       </div>

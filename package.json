@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test:store": "tsc -p tsconfig.test.json && node --test .codex-test-dist/tests/xbarStoreLogic.test.js",
+    "test:store": "tsc -p tsconfig.test.json && node --test .codex-test-dist/tests/xbarStoreLogic.test.js .codex-test-dist/tests/xbarPhaseTwo.test.js .codex-test-dist/tests/xbarGrowth.test.js",
     "tauri": "tauri"
   },
   "dependencies": {

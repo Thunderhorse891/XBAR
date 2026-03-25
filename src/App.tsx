@@ -1,6 +1,7 @@
 import { HashRouter, Route, Routes } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import Breeding from './routes/Breeding';
+import BuyerProfile from './routes/BuyerProfile';
 import Documents from './routes/Documents';
 import HorseDetail from './routes/HorseDetail';
 import Horses from './routes/Horses';
@@ -18,6 +19,7 @@ export default function App() {
   return (
     <HashRouter>
       <Routes>
+        <Route path="/profiles/:id" element={<BuyerProfile />} />
         <Route path="/" element={<MainLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="horses" element={<Horses />} />

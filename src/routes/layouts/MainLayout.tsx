@@ -191,6 +191,29 @@ export default function MainLayout() {
         <main className="shell-content">
           <Outlet />
         </main>
+
+        <nav className="mobile-dock" aria-label="Mobile quick navigation">
+          <NavLink to="/" end className={({ isActive }) => `mobile-dock__item${isActive ? ' mobile-dock__item--active' : ''}`}>
+            <DashboardIcon className="mobile-dock__icon" />
+            <span>Home</span>
+          </NavLink>
+          <NavLink to="/horses" className={({ isActive }) => `mobile-dock__item${isActive ? ' mobile-dock__item--active' : ''}`}>
+            <HorsesIcon className="mobile-dock__icon" />
+            <span>Horses</span>
+          </NavLink>
+          <NavLink to="/documents" className={({ isActive }) => `mobile-dock__item${isActive ? ' mobile-dock__item--active' : ''}`}>
+            <DocumentsIcon className="mobile-dock__icon" />
+            <span>Docs</span>
+          </NavLink>
+          <NavLink to="/sales" className={({ isActive }) => `mobile-dock__item${isActive ? ' mobile-dock__item--active' : ''}`}>
+            <SalesIcon className="mobile-dock__icon" />
+            <span>Sales</span>
+          </NavLink>
+          <button className="mobile-dock__item mobile-dock__item--action" type="button" onClick={() => navigate('/horses?new=1')}>
+            <AddIcon className="mobile-dock__icon" />
+            <span>New</span>
+          </button>
+        </nav>
       </div>
     </div>
   );
