@@ -93,15 +93,6 @@ export function SalesIcon(props: IconProps) {
   );
 }
 
-export function WeatherIcon(props: IconProps) {
-  return (
-    <IconBase {...props}>
-      <path d="M8 17.5h8.2A3.8 3.8 0 0 0 16 10a5 5 0 0 0-9.7 1.6A3.2 3.2 0 0 0 8 17.5Z" />
-      <path d="m10.5 20 1.5-2.4h-1.8L12 15" />
-    </IconBase>
-  );
-}
-
 export function AssetsIcon(props: IconProps) {
   return (
     <IconBase {...props}>

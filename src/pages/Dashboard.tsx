@@ -19,7 +19,6 @@ export default function Dashboard() {
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
-  const weather = useXbarStore((state) => state.weather);
   const salesLeads = useXbarStore((state) => state.salesLeads);
   const portal = useXbarStore((state) => state.portal);
   const ocrBatches = useXbarStore((state) => state.ocrBatches);
@@ -28,7 +27,7 @@ export default function Dashboard() {
   const [menuState, setMenuState] = useState<DashboardMenuState | null>(null);
 
   const saleReady = horses.filter((horse) => horse.readiness.score >= 80);
-  const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Extracting');
+  const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched' || document.state === 'Extracting');
   const ownershipAttention = ownershipRecords.filter((record) => record.transferStatus !== 'Clear');
   const medicalWatch = horses.filter((horse) => horse.status === 'Medical Review');
   const totalInsuredValue = horses.reduce((sum, horse) => sum + horse.insuredValue, 0);
@@ -47,7 +46,6 @@ export default function Dashboard() {
     ownershipRecords,
     salesLeads,
     ranchAssets,
-    weather,
     ocrBatches,
   });
   const fieldTools = buildFieldTools({
@@ -56,7 +54,6 @@ export default function Dashboard() {
     ownershipRecords,
     salesLeads,
     portal,
-    weather,
   }).slice(0, 4);
 
   const menuCommand = menuState?.type === 'command' ? commandCenter.find((item) => item.id === menuState.id) ?? fieldTools.find((item) => item.id === menuState.id) : undefined;
@@ -81,8 +78,8 @@ export default function Dashboard() {
             onSelect: () => navigate(`/horses/${menuHorse.id}`),
           },
           {
-            id: 'preview-profile',
-            label: 'Preview buyer profile',
+            id: 'open-profile',
+            label: 'Open buyer profile',
             onSelect: () => navigate(`/profiles/${menuHorse.id}`),
           },
           {
@@ -132,7 +129,7 @@ export default function Dashboard() {
       <PageHeader
         eyebrow="Ops center"
         title="Control deck"
-        description="Queue, transfers, buyers, weather."
+        description="Queue, transfers, buyers, assets."
         actions={
           <>
             <Link to="/horses" className="button button--ghost button--compact">
@@ -403,36 +400,6 @@ export default function Dashboard() {
           ) : (
             <EmptyState compact title="No buyer leads yet" description="Create a lead to start outreach." />
           )}
-        </Panel>
-
-        <Panel eyebrow="Weather" title="Field conditions">
-          <div className="weather-shell">
-            <div className="weather-shell__headline">
-              <div>
-                <div className="weather-shell__temp">{weather.currentTempF}F</div>
-                <div className="weather-shell__copy">{weather.condition}</div>
-              </div>
-              <Pill tone={weather.riskLevel === 'Action' ? 'rose' : weather.riskLevel === 'Watch' ? 'amber' : 'emerald'}>
-                {weather.riskLevel}
-              </Pill>
-            </div>
-            <div className="key-grid">
-              <div className="key-grid__item">
-                <div className="key-grid__label">Wind</div>
-                <div className="key-grid__value">{weather.windMph} mph</div>
-              </div>
-              <div className="key-grid__item">
-                <div className="key-grid__label">Humidity</div>
-                <div className="key-grid__value">{weather.humidity}%</div>
-              </div>
-            </div>
-            <div className="detail-block">
-              <strong>Pasture:</strong> {weather.pastureImpact}
-            </div>
-            <div className="detail-block">
-              <strong>Transport:</strong> {weather.transportImpact}
-            </div>
-          </div>
         </Panel>
       </div>
 

@@ -2,7 +2,6 @@ import { MetricCard, PageHeader, Panel, Pill, ProgressBar } from '@/components/a
 import { formatCurrency, formatDateLabel } from '@/lib/format';
 import { buildRevenueBlueprint } from '@/lib/xbarGrowth';
 import { subscriptionTierConfig } from '@/lib/xbarRuntime';
-import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import type { SubscriptionTier } from '@/types/xbar';
 
@@ -10,20 +9,18 @@ const tiers: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Ente
 
 export default function Subscriptions() {
   const subscription = useXbarStore((state) => state.subscription);
-  const changeSubscriptionTier = useXbarStore((state) => state.changeSubscriptionTier);
-  const pushToast = useUiStore((state) => state.pushToast);
   const revenuePlan = buildRevenueBlueprint(subscription);
 
   return (
     <>
       <PageHeader
         eyebrow="Subscriptions"
-        title="Plan and feature gating"
-        description="Plans, limits, revenue."
+        title="Contract and packaging"
+        description="Usage, limits, revenue."
       />
 
       <div className="callout callout--warning">
-        <strong>Billing preview:</strong> Stripe is not connected.
+        <strong>Billing is offline:</strong> This workspace does not process payments or plan changes yet.
       </div>
 
       <div className="metric-grid">
@@ -60,7 +57,7 @@ export default function Subscriptions() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Usage" title="Seats, processing, storage, portal">
+        <Panel eyebrow="Usage" title="Seats, storage, portal">
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__top">
@@ -71,10 +68,10 @@ export default function Subscriptions() {
             </div>
             <div className="stack-item">
               <div className="stack-item__top">
-                <div className="stack-item__title">OCR pages</div>
-                <strong>{subscription.usage.ocrProcessed}/{subscription.usage.ocrLimit}</strong>
+                <div className="stack-item__title">Storage</div>
+                <strong>{subscription.usage.storageUsedGb}/{subscription.usage.storageLimitGb} GB</strong>
               </div>
-              <ProgressBar value={(subscription.usage.ocrProcessed / subscription.usage.ocrLimit) * 100} tone="amber" />
+              <ProgressBar value={(subscription.usage.storageUsedGb / subscription.usage.storageLimitGb) * 100} tone="amber" />
             </div>
             <div className="stack-item">
               <div className="stack-item__top">
@@ -121,7 +118,7 @@ export default function Subscriptions() {
         </Panel>
       </div>
 
-      <Panel eyebrow="Tier design" title="Product packaging" description="Preview tiers.">
+      <Panel eyebrow="Tier design" title="Product packaging" description="Read-only tiers.">
         <div className="detail-grid">
           {tiers.map((tier) => {
             const config = subscriptionTierConfig[tier];
@@ -135,7 +132,7 @@ export default function Subscriptions() {
                   </Pill>
                 </div>
                 <div className="stack-item__copy">
-                  {formatCurrency(config.monthlyRate)}/mo · {config.limits.seatLimit} seats · {config.limits.ocrLimit} processing pages · {config.limits.storageLimitGb} GB storage
+                  {formatCurrency(config.monthlyRate)}/mo · {config.limits.seatLimit} seats · {config.limits.storageLimitGb} GB storage · {config.limits.portalSeatLimit} portal seats
                 </div>
                 <div className="token-row">
                   {config.featureFlags.map((flag) => (
@@ -144,24 +141,7 @@ export default function Subscriptions() {
                     </Pill>
                   ))}
                 </div>
-                {!current ? (
-                  <div className="inline-actions">
-                    <button
-                      className="button button--ghost button--compact"
-                      type="button"
-                      onClick={() => {
-                        changeSubscriptionTier(tier);
-                        pushToast({
-                          title: 'Plan preview updated',
-                          message: `${tier} is now active in this local workspace preview.`,
-                          tone: 'success',
-                        });
-                      }}
-                    >
-                      Preview {tier}
-                    </button>
-                  </div>
-                ) : null}
+                <div className="stack-item__copy">{current ? 'This is the active contract on this workspace.' : 'Package reference only.'}</div>
               </div>
             );
           })}

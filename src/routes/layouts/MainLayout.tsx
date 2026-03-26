@@ -17,7 +17,6 @@ import {
   SearchIcon,
   SettingsIcon,
   SubscriptionIcon,
-  WeatherIcon,
 } from '@/components/icons';
 import { useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
 import type { UserRole } from '@/types/xbar';
@@ -42,7 +41,6 @@ const programs: NavItem[] = [
 ];
 
 const platform: NavItem[] = [
-  { label: 'Weather', path: '/weather', icon: WeatherIcon },
   { label: 'Ranch Toolkit', path: '/assets', icon: AssetsIcon },
   { label: 'Subscriptions', path: '/subscriptions', icon: SubscriptionIcon },
   { label: 'Owner Portal', path: '/portal', icon: PortalIcon },
@@ -57,7 +55,6 @@ const routeLabels: Record<string, string> = {
   '/medical': 'Medical',
   '/breeding': 'Breeding',
   '/sales': 'Sales',
-  '/weather': 'Weather',
   '/assets': 'Ranch Toolkit',
   '/subscriptions': 'Subscriptions',
   '/portal': 'Owner Portal',
@@ -90,7 +87,7 @@ export default function MainLayout() {
   const documents = useXbarStore((state) => state.documents);
   const roleWorkspace = useCurrentRoleWorkspace();
 
-  const pendingReview = documents.filter((document) => document.state === 'Needs Review').length;
+  const pendingReview = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched').length;
   const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse Profile' : routeLabels[location.pathname] ?? 'Dashboard';
 
   const handleSearch = (event: KeyboardEvent<HTMLInputElement>) => {

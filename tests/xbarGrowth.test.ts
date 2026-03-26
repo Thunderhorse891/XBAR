@@ -10,7 +10,6 @@ import type {
   RanchAsset,
   SalesLead,
   SubscriptionProfile,
-  WeatherSnapshot,
 } from '../src/types/xbar.js';
 
 const horse: HorseRecord = {
@@ -171,21 +170,6 @@ const ranchAssets: RanchAsset[] = [
   },
 ];
 
-const weather: WeatherSnapshot = {
-  ranchName: 'XBAR Main Ranch',
-  locale: 'Oklahoma',
-  updatedAt: '2026-03-25 09:00',
-  currentTempF: 48,
-  condition: 'Wind front',
-  windMph: 24,
-  humidity: 55,
-  riskLevel: 'Watch',
-  pastureImpact: 'Rotate turnout',
-  transportImpact: 'Delay trailer moves',
-  breedingNote: 'Indoor only',
-  alerts: [],
-};
-
 const ocrBatches: OCRBatch[] = [
   {
     id: 'batch-1',
@@ -205,8 +189,6 @@ const portal: PortalSnapshot = {
   activeOwners: 4,
   savedHorses: 5,
   openInquiries: 2,
-  googleAuthReady: false,
-  facebookAuthReady: false,
 };
 
 const subscription: SubscriptionProfile = {
@@ -216,7 +198,7 @@ const subscription: SubscriptionProfile = {
   billingState: 'Active',
   ownerPortalEnabled: true,
   brandedListings: true,
-  featureFlags: ['OCR review queue'],
+  featureFlags: ['Manual document review'],
   usage: {
     seatsUsed: 5,
     seatLimit: 8,
@@ -243,7 +225,6 @@ test('buildCommandCenter prioritizes trust and revenue actions', () => {
     ownershipRecords,
     salesLeads,
     ranchAssets,
-    weather,
     ocrBatches,
   });
 
@@ -258,10 +239,9 @@ test('buildFieldTools highlights mobile capture and buyer sharing workflows', ()
     ownershipRecords,
     salesLeads,
     portal,
-    weather,
   });
 
-  assert.equal(cards.length, 6);
+  assert.equal(cards.length, 5);
   assert.ok(cards.some((card) => card.href === '/documents?upload=1'));
   assert.ok(cards.some((card) => card.href === '/portal'));
 });

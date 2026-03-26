@@ -51,37 +51,33 @@ export default function OwnerPortal() {
     <>
       <PageHeader
         eyebrow="Owner portal"
-        title="Owner and buyer access"
+        title="Shared links and owner access"
         description="Saved horses, share links, inquiries."
       />
-
-      <div className="callout callout--warning">
-        <strong>Preview only:</strong> External login is not connected.
-      </div>
 
       <div className="metric-grid">
         <MetricCard label="Invited owners" value={`${portal.invitedOwners}`} detail={`${portal.activeOwners} already active in the current workspace`} />
         <MetricCard label="Saved horses" value={`${portal.savedHorses}`} detail="Behavior signal available to the sales and ownership layers" tone="blue" />
         <MetricCard label="Open inquiries" value={`${portal.openInquiries}`} detail="Buyer and owner requests waiting on response" tone="amber" />
-        <MetricCard label="Live buyer links" value={`${liveProfiles.length}`} detail="Saved horses currently clear enough for buyer-facing profile previews" tone="emerald" />
+        <MetricCard label="Live buyer links" value={`${liveProfiles.length}`} detail="Saved horses clear enough for a shareable buyer link" tone="emerald" />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Auth providers" title="Google and Facebook status" description="Connector status.">
+        <Panel eyebrow="Share workflow" title="How access works" description="Shared links.">
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__top">
-                <div className="stack-item__title">Google login</div>
-                <Pill tone={portal.googleAuthReady ? 'emerald' : 'amber'}>{portal.googleAuthReady ? 'Connected' : 'Preview only'}</Pill>
+                <div className="stack-item__title">Owner access</div>
+                <Pill tone="blue">Shared links</Pill>
               </div>
-              <div className="stack-item__copy">Login flow not wired yet.</div>
+              <div className="stack-item__copy">This build uses direct share links instead of external sign-in providers.</div>
             </div>
             <div className="stack-item">
               <div className="stack-item__top">
-                <div className="stack-item__title">Facebook login</div>
-                <Pill tone={portal.facebookAuthReady ? 'emerald' : 'amber'}>{portal.facebookAuthReady ? 'Connected' : 'Preview only'}</Pill>
+                <div className="stack-item__title">Inquiry routing</div>
+                <Pill tone="amber">{portal.openInquiries} open</Pill>
               </div>
-              <div className="stack-item__copy">Meta access not wired yet.</div>
+              <div className="stack-item__copy">Buyer and owner questions still route through the sales desk and workspace team.</div>
             </div>
           </div>
         </Panel>
@@ -116,7 +112,7 @@ export default function OwnerPortal() {
                     </div>
                     <div className="inline-actions">
                       <Link className="button button--ghost button--compact" to={packet.sharePath} onClick={(event) => event.stopPropagation()}>
-                        Preview share link
+                        Open share link
                       </Link>
                     </div>
                   </div>
@@ -124,7 +120,7 @@ export default function OwnerPortal() {
               })}
             </div>
           ) : (
-            <EmptyState compact title="No saved horses to share" description="Save a horse to preview the share link here." />
+            <EmptyState compact title="No saved horses to share" description="Save a horse to manage share links here." />
           )}
         </Panel>
       </div>

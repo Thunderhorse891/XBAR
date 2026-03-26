@@ -40,8 +40,8 @@ export const subscriptionTierConfig: Record<
       'Role-aware dashboards',
       'Owner portal access',
       'Branded sale packets',
-      'OCR review queue',
-      'Weather operations layer',
+      'Manual document review',
+      'Operations workspace',
     ],
     limits: {
       seatLimit: 8,
@@ -55,7 +55,7 @@ export const subscriptionTierConfig: Record<
     ownerPortalEnabled: true,
     brandedListings: true,
     featureFlags: [
-      'Expanded OCR throughput',
+      'Expanded document intake',
       'Branded sale packets',
       'Role-aware dashboards',
       'Owner portal access',
@@ -75,7 +75,7 @@ export const subscriptionTierConfig: Record<
     brandedListings: true,
     featureFlags: [
       'Custom auth providers',
-      'Expanded OCR throughput',
+      'Expanded document intake',
       'Dedicated portal branding',
       'Priority operations support',
       'Custom integrations',
@@ -122,10 +122,6 @@ function includesNormalized(haystack: string, needle: string) {
 export function estimateStorageGb(files: File[]) {
   const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
   return normalizeStorage(totalBytes / GIGABYTE);
-}
-
-export function estimateOcrPages(files: File[]) {
-  return files.reduce((sum, file) => sum + Math.max(1, Math.round(file.size / 240000)), 0);
 }
 
 export function guessDocumentType(fileName: string): DocumentType {
@@ -180,20 +176,20 @@ export async function readFileAsDataUrl(file: File) {
   });
 }
 
-async function readFileTextPreview(file: File) {
+async function readFileTextSnippet(file: File) {
   const fileIsTextLike =
     file.type.startsWith('text/') ||
     /\.(txt|csv|json|md)$/i.test(file.name);
 
   if (!fileIsTextLike) {
-    return `${file.name} uploaded through the local intake engine. External OCR is not connected yet, so image and PDF extraction is limited in this public preview.`;
+    return '';
   }
 
   try {
     const text = await file.text();
-    return text.slice(0, 320) || `${file.name} uploaded through the local intake engine.`;
+    return text.slice(0, 320);
   } catch {
-    return `${file.name} uploaded through the local intake engine.`;
+    return '';
   }
 }
 
@@ -320,7 +316,7 @@ export async function buildDocumentRecord(params: {
   existingDocuments: DocumentRecord[];
 }) {
   const { file, uploadedBy, source, selectedHorse, horses, existingDocuments } = params;
-  const previewText = await readFileTextPreview(file);
+  const previewText = await readFileTextSnippet(file);
   const inferredType = guessDocumentType(file.name);
   const extractedEntities = extractDocumentEntities({
     fileName: file.name,
@@ -347,7 +343,7 @@ export async function buildDocumentRecord(params: {
     horseName: extractedEntities.horseName ?? matchedHorse?.name,
     registrationNumber: extractedEntities.registrationNumber ?? matchedHorse?.registrationNumber,
     ownerName: extractedEntities.ownerName ?? matchedHorse?.owner,
-    examDate: extractedEntities.examDate ?? (inferredType === 'Vet Record' || inferredType === 'Coggins' ? todayStamp() : undefined),
+    examDate: extractedEntities.examDate,
     veterinarian: extractedEntities.veterinarian,
     transferStatus: extractedEntities.transferStatus,
   };
@@ -366,16 +362,12 @@ export async function buildDocumentRecord(params: {
   let state: DocumentRecord['state'] = 'Needs Review';
   if (duplicateRisk === 'Possible Duplicate') {
     state = 'Needs Review';
-  } else if (confidence >= 0.94 && matchedHorse) {
-    state = 'Ready';
   } else if (confidence >= 0.8 && matchedHorse) {
     state = 'Matched';
-  } else if (matchedHorse) {
-    state = 'Extracting';
   }
 
   const matchReason = candidateMatches[0]?.reason?.toLowerCase() ?? 'the intake engine found a weak candidate match';
-  const trustLabel = `${Math.round(confidence * 100)}% trust`;
+  const trustLabel = `${Math.round(confidence * 100)}% match`;
 
   return {
     id: createId('doc'),
@@ -390,8 +382,8 @@ export async function buildDocumentRecord(params: {
     duplicateRisk,
     extractedTextPreview: previewText,
     summary: matchedHorse
-      ? `${inferredType} staged for ${matchedHorse.name} with ${trustLabel} based on ${matchReason}.`
-      : `${inferredType} intake needs review before it can be attached to a horse profile.`,
+      ? `${inferredType} matched to ${matchedHorse.name} with ${trustLabel} based on ${matchReason}.`
+      : `${inferredType} added to intake and needs manual assignment before it can be attached to a horse profile.`,
     entities,
   } satisfies DocumentRecord;
 }

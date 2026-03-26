@@ -228,30 +228,6 @@ export interface OwnershipRecord {
   auditTrail: string[];
 }
 
-export interface WeatherAlert {
-  id: string;
-  title: string;
-  detail: string;
-  severity: Severity;
-  impact: string;
-  effectiveAt: string;
-}
-
-export interface WeatherSnapshot {
-  ranchName: string;
-  locale: string;
-  updatedAt: string;
-  currentTempF: number;
-  condition: string;
-  windMph: number;
-  humidity: number;
-  riskLevel: 'Stable' | 'Watch' | 'Action';
-  pastureImpact: string;
-  transportImpact: string;
-  breedingNote: string;
-  alerts: WeatherAlert[];
-}
-
 export interface RanchAsset {
   id: string;
   name: string;
@@ -314,6 +290,4 @@ export interface PortalSnapshot {
   activeOwners: number;
   savedHorses: number;
   openInquiries: number;
-  googleAuthReady: boolean;
-  facebookAuthReady: boolean;
 }

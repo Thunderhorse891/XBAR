@@ -9,18 +9,15 @@ import {
   roleSeed,
   salesLeadsSeed,
   subscriptionSeed,
-  weatherSeed,
 } from '@/data/xbarPlatform';
 import {
   buildDocumentRecord,
   createId,
   derivePortalSnapshot,
-  estimateOcrPages,
   estimateStorageGb,
   guessGalleryKind,
   nowStamp,
   readFileAsDataUrl,
-  subscriptionTierConfig,
   todayStamp,
 } from '@/lib/xbarRuntime';
 import { workspaceStateStorage } from '@/lib/workspaceStorage';
@@ -40,7 +37,6 @@ import type {
   OwnershipStake,
   PortalSnapshot,
   SalesLead,
-  SubscriptionTier,
   UserRole,
 } from '@/types/xbar';
 import type {
@@ -49,7 +45,6 @@ import type {
   RanchAsset,
   RoleWorkspace,
   SubscriptionProfile,
-  WeatherSnapshot,
 } from '@/types/xbar';
 import type { AssetPatch, LeadInput, LocationPatch, MediaUploadInput, NewHorseInput, OCRIntakeInput } from '@/store/xbarStoreLogic';
 
@@ -67,7 +62,6 @@ type XbarStore = {
   ownershipRecords: OwnershipRecord[];
   ranchAssets: RanchAsset[];
   subscription: SubscriptionProfile;
-  weather: WeatherSnapshot;
   roleWorkspaces: RoleWorkspace[];
   salesLeads: SalesLead[];
   portal: PortalSnapshot;
@@ -95,8 +89,6 @@ type XbarStore = {
   ) => ActionResult;
   addOwnershipAuditEntry: (recordId: string, entry: string) => ActionResult;
   addOwnershipStake: (horseId: string, stake: Omit<OwnershipStake, 'id'>) => ActionResult;
-  changeSubscriptionTier: (tier: SubscriptionTier) => void;
-  refreshWeatherSnapshot: () => ActionResult;
 };
 
 const initialState = {
@@ -107,7 +99,6 @@ const initialState = {
   ownershipRecords: ownershipSeed,
   ranchAssets: ranchAssetsSeed,
   subscription: subscriptionSeed,
-  weather: weatherSeed,
   roleWorkspaces: roleSeed,
   salesLeads: salesLeadsSeed,
   portal: portalSeed,
@@ -299,16 +290,6 @@ function createTimelineEvent(params: {
   } as const;
 }
 
-function touchWeatherSnapshot(current: WeatherSnapshot): WeatherSnapshot {
-  return {
-    ...current,
-    updatedAt: nowStamp(),
-    currentTempF: Math.max(28, current.currentTempF + (Math.random() > 0.5 ? 1 : -1)),
-    windMph: Math.max(0, current.windMph + (Math.random() > 0.5 ? 1 : -1)),
-    humidity: Math.min(100, Math.max(10, current.humidity + (Math.random() > 0.5 ? 2 : -2))),
-  };
-}
-
 export const useXbarStore = create<XbarStore>()(
   persist(
     (set, get) => ({
@@ -368,14 +349,8 @@ export const useXbarStore = create<XbarStore>()(
 
         const state = get();
         const storageIncrease = estimateStorageGb(fileList);
-        const pageIncrease = estimateOcrPages(fileList);
-
         if (state.subscription.usage.storageUsedGb + storageIncrease > state.subscription.usage.storageLimitGb) {
           return { ok: false, message: 'Storage limit reached for the current plan. Upgrade before adding more files.' };
-        }
-
-        if (state.subscription.usage.ocrProcessed + pageIncrease > state.subscription.usage.ocrLimit) {
-          return { ok: false, message: 'OCR page limit reached for the current plan. Upgrade or archive older intake first.' };
         }
 
         try {
@@ -404,9 +379,9 @@ export const useXbarStore = create<XbarStore>()(
             source,
             fileCount: documents.length,
             processedCount: documents.length,
-            needsReviewCount: documents.filter((document) => document.state === 'Needs Review' || document.state === 'Extracting').length,
-            matchedCount: documents.filter((document) => document.state === 'Matched' || document.state === 'Ready').length,
-            state: documents.some((document) => document.state === 'Needs Review' || document.state === 'Extracting')
+            needsReviewCount: documents.filter((document) => document.state === 'Needs Review').length,
+            matchedCount: documents.filter((document) => document.state === 'Matched').length,
+            state: documents.some((document) => document.state === 'Needs Review')
               ? 'Reviewing'
               : 'Completed',
           };
@@ -415,7 +390,7 @@ export const useXbarStore = create<XbarStore>()(
             const allDocuments = [...documents, ...current.documents];
             const nextHorses = current.horses.map((horse) => {
               const matchedDocuments = documents.filter(
-                (document) => document.horseId === horse.id && (document.state === 'Matched' || document.state === 'Ready'),
+                (document) => document.horseId === horse.id && document.state === 'Matched',
               );
               return matchedDocuments.reduce(promoteDocument, horse);
             });
@@ -429,7 +404,6 @@ export const useXbarStore = create<XbarStore>()(
                 usage: {
                   ...current.subscription.usage,
                   storageUsedGb: normalizeUsage(current.subscription.usage.storageUsedGb + storageIncrease),
-                  ocrProcessed: current.subscription.usage.ocrProcessed + pageIncrease,
                 },
               },
             };
@@ -437,12 +411,12 @@ export const useXbarStore = create<XbarStore>()(
 
           return {
             ok: true,
-            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the OCR queue.`,
+            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.`,
             id: batch.id,
           };
         } catch (error) {
-          console.error('OCR intake failed', error);
-          return { ok: false, message: 'OCR intake failed. Check the selected files and try again.' };
+          console.error('Document intake failed', error);
+          return { ok: false, message: 'Document intake failed. Check the selected files and try again.' };
         }
       },
       reviewDocument: (documentId, horseId) => {
@@ -937,34 +911,6 @@ export const useXbarStore = create<XbarStore>()(
 
         return { ok: true, message: `${nextStake.name} added to the ownership split.`, id: nextStake.id };
       },
-      changeSubscriptionTier: (tier) =>
-        set((state) => {
-          const config = subscriptionTierConfig[tier];
-          return {
-            subscription: {
-              ...state.subscription,
-              tier,
-              monthlyRate: config.monthlyRate,
-              ownerPortalEnabled: config.ownerPortalEnabled,
-              brandedListings: config.brandedListings,
-              featureFlags: config.featureFlags,
-              billingState: tier === state.subscription.tier ? state.subscription.billingState : 'Upgrade Review',
-              usage: {
-                ...state.subscription.usage,
-                seatLimit: config.limits.seatLimit,
-                ocrLimit: config.limits.ocrLimit,
-                storageLimitGb: config.limits.storageLimitGb,
-                portalSeatLimit: config.limits.portalSeatLimit,
-              },
-            },
-          };
-        }),
-      refreshWeatherSnapshot: () => {
-        set((state) => ({
-          weather: touchWeatherSnapshot(state.weather),
-        }));
-        return { ok: true, message: 'Weather brief refreshed from local preview data.' };
-      },
     }),
     {
       name: 'xbar-live-workspace',
@@ -977,7 +923,6 @@ export const useXbarStore = create<XbarStore>()(
         ownershipRecords: state.ownershipRecords,
         ranchAssets: state.ranchAssets,
         subscription: state.subscription,
-        weather: state.weather,
         roleWorkspaces: state.roleWorkspaces,
         salesLeads: state.salesLeads,
         portal: state.portal,

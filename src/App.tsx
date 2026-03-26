@@ -16,7 +16,6 @@ import RanchAssets from './routes/RanchAssets';
 import Sales from './routes/Sales';
 import Settings from './routes/Settings';
 import Subscriptions from './routes/Subscriptions';
-import Weather from './routes/Weather';
 
 export default function App() {
   return (
@@ -34,7 +33,6 @@ export default function App() {
             <Route path="medical" element={<Medical />} />
             <Route path="breeding" element={<Breeding />} />
             <Route path="sales" element={<Sales />} />
-            <Route path="weather" element={<Weather />} />
             <Route path="assets" element={<RanchAssets />} />
             <Route path="subscriptions" element={<Subscriptions />} />
             <Route path="portal" element={<OwnerPortal />} />

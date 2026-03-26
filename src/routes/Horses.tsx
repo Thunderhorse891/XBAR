@@ -105,8 +105,8 @@ export default function Horses() {
           onSelect: () => navigate(`/horses/${menuHorse.id}`),
         },
         {
-          id: 'preview-profile',
-          label: 'Preview buyer profile',
+          id: 'open-profile',
+          label: 'Open buyer profile',
           onSelect: () => navigate(`/profiles/${menuHorse.id}`),
         },
         {

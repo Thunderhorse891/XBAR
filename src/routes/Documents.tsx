@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { EmptyState } from '@/components/EmptyState';
-import { formatDateTimeLabel, formatPercent } from '@/lib/format';
+import { formatDateTimeLabel } from '@/lib/format';
 import { buildDocumentTrustProfile } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -33,8 +33,7 @@ export default function Documents() {
   const [reviewAssignments, setReviewAssignments] = useState<Record<string, string>>({});
   const [menuState, setMenuState] = useState<{ documentId: string; x: number; y: number } | null>(null);
 
-  const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Extracting');
-  const matched = documents.filter((document) => document.state === 'Matched' || document.state === 'Ready');
+  const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched' || document.state === 'Extracting');
   const duplicates = documents.filter((document) => document.duplicateRisk === 'Possible Duplicate');
   const buyerSafeDocuments = documents.filter((document) => buildDocumentTrustProfile(document, horses).readyForProfile);
   const uploadOpen = searchParams.get('upload') === '1';
@@ -103,7 +102,7 @@ export default function Documents() {
     });
 
     pushToast({
-      title: result.ok ? 'OCR intake updated' : 'OCR intake blocked',
+      title: result.ok ? 'Document intake updated' : 'Document intake blocked',
       message: result.message,
       tone: result.ok ? 'success' : 'error',
     });
@@ -120,25 +119,25 @@ export default function Documents() {
       <PageHeader
         eyebrow="Documents"
         title="Document intake and review"
-        description="Intake, review, trust."
+        description="Intake, assignment, records."
       />
 
-      <div className="callout callout--warning">
-        <strong>OCR preview:</strong> Provider not connected.
+      <div className="callout">
+        <strong>Manual review:</strong> New uploads are assigned during intake review. No automatic extraction is running.
       </div>
 
       <div className="metric-grid">
         <MetricCard label="Document vault" value={`${documents.length}`} detail="Registration, medical, transfer, insurance, and media records" />
-        <MetricCard label="Needs review" value={`${reviewQueue.length}`} detail="Human review queue before facts become trusted profile data" tone="amber" />
+        <MetricCard label="Needs review" value={`${reviewQueue.length}`} detail="Files waiting on manual assignment" tone="amber" />
         <MetricCard label="Buyer-safe docs" value={`${buyerSafeDocuments.length}`} detail="Approved documents strong enough for buyer-facing packet surfaces" tone="emerald" />
-        <MetricCard label="Processing usage" value={`${subscription.usage.ocrProcessed}/${subscription.usage.ocrLimit}`} detail="Local document pages processed against the current plan" tone="blue" />
+        <MetricCard label="Storage used" value={`${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB`} detail="Local file storage against the current plan" tone="blue" />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel
           eyebrow="Live intake"
           title="Upload files"
-          description="Send files into the queue."
+          description="Add files and review them manually."
           action={
             <Pill tone={uploadOpen ? 'blue' : 'slate'}>
               {uploadOpen ? 'Top-bar launch' : `${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB used`}
@@ -171,7 +170,7 @@ export default function Documents() {
             <label className="field-stack">
               <span className="field-label">Attach to horse</span>
               <select className="field-input" value={horseId} onChange={(event) => setHorseId(event.target.value)}>
-                <option value="">Auto-match from file names</option>
+                <option value="">Try local file-name match</option>
                 {horses.map((horse) => (
                   <option key={horse.id} value={horse.id}>
                     {horse.name}
@@ -196,15 +195,15 @@ export default function Documents() {
           </div>
           <div className="inline-actions">
             <button className="button button--primary" type="button" onClick={handleIntake} disabled={isSubmitting || !uploadedBy.trim() || !files.length}>
-              {isSubmitting ? 'Starting intake...' : 'Start intake'}
+              {isSubmitting ? 'Adding documents...' : 'Add documents'}
             </button>
             <div className="detail-block subtle">
-              {files.length ? `${files.length} file${files.length === 1 ? '' : 's'} selected for intake.` : 'Choose files to create a live OCR batch.'}
+              {files.length ? `${files.length} file${files.length === 1 ? '' : 's'} selected for intake.` : 'Choose files to add to the queue.'}
             </div>
           </div>
         </Panel>
 
-        <Panel eyebrow="Batch intake" title="Queue states" description="Recent batches.">
+        <Panel eyebrow="Batch intake" title="Queue states" description="Recent intake activity.">
           {ocrBatches.length ? (
             <div className="stack-list">
               {ocrBatches.map((batch) => (
@@ -221,9 +220,9 @@ export default function Documents() {
                     </Pill>
                   </div>
                   <div className="inline-metrics">
-                    <span>{batch.processedCount}/{batch.fileCount} processed</span>
+                    <span>{batch.processedCount}/{batch.fileCount} logged</span>
                     <span>{batch.matchedCount} matched</span>
-                    <span>{batch.needsReviewCount} queued for review</span>
+                    <span>{batch.needsReviewCount} waiting on review</span>
                   </div>
                 </div>
               ))}
@@ -245,9 +244,8 @@ export default function Documents() {
               <thead>
                 <tr>
                   <th>Document</th>
-                  <th>Suggested horse</th>
-                  <th>Trust</th>
-                  <th>Review signal</th>
+                  <th>Current horse</th>
+                  <th>Status</th>
                   <th>Assign horse</th>
                   <th>Action</th>
                 </tr>
@@ -255,7 +253,7 @@ export default function Documents() {
               <tbody>
                 {reviewQueue.map((document) => {
                   const trust = buildDocumentTrustProfile(document, horses);
-                  const topCandidate = trust.candidateMatches[0];
+                  const selectedHorse = horses.find((horse) => horse.id === (reviewAssignments[document.id] ?? document.horseId));
                   return (
                     <tr
                       key={document.id}
@@ -273,20 +271,14 @@ export default function Documents() {
                       </td>
                       <td>
                         <div className="table-cell__stack">
-                          <span>{document.entities.horseName ?? topCandidate?.horseName ?? 'Unresolved'}</span>
-                          <span>{topCandidate ? `${topCandidate.confidence}% · ${topCandidate.reason}` : 'No strong match candidate yet'}</span>
+                          <span>{selectedHorse?.name ?? document.entities.horseName ?? 'Unassigned'}</span>
+                          <span>{document.source}</span>
                         </div>
                       </td>
                       <td>
                         <div className="table-cell__stack">
-                          <Pill tone={trust.tone}>{formatPercent(trust.trustScore)}</Pill>
-                          <span>{trust.entityCount}/{trust.totalEntities} entities</span>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="table-cell__stack">
-                          <span>{document.state}</span>
-                          <span>{trust.reviewReasons[0] ?? 'Cleared for next review step'}</span>
+                          <Pill tone={document.state === 'Ready' ? 'emerald' : document.state === 'Matched' ? 'blue' : trust.tone}>{document.state}</Pill>
+                          <span>{document.duplicateRisk === 'Possible Duplicate' ? 'Duplicate review needed' : 'Manual assignment required'}</span>
                         </div>
                       </td>
                       <td>
@@ -350,50 +342,6 @@ export default function Documents() {
           <EmptyState
             title="Review queue is clear"
             description="Nothing is waiting on review."
-          />
-        )}
-      </Panel>
-
-      <Panel eyebrow="Extracted data" title="Entity extraction preview" description="Structured fields.">
-        {documents.length ? (
-          <div className="detail-grid">
-            {documents.slice(0, 6).map((document) => {
-              const trust = buildDocumentTrustProfile(document, horses);
-              return (
-                <div key={document.id} className="stack-item">
-                  <div className="stack-item__top">
-                    <div className="stack-item__title">{document.title}</div>
-                    <div className="status-inline">
-                      <Pill tone={trust.tone}>{formatPercent(trust.trustScore)} trust</Pill>
-                      <Pill tone={document.duplicateRisk === 'Possible Duplicate' ? 'rose' : document.state === 'Ready' ? 'emerald' : 'blue'}>
-                        {document.type}
-                      </Pill>
-                    </div>
-                  </div>
-                  <div className="stack-item__copy">{document.summary}</div>
-                  <div className="inline-metrics">
-                    <span>{trust.entityCount}/{trust.totalEntities} entities</span>
-                    <span>{trust.candidateMatches[0]?.horseName ?? 'No match candidate'}</span>
-                    <span>{matched.includes(document) ? 'Attached to packet flow' : 'Still in trust workbench'}</span>
-                  </div>
-                  <div className="token-row">
-                    {Object.entries(document.entities)
-                      .filter(([, value]) => Boolean(value))
-                      .map(([label, value]) => (
-                        <Pill key={label} tone="blue">
-                          {label}: {value}
-                        </Pill>
-                      ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <EmptyState
-            compact
-            title="No extracted entities yet"
-            description="Upload documents to generate entity previews."
           />
         )}
       </Panel>

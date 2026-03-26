@@ -114,10 +114,10 @@ export function buildDocumentTrustProfile(document: DocumentRecord, horses: Hors
 
   const reviewReasons: string[] = [];
   if (document.state === 'Needs Review') reviewReasons.push('Human review still required before packet use');
-  if (document.state === 'Extracting') reviewReasons.push('Entity extraction is still incomplete');
+  if (document.state === 'Extracting') reviewReasons.push('Document review is still incomplete');
   if (document.duplicateRisk !== 'Low') reviewReasons.push(describeDuplicateRisk(document));
   if (entityCount < 2) reviewReasons.push('Entity coverage is thin for a buyer-trust surface');
-  if (document.confidence < 0.9) reviewReasons.push('OCR confidence is still below the preferred buyer threshold');
+  if (document.confidence < 0.9) reviewReasons.push('Document confidence is still below the preferred buyer threshold');
   if (!document.horseId) reviewReasons.push('The document is not attached to a horse profile yet');
 
   const duplicatePenalty = document.duplicateRisk === 'Possible Duplicate' ? 18 : document.duplicateRisk === 'Review' ? 8 : 0;
@@ -308,11 +308,11 @@ export function buildHorsePacketCompleteness(
             : 'blue',
     buyerProfileNote:
       buyerProfileStatus === 'Live'
-        ? 'This profile is safe to present as a buyer-facing preview.'
+        ? 'This profile is safe to present as a buyer-safe share link.'
         : buyerProfileStatus === 'Needs Review'
           ? 'The buyer-facing profile is useful, but still carries unresolved trust checks.'
           : buyerProfileStatus === 'Blocked'
-            ? 'Internal preview only until the trust blockers clear.'
+            ? 'Keep this link internal until the trust blockers clear.'
             : 'Share link is staged, but no live buyer motion is active yet.',
     shareSlug,
     sharePath,

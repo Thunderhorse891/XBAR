@@ -49,7 +49,7 @@ export default function BuyerProfile() {
             <img src={horse.profileImage} alt="" className="buyer-hero__image" />
           </div>
           <div className="buyer-hero__copy">
-            <div className="eyebrow">Buyer profile preview</div>
+            <div className="eyebrow">Buyer profile</div>
             <h1 className="page-title">{horse.name}</h1>
             <p className="page-description">{horse.summary}</p>
             <div className="status-inline">
@@ -101,7 +101,7 @@ export default function BuyerProfile() {
             </div>
             <div className="inline-actions">
               <div className="detail-block subtle">
-                Preview only. Inquiry capture still routes through Sales.
+                Buyer questions still route through the sales desk.
               </div>
             </div>
           </Panel>
@@ -149,7 +149,7 @@ export default function BuyerProfile() {
             </div>
           </Panel>
 
-          <Panel eyebrow="Extracted highlights" title="OCR facts">
+          <Panel eyebrow="Record highlights" title="Profile facts">
             <div className="token-row">
               {horse.ocrFacts.length ? (
                 horse.ocrFacts.map((fact) => (
@@ -158,7 +158,7 @@ export default function BuyerProfile() {
                   </Pill>
                 ))
               ) : (
-                <Pill tone="slate">No extracted facts promoted yet</Pill>
+                <Pill tone="slate">No record facts promoted yet</Pill>
               )}
             </div>
           </Panel>

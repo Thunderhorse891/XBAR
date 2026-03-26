@@ -899,7 +899,6 @@ a:focus-visible {
 .horse-card__top,
 .horse-card__footer,
 .horse-card__readiness-head,
-.weather-shell__headline,
 .inline-metrics,
 .key-value,
 .status-inline {
@@ -943,22 +942,6 @@ a:focus-visible {
 
 .detail-block.subtle {
   background: #f7f9fb;
-}
-
-.weather-shell {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.weather-shell__temp {
-  font-size: 1.8rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.weather-shell__copy {
-  color: var(--muted);
 }
 
 .key-grid {

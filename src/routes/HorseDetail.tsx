@@ -199,7 +199,7 @@ export default function HorseDetail() {
         actions={
           <>
             <Link className="button button--primary button--compact" to={packet.sharePath}>
-              Preview buyer profile
+              Open buyer profile
             </Link>
             <button className="button button--ghost button--compact" type="button" onClick={handleSavedHorseToggle}>
               {saved ? 'Saved in portal' : 'Save to portal'}

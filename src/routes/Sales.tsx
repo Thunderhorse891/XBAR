@@ -20,6 +20,18 @@ export default function Sales() {
   const saleHorses = horses.filter(
     (horse) => horse.sale.askPrice > 0 || horse.sale.listingState === 'Buyer Review' || horse.sale.listingState === 'Market Ready',
   );
+  const packetByHorseId = Object.fromEntries(
+    saleHorses.map((horse) => [
+      horse.id,
+      buildHorsePacketCompleteness(
+        horse,
+        documents.filter((document) => document.horseId === horse.id),
+        ownershipRecords.find((record) => record.horseId === horse.id),
+      ),
+    ]),
+  );
+  const liveShareCount = saleHorses.filter((horse) => packetByHorseId[horse.id]?.buyerSafe).length;
+  const followUpsDue = salesLeads.filter((lead) => lead.nextFollowUp && lead.nextFollowUp <= new Date().toISOString().slice(0, 10)).length;
   const [selectedLeadId, setSelectedLeadId] = useState(salesLeads[0]?.id ?? '');
   const selectedLead = salesLeads.find((lead) => lead.id === selectedLeadId) ?? salesLeads[0];
   const [leadStage, setLeadStage] = useState(selectedLead?.stage ?? 'New');
@@ -63,12 +75,12 @@ export default function Sales() {
             label: 'Open horse profile',
             onSelect: () => navigate(`/horses/${menuHorse.id}`),
           },
-          {
-            id: 'preview-profile',
-            label: 'Preview buyer profile',
-            onSelect: () => navigate(`/profiles/${menuHorse.id}`),
-          },
-        ]
+        {
+          id: 'open-profile',
+          label: 'Open buyer profile',
+          onSelect: () => navigate(`/profiles/${menuHorse.id}`),
+        },
+      ]
       : [];
 
   return (
@@ -101,11 +113,7 @@ export default function Sales() {
                   }}
                 >
                   {(() => {
-                    const packet = buildHorsePacketCompleteness(
-                      horse,
-                      documents.filter((document) => document.horseId === horse.id),
-                      ownershipRecords.find((record) => record.horseId === horse.id),
-                    );
+                    const packet = packetByHorseId[horse.id];
 
                     return (
                       <>
@@ -129,7 +137,7 @@ export default function Sales() {
                           </div>
                           <div className="inline-actions inline-actions--card">
                             <Link className="button button--ghost button--compact" to={packet.sharePath} onClick={(event) => event.stopPropagation()}>
-                              Preview buyer profile
+                              Open buyer profile
                             </Link>
                           </div>
                         </div>
@@ -273,28 +281,33 @@ export default function Sales() {
           )}
         </Panel>
 
-        <Panel eyebrow="Connectors" title="Social and portal handoff" description="Connector status.">
+        <Panel eyebrow="Handoff" title="Buyer handoff readiness" description="Live motion.">
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__top">
                 <div>
-                  <div className="stack-item__title">Facebook listing handoff</div>
-                  <div className="stack-item__copy">Meta publishing is not connected yet.</div>
+                  <div className="stack-item__title">Live buyer links</div>
+                  <div className="stack-item__copy">Sale horses that are clean enough to open as shareable profiles.</div>
                 </div>
-                <Pill tone={portal.facebookAuthReady ? 'emerald' : 'amber'}>
-                  {portal.facebookAuthReady ? 'Connected' : 'Preview only'}
-                </Pill>
+                <Pill tone={liveShareCount ? 'emerald' : 'amber'}>{liveShareCount}</Pill>
               </div>
             </div>
             <div className="stack-item">
               <div className="stack-item__top">
                 <div>
-                  <div className="stack-item__title">Google and owner portal access</div>
-                  <div className="stack-item__copy">External login is not connected.</div>
+                  <div className="stack-item__title">Saved-horse demand</div>
+                  <div className="stack-item__copy">Watchlist pressure coming from the owner and buyer access layer.</div>
                 </div>
-                <Pill tone={portal.googleAuthReady ? 'emerald' : 'amber'}>
-                  {portal.googleAuthReady ? 'Connected' : 'Preview only'}
-                </Pill>
+                <Pill tone={portal.savedHorses ? 'blue' : 'slate'}>{portal.savedHorses}</Pill>
+              </div>
+            </div>
+            <div className="stack-item">
+              <div className="stack-item__top">
+                <div>
+                  <div className="stack-item__title">Follow-ups due</div>
+                  <div className="stack-item__copy">Leads with a next-touch date at or before today.</div>
+                </div>
+                <Pill tone={followUpsDue ? 'amber' : 'emerald'}>{followUpsDue}</Pill>
               </div>
             </div>
           </div>

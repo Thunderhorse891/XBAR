@@ -10,7 +10,6 @@ import type {
   SalesLead,
   SubscriptionProfile,
   SubscriptionTier,
-  WeatherSnapshot,
 } from '../types/xbar.js';
 
 type Tone = 'blue' | 'slate' | 'emerald' | 'amber' | 'rose';
@@ -76,12 +75,11 @@ export function buildCommandCenter(params: {
   ownershipRecords: OwnershipRecord[];
   salesLeads: SalesLead[];
   ranchAssets: RanchAsset[];
-  weather: WeatherSnapshot;
   ocrBatches: OCRBatch[];
 }) {
-  const { horses, documents, ownershipRecords, salesLeads, ranchAssets, weather, ocrBatches } = params;
+  const { horses, documents, ownershipRecords, salesLeads, ranchAssets, ocrBatches } = params;
 
-  const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Extracting');
+  const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched' || document.state === 'Extracting');
   const blockedProfiles = horses.filter((horse) => {
     const packet = buildHorsePacketCompleteness(
       horse,
@@ -97,9 +95,9 @@ export function buildCommandCenter(params: {
 
   const items: CommandCenterItem[] = [
     {
-      id: 'ocr-review',
-      title: `Clear ${reviewQueue.length} OCR review items`,
-      summary: 'Push unresolved intake into trusted records.',
+      id: 'document-review',
+      title: `Clear ${reviewQueue.length} document review items`,
+      summary: 'Push unresolved intake into live horse records.',
       module: 'Documents',
       href: '/documents',
       tone: reviewQueue.length > 4 ? 'rose' : 'amber',
@@ -133,17 +131,6 @@ export function buildCommandCenter(params: {
       value: activeOffers.length ? `${activeOffers.length} hot leads` : 'Pipeline cool',
     },
     {
-      id: 'field-risk',
-      title: weather.riskLevel === 'Stable' ? 'Field conditions stable' : 'Field operations need adjustment',
-      summary: weather.riskLevel === 'Stable'
-        ? 'No urgent weather-driven operational changes are needed right now.'
-        : 'Adjust turnout, transport, and breeding timing now.',
-      module: 'Weather',
-      href: '/weather',
-      tone: weather.riskLevel === 'Action' ? 'rose' : weather.riskLevel === 'Watch' ? 'amber' : 'emerald',
-      value: weather.riskLevel,
-    },
-    {
       id: 'ops-hardware',
       title: `${serviceRisk.length} ops tools need service`,
       summary: 'Scanner and field tools are affecting throughput.',
@@ -155,7 +142,7 @@ export function buildCommandCenter(params: {
     {
       id: 'throughput',
       title: `${slowBatches.length} intake batches still moving`,
-      summary: 'Keep OCR throughput fast and clean.',
+      summary: 'Keep document intake moving cleanly.',
       module: 'Documents',
       href: '/documents',
       tone: slowBatches.length > 1 ? 'blue' : 'slate',
@@ -177,18 +164,17 @@ export function buildFieldTools(params: {
   ownershipRecords: OwnershipRecord[];
   salesLeads: SalesLead[];
   portal: PortalSnapshot;
-  weather: WeatherSnapshot;
 }) {
-  const { horses, documents, ownershipRecords, salesLeads, portal, weather } = params;
+  const { horses, documents, ownershipRecords, salesLeads, portal } = params;
   const buyerReady = buyerReadyProfiles(horses, documents, ownershipRecords).length;
-  const unresolvedDocs = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Extracting').length;
+  const unresolvedDocs = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched' || document.state === 'Extracting').length;
 
   return [
     {
       id: 'scan-intake',
       eyebrow: 'Mobile capture',
-      title: 'Scan to trusted record',
-      summary: 'Turn a phone scan into a trusted record.',
+      title: 'Add documents from the field',
+      summary: 'Send files into the manual review queue.',
       metric: `${unresolvedDocs} docs still in review`,
       href: '/documents?upload=1',
       tone: unresolvedDocs ? 'amber' : 'emerald',
@@ -205,20 +191,11 @@ export function buildFieldTools(params: {
     {
       id: 'buyer-share',
       eyebrow: 'Revenue tool',
-      title: 'Share buyer-safe profiles instantly',
-      summary: 'Send premium buyer links fast.',
+      title: 'Open buyer links instantly',
+      summary: 'Send shareable horse links fast.',
       metric: `${buyerReady} buyer-safe profiles`,
       href: '/portal',
       tone: buyerReady ? 'emerald' : 'amber',
-    },
-    {
-      id: 'weather-dispatch',
-      eyebrow: 'Ranch control',
-      title: 'Run weather-driven dispatch',
-      summary: 'Dispatch the ranch from live weather posture.',
-      metric: `${weather.riskLevel} field posture`,
-      href: '/weather',
-      tone: weather.riskLevel === 'Action' ? 'rose' : weather.riskLevel === 'Watch' ? 'amber' : 'blue',
     },
     {
       id: 'lead-response',
@@ -232,8 +209,8 @@ export function buildFieldTools(params: {
     {
       id: 'owner-experience',
       eyebrow: 'Subscriber value',
-      title: 'Give owners a premium portal, not a login screen',
-      summary: 'Make the portal feel high-touch and branded.',
+      title: 'Keep shared links polished and fast',
+      summary: 'Make the share experience feel high-touch and branded.',
       metric: `${portal.activeOwners}/${portal.invitedOwners} active owners`,
       href: '/portal',
       tone: portal.activeOwners ? 'emerald' : 'slate',

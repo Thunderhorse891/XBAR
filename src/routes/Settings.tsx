@@ -36,11 +36,11 @@ export default function Settings() {
 
         <Panel eyebrow="Connection status" title="What is local or not connected">
           <div className="bullet-list">
-            <div className="bullet-list__item">Google and Facebook auth are not connected yet.</div>
-            <div className="bullet-list__item">External OCR is not connected yet.</div>
-            <div className="bullet-list__item">External user sessions are still local-only.</div>
-            <div className="bullet-list__item">Subscription tiers and limits are in the product, but billing is not connected yet.</div>
-            <div className="bullet-list__item">This preview is browser-local. It is not a shared backend yet.</div>
+            <div className="bullet-list__item">This workspace runs locally in the browser.</div>
+            <div className="bullet-list__item">Shared links work, but external sign-in is not wired yet.</div>
+            <div className="bullet-list__item">Documents are reviewed manually in this build.</div>
+            <div className="bullet-list__item">Billing and payments are still handled outside the app.</div>
+            <div className="bullet-list__item">A shared backend is not connected yet.</div>
           </div>
         </Panel>
       </div>

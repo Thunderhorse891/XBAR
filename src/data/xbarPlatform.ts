@@ -5,7 +5,6 @@ import {
   RoleWorkspace,
   SalesLead,
   SubscriptionProfile,
-  WeatherSnapshot,
 } from '@/types/xbar';
 
 export const ownershipSeed: OwnershipRecord[] = [
@@ -27,7 +26,7 @@ export const ownershipSeed: OwnershipRecord[] = [
     pendingDocuments: ['Owner signature page', 'Transport approval memo'],
     complianceDeadline: '2026-03-25',
     confidence: 72,
-    auditTrail: ['Travel packet uploaded via owner portal', 'Signature mismatch flagged by OCR review queue'],
+    auditTrail: ['Travel packet uploaded via shared link', 'Signature mismatch flagged during manual review'],
   },
   {
     id: 'ownership-dolly',
@@ -50,38 +49,6 @@ export const ownershipSeed: OwnershipRecord[] = [
     auditTrail: ['Legacy owner archive synced to portal'],
   },
 ];
-
-export const weatherSeed: WeatherSnapshot = {
-  ranchName: 'XBAR Main Ranch',
-  locale: 'Oklahoma performance yard',
-  updatedAt: '2026-03-24 06:45',
-  currentTempF: 47,
-  condition: 'Cold front with rising wind',
-  windMph: 26,
-  humidity: 62,
-  riskLevel: 'Watch',
-  pastureImpact: 'Rotate turnout away from low ground after 2PM. South pasture will be slick after the front passes.',
-  transportImpact: 'Delay nonessential trailer movements until wind falls below 20 mph this evening.',
-  breedingNote: 'Collection windows should stay indoors today. Shift mare walk-ins to tomorrow morning.',
-  alerts: [
-    {
-      id: 'weather-1',
-      title: 'Wind advisory',
-      detail: 'Gusts above 35 mph expected between 2PM and 7PM.',
-      severity: 'medium',
-      impact: 'Transport and turnout planning',
-      effectiveAt: '2026-03-24 14:00',
-    },
-    {
-      id: 'weather-2',
-      title: 'Temperature drop',
-      detail: 'Overnight low will fall below 34F after rain.',
-      severity: 'low',
-      impact: 'Broodmare and young stock shelter checks',
-      effectiveAt: '2026-03-25 01:00',
-    },
-  ],
-};
 
 export const ranchAssetsSeed: RanchAsset[] = [
   {
@@ -119,14 +86,14 @@ export const ranchAssetsSeed: RanchAsset[] = [
   },
   {
     id: 'asset-4',
-    name: 'Owner portal document scanner',
+    name: 'Records room document scanner',
     category: 'Equipment',
     status: 'In Service',
     condition: 'Attention Required',
     assignedTo: 'Ops Desk',
     location: 'Records Room',
     nextService: '2026-03-26',
-    notes: 'OCR intake hardware is dropping page contrast on larger batches.',
+    notes: 'Scanner hardware is dropping page contrast on larger batches.',
   },
   {
     id: 'asset-5',
@@ -156,15 +123,15 @@ export const subscriptionSeed: SubscriptionProfile = {
   tier: 'Professional',
   monthlyRate: 1290,
   renewalDate: '2026-04-12',
-  billingState: 'Upgrade Review',
+  billingState: 'Trial',
   ownerPortalEnabled: true,
   brandedListings: true,
   featureFlags: [
     'Role-aware dashboards',
     'Owner portal access',
     'Branded sale packets',
-    'OCR review queue',
-    'Weather operations layer',
+    'Manual document intake',
+    'Ranch asset operations',
   ],
   usage: {
     seatsUsed: 5,
@@ -182,15 +149,15 @@ export const roleSeed: RoleWorkspace[] = [
   {
     role: 'Admin',
     label: 'Admin view',
-    summary: 'Full portfolio control across records, documents, subscription posture, and external access.',
+    summary: 'Full portfolio control across records, documents, subscription posture, and shared links.',
     primaryModules: ['Ownership', 'Documents', 'Subscriptions', 'Settings'],
-    permissions: ['Full record write access', 'Billing and plan controls', 'Portal visibility approvals'],
+    permissions: ['Full record write access', 'Contract visibility', 'Portal visibility approvals'],
   },
   {
     role: 'Ranch Manager',
     label: 'Ranch manager view',
-    summary: 'Operational visibility across horses, weather, ranch assets, and readiness blockers.',
-    primaryModules: ['Dashboard', 'Horses', 'Weather', 'Ranch Assets'],
+    summary: 'Operational visibility across horses, ranch assets, and readiness blockers.',
+    primaryModules: ['Dashboard', 'Horses', 'Ranch Assets'],
     permissions: ['Horse updates', 'Asset assignments', 'Medical watch visibility'],
   },
   {
@@ -204,7 +171,7 @@ export const roleSeed: RoleWorkspace[] = [
     role: 'Medical Lead',
     label: 'Medical lead view',
     summary: 'Exam cadence, treatment history, kit readiness, and document review tied to care plans.',
-    primaryModules: ['Medical', 'Documents', 'Weather'],
+    primaryModules: ['Medical', 'Documents'],
     permissions: ['Vet note review', 'Care protocol updates', 'Travel hold approvals'],
   },
   {
@@ -254,6 +221,4 @@ export const portalSeed: PortalSnapshot = {
   activeOwners: 3,
   savedHorses: 7,
   openInquiries: 5,
-  googleAuthReady: false,
-  facebookAuthReady: false,
 };
