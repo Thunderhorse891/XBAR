@@ -36,7 +36,7 @@ export const ownershipSeed: OwnershipRecord[] = [
     pendingDocuments: ['AQHA transfer clearance'],
     complianceDeadline: '2026-03-29',
     confidence: 81,
-    auditTrail: ['Buyer packet updated 2026-03-20', 'AQHA packet still processing'],
+    auditTrail: ['Buyer packet updated 2026-03-20', 'AQHA packet still under review'],
   },
   {
     id: 'ownership-shadow',
@@ -123,12 +123,12 @@ export const subscriptionSeed: SubscriptionProfile = {
   tier: 'Professional',
   monthlyRate: 1290,
   renewalDate: '2026-04-12',
-  billingState: 'Trial',
+  billingState: 'Manual Billing',
   ownerPortalEnabled: true,
   brandedListings: true,
   featureFlags: [
     'Role-aware dashboards',
-    'Owner portal access',
+    'Shared access links',
     'Branded sale packets',
     'Manual document intake',
     'Ranch asset operations',
@@ -136,8 +136,8 @@ export const subscriptionSeed: SubscriptionProfile = {
   usage: {
     seatsUsed: 5,
     seatLimit: 8,
-    ocrProcessed: 912,
-    ocrLimit: 1800,
+    documentsProcessed: 912,
+    documentLimit: 1800,
     storageUsedGb: 82,
     storageLimitGb: 200,
     portalSeatsUsed: 3,
@@ -162,9 +162,9 @@ export const roleSeed: RoleWorkspace[] = [
   },
   {
     role: 'Owner',
-    label: 'Owner portal view',
+    label: 'Shared access view',
     summary: 'Read-only visibility into owned horses, documents, sale packets, and legacy records.',
-    primaryModules: ['Owner Portal', 'Documents', 'Ownership'],
+    primaryModules: ['Shared Access', 'Documents', 'Ownership'],
     permissions: ['Packet viewing', 'Owner document upload', 'Saved listing access'],
   },
   {
@@ -178,7 +178,7 @@ export const roleSeed: RoleWorkspace[] = [
     role: 'Sales Lead',
     label: 'Sales lead view',
     summary: 'Listing quality, buyer confidence, social packet readiness, and transfer blockers.',
-    primaryModules: ['Sales', 'Horses', 'Owner Portal'],
+    primaryModules: ['Sales', 'Horses', 'Shared Access'],
     permissions: ['Listing packet edits', 'Lead tracking', 'Shareable presentation controls'],
   },
 ];

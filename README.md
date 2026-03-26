@@ -1,6 +1,6 @@
 # XBAR Horse Management App
 
-Desktop horse ranch management application built with Tauri + React + TypeScript.
+Horse records and ranch operations workspace built with React, TypeScript, Zustand, and Tauri.
 
 ## Getting Started
 
@@ -38,16 +38,21 @@ Builds automatically trigger on every push to `main` and produce a Windows insta
 ## Development
 
 ```powershell
-npm install
-npm run dev         # Start Vite dev server
-npm run tauri dev   # Launch the Tauri desktop app
+node "C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js" install
+node "C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js" run dev
+node "C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js" run tauri dev
 ```
 
 ## Tech Stack
 
-- **Frontend:** React 18, TypeScript, Tailwind CSS, Zustand, TanStack Table
+- **Frontend:** React 18, TypeScript, Zustand, React Router
 - **Desktop:** Tauri v1 (Rust)
-- **Database:** Local in-app data store
+- **Persistence:** IndexedDB primary, localStorage fallback, local JSON backup/restore
 - **Build:** Vite 5
 
-This app is offline-first. No cloud required.
+## Current Product State
+
+- Local-first workspace with IndexedDB persistence and manual backup import/export
+- Manual document intake and review queue
+- Shared-link access for buyer and owner views
+- Billing, external auth, and shared backend services are not connected yet

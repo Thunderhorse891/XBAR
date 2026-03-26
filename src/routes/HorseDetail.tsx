@@ -22,7 +22,7 @@ export default function HorseDetail() {
   const savedHorseIds = useXbarStore((state) => state.savedHorseIds);
   const toggleSavedHorse = useXbarStore((state) => state.toggleSavedHorse);
   const uploadHorseMedia = useXbarStore((state) => state.uploadHorseMedia);
-  const createOCRIntake = useXbarStore((state) => state.createOCRIntake);
+  const createDocumentIntake = useXbarStore((state) => state.createDocumentIntake);
   const addHorseNote = useXbarStore((state) => state.addHorseNote);
   const updateHorseLocation = useXbarStore((state) => state.updateHorseLocation);
   const createSalesLead = useXbarStore((state) => state.createSalesLead);
@@ -103,7 +103,7 @@ export default function HorseDetail() {
     }
 
     setIsDocumentUploading(true);
-    const result = await createOCRIntake({
+    const result = await createDocumentIntake({
       files: docFiles,
       horseId: horse.id,
       source: docSource,
@@ -414,9 +414,9 @@ export default function HorseDetail() {
                       <div className="stack-item__title">{document.title}</div>
                       <div className="stack-item__copy">{document.type} · {document.source}</div>
                     </div>
-                    <Pill tone={document.state === 'Needs Review' ? 'rose' : document.state === 'Extracting' ? 'amber' : 'emerald'}>
-                      {document.state}
-                    </Pill>
+                      <Pill tone={document.state === 'Needs Review' ? 'rose' : 'emerald'}>
+                        {document.state}
+                      </Pill>
                   </div>
                   <div className="stack-item__copy">{document.summary}</div>
                   <div className="inline-metrics">
@@ -430,9 +430,9 @@ export default function HorseDetail() {
             ) : (
               <EmptyState compact title="No documents linked" description="Upload documents to build packet trust for this horse." />
             )}
-            {!!horse.ocrFacts.length && (
+            {!!horse.documentFacts.length && (
               <div className="token-row">
-                {horse.ocrFacts.map((fact) => (
+                {horse.documentFacts.map((fact) => (
                   <Pill key={fact.id} tone="blue">
                     {fact.label}: {fact.value}
                   </Pill>

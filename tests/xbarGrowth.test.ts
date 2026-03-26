@@ -4,7 +4,7 @@ import { buildCommandCenter, buildFieldTools, buildRevenueBlueprint } from '../s
 import type {
   DocumentRecord,
   HorseRecord,
-  OCRBatch,
+  IntakeBatch,
   OwnershipRecord,
   PortalSnapshot,
   RanchAsset,
@@ -62,7 +62,7 @@ const horse: HorseRecord = {
   medicalTimeline: [],
   breedingTimeline: [],
   activity: [],
-  ocrFacts: [],
+  documentFacts: [],
   alerts: [],
   notes: [],
 };
@@ -170,7 +170,7 @@ const ranchAssets: RanchAsset[] = [
   },
 ];
 
-const ocrBatches: OCRBatch[] = [
+const intakeBatches: IntakeBatch[] = [
   {
     id: 'batch-1',
     label: 'AQHA intake',
@@ -202,8 +202,8 @@ const subscription: SubscriptionProfile = {
   usage: {
     seatsUsed: 5,
     seatLimit: 8,
-    ocrProcessed: 200,
-    ocrLimit: 1800,
+    documentsProcessed: 200,
+    documentLimit: 1800,
     storageUsedGb: 12,
     storageLimitGb: 200,
     portalSeatsUsed: 4,
@@ -225,7 +225,7 @@ test('buildCommandCenter prioritizes trust and revenue actions', () => {
     ownershipRecords,
     salesLeads,
     ranchAssets,
-    ocrBatches,
+    intakeBatches,
   });
 
   assert.ok(items.length > 0);

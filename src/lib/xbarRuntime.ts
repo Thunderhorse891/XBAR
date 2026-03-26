@@ -17,7 +17,7 @@ const GIGABYTE = 1024 * 1024 * 1024;
 export const subscriptionTierConfig: Record<
   SubscriptionTier,
   Pick<SubscriptionProfile, 'monthlyRate' | 'ownerPortalEnabled' | 'brandedListings' | 'featureFlags'> & {
-    limits: Pick<SubscriptionProfile['usage'], 'seatLimit' | 'ocrLimit' | 'storageLimitGb' | 'portalSeatLimit'>;
+    limits: Pick<SubscriptionProfile['usage'], 'seatLimit' | 'documentLimit' | 'storageLimitGb' | 'portalSeatLimit'>;
   }
 > = {
   Starter: {
@@ -27,7 +27,7 @@ export const subscriptionTierConfig: Record<
     featureFlags: ['Horse records', 'Basic listings', 'Local document vault'],
     limits: {
       seatLimit: 2,
-      ocrLimit: 250,
+      documentLimit: 250,
       storageLimitGb: 25,
       portalSeatLimit: 0,
     },
@@ -38,14 +38,14 @@ export const subscriptionTierConfig: Record<
     brandedListings: true,
     featureFlags: [
       'Role-aware dashboards',
-      'Owner portal access',
+      'Shared access links',
       'Branded sale packets',
       'Manual document review',
       'Operations workspace',
     ],
     limits: {
       seatLimit: 8,
-      ocrLimit: 1800,
+      documentLimit: 1800,
       storageLimitGb: 200,
       portalSeatLimit: 10,
     },
@@ -58,13 +58,13 @@ export const subscriptionTierConfig: Record<
       'Expanded document intake',
       'Branded sale packets',
       'Role-aware dashboards',
-      'Owner portal access',
+      'Shared access links',
       'Ranch asset operations',
       'Lead intelligence',
     ],
     limits: {
       seatLimit: 20,
-      ocrLimit: 6000,
+      documentLimit: 6000,
       storageLimitGb: 750,
       portalSeatLimit: 40,
     },
@@ -74,16 +74,16 @@ export const subscriptionTierConfig: Record<
     ownerPortalEnabled: true,
     brandedListings: true,
     featureFlags: [
-      'Custom auth providers',
+      'Custom shared access',
       'Expanded document intake',
-      'Dedicated portal branding',
+      'Dedicated access branding',
       'Priority operations support',
       'Custom integrations',
       'Advanced audit controls',
     ],
     limits: {
       seatLimit: 60,
-      ocrLimit: 20000,
+      documentLimit: 20000,
       storageLimitGb: 2500,
       portalSeatLimit: 200,
     },

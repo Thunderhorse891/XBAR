@@ -66,7 +66,6 @@ function stateBonus(state: ProcessingState) {
   if (state === 'Ready') return 14;
   if (state === 'Matched') return 10;
   if (state === 'Archived') return 8;
-  if (state === 'Extracting') return 5;
   return 0;
 }
 
@@ -114,7 +113,6 @@ export function buildDocumentTrustProfile(document: DocumentRecord, horses: Hors
 
   const reviewReasons: string[] = [];
   if (document.state === 'Needs Review') reviewReasons.push('Human review still required before packet use');
-  if (document.state === 'Extracting') reviewReasons.push('Document review is still incomplete');
   if (document.duplicateRisk !== 'Low') reviewReasons.push(describeDuplicateRisk(document));
   if (entityCount < 2) reviewReasons.push('Entity coverage is thin for a buyer-trust surface');
   if (document.confidence < 0.9) reviewReasons.push('Document confidence is still below the preferred buyer threshold');

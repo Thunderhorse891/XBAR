@@ -67,7 +67,7 @@ function createHorse(overrides: Partial<HorseRecord> & Pick<HorseRecord, 'id' | 
     medicalTimeline: [],
     breedingTimeline: [],
     activity: [],
-    ocrFacts: [],
+    documentFacts: [],
     alerts: [],
     notes: [],
     ...rest,
@@ -197,7 +197,7 @@ const documentsSeed: DocumentRecord[] = [
     title: 'Dolly AQHA transfer packet',
     type: 'Transfer Packet',
     horseId: 'horse-dolly',
-    state: 'Extracting',
+    state: 'Needs Review',
     confidence: 0.87,
     entities: {
       horseName: 'RT BLUE DOLLY 1321',

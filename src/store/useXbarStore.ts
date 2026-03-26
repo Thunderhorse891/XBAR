@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { documentsSeed, ocrBatchesSeed } from '@/data/xbarDocuments';
+import { documentsSeed, intakeBatchesSeed } from '@/data/xbarDocuments';
 import { horsesSeed } from '@/data/xbarHorses';
 import {
   ownershipSeed,
@@ -31,9 +31,10 @@ import {
   validateNewHorseInput,
 } from '@/store/xbarStoreLogic';
 import type {
+  DocumentFact,
   HorseNote,
   HorseRecord,
-  OCRBatch,
+  IntakeBatch,
   OwnershipStake,
   PortalSnapshot,
   SalesLead,
@@ -46,7 +47,7 @@ import type {
   RoleWorkspace,
   SubscriptionProfile,
 } from '@/types/xbar';
-import type { AssetPatch, LeadInput, LocationPatch, MediaUploadInput, NewHorseInput, OCRIntakeInput } from '@/store/xbarStoreLogic';
+import type { AssetPatch, DocumentIntakeInput, LeadInput, LocationPatch, MediaUploadInput, NewHorseInput } from '@/store/xbarStoreLogic';
 
 type ActionResult = {
   ok: boolean;
@@ -58,7 +59,7 @@ type XbarStore = {
   currentRole: UserRole;
   horses: HorseRecord[];
   documents: DocumentRecord[];
-  ocrBatches: OCRBatch[];
+  intakeBatches: IntakeBatch[];
   ownershipRecords: OwnershipRecord[];
   ranchAssets: RanchAsset[];
   subscription: SubscriptionProfile;
@@ -69,7 +70,7 @@ type XbarStore = {
   setCurrentRole: (role: UserRole) => void;
   toggleSavedHorse: (horseId: string) => void;
   addHorse: (input: NewHorseInput) => ActionResult;
-  createOCRIntake: (input: OCRIntakeInput) => Promise<ActionResult>;
+  createDocumentIntake: (input: DocumentIntakeInput) => Promise<ActionResult>;
   reviewDocument: (documentId: string, horseId?: string) => ActionResult;
   discardDocument: (documentId: string) => ActionResult;
   uploadHorseMedia: (input: MediaUploadInput) => Promise<ActionResult>;
@@ -89,13 +90,39 @@ type XbarStore = {
   ) => ActionResult;
   addOwnershipAuditEntry: (recordId: string, entry: string) => ActionResult;
   addOwnershipStake: (horseId: string, stake: Omit<OwnershipStake, 'id'>) => ActionResult;
+  exportWorkspaceBackup: () => WorkspaceBackup;
+  importWorkspaceBackup: (backup: unknown) => ActionResult;
 };
+
+type PersistedXbarState = Pick<
+  XbarStore,
+  | 'currentRole'
+  | 'horses'
+  | 'documents'
+  | 'intakeBatches'
+  | 'ownershipRecords'
+  | 'ranchAssets'
+  | 'subscription'
+  | 'roleWorkspaces'
+  | 'salesLeads'
+  | 'portal'
+  | 'savedHorseIds'
+>;
+
+type WorkspaceBackup = {
+  app: 'XBAR';
+  version: number;
+  exportedAt: string;
+  workspace: PersistedXbarState;
+};
+
+const WORKSPACE_SCHEMA_VERSION = 2;
 
 const initialState = {
   currentRole: 'Admin' as UserRole,
   horses: horsesSeed,
   documents: documentsSeed,
-  ocrBatches: ocrBatchesSeed,
+  intakeBatches: intakeBatchesSeed,
   ownershipRecords: ownershipSeed,
   ranchAssets: ranchAssetsSeed,
   subscription: subscriptionSeed,
@@ -120,6 +147,112 @@ function syncDerivedValues(state: Pick<XbarStore, 'horses' | 'salesLeads' | 'sav
   return {
     horses,
     portal: derivePortalSnapshot(state.portal, state.savedHorseIds, state.salesLeads),
+  };
+}
+
+function normalizeDocumentState(value: unknown): DocumentRecord['state'] {
+  if (value === 'Queued' || value === 'Needs Review' || value === 'Matched' || value === 'Ready' || value === 'Archived') {
+    return value;
+  }
+  return 'Needs Review';
+}
+
+function normalizeBatchState(value: unknown): IntakeBatch['state'] {
+  if (value === 'Completed' || value === 'Reviewing' || value === 'Queued') {
+    return value;
+  }
+  return 'Reviewing';
+}
+
+function normalizeBillingState(value: unknown): SubscriptionProfile['billingState'] {
+  if (value === 'Active' || value === 'Past Due' || value === 'Manual Billing') {
+    return value;
+  }
+  return 'Manual Billing';
+}
+
+function selectPersistedState(state: PersistedXbarState): PersistedXbarState {
+  return {
+    currentRole: state.currentRole,
+    horses: state.horses,
+    documents: state.documents,
+    intakeBatches: state.intakeBatches,
+    ownershipRecords: state.ownershipRecords,
+    ranchAssets: state.ranchAssets,
+    subscription: state.subscription,
+    roleWorkspaces: state.roleWorkspaces,
+    salesLeads: state.salesLeads,
+    portal: state.portal,
+    savedHorseIds: state.savedHorseIds,
+  };
+}
+
+function restorePersistedState(raw: unknown): PersistedXbarState {
+  const state = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const horses = Array.isArray(state.horses)
+    ? (state.horses as HorseRecord[]).map((horse) => ({
+        ...horse,
+        documentFacts: Array.isArray((horse as HorseRecord & { documentFacts?: DocumentFact[] }).documentFacts)
+          ? (horse as HorseRecord & { documentFacts?: DocumentFact[] }).documentFacts ?? []
+          : Array.isArray((horse as HorseRecord & { ocrFacts?: DocumentFact[] }).ocrFacts)
+            ? (horse as HorseRecord & { ocrFacts?: DocumentFact[] }).ocrFacts ?? []
+            : [],
+      }))
+    : initialState.horses;
+  const documents = Array.isArray(state.documents)
+    ? (state.documents as DocumentRecord[]).map((document) => ({
+        ...document,
+        state: normalizeDocumentState(document.state),
+      }))
+    : initialState.documents;
+  const intakeBatchesSource = Array.isArray(state.intakeBatches)
+    ? (state.intakeBatches as IntakeBatch[])
+    : Array.isArray(state.ocrBatches)
+      ? (state.ocrBatches as IntakeBatch[])
+      : initialState.intakeBatches;
+  const intakeBatches = intakeBatchesSource.map((batch) => ({
+    ...batch,
+    state: normalizeBatchState(batch.state),
+  }));
+  const usage = ((state.subscription as SubscriptionProfile | undefined)?.usage ?? {}) as Partial<SubscriptionProfile['usage']> & {
+    ocrProcessed?: number;
+    ocrLimit?: number;
+  };
+  const subscription = state.subscription && typeof state.subscription === 'object'
+    ? {
+        ...(state.subscription as SubscriptionProfile),
+        billingState: normalizeBillingState((state.subscription as SubscriptionProfile).billingState),
+        usage: {
+          ...(state.subscription as SubscriptionProfile).usage,
+          documentsProcessed: usage.documentsProcessed ?? usage.ocrProcessed ?? initialState.subscription.usage.documentsProcessed,
+          documentLimit: usage.documentLimit ?? usage.ocrLimit ?? initialState.subscription.usage.documentLimit,
+        },
+      }
+    : initialState.subscription;
+  const baseState: PersistedXbarState = {
+    currentRole: (state.currentRole as UserRole | undefined) ?? initialState.currentRole,
+    horses,
+    documents,
+    intakeBatches,
+    ownershipRecords: Array.isArray(state.ownershipRecords) ? (state.ownershipRecords as OwnershipRecord[]) : initialState.ownershipRecords,
+    ranchAssets: Array.isArray(state.ranchAssets) ? (state.ranchAssets as RanchAsset[]) : initialState.ranchAssets,
+    subscription,
+    roleWorkspaces: Array.isArray(state.roleWorkspaces) ? (state.roleWorkspaces as RoleWorkspace[]) : initialState.roleWorkspaces,
+    salesLeads: Array.isArray(state.salesLeads) ? (state.salesLeads as SalesLead[]) : initialState.salesLeads,
+    portal: state.portal && typeof state.portal === 'object' ? (state.portal as PortalSnapshot) : initialState.portal,
+    savedHorseIds: Array.isArray(state.savedHorseIds) ? (state.savedHorseIds as string[]) : initialState.savedHorseIds,
+  };
+  const derived = syncDerivedValues({
+    horses: baseState.horses,
+    salesLeads: baseState.salesLeads,
+    savedHorseIds: baseState.savedHorseIds,
+    portal: baseState.portal,
+  });
+
+  return {
+    ...baseState,
+    horses: derived.horses,
+    portal: derived.portal,
   };
 }
 
@@ -205,7 +338,7 @@ function createHorseRecord(input: NewHorseInput): HorseRecord {
         category: 'Operations',
       },
     ],
-    ocrFacts: [],
+    documentFacts: [],
     alerts: [
       {
         id: createId('alert'),
@@ -221,7 +354,7 @@ function createHorseRecord(input: NewHorseInput): HorseRecord {
 
 function promoteDocument(horse: HorseRecord, document: DocumentRecord): HorseRecord {
   const nextDocumentIds = horse.documents.includes(document.id) ? horse.documents : [...horse.documents, document.id];
-  const nextFacts = [...horse.ocrFacts];
+  const nextFacts = [...horse.documentFacts];
   Object.entries(document.entities)
     .filter(([, value]) => Boolean(value))
     .forEach(([label, value]) => {
@@ -253,7 +386,7 @@ function promoteDocument(horse: HorseRecord, document: DocumentRecord): HorseRec
   return {
     ...horse,
     documents: nextDocumentIds,
-    ocrFacts: nextFacts,
+    documentFacts: nextFacts,
     readiness: nextReadiness,
     sale: {
       ...horse.sale,
@@ -337,7 +470,7 @@ export const useXbarStore = create<XbarStore>()(
         }));
         return { ok: true, message: `${horse.name} is now live in the horse portfolio.`, id: horse.id };
       },
-      createOCRIntake: async ({ files, horseId, source, uploadedBy, label }) => {
+      createDocumentIntake: async ({ files, horseId, source, uploadedBy, label }) => {
         const fileList = files.filter(Boolean);
         if (!fileList.length) {
           return { ok: false, message: 'Select at least one file for intake.' };
@@ -372,7 +505,7 @@ export const useXbarStore = create<XbarStore>()(
             batchId,
           }));
 
-          const batch: OCRBatch = {
+          const batch: IntakeBatch = {
             id: batchId,
             label: label?.trim() || `${source} intake`,
             receivedAt: nowStamp(),
@@ -397,7 +530,7 @@ export const useXbarStore = create<XbarStore>()(
 
             return {
               documents: allDocuments,
-              ocrBatches: [batch, ...current.ocrBatches],
+              intakeBatches: [batch, ...current.intakeBatches],
               horses: nextHorses,
               subscription: {
                 ...current.subscription,
@@ -454,12 +587,12 @@ export const useXbarStore = create<XbarStore>()(
         set((current) => {
           const nextDocuments = current.documents.map((item) => (item.id === documentId ? nextDocument : item));
           const nextHorses = current.horses.map((horse) => (horse.id === matchedHorse.id ? promoteDocument(horse, nextDocument) : horse));
-          const nextBatches = current.ocrBatches.map((batch) => summarizeBatch(batch, nextDocuments));
+          const nextBatches = current.intakeBatches.map((batch) => summarizeBatch(batch, nextDocuments));
 
           return {
             documents: nextDocuments,
             horses: nextHorses,
-            ocrBatches: nextBatches,
+            intakeBatches: nextBatches,
           };
         });
 
@@ -484,7 +617,7 @@ export const useXbarStore = create<XbarStore>()(
 
           return {
             documents: nextDocuments,
-            ocrBatches: current.ocrBatches.map((batch) => summarizeBatch(batch, nextDocuments)),
+            intakeBatches: current.intakeBatches.map((batch) => summarizeBatch(batch, nextDocuments)),
           };
         });
 
@@ -911,23 +1044,56 @@ export const useXbarStore = create<XbarStore>()(
 
         return { ok: true, message: `${nextStake.name} added to the ownership split.`, id: nextStake.id };
       },
+      exportWorkspaceBackup: () => ({
+        app: 'XBAR',
+        version: WORKSPACE_SCHEMA_VERSION,
+        exportedAt: new Date().toISOString(),
+        workspace: selectPersistedState(get()),
+      }),
+      importWorkspaceBackup: (backup) => {
+        const payload =
+          backup && typeof backup === 'object' && 'workspace' in (backup as Record<string, unknown>)
+            ? (backup as { workspace: unknown }).workspace
+            : backup;
+        if (
+          !payload ||
+          typeof payload !== 'object' ||
+          (!('horses' in (payload as Record<string, unknown>)) &&
+            !('documents' in (payload as Record<string, unknown>)) &&
+            !('subscription' in (payload as Record<string, unknown>)))
+        ) {
+          return {
+            ok: false,
+            message: 'Backup file is missing the XBAR workspace payload.',
+          };
+        }
+        const nextState = restorePersistedState(payload);
+        set(nextState);
+        return {
+          ok: true,
+          message: `Imported ${nextState.horses.length} horses, ${nextState.documents.length} documents, and ${nextState.salesLeads.length} leads.`,
+        };
+      },
     }),
     {
       name: 'xbar-live-workspace',
       storage: createJSONStorage(() => workspaceStateStorage),
-      partialize: (state) => ({
-        currentRole: state.currentRole,
-        horses: state.horses,
-        documents: state.documents,
-        ocrBatches: state.ocrBatches,
-        ownershipRecords: state.ownershipRecords,
-        ranchAssets: state.ranchAssets,
-        subscription: state.subscription,
-        roleWorkspaces: state.roleWorkspaces,
-        salesLeads: state.salesLeads,
-        portal: state.portal,
-        savedHorseIds: state.savedHorseIds,
-      }),
+      version: WORKSPACE_SCHEMA_VERSION,
+      migrate: (persistedState) => restorePersistedState(persistedState),
+      partialize: (state) =>
+        selectPersistedState({
+          currentRole: state.currentRole,
+          horses: state.horses,
+          documents: state.documents,
+          intakeBatches: state.intakeBatches,
+          ownershipRecords: state.ownershipRecords,
+          ranchAssets: state.ranchAssets,
+          subscription: state.subscription,
+          roleWorkspaces: state.roleWorkspaces,
+          salesLeads: state.salesLeads,
+          portal: state.portal,
+          savedHorseIds: state.savedHorseIds,
+        }),
     },
   ),
 );

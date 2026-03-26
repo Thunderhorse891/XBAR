@@ -1,4 +1,4 @@
-import { DocumentRecord, OCRBatch } from '@/types/xbar';
+import { DocumentRecord, IntakeBatch } from '@/types/xbar';
 
 export const documentsSeed: DocumentRecord[] = [
   {
@@ -137,11 +137,11 @@ export const documentsSeed: DocumentRecord[] = [
     uploadedBy: 'Ownership Desk',
     uploadedAt: '2026-03-18',
     source: 'Bulk Intake',
-    state: 'Extracting',
+    state: 'Needs Review',
     confidence: 0.87,
     duplicateRisk: 'Low',
-    extractedTextPreview: 'AQHA review language, transfer signatures, and registered owner references are still processing.',
-    summary: 'Processing is underway. This packet is the primary blocker on Dolly going public.',
+    extractedTextPreview: 'AQHA review language, transfer signatures, and registered owner references still need human review.',
+    summary: 'Manual review is still open. This packet is the primary blocker on Dolly going public.',
     entities: {
       horseName: 'RT BLUE DOLLY 1321',
       transferStatus: 'AQHA Review',
@@ -193,8 +193,8 @@ export const documentsSeed: DocumentRecord[] = [
     state: 'Matched',
     confidence: 0.84,
     duplicateRisk: 'Low',
-    extractedTextPreview: 'Legacy owner memo linked to owner portal archive for insurance and retirement review.',
-    summary: 'Document supports the owner portal experience and legacy archive module.',
+    extractedTextPreview: 'Legacy owner memo linked to the shared archive for insurance and retirement review.',
+    summary: 'Document supports shared access and the legacy archive module.',
     entities: {
       horseName: 'SHADOW',
       ownerName: 'Jason Wyrick',
@@ -202,7 +202,7 @@ export const documentsSeed: DocumentRecord[] = [
   },
 ];
 
-export const ocrBatchesSeed: OCRBatch[] = [
+export const intakeBatchesSeed: IntakeBatch[] = [
   {
     id: 'batch-spring',
     label: 'Spring veterinary drop',
@@ -223,7 +223,7 @@ export const ocrBatchesSeed: OCRBatch[] = [
     processedCount: 24,
     needsReviewCount: 6,
     matchedCount: 18,
-    state: 'Processing',
+    state: 'Reviewing',
   },
   {
     id: 'batch-sale',

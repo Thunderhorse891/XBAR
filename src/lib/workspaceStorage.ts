@@ -4,6 +4,8 @@ const DATABASE_NAME = 'xbar-workspace';
 const STORE_NAME = 'persist';
 const LEGACY_KEY = 'xbar-live-workspace';
 
+export const workspaceStorageDriverLabel = 'IndexedDB primary, localStorage fallback';
+
 function hasBrowserStorage() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 }

@@ -33,7 +33,6 @@ export type DocumentSource = 'Manual Upload' | 'Bulk Intake' | 'Owner Portal' | 
 
 export type ProcessingState =
   | 'Queued'
-  | 'Extracting'
   | 'Needs Review'
   | 'Matched'
   | 'Ready'
@@ -98,7 +97,7 @@ export interface TimelineEvent {
   severity?: Severity;
 }
 
-export interface ExtractedFact {
+export interface DocumentFact {
   id: string;
   label: string;
   value: string;
@@ -174,7 +173,7 @@ export interface HorseRecord {
   medicalTimeline: TimelineEvent[];
   breedingTimeline: TimelineEvent[];
   activity: TimelineEvent[];
-  ocrFacts: ExtractedFact[];
+  documentFacts: DocumentFact[];
   alerts: HorseAlert[];
   notes: HorseNote[];
 }
@@ -205,7 +204,7 @@ export interface DocumentRecord {
   entities: DocumentEntities;
 }
 
-export interface OCRBatch {
+export interface IntakeBatch {
   id: string;
   label: string;
   receivedAt: string;
@@ -214,7 +213,7 @@ export interface OCRBatch {
   processedCount: number;
   needsReviewCount: number;
   matchedCount: number;
-  state: 'Intaking' | 'Processing' | 'Reviewing' | 'Completed';
+  state: 'Queued' | 'Reviewing' | 'Completed';
 }
 
 export interface OwnershipRecord {
@@ -243,8 +242,8 @@ export interface RanchAsset {
 export interface SubscriptionUsage {
   seatsUsed: number;
   seatLimit: number;
-  ocrProcessed: number;
-  ocrLimit: number;
+  documentsProcessed: number;
+  documentLimit: number;
   storageUsedGb: number;
   storageLimitGb: number;
   portalSeatsUsed: number;
@@ -255,7 +254,7 @@ export interface SubscriptionProfile {
   tier: SubscriptionTier;
   monthlyRate: number;
   renewalDate: string;
-  billingState: 'Active' | 'Upgrade Review' | 'Trial';
+  billingState: 'Active' | 'Manual Billing' | 'Past Due';
   ownerPortalEnabled: boolean;
   brandedListings: boolean;
   featureFlags: string[];

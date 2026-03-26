@@ -43,7 +43,7 @@ const programs: NavItem[] = [
 const platform: NavItem[] = [
   { label: 'Ranch Toolkit', path: '/assets', icon: AssetsIcon },
   { label: 'Subscriptions', path: '/subscriptions', icon: SubscriptionIcon },
-  { label: 'Owner Portal', path: '/portal', icon: PortalIcon },
+  { label: 'Shared Access', path: '/portal', icon: PortalIcon },
   { label: 'Settings', path: '/settings', icon: SettingsIcon },
 ];
 
@@ -57,7 +57,7 @@ const routeLabels: Record<string, string> = {
   '/sales': 'Sales',
   '/assets': 'Ranch Toolkit',
   '/subscriptions': 'Subscriptions',
-  '/portal': 'Owner Portal',
+  '/portal': 'Shared Access',
   '/settings': 'Settings',
 };
 
@@ -124,7 +124,7 @@ export default function MainLayout() {
         <NavSection title="Platform" items={platform} />
 
         <div className="sidebar-footer">
-          <div className="sidebar-footer__title">Plan status</div>
+          <div className="sidebar-footer__title">Contract status</div>
           <div className="sidebar-footer__row">
             <span>{subscription.tier}</span>
             <Pill tone="blue">{subscription.billingState}</Pill>

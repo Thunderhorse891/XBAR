@@ -16,9 +16,9 @@ export default function Documents() {
   const [searchParams, setSearchParams] = useSearchParams();
   const documents = useXbarStore((state) => state.documents);
   const horses = useXbarStore((state) => state.horses);
-  const ocrBatches = useXbarStore((state) => state.ocrBatches);
+  const intakeBatches = useXbarStore((state) => state.intakeBatches);
   const subscription = useXbarStore((state) => state.subscription);
-  const createOCRIntake = useXbarStore((state) => state.createOCRIntake);
+  const createDocumentIntake = useXbarStore((state) => state.createDocumentIntake);
   const reviewDocument = useXbarStore((state) => state.reviewDocument);
   const discardDocument = useXbarStore((state) => state.discardDocument);
   const pushToast = useUiStore((state) => state.pushToast);
@@ -33,7 +33,7 @@ export default function Documents() {
   const [reviewAssignments, setReviewAssignments] = useState<Record<string, string>>({});
   const [menuState, setMenuState] = useState<{ documentId: string; x: number; y: number } | null>(null);
 
-  const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched' || document.state === 'Extracting');
+  const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched');
   const duplicates = documents.filter((document) => document.duplicateRisk === 'Possible Duplicate');
   const buyerSafeDocuments = documents.filter((document) => buildDocumentTrustProfile(document, horses).readyForProfile);
   const uploadOpen = searchParams.get('upload') === '1';
@@ -93,7 +93,7 @@ export default function Documents() {
     }
 
     setIsSubmitting(true);
-    const result = await createOCRIntake({
+    const result = await createDocumentIntake({
       files,
       horseId: horseId || undefined,
       source,
@@ -130,7 +130,7 @@ export default function Documents() {
         <MetricCard label="Document vault" value={`${documents.length}`} detail="Registration, medical, transfer, insurance, and media records" />
         <MetricCard label="Needs review" value={`${reviewQueue.length}`} detail="Files waiting on manual assignment" tone="amber" />
         <MetricCard label="Buyer-safe docs" value={`${buyerSafeDocuments.length}`} detail="Approved documents strong enough for buyer-facing packet surfaces" tone="emerald" />
-        <MetricCard label="Storage used" value={`${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB`} detail="Local file storage against the current plan" tone="blue" />
+        <MetricCard label="Storage used" value={`${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB`} detail="Workspace file storage against the current contract" tone="blue" />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
@@ -204,9 +204,9 @@ export default function Documents() {
         </Panel>
 
         <Panel eyebrow="Batch intake" title="Queue states" description="Recent intake activity.">
-          {ocrBatches.length ? (
+          {intakeBatches.length ? (
             <div className="stack-list">
-              {ocrBatches.map((batch) => (
+              {intakeBatches.map((batch) => (
                 <div key={batch.id} className="stack-item">
                   <div className="stack-item__top">
                     <div>

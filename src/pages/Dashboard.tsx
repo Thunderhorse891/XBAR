@@ -21,13 +21,13 @@ export default function Dashboard() {
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const salesLeads = useXbarStore((state) => state.salesLeads);
   const portal = useXbarStore((state) => state.portal);
-  const ocrBatches = useXbarStore((state) => state.ocrBatches);
+  const intakeBatches = useXbarStore((state) => state.intakeBatches);
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
   const roleWorkspace = useCurrentRoleWorkspace();
   const [menuState, setMenuState] = useState<DashboardMenuState | null>(null);
 
   const saleReady = horses.filter((horse) => horse.readiness.score >= 80);
-  const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched' || document.state === 'Extracting');
+  const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched');
   const ownershipAttention = ownershipRecords.filter((record) => record.transferStatus !== 'Clear');
   const medicalWatch = horses.filter((horse) => horse.status === 'Medical Review');
   const totalInsuredValue = horses.reduce((sum, horse) => sum + horse.insuredValue, 0);
@@ -46,7 +46,7 @@ export default function Dashboard() {
     ownershipRecords,
     salesLeads,
     ranchAssets,
-    ocrBatches,
+    intakeBatches,
   });
   const fieldTools = buildFieldTools({
     horses,
@@ -294,9 +294,9 @@ export default function Dashboard() {
 
       <div className="dashboard-grid dashboard-grid--secondary">
         <Panel eyebrow="Documents" title="Recent intake">
-          {ocrBatches.length ? (
+          {intakeBatches.length ? (
             <div className="stack-list">
-              {ocrBatches.slice(0, 5).map((batch) => (
+              {intakeBatches.slice(0, 5).map((batch) => (
                 <Link key={batch.id} to="/documents" className="stack-item stack-item--interactive">
                   <div className="stack-item__top">
                     <div>

@@ -50,7 +50,7 @@ export default function OwnerPortal() {
   return (
     <>
       <PageHeader
-        eyebrow="Owner portal"
+        eyebrow="Shared access"
         title="Shared links and owner access"
         description="Saved horses, share links, inquiries."
       />

@@ -20,7 +20,7 @@ export default function Subscriptions() {
       />
 
       <div className="callout callout--warning">
-        <strong>Billing is offline:</strong> This workspace does not process payments or plan changes yet.
+        <strong>Manual billing:</strong> Contracts are tracked here, but payments still happen outside the app.
       </div>
 
       <div className="metric-grid">
@@ -40,7 +40,7 @@ export default function Subscriptions() {
               </div>
               <div className="inline-metrics">
                 <span>{subscription.billingState}</span>
-                <span>Owner portal {subscription.ownerPortalEnabled ? 'enabled' : 'disabled'}</span>
+                <span>Shared access {subscription.ownerPortalEnabled ? 'enabled' : 'disabled'}</span>
                 <span>Branded listings {subscription.brandedListings ? 'enabled' : 'disabled'}</span>
               </div>
             </div>
@@ -75,7 +75,7 @@ export default function Subscriptions() {
             </div>
             <div className="stack-item">
               <div className="stack-item__top">
-                <div className="stack-item__title">Portal seats</div>
+                <div className="stack-item__title">Shared-access seats</div>
                 <strong>{subscription.usage.portalSeatsUsed}/{subscription.usage.portalSeatLimit}</strong>
               </div>
               <ProgressBar value={(subscription.usage.portalSeatsUsed / subscription.usage.portalSeatLimit) * 100} tone="emerald" />
@@ -132,7 +132,7 @@ export default function Subscriptions() {
                   </Pill>
                 </div>
                 <div className="stack-item__copy">
-                  {formatCurrency(config.monthlyRate)}/mo · {config.limits.seatLimit} seats · {config.limits.storageLimitGb} GB storage · {config.limits.portalSeatLimit} portal seats
+                  {formatCurrency(config.monthlyRate)}/mo · {config.limits.seatLimit} seats · {config.limits.storageLimitGb} GB storage · {config.limits.portalSeatLimit} shared-access seats
                 </div>
                 <div className="token-row">
                   {config.featureFlags.map((flag) => (

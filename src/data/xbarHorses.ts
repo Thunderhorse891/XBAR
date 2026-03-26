@@ -114,7 +114,7 @@ export const horsesSeed: HorseRecord[] = [
         id: 'med-wiggy-2',
         date: '2026-02-14',
         title: 'Vaccination packet signed',
-        summary: 'Annual spring packet archived to sale packet and owner portal.',
+        summary: 'Annual spring packet archived to the sale packet and shared access link.',
         owner: 'Ops Desk',
         category: 'Medical',
         status: 'Filed',
@@ -150,7 +150,7 @@ export const horsesSeed: HorseRecord[] = [
         category: 'Ownership',
       },
     ],
-    ocrFacts: [
+  documentFacts: [
       {
         id: 'ocr-wiggy-1',
         label: 'Registration number',
@@ -293,7 +293,7 @@ export const horsesSeed: HorseRecord[] = [
         category: 'Ownership',
       },
     ],
-    ocrFacts: [
+  documentFacts: [
       {
         id: 'ocr-hancock-1',
         label: 'Coverage period',
@@ -420,7 +420,7 @@ export const horsesSeed: HorseRecord[] = [
         category: 'Operations',
       },
     ],
-    ocrFacts: [
+  documentFacts: [
       {
         id: 'ocr-bonny-1',
         label: 'Mobility follow-up',
@@ -561,7 +561,7 @@ export const horsesSeed: HorseRecord[] = [
         category: 'Sales',
       },
     ],
-    ocrFacts: [
+  documentFacts: [
       {
         id: 'ocr-dolly-1',
         label: 'Transfer status',
@@ -678,7 +678,7 @@ export const horsesSeed: HorseRecord[] = [
         category: 'Operations',
       },
     ],
-    ocrFacts: [],
+  documentFacts: [],
     alerts: [],
     notes: [
       {
@@ -695,7 +695,7 @@ export const horsesSeed: HorseRecord[] = [
     id: 'horse-shadow',
     name: 'SHADOW',
     barnName: 'Shadow',
-    summary: 'Retired foundation horse with owner portal visibility, archived records, and light exercise only.',
+  summary: 'Retired foundation horse with shared-access visibility, archived records, and light exercise only.',
     segment: 'Retired',
     status: 'Retired',
     breed: 'Arabian',
@@ -754,7 +754,7 @@ export const horsesSeed: HorseRecord[] = [
       blockers: [],
       packetStatus: 'Ready',
     },
-    medicalNotes: 'Retirement pasture, joint support only, owner portal records visible.',
+  medicalNotes: 'Retirement pasture, joint support only, shared-access records visible.',
     lastVetVisit: '2025-12-16',
     documents: ['doc-shadow-owner'],
     medicalTimeline: [
@@ -773,13 +773,13 @@ export const horsesSeed: HorseRecord[] = [
       {
         id: 'activity-shadow-1',
         date: '2026-03-10',
-        title: 'Owner portal viewed',
+      title: 'Shared link viewed',
         summary: 'Legacy records were accessed by the owner for insurance review.',
         owner: 'Portal',
         category: 'Ownership',
       },
     ],
-    ocrFacts: [
+  documentFacts: [
       {
         id: 'ocr-shadow-1',
         label: 'Owner policy reference',
@@ -793,7 +793,7 @@ export const horsesSeed: HorseRecord[] = [
       {
         id: 'note-shadow-1',
         title: 'Portal-ready archive',
-        body: 'Good template horse for the owner portal and legacy records workflow.',
+      body: 'Good template horse for the shared-access and legacy records workflow.',
         author: 'Admin',
         createdAt: '2026-03-15',
         tone: 'info',

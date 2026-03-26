@@ -9,7 +9,7 @@ import type {
   HorseSegment,
   HorseSex,
   HorseStatus,
-  OCRBatch,
+  IntakeBatch,
   OwnershipRecord,
   SalesLead,
 } from '../types/xbar.js';
@@ -28,7 +28,7 @@ export type NewHorseInput = {
   pasture: string;
 };
 
-export type OCRIntakeInput = {
+export type DocumentIntakeInput = {
   files: File[];
   horseId?: string;
   source: DocumentSource;
@@ -132,7 +132,7 @@ export function validateAssetPatch(patch: AssetPatch) {
   return null;
 }
 
-export function summarizeBatch(batch: OCRBatch, documents: DocumentRecord[]): OCRBatch {
+export function summarizeBatch(batch: IntakeBatch, documents: DocumentRecord[]): IntakeBatch {
   const batchDocuments = documents.filter((document) => document.batchId === batch.id);
   if (!batchDocuments.length) {
     return batch;
@@ -140,10 +140,10 @@ export function summarizeBatch(batch: OCRBatch, documents: DocumentRecord[]): OC
 
   const fileCount = batchDocuments.length;
   const processedCount = batchDocuments.filter((document) => document.state !== 'Queued').length;
-  const needsReviewCount = batchDocuments.filter((document) => document.state === 'Needs Review' || document.state === 'Extracting').length;
+  const needsReviewCount = batchDocuments.filter((document) => document.state === 'Needs Review').length;
   const matchedCount = batchDocuments.filter((document) => document.state === 'Matched' || document.state === 'Ready').length;
 
-  let state: OCRBatch['state'] = 'Processing';
+  let state: IntakeBatch['state'] = 'Queued';
   if (needsReviewCount > 0) {
     state = 'Reviewing';
   } else if (matchedCount >= fileCount) {

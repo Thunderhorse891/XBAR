@@ -3,7 +3,7 @@ import { subscriptionTierConfig } from './xbarRuntime.js';
 import type {
   DocumentRecord,
   HorseRecord,
-  OCRBatch,
+  IntakeBatch,
   OwnershipRecord,
   PortalSnapshot,
   RanchAsset,
@@ -75,11 +75,11 @@ export function buildCommandCenter(params: {
   ownershipRecords: OwnershipRecord[];
   salesLeads: SalesLead[];
   ranchAssets: RanchAsset[];
-  ocrBatches: OCRBatch[];
+  intakeBatches: IntakeBatch[];
 }) {
-  const { horses, documents, ownershipRecords, salesLeads, ranchAssets, ocrBatches } = params;
+  const { horses, documents, ownershipRecords, salesLeads, ranchAssets, intakeBatches } = params;
 
-  const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched' || document.state === 'Extracting');
+  const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched');
   const blockedProfiles = horses.filter((horse) => {
     const packet = buildHorsePacketCompleteness(
       horse,
@@ -91,7 +91,7 @@ export function buildCommandCenter(params: {
   const activeOffers = salesLeads.filter((lead) => lead.stage === 'Offer' || lead.stage === 'Qualified');
   const ownershipAttention = ownershipRecords.filter((record) => record.transferStatus !== 'Clear');
   const serviceRisk = ranchAssets.filter((asset) => asset.condition === 'Attention Required' || asset.status === 'In Service');
-  const slowBatches = ocrBatches.filter((batch) => batch.state !== 'Completed');
+  const slowBatches = intakeBatches.filter((batch) => batch.state !== 'Completed');
 
   const items: CommandCenterItem[] = [
     {
@@ -167,7 +167,7 @@ export function buildFieldTools(params: {
 }) {
   const { horses, documents, ownershipRecords, salesLeads, portal } = params;
   const buyerReady = buyerReadyProfiles(horses, documents, ownershipRecords).length;
-  const unresolvedDocs = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched' || document.state === 'Extracting').length;
+  const unresolvedDocs = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched').length;
 
   return [
     {

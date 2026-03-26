@@ -151,8 +151,8 @@ export default function BuyerProfile() {
 
           <Panel eyebrow="Record highlights" title="Profile facts">
             <div className="token-row">
-              {horse.ocrFacts.length ? (
-                horse.ocrFacts.map((fact) => (
+              {horse.documentFacts.length ? (
+                horse.documentFacts.map((fact) => (
                   <Pill key={fact.id} tone="blue">
                     {fact.label}: {fact.value}
                   </Pill>

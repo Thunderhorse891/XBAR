@@ -8,7 +8,7 @@ import {
   validateLocationPatch,
   validateNewHorseInput,
 } from '../src/store/xbarStoreLogic.js';
-import type { DocumentRecord, OCRBatch } from '../src/types/xbar.js';
+import type { DocumentRecord, IntakeBatch } from '../src/types/xbar.js';
 
 test('validateNewHorseInput rejects incomplete horse records', () => {
   assert.equal(
@@ -65,7 +65,7 @@ test('validateAssetPatch requires assignment and service dates for active assets
 });
 
 test('summarizeBatch recalculates processing counts from documents', () => {
-  const batch: OCRBatch = {
+  const batch: IntakeBatch = {
     id: 'batch-1',
     label: 'Batch 1',
     receivedAt: '2026-03-25 10:30',
@@ -74,7 +74,7 @@ test('summarizeBatch recalculates processing counts from documents', () => {
     processedCount: 0,
     needsReviewCount: 0,
     matchedCount: 0,
-    state: 'Processing',
+    state: 'Queued',
   };
 
   const documents: DocumentRecord[] = [
