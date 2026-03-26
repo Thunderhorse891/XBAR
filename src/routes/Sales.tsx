@@ -12,7 +12,7 @@ export default function Sales() {
   const navigate = useNavigate();
   const horses = useXbarStore((state) => state.horses);
   const salesLeads = useXbarStore((state) => state.salesLeads);
-  const portal = useXbarStore((state) => state.portal);
+  const sharedAccess = useXbarStore((state) => state.sharedAccess);
   const documents = useXbarStore((state) => state.documents);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const updateSalesLead = useXbarStore((state) => state.updateSalesLead);
@@ -94,7 +94,7 @@ export default function Sales() {
       <div className="metric-grid">
         <MetricCard label="Sale horses" value={`${saleHorses.length}`} detail="Active pricing or buyer review" />
         <MetricCard label="Buyer pipeline" value={`${salesLeads.filter((lead) => lead.stage !== 'Closed').length}`} detail="Open leads across all channels" tone="blue" />
-        <MetricCard label="Watchlist demand" value={`${portal.savedHorses}`} detail="Saved horses signal live buyer interest" tone="emerald" />
+        <MetricCard label="Watchlist demand" value={`${sharedAccess.savedHorses}`} detail="Saved horses signal live buyer interest" tone="emerald" />
         <MetricCard label="Transfer blockers" value={`${saleHorses.filter((horse) => horse.readiness.packetStatus === 'Needs Transfer Docs').length}`} detail="Listings with ownership or paperwork friction" tone="amber" />
       </div>
 
@@ -190,7 +190,7 @@ export default function Sales() {
                     </div>
                     <div className="inline-metrics">
                       <span>{lead.savedListing ? 'Saved listing' : 'Not saved yet'}</span>
-                      <span>{lead.ownerPortalReady ? 'Share link issued' : 'Share link staged'}</span>
+                      <span>{lead.shareReady ? 'Share link issued' : 'Share link staged'}</span>
                       <span>Last touch {formatDateLabel(lead.lastTouch)}</span>
                     </div>
                   </button>
@@ -298,7 +298,7 @@ export default function Sales() {
                   <div className="stack-item__title">Saved demand</div>
                   <div className="stack-item__copy">Watchlist pressure from the shared-access layer.</div>
                 </div>
-                <Pill tone={portal.savedHorses ? 'blue' : 'slate'}>{portal.savedHorses}</Pill>
+                <Pill tone={sharedAccess.savedHorses ? 'blue' : 'slate'}>{sharedAccess.savedHorses}</Pill>
               </div>
             </div>
             <div className="stack-item">

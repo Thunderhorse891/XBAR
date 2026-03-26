@@ -12,7 +12,7 @@ import {
   HorsesIcon,
   MedicalIcon,
   OwnershipIcon,
-  PortalIcon,
+  SharedAccessIcon,
   SalesIcon,
   SearchIcon,
   SettingsIcon,
@@ -43,7 +43,7 @@ const programs: NavItem[] = [
 const platform: NavItem[] = [
   { label: 'Ranch Toolkit', path: '/assets', icon: AssetsIcon },
   { label: 'Subscriptions', path: '/subscriptions', icon: SubscriptionIcon },
-  { label: 'Shared Access', path: '/portal', icon: PortalIcon },
+  { label: 'Shared Access', path: '/shared-access', icon: SharedAccessIcon },
   { label: 'Settings', path: '/settings', icon: SettingsIcon },
 ];
 
@@ -57,7 +57,7 @@ const routeLabels: Record<string, string> = {
   '/sales': 'Sales',
   '/assets': 'Ranch Toolkit',
   '/subscriptions': 'Subscriptions',
-  '/portal': 'Shared Access',
+  '/shared-access': 'Shared Access',
   '/settings': 'Settings',
 };
 

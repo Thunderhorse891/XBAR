@@ -172,7 +172,7 @@ export default function HorseDetail() {
       name: leadName,
       channel: leadChannel,
       horseId: horse.id,
-      portalReady: saved,
+      shareReady: saved,
     });
     pushToast({
       title: result.ok ? 'Lead created' : 'Lead blocked',

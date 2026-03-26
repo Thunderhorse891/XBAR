@@ -40,7 +40,7 @@ export default function Subscriptions() {
               </div>
               <div className="inline-metrics">
                 <span>{subscription.billingState}</span>
-                <span>Shared access {subscription.ownerPortalEnabled ? 'enabled' : 'disabled'}</span>
+                <span>Shared access {subscription.sharedAccessEnabled ? 'enabled' : 'disabled'}</span>
                 <span>Branded listings {subscription.brandedListings ? 'enabled' : 'disabled'}</span>
               </div>
             </div>
@@ -76,9 +76,16 @@ export default function Subscriptions() {
             <div className="stack-item">
               <div className="stack-item__top">
                 <div className="stack-item__title">Shared-access seats</div>
-                <strong>{subscription.usage.portalSeatsUsed}/{subscription.usage.portalSeatLimit}</strong>
+                <strong>{subscription.usage.sharedAccessSeatsUsed}/{subscription.usage.sharedAccessSeatLimit}</strong>
               </div>
-              <ProgressBar value={(subscription.usage.portalSeatsUsed / subscription.usage.portalSeatLimit) * 100} tone="emerald" />
+              <ProgressBar
+                value={
+                  subscription.usage.sharedAccessSeatLimit
+                    ? (subscription.usage.sharedAccessSeatsUsed / subscription.usage.sharedAccessSeatLimit) * 100
+                    : 0
+                }
+                tone="emerald"
+              />
             </div>
           </div>
         </Panel>
@@ -132,7 +139,7 @@ export default function Subscriptions() {
                   </Pill>
                 </div>
                 <div className="stack-item__copy">
-                  {formatCurrency(config.monthlyRate)}/mo · {config.limits.seatLimit} seats · {config.limits.storageLimitGb} GB storage · {config.limits.portalSeatLimit} shared-access seats
+                  {formatCurrency(config.monthlyRate)}/mo · {config.limits.seatLimit} seats · {config.limits.storageLimitGb} GB storage · {config.limits.sharedAccessSeatLimit} shared-access seats
                 </div>
                 <div className="token-row">
                   {config.featureFlags.map((flag) => (

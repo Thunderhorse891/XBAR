@@ -246,8 +246,8 @@ export interface SubscriptionUsage {
   documentLimit: number;
   storageUsedGb: number;
   storageLimitGb: number;
-  portalSeatsUsed: number;
-  portalSeatLimit: number;
+  sharedAccessSeatsUsed: number;
+  sharedAccessSeatLimit: number;
 }
 
 export interface SubscriptionProfile {
@@ -255,7 +255,7 @@ export interface SubscriptionProfile {
   monthlyRate: number;
   renewalDate: string;
   billingState: 'Active' | 'Manual Billing' | 'Past Due';
-  ownerPortalEnabled: boolean;
+  sharedAccessEnabled: boolean;
   brandedListings: boolean;
   featureFlags: string[];
   usage: SubscriptionUsage;
@@ -281,10 +281,10 @@ export interface SalesLead {
   offerAmount?: number;
   outcome?: 'Won' | 'Lost';
   savedListing: boolean;
-  ownerPortalReady: boolean;
+  shareReady: boolean;
 }
 
-export interface PortalSnapshot {
+export interface SharedAccessSnapshot {
   invitedOwners: number;
   activeOwners: number;
   savedHorses: number;

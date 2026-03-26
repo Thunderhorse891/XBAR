@@ -111,7 +111,7 @@ export function SubscriptionIcon(props: IconProps) {
   );
 }
 
-export function PortalIcon(props: IconProps) {
+export function SharedAccessIcon(props: IconProps) {
   return (
     <IconBase {...props}>
       <path d="M5 4.5h11a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z" />

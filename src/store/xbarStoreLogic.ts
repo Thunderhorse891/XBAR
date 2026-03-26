@@ -47,7 +47,7 @@ export type LeadInput = {
   name: string;
   channel: SalesLead['channel'];
   horseId: string;
-  portalReady?: boolean;
+  shareReady?: boolean;
 };
 
 export type AssetPatch = {

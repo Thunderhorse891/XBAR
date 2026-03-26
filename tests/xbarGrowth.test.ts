@@ -6,9 +6,9 @@ import type {
   HorseRecord,
   IntakeBatch,
   OwnershipRecord,
-  PortalSnapshot,
   RanchAsset,
   SalesLead,
+  SharedAccessSnapshot,
   SubscriptionProfile,
 } from '../src/types/xbar.js';
 
@@ -152,7 +152,7 @@ const salesLeads: SalesLead[] = [
     stage: 'Offer',
     lastTouch: '2026-03-25',
     savedListing: true,
-    ownerPortalReady: true,
+    shareReady: true,
   },
 ];
 
@@ -184,7 +184,7 @@ const intakeBatches: IntakeBatch[] = [
   },
 ];
 
-const portal: PortalSnapshot = {
+const sharedAccess: SharedAccessSnapshot = {
   invitedOwners: 10,
   activeOwners: 4,
   savedHorses: 5,
@@ -196,7 +196,7 @@ const subscription: SubscriptionProfile = {
   monthlyRate: 1290,
   renewalDate: '2026-04-12',
   billingState: 'Active',
-  ownerPortalEnabled: true,
+  sharedAccessEnabled: true,
   brandedListings: true,
   featureFlags: ['Manual document review'],
   usage: {
@@ -206,8 +206,8 @@ const subscription: SubscriptionProfile = {
     documentLimit: 1800,
     storageUsedGb: 12,
     storageLimitGb: 200,
-    portalSeatsUsed: 4,
-    portalSeatLimit: 10,
+    sharedAccessSeatsUsed: 4,
+    sharedAccessSeatLimit: 10,
   },
 };
 
@@ -238,10 +238,10 @@ test('buildFieldTools highlights mobile capture and buyer sharing workflows', ()
     documents,
     ownershipRecords,
     salesLeads,
-    portal,
+    sharedAccess,
   });
 
   assert.equal(cards.length, 5);
   assert.ok(cards.some((card) => card.href === '/documents?upload=1'));
-  assert.ok(cards.some((card) => card.href === '/portal'));
+  assert.ok(cards.some((card) => card.href === '/shared-access'));
 });

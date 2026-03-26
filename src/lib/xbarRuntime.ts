@@ -6,8 +6,8 @@ import type {
   DocumentType,
   GalleryAsset,
   HorseRecord,
-  PortalSnapshot,
   SalesLead,
+  SharedAccessSnapshot,
   SubscriptionProfile,
   SubscriptionTier,
 } from '../types/xbar.js';
@@ -16,25 +16,25 @@ const GIGABYTE = 1024 * 1024 * 1024;
 
 export const subscriptionTierConfig: Record<
   SubscriptionTier,
-  Pick<SubscriptionProfile, 'monthlyRate' | 'ownerPortalEnabled' | 'brandedListings' | 'featureFlags'> & {
-    limits: Pick<SubscriptionProfile['usage'], 'seatLimit' | 'documentLimit' | 'storageLimitGb' | 'portalSeatLimit'>;
+  Pick<SubscriptionProfile, 'monthlyRate' | 'sharedAccessEnabled' | 'brandedListings' | 'featureFlags'> & {
+    limits: Pick<SubscriptionProfile['usage'], 'seatLimit' | 'documentLimit' | 'storageLimitGb' | 'sharedAccessSeatLimit'>;
   }
 > = {
   Starter: {
     monthlyRate: 390,
-    ownerPortalEnabled: false,
+    sharedAccessEnabled: false,
     brandedListings: false,
     featureFlags: ['Horse records', 'Basic listings', 'Local document vault'],
     limits: {
       seatLimit: 2,
       documentLimit: 250,
       storageLimitGb: 25,
-      portalSeatLimit: 0,
+      sharedAccessSeatLimit: 0,
     },
   },
   Professional: {
     monthlyRate: 1290,
-    ownerPortalEnabled: true,
+    sharedAccessEnabled: true,
     brandedListings: true,
     featureFlags: [
       'Role-aware dashboards',
@@ -47,12 +47,12 @@ export const subscriptionTierConfig: Record<
       seatLimit: 8,
       documentLimit: 1800,
       storageLimitGb: 200,
-      portalSeatLimit: 10,
+      sharedAccessSeatLimit: 10,
     },
   },
   'Ranch Ops': {
     monthlyRate: 2490,
-    ownerPortalEnabled: true,
+    sharedAccessEnabled: true,
     brandedListings: true,
     featureFlags: [
       'Expanded document intake',
@@ -66,12 +66,12 @@ export const subscriptionTierConfig: Record<
       seatLimit: 20,
       documentLimit: 6000,
       storageLimitGb: 750,
-      portalSeatLimit: 40,
+      sharedAccessSeatLimit: 40,
     },
   },
   Enterprise: {
     monthlyRate: 4990,
-    ownerPortalEnabled: true,
+    sharedAccessEnabled: true,
     brandedListings: true,
     featureFlags: [
       'Custom shared access',
@@ -85,7 +85,7 @@ export const subscriptionTierConfig: Record<
       seatLimit: 60,
       documentLimit: 20000,
       storageLimitGb: 2500,
-      portalSeatLimit: 200,
+      sharedAccessSeatLimit: 200,
     },
   },
 };
@@ -154,14 +154,14 @@ export function conditionTone(condition: AssetCondition) {
   return 'emerald';
 }
 
-export function derivePortalSnapshot(
-  portal: PortalSnapshot,
+export function deriveSharedAccessSnapshot(
+  sharedAccess: SharedAccessSnapshot,
   savedHorseIds: string[],
   salesLeads: SalesLead[],
 ) {
   const openInquiries = salesLeads.filter((lead) => lead.stage !== 'Closed').length;
   return {
-    ...portal,
+    ...sharedAccess,
     savedHorses: savedHorseIds.length,
     openInquiries,
   };

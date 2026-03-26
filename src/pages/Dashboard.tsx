@@ -20,7 +20,7 @@ export default function Dashboard() {
   const documents = useXbarStore((state) => state.documents);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const salesLeads = useXbarStore((state) => state.salesLeads);
-  const portal = useXbarStore((state) => state.portal);
+  const sharedAccess = useXbarStore((state) => state.sharedAccess);
   const intakeBatches = useXbarStore((state) => state.intakeBatches);
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
   const roleWorkspace = useCurrentRoleWorkspace();
@@ -51,7 +51,7 @@ export default function Dashboard() {
     documents,
     ownershipRecords,
     salesLeads,
-    portal,
+    sharedAccess,
   }).slice(0, 4);
 
   const menuCommand = menuState?.type === 'command' ? commandCenter.find((item) => item.id === menuState.id) ?? fieldTools.find((item) => item.id === menuState.id) : undefined;
@@ -382,7 +382,7 @@ export default function Dashboard() {
                     <div className="inline-metrics">
                       <span>Last touch {formatDateLabel(lead.lastTouch)}</span>
                       <span>{lead.savedListing ? 'Saved' : 'Not saved'}</span>
-                      <span>{lead.ownerPortalReady ? 'Share ready' : 'Share pending'}</span>
+                      <span>{lead.shareReady ? 'Share ready' : 'Share pending'}</span>
                     </div>
                   </button>
                 );

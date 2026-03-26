@@ -1,9 +1,9 @@
 import {
   OwnershipRecord,
-  PortalSnapshot,
   RanchAsset,
   RoleWorkspace,
   SalesLead,
+  SharedAccessSnapshot,
   SubscriptionProfile,
 } from '@/types/xbar';
 
@@ -124,7 +124,7 @@ export const subscriptionSeed: SubscriptionProfile = {
   monthlyRate: 1290,
   renewalDate: '2026-04-12',
   billingState: 'Manual Billing',
-  ownerPortalEnabled: true,
+  sharedAccessEnabled: true,
   brandedListings: true,
   featureFlags: [
     'Role-aware dashboards',
@@ -140,8 +140,8 @@ export const subscriptionSeed: SubscriptionProfile = {
     documentLimit: 1800,
     storageUsedGb: 82,
     storageLimitGb: 200,
-    portalSeatsUsed: 3,
-    portalSeatLimit: 10,
+    sharedAccessSeatsUsed: 3,
+    sharedAccessSeatLimit: 10,
   },
 };
 
@@ -162,7 +162,7 @@ export const roleSeed: RoleWorkspace[] = [
   },
   {
     role: 'Owner',
-    label: 'Shared access view',
+    label: 'Owner access',
     summary: 'Read-only horse records, documents, and sale packets.',
     primaryModules: ['Shared Access', 'Documents', 'Ownership'],
     permissions: ['Packet viewing', 'Owner document upload', 'Saved listing access'],
@@ -192,7 +192,7 @@ export const salesLeadsSeed: SalesLead[] = [
     stage: 'Qualified',
     lastTouch: '2026-03-23',
     savedListing: true,
-    ownerPortalReady: false,
+    shareReady: false,
   },
   {
     id: 'lead-2',
@@ -202,7 +202,7 @@ export const salesLeadsSeed: SalesLead[] = [
     stage: 'Offer',
     lastTouch: '2026-03-22',
     savedListing: false,
-    ownerPortalReady: true,
+    shareReady: true,
   },
   {
     id: 'lead-3',
@@ -212,11 +212,11 @@ export const salesLeadsSeed: SalesLead[] = [
     stage: 'New',
     lastTouch: '2026-03-24',
     savedListing: true,
-    ownerPortalReady: false,
+    shareReady: false,
   },
 ];
 
-export const portalSeed: PortalSnapshot = {
+export const sharedAccessSeed: SharedAccessSnapshot = {
   invitedOwners: 9,
   activeOwners: 3,
   savedHorses: 7,

@@ -1,4 +1,4 @@
-import { HashRouter, Route, Routes } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastViewport } from './components/ToastViewport';
 import Dashboard from './pages/Dashboard';
@@ -10,11 +10,11 @@ import Horses from './routes/Horses';
 import MainLayout from './routes/layouts/MainLayout';
 import Medical from './routes/Medical';
 import NotFound from './routes/NotFound';
-import OwnerPortal from './routes/OwnerPortal';
 import Ownership from './routes/Ownership';
 import RanchAssets from './routes/RanchAssets';
 import Sales from './routes/Sales';
 import Settings from './routes/Settings';
+import SharedAccess from './routes/SharedAccess';
 import Subscriptions from './routes/Subscriptions';
 
 export default function App() {
@@ -35,7 +35,8 @@ export default function App() {
             <Route path="sales" element={<Sales />} />
             <Route path="assets" element={<RanchAssets />} />
             <Route path="subscriptions" element={<Subscriptions />} />
-            <Route path="portal" element={<OwnerPortal />} />
+            <Route path="shared-access" element={<SharedAccess />} />
+            <Route path="portal" element={<Navigate to="/shared-access" replace />} />
             <Route path="settings" element={<Settings />} />
             <Route path="*" element={<NotFound />} />
           </Route>

@@ -6,9 +6,9 @@ import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useXbarStore } from '@/store/useXbarStore';
 
-export default function OwnerPortal() {
+export default function SharedAccess() {
   const navigate = useNavigate();
-  const portal = useXbarStore((state) => state.portal);
+  const sharedAccess = useXbarStore((state) => state.sharedAccess);
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const savedHorseIds = useXbarStore((state) => state.savedHorseIds);
@@ -56,9 +56,9 @@ export default function OwnerPortal() {
       />
 
       <div className="metric-grid">
-        <MetricCard label="Invited owners" value={`${portal.invitedOwners}`} detail={`${portal.activeOwners} already active in the current workspace`} />
-        <MetricCard label="Saved horses" value={`${portal.savedHorses}`} detail="Live demand signal across sales and ownership" tone="blue" />
-        <MetricCard label="Open inquiries" value={`${portal.openInquiries}`} detail="Buyer and owner requests waiting on response" tone="amber" />
+        <MetricCard label="Invited owners" value={`${sharedAccess.invitedOwners}`} detail={`${sharedAccess.activeOwners} already active in the current workspace`} />
+        <MetricCard label="Saved horses" value={`${sharedAccess.savedHorses}`} detail="Live demand signal across sales and ownership" tone="blue" />
+        <MetricCard label="Open inquiries" value={`${sharedAccess.openInquiries}`} detail="Buyer and owner requests waiting on response" tone="amber" />
         <MetricCard label="Live buyer links" value={`${liveProfiles.length}`} detail="Saved horses clear enough for a shareable buyer link" tone="emerald" />
       </div>
 
@@ -75,7 +75,7 @@ export default function OwnerPortal() {
             <div className="stack-item">
               <div className="stack-item__top">
                 <div className="stack-item__title">Inquiry routing</div>
-                <Pill tone="amber">{portal.openInquiries} open</Pill>
+                <Pill tone="amber">{sharedAccess.openInquiries} open</Pill>
               </div>
               <div className="stack-item__copy">Questions still route through the workspace team.</div>
             </div>

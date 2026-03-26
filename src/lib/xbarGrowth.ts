@@ -5,9 +5,9 @@ import type {
   HorseRecord,
   IntakeBatch,
   OwnershipRecord,
-  PortalSnapshot,
   RanchAsset,
   SalesLead,
+  SharedAccessSnapshot,
   SubscriptionProfile,
   SubscriptionTier,
 } from '../types/xbar.js';
@@ -126,7 +126,7 @@ export function buildCommandCenter(params: {
       title: activeOffers.length ? `${activeOffers.length} hot buyers` : 'Buyer queue calm',
       summary: 'Keep share links and follow-up moving.',
       module: 'Sales',
-      href: '/portal',
+      href: '/shared-access',
       tone: activeOffers.length ? 'blue' : 'slate',
       value: activeOffers.length ? `${activeOffers.length} hot leads` : 'Pipeline cool',
     },
@@ -163,9 +163,9 @@ export function buildFieldTools(params: {
   documents: DocumentRecord[];
   ownershipRecords: OwnershipRecord[];
   salesLeads: SalesLead[];
-  portal: PortalSnapshot;
+  sharedAccess: SharedAccessSnapshot;
 }) {
-  const { horses, documents, ownershipRecords, salesLeads, portal } = params;
+  const { horses, documents, ownershipRecords, salesLeads, sharedAccess } = params;
   const buyerReady = buyerReadyProfiles(horses, documents, ownershipRecords).length;
   const unresolvedDocs = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched').length;
 
@@ -194,7 +194,7 @@ export function buildFieldTools(params: {
       title: 'Open share links',
       summary: 'Send clean buyer-ready records.',
       metric: `${buyerReady} buyer-safe profiles`,
-      href: '/portal',
+      href: '/shared-access',
       tone: buyerReady ? 'emerald' : 'amber',
     },
     {
@@ -211,9 +211,9 @@ export function buildFieldTools(params: {
       eyebrow: 'Subscriber value',
       title: 'Shared access',
       summary: 'Manage links, saves, and inquiries.',
-      metric: `${portal.activeOwners}/${portal.invitedOwners} active owners`,
-      href: '/portal',
-      tone: portal.activeOwners ? 'emerald' : 'slate',
+      metric: `${sharedAccess.activeOwners}/${sharedAccess.invitedOwners} active owners`,
+      href: '/shared-access',
+      tone: sharedAccess.activeOwners ? 'emerald' : 'slate',
     },
   ] satisfies FieldToolCard[];
 }

@@ -4,16 +4,16 @@ import { documentsSeed, intakeBatchesSeed } from '@/data/xbarDocuments';
 import { horsesSeed } from '@/data/xbarHorses';
 import {
   ownershipSeed,
-  portalSeed,
   ranchAssetsSeed,
   roleSeed,
   salesLeadsSeed,
+  sharedAccessSeed,
   subscriptionSeed,
 } from '@/data/xbarPlatform';
 import {
   buildDocumentRecord,
   createId,
-  derivePortalSnapshot,
+  deriveSharedAccessSnapshot,
   estimateStorageGb,
   guessGalleryKind,
   nowStamp,
@@ -36,8 +36,8 @@ import type {
   HorseRecord,
   IntakeBatch,
   OwnershipStake,
-  PortalSnapshot,
   SalesLead,
+  SharedAccessSnapshot,
   UserRole,
 } from '@/types/xbar';
 import type {
@@ -65,7 +65,7 @@ type XbarStore = {
   subscription: SubscriptionProfile;
   roleWorkspaces: RoleWorkspace[];
   salesLeads: SalesLead[];
-  portal: PortalSnapshot;
+  sharedAccess: SharedAccessSnapshot;
   savedHorseIds: string[];
   setCurrentRole: (role: UserRole) => void;
   toggleSavedHorse: (horseId: string) => void;
@@ -77,7 +77,7 @@ type XbarStore = {
   createSalesLead: (input: LeadInput) => ActionResult;
   updateSalesLead: (
     leadId: string,
-    patch: Partial<Pick<SalesLead, 'stage' | 'lastTouch' | 'nextFollowUp' | 'notes' | 'offerAmount' | 'savedListing' | 'ownerPortalReady' | 'outcome'>>,
+    patch: Partial<Pick<SalesLead, 'stage' | 'lastTouch' | 'nextFollowUp' | 'notes' | 'offerAmount' | 'savedListing' | 'shareReady' | 'outcome'>>,
   ) => ActionResult;
   updateAsset: (assetId: string, patch: AssetPatch) => ActionResult;
   addHorseNote: (horseId: string, note: Pick<HorseNote, 'title' | 'body' | 'author' | 'tone'>) => ActionResult;
@@ -105,7 +105,7 @@ type PersistedXbarState = Pick<
   | 'subscription'
   | 'roleWorkspaces'
   | 'salesLeads'
-  | 'portal'
+  | 'sharedAccess'
   | 'savedHorseIds'
 >;
 
@@ -116,7 +116,7 @@ type WorkspaceBackup = {
   workspace: PersistedXbarState;
 };
 
-const WORKSPACE_SCHEMA_VERSION = 2;
+const WORKSPACE_SCHEMA_VERSION = 3;
 
 const initialState = {
   currentRole: 'Admin' as UserRole,
@@ -128,11 +128,11 @@ const initialState = {
   subscription: subscriptionSeed,
   roleWorkspaces: roleSeed,
   salesLeads: salesLeadsSeed,
-  portal: portalSeed,
+  sharedAccess: sharedAccessSeed,
   savedHorseIds: ['horse-wiggy', 'horse-dolly'],
 };
 
-function syncDerivedValues(state: Pick<XbarStore, 'horses' | 'salesLeads' | 'savedHorseIds' | 'portal'>) {
+function syncDerivedValues(state: Pick<XbarStore, 'horses' | 'salesLeads' | 'savedHorseIds' | 'sharedAccess'>) {
   const horses = state.horses.map((horse) => {
     const leadCount = state.salesLeads.filter((lead) => lead.horseId === horse.id && lead.stage !== 'Closed').length;
     return {
@@ -146,7 +146,7 @@ function syncDerivedValues(state: Pick<XbarStore, 'horses' | 'salesLeads' | 'sav
 
   return {
     horses,
-    portal: derivePortalSnapshot(state.portal, state.savedHorseIds, state.salesLeads),
+    sharedAccess: deriveSharedAccessSnapshot(state.sharedAccess, state.savedHorseIds, state.salesLeads),
   };
 }
 
@@ -182,7 +182,7 @@ function selectPersistedState(state: PersistedXbarState): PersistedXbarState {
     subscription: state.subscription,
     roleWorkspaces: state.roleWorkspaces,
     salesLeads: state.salesLeads,
-    portal: state.portal,
+    sharedAccess: state.sharedAccess,
     savedHorseIds: state.savedHorseIds,
   };
 }
@@ -217,15 +217,25 @@ function restorePersistedState(raw: unknown): PersistedXbarState {
   const usage = ((state.subscription as SubscriptionProfile | undefined)?.usage ?? {}) as Partial<SubscriptionProfile['usage']> & {
     ocrProcessed?: number;
     ocrLimit?: number;
+    portalSeatsUsed?: number;
+    portalSeatLimit?: number;
   };
   const subscription = state.subscription && typeof state.subscription === 'object'
     ? {
         ...(state.subscription as SubscriptionProfile),
         billingState: normalizeBillingState((state.subscription as SubscriptionProfile).billingState),
+        sharedAccessEnabled:
+          (state.subscription as SubscriptionProfile).sharedAccessEnabled ??
+          (state.subscription as SubscriptionProfile & { ownerPortalEnabled?: boolean }).ownerPortalEnabled ??
+          initialState.subscription.sharedAccessEnabled,
         usage: {
           ...(state.subscription as SubscriptionProfile).usage,
           documentsProcessed: usage.documentsProcessed ?? usage.ocrProcessed ?? initialState.subscription.usage.documentsProcessed,
           documentLimit: usage.documentLimit ?? usage.ocrLimit ?? initialState.subscription.usage.documentLimit,
+          sharedAccessSeatsUsed:
+            usage.sharedAccessSeatsUsed ?? usage.portalSeatsUsed ?? initialState.subscription.usage.sharedAccessSeatsUsed,
+          sharedAccessSeatLimit:
+            usage.sharedAccessSeatLimit ?? usage.portalSeatLimit ?? initialState.subscription.usage.sharedAccessSeatLimit,
         },
       }
     : initialState.subscription;
@@ -238,21 +248,34 @@ function restorePersistedState(raw: unknown): PersistedXbarState {
     ranchAssets: Array.isArray(state.ranchAssets) ? (state.ranchAssets as RanchAsset[]) : initialState.ranchAssets,
     subscription,
     roleWorkspaces: Array.isArray(state.roleWorkspaces) ? (state.roleWorkspaces as RoleWorkspace[]) : initialState.roleWorkspaces,
-    salesLeads: Array.isArray(state.salesLeads) ? (state.salesLeads as SalesLead[]) : initialState.salesLeads,
-    portal: state.portal && typeof state.portal === 'object' ? (state.portal as PortalSnapshot) : initialState.portal,
+    salesLeads: Array.isArray(state.salesLeads)
+      ? (state.salesLeads as SalesLead[]).map((lead) => ({
+          ...lead,
+          shareReady:
+            lead.shareReady ??
+            (lead as SalesLead & { ownerPortalReady?: boolean }).ownerPortalReady ??
+            false,
+        }))
+      : initialState.salesLeads,
+    sharedAccess:
+      state.sharedAccess && typeof state.sharedAccess === 'object'
+        ? (state.sharedAccess as SharedAccessSnapshot)
+        : state.portal && typeof state.portal === 'object'
+          ? (state.portal as SharedAccessSnapshot)
+          : initialState.sharedAccess,
     savedHorseIds: Array.isArray(state.savedHorseIds) ? (state.savedHorseIds as string[]) : initialState.savedHorseIds,
   };
   const derived = syncDerivedValues({
     horses: baseState.horses,
     salesLeads: baseState.salesLeads,
     savedHorseIds: baseState.savedHorseIds,
-    portal: baseState.portal,
+    sharedAccess: baseState.sharedAccess,
   });
 
   return {
     ...baseState,
     horses: derived.horses,
-    portal: derived.portal,
+    sharedAccess: derived.sharedAccess,
   };
 }
 
@@ -448,13 +471,13 @@ export const useXbarStore = create<XbarStore>()(
 
           return {
             savedHorseIds: nextSavedHorseIds,
-            ...syncDerivedValues({
-              horses,
-              salesLeads: state.salesLeads,
-              savedHorseIds: nextSavedHorseIds,
-              portal: state.portal,
-            }),
-          };
+              ...syncDerivedValues({
+                horses,
+                salesLeads: state.salesLeads,
+                savedHorseIds: nextSavedHorseIds,
+                sharedAccess: state.sharedAccess,
+              }),
+            };
         }),
       addHorse: (input) => {
         const validationError = validateNewHorseInput(input);
@@ -696,8 +719,8 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Media upload failed. Check the selected files and try again.' };
         }
       },
-      createSalesLead: ({ horseId, name, channel, portalReady }) => {
-        const validationError = validateLeadInput({ horseId, name, channel, portalReady });
+      createSalesLead: ({ horseId, name, channel, shareReady }) => {
+        const validationError = validateLeadInput({ horseId, name, channel, shareReady });
         if (validationError) {
           return { ok: false, message: validationError };
         }
@@ -716,7 +739,7 @@ export const useXbarStore = create<XbarStore>()(
           nextFollowUp: '',
           notes: '',
           savedListing: false,
-          ownerPortalReady: Boolean(portalReady),
+          shareReady: Boolean(shareReady),
         };
 
         set((current) => {
@@ -750,7 +773,7 @@ export const useXbarStore = create<XbarStore>()(
               horses,
               salesLeads,
               savedHorseIds: current.savedHorseIds,
-              portal: current.portal,
+              sharedAccess: current.sharedAccess,
             }),
           };
         });
@@ -780,7 +803,7 @@ export const useXbarStore = create<XbarStore>()(
               horses: current.horses,
               salesLeads,
               savedHorseIds: current.savedHorseIds,
-              portal: current.portal,
+              sharedAccess: current.sharedAccess,
             }),
           };
         });
@@ -1091,7 +1114,7 @@ export const useXbarStore = create<XbarStore>()(
           subscription: state.subscription,
           roleWorkspaces: state.roleWorkspaces,
           salesLeads: state.salesLeads,
-          portal: state.portal,
+          sharedAccess: state.sharedAccess,
           savedHorseIds: state.savedHorseIds,
         }),
     },
