@@ -120,7 +120,7 @@ const documents: DocumentRecord[] = [
     horseId: 'horse-1',
     uploadedBy: 'Ops',
     uploadedAt: '2026-03-20',
-    source: 'Owner Portal',
+    source: 'Shared Upload',
     state: 'Needs Review',
     confidence: 0.71,
     duplicateRisk: 'Possible Duplicate',

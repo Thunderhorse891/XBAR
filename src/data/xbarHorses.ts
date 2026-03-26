@@ -49,7 +49,7 @@ export const horsesSeed: HorseRecord[] = [
     ownerEntity: 'XBAR LLC',
     insuredValue: 185000,
     profileImage: assetUrl('xbar-logo-sleek.png'),
-    tags: ['sale-ready', 'aqha-verified', 'owner-portal-visible'],
+    tags: ['sale-ready', 'aqha-verified', 'shared-access-visible'],
     bloodline: {
       sire: 'Red Buck Hancock',
       dam: 'Wiggy Deluxe Lena',
@@ -713,7 +713,7 @@ export const horsesSeed: HorseRecord[] = [
     ownerEntity: 'XBAR Legacy',
     insuredValue: 42000,
     profileImage: assetUrl('xbar-logo-sleek.png'),
-    tags: ['retired', 'owner-portal'],
+    tags: ['retired', 'shared-access'],
     bloodline: {
       sire: 'Midnight Valor',
       dam: 'Arabella Shade',
@@ -775,7 +775,7 @@ export const horsesSeed: HorseRecord[] = [
         date: '2026-03-10',
       title: 'Shared link viewed',
         summary: 'Legacy records were accessed by the owner for insurance review.',
-        owner: 'Portal',
+        owner: 'Shared Access',
         category: 'Ownership',
       },
     ],
@@ -792,7 +792,7 @@ export const horsesSeed: HorseRecord[] = [
     notes: [
       {
         id: 'note-shadow-1',
-        title: 'Portal-ready archive',
+        title: 'Shared-access archive',
       body: 'Good template horse for the shared-access and legacy records workflow.',
         author: 'Admin',
         createdAt: '2026-03-15',

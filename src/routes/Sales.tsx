@@ -72,12 +72,12 @@ export default function Sales() {
       ? [
           {
             id: 'open-horse',
-            label: 'Open horse profile',
+            label: 'Open horse record',
             onSelect: () => navigate(`/horses/${menuHorse.id}`),
           },
         {
           id: 'open-profile',
-          label: 'Open buyer profile',
+          label: 'Open share view',
           onSelect: () => navigate(`/profiles/${menuHorse.id}`),
         },
       ]
@@ -87,19 +87,19 @@ export default function Sales() {
     <>
       <PageHeader
         eyebrow="Sales"
-        title="Sales and listing readiness"
-        description="Buyers, listings, follow-up."
+        title="Sales Board"
+        description="Listings, buyers, follow-up."
       />
 
       <div className="metric-grid">
-        <MetricCard label="Sale horses" value={`${saleHorses.length}`} detail="Profiles carrying active pricing or buyer-review posture" />
-        <MetricCard label="Buyer pipeline" value={`${salesLeads.filter((lead) => lead.stage !== 'Closed').length}`} detail="Leads across social, referral, and direct inquiry channels" tone="blue" />
-        <MetricCard label="Watchlist demand" value={`${portal.savedHorses}`} detail="Saved horses are now a first-class signal inside the platform" tone="emerald" />
+        <MetricCard label="Sale horses" value={`${saleHorses.length}`} detail="Active pricing or buyer review" />
+        <MetricCard label="Buyer pipeline" value={`${salesLeads.filter((lead) => lead.stage !== 'Closed').length}`} detail="Open leads across all channels" tone="blue" />
+        <MetricCard label="Watchlist demand" value={`${portal.savedHorses}`} detail="Saved horses signal live buyer interest" tone="emerald" />
         <MetricCard label="Transfer blockers" value={`${saleHorses.filter((horse) => horse.readiness.packetStatus === 'Needs Transfer Docs').length}`} detail="Listings with ownership or paperwork friction" tone="amber" />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Listing portfolio" title="Sale-ready horse presentation" description="Live listings.">
+        <Panel eyebrow="Listings" title="Sale-ready records" description="Live listings.">
           {saleHorses.length ? (
             <div className="horse-grid">
               {saleHorses.map((horse) => (
@@ -137,7 +137,7 @@ export default function Sales() {
                           </div>
                           <div className="inline-actions inline-actions--card">
                             <Link className="button button--ghost button--compact" to={packet.sharePath} onClick={(event) => event.stopPropagation()}>
-                              Open buyer profile
+                              Open share view
                             </Link>
                           </div>
                         </div>
@@ -148,11 +148,11 @@ export default function Sales() {
               ))}
             </div>
           ) : (
-            <EmptyState compact title="No sale horses yet" description="Move a horse into buyer review or market ready status to populate the sales board." />
+            <EmptyState compact title="No sale horses yet" description="Move a horse into buyer review or market ready to populate the sales board." />
           )}
         </Panel>
 
-        <Panel eyebrow="Leads" title="Buyer and inquiry flow" description="Lead pipeline.">
+        <Panel eyebrow="Leads" title="Buyer flow" description="Lead pipeline.">
           {salesLeads.length ? (
             <div className="stack-list">
               {salesLeads.map((lead) => {
@@ -189,8 +189,8 @@ export default function Sales() {
                       </Pill>
                     </div>
                     <div className="inline-metrics">
-                      <span>{lead.savedListing ? 'Saved listing' : 'No saved listing yet'}</span>
-                      <span>{lead.ownerPortalReady ? 'Portal link issued' : 'Portal handoff staged'}</span>
+                      <span>{lead.savedListing ? 'Saved listing' : 'Not saved yet'}</span>
+                      <span>{lead.ownerPortalReady ? 'Share link issued' : 'Share link staged'}</span>
                       <span>Last touch {formatDateLabel(lead.lastTouch)}</span>
                     </div>
                   </button>
@@ -198,7 +198,7 @@ export default function Sales() {
               })}
             </div>
           ) : (
-            <EmptyState compact title="No leads yet" description="Create a lead from a horse profile to start working the buyer pipeline." />
+            <EmptyState compact title="No leads yet" description="Create a lead from a horse record to start the pipeline." />
           )}
         </Panel>
       </div>
@@ -281,13 +281,13 @@ export default function Sales() {
           )}
         </Panel>
 
-        <Panel eyebrow="Handoff" title="Buyer handoff readiness" description="Live motion.">
+        <Panel eyebrow="Handoff" title="Share readiness" description="Live motion.">
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__top">
                 <div>
-                  <div className="stack-item__title">Live buyer links</div>
-                  <div className="stack-item__copy">Sale horses that are clean enough to open as shareable profiles.</div>
+                  <div className="stack-item__title">Live share links</div>
+                  <div className="stack-item__copy">Sale horses clean enough to open as shareable records.</div>
                 </div>
                 <Pill tone={liveShareCount ? 'emerald' : 'amber'}>{liveShareCount}</Pill>
               </div>
@@ -295,8 +295,8 @@ export default function Sales() {
             <div className="stack-item">
               <div className="stack-item__top">
                 <div>
-                  <div className="stack-item__title">Saved-horse demand</div>
-                  <div className="stack-item__copy">Watchlist pressure coming from the owner and buyer access layer.</div>
+                  <div className="stack-item__title">Saved demand</div>
+                  <div className="stack-item__copy">Watchlist pressure from the shared-access layer.</div>
                 </div>
                 <Pill tone={portal.savedHorses ? 'blue' : 'slate'}>{portal.savedHorses}</Pill>
               </div>

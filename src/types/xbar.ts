@@ -29,7 +29,7 @@ export type DocumentType =
   | 'Media Kit'
   | 'Ownership Memo';
 
-export type DocumentSource = 'Manual Upload' | 'Bulk Intake' | 'Owner Portal' | 'Sales Packet';
+export type DocumentSource = 'Manual Upload' | 'Bulk Intake' | 'Shared Upload' | 'Sales Packet';
 
 export type ProcessingState =
   | 'Queued'

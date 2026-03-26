@@ -96,8 +96,8 @@ export function buildCommandCenter(params: {
   const items: CommandCenterItem[] = [
     {
       id: 'document-review',
-      title: `Clear ${reviewQueue.length} document review items`,
-      summary: 'Push unresolved intake into live horse records.',
+      title: reviewQueue.length ? `Review ${reviewQueue.length} documents` : 'Document queue clear',
+      summary: 'Assign files and close the queue.',
       module: 'Documents',
       href: '/documents',
       tone: reviewQueue.length > 4 ? 'rose' : 'amber',
@@ -105,8 +105,8 @@ export function buildCommandCenter(params: {
     },
     {
       id: 'buyer-blockers',
-      title: `${blockedProfiles.length} revenue profiles blocked`,
-      summary: 'Private sale horses still need buyer-safe packet trust.',
+      title: blockedProfiles.length ? `${blockedProfiles.length} sale packets blocked` : 'Sale packets clear',
+      summary: 'Private listings still need clean share packets.',
       module: 'Sales',
       href: '/sales',
       tone: blockedProfiles.length ? 'rose' : 'emerald',
@@ -114,8 +114,8 @@ export function buildCommandCenter(params: {
     },
     {
       id: 'ownership-integrity',
-      title: `Resolve ${ownershipAttention.length} ownership issues`,
-      summary: 'Clear transfer blockers before they slow deals or travel.',
+      title: ownershipAttention.length ? `${ownershipAttention.length} transfer blockers` : 'Transfers clean',
+      summary: 'Clear signatures, AQHA holds, and owner gaps.',
       module: 'Ownership',
       href: '/ownership',
       tone: ownershipAttention.length > 1 ? 'amber' : 'emerald',
@@ -123,8 +123,8 @@ export function buildCommandCenter(params: {
     },
     {
       id: 'buyer-pipeline',
-      title: `Advance ${activeOffers.length} high-intent buyers`,
-      summary: 'Move hot buyers with faster packet follow-up.',
+      title: activeOffers.length ? `${activeOffers.length} hot buyers` : 'Buyer queue calm',
+      summary: 'Keep share links and follow-up moving.',
       module: 'Sales',
       href: '/portal',
       tone: activeOffers.length ? 'blue' : 'slate',
@@ -132,8 +132,8 @@ export function buildCommandCenter(params: {
     },
     {
       id: 'ops-hardware',
-      title: `${serviceRisk.length} ops tools need service`,
-      summary: 'Scanner and field tools are affecting throughput.',
+      title: serviceRisk.length ? `${serviceRisk.length} tools need service` : 'Field tools ready',
+      summary: 'Scanner and field kits need attention.',
       module: 'Ranch Toolkit',
       href: '/assets',
       tone: serviceRisk.length ? 'amber' : 'emerald',
@@ -141,8 +141,8 @@ export function buildCommandCenter(params: {
     },
     {
       id: 'throughput',
-      title: `${slowBatches.length} intake batches still moving`,
-      summary: 'Keep document intake moving cleanly.',
+      title: slowBatches.length ? `${slowBatches.length} intake batches live` : 'Intake caught up',
+      summary: 'Keep intake moving without spillover.',
       module: 'Documents',
       href: '/documents',
       tone: slowBatches.length > 1 ? 'blue' : 'slate',
@@ -173,8 +173,8 @@ export function buildFieldTools(params: {
     {
       id: 'scan-intake',
       eyebrow: 'Mobile capture',
-      title: 'Add documents from the field',
-      summary: 'Send files into the manual review queue.',
+      title: 'Add files',
+      summary: 'Send documents to intake.',
       metric: `${unresolvedDocs} docs still in review`,
       href: '/documents?upload=1',
       tone: unresolvedDocs ? 'amber' : 'emerald',
@@ -182,8 +182,8 @@ export function buildFieldTools(params: {
     {
       id: 'horse-ops',
       eyebrow: 'Field workflow',
-      title: 'Update horses from the barn, pasture, or trailer',
-      summary: 'Update horses from anywhere without friction.',
+      title: 'Update horse records',
+      summary: 'Barn, pasture, trailer.',
       metric: `${horses.length} active horse records`,
       href: '/horses',
       tone: 'blue',
@@ -191,8 +191,8 @@ export function buildFieldTools(params: {
     {
       id: 'buyer-share',
       eyebrow: 'Revenue tool',
-      title: 'Open buyer links instantly',
-      summary: 'Send shareable horse links fast.',
+      title: 'Open share links',
+      summary: 'Send clean buyer-ready records.',
       metric: `${buyerReady} buyer-safe profiles`,
       href: '/portal',
       tone: buyerReady ? 'emerald' : 'amber',
@@ -200,8 +200,8 @@ export function buildFieldTools(params: {
     {
       id: 'lead-response',
       eyebrow: 'Pipeline motion',
-      title: 'Respond before the buyer cools off',
-      summary: 'Keep hot buyers moving with clean follow-up.',
+      title: 'Work hot leads',
+      summary: 'Follow-up, offers, next touch.',
       metric: `${salesLeads.filter((lead) => lead.stage !== 'Closed').length} open conversations`,
       href: '/sales',
       tone: 'blue',
@@ -209,8 +209,8 @@ export function buildFieldTools(params: {
     {
       id: 'owner-experience',
       eyebrow: 'Subscriber value',
-      title: 'Keep shared links polished and fast',
-      summary: 'Make the share experience feel high-touch and branded.',
+      title: 'Shared access',
+      summary: 'Manage links, saves, and inquiries.',
       metric: `${portal.activeOwners}/${portal.invitedOwners} active owners`,
       href: '/portal',
       tone: portal.activeOwners ? 'emerald' : 'slate',
@@ -254,9 +254,9 @@ export function buildRevenueBlueprint(subscription: SubscriptionProfile): Revenu
     recommendedMixLabel: recommendedMix.map((item) => `${item.customers} ${item.tier}`).join(' + '),
     scenarios,
     motions: [
-      'Charge premium monthly plans for trust, packet readiness, and owner/buyer portals.',
-      'Use setup and migration fees to fund onboarding and improve cash flow without depending on them for ARR.',
-      'Win on category depth: records integrity, ownership clarity, buyer trust, and mobile field speed.',
+      'Charge for trust, ownership clarity, and premium shared access.',
+      'Use setup and migration fees to fund onboarding.',
+      'Win on depth: records, transfers, buyer trust, field speed.',
     ],
   };
 }

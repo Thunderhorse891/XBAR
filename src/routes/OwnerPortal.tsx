@@ -51,38 +51,38 @@ export default function OwnerPortal() {
     <>
       <PageHeader
         eyebrow="Shared access"
-        title="Shared links and owner access"
-        description="Saved horses, share links, inquiries."
+        title="Shared Links"
+        description="Links, saves, inquiries."
       />
 
       <div className="metric-grid">
         <MetricCard label="Invited owners" value={`${portal.invitedOwners}`} detail={`${portal.activeOwners} already active in the current workspace`} />
-        <MetricCard label="Saved horses" value={`${portal.savedHorses}`} detail="Behavior signal available to the sales and ownership layers" tone="blue" />
+        <MetricCard label="Saved horses" value={`${portal.savedHorses}`} detail="Live demand signal across sales and ownership" tone="blue" />
         <MetricCard label="Open inquiries" value={`${portal.openInquiries}`} detail="Buyer and owner requests waiting on response" tone="amber" />
         <MetricCard label="Live buyer links" value={`${liveProfiles.length}`} detail="Saved horses clear enough for a shareable buyer link" tone="emerald" />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Share workflow" title="How access works" description="Shared links.">
+        <Panel eyebrow="Access" title="How it works" description="Shared links only.">
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__top">
                 <div className="stack-item__title">Owner access</div>
                 <Pill tone="blue">Shared links</Pill>
               </div>
-              <div className="stack-item__copy">This build uses direct share links instead of external sign-in providers.</div>
+              <div className="stack-item__copy">This build uses direct share links instead of external sign-in.</div>
             </div>
             <div className="stack-item">
               <div className="stack-item__top">
                 <div className="stack-item__title">Inquiry routing</div>
                 <Pill tone="amber">{portal.openInquiries} open</Pill>
               </div>
-              <div className="stack-item__copy">Buyer and owner questions still route through the sales desk and workspace team.</div>
+              <div className="stack-item__copy">Questions still route through the workspace team.</div>
             </div>
           </div>
         </Panel>
 
-        <Panel eyebrow="Shared profiles" title="Shared horse visibility" description="Saved horses.">
+        <Panel eyebrow="Shared records" title="Visibility" description="Saved horses.">
           {sharedHorses.length ? (
             <div className="stack-list">
               {sharedHorses.map((horse) => {

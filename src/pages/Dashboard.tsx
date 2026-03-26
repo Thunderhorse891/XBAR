@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
-import { MetricCard, PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
-import { formatCompactCurrency, formatDateLabel, formatPercent } from '@/lib/format';
+import { PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
+import { formatDateLabel, formatPercent } from '@/lib/format';
 import { buildCommandCenter, buildFieldTools } from '@/lib/xbarGrowth';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
@@ -26,11 +26,9 @@ export default function Dashboard() {
   const roleWorkspace = useCurrentRoleWorkspace();
   const [menuState, setMenuState] = useState<DashboardMenuState | null>(null);
 
-  const saleReady = horses.filter((horse) => horse.readiness.score >= 80);
   const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched');
   const ownershipAttention = ownershipRecords.filter((record) => record.transferStatus !== 'Clear');
   const medicalWatch = horses.filter((horse) => horse.status === 'Medical Review');
-  const totalInsuredValue = horses.reduce((sum, horse) => sum + horse.insuredValue, 0);
   const averageReadiness = horses.length ? Math.round(horses.reduce((sum, horse) => sum + horse.readiness.score, 0) / horses.length) : 0;
   const attentionHorses = horses.filter((horse) => horse.alerts.length > 0 || horse.readiness.score < 75).slice(0, 5);
   const buyerReadyProfiles = horses.filter((horse) =>
@@ -127,16 +125,16 @@ export default function Dashboard() {
   return (
     <>
       <PageHeader
-        eyebrow="Ops center"
-        title="Control deck"
-        description="Queue, transfers, buyers, assets."
+        eyebrow="Workspace"
+        title="Ops Board"
+        description="Queue, transfers, buyers."
         actions={
           <>
             <Link to="/horses" className="button button--ghost button--compact">
               Ledger
             </Link>
             <Link to="/documents" className="button button--primary button--compact">
-              Review queue
+              Review
             </Link>
           </>
         }
@@ -144,9 +142,9 @@ export default function Dashboard() {
 
       <section className="dashboard-stage">
         <div className="dashboard-stage__hero">
-          <div className="eyebrow">Live operations</div>
-          <h2 className="dashboard-stage__title">Clear the queue. Keep transfers clean. Move buyers faster.</h2>
-          <p className="dashboard-stage__description">Working records first.</p>
+          <div className="eyebrow">Live queue</div>
+          <h2 className="dashboard-stage__title">Move the work.</h2>
+          <p className="dashboard-stage__description">Queue first. Transfers and buyers next.</p>
           <div className="inline-actions">
             <Link to="/documents" className="button button--primary button--compact">
               Review intake
@@ -165,7 +163,7 @@ export default function Dashboard() {
         </div>
 
         <div className="dashboard-stage__board">
-          {commandCenter.slice(0, 4).map((item) => (
+          {commandCenter.slice(0, 3).map((item) => (
             <Link
               key={item.id}
               to={item.href}
@@ -214,15 +212,8 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <div className="metric-grid">
-        <MetricCard label="Portfolio" value={`${horses.length}`} detail={`${saleReady.length} market ready`} />
-        <MetricCard label="Insured value" value={formatCompactCurrency(totalInsuredValue)} detail={`${ownershipAttention.length} transfer blockers`} tone="slate" />
-        <MetricCard label="Buyer-safe" value={`${buyerReadyProfiles.length}`} detail="Profiles clear to share" tone="emerald" />
-        <MetricCard label="Medical watch" value={`${medicalWatch.length}`} detail="Care-sensitive horses" tone="rose" />
-      </div>
-
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Priority board" title="What needs action now">
+        <Panel eyebrow="Priority" title="Now">
           {commandCenter.length ? (
             <div className="stack-list">
               {commandCenter.map((item) => (
@@ -253,7 +244,7 @@ export default function Dashboard() {
           )}
         </Panel>
 
-        <Panel eyebrow="Horse watch" title="Records carrying risk">
+        <Panel eyebrow="Horse watch" title="At risk">
           {attentionHorses.length ? (
             <div className="stack-list">
               {attentionHorses.map((horse) => (
@@ -278,10 +269,10 @@ export default function Dashboard() {
                     </Pill>
                   </div>
                   <div className="inline-metrics">
-                    <span>Trust {formatPercent(horse.readiness.score)}</span>
-                    <span>{horse.documents.length} docs</span>
-                    <span>{horse.alerts.length} alerts</span>
-                  </div>
+                      <span>Trust {formatPercent(horse.readiness.score)}</span>
+                      <span>{horse.documents.length} docs</span>
+                      <span>{horse.alerts.length} alerts</span>
+                    </div>
                   <ProgressBar value={horse.readiness.score} tone={horse.readiness.score >= 85 ? 'emerald' : 'amber'} />
                 </Link>
               ))}
@@ -293,7 +284,7 @@ export default function Dashboard() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--secondary">
-        <Panel eyebrow="Documents" title="Recent intake">
+        <Panel eyebrow="Documents" title="Intake">
           {intakeBatches.length ? (
             <div className="stack-list">
               {intakeBatches.slice(0, 5).map((batch) => (
@@ -309,11 +300,11 @@ export default function Dashboard() {
                       {batch.state}
                     </Pill>
                   </div>
-                  <div className="inline-metrics">
-                    <span>{batch.processedCount}/{batch.fileCount} processed</span>
-                    <span>{batch.matchedCount} matched</span>
-                    <span>{batch.needsReviewCount} in review</span>
-                  </div>
+                    <div className="inline-metrics">
+                      <span>{batch.processedCount}/{batch.fileCount} logged</span>
+                      <span>{batch.matchedCount} matched</span>
+                      <span>{batch.needsReviewCount} in review</span>
+                    </div>
                 </Link>
               ))}
             </div>
@@ -322,7 +313,7 @@ export default function Dashboard() {
           )}
         </Panel>
 
-        <Panel eyebrow="Ownership" title="Transfer queue">
+        <Panel eyebrow="Ownership" title="Transfers">
           {ownershipRecords.length ? (
             <div className="stack-list">
               {ownershipRecords.slice(0, 5).map((record) => {
@@ -361,7 +352,7 @@ export default function Dashboard() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--secondary">
-        <Panel eyebrow="Buyer signals" title="Recent leads">
+        <Panel eyebrow="Leads" title="Buyer flow">
           {salesLeads.length ? (
             <div className="stack-list">
               {salesLeads.slice(0, 5).map((lead) => {
@@ -390,8 +381,8 @@ export default function Dashboard() {
                     </div>
                     <div className="inline-metrics">
                       <span>Last touch {formatDateLabel(lead.lastTouch)}</span>
-                      <span>{lead.savedListing ? 'Saved listing' : 'Not saved yet'}</span>
-                      <span>{lead.ownerPortalReady ? 'Portal ready' : 'Portal pending'}</span>
+                      <span>{lead.savedListing ? 'Saved' : 'Not saved'}</span>
+                      <span>{lead.ownerPortalReady ? 'Share ready' : 'Share pending'}</span>
                     </div>
                   </button>
                 );
@@ -404,7 +395,7 @@ export default function Dashboard() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--secondary">
-        <Panel eyebrow="Field tools" title="Fast jumps">
+        <Panel eyebrow="Shortcuts" title="Fast jumps">
           <div className="stack-list">
             {fieldTools.map((tool) => (
               <Link
@@ -428,7 +419,7 @@ export default function Dashboard() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Role focus" title={roleWorkspace.label} meta={<Pill tone="blue">{roleWorkspace.primaryModules.length} modules</Pill>}>
+        <Panel eyebrow="Role" title={roleWorkspace.label} meta={<Pill tone="blue">{roleWorkspace.primaryModules.length} modules</Pill>}>
           <div className="token-row">
             {roleWorkspace.primaryModules.map((module) => (
               <Pill key={module} tone="blue">

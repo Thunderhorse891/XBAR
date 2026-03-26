@@ -15,7 +15,7 @@ export default function Subscriptions() {
     <>
       <PageHeader
         eyebrow="Subscriptions"
-        title="Contract and packaging"
+        title="Contract"
         description="Usage, limits, revenue."
       />
 
@@ -57,7 +57,7 @@ export default function Subscriptions() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Usage" title="Seats, storage, portal">
+        <Panel eyebrow="Usage" title="Seats, storage, access">
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__top">
@@ -85,7 +85,7 @@ export default function Subscriptions() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--secondary">
-        <Panel eyebrow="Revenue blueprint" title="Path to $10M ARR" description="Revenue scenarios.">
+        <Panel eyebrow="Revenue" title="Path to $10M ARR" description="Scenarios.">
           <div className="stack-list">
             {revenuePlan.scenarios.map((scenario) => (
               <div key={scenario.tier} className="stack-item">
@@ -104,7 +104,7 @@ export default function Subscriptions() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Premium pricing levers" title="Why teams pay more" description="Pricing drivers.">
+        <Panel eyebrow="Pricing" title="Why teams pay more" description="Drivers.">
           <div className="bullet-list">
             {revenuePlan.motions.map((motion) => (
               <div key={motion} className="bullet-list__item">
@@ -118,7 +118,7 @@ export default function Subscriptions() {
         </Panel>
       </div>
 
-      <Panel eyebrow="Tier design" title="Product packaging" description="Read-only tiers.">
+      <Panel eyebrow="Packaging" title="Product tiers" description="Read-only tiers.">
         <div className="detail-grid">
           {tiers.map((tier) => {
             const config = subscriptionTierConfig[tier];

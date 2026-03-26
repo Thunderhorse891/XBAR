@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
-import { MetricCard, PageHeader, Pill, ProgressBar } from '@/components/app-ui';
+import { PageHeader, Pill, ProgressBar } from '@/components/app-ui';
 import { DotsIcon } from '@/components/icons';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
@@ -85,8 +85,8 @@ export default function Horses() {
     const wasSaved = savedHorseIds.includes(horseId);
     toggleSavedHorse(horseId);
     pushToast({
-      title: wasSaved ? 'Removed from portal' : 'Saved to portal',
-      message: horse ? `${horse.name} ${wasSaved ? 'was removed from' : 'is now in'} the saved-horse workspace.` : 'Portal state updated.',
+      title: wasSaved ? 'Removed from shared access' : 'Added to shared access',
+      message: horse ? `${horse.name} ${wasSaved ? 'was removed from' : 'is now in'} the shared-access list.` : 'Shared access updated.',
       tone: 'success',
     });
   };
@@ -101,17 +101,17 @@ export default function Horses() {
     ? [
         {
           id: 'open-profile',
-          label: 'Open profile',
+          label: 'Open record',
           onSelect: () => navigate(`/horses/${menuHorse.id}`),
         },
         {
-          id: 'open-profile',
-          label: 'Open buyer profile',
+          id: 'open-share-view',
+          label: 'Open share view',
           onSelect: () => navigate(`/profiles/${menuHorse.id}`),
         },
         {
-          id: 'toggle-saved',
-          label: menuSaved ? 'Remove from portal' : 'Save to portal',
+          id: 'toggle-shared',
+          label: menuSaved ? 'Remove from shared access' : 'Add to shared access',
           onSelect: () => handleSavedHorseToggle(menuHorse.id),
         },
         {
@@ -165,8 +165,8 @@ export default function Horses() {
     <>
       <PageHeader
         eyebrow="Horse ledger"
-        title="Horse Portfolio"
-        description="Trust, location, buyers."
+        title="Horse Ledger"
+        description="Records, trust, location."
         actions={
           <div className="page-actions">
             <div className="view-toggle">
@@ -193,8 +193,8 @@ export default function Horses() {
             <div className="panel__header">
               <div>
                 <div className="panel__eyebrow">Live intake</div>
-                <h2 className="panel__title">Create a horse record</h2>
-                <p className="panel__description">Adds a new premium record to this workspace.</p>
+                <h2 className="panel__title">New horse</h2>
+                <p className="panel__description">Add a horse to this workspace.</p>
               </div>
               <button className="button button--ghost button--compact" type="button" onClick={() => setSearchParams({})}>
                 Close
@@ -299,34 +299,44 @@ export default function Horses() {
       <section className="ledger-stage">
         <div className="ledger-stage__copy">
           <div className="eyebrow">Active ledger</div>
-          <h2 className="ledger-stage__title">Fast records with ranch context.</h2>
-          <p className="ledger-stage__description">Click profiles. Right-click records. Move fast.</p>
+          <h2 className="ledger-stage__title">Clean horse records.</h2>
+          <p className="ledger-stage__description">Open records. Right-click anything. Keep the ledger tight.</p>
         </div>
         <div className="ledger-stage__stats">
           <div className="ledger-stat">
-            <span className="ledger-stat__label">Portfolio</span>
+            <span className="ledger-stat__label">Horses</span>
             <strong className="ledger-stat__value">{filtered.length}</strong>
             <span className="ledger-stat__detail">{saleReady.length} sale ready</span>
           </div>
           <div className="ledger-stat">
-            <span className="ledger-stat__label">Buyer-safe</span>
+            <span className="ledger-stat__label">Share ready</span>
             <strong className="ledger-stat__value">{buyerReady.length}</strong>
-            <span className="ledger-stat__detail">Profiles cleared to share</span>
+            <span className="ledger-stat__detail">Records cleared to share</span>
           </div>
           <div className="ledger-stat">
             <span className="ledger-stat__label">Medical watch</span>
             <strong className="ledger-stat__value">{medicalWatch.length}</strong>
             <span className="ledger-stat__detail">Care-sensitive records</span>
           </div>
+          <div className="ledger-stat">
+            <span className="ledger-stat__label">Transfer risk</span>
+            <strong className="ledger-stat__value">{transferRisk.length}</strong>
+            <span className="ledger-stat__detail">{formatCompactCurrency(saleReady.reduce((sum, horse) => sum + horse.sale.askPrice, 0))} asking</span>
+          </div>
         </div>
       </section>
 
-      <div className="metric-grid">
-        <MetricCard label="Portfolio" value={`${filtered.length}`} detail={`${saleReady.length} market ready`} />
-        <MetricCard label="Buyer-safe" value={`${buyerReady.length}`} detail="Profiles cleared for premium share links" tone="emerald" />
-        <MetricCard label="Medical watch" value={`${medicalWatch.length}`} detail="Care-sensitive records" tone="rose" />
-        <MetricCard label="Sale value" value={formatCompactCurrency(saleReady.reduce((sum, horse) => sum + horse.sale.askPrice, 0))} detail={`${transferRisk.length} transfer risks`} tone="amber" />
-      </div>
+      <section className="ledger-toolbar">
+        <div className="ledger-toolbar__title">
+          <div className="ledger-toolbar__label">{viewMode}</div>
+          <strong>{filtered.length} records</strong>
+        </div>
+        <div className="ledger-toolbar__meta">
+          <span>{saleReady.length} sale ready</span>
+          <span>{buyerReady.length} share ready</span>
+          <span>{transferRisk.length} transfer blockers</span>
+        </div>
+      </section>
 
       <div className="filter-bar">
         <div className="filter-row">
@@ -360,6 +370,8 @@ export default function Horses() {
               documents.filter((document) => document.horseId === horse.id),
               ownershipRecords.find((record) => record.horseId === horse.id),
             );
+            const valueLabel = horse.segment === 'Sale Prospect' && horse.sale.askPrice ? 'Ask' : 'Insured';
+            const accessLabel = saved ? 'Shared' : 'Private';
             return (
               <div
                 key={horse.id}
@@ -402,16 +414,16 @@ export default function Horses() {
                 <div className="horse-card__body">
                   <div className="horse-card__metric-band">
                     <div className="horse-card__metric">
-                      <span>Packet</span>
+                      <span>Trust</span>
                       <strong>{formatPercent(packet.score)}</strong>
                     </div>
                     <div className="horse-card__metric">
-                      <span>Value</span>
+                      <span>{valueLabel}</span>
                       <strong>{formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)}</strong>
                     </div>
                     <div className="horse-card__metric">
-                      <span>Portal</span>
-                      <strong>{saved ? 'Saved' : 'Open'}</strong>
+                      <span>Access</span>
+                      <strong>{accessLabel}</strong>
                     </div>
                   </div>
 
@@ -425,7 +437,7 @@ export default function Horses() {
                       <strong>{horse.location.pasture}</strong>
                     </div>
                     <div className="horse-card__meta-cell">
-                      <span>Registry</span>
+                      <span>Record ID</span>
                       <strong>{horse.registrationNumber}</strong>
                     </div>
                     <div className="horse-card__meta-cell">
@@ -436,7 +448,7 @@ export default function Horses() {
 
                   <div className="horse-card__readiness">
                     <div className="horse-card__readiness-head">
-                      <span>Packet trust</span>
+                      <span>Trust</span>
                       <strong>{formatPercent(packet.score)}</strong>
                     </div>
                     <ProgressBar value={packet.score} tone={packet.tone} />
@@ -444,7 +456,7 @@ export default function Horses() {
 
                   <div className="horse-card__footer">
                     <div className="status-inline">
-                      {saved ? <Pill tone="blue">Saved</Pill> : null}
+                      {saved ? <Pill tone="blue">Shared</Pill> : null}
                       <span>{horse.sale.watchlistCount} watching</span>
                     </div>
                     <div className="inline-actions inline-actions--card">
@@ -456,14 +468,14 @@ export default function Horses() {
                           handleSavedHorseToggle(horse.id);
                         }}
                       >
-                        {saved ? 'Remove from saved' : 'Save to portal'}
+                        {saved ? 'Remove from shared' : 'Add to shared'}
                       </button>
                       <Link
                         to={`/horses/${horse.id}`}
                         className="button button--primary button--compact"
                         onClick={(event) => event.stopPropagation()}
                       >
-                        Open profile
+                        Open record
                       </Link>
                     </div>
                   </div>

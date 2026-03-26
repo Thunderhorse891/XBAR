@@ -105,7 +105,7 @@ export default function MainLayout() {
           </div>
           <div>
             <div className="brand-lockup__title">XBAR</div>
-            <div className="brand-lockup__subtitle">Records OS</div>
+            <div className="brand-lockup__subtitle">Horse Ledger</div>
           </div>
         </div>
 

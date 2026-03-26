@@ -11,7 +11,7 @@ import type { DocumentSource, GalleryAsset, SalesLead } from '@/types/xbar';
 
 const mediaKinds: GalleryAsset['kind'][] = ['Hero', 'Conformation', 'Sale Still', 'Pedigree', 'Document Cover'];
 const leadChannels: SalesLead['channel'][] = ['Facebook', 'Instagram', 'Referral', 'Site Inquiry'];
-const docSources: DocumentSource[] = ['Manual Upload', 'Bulk Intake', 'Owner Portal', 'Sales Packet'];
+const docSources: DocumentSource[] = ['Manual Upload', 'Bulk Intake', 'Shared Upload', 'Sales Packet'];
 
 export default function HorseDetail() {
   const { id } = useParams<{ id: string }>();
@@ -65,8 +65,8 @@ export default function HorseDetail() {
   const handleSavedHorseToggle = () => {
     toggleSavedHorse(horse.id);
     pushToast({
-      title: saved ? 'Removed from portal' : 'Saved to portal',
-      message: `${horse.name} ${saved ? 'was removed from' : 'is now in'} the saved-horse workspace.`,
+      title: saved ? 'Removed from shared access' : 'Added to shared access',
+      message: `${horse.name} ${saved ? 'was removed from' : 'is now in'} the shared-access list.`,
       tone: 'success',
     });
   };
@@ -199,10 +199,10 @@ export default function HorseDetail() {
         actions={
           <>
             <Link className="button button--primary button--compact" to={packet.sharePath}>
-              Open buyer profile
+              Open share view
             </Link>
             <button className="button button--ghost button--compact" type="button" onClick={handleSavedHorseToggle}>
-              {saved ? 'Saved in portal' : 'Save to portal'}
+              {saved ? 'In shared access' : 'Add to shared access'}
             </button>
             <Pill tone={horse.readiness.score >= 85 ? 'emerald' : horse.readiness.score >= 70 ? 'amber' : 'rose'}>
               {horse.status}
