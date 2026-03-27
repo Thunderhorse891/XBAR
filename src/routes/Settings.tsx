@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PageHeader, Panel, Pill } from '@/components/app-ui';
 import { workspaceStorageDriverLabel } from '@/lib/workspaceStorage';
 import { useUiStore } from '@/store/useUiStore';
@@ -6,10 +6,17 @@ import { useXbarStore } from '@/store/useXbarStore';
 
 export default function Settings() {
   const roleWorkspaces = useXbarStore((state) => state.roleWorkspaces);
+  const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
+  const updateWorkspaceProfile = useXbarStore((state) => state.updateWorkspaceProfile);
   const exportWorkspaceBackup = useXbarStore((state) => state.exportWorkspaceBackup);
   const importWorkspaceBackup = useXbarStore((state) => state.importWorkspaceBackup);
   const pushToast = useUiStore((state) => state.pushToast);
   const importRef = useRef<HTMLInputElement | null>(null);
+  const [profileDraft, setProfileDraft] = useState(workspaceProfile);
+
+  useEffect(() => {
+    setProfileDraft(workspaceProfile);
+  }, [workspaceProfile]);
 
   const handleExport = () => {
     try {
@@ -63,15 +70,75 @@ export default function Settings() {
     }
   };
 
+  const handleProfileSave = () => {
+    if (!profileDraft.ranchName.trim() || !profileDraft.businessName.trim()) {
+      pushToast({
+        title: 'Profile not saved',
+        message: 'Business name and ranch name are required.',
+        tone: 'error',
+      });
+      return;
+    }
+
+    const result = updateWorkspaceProfile(profileDraft);
+    pushToast({
+      title: result.ok ? 'Profile saved' : 'Profile not saved',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
+  };
+
   return (
     <>
       <PageHeader
         eyebrow="Settings"
-        title="Roles, backups, and platform status"
-        description="Access, backups, status."
+        title="Workspace settings"
+        description="Profile, roles, backups."
       />
 
       <div className="dashboard-grid dashboard-grid--primary">
+        <Panel eyebrow="Workspace profile" title="Business and default intake values">
+          <div className="form-grid form-grid--tight">
+            <label className="field-stack">
+              <span className="field-label">Business name</span>
+              <input className="field-input" value={profileDraft.businessName} onChange={(event) => setProfileDraft((current) => ({ ...current, businessName: event.target.value }))} />
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Ranch name</span>
+              <input className="field-input" value={profileDraft.ranchName} onChange={(event) => setProfileDraft((current) => ({ ...current, ranchName: event.target.value }))} />
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Default owner</span>
+              <input className="field-input" value={profileDraft.defaultOwnerName} onChange={(event) => setProfileDraft((current) => ({ ...current, defaultOwnerName: event.target.value }))} />
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Default owner entity</span>
+              <input className="field-input" value={profileDraft.defaultOwnerEntity} onChange={(event) => setProfileDraft((current) => ({ ...current, defaultOwnerEntity: event.target.value }))} />
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Ranch manager</span>
+              <input className="field-input" value={profileDraft.ranchManagerName} onChange={(event) => setProfileDraft((current) => ({ ...current, ranchManagerName: event.target.value }))} />
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Operations email</span>
+              <input className="field-input" type="email" value={profileDraft.operationsEmail} onChange={(event) => setProfileDraft((current) => ({ ...current, operationsEmail: event.target.value }))} />
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Default barn</span>
+              <input className="field-input" value={profileDraft.defaultBarn} onChange={(event) => setProfileDraft((current) => ({ ...current, defaultBarn: event.target.value }))} />
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Default pasture</span>
+              <input className="field-input" value={profileDraft.defaultPasture} onChange={(event) => setProfileDraft((current) => ({ ...current, defaultPasture: event.target.value }))} />
+            </label>
+          </div>
+          <div className="inline-actions">
+            <button className="button button--primary button--compact" type="button" onClick={handleProfileSave}>
+              Save workspace profile
+            </button>
+          </div>
+        </Panel>
+
         <Panel eyebrow="Role matrix" title="Workspace modes">
           <div className="stack-list">
             {roleWorkspaces.map((workspace) => (
@@ -93,13 +160,13 @@ export default function Settings() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Connection status" title="What is local or not connected">
+        <Panel eyebrow="Deployment posture" title="Current runtime">
           <div className="bullet-list">
-            <div className="bullet-list__item">This workspace runs locally in the browser.</div>
-            <div className="bullet-list__item">Shared links work, but external sign-in is not wired yet.</div>
-            <div className="bullet-list__item">Documents are reviewed manually in this build.</div>
-            <div className="bullet-list__item">Billing and payments are still handled outside the app.</div>
-            <div className="bullet-list__item">A shared backend is not connected yet.</div>
+            <div className="bullet-list__item">This deployment is local-first with IndexedDB persistence.</div>
+            <div className="bullet-list__item">Shared access works through direct links and saved records.</div>
+            <div className="bullet-list__item">Documents are reviewed manually in the current workflow.</div>
+            <div className="bullet-list__item">Contracts are tracked here even when billing is handled separately.</div>
+            <div className="bullet-list__item">A multi-user backend is still the next major production milestone.</div>
           </div>
         </Panel>
       </div>

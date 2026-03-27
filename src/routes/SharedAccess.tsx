@@ -56,28 +56,28 @@ export default function SharedAccess() {
       />
 
       <div className="metric-grid">
-        <MetricCard label="Invited owners" value={`${sharedAccess.invitedOwners}`} detail={`${sharedAccess.activeOwners} already active in the current workspace`} />
-        <MetricCard label="Saved horses" value={`${sharedAccess.savedHorses}`} detail="Live demand signal across sales and ownership" tone="blue" />
-        <MetricCard label="Open inquiries" value={`${sharedAccess.openInquiries}`} detail="Buyer and owner requests waiting on response" tone="amber" />
-        <MetricCard label="Live buyer links" value={`${liveProfiles.length}`} detail="Saved horses clear enough for a shareable buyer link" tone="emerald" />
+        <MetricCard label="Invited owners" value={`${sharedAccess.invitedOwners}`} detail={`${sharedAccess.activeOwners} active`} />
+        <MetricCard label="Saved horses" value={`${sharedAccess.savedHorses}`} detail="Demand signal" tone="blue" />
+        <MetricCard label="Open inquiries" value={`${sharedAccess.openInquiries}`} detail="Waiting on response" tone="amber" />
+        <MetricCard label="Live buyer links" value={`${liveProfiles.length}`} detail="Ready to share" tone="emerald" />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Access" title="How it works" description="Shared links only.">
+        <Panel eyebrow="Access" title="Owner delivery" description="Direct links.">
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__top">
-                <div className="stack-item__title">Owner access</div>
+                <div className="stack-item__title">Access mode</div>
                 <Pill tone="blue">Shared links</Pill>
               </div>
-              <div className="stack-item__copy">This build uses direct share links instead of external sign-in.</div>
+              <div className="stack-item__copy">Direct record access.</div>
             </div>
             <div className="stack-item">
               <div className="stack-item__top">
                 <div className="stack-item__title">Inquiry routing</div>
                 <Pill tone="amber">{sharedAccess.openInquiries} open</Pill>
               </div>
-              <div className="stack-item__copy">Questions still route through the workspace team.</div>
+              <div className="stack-item__copy">Handled in the workspace.</div>
             </div>
           </div>
         </Panel>

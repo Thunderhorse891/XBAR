@@ -20,7 +20,7 @@ export default function Subscriptions() {
       />
 
       <div className="callout callout--warning">
-        <strong>Manual billing:</strong> Contracts are tracked here, but payments still happen outside the app.
+        <strong>Contract tracking:</strong> Billing is managed off-platform for this workspace.
       </div>
 
       <div className="metric-grid">

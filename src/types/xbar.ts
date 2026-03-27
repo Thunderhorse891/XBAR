@@ -290,3 +290,14 @@ export interface SharedAccessSnapshot {
   savedHorses: number;
   openInquiries: number;
 }
+
+export interface WorkspaceProfile {
+  ranchName: string;
+  businessName: string;
+  defaultOwnerName: string;
+  defaultOwnerEntity: string;
+  ranchManagerName: string;
+  operationsEmail: string;
+  defaultBarn: string;
+  defaultPasture: string;
+}

@@ -85,6 +85,7 @@ export default function MainLayout() {
   const setCurrentRole = useXbarStore((state) => state.setCurrentRole);
   const subscription = useXbarStore((state) => state.subscription);
   const documents = useXbarStore((state) => state.documents);
+  const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const roleWorkspace = useCurrentRoleWorkspace();
 
   const pendingReview = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched').length;
@@ -104,8 +105,8 @@ export default function MainLayout() {
             <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" />
           </div>
           <div>
-            <div className="brand-lockup__title">XBAR</div>
-            <div className="brand-lockup__subtitle">Horse Ledger</div>
+            <div className="brand-lockup__title">{workspaceProfile.businessName || 'XBAR'}</div>
+            <div className="brand-lockup__subtitle">{workspaceProfile.ranchName || 'Horse Ledger'}</div>
           </div>
         </div>
 

@@ -5,6 +5,7 @@ import {
   SalesLead,
   SharedAccessSnapshot,
   SubscriptionProfile,
+  WorkspaceProfile,
 } from '@/types/xbar';
 
 export const ownershipSeed: OwnershipRecord[] = [
@@ -221,4 +222,15 @@ export const sharedAccessSeed: SharedAccessSnapshot = {
   activeOwners: 3,
   savedHorses: 7,
   openInquiries: 5,
+};
+
+export const workspaceProfileSeed: WorkspaceProfile = {
+  ranchName: 'Primary Ranch',
+  businessName: 'XBAR',
+  defaultOwnerName: '',
+  defaultOwnerEntity: '',
+  ranchManagerName: '',
+  operationsEmail: '',
+  defaultBarn: '',
+  defaultPasture: '',
 };

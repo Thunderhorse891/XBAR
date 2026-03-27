@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { createId } from '@/lib/xbarRuntime';
 
 export type ToastTone = 'success' | 'error' | 'warning' | 'info';
 
@@ -18,7 +19,7 @@ type UiStore = {
 };
 
 function createToastId() {
-  return `toast-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return createId('toast');
 }
 
 export const useUiStore = create<UiStore>((set) => ({

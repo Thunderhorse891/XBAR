@@ -9,10 +9,12 @@ import {
   salesLeadsSeed,
   sharedAccessSeed,
   subscriptionSeed,
+  workspaceProfileSeed,
 } from '@/data/xbarPlatform';
 import {
   buildDocumentRecord,
   createId,
+  createNumericToken,
   deriveSharedAccessSnapshot,
   estimateStorageGb,
   guessGalleryKind,
@@ -39,6 +41,7 @@ import type {
   SalesLead,
   SharedAccessSnapshot,
   UserRole,
+  WorkspaceProfile,
 } from '@/types/xbar';
 import type {
   DocumentRecord,
@@ -66,8 +69,10 @@ type XbarStore = {
   roleWorkspaces: RoleWorkspace[];
   salesLeads: SalesLead[];
   sharedAccess: SharedAccessSnapshot;
+  workspaceProfile: WorkspaceProfile;
   savedHorseIds: string[];
   setCurrentRole: (role: UserRole) => void;
+  updateWorkspaceProfile: (patch: Partial<WorkspaceProfile>) => ActionResult;
   toggleSavedHorse: (horseId: string) => void;
   addHorse: (input: NewHorseInput) => ActionResult;
   createDocumentIntake: (input: DocumentIntakeInput) => Promise<ActionResult>;
@@ -106,6 +111,7 @@ type PersistedXbarState = Pick<
   | 'roleWorkspaces'
   | 'salesLeads'
   | 'sharedAccess'
+  | 'workspaceProfile'
   | 'savedHorseIds'
 >;
 
@@ -116,7 +122,7 @@ type WorkspaceBackup = {
   workspace: PersistedXbarState;
 };
 
-const WORKSPACE_SCHEMA_VERSION = 3;
+const WORKSPACE_SCHEMA_VERSION = 4;
 
 const initialState = {
   currentRole: 'Admin' as UserRole,
@@ -129,6 +135,7 @@ const initialState = {
   roleWorkspaces: roleSeed,
   salesLeads: salesLeadsSeed,
   sharedAccess: sharedAccessSeed,
+  workspaceProfile: workspaceProfileSeed,
   savedHorseIds: ['horse-wiggy', 'horse-dolly'],
 };
 
@@ -171,6 +178,21 @@ function normalizeBillingState(value: unknown): SubscriptionProfile['billingStat
   return 'Manual Billing';
 }
 
+function restoreWorkspaceProfile(raw: unknown): WorkspaceProfile {
+  const value = raw && typeof raw === 'object' ? (raw as Partial<WorkspaceProfile>) : {};
+
+  return {
+    ranchName: value.ranchName?.trim() || workspaceProfileSeed.ranchName,
+    businessName: value.businessName?.trim() || workspaceProfileSeed.businessName,
+    defaultOwnerName: value.defaultOwnerName?.trim() || '',
+    defaultOwnerEntity: value.defaultOwnerEntity?.trim() || '',
+    ranchManagerName: value.ranchManagerName?.trim() || '',
+    operationsEmail: value.operationsEmail?.trim() || '',
+    defaultBarn: value.defaultBarn?.trim() || '',
+    defaultPasture: value.defaultPasture?.trim() || '',
+  };
+}
+
 function selectPersistedState(state: PersistedXbarState): PersistedXbarState {
   return {
     currentRole: state.currentRole,
@@ -183,6 +205,7 @@ function selectPersistedState(state: PersistedXbarState): PersistedXbarState {
     roleWorkspaces: state.roleWorkspaces,
     salesLeads: state.salesLeads,
     sharedAccess: state.sharedAccess,
+    workspaceProfile: state.workspaceProfile,
     savedHorseIds: state.savedHorseIds,
   };
 }
@@ -263,6 +286,7 @@ function restorePersistedState(raw: unknown): PersistedXbarState {
         : state.portal && typeof state.portal === 'object'
           ? (state.portal as SharedAccessSnapshot)
           : initialState.sharedAccess,
+    workspaceProfile: restoreWorkspaceProfile(state.workspaceProfile),
     savedHorseIds: Array.isArray(state.savedHorseIds) ? (state.savedHorseIds as string[]) : initialState.savedHorseIds,
   };
   const derived = syncDerivedValues({
@@ -279,10 +303,13 @@ function restorePersistedState(raw: unknown): PersistedXbarState {
   };
 }
 
-function createHorseRecord(input: NewHorseInput): HorseRecord {
+function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProfile): HorseRecord {
   const id = createId('horse');
   const name = input.name.trim().toUpperCase();
   const barnName = input.barnName.trim();
+  const ranchName = workspaceProfile.ranchName.trim() || 'Primary Ranch';
+  const ranchManagerName = workspaceProfile.ranchManagerName.trim() || 'Unassigned';
+  const operationsEmail = workspaceProfile.operationsEmail.trim();
   return {
     id,
     name,
@@ -300,7 +327,7 @@ function createHorseRecord(input: NewHorseInput): HorseRecord {
     sex: input.sex,
     color: 'To be confirmed',
     markings: 'Intake photos pending',
-    microchipId: `9810${Math.random().toString().slice(2, 12)}`,
+    microchipId: `9810${createNumericToken(10)}`,
     owner: input.owner.trim(),
     ownerEntity: input.ownerEntity.trim(),
     insuredValue: 65000,
@@ -312,14 +339,14 @@ function createHorseRecord(input: NewHorseInput): HorseRecord {
       family: 'Pending pedigree review',
     },
     location: {
-      ranch: 'XBAR Main Ranch',
+      ranch: ranchName,
       barn: input.barn.trim(),
       pasture: input.pasture.trim(),
       stall: 'Unassigned',
     },
     assignments: {
       trainer: 'Unassigned',
-      ranchManager: 'Erin Wyrick',
+      ranchManager: ranchManagerName,
       veterinarian: 'Pending',
       farrier: 'Pending',
     },
@@ -329,7 +356,7 @@ function createHorseRecord(input: NewHorseInput): HorseRecord {
         name: input.owner.trim(),
         share: 100,
         role: 'Legal Owner',
-        contact: 'pending@xbarllc.com',
+        contact: operationsEmail,
       },
     ],
     gallery: [],
@@ -451,6 +478,11 @@ export const useXbarStore = create<XbarStore>()(
     (set, get) => ({
       ...initialState,
       setCurrentRole: (role) => set({ currentRole: role }),
+      updateWorkspaceProfile: (patch) => {
+        const nextProfile = restoreWorkspaceProfile({ ...get().workspaceProfile, ...patch });
+        set({ workspaceProfile: nextProfile });
+        return { ok: true, message: 'Workspace profile updated.' };
+      },
       toggleSavedHorse: (horseId) =>
         set((state) => {
           const nextSavedHorseIds = state.savedHorseIds.includes(horseId)
@@ -485,7 +517,7 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: validationError };
         }
 
-        const horse = createHorseRecord(input);
+        const horse = createHorseRecord(input, get().workspaceProfile);
         const ownershipRecord = createOwnershipRecord(horse);
         set((state) => ({
           horses: [horse, ...state.horses],
@@ -1115,6 +1147,7 @@ export const useXbarStore = create<XbarStore>()(
           roleWorkspaces: state.roleWorkspaces,
           salesLeads: state.salesLeads,
           sharedAccess: state.sharedAccess,
+          workspaceProfile: state.workspaceProfile,
           savedHorseIds: state.savedHorseIds,
         }),
     },

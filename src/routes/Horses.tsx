@@ -10,6 +10,27 @@ import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useXbarStore } from '@/store/useXbarStore';
 import type { HorseSegment, HorseSex, HorseStatus } from '@/types/xbar';
 
+function createHorseFormDefaults(params: {
+  defaultOwnerName: string;
+  defaultOwnerEntity: string;
+  defaultBarn: string;
+  defaultPasture: string;
+}) {
+  return {
+    name: '',
+    barnName: '',
+    segment: 'Sale Prospect' as HorseSegment,
+    status: 'Sale Prep' as HorseStatus,
+    sex: 'Mare' as HorseSex,
+    owner: params.defaultOwnerName,
+    ownerEntity: params.defaultOwnerEntity,
+    aqhaNumber: '',
+    registrationNumber: '',
+    barn: params.defaultBarn,
+    pasture: params.defaultPasture,
+  };
+}
+
 type ViewMode = 'Portfolio' | 'Registry';
 type SegmentFilter = 'All' | HorseSegment;
 
@@ -35,6 +56,7 @@ export default function Horses() {
   const savedHorseIds = useXbarStore((state) => state.savedHorseIds);
   const toggleSavedHorse = useXbarStore((state) => state.toggleSavedHorse);
   const addHorse = useXbarStore((state) => state.addHorse);
+  const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const pushToast = useUiStore((state) => state.pushToast);
   const [searchParams, setSearchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState<ViewMode>('Portfolio');
@@ -42,19 +64,14 @@ export default function Horses() {
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [formErrors, setFormErrors] = useState<Partial<Record<'name' | 'barnName' | 'owner' | 'ownerEntity' | 'barn' | 'pasture', string>>>({});
   const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
-  const [form, setForm] = useState({
-    name: '',
-    barnName: '',
-    segment: 'Sale Prospect' as HorseSegment,
-    status: 'Sale Prep' as HorseStatus,
-    sex: 'Mare' as HorseSex,
-    owner: '',
-    ownerEntity: '',
-    aqhaNumber: '',
-    registrationNumber: '',
-    barn: '',
-    pasture: '',
-  });
+  const [form, setForm] = useState(() =>
+    createHorseFormDefaults({
+      defaultOwnerName: workspaceProfile.defaultOwnerName,
+      defaultOwnerEntity: workspaceProfile.defaultOwnerEntity,
+      defaultBarn: workspaceProfile.defaultBarn,
+      defaultPasture: workspaceProfile.defaultPasture,
+    }),
+  );
 
   const createOpen = searchParams.get('new') === '1';
 
@@ -143,19 +160,14 @@ export default function Horses() {
       tone: result.ok ? 'success' : 'error',
     });
     if (result.ok && result.id) {
-      setForm({
-        name: '',
-        barnName: '',
-        segment: 'Sale Prospect',
-        status: 'Sale Prep',
-        sex: 'Mare',
-        owner: '',
-        ownerEntity: '',
-        aqhaNumber: '',
-        registrationNumber: '',
-        barn: '',
-        pasture: '',
-      });
+      setForm(
+        createHorseFormDefaults({
+          defaultOwnerName: workspaceProfile.defaultOwnerName,
+          defaultOwnerEntity: workspaceProfile.defaultOwnerEntity,
+          defaultBarn: workspaceProfile.defaultBarn,
+          defaultPasture: workspaceProfile.defaultPasture,
+        }),
+      );
       setSearchParams({});
       navigate(`/horses/${result.id}`);
     }
@@ -198,7 +210,7 @@ export default function Horses() {
               </div>
               <button className="button button--ghost button--compact" type="button" onClick={() => setSearchParams({})}>
                 Close
-            </button>
+              </button>
           </div>
           <div className="form-grid">
             <label className="field-stack">
@@ -289,6 +301,21 @@ export default function Horses() {
             </label>
           </div>
           <div className="inline-actions">
+            <button
+              className="button button--ghost"
+              type="button"
+              onClick={() =>
+                setForm((current) => ({
+                  ...current,
+                  owner: workspaceProfile.defaultOwnerName,
+                  ownerEntity: workspaceProfile.defaultOwnerEntity,
+                  barn: workspaceProfile.defaultBarn,
+                  pasture: workspaceProfile.defaultPasture,
+                }))
+              }
+            >
+              Apply workspace defaults
+            </button>
             <button className="button button--primary" type="button" onClick={handleCreateHorse} disabled={!form.name.trim() || !form.barnName.trim() || !form.owner.trim() || !form.ownerEntity.trim() || !form.barn.trim() || !form.pasture.trim()}>
               Create horse
             </button>

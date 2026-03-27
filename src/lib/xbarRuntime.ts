@@ -13,6 +13,7 @@ import type {
 } from '../types/xbar.js';
 
 const GIGABYTE = 1024 * 1024 * 1024;
+const BASE36_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 
 export const subscriptionTierConfig: Record<
   SubscriptionTier,
@@ -90,8 +91,37 @@ export const subscriptionTierConfig: Record<
   },
 };
 
+function getCryptoApi() {
+  return typeof globalThis !== 'undefined' ? globalThis.crypto : undefined;
+}
+
+function createRandomBase36(length: number) {
+  const cryptoApi = getCryptoApi();
+  if (cryptoApi?.getRandomValues) {
+    const values = cryptoApi.getRandomValues(new Uint8Array(length));
+    return Array.from(values, (value) => BASE36_ALPHABET[value % BASE36_ALPHABET.length]).join('');
+  }
+
+  return Array.from({ length }, (_, index) => BASE36_ALPHABET[(Date.now() + index * 17) % BASE36_ALPHABET.length]).join('');
+}
+
 export function createId(prefix: string) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const cryptoApi = getCryptoApi();
+  if (cryptoApi?.randomUUID) {
+    return `${prefix}-${cryptoApi.randomUUID()}`;
+  }
+
+  return `${prefix}-${Date.now()}-${createRandomBase36(8)}`;
+}
+
+export function createNumericToken(length: number) {
+  const cryptoApi = getCryptoApi();
+  if (cryptoApi?.getRandomValues) {
+    const values = cryptoApi.getRandomValues(new Uint8Array(length));
+    return Array.from(values, (value) => String(value % 10)).join('');
+  }
+
+  return Array.from({ length }, (_, index) => String((Date.now() + index) % 10)).join('');
 }
 
 export function todayStamp() {
