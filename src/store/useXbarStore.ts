@@ -547,10 +547,15 @@ export const useXbarStore = create<XbarStore>()(
           const batchId = createId('batch');
           const documents = await Promise.all(
             fileList.map(async (file) => {
-              const uploadedAsset = await uploadDocumentAssetToCloud({
-                file,
-                horseId: selectedHorse?.id ?? horseId,
-              });
+              let uploadedAsset: Awaited<ReturnType<typeof uploadDocumentAssetToCloud>> = null;
+              try {
+                uploadedAsset = await uploadDocumentAssetToCloud({
+                  file,
+                  horseId: selectedHorse?.id ?? horseId,
+                });
+              } catch (error) {
+                console.error('Cloud document upload failed; storing file locally instead.', error);
+              }
               const document = await buildDocumentRecord({
                 file,
                 uploadedBy,
@@ -559,16 +564,19 @@ export const useXbarStore = create<XbarStore>()(
                 horses: get().horses,
                 existingDocuments: get().documents,
               });
+              const localFileUrl = uploadedAsset?.storagePath ? undefined : await readFileAsDataUrl(file);
               return {
                 ...document,
                 batchId,
                 fileName: file.name,
                 mimeType: file.type || undefined,
                 fileSizeBytes: file.size,
+                fileUrl: localFileUrl,
                 storagePath: uploadedAsset?.storagePath,
               };
             }),
           );
+          const localDocumentCount = documents.filter((document) => document.fileUrl && !document.storagePath).length;
 
           const batch: IntakeBatch = {
             id: batchId,
@@ -609,7 +617,7 @@ export const useXbarStore = create<XbarStore>()(
 
           return {
             ok: true,
-            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.`,
+            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${localDocumentCount ? ` ${localDocumentCount} stored locally until cloud sync is available.` : ''}`,
             id: batch.id,
           };
         } catch (error) {
@@ -707,7 +715,12 @@ export const useXbarStore = create<XbarStore>()(
         try {
           const assets = await Promise.all(
             fileList.map(async (file) => {
-              const uploadedAsset = await uploadMediaAssetToCloud({ file, horseId });
+              let uploadedAsset: Awaited<ReturnType<typeof uploadMediaAssetToCloud>> = null;
+              try {
+                uploadedAsset = await uploadMediaAssetToCloud({ file, horseId });
+              } catch (error) {
+                console.error('Cloud media upload failed; storing media locally instead.', error);
+              }
               return {
                 id: createId('media'),
                 label: file.name.replace(/\.[^.]+$/, ''),
@@ -718,6 +731,7 @@ export const useXbarStore = create<XbarStore>()(
               };
             }),
           );
+          const localAssetCount = assets.filter((asset) => !asset.storagePath).length;
 
           set((current) => ({
             horses: current.horses.map((horse) =>
@@ -759,7 +773,11 @@ export const useXbarStore = create<XbarStore>()(
             },
           }));
 
-          return { ok: true, message: `${assets.length} media asset${assets.length === 1 ? '' : 's'} uploaded.`, id: horseId };
+          return {
+            ok: true,
+            message: `${assets.length} media asset${assets.length === 1 ? '' : 's'} uploaded.${localAssetCount ? ` ${localAssetCount} stored locally until cloud sync is available.` : ''}`,
+            id: horseId,
+          };
         } catch (error) {
           console.error('Media upload failed', error);
           return { ok: false, message: 'Media upload failed. Check the selected files and try again.' };

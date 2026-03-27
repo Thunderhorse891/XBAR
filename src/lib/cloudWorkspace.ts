@@ -1,6 +1,7 @@
 import { supabaseConfig } from '@/lib/platformConfig';
 import { createId } from '@/lib/xbarRuntime';
 import { getSupabaseClient } from '@/lib/supabaseClient';
+import type { DocumentRecord } from '@/types/xbar';
 
 function sanitizeStorageSegment(value: string) {
   return value
@@ -146,3 +147,48 @@ export async function uploadDocumentAssetToCloud(params: { file: File; horseId?:
   };
 }
 
+export async function getDocumentAccessUrl(document: Pick<DocumentRecord, 'fileUrl' | 'storagePath'>) {
+  const directFileUrl = document.fileUrl?.trim();
+  if (directFileUrl) {
+    return {
+      ok: true,
+      url: directFileUrl,
+    } as const;
+  }
+
+  if (!document.storagePath) {
+    return {
+      ok: false,
+      message: 'This document does not have a stored file attached yet.',
+    } as const;
+  }
+
+  const client = getSupabaseClient();
+  if (!client) {
+    return {
+      ok: false,
+      message: 'Cloud storage is not configured for this build.',
+    } as const;
+  }
+
+  const session = await getActiveSession();
+  if (!session?.user) {
+    return {
+      ok: false,
+      message: 'Sign in to open files stored in cloud storage.',
+    } as const;
+  }
+
+  const { data, error } = await client.storage.from(supabaseConfig.documentBucket).createSignedUrl(document.storagePath, 60 * 5);
+  if (error || !data?.signedUrl) {
+    return {
+      ok: false,
+      message: error?.message ?? 'Unable to generate a secure file link for this document.',
+    } as const;
+  }
+
+  return {
+    ok: true,
+    url: data.signedUrl,
+  } as const;
+}

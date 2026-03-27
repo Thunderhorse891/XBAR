@@ -9,14 +9,18 @@ type CloudActionResult = {
 };
 
 type CloudStatus = 'unavailable' | 'loading' | 'signed-out' | 'signed-in';
+type CloudSyncState = 'idle' | 'syncing' | 'error';
 
 type CloudStore = {
   initialized: boolean;
   status: CloudStatus;
   session: Session | null;
   lastSyncAt: string;
+  syncState: CloudSyncState;
+  syncMessage: string;
   initialize: () => Promise<(() => void) | void>;
   setLastSyncAt: (value: string) => void;
+  setSyncState: (state: CloudSyncState, message?: string) => void;
   sendMagicLink: (email: string) => Promise<CloudActionResult>;
   signOut: () => Promise<CloudActionResult>;
 };
@@ -26,6 +30,8 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
   status: isSupabaseConfigured() ? 'loading' : 'unavailable',
   session: null,
   lastSyncAt: '',
+  syncState: 'idle',
+  syncMessage: '',
   initialize: async () => {
     if (get().initialized) {
       return;
@@ -58,6 +64,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     return () => subscription.subscription.unsubscribe();
   },
   setLastSyncAt: (value) => set({ lastSyncAt: value }),
+  setSyncState: (state, message = '') => set({ syncState: state, syncMessage: message }),
   sendMagicLink: async (email) => {
     const client = getSupabaseClient();
     if (!client) {
@@ -95,7 +102,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     }
 
     set({ session: null, status: 'signed-out' });
+    set({ syncState: 'idle', syncMessage: '' });
     return { ok: true, message: 'Signed out of cloud sync.' };
   },
 }));
-

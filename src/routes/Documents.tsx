@@ -3,11 +3,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { EmptyState } from '@/components/EmptyState';
+import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { formatDateTimeLabel } from '@/lib/format';
 import { buildDocumentTrustProfile } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
-import type { DocumentSource } from '@/types/xbar';
+import type { DocumentRecord, DocumentSource } from '@/types/xbar';
 
 const sources: DocumentSource[] = ['Manual Upload', 'Bulk Intake', 'Shared Upload', 'Sales Packet'];
 
@@ -32,6 +33,7 @@ export default function Documents() {
   const [formErrors, setFormErrors] = useState<{ uploadedBy?: string; files?: string }>({});
   const [reviewAssignments, setReviewAssignments] = useState<Record<string, string>>({});
   const [menuState, setMenuState] = useState<{ documentId: string; x: number; y: number } | null>(null);
+  const [openingDocumentId, setOpeningDocumentId] = useState('');
 
   const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched');
   const duplicates = documents.filter((document) => document.duplicateRisk === 'Possible Duplicate');
@@ -39,8 +41,47 @@ export default function Documents() {
   const uploadOpen = searchParams.get('upload') === '1';
   const menuDocument = documents.find((document) => document.id === menuState?.documentId);
   const menuHorseId = menuDocument ? reviewAssignments[menuDocument.id] ?? menuDocument.horseId : undefined;
+  const openDocument = async (document: Pick<DocumentRecord, 'id' | 'title' | 'fileUrl' | 'storagePath'>) => {
+    const previewWindow = typeof window !== 'undefined' ? window.open('', '_blank') : null;
+    if (previewWindow) {
+      previewWindow.opener = null;
+    }
+
+    setOpeningDocumentId(document.id);
+    const access = await getDocumentAccessUrl(document);
+    setOpeningDocumentId('');
+
+    if (!access.ok) {
+      previewWindow?.close();
+      pushToast({
+        title: 'File unavailable',
+        message: access.message,
+        tone: 'error',
+      });
+      return;
+    }
+
+    if (previewWindow) {
+      previewWindow.location.href = access.url;
+      previewWindow.focus();
+      return;
+    }
+
+    window.open(access.url, '_blank', 'noopener,noreferrer');
+  };
   const menuItems = menuDocument
     ? [
+        ...(menuDocument.fileUrl || menuDocument.storagePath
+          ? [
+              {
+                id: 'open-file',
+                label: 'Open file',
+                onSelect: () => {
+                  void openDocument(menuDocument);
+                },
+              },
+            ]
+          : []),
         {
           id: 'approve',
           label: 'Approve document',
@@ -302,6 +343,16 @@ export default function Documents() {
                       </td>
                       <td>
                         <div className="inline-actions inline-actions--card">
+                          {document.fileUrl || document.storagePath ? (
+                            <button
+                              className="button button--ghost button--compact"
+                              type="button"
+                              onClick={() => void openDocument(document)}
+                              disabled={openingDocumentId === document.id}
+                            >
+                              {openingDocumentId === document.id ? 'Opening...' : 'Open file'}
+                            </button>
+                          ) : null}
                           <button
                             className="button button--ghost button--compact"
                             type="button"

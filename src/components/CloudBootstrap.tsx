@@ -1,8 +1,13 @@
 import { useEffect } from 'react';
+import { saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
 import { useCloudStore } from '@/store/useCloudStore';
+import { useXbarStore } from '@/store/useXbarStore';
 
 export function CloudBootstrap() {
   const initialize = useCloudStore((state) => state.initialize);
+  const cloudStatus = useCloudStore((state) => state.status);
+  const setLastSyncAt = useCloudStore((state) => state.setLastSyncAt);
+  const setSyncState = useCloudStore((state) => state.setSyncState);
 
   useEffect(() => {
     let dispose: (() => void) | void;
@@ -15,6 +20,56 @@ export function CloudBootstrap() {
       dispose?.();
     };
   }, [initialize]);
+
+  useEffect(() => {
+    if (cloudStatus !== 'signed-in') {
+      setSyncState('idle');
+      return;
+    }
+
+    let disposed = false;
+    let syncTimeout: number | undefined;
+
+    const unsubscribe = useXbarStore.subscribe(() => {
+      if (syncTimeout) {
+        window.clearTimeout(syncTimeout);
+      }
+
+      setSyncState('syncing', 'Saving workspace changes to cloud...');
+      syncTimeout = window.setTimeout(async () => {
+        if (disposed) {
+          return;
+        }
+
+        if (typeof navigator !== 'undefined' && 'onLine' in navigator && !navigator.onLine) {
+          setSyncState('error', 'Offline. Workspace changes remain local until the connection returns.');
+          return;
+        }
+
+        const backup = useXbarStore.getState().exportWorkspaceBackup();
+        const result = await saveWorkspaceBackupToCloud(backup);
+        if (disposed) {
+          return;
+        }
+
+        if (result.ok && result.updatedAt) {
+          setLastSyncAt(result.updatedAt);
+          setSyncState('idle', 'Cloud autosave complete.');
+          return;
+        }
+
+        setSyncState('error', result.message);
+      }, 1600);
+    });
+
+    return () => {
+      disposed = true;
+      if (syncTimeout) {
+        window.clearTimeout(syncTimeout);
+      }
+      unsubscribe();
+    };
+  }, [cloudStatus, setLastSyncAt, setSyncState]);
 
   return null;
 }

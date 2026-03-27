@@ -17,6 +17,8 @@ export default function Settings() {
   const cloudStatus = useCloudStore((state) => state.status);
   const cloudSession = useCloudStore((state) => state.session);
   const lastCloudSyncAt = useCloudStore((state) => state.lastSyncAt);
+  const cloudSyncState = useCloudStore((state) => state.syncState);
+  const cloudSyncMessage = useCloudStore((state) => state.syncMessage);
   const setLastCloudSyncAt = useCloudStore((state) => state.setLastSyncAt);
   const sendMagicLink = useCloudStore((state) => state.sendMagicLink);
   const signOutCloud = useCloudStore((state) => state.signOut);
@@ -181,11 +183,20 @@ export default function Settings() {
                         <div className="stack-item__title">{cloudSession.user.email ?? 'Signed-in user'}</div>
                         <div className="stack-item__copy">Cloud auth is live for this workspace.</div>
                       </div>
-                      <Pill tone="emerald">{cloudStatus === 'signed-in' ? 'Connected' : 'Ready'}</Pill>
+                      <div className="status-inline">
+                        <Pill tone="emerald">{cloudStatus === 'signed-in' ? 'Connected' : 'Ready'}</Pill>
+                        <Pill tone={cloudSyncState === 'error' ? 'rose' : cloudSyncState === 'syncing' ? 'amber' : 'blue'}>
+                          {cloudSyncState === 'syncing' ? 'Syncing' : cloudSyncState === 'error' ? 'Sync issue' : 'Autosave on'}
+                        </Pill>
+                      </div>
                     </div>
                     <div className="inline-metrics">
                       <span>User ID {cloudSession.user.id.slice(0, 8)}</span>
                       <span>{lastCloudSyncAt ? `Last sync ${formatDateLabel(lastCloudSyncAt)}` : 'No cloud sync yet'}</span>
+                      <span>{cloudSyncState === 'syncing' ? 'Saving changes' : cloudSyncState === 'error' ? 'Needs retry' : 'Watching workspace changes'}</span>
+                    </div>
+                    <div className="detail-block subtle">
+                      {cloudSyncMessage || 'Signed-in workspaces autosave after changes and still support manual sync on demand.'}
                     </div>
                   </div>
                 </div>
@@ -291,7 +302,7 @@ export default function Settings() {
         <Panel eyebrow="Deployment posture" title="Current runtime">
           <div className="bullet-list">
             <div className="bullet-list__item">This deployment is local-first with IndexedDB persistence.</div>
-            <div className="bullet-list__item">Cloud auth and remote sync activate when Supabase env is configured.</div>
+            <div className="bullet-list__item">Cloud auth, autosave, and remote sync activate when Supabase env is configured.</div>
             <div className="bullet-list__item">Documents are reviewed manually in the current workflow.</div>
             <div className="bullet-list__item">Stripe payment links activate when billing env is configured.</div>
             <div className="bullet-list__item">A full multi-user relational backend is still the next major milestone.</div>

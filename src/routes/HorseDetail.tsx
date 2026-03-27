@@ -3,11 +3,12 @@ import { Link, useParams } from 'react-router-dom';
 import { EmptyState } from '@/components/EmptyState';
 import { KeyValue, PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
 import { ChevronLeftIcon } from '@/components/icons';
+import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { formatCompactCurrency, formatDateLabel, formatPercent } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useHorseRecord, useXbarStore } from '@/store/useXbarStore';
-import type { DocumentSource, GalleryAsset, SalesLead } from '@/types/xbar';
+import type { DocumentRecord, DocumentSource, GalleryAsset, SalesLead } from '@/types/xbar';
 
 const mediaKinds: GalleryAsset['kind'][] = ['Hero', 'Conformation', 'Sale Still', 'Pedigree', 'Document Cover'];
 const leadChannels: SalesLead['channel'][] = ['Facebook', 'Instagram', 'Referral', 'Site Inquiry'];
@@ -35,6 +36,7 @@ export default function HorseDetail() {
   const [docFiles, setDocFiles] = useState<File[]>([]);
   const [docSource, setDocSource] = useState<DocumentSource>('Manual Upload');
   const [isDocumentUploading, setIsDocumentUploading] = useState(false);
+  const [openingDocumentId, setOpeningDocumentId] = useState('');
   const [noteTitle, setNoteTitle] = useState('Field update');
   const [noteBody, setNoteBody] = useState('');
   const [noteError, setNoteError] = useState('');
@@ -119,6 +121,35 @@ export default function HorseDetail() {
       setDocFiles([]);
     }
     setIsDocumentUploading(false);
+  };
+
+  const handleOpenDocument = async (document: Pick<DocumentRecord, 'id' | 'fileUrl' | 'storagePath'>) => {
+    const previewWindow = typeof window !== 'undefined' ? window.open('', '_blank') : null;
+    if (previewWindow) {
+      previewWindow.opener = null;
+    }
+
+    setOpeningDocumentId(document.id);
+    const access = await getDocumentAccessUrl(document);
+    setOpeningDocumentId('');
+
+    if (!access.ok) {
+      previewWindow?.close();
+      pushToast({
+        title: 'File unavailable',
+        message: access.message,
+        tone: 'error',
+      });
+      return;
+    }
+
+    if (previewWindow) {
+      previewWindow.location.href = access.url;
+      previewWindow.focus();
+      return;
+    }
+
+    window.open(access.url, '_blank', 'noopener,noreferrer');
   };
 
   const handleAddNote = () => {
@@ -425,6 +456,18 @@ export default function HorseDetail() {
                     <span>{document.duplicateRisk}</span>
                     <span>{formatDateLabel(document.uploadedAt)}</span>
                   </div>
+                  {document.fileUrl || document.storagePath ? (
+                    <div className="inline-actions inline-actions--card">
+                      <button
+                        className="button button--ghost button--compact"
+                        type="button"
+                        onClick={() => void handleOpenDocument(document)}
+                        disabled={openingDocumentId === document.id}
+                      >
+                        {openingDocumentId === document.id ? 'Opening...' : 'Open file'}
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               ))
             ) : (
