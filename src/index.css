@@ -4,27 +4,27 @@
 
 :root {
   color-scheme: light;
-  --bg: #edf1f6;
-  --bg-deep: #e5ebf2;
+  --bg: #f2f2f7;
+  --bg-deep: #e8ebf0;
   --surface: #ffffff;
   --surface-strong: #ffffff;
-  --sidebar: #090c11;
+  --sidebar: #03375d;
   --sidebar-edge: rgba(255, 255, 255, 0.08);
-  --text: #0d1421;
-  --muted: #5a6a7e;
-  --muted-strong: #344154;
-  --border: #dfe5ec;
-  --border-strong: #c9d2dc;
-  --blue: #2e6ff2;
-  --blue-soft: rgba(46, 111, 242, 0.1);
-  --slate: #7d8ca6;
-  --slate-soft: rgba(125, 140, 166, 0.12);
-  --emerald: #1fa177;
-  --emerald-soft: rgba(31, 161, 119, 0.12);
-  --amber: #d5911b;
-  --amber-soft: rgba(213, 145, 27, 0.12);
-  --rose: #d25770;
-  --rose-soft: rgba(210, 87, 112, 0.12);
+  --text: #202225;
+  --muted: #667085;
+  --muted-strong: #475467;
+  --border: #dce4ec;
+  --border-strong: #d1dbe4;
+  --blue: #066b90;
+  --blue-soft: rgba(6, 107, 144, 0.1);
+  --slate: #4a90b8;
+  --slate-soft: rgba(74, 144, 184, 0.12);
+  --emerald: #1f8f5f;
+  --emerald-soft: rgba(31, 143, 95, 0.12);
+  --amber: #4a90b8;
+  --amber-soft: rgba(74, 144, 184, 0.12);
+  --rose: #cc3333;
+  --rose-soft: rgba(204, 51, 51, 0.12);
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
   --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.08);
   --radius-xl: 6px;
@@ -86,14 +86,14 @@ button {
 }
 
 ::selection {
-  background: rgba(46, 111, 242, 0.16);
+  background: rgba(6, 107, 144, 0.16);
 }
 
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 a:focus-visible {
-  outline: 3px solid rgba(46, 111, 242, 0.22);
+  outline: 3px solid rgba(6, 107, 144, 0.22);
   outline-offset: 2px;
 }
 
@@ -344,7 +344,7 @@ a:focus-visible {
   color: var(--text);
   padding: 0 14px;
   height: 40px;
-  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
 }
 
 .search-shell__input {
@@ -366,7 +366,7 @@ a:focus-visible {
   font-weight: 700;
   letter-spacing: 0.01em;
   cursor: pointer;
-  transition: box-shadow 180ms ease, background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+  transition: box-shadow 150ms ease, background-color 150ms ease, border-color 150ms ease, color 150ms ease;
   white-space: nowrap;
 }
 
@@ -392,7 +392,7 @@ a:focus-visible {
 }
 
 .button--primary:hover {
-  background: #215ed8;
+  background: #055a7a;
 }
 
 .button--ghost:hover {

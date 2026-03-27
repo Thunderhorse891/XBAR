@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { EmptyState } from '@/components/EmptyState';
-import { KeyValue, PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
-import { ChevronLeftIcon } from '@/components/icons';
+import { KeyValue, Panel, Pill } from '@/components/app-ui';
+import { ChevronLeftIcon, SharedAccessIcon } from '@/components/icons';
 import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { formatCompactCurrency, formatDateLabel, formatPercent } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
@@ -13,6 +13,143 @@ import type { DocumentRecord, DocumentSource, GalleryAsset, SalesLead } from '@/
 const mediaKinds: GalleryAsset['kind'][] = ['Hero', 'Conformation', 'Sale Still', 'Pedigree', 'Document Cover'];
 const leadChannels: SalesLead['channel'][] = ['Facebook', 'Instagram', 'Referral', 'Site Inquiry'];
 const docSources: DocumentSource[] = ['Manual Upload', 'Bulk Intake', 'Shared Upload', 'Sales Packet'];
+const profileBadgeStyles = [
+  'border border-[#066B90]/15 bg-[#E8F2F7] text-[#066B90]',
+  'border border-[#4A90B8]/15 bg-[#edf5fa] text-[#4A90B8]',
+  'border border-[#CC3333]/15 bg-[#fff4f4] text-[#CC3333]',
+] as const;
+
+function classNames(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(' ');
+}
+
+function LockIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <rect x="5" y="11" width="14" height="10" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </svg>
+  );
+}
+
+function PhotoIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="9" cy="10" r="1.6" />
+      <path d="m21 15-4.5-4.5L8 19" />
+    </svg>
+  );
+}
+
+function DollarIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d="M12 3v18" />
+      <path d="M16.5 7.2C15.5 6.1 14 5.5 12.4 5.5h-.8C9.3 5.5 7.5 7 7.5 8.9c0 2.2 2 3.1 4.3 3.6l1.4.3c2.4.5 3.8 1.4 3.8 3.4 0 2.1-1.9 3.8-4.6 3.8h-.9c-1.8 0-3.5-.7-4.7-1.9" />
+    </svg>
+  );
+}
+
+function EyeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d="M2.5 12s3.6-6 9.5-6 9.5 6 9.5 6-3.6 6-9.5 6-9.5-6-9.5-6Z" />
+      <circle cx="12" cy="12" r="2.6" />
+    </svg>
+  );
+}
+
+function MessageIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d="M5 5.5h14a2 2 0 0 1 2 2V16a2 2 0 0 1-2 2H9l-4 3v-3H5a2 2 0 0 1-2-2V7.5a2 2 0 0 1 2-2Z" />
+    </svg>
+  );
+}
+
+function LinkIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d="M10 14 8 16a3 3 0 1 1-4.2-4.2l3-3A3 3 0 0 1 11 8" />
+      <path d="m14 10 2-2a3 3 0 1 1 4.2 4.2l-3 3A3 3 0 0 1 13 16" />
+      <path d="M8 12h8" />
+    </svg>
+  );
+}
+
+function ReadinessGauge({ value }: { value: number }) {
+  const normalized = Math.max(0, Math.min(100, value));
+  const radius = 48;
+  const circumference = 2 * Math.PI * radius;
+  const dashOffset = circumference - (normalized / 100) * circumference;
+  const gaugeColor = normalized >= 75 ? '#066B90' : '#4A90B8';
+
+  return (
+    <div className="relative mx-auto h-40 w-40">
+      <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
+        <circle cx="60" cy="60" r={radius} stroke="#dce4ec" strokeWidth="8" fill="none" />
+        <circle
+          cx="60"
+          cy="60"
+          r={radius}
+          stroke={gaugeColor}
+          strokeWidth="8"
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={dashOffset}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#4A90B8]">Ready</span>
+        <span className="mt-1 text-4xl font-bold tracking-[-0.06em] text-[#202225]">{normalized}</span>
+        <span className="text-sm font-semibold text-[#667085]">%</span>
+      </div>
+    </div>
+  );
+}
+
+function StatusChip({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
+  return (
+    <div className="group relative">
+      <span
+        className={classNames(
+          'inline-flex min-h-[32px] cursor-default items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold tracking-[0.02em] ring-1 transition-all duration-150 ease-[ease]',
+          ready
+            ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+            : 'bg-red-50 text-red-700 ring-red-200',
+        )}
+      >
+        <span aria-hidden="true">{ready ? '✓' : '✗'}</span>
+        <span>{label}</span>
+      </span>
+      <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-44 -translate-x-1/2 rounded-2xl bg-[#202225] px-3 py-2 text-xs font-medium leading-5 text-white shadow-lg group-hover:block group-focus-within:block">
+        {detail}
+      </div>
+    </div>
+  );
+}
+
+function StatPill({
+  icon,
+  value,
+  label,
+}: {
+  icon: React.ReactNode;
+  value: string;
+  label: string;
+}) {
+  return (
+    <div className="flex min-w-[112px] flex-1 items-center gap-3 rounded-full border border-[#dce4ec] bg-[#f7fafc] px-3 py-2 shadow-sm transition-all duration-150 ease-[ease] hover:border-[#4A90B8]/40 hover:bg-white">
+      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#066B90] ring-1 ring-[#dce4ec]">{icon}</span>
+      <div className="min-w-0">
+        <div className="text-sm font-bold tracking-[-0.03em] text-[#202225]">{value}</div>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#667085]">{label}</div>
+      </div>
+    </div>
+  );
+}
 
 export default function HorseDetail() {
   const { id } = useParams<{ id: string }>();
@@ -56,6 +193,9 @@ export default function HorseDetail() {
     stall: horse?.location.stall ?? '',
   });
 
+  const mediaInputId = useId();
+  const mediaInputRef = useRef<HTMLInputElement | null>(null);
+
   if (!horse) {
     return (
       <Panel title="Horse not found" description="Record not found in this workspace.">
@@ -69,6 +209,43 @@ export default function HorseDetail() {
   const saved = savedHorseIds.includes(horse.id);
   const packet = buildHorsePacketCompleteness(horse, documents, ownershipRecord);
   const buyerReadyDocuments = documents.filter((document) => buildDocumentTrustProfile(document, [horse]).readyForProfile);
+  const hasRestrictedActions = !canManageSharedAccess || !canUploadMedia || !canUploadDocuments || !canEditHorse || !canManageSales;
+
+  const readinessByKey = useMemo(
+    () =>
+      new Map(
+        packet.requirements
+          .filter((requirement) => ['identity', 'ownership', 'medical', 'media'].includes(requirement.key))
+          .map((requirement) => [requirement.key, requirement]),
+      ),
+    [packet.requirements],
+  );
+
+  const readinessChips = [
+    { key: 'identity', label: 'Identity' },
+    { key: 'ownership', label: 'Ownership' },
+    { key: 'medical', label: 'Medical' },
+    { key: 'media', label: 'Visuals' },
+  ].map(({ key, label }) => {
+    const requirement = readinessByKey.get(key);
+    return {
+      key,
+      label,
+      detail: requirement?.detail ?? 'No packet signal yet.',
+      ready: requirement?.status === 'ready',
+    };
+  });
+
+  const gallerySlots = useMemo(() => Array.from({ length: 4 }, (_, index) => horse.gallery[index] ?? null), [horse.gallery]);
+
+  const shareBadgeStyles =
+    packet.buyerProfileStatus === 'Live'
+      ? 'border border-[#066B90]/15 bg-[#E8F2F7] text-[#066B90]'
+      : packet.buyerProfileStatus === 'Blocked'
+        ? 'border border-[#CC3333]/15 bg-[#fff4f4] text-[#CC3333]'
+        : packet.buyerProfileStatus === 'Needs Review'
+          ? 'border border-[#4A90B8]/15 bg-[#edf5fa] text-[#4A90B8]'
+          : 'border border-[#dce4ec] bg-[#f6f8fb] text-[#667085]';
 
   const handleSavedHorseToggle = () => {
     toggleSavedHorse(horse.id);
@@ -224,85 +401,213 @@ export default function HorseDetail() {
 
   return (
     <>
-      <Link to="/horses" className="inline-link">
-        <ChevronLeftIcon className="inline-link__icon" />
+      <Link
+        to="/horses"
+        className="inline-flex w-fit items-center gap-2 text-sm font-semibold text-[#066B90] transition-all duration-150 ease-[ease] hover:text-[#03375D]"
+      >
+        <ChevronLeftIcon className="h-4 w-4" />
         Back to horses
       </Link>
 
-      <PageHeader
-        eyebrow={horse.ownerEntity}
-        title={horse.name}
-        description={`${horse.segment} · ${horse.status} · ${horse.location.barn}`}
-        actions={
-          <>
-            <Link className="button button--primary button--compact" to={packet.sharePath}>
+      <section className="rounded-[20px] border border-[#dde5ec] bg-white px-5 py-5 shadow-sm">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0">
+            <div className="mb-3 flex items-center gap-3">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#4A90B8]">{horse.ownerEntity}</span>
+              {hasRestrictedActions ? (
+                <span
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#dce4ec] bg-[#f6f8fb] text-[#667085] transition-all duration-150 ease-[ease] hover:border-[#4A90B8]/40 hover:text-[#066B90]"
+                  title={`${currentRole} access limits some profile actions.`}
+                >
+                  <LockIcon className="h-4 w-4" />
+                </span>
+              ) : null}
+            </div>
+            <h1 className="text-[clamp(2rem,4vw,3.25rem)] font-bold tracking-[-0.06em] text-[#202225]">{horse.name}</h1>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {[horse.segment, horse.status, horse.location.barn].map((label, index) => (
+                <span
+                  key={`${label}-${index}`}
+                  className={classNames(
+                    'inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold tracking-[0.02em]',
+                    profileBadgeStyles[index],
+                  )}
+                >
+                  <span
+                    className={classNames(
+                      'h-2.5 w-2.5 rounded-full',
+                      index === 0 ? 'bg-[#066B90]' : index === 1 ? 'bg-[#4A90B8]' : 'bg-[#CC3333]',
+                    )}
+                  />
+                  {label}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <Link
+              className="inline-flex h-11 items-center justify-center rounded-full bg-[#066B90] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#055a7a]"
+              to={packet.sharePath}
+            >
               Open share view
             </Link>
-            <button className="button button--ghost button--compact" type="button" onClick={handleSavedHorseToggle} disabled={!canManageSharedAccess}>
-              {saved ? 'In shared access' : 'Add to shared access'}
+            <button
+              className="inline-flex h-11 items-center justify-center rounded-full border border-[#066B90] px-5 text-sm font-semibold text-[#066B90] transition-all duration-150 ease-[ease] hover:bg-[#E8F2F7] disabled:cursor-not-allowed disabled:opacity-50"
+              type="button"
+              onClick={handleSavedHorseToggle}
+              disabled={!canManageSharedAccess}
+            >
+              Add to shared access
             </button>
-            <Pill tone={horse.readiness.score >= 85 ? 'emerald' : horse.readiness.score >= 70 ? 'amber' : 'rose'}>
-              {horse.status}
-            </Pill>
-            <Pill tone="blue">{horse.segment}</Pill>
-          </>
-        }
-      />
-      {!canManageSharedAccess || !canUploadMedia || !canUploadDocuments || !canEditHorse || !canManageSales ? (
-        <div className="callout callout--warning">
-          <strong>{currentRole} access:</strong> Sensitive actions on this horse profile are limited by workspace role.
+          </div>
         </div>
-      ) : null}
+      </section>
 
-      <section className="detail-hero">
-        <div className="detail-hero__media">
-          <img src={horse.profileImage} alt="" className="detail-hero__image" />
-          <div className="detail-hero__media-copy">
-            <div className="detail-hero__eyebrow">Media vault</div>
-            <h2>Gallery and packet assets.</h2>
-            <p>Upload sale stills, hero images, and packet covers.</p>
+      <section className="grid items-stretch gap-5 lg:grid-cols-2">
+        <div className="relative flex h-full flex-col overflow-hidden rounded-[20px] border border-[#dde5ec] bg-white p-5 shadow-sm">
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E8F2F7] text-[#066B90]">
+                <PhotoIcon className="h-5 w-5" />
+              </span>
+              <div className="text-sm font-semibold tracking-[0.02em] text-[#202225]">Media Vault</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => mediaInputRef.current?.click()}
+              disabled={!canUploadMedia}
+              className="inline-flex h-10 items-center justify-center rounded-full border border-[#066B90] px-4 text-sm font-semibold text-[#066B90] transition-all duration-150 ease-[ease] hover:bg-[#E8F2F7] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              + Upload
+            </button>
+          </div>
+
+          <input
+            id={mediaInputId}
+            ref={mediaInputRef}
+            className="hidden"
+            type="file"
+            multiple
+            accept="image/*"
+            onChange={(event) => setMediaFiles(Array.from(event.target.files ?? []))}
+            disabled={!canUploadMedia}
+          />
+
+          <div className="relative grid flex-1 grid-cols-2 gap-3">
+            {!horse.gallery.length ? (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="" className="h-28 w-28 opacity-[0.15]" />
+              </div>
+            ) : null}
+            {gallerySlots.map((asset, index) =>
+              asset ? (
+                <div
+                  key={asset.id}
+                  className="group relative z-10 aspect-[4/3] overflow-hidden rounded-[18px] border border-[#dce4ec] bg-[#f6f8fb]"
+                >
+                  <img
+                    src={asset.url}
+                    alt={asset.label}
+                    className="h-full w-full object-cover transition-all duration-150 ease-[ease] group-hover:scale-[1.02]"
+                  />
+                  <div className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-[#202225]/78 via-[#202225]/24 to-transparent p-3 text-white">
+                    <div>
+                      <div className="text-xs font-semibold tracking-[0.02em]">{asset.label}</div>
+                      <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-white/70">{asset.kind}</div>
+                    </div>
+                    <span className="rounded-full bg-white/12 px-2.5 py-1 text-[11px] font-semibold backdrop-blur-sm">{asset.status}</span>
+                  </div>
+                </div>
+              ) : (
+                <label
+                  key={`empty-${index}`}
+                  htmlFor={mediaInputId}
+                  className="relative z-10 flex aspect-[4/3] cursor-pointer items-center justify-center rounded-[18px] border border-dashed border-[#d1dbe4] bg-[#f8fbfd] text-xs font-semibold uppercase tracking-[0.22em] text-[#4A90B8] transition-all duration-150 ease-[ease] hover:border-[#066B90] hover:bg-[#eef6fa]"
+                >
+                  + Upload
+                </label>
+              ),
+            )}
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-[#dce4ec] bg-[#f7fafc] px-4 py-3">
+            <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#4A90B8]">
+              <span>{horse.gallery.length} assets</span>
+              {mediaFiles.length ? <span>{mediaFiles.length} queued</span> : null}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                className="h-10 rounded-full border border-[#d1dbe4] bg-white px-3 text-sm font-medium text-[#202225] transition-all duration-150 ease-[ease] focus:border-[#066B90] focus:outline-none"
+                value={mediaKind}
+                onChange={(event) => setMediaKind(event.target.value as GalleryAsset['kind'])}
+                disabled={!canUploadMedia}
+              >
+                {mediaKinds.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {kind}
+                  </option>
+                ))}
+              </select>
+              <label className="inline-flex h-10 items-center gap-2 rounded-full border border-[#d1dbe4] bg-white px-3 text-sm font-medium text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#4A90B8]/50">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-[#c2d1dc] text-[#066B90] focus:ring-[#066B90]"
+                  checked={makePrimary}
+                  onChange={(event) => setMakePrimary(event.target.checked)}
+                  disabled={!canUploadMedia}
+                />
+                Hero
+              </label>
+              <button
+                className="inline-flex h-10 items-center justify-center rounded-full bg-[#066B90] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#055a7a] disabled:cursor-not-allowed disabled:opacity-50"
+                type="button"
+                onClick={() => void handleMediaUpload()}
+                disabled={!canUploadMedia || isMediaUploading || !mediaFiles.length}
+              >
+                {isMediaUploading ? 'Saving...' : 'Save media'}
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="detail-hero__side">
-          <Panel title="Sale readiness" description="Live packet status.">
-            <div className="stack-list">
-              <div className="stack-item">
-                <div className="stack-item__top">
-                  <div className="stack-item__title">{formatPercent(packet.score)}</div>
-                  <div className="status-inline">
-                    <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
-                    <Pill tone={packet.tone}>{horse.readiness.packetStatus}</Pill>
-                  </div>
-                </div>
-                <ProgressBar value={packet.score} tone={packet.tone} />
-                <div className="bullet-list">
-                  {packet.requirements.map((requirement) => (
-                    <div key={requirement.key} className="bullet-list__item">
-                      {requirement.label}: {requirement.detail}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="stack-item">
-                <div className="inline-metrics">
-                  <span>Ask {formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)}</span>
-                  <span>{horse.sale.watchlistCount} watchers</span>
-                  <span>{horse.sale.inquiryCount} inquiries</span>
-                </div>
-                <div className="detail-block subtle">{packet.buyerProfileNote}</div>
-              </div>
-            </div>
-          </Panel>
+        <div className="flex h-full flex-col rounded-[20px] border border-[#dde5ec] bg-white p-5 shadow-sm">
+          <div className="mb-5 flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E8F2F7] text-[#066B90]">
+              <SharedAccessIcon className="h-5 w-5" />
+            </span>
+            <div className="text-sm font-semibold tracking-[0.02em] text-[#202225]">Sale Readiness</div>
+          </div>
+
+          <ReadinessGauge value={packet.score} />
+
+          <div className="mt-5 flex flex-wrap gap-2">
+            {readinessChips.map((chip) => (
+              <StatusChip key={chip.key} label={chip.label} detail={chip.detail} ready={chip.ready} />
+            ))}
+          </div>
+
+          <div className="mt-5 flex flex-wrap gap-3">
+            <StatPill icon={<DollarIcon className="h-4 w-4" />} value={formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)} label="Ask" />
+            <StatPill icon={<EyeIcon className="h-4 w-4" />} value={String(horse.sale.watchlistCount)} label="Watchers" />
+            <StatPill icon={<MessageIcon className="h-4 w-4" />} value={String(horse.sale.inquiryCount)} label="Inquiries" />
+          </div>
+
+          <div className="mt-5">
+            <span className={classNames('inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold tracking-[0.02em]', shareBadgeStyles)}>
+              <LinkIcon className="h-3.5 w-3.5" />
+              {packet.buyerProfileStatus}
+            </span>
+          </div>
         </div>
       </section>
 
       <div className="detail-grid">
-        <Panel eyebrow="Identity" title="Registry and physical profile">
+        <Panel eyebrow="Identity" title="Registry">
           <div className="key-grid key-grid--wide">
             <KeyValue label="Registry" value={`${horse.registry} · ${horse.aqhaNumber}`} />
             <KeyValue label="Registration" value={horse.registrationNumber} />
-            <KeyValue label="Color and markings" value={`${horse.color} · ${horse.markings}`} />
+            <KeyValue label="Color / marks" value={`${horse.color} · ${horse.markings}`} />
             <KeyValue label="Sex / age" value={`${horse.sex} · ${horse.age}`} />
             <KeyValue label="Foaled" value={formatDateLabel(horse.foaledOn)} />
             <KeyValue label="Microchip" value={horse.microchipId} />
@@ -311,7 +616,7 @@ export default function HorseDetail() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Assignments" title="Owner, ranch, and care assignments">
+        <Panel eyebrow="Assignments" title="Assignments">
           <div className="key-grid key-grid--wide">
             <KeyValue label="Owner entity" value={horse.ownerEntity} />
             <KeyValue label="Legal owner" value={ownershipRecord?.legalOwner ?? horse.owner} />
@@ -351,71 +656,23 @@ export default function HorseDetail() {
       </div>
 
       <div className="detail-grid">
-        <Panel eyebrow="Media" title="Gallery and packet assets" description="Images and packet files.">
-          {horse.gallery.length ? (
-            <div className="media-strip">
-              {horse.gallery.map((asset) => (
-                <div key={asset.id} className="media-tile">
-                  <div className="media-tile__image-shell">
-                    <img src={asset.url} alt="" className="media-tile__image" />
-                  </div>
-                  <div className="media-tile__label">{asset.label}</div>
-                  <div className="media-tile__meta">
-                    <Pill tone={asset.status === 'Approved' ? 'emerald' : asset.status === 'Pending' ? 'amber' : 'slate'}>
-                      {asset.status}
-                    </Pill>
-                    <span>{asset.kind}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState compact title="No media uploaded" description="Upload hero images, conformation shots, or sale stills for this horse." />
-          )}
-          <div className="form-grid form-grid--tight">
-            <label className="field-stack">
-              <span className="field-label">Media kind</span>
-              <select className="field-input" value={mediaKind} onChange={(event) => setMediaKind(event.target.value as GalleryAsset['kind'])} disabled={!canUploadMedia}>
-                {mediaKinds.map((kind) => (
-                  <option key={kind} value={kind}>
-                    {kind}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field-stack">
-              <span className="field-label">Upload images</span>
-              <input className="field-input field-input--file" type="file" multiple accept="image/*" onChange={(event) => setMediaFiles(Array.from(event.target.files ?? []))} disabled={!canUploadMedia} />
-            </label>
-            <label className="field-stack field-stack--checkbox">
-              <input type="checkbox" checked={makePrimary} onChange={(event) => setMakePrimary(event.target.checked)} disabled={!canUploadMedia} />
-              <span>Use first upload as hero image</span>
-            </label>
-          </div>
-          <div className="inline-actions">
-            <button className="button button--primary button--compact" type="button" onClick={handleMediaUpload} disabled={!canUploadMedia || isMediaUploading || !mediaFiles.length}>
-              {isMediaUploading ? 'Uploading media...' : 'Upload media'}
-            </button>
-          </div>
-        </Panel>
-
-        <Panel eyebrow="Profile notes" title="Operational summary">
+        <Panel eyebrow="Snapshot" title="Snapshot">
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__title">Medical note</div>
               <div className="stack-item__copy">{horse.medicalNotes}</div>
             </div>
             <div className="stack-item">
-              <div className="stack-item__title">Packet posture</div>
+              <div className="stack-item__title">Packet state</div>
               <div className="inline-metrics">
-                <span>{horse.documents.length} linked docs</span>
-                <span>{horse.gallery.length} media slots</span>
-                <span>{buyerReadyDocuments.length} buyer-safe docs</span>
+                <span>{horse.documents.length} docs</span>
+                <span>{horse.gallery.length} assets</span>
+                <span>{buyerReadyDocuments.length} buyer-safe</span>
                 <span>{packet.shareSlug}</span>
               </div>
             </div>
             <div className="stack-item">
-              <div className="stack-item__title">Buyer profile</div>
+              <div className="stack-item__title">Buyer view</div>
               <div className="inline-metrics">
                 <span>{packet.buyerProfileStatus}</span>
                 <span>{packet.trustSummary}</span>
@@ -423,30 +680,8 @@ export default function HorseDetail() {
             </div>
           </div>
         </Panel>
-      </div>
 
-      <div className="detail-grid">
-        <Panel eyebrow="Ownership" title="Shares and transfer posture">
-          <div className="stack-list">
-            {horse.ownership.map((stake) => (
-              <div key={stake.id} className="stack-item">
-                <div className="stack-item__top">
-                  <div>
-                    <div className="stack-item__title">{stake.name}</div>
-                    <div className="stack-item__copy">{stake.contact}</div>
-                  </div>
-                  <Pill tone="slate">{stake.role}</Pill>
-                </div>
-                <div className="inline-metrics">
-                  <span>{stake.share}% share</span>
-                  <span>{ownershipRecord?.transferStatus ?? 'No transfer record'}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
-
-        <Panel eyebrow="Documents" title="Packet coverage">
+        <Panel eyebrow="Documents" title="Documents">
           <div className="stack-list">
             {documents.length ? (
               documents.map((document) => (
@@ -454,11 +689,11 @@ export default function HorseDetail() {
                   <div className="stack-item__top">
                     <div>
                       <div className="stack-item__title">{document.title}</div>
-                      <div className="stack-item__copy">{document.type} · {document.source}</div>
+                      <div className="stack-item__copy">
+                        {document.type} · {document.source}
+                      </div>
                     </div>
-                      <Pill tone={document.state === 'Needs Review' ? 'rose' : 'emerald'}>
-                        {document.state}
-                      </Pill>
+                    <Pill tone={document.state === 'Needs Review' ? 'rose' : 'emerald'}>{document.state}</Pill>
                   </div>
                   <div className="stack-item__copy">{document.summary}</div>
                   <div className="inline-metrics">
@@ -496,7 +731,7 @@ export default function HorseDetail() {
           </div>
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
-              <span className="field-label">Document source</span>
+              <span className="field-label">Source</span>
               <select className="field-input" value={docSource} onChange={(event) => setDocSource(event.target.value as DocumentSource)} disabled={!canUploadDocuments}>
                 {docSources.map((source) => (
                   <option key={source} value={source}>
@@ -506,20 +741,40 @@ export default function HorseDetail() {
               </select>
             </label>
             <label className="field-stack field-stack--wide">
-              <span className="field-label">Upload documents</span>
+              <span className="field-label">Upload</span>
               <input className="field-input field-input--file" type="file" multiple accept=".pdf,.txt,.csv,image/*" onChange={(event) => setDocFiles(Array.from(event.target.files ?? []))} disabled={!canUploadDocuments} />
             </label>
           </div>
           <div className="inline-actions">
             <button className="button button--ghost button--compact" type="button" onClick={handleDocumentUpload} disabled={!canUploadDocuments || isDocumentUploading || !docFiles.length}>
-              {isDocumentUploading ? 'Uploading documents...' : 'Add to document intake'}
+              {isDocumentUploading ? 'Uploading...' : 'Add intake'}
             </button>
           </div>
         </Panel>
       </div>
 
       <div className="detail-grid">
-        <Panel eyebrow="Medical" title="Timeline and care notes">
+        <Panel eyebrow="Ownership" title="Ownership">
+          <div className="stack-list">
+            {horse.ownership.map((stake) => (
+              <div key={stake.id} className="stack-item">
+                <div className="stack-item__top">
+                  <div>
+                    <div className="stack-item__title">{stake.name}</div>
+                    <div className="stack-item__copy">{stake.contact}</div>
+                  </div>
+                  <Pill tone="slate">{stake.role}</Pill>
+                </div>
+                <div className="inline-metrics">
+                  <span>{stake.share}% share</span>
+                  <span>{ownershipRecord?.transferStatus ?? 'No transfer record'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel eyebrow="Medical" title="Medical">
           {horse.medicalTimeline.length ? (
             <div className="timeline">
               {horse.medicalTimeline.map((event) => (
@@ -537,15 +792,17 @@ export default function HorseDetail() {
             <EmptyState compact title="No medical timeline yet" description="Add medical events from the Medical module or after a new exam." />
           )}
         </Panel>
+      </div>
 
-        <Panel eyebrow="Breeding and sales" title="Program and buyer posture">
+      <div className="detail-grid">
+        <Panel eyebrow="Programs" title="Programs">
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__title">Listing state</div>
               <div className="inline-metrics">
                 <span>{horse.sale.listingState}</span>
-                <span>Buyer confidence {formatPercent(horse.sale.buyerConfidence)}</span>
-                <span>{horse.sale.socialReady ? 'Social packet ready' : 'Social packet staged'}</span>
+                <span>Confidence {formatPercent(horse.sale.buyerConfidence)}</span>
+                <span>{horse.sale.socialReady ? 'Social ready' : 'Social staged'}</span>
               </div>
             </div>
             {horse.breedingTimeline.length ? (
@@ -576,13 +833,18 @@ export default function HorseDetail() {
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
               <span className="field-label">Lead name</span>
-              <input className="field-input" value={leadName} onChange={(event) => {
-                setLeadName(event.target.value);
-                setLeadError('');
-              }} disabled={!canManageSales} />
+              <input
+                className="field-input"
+                value={leadName}
+                onChange={(event) => {
+                  setLeadName(event.target.value);
+                  setLeadError('');
+                }}
+                disabled={!canManageSales}
+              />
             </label>
             <label className="field-stack">
-              <span className="field-label">Lead channel</span>
+              <span className="field-label">Channel</span>
               <select className="field-input" value={leadChannel} onChange={(event) => setLeadChannel(event.target.value as SalesLead['channel'])} disabled={!canManageSales}>
                 {leadChannels.map((channel) => (
                   <option key={channel} value={channel}>
@@ -595,22 +857,52 @@ export default function HorseDetail() {
           {leadError ? <div className="field-error">{leadError}</div> : null}
           <div className="inline-actions">
             <button className="button button--primary button--compact" type="button" onClick={handleLeadCreate} disabled={!canManageSales || !leadName.trim()}>
-              Add buyer lead
+              Add lead
             </button>
+          </div>
+        </Panel>
+
+        <Panel eyebrow="Files" title="Files">
+          <div className="stack-list">
+            <div className="stack-item">
+              <div className="stack-item__top">
+                <div className="stack-item__title">Packet trust</div>
+                <Pill tone="blue">{packet.buyerProfileStatus}</Pill>
+              </div>
+              <div className="inline-metrics">
+                <span>{packet.readyCount} clear</span>
+                <span>{packet.reviewCount} review</span>
+                <span>{packet.missingCount} missing</span>
+              </div>
+            </div>
+            <div className="stack-item">
+              <div className="stack-item__title">Buyer-safe docs</div>
+              <div className="inline-metrics">
+                <span>{buyerReadyDocuments.length} ready</span>
+                <span>{documents.length} linked</span>
+              </div>
+            </div>
+            <div className="stack-item">
+              <div className="stack-item__top">
+                <div className="stack-item__title">Share path</div>
+                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[#4A90B8]">{packet.shareSlug}</span>
+              </div>
+              <div className="inline-metrics">
+                <span>{packet.sharePath}</span>
+              </div>
+            </div>
           </div>
         </Panel>
       </div>
 
-      <Panel eyebrow="Activity" title="Notes and alerts">
+      <Panel eyebrow="Activity" title="Activity">
         <div className="detail-grid">
           <div className="stack-list">
             {horse.alerts.map((alert) => (
               <div key={alert.id} className="stack-item">
                 <div className="stack-item__top">
                   <div className="stack-item__title">{alert.title}</div>
-                  <Pill tone={alert.severity === 'high' ? 'rose' : alert.severity === 'medium' ? 'amber' : 'blue'}>
-                    {alert.module}
-                  </Pill>
+                  <Pill tone={alert.severity === 'high' ? 'rose' : alert.severity === 'medium' ? 'blue' : 'slate'}>{alert.module}</Pill>
                 </div>
                 <div className="stack-item__copy">{alert.summary}</div>
               </div>
@@ -618,21 +910,32 @@ export default function HorseDetail() {
           </div>
           <div className="stack-list">
             <div className="stack-item">
-              <div className="stack-item__title">Add field note</div>
+              <div className="stack-item__title">Add note</div>
               <div className="form-grid form-grid--tight">
                 <label className="field-stack">
-                  <span className="field-label">Note title</span>
-                  <input className="field-input" value={noteTitle} onChange={(event) => {
-                    setNoteTitle(event.target.value);
-                    setNoteError('');
-                  }} disabled={!canEditHorse} />
+                  <span className="field-label">Title</span>
+                  <input
+                    className="field-input"
+                    value={noteTitle}
+                    onChange={(event) => {
+                      setNoteTitle(event.target.value);
+                      setNoteError('');
+                    }}
+                    disabled={!canEditHorse}
+                  />
                 </label>
                 <label className="field-stack field-stack--wide">
                   <span className="field-label">Note</span>
-                  <textarea className="field-textarea" value={noteBody} onChange={(event) => {
-                    setNoteBody(event.target.value);
-                    setNoteError('');
-                  }} rows={4} disabled={!canEditHorse} />
+                  <textarea
+                    className="field-textarea"
+                    value={noteBody}
+                    onChange={(event) => {
+                      setNoteBody(event.target.value);
+                      setNoteError('');
+                    }}
+                    rows={4}
+                    disabled={!canEditHorse}
+                  />
                 </label>
               </div>
               {noteError ? <div className="field-error">{noteError}</div> : null}

@@ -61,14 +61,30 @@ const routeLabels: Record<string, string> = {
   '/settings': 'Settings',
 };
 
+function classNames(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(' ');
+}
+
 function NavSection({ title, items }: { title: string; items: NavItem[] }) {
   return (
-    <div className="nav-section">
-      <div className="nav-section__title">{title}</div>
-      <div className="nav-section__items">
+    <div className="flex flex-col gap-2">
+      <div className="px-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-[#666666]">{title}</div>
+      <div className="flex flex-col gap-1">
         {items.map(({ label, path, icon: Icon }) => (
-          <NavLink key={label} to={path} end={path === '/'} className={({ isActive }) => `nav-link${isActive ? ' nav-link--active' : ''}`}>
-            <Icon className="nav-link__icon" />
+          <NavLink
+            key={label}
+            to={path}
+            end={path === '/'}
+            className={({ isActive }) =>
+              classNames(
+                'group flex items-center gap-3 border-l-[3px] px-3 py-2.5 text-sm font-medium transition-all duration-150 ease-[ease]',
+                isActive
+                  ? 'border-[#066B90] bg-[#E8F2F7] text-[#03375D]'
+                  : 'border-transparent text-white/78 hover:border-[#066B90]/35 hover:bg-white/5 hover:text-white',
+              )
+            }
+          >
+            <Icon className="h-[18px] w-[18px] shrink-0" />
             <span>{label}</span>
           </NavLink>
         ))}
@@ -111,24 +127,26 @@ export default function MainLayout() {
   };
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand-lockup">
-          <div className="brand-lockup__mark">
-            <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" />
+    <div className="min-h-screen bg-[#f2f2f7] lg:grid lg:grid-cols-[276px,1fr]">
+      <aside className="hidden min-h-screen flex-col gap-5 border-r border-white/10 bg-[#03375D] px-[18px] py-6 text-white lg:flex">
+        <div className="flex items-center gap-3">
+          <div className="flex h-[52px] w-[52px] items-center justify-center rounded-2xl border border-white/10 bg-white/5 p-1.5">
+            <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" className="h-full w-full object-contain" />
           </div>
-          <div>
-            <div className="brand-lockup__title">{workspaceProfile.businessName || 'XBAR'}</div>
-            <div className="brand-lockup__subtitle">{workspaceProfile.ranchName || 'Horse Ledger'}</div>
+          <div className="min-w-0">
+            <div className="truncate text-[1.04rem] font-extrabold uppercase tracking-[0.14em]">{workspaceProfile.businessName || 'XBAR'}</div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/55">{workspaceProfile.ranchName || 'Horse Ledger'}</div>
           </div>
         </div>
 
-        <div className="sidebar-card">
-          <div className="sidebar-card__eyebrow">Workspace</div>
-          <div className="sidebar-card__title">{roleWorkspace.label}</div>
-          <div className="sidebar-card__tags">
+        <div className="rounded-2xl border border-white/8 bg-white/5 p-3">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#8bb9d2]">Workspace</div>
+          <div className="mt-2 text-sm font-semibold text-white">{roleWorkspace.label}</div>
+          <div className="mt-3 flex flex-wrap gap-2">
             {roleWorkspace.primaryModules.map((module) => (
-              <Pill key={module}>{module}</Pill>
+              <span key={module} className="rounded-full bg-[#E8F2F7] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#4A90B8]">
+                {module}
+              </span>
             ))}
           </div>
         </div>
@@ -137,91 +155,155 @@ export default function MainLayout() {
         <NavSection title="Programs" items={programs} />
         <NavSection title="Platform" items={platformItems} />
 
-        <div className="sidebar-footer">
-          <div className="sidebar-footer__title">Contract status</div>
-          <div className="sidebar-footer__row">
-            <span>{subscription.tier}</span>
+        <div className="mt-auto rounded-2xl border border-white/8 bg-white/5 p-3">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#8bb9d2]">Contract</div>
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <span className="text-sm font-semibold text-white">{subscription.tier}</span>
             <Pill tone="blue">{subscription.billingState}</Pill>
           </div>
-          <div className="sidebar-footer__meta">
+          <div className="mt-2 text-xs text-white/62">
             {subscription.usage.seatsUsed}/{subscription.usage.seatLimit} seats in use
           </div>
         </div>
       </aside>
 
-      <div className="shell-main">
-        <header className="topbar">
-          <div className="topbar__context">
-            <div className="topbar__title-row">
-              <div className="topbar__title">{currentLabel}</div>
-              <Pill tone={pendingReview ? 'amber' : 'emerald'}>{pendingReview ? `${pendingReview} in review` : 'Queue clear'}</Pill>
+      <div className="flex min-w-0 flex-col bg-[#f2f2f7]">
+        <header className="sticky top-0 z-10 border-b border-[#d8e0e8] bg-white/95 backdrop-blur-sm">
+          <div className="flex min-h-[58px] flex-wrap items-center justify-between gap-4 px-5 py-3">
+            <div className="flex items-center gap-3">
+              <div className="text-[0.92rem] font-extrabold tracking-[0.01em] text-[#202225]">{currentLabel}</div>
+              <span
+                className={classNames(
+                  'inline-flex min-h-[24px] items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]',
+                  pendingReview ? 'bg-[#E8F2F7] text-[#066B90]' : 'bg-emerald-50 text-emerald-700',
+                )}
+              >
+                {pendingReview ? `${pendingReview} review` : 'Queue clear'}
+              </span>
             </div>
-          </div>
 
-          <div className="topbar__controls">
-            <label className="search-shell">
-              <SearchIcon className="search-shell__icon" />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                onKeyDown={handleSearch}
-                placeholder="Search records"
-                className="search-shell__input"
-              />
-            </label>
+            <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
+              <label className="relative min-w-[220px] max-w-[420px] flex-1">
+                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[#7b8794]" />
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  onKeyDown={handleSearch}
+                  placeholder="Search records"
+                  className="h-10 w-full rounded-full border border-[#d1dbe4] bg-white pl-10 pr-4 text-sm text-[#202225] transition-all duration-150 ease-[ease] placeholder:text-[#8a96a3] focus:border-[#066B90] focus:outline-none"
+                />
+              </label>
 
-            <select
-              className="role-select"
-              value={currentRole}
-              onChange={(event) => setCurrentRole(event.target.value as UserRole)}
-              aria-label="Workspace role"
-            >
-              <option value="Admin">Admin</option>
-              <option value="Ranch Manager">Ranch Manager</option>
-              <option value="Owner">Owner</option>
-              <option value="Medical Lead">Medical Lead</option>
-              <option value="Sales Lead">Sales Lead</option>
-            </select>
+              <select
+                className="h-10 rounded-full border border-[#d1dbe4] bg-white px-4 text-sm font-medium text-[#202225] transition-all duration-150 ease-[ease] focus:border-[#066B90] focus:outline-none"
+                value={currentRole}
+                onChange={(event) => setCurrentRole(event.target.value as UserRole)}
+                aria-label="Workspace role"
+              >
+                <option value="Admin">Admin</option>
+                <option value="Ranch Manager">Ranch Manager</option>
+                <option value="Owner">Owner</option>
+                <option value="Medical Lead">Medical Lead</option>
+                <option value="Sales Lead">Sales Lead</option>
+              </select>
 
-            <button className="icon-button" type="button" onClick={() => navigate('/documents')} aria-label="Open document review">
-              <BellIcon className="icon-button__icon" />
-              {pendingReview ? <span className="icon-button__dot">{pendingReview}</span> : null}
-            </button>
+              <button
+                className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#d1dbe4] bg-white text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#4A90B8]/50 hover:bg-[#f7fafc] disabled:cursor-not-allowed disabled:opacity-50"
+                type="button"
+                onClick={() => navigate('/documents')}
+                aria-label="Open document review"
+              >
+                <BellIcon className="h-[18px] w-[18px]" />
+                {pendingReview ? (
+                  <span className="absolute right-0.5 top-0.5 min-w-[18px] rounded-full bg-[#CC3333] px-1.5 py-0.5 text-[10px] font-bold text-white">
+                    {pendingReview}
+                  </span>
+                ) : null}
+              </button>
 
-            <button className="button button--ghost" type="button" onClick={() => navigate('/documents?upload=1')} disabled={!canUploadDocuments}>
-              Intake
-            </button>
+              <button
+                className="inline-flex h-10 items-center justify-center rounded-full border border-[#d1dbe4] bg-white px-4 text-sm font-semibold text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#4A90B8]/50 hover:bg-[#f7fafc] disabled:cursor-not-allowed disabled:opacity-50"
+                type="button"
+                onClick={() => navigate('/documents?upload=1')}
+                disabled={!canUploadDocuments}
+              >
+                Intake
+              </button>
 
-            <button className="button button--primary" type="button" onClick={() => navigate('/horses?new=1')} disabled={!canCreateHorse}>
-              <AddIcon className="button__icon" />
-              New
-            </button>
+              <button
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#066B90] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#055a7a] disabled:cursor-not-allowed disabled:opacity-50"
+                type="button"
+                onClick={() => navigate('/horses?new=1')}
+                disabled={!canCreateHorse}
+              >
+                <AddIcon className="h-[16px] w-[16px]" />
+                New
+              </button>
+            </div>
           </div>
         </header>
 
-        <main className="shell-content">
+        <main className="flex flex-col gap-[18px] px-6 py-5">
           <Outlet />
         </main>
 
-        <nav className="mobile-dock" aria-label="Mobile quick navigation">
-          <NavLink to="/" end className={({ isActive }) => `mobile-dock__item${isActive ? ' mobile-dock__item--active' : ''}`}>
-            <DashboardIcon className="mobile-dock__icon" />
+        <nav className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-2 rounded-2xl border border-white/10 bg-[#03375D] p-2 text-white shadow-lg lg:hidden" aria-label="Mobile quick navigation">
+          <NavLink
+            to="/"
+            end
+            className={({ isActive }) =>
+              classNames(
+                'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-semibold transition-all duration-150 ease-[ease]',
+                isActive ? 'bg-[#E8F2F7] text-[#03375D]' : 'text-white/72 hover:bg-white/8 hover:text-white',
+              )
+            }
+          >
+            <DashboardIcon className="h-[18px] w-[18px]" />
             <span>Home</span>
           </NavLink>
-          <NavLink to="/horses" className={({ isActive }) => `mobile-dock__item${isActive ? ' mobile-dock__item--active' : ''}`}>
-            <HorsesIcon className="mobile-dock__icon" />
+          <NavLink
+            to="/horses"
+            className={({ isActive }) =>
+              classNames(
+                'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-semibold transition-all duration-150 ease-[ease]',
+                isActive ? 'bg-[#E8F2F7] text-[#03375D]' : 'text-white/72 hover:bg-white/8 hover:text-white',
+              )
+            }
+          >
+            <HorsesIcon className="h-[18px] w-[18px]" />
             <span>Horses</span>
           </NavLink>
-          <NavLink to="/documents" className={({ isActive }) => `mobile-dock__item${isActive ? ' mobile-dock__item--active' : ''}`}>
-            <DocumentsIcon className="mobile-dock__icon" />
+          <NavLink
+            to="/documents"
+            className={({ isActive }) =>
+              classNames(
+                'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-semibold transition-all duration-150 ease-[ease]',
+                isActive ? 'bg-[#E8F2F7] text-[#03375D]' : 'text-white/72 hover:bg-white/8 hover:text-white',
+              )
+            }
+          >
+            <DocumentsIcon className="h-[18px] w-[18px]" />
             <span>Docs</span>
           </NavLink>
-          <NavLink to="/sales" className={({ isActive }) => `mobile-dock__item${isActive ? ' mobile-dock__item--active' : ''}`}>
-            <SalesIcon className="mobile-dock__icon" />
+          <NavLink
+            to="/sales"
+            className={({ isActive }) =>
+              classNames(
+                'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-semibold transition-all duration-150 ease-[ease]',
+                isActive ? 'bg-[#E8F2F7] text-[#03375D]' : 'text-white/72 hover:bg-white/8 hover:text-white',
+              )
+            }
+          >
+            <SalesIcon className="h-[18px] w-[18px]" />
             <span>Sales</span>
           </NavLink>
-          <button className="mobile-dock__item mobile-dock__item--action" type="button" onClick={() => navigate('/horses?new=1')} disabled={!canCreateHorse}>
-            <AddIcon className="mobile-dock__icon" />
+          <button
+            className="flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-xl bg-[#066B90] text-[11px] font-semibold text-white transition-all duration-150 ease-[ease] hover:bg-[#055a7a] disabled:cursor-not-allowed disabled:opacity-50"
+            type="button"
+            onClick={() => navigate('/horses?new=1')}
+            disabled={!canCreateHorse}
+          >
+            <AddIcon className="h-[18px] w-[18px]" />
             <span>New</span>
           </button>
         </nav>
