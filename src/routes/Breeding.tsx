@@ -5,14 +5,16 @@ import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
-import { useXbarStore } from '@/store/useXbarStore';
+import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 
 export default function Breeding() {
   const navigate = useNavigate();
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const addBreedingEvent = useXbarStore((state) => state.addBreedingEvent);
+  const currentRole = useXbarStore((state) => state.currentRole);
   const pushToast = useUiStore((state) => state.pushToast);
+  const canManageBreeding = useCurrentRoleCapability('manageBreeding');
   const breedingHorses = horses.filter((horse) => horse.segment === 'Stud' || horse.sex === 'Mare');
   const breedingDocs = documents.filter((document) => document.type === 'Breeding Contract');
   const [selectedHorseId, setSelectedHorseId] = useState(breedingHorses[0]?.id ?? '');
@@ -44,6 +46,11 @@ export default function Breeding() {
         title="Breeding program"
         description="Studs, mares, timing."
       />
+      {!canManageBreeding ? (
+        <div className="callout callout--warning">
+          <strong>{currentRole} access:</strong> Breeding program updates are read-only for this role.
+        </div>
+      ) : null}
 
       <div className="metric-grid">
         <MetricCard label="Program horses" value={`${breedingHorses.length}`} detail="Mares and studs tracked in active breeding context" />
@@ -117,7 +124,7 @@ export default function Breeding() {
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
               <span className="field-label">Horse</span>
-              <select className="field-input" value={selectedHorseId} onChange={(event) => setSelectedHorseId(event.target.value)}>
+              <select className="field-input" value={selectedHorseId} onChange={(event) => setSelectedHorseId(event.target.value)} disabled={!canManageBreeding}>
                 <option value="">Select horse</option>
                 {breedingHorses.map((horse) => (
                   <option key={horse.id} value={horse.id}>
@@ -128,21 +135,21 @@ export default function Breeding() {
             </label>
             <label className="field-stack">
               <span className="field-label">Event date</span>
-              <input className="field-input" type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} />
+              <input className="field-input" type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} disabled={!canManageBreeding} />
             </label>
             <label className="field-stack field-stack--wide">
               <span className="field-label">Milestone</span>
               <input className="field-input" value={eventTitle} onChange={(event) => {
                 setEventTitle(event.target.value);
                 setEventError('');
-              }} />
+              }} disabled={!canManageBreeding} />
             </label>
             <label className="field-stack field-stack--wide">
               <span className="field-label">Program note</span>
               <textarea className="field-textarea" rows={4} value={eventBody} onChange={(event) => {
                 setEventBody(event.target.value);
                 setEventError('');
-              }} />
+              }} disabled={!canManageBreeding} />
             </label>
           </div>
           {eventError ? <div className="field-error">{eventError}</div> : null}
@@ -174,6 +181,7 @@ export default function Breeding() {
                   setEventError('');
                 }
               }}
+              disabled={!canManageBreeding}
             >
               Save breeding event
             </button>

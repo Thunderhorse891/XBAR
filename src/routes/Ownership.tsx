@@ -5,7 +5,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
-import { useXbarStore } from '@/store/useXbarStore';
+import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { OwnershipStake, TransferStatus } from '@/types/xbar';
 
 const ownershipRoles: OwnershipStake['role'][] = ['Co-Owner', 'Managing Partner', 'Prospective Buyer'];
@@ -18,7 +18,9 @@ export default function Ownership() {
   const updateOwnershipRecord = useXbarStore((state) => state.updateOwnershipRecord);
   const addOwnershipAuditEntry = useXbarStore((state) => state.addOwnershipAuditEntry);
   const addOwnershipStake = useXbarStore((state) => state.addOwnershipStake);
+  const currentRole = useXbarStore((state) => state.currentRole);
   const pushToast = useUiStore((state) => state.pushToast);
+  const canManageOwnership = useCurrentRoleCapability('manageOwnership');
 
   const pending = ownershipRecords.filter((record) => record.transferStatus !== 'Clear');
   const withCoOwners = horses.filter((horse) => horse.ownership.length > 1);
@@ -58,22 +60,26 @@ export default function Ownership() {
               },
             ]
           : []),
-        {
-          id: 'mark-clear',
-          label: 'Mark transfer clear',
-          onSelect: () => {
-            const result = updateOwnershipRecord(menuRecord.id, { transferStatus: 'Clear' });
-            pushToast({ title: result.ok ? 'Transfer updated' : 'Transfer update blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
-          },
-        },
-        {
-          id: 'mark-aqha',
-          label: 'Set AQHA review',
-          onSelect: () => {
-            const result = updateOwnershipRecord(menuRecord.id, { transferStatus: 'AQHA Review' });
-            pushToast({ title: result.ok ? 'Transfer updated' : 'Transfer update blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
-          },
-        },
+        ...(canManageOwnership
+          ? [
+              {
+                id: 'mark-clear',
+                label: 'Mark transfer clear',
+                onSelect: () => {
+                  const result = updateOwnershipRecord(menuRecord.id, { transferStatus: 'Clear' });
+                  pushToast({ title: result.ok ? 'Transfer updated' : 'Transfer update blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                },
+              },
+              {
+                id: 'mark-aqha',
+                label: 'Set AQHA review',
+                onSelect: () => {
+                  const result = updateOwnershipRecord(menuRecord.id, { transferStatus: 'AQHA Review' });
+                  pushToast({ title: result.ok ? 'Transfer updated' : 'Transfer update blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                },
+              },
+            ]
+          : []),
       ]
     : [];
 
@@ -84,6 +90,11 @@ export default function Ownership() {
         title="Ownership integrity"
         description="Owners, splits, transfer status."
       />
+      {!canManageOwnership ? (
+        <div className="callout callout--warning">
+          <strong>{currentRole} access:</strong> Ownership records are read-only for this role.
+        </div>
+      ) : null}
 
       <div className="metric-grid">
         <MetricCard label="Ownership files" value={`${ownershipRecords.length}`} detail="Tracked ownership records" />
@@ -162,11 +173,11 @@ export default function Ownership() {
               <div className="form-grid form-grid--tight">
                 <label className="field-stack">
                   <span className="field-label">Legal owner</span>
-                  <input className="field-input" value={legalOwner} onChange={(event) => setLegalOwner(event.target.value)} />
+                  <input className="field-input" value={legalOwner} onChange={(event) => setLegalOwner(event.target.value)} disabled={!canManageOwnership} />
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Transfer status</span>
-                  <select className="field-input" value={transferStatus} onChange={(event) => setTransferStatus(event.target.value as TransferStatus)}>
+                  <select className="field-input" value={transferStatus} onChange={(event) => setTransferStatus(event.target.value as TransferStatus)} disabled={!canManageOwnership}>
                     {transferStatuses.map((status) => (
                       <option key={status} value={status}>
                         {status}
@@ -176,11 +187,11 @@ export default function Ownership() {
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Deadline</span>
-                  <input className="field-input" type="date" value={complianceDeadline} onChange={(event) => setComplianceDeadline(event.target.value)} />
+                  <input className="field-input" type="date" value={complianceDeadline} onChange={(event) => setComplianceDeadline(event.target.value)} disabled={!canManageOwnership} />
                 </label>
                 <label className="field-stack field-stack--wide">
                   <span className="field-label">Pending documents</span>
-                  <input className="field-input" value={pendingDocuments} onChange={(event) => setPendingDocuments(event.target.value)} />
+                  <input className="field-input" value={pendingDocuments} onChange={(event) => setPendingDocuments(event.target.value)} disabled={!canManageOwnership} />
                 </label>
               </div>
               {formError ? <div className="field-error">{formError}</div> : null}
@@ -209,6 +220,7 @@ export default function Ownership() {
                       setFormError('');
                     }
                   }}
+                  disabled={!canManageOwnership}
                 >
                   Save transfer
                 </button>
@@ -225,15 +237,15 @@ export default function Ownership() {
               <div className="form-grid form-grid--tight">
                 <label className="field-stack">
                   <span className="field-label">Name</span>
-                  <input className="field-input" value={coOwner.name} onChange={(event) => setCoOwner((current) => ({ ...current, name: event.target.value }))} />
+                  <input className="field-input" value={coOwner.name} onChange={(event) => setCoOwner((current) => ({ ...current, name: event.target.value }))} disabled={!canManageOwnership} />
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Share</span>
-                  <input className="field-input" type="number" min="1" max="100" value={coOwner.share} onChange={(event) => setCoOwner((current) => ({ ...current, share: event.target.value }))} />
+                  <input className="field-input" type="number" min="1" max="100" value={coOwner.share} onChange={(event) => setCoOwner((current) => ({ ...current, share: event.target.value }))} disabled={!canManageOwnership} />
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Role</span>
-                  <select className="field-input" value={coOwner.role} onChange={(event) => setCoOwner((current) => ({ ...current, role: event.target.value as OwnershipStake['role'] }))}>
+                  <select className="field-input" value={coOwner.role} onChange={(event) => setCoOwner((current) => ({ ...current, role: event.target.value as OwnershipStake['role'] }))} disabled={!canManageOwnership}>
                     {ownershipRoles.map((role) => (
                       <option key={role} value={role}>
                         {role}
@@ -243,7 +255,7 @@ export default function Ownership() {
                 </label>
                 <label className="field-stack field-stack--wide">
                   <span className="field-label">Contact</span>
-                  <input className="field-input" value={coOwner.contact} onChange={(event) => setCoOwner((current) => ({ ...current, contact: event.target.value }))} />
+                  <input className="field-input" value={coOwner.contact} onChange={(event) => setCoOwner((current) => ({ ...current, contact: event.target.value }))} disabled={!canManageOwnership} />
                 </label>
               </div>
               <div className="inline-actions">
@@ -267,6 +279,7 @@ export default function Ownership() {
                       setCoOwner({ name: '', share: '25', role: 'Co-Owner', contact: '' });
                     }
                   }}
+                  disabled={!canManageOwnership}
                 >
                   Add co-owner
                 </button>
@@ -293,7 +306,7 @@ export default function Ownership() {
             </div>
             <div className="stack-item">
               <div className="stack-item__title">Add audit note</div>
-              <textarea className="field-textarea" rows={4} value={auditNote} onChange={(event) => setAuditNote(event.target.value)} />
+              <textarea className="field-textarea" rows={4} value={auditNote} onChange={(event) => setAuditNote(event.target.value)} disabled={!canManageOwnership} />
               <div className="inline-actions">
                 <button
                   className="button button--ghost button--compact"
@@ -309,6 +322,7 @@ export default function Ownership() {
                       setAuditNote('');
                     }
                   }}
+                  disabled={!canManageOwnership}
                 >
                   Save audit note
                 </button>

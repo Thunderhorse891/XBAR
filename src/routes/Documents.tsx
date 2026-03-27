@@ -7,7 +7,7 @@ import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { formatDateTimeLabel } from '@/lib/format';
 import { buildDocumentTrustProfile } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
-import { useXbarStore } from '@/store/useXbarStore';
+import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { DocumentRecord, DocumentSource } from '@/types/xbar';
 
 const sources: DocumentSource[] = ['Manual Upload', 'Bulk Intake', 'Shared Upload', 'Sales Packet'];
@@ -23,6 +23,9 @@ export default function Documents() {
   const reviewDocument = useXbarStore((state) => state.reviewDocument);
   const discardDocument = useXbarStore((state) => state.discardDocument);
   const pushToast = useUiStore((state) => state.pushToast);
+  const currentRole = useXbarStore((state) => state.currentRole);
+  const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
+  const canReviewDocuments = useCurrentRoleCapability('reviewDocuments');
 
   const [files, setFiles] = useState<File[]>([]);
   const [source, setSource] = useState<DocumentSource>('Bulk Intake');
@@ -82,31 +85,35 @@ export default function Documents() {
               },
             ]
           : []),
-        {
-          id: 'approve',
-          label: 'Approve document',
-          onSelect: () => {
-            const result = reviewDocument(menuDocument.id, menuHorseId);
-            pushToast({
-              title: result.ok ? 'Document approved' : 'Approval blocked',
-              message: result.message,
-              tone: result.ok ? 'success' : 'error',
-            });
-          },
-        },
-        {
-          id: 'discard',
-          label: 'Discard document',
-          onSelect: () => {
-            const result = discardDocument(menuDocument.id);
-            pushToast({
-              title: result.ok ? 'Document discarded' : 'Discard blocked',
-              message: result.message,
-              tone: result.ok ? 'warning' : 'error',
-            });
-          },
-          tone: 'danger' as const,
-        },
+        ...(canReviewDocuments
+          ? [
+              {
+                id: 'approve',
+                label: 'Approve document',
+                onSelect: () => {
+                  const result = reviewDocument(menuDocument.id, menuHorseId);
+                  pushToast({
+                    title: result.ok ? 'Document approved' : 'Approval blocked',
+                    message: result.message,
+                    tone: result.ok ? 'success' : 'error',
+                  });
+                },
+              },
+              {
+                id: 'discard',
+                label: 'Discard document',
+                onSelect: () => {
+                  const result = discardDocument(menuDocument.id);
+                  pushToast({
+                    title: result.ok ? 'Document discarded' : 'Discard blocked',
+                    message: result.message,
+                    tone: result.ok ? 'warning' : 'error',
+                  });
+                },
+                tone: 'danger' as const,
+              },
+            ]
+          : []),
         ...(menuHorseId
           ? [
               {
@@ -166,6 +173,16 @@ export default function Documents() {
       <div className="callout">
         <strong>Manual review:</strong> New uploads are assigned during intake review. No automatic extraction is running.
       </div>
+      {!canUploadDocuments || !canReviewDocuments ? (
+        <div className="callout callout--warning">
+          <strong>{currentRole} access:</strong>{' '}
+          {canUploadDocuments && !canReviewDocuments
+            ? 'This role can upload files but cannot approve or discard records.'
+            : !canUploadDocuments && canReviewDocuments
+              ? 'This role can review records but cannot add new files.'
+              : 'This role is read-only in the document workspace.'}
+        </div>
+      ) : null}
 
       <div className="metric-grid">
         <MetricCard label="Document vault" value={`${documents.length}`} detail="Registration, medical, transfer, insurance, and media records" />
@@ -188,11 +205,11 @@ export default function Documents() {
           <div className="form-grid">
             <label className="field-stack">
               <span className="field-label">Batch label</span>
-              <input className="field-input" value={batchLabel} onChange={(event) => setBatchLabel(event.target.value)} />
+              <input className="field-input" value={batchLabel} onChange={(event) => setBatchLabel(event.target.value)} disabled={!canUploadDocuments} />
             </label>
             <label className="field-stack">
               <span className="field-label">Source</span>
-              <select className="field-input" value={source} onChange={(event) => setSource(event.target.value as DocumentSource)}>
+              <select className="field-input" value={source} onChange={(event) => setSource(event.target.value as DocumentSource)} disabled={!canUploadDocuments}>
                 {sources.map((item) => (
                   <option key={item} value={item}>
                     {item}
@@ -205,12 +222,12 @@ export default function Documents() {
               <input className="field-input" value={uploadedBy} onChange={(event) => {
                 setUploadedBy(event.target.value);
                 setFormErrors((current) => ({ ...current, uploadedBy: undefined }));
-              }} />
+              }} disabled={!canUploadDocuments} />
               {formErrors.uploadedBy ? <span className="field-error">{formErrors.uploadedBy}</span> : null}
             </label>
             <label className="field-stack">
               <span className="field-label">Attach to horse</span>
-              <select className="field-input" value={horseId} onChange={(event) => setHorseId(event.target.value)}>
+              <select className="field-input" value={horseId} onChange={(event) => setHorseId(event.target.value)} disabled={!canUploadDocuments}>
                 <option value="">Try local file-name match</option>
                 {horses.map((horse) => (
                   <option key={horse.id} value={horse.id}>
@@ -230,12 +247,13 @@ export default function Documents() {
                   setFiles(Array.from(event.target.files ?? []));
                   setFormErrors((current) => ({ ...current, files: undefined }));
                 }}
+                disabled={!canUploadDocuments}
               />
               {formErrors.files ? <span className="field-error">{formErrors.files}</span> : null}
             </label>
           </div>
           <div className="inline-actions">
-            <button className="button button--primary" type="button" onClick={handleIntake} disabled={isSubmitting || !uploadedBy.trim() || !files.length}>
+            <button className="button button--primary" type="button" onClick={handleIntake} disabled={!canUploadDocuments || isSubmitting || !uploadedBy.trim() || !files.length}>
               {isSubmitting ? 'Adding documents...' : 'Add documents'}
             </button>
             <div className="detail-block subtle">
@@ -332,6 +350,7 @@ export default function Documents() {
                               [document.id]: event.target.value,
                             }))
                           }
+                          disabled={!canReviewDocuments}
                         >
                           <option value="">Select horse</option>
                           {horses.map((horse) => (
@@ -364,6 +383,7 @@ export default function Documents() {
                                 tone: result.ok ? 'success' : 'error',
                               });
                             }}
+                            disabled={!canReviewDocuments}
                           >
                             Approve
                           </button>
@@ -378,6 +398,7 @@ export default function Documents() {
                                 tone: result.ok ? 'warning' : 'error',
                               });
                             }}
+                            disabled={!canReviewDocuments}
                           >
                             Discard
                           </button>

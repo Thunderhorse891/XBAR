@@ -21,6 +21,7 @@
     "src/lib/xbarRuntime.ts",
     "src/lib/xbarPhaseTwo.ts",
     "src/lib/xbarGrowth.ts",
+    "src/lib/permissions.ts",
     "src/vite-env.d.ts",
     "tests/**/*.ts"
   ]

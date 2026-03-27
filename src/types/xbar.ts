@@ -1,4 +1,19 @@
 export type UserRole = 'Admin' | 'Ranch Manager' | 'Owner' | 'Medical Lead' | 'Sales Lead';
+export type RoleCapability =
+  | 'createHorse'
+  | 'editHorse'
+  | 'uploadDocuments'
+  | 'reviewDocuments'
+  | 'uploadMedia'
+  | 'manageMedical'
+  | 'manageBreeding'
+  | 'manageSales'
+  | 'manageOwnership'
+  | 'manageAssets'
+  | 'manageSharedAccess'
+  | 'manageSettings'
+  | 'manageBilling'
+  | 'syncCloud';
 
 export type HorseSegment =
   | 'Broodmare'

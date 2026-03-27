@@ -5,7 +5,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
-import { useXbarStore } from '@/store/useXbarStore';
+import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 
 export default function Medical() {
   const navigate = useNavigate();
@@ -13,7 +13,9 @@ export default function Medical() {
   const documents = useXbarStore((state) => state.documents);
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
   const addMedicalEvent = useXbarStore((state) => state.addMedicalEvent);
+  const currentRole = useXbarStore((state) => state.currentRole);
   const pushToast = useUiStore((state) => state.pushToast);
+  const canManageMedical = useCurrentRoleCapability('manageMedical');
   const medicalWatch = horses.filter((horse) => horse.status === 'Medical Review');
   const medicalEvents = horses.flatMap((horse) =>
     horse.medicalTimeline.map((event) => ({
@@ -53,6 +55,11 @@ export default function Medical() {
         title="Medical control"
         description="Watchlists, care, kits."
       />
+      {!canManageMedical ? (
+        <div className="callout callout--warning">
+          <strong>{currentRole} access:</strong> Medical updates are read-only for this role.
+        </div>
+      ) : null}
 
       <div className="metric-grid">
         <MetricCard label="Watchlist" value={`${medicalWatch.length}`} detail="Horses needing care attention" tone="rose" />
@@ -124,7 +131,7 @@ export default function Medical() {
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
               <span className="field-label">Horse</span>
-              <select className="field-input" value={selectedHorseId} onChange={(event) => setSelectedHorseId(event.target.value)}>
+              <select className="field-input" value={selectedHorseId} onChange={(event) => setSelectedHorseId(event.target.value)} disabled={!canManageMedical}>
                 {horses.map((horse) => (
                   <option key={horse.id} value={horse.id}>
                     {horse.name}
@@ -134,21 +141,21 @@ export default function Medical() {
             </label>
             <label className="field-stack">
               <span className="field-label">Event date</span>
-              <input className="field-input" type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} />
+              <input className="field-input" type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} disabled={!canManageMedical} />
             </label>
             <label className="field-stack field-stack--wide">
               <span className="field-label">Event title</span>
               <input className="field-input" value={eventTitle} onChange={(event) => {
                 setEventTitle(event.target.value);
                 setEventError('');
-              }} />
+              }} disabled={!canManageMedical} />
             </label>
             <label className="field-stack field-stack--wide">
               <span className="field-label">Care note</span>
               <textarea className="field-textarea" rows={4} value={eventBody} onChange={(event) => {
                 setEventBody(event.target.value);
                 setEventError('');
-              }} />
+              }} disabled={!canManageMedical} />
             </label>
           </div>
           {eventError ? <div className="field-error">{eventError}</div> : null}
@@ -180,6 +187,7 @@ export default function Medical() {
                   setEventError('');
                 }
               }}
+              disabled={!canManageMedical}
             >
               Save medical event
             </button>

@@ -7,7 +7,7 @@ import { DotsIcon } from '@/components/icons';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
-import { useXbarStore } from '@/store/useXbarStore';
+import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { HorseSegment, HorseSex, HorseStatus } from '@/types/xbar';
 
 function createHorseFormDefaults(params: {
@@ -57,7 +57,10 @@ export default function Horses() {
   const toggleSavedHorse = useXbarStore((state) => state.toggleSavedHorse);
   const addHorse = useXbarStore((state) => state.addHorse);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
+  const currentRole = useXbarStore((state) => state.currentRole);
   const pushToast = useUiStore((state) => state.pushToast);
+  const canCreateHorse = useCurrentRoleCapability('createHorse');
+  const canManageSharedAccess = useCurrentRoleCapability('manageSharedAccess');
   const [searchParams, setSearchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState<ViewMode>('Portfolio');
   const [segmentFilter, setSegmentFilter] = useState<SegmentFilter>('All');
@@ -126,11 +129,15 @@ export default function Horses() {
           label: 'Open share view',
           onSelect: () => navigate(`/profiles/${menuHorse.id}`),
         },
-        {
-          id: 'toggle-shared',
-          label: menuSaved ? 'Remove from shared access' : 'Add to shared access',
-          onSelect: () => handleSavedHorseToggle(menuHorse.id),
-        },
+        ...(canManageSharedAccess
+          ? [
+              {
+                id: 'toggle-shared',
+                label: menuSaved ? 'Remove from shared access' : 'Add to shared access',
+                onSelect: () => handleSavedHorseToggle(menuHorse.id),
+              },
+            ]
+          : []),
         {
           id: 'open-sales',
           label: 'Open sales board',
@@ -193,12 +200,22 @@ export default function Horses() {
                 </button>
               ))}
             </div>
-            <button className="button button--primary button--compact" type="button" onClick={() => setSearchParams({ new: '1' })}>
+            <button className="button button--primary button--compact" type="button" onClick={() => setSearchParams({ new: '1' })} disabled={!canCreateHorse}>
               New horse
             </button>
           </div>
         }
       />
+      {!canCreateHorse || !canManageSharedAccess ? (
+        <div className="callout callout--warning">
+          <strong>{currentRole} access:</strong>{' '}
+          {!canCreateHorse && !canManageSharedAccess
+            ? 'This role is read-only in the horse ledger.'
+            : !canCreateHorse
+              ? 'This role cannot create horse records.'
+              : 'This role cannot change shared-access exposure from the horse ledger.'}
+        </div>
+      ) : null}
 
       {createOpen ? (
         <section className="panel">
@@ -218,7 +235,7 @@ export default function Horses() {
               <input className="field-input" value={form.name} onChange={(event) => {
                 setForm((current) => ({ ...current, name: event.target.value }));
                 setFormErrors((current) => ({ ...current, name: undefined }));
-              }} />
+              }} disabled={!canCreateHorse} />
               {formErrors.name ? <span className="field-error">{formErrors.name}</span> : null}
             </label>
             <label className="field-stack">
@@ -226,12 +243,12 @@ export default function Horses() {
               <input className="field-input" value={form.barnName} onChange={(event) => {
                 setForm((current) => ({ ...current, barnName: event.target.value }));
                 setFormErrors((current) => ({ ...current, barnName: undefined }));
-              }} />
+              }} disabled={!canCreateHorse} />
               {formErrors.barnName ? <span className="field-error">{formErrors.barnName}</span> : null}
             </label>
             <label className="field-stack">
               <span className="field-label">Segment</span>
-              <select className="field-input" value={form.segment} onChange={(event) => setForm((current) => ({ ...current, segment: event.target.value as HorseSegment }))}>
+              <select className="field-input" value={form.segment} onChange={(event) => setForm((current) => ({ ...current, segment: event.target.value as HorseSegment }))} disabled={!canCreateHorse}>
                 {horseSegments.map((segment) => (
                   <option key={segment} value={segment}>
                     {segment}
@@ -241,7 +258,7 @@ export default function Horses() {
             </label>
             <label className="field-stack">
               <span className="field-label">Status</span>
-              <select className="field-input" value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as HorseStatus }))}>
+              <select className="field-input" value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as HorseStatus }))} disabled={!canCreateHorse}>
                 {horseStatuses.map((status) => (
                   <option key={status} value={status}>
                     {status}
@@ -251,7 +268,7 @@ export default function Horses() {
             </label>
             <label className="field-stack">
               <span className="field-label">Sex</span>
-              <select className="field-input" value={form.sex} onChange={(event) => setForm((current) => ({ ...current, sex: event.target.value as HorseSex }))}>
+              <select className="field-input" value={form.sex} onChange={(event) => setForm((current) => ({ ...current, sex: event.target.value as HorseSex }))} disabled={!canCreateHorse}>
                 {horseSexes.map((sex) => (
                   <option key={sex} value={sex}>
                     {sex}
@@ -264,7 +281,7 @@ export default function Horses() {
               <input className="field-input" value={form.owner} onChange={(event) => {
                 setForm((current) => ({ ...current, owner: event.target.value }));
                 setFormErrors((current) => ({ ...current, owner: undefined }));
-              }} />
+              }} disabled={!canCreateHorse} />
               {formErrors.owner ? <span className="field-error">{formErrors.owner}</span> : null}
             </label>
             <label className="field-stack">
@@ -272,23 +289,23 @@ export default function Horses() {
               <input className="field-input" value={form.ownerEntity} onChange={(event) => {
                 setForm((current) => ({ ...current, ownerEntity: event.target.value }));
                 setFormErrors((current) => ({ ...current, ownerEntity: undefined }));
-              }} />
+              }} disabled={!canCreateHorse} />
               {formErrors.ownerEntity ? <span className="field-error">{formErrors.ownerEntity}</span> : null}
             </label>
             <label className="field-stack">
               <span className="field-label">AQHA number</span>
-              <input className="field-input" value={form.aqhaNumber} onChange={(event) => setForm((current) => ({ ...current, aqhaNumber: event.target.value }))} />
+              <input className="field-input" value={form.aqhaNumber} onChange={(event) => setForm((current) => ({ ...current, aqhaNumber: event.target.value }))} disabled={!canCreateHorse} />
             </label>
             <label className="field-stack">
               <span className="field-label">Registration number</span>
-              <input className="field-input" value={form.registrationNumber} onChange={(event) => setForm((current) => ({ ...current, registrationNumber: event.target.value }))} />
+              <input className="field-input" value={form.registrationNumber} onChange={(event) => setForm((current) => ({ ...current, registrationNumber: event.target.value }))} disabled={!canCreateHorse} />
             </label>
             <label className="field-stack">
               <span className="field-label">Barn</span>
               <input className="field-input" value={form.barn} onChange={(event) => {
                 setForm((current) => ({ ...current, barn: event.target.value }));
                 setFormErrors((current) => ({ ...current, barn: undefined }));
-              }} />
+              }} disabled={!canCreateHorse} />
               {formErrors.barn ? <span className="field-error">{formErrors.barn}</span> : null}
             </label>
             <label className="field-stack">
@@ -296,7 +313,7 @@ export default function Horses() {
               <input className="field-input" value={form.pasture} onChange={(event) => {
                 setForm((current) => ({ ...current, pasture: event.target.value }));
                 setFormErrors((current) => ({ ...current, pasture: undefined }));
-              }} />
+              }} disabled={!canCreateHorse} />
               {formErrors.pasture ? <span className="field-error">{formErrors.pasture}</span> : null}
             </label>
           </div>
@@ -313,10 +330,11 @@ export default function Horses() {
                   pasture: workspaceProfile.defaultPasture,
                 }))
               }
+              disabled={!canCreateHorse}
             >
               Apply workspace defaults
             </button>
-            <button className="button button--primary" type="button" onClick={handleCreateHorse} disabled={!form.name.trim() || !form.barnName.trim() || !form.owner.trim() || !form.ownerEntity.trim() || !form.barn.trim() || !form.pasture.trim()}>
+            <button className="button button--primary" type="button" onClick={handleCreateHorse} disabled={!canCreateHorse || !form.name.trim() || !form.barnName.trim() || !form.owner.trim() || !form.ownerEntity.trim() || !form.barn.trim() || !form.pasture.trim()}>
               Create horse
             </button>
           </div>
@@ -494,6 +512,7 @@ export default function Horses() {
                           event.stopPropagation();
                           handleSavedHorseToggle(horse.id);
                         }}
+                        disabled={!canManageSharedAccess}
                       >
                         {saved ? 'Remove from shared' : 'Add to shared'}
                       </button>
@@ -516,7 +535,7 @@ export default function Horses() {
             title="No horses match this view"
             description="Change the segment filter, clear the search, or add a horse record."
             action={
-              <button className="button button--primary button--compact" type="button" onClick={() => setSearchParams({ new: '1' })}>
+              <button className="button button--primary button--compact" type="button" onClick={() => setSearchParams({ new: '1' })} disabled={!canCreateHorse}>
                 Add horse
               </button>
             }
@@ -572,9 +591,9 @@ export default function Horses() {
           title="No horses match this registry view"
           description="Change the segment filter, clear the search, or add a horse record."
           action={
-            <button className="button button--primary button--compact" type="button" onClick={() => setSearchParams({ new: '1' })}>
-              Add horse
-            </button>
+              <button className="button button--primary button--compact" type="button" onClick={() => setSearchParams({ new: '1' })} disabled={!canCreateHorse}>
+                Add horse
+              </button>
           }
         />
       )}

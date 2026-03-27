@@ -22,6 +22,7 @@ import {
   readFileAsDataUrl,
   todayStamp,
 } from '@/lib/xbarRuntime';
+import { getCapabilityDeniedMessage, hasRoleCapability } from '@/lib/permissions';
 import { uploadDocumentAssetToCloud, uploadMediaAssetToCloud } from '@/lib/cloudWorkspace';
 import { workspaceStateStorage } from '@/lib/workspaceStorage';
 import {
@@ -39,6 +40,7 @@ import type {
   HorseRecord,
   IntakeBatch,
   OwnershipStake,
+  RoleCapability,
   SalesLead,
   SharedAccessSnapshot,
   UserRole,
@@ -474,17 +476,31 @@ function createTimelineEvent(params: {
   } as const;
 }
 
+function requireRoleCapability(role: UserRole, capability: RoleCapability) {
+  return hasRoleCapability(role, capability) ? null : getCapabilityDeniedMessage(capability);
+}
+
 export const useXbarStore = create<XbarStore>()(
   persist(
     (set, get) => ({
       ...initialState,
       setCurrentRole: (role) => set({ currentRole: role }),
       updateWorkspaceProfile: (patch) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageSettings');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
         const nextProfile = restoreWorkspaceProfile({ ...get().workspaceProfile, ...patch });
         set({ workspaceProfile: nextProfile });
         return { ok: true, message: 'Workspace profile updated.' };
       },
-      toggleSavedHorse: (horseId) =>
+      toggleSavedHorse: (horseId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageSharedAccess');
+        if (deniedMessage) {
+          return;
+        }
+
         set((state) => {
           const nextSavedHorseIds = state.savedHorseIds.includes(horseId)
             ? state.savedHorseIds.filter((id) => id !== horseId)
@@ -511,8 +527,14 @@ export const useXbarStore = create<XbarStore>()(
                 sharedAccess: state.sharedAccess,
               }),
             };
-        }),
+        });
+      },
       addHorse: (input) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'createHorse');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
         const validationError = validateNewHorseInput(input);
         if (validationError) {
           return { ok: false, message: validationError };
@@ -527,6 +549,11 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: `${horse.name} is now live in the horse portfolio.`, id: horse.id };
       },
       createDocumentIntake: async ({ files, horseId, source, uploadedBy, label }) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'uploadDocuments');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
         const fileList = files.filter(Boolean);
         if (!fileList.length) {
           return { ok: false, message: 'Select at least one file for intake.' };
@@ -626,6 +653,11 @@ export const useXbarStore = create<XbarStore>()(
         }
       },
       reviewDocument: (documentId, horseId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'reviewDocuments');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
         const state = get();
         const document = state.documents.find((item) => item.id === documentId);
         if (!document) {
@@ -672,6 +704,11 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: `${matchedHorse.name} now has this document attached.`, id: matchedHorse.id };
       },
       discardDocument: (documentId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'reviewDocuments');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
         const document = get().documents.find((item) => item.id === documentId);
         if (!document) {
           return { ok: false, message: 'Document not found.' };
@@ -697,6 +734,11 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: `${document.title} was removed from active review.`, id: document.id };
       },
       uploadHorseMedia: async ({ horseId, files, kind, makePrimary }) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'uploadMedia');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
         const fileList = files.filter(Boolean);
         if (!fileList.length) {
           return { ok: false, message: 'Select at least one image to upload.' };
@@ -784,6 +826,11 @@ export const useXbarStore = create<XbarStore>()(
         }
       },
       createSalesLead: ({ horseId, name, channel, shareReady }) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageSales');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
         const validationError = validateLeadInput({ horseId, name, channel, shareReady });
         if (validationError) {
           return { ok: false, message: validationError };
@@ -845,6 +892,11 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: `${lead.name} is now in the buyer pipeline.`, id: lead.id };
       },
       updateSalesLead: (leadId, patch) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageSales');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
         const lead = get().salesLeads.find((item) => item.id === leadId);
         if (!lead) {
           return { ok: false, message: 'Lead not found.' };
@@ -875,6 +927,11 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: `${lead.name} updated.`, id: leadId };
       },
       updateAsset: (assetId, patch) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageAssets');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
         if (!get().ranchAssets.some((asset) => asset.id === assetId)) {
           return { ok: false, message: 'Asset record not found.' };
         }
@@ -890,6 +947,11 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: 'Asset record updated.', id: assetId };
       },
       addHorseNote: (horseId, note) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
         const validationError = validateHorseNoteInput(note);
         if (validationError) {
           return { ok: false, message: validationError };
@@ -933,6 +995,11 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: 'Horse note saved.', id: nextNote.id };
       },
       addMedicalEvent: (horseId, event) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageMedical');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
         if (!event.title.trim() || !event.body.trim() || !event.author.trim() || !event.date.trim()) {
           return { ok: false, message: 'Medical events need a title, note, owner, and date.' };
         }
@@ -967,6 +1034,11 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: 'Medical event added.', id: nextEvent.id };
       },
       addBreedingEvent: (horseId, event) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageBreeding');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
         if (!event.title.trim() || !event.body.trim() || !event.author.trim() || !event.date.trim()) {
           return { ok: false, message: 'Breeding events need a title, note, owner, and date.' };
         }
@@ -998,6 +1070,11 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: 'Breeding event added.', id: nextEvent.id };
       },
       updateHorseLocation: (horseId, patch) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
         const validationError = validateLocationPatch(patch);
         if (validationError) {
           return { ok: false, message: validationError };
@@ -1035,6 +1112,11 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: 'Horse location updated.', id: horseId };
       },
       updateOwnershipRecord: (recordId, patch) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageOwnership');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
         const record = get().ownershipRecords.find((item) => item.id === recordId);
         if (!record) {
           return { ok: false, message: 'Ownership record not found.' };
@@ -1070,6 +1152,11 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: 'Ownership record updated.', id: recordId };
       },
       addOwnershipAuditEntry: (recordId, entry) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageOwnership');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
         const trimmed = entry.trim();
         if (!trimmed) {
           return { ok: false, message: 'Enter an audit note before saving.' };
@@ -1093,6 +1180,11 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: 'Audit note added.', id: recordId };
       },
       addOwnershipStake: (horseId, stake) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageOwnership');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
         if (!stake.name.trim() || !stake.contact.trim() || !Number.isFinite(stake.share) || stake.share <= 0) {
           return { ok: false, message: 'Co-owner name, share, and contact are required.' };
         }
@@ -1199,4 +1291,8 @@ export function useCurrentRoleWorkspace() {
 
 export function useHorseRecord(id?: string) {
   return useXbarStore((state) => state.horses.find((horse) => horse.id === id));
+}
+
+export function useCurrentRoleCapability(capability: RoleCapability) {
+  return useXbarStore((state) => hasRoleCapability(state.currentRole, capability));
 }

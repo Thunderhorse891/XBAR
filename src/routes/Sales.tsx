@@ -6,7 +6,7 @@ import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
-import { useXbarStore } from '@/store/useXbarStore';
+import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 
 export default function Sales() {
   const navigate = useNavigate();
@@ -16,7 +16,9 @@ export default function Sales() {
   const documents = useXbarStore((state) => state.documents);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const updateSalesLead = useXbarStore((state) => state.updateSalesLead);
+  const currentRole = useXbarStore((state) => state.currentRole);
   const pushToast = useUiStore((state) => state.pushToast);
+  const canManageSales = useCurrentRoleCapability('manageSales');
   const saleHorses = horses.filter(
     (horse) => horse.sale.askPrice > 0 || horse.sale.listingState === 'Buyer Review' || horse.sale.listingState === 'Market Ready',
   );
@@ -46,22 +48,26 @@ export default function Sales() {
   const menuHorse = menuState?.type === 'horse' ? saleHorses.find((horse) => horse.id === menuState.id) : undefined;
   const menuItems = menuLead
     ? [
-        {
-          id: 'qualified',
-          label: 'Mark qualified',
-          onSelect: () => {
-            const result = updateSalesLead(menuLead.id, { stage: 'Qualified', lastTouch: new Date().toISOString().slice(0, 10) });
-            pushToast({ title: result.ok ? 'Lead updated' : 'Lead update blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
-          },
-        },
-        {
-          id: 'offer',
-          label: 'Move to offer',
-          onSelect: () => {
-            const result = updateSalesLead(menuLead.id, { stage: 'Offer', lastTouch: new Date().toISOString().slice(0, 10) });
-            pushToast({ title: result.ok ? 'Lead updated' : 'Lead update blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
-          },
-        },
+        ...(canManageSales
+          ? [
+              {
+                id: 'qualified',
+                label: 'Mark qualified',
+                onSelect: () => {
+                  const result = updateSalesLead(menuLead.id, { stage: 'Qualified', lastTouch: new Date().toISOString().slice(0, 10) });
+                  pushToast({ title: result.ok ? 'Lead updated' : 'Lead update blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                },
+              },
+              {
+                id: 'offer',
+                label: 'Move to offer',
+                onSelect: () => {
+                  const result = updateSalesLead(menuLead.id, { stage: 'Offer', lastTouch: new Date().toISOString().slice(0, 10) });
+                  pushToast({ title: result.ok ? 'Lead updated' : 'Lead update blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                },
+              },
+            ]
+          : []),
         {
           id: 'open-horse',
           label: 'Open horse profile',
@@ -90,6 +96,11 @@ export default function Sales() {
         title="Sales Board"
         description="Listings, buyers, follow-up."
       />
+      {!canManageSales ? (
+        <div className="callout callout--warning">
+          <strong>{currentRole} access:</strong> Sales pipeline changes are read-only for this role.
+        </div>
+      ) : null}
 
       <div className="metric-grid">
         <MetricCard label="Sale horses" value={`${saleHorses.length}`} detail="Active pricing or buyer review" />
@@ -210,7 +221,7 @@ export default function Sales() {
               <div className="form-grid form-grid--tight">
                 <label className="field-stack">
                   <span className="field-label">Stage</span>
-                  <select className="field-input" value={leadStage} onChange={(event) => setLeadStage(event.target.value as typeof leadStage)}>
+                  <select className="field-input" value={leadStage} onChange={(event) => setLeadStage(event.target.value as typeof leadStage)} disabled={!canManageSales}>
                     {(['New', 'Qualified', 'Offer', 'Closed'] as const).map((stage) => (
                       <option key={stage} value={stage}>
                         {stage}
@@ -220,26 +231,26 @@ export default function Sales() {
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Last touch</span>
-                  <input className="field-input" type="date" value={leadLastTouch} onChange={(event) => setLeadLastTouch(event.target.value)} />
+                  <input className="field-input" type="date" value={leadLastTouch} onChange={(event) => setLeadLastTouch(event.target.value)} disabled={!canManageSales} />
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Next follow-up</span>
-                  <input className="field-input" type="date" value={leadNextFollowUp} onChange={(event) => setLeadNextFollowUp(event.target.value)} />
+                  <input className="field-input" type="date" value={leadNextFollowUp} onChange={(event) => setLeadNextFollowUp(event.target.value)} disabled={!canManageSales} />
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Offer amount</span>
-                  <input className="field-input" type="number" min="0" value={leadOfferAmount} onChange={(event) => setLeadOfferAmount(event.target.value)} />
+                  <input className="field-input" type="number" min="0" value={leadOfferAmount} onChange={(event) => setLeadOfferAmount(event.target.value)} disabled={!canManageSales} />
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Closed outcome</span>
-                  <select className="field-input" value={leadOutcome} onChange={(event) => setLeadOutcome(event.target.value as 'Won' | 'Lost')}>
+                  <select className="field-input" value={leadOutcome} onChange={(event) => setLeadOutcome(event.target.value as 'Won' | 'Lost')} disabled={!canManageSales}>
                     <option value="Won">Won</option>
                     <option value="Lost">Lost</option>
                   </select>
                 </label>
                 <label className="field-stack field-stack--wide">
                   <span className="field-label">Notes</span>
-                  <textarea className="field-textarea" rows={4} value={leadNotes} onChange={(event) => setLeadNotes(event.target.value)} />
+                  <textarea className="field-textarea" rows={4} value={leadNotes} onChange={(event) => setLeadNotes(event.target.value)} disabled={!canManageSales} />
                 </label>
               </div>
               {leadError ? <div className="field-error">{leadError}</div> : null}
@@ -271,6 +282,7 @@ export default function Sales() {
                       setLeadError('');
                     }
                   }}
+                  disabled={!canManageSales}
                 >
                   Save lead changes
                 </button>

@@ -18,7 +18,7 @@ import {
   SettingsIcon,
   SubscriptionIcon,
 } from '@/components/icons';
-import { useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
+import { useCurrentRoleCapability, useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
 import type { UserRole } from '@/types/xbar';
 
 type NavItem = {
@@ -87,6 +87,19 @@ export default function MainLayout() {
   const documents = useXbarStore((state) => state.documents);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const roleWorkspace = useCurrentRoleWorkspace();
+  const canCreateHorse = useCurrentRoleCapability('createHorse');
+  const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
+  const canManageBilling = useCurrentRoleCapability('manageBilling');
+  const canManageSettings = useCurrentRoleCapability('manageSettings');
+  const platformItems = platform.filter((item) => {
+    if (item.path === '/subscriptions') {
+      return canManageBilling;
+    }
+    if (item.path === '/settings') {
+      return canManageSettings;
+    }
+    return true;
+  });
 
   const pendingReview = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched').length;
   const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse Profile' : routeLabels[location.pathname] ?? 'Dashboard';
@@ -122,7 +135,7 @@ export default function MainLayout() {
 
         <NavSection title="Operations" items={operations} />
         <NavSection title="Programs" items={programs} />
-        <NavSection title="Platform" items={platform} />
+        <NavSection title="Platform" items={platformItems} />
 
         <div className="sidebar-footer">
           <div className="sidebar-footer__title">Contract status</div>
@@ -175,11 +188,11 @@ export default function MainLayout() {
               {pendingReview ? <span className="icon-button__dot">{pendingReview}</span> : null}
             </button>
 
-            <button className="button button--ghost" type="button" onClick={() => navigate('/documents?upload=1')}>
+            <button className="button button--ghost" type="button" onClick={() => navigate('/documents?upload=1')} disabled={!canUploadDocuments}>
               Intake
             </button>
 
-            <button className="button button--primary" type="button" onClick={() => navigate('/horses?new=1')}>
+            <button className="button button--primary" type="button" onClick={() => navigate('/horses?new=1')} disabled={!canCreateHorse}>
               <AddIcon className="button__icon" />
               New
             </button>
@@ -207,7 +220,7 @@ export default function MainLayout() {
             <SalesIcon className="mobile-dock__icon" />
             <span>Sales</span>
           </NavLink>
-          <button className="mobile-dock__item mobile-dock__item--action" type="button" onClick={() => navigate('/horses?new=1')}>
+          <button className="mobile-dock__item mobile-dock__item--action" type="button" onClick={() => navigate('/horses?new=1')} disabled={!canCreateHorse}>
             <AddIcon className="mobile-dock__icon" />
             <span>New</span>
           </button>

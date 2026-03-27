@@ -6,7 +6,7 @@ import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { workspaceStorageDriverLabel } from '@/lib/workspaceStorage';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
-import { useXbarStore } from '@/store/useXbarStore';
+import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 
 export default function Settings() {
   const roleWorkspaces = useXbarStore((state) => state.roleWorkspaces);
@@ -14,6 +14,7 @@ export default function Settings() {
   const updateWorkspaceProfile = useXbarStore((state) => state.updateWorkspaceProfile);
   const exportWorkspaceBackup = useXbarStore((state) => state.exportWorkspaceBackup);
   const importWorkspaceBackup = useXbarStore((state) => state.importWorkspaceBackup);
+  const currentRole = useXbarStore((state) => state.currentRole);
   const cloudStatus = useCloudStore((state) => state.status);
   const cloudSession = useCloudStore((state) => state.session);
   const lastCloudSyncAt = useCloudStore((state) => state.lastSyncAt);
@@ -23,6 +24,8 @@ export default function Settings() {
   const sendMagicLink = useCloudStore((state) => state.sendMagicLink);
   const signOutCloud = useCloudStore((state) => state.signOut);
   const pushToast = useUiStore((state) => state.pushToast);
+  const canManageSettings = useCurrentRoleCapability('manageSettings');
+  const canSyncCloud = useCurrentRoleCapability('syncCloud');
   const importRef = useRef<HTMLInputElement | null>(null);
   const [profileDraft, setProfileDraft] = useState(workspaceProfile);
   const [authEmail, setAuthEmail] = useState('');
@@ -170,6 +173,11 @@ export default function Settings() {
         title="Workspace settings"
         description="Profile, roles, backups."
       />
+      {!canManageSettings || !canSyncCloud ? (
+        <div className="callout callout--warning">
+          <strong>{currentRole} access:</strong> Workspace administration is restricted by role.
+        </div>
+      ) : null}
 
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel eyebrow="Cloud" title="Auth and workspace sync">
@@ -201,13 +209,13 @@ export default function Settings() {
                   </div>
                 </div>
                 <div className="inline-actions">
-                  <button className="button button--primary button--compact" type="button" onClick={handlePushCloud} disabled={cloudBusy}>
+                  <button className="button button--primary button--compact" type="button" onClick={handlePushCloud} disabled={!canSyncCloud || cloudBusy}>
                     {cloudBusy ? 'Working...' : 'Push workspace to cloud'}
                   </button>
-                  <button className="button button--ghost button--compact" type="button" onClick={handlePullCloud} disabled={cloudBusy}>
+                  <button className="button button--ghost button--compact" type="button" onClick={handlePullCloud} disabled={!canSyncCloud || cloudBusy}>
                     Pull cloud workspace
                   </button>
-                  <button className="button button--ghost button--compact" type="button" onClick={handleSignOutCloud} disabled={cloudBusy}>
+                  <button className="button button--ghost button--compact" type="button" onClick={handleSignOutCloud} disabled={!canSyncCloud || cloudBusy}>
                     Sign out
                   </button>
                 </div>
@@ -217,12 +225,12 @@ export default function Settings() {
                 <div className="form-grid form-grid--tight">
                   <label className="field-stack">
                     <span className="field-label">Email</span>
-                    <input className="field-input" type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} />
+                    <input className="field-input" type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} disabled={!canSyncCloud} />
                   </label>
                 </div>
                 <div className="detail-block subtle">Magic-link auth enables real cloud sync and storage.</div>
                 <div className="inline-actions">
-                  <button className="button button--primary button--compact" type="button" onClick={handleSendMagicLink} disabled={cloudBusy || !authEmail.trim()}>
+                  <button className="button button--primary button--compact" type="button" onClick={handleSendMagicLink} disabled={!canSyncCloud || cloudBusy || !authEmail.trim()}>
                     {cloudBusy ? 'Sending...' : 'Send magic link'}
                   </button>
                 </div>
@@ -240,39 +248,39 @@ export default function Settings() {
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
               <span className="field-label">Business name</span>
-              <input className="field-input" value={profileDraft.businessName} onChange={(event) => setProfileDraft((current) => ({ ...current, businessName: event.target.value }))} />
+              <input className="field-input" value={profileDraft.businessName} onChange={(event) => setProfileDraft((current) => ({ ...current, businessName: event.target.value }))} disabled={!canManageSettings} />
             </label>
             <label className="field-stack">
               <span className="field-label">Ranch name</span>
-              <input className="field-input" value={profileDraft.ranchName} onChange={(event) => setProfileDraft((current) => ({ ...current, ranchName: event.target.value }))} />
+              <input className="field-input" value={profileDraft.ranchName} onChange={(event) => setProfileDraft((current) => ({ ...current, ranchName: event.target.value }))} disabled={!canManageSettings} />
             </label>
             <label className="field-stack">
               <span className="field-label">Default owner</span>
-              <input className="field-input" value={profileDraft.defaultOwnerName} onChange={(event) => setProfileDraft((current) => ({ ...current, defaultOwnerName: event.target.value }))} />
+              <input className="field-input" value={profileDraft.defaultOwnerName} onChange={(event) => setProfileDraft((current) => ({ ...current, defaultOwnerName: event.target.value }))} disabled={!canManageSettings} />
             </label>
             <label className="field-stack">
               <span className="field-label">Default owner entity</span>
-              <input className="field-input" value={profileDraft.defaultOwnerEntity} onChange={(event) => setProfileDraft((current) => ({ ...current, defaultOwnerEntity: event.target.value }))} />
+              <input className="field-input" value={profileDraft.defaultOwnerEntity} onChange={(event) => setProfileDraft((current) => ({ ...current, defaultOwnerEntity: event.target.value }))} disabled={!canManageSettings} />
             </label>
             <label className="field-stack">
               <span className="field-label">Ranch manager</span>
-              <input className="field-input" value={profileDraft.ranchManagerName} onChange={(event) => setProfileDraft((current) => ({ ...current, ranchManagerName: event.target.value }))} />
+              <input className="field-input" value={profileDraft.ranchManagerName} onChange={(event) => setProfileDraft((current) => ({ ...current, ranchManagerName: event.target.value }))} disabled={!canManageSettings} />
             </label>
             <label className="field-stack">
               <span className="field-label">Operations email</span>
-              <input className="field-input" type="email" value={profileDraft.operationsEmail} onChange={(event) => setProfileDraft((current) => ({ ...current, operationsEmail: event.target.value }))} />
+              <input className="field-input" type="email" value={profileDraft.operationsEmail} onChange={(event) => setProfileDraft((current) => ({ ...current, operationsEmail: event.target.value }))} disabled={!canManageSettings} />
             </label>
             <label className="field-stack">
               <span className="field-label">Default barn</span>
-              <input className="field-input" value={profileDraft.defaultBarn} onChange={(event) => setProfileDraft((current) => ({ ...current, defaultBarn: event.target.value }))} />
+              <input className="field-input" value={profileDraft.defaultBarn} onChange={(event) => setProfileDraft((current) => ({ ...current, defaultBarn: event.target.value }))} disabled={!canManageSettings} />
             </label>
             <label className="field-stack">
               <span className="field-label">Default pasture</span>
-              <input className="field-input" value={profileDraft.defaultPasture} onChange={(event) => setProfileDraft((current) => ({ ...current, defaultPasture: event.target.value }))} />
+              <input className="field-input" value={profileDraft.defaultPasture} onChange={(event) => setProfileDraft((current) => ({ ...current, defaultPasture: event.target.value }))} disabled={!canManageSettings} />
             </label>
           </div>
           <div className="inline-actions">
-            <button className="button button--primary button--compact" type="button" onClick={handleProfileSave}>
+            <button className="button button--primary button--compact" type="button" onClick={handleProfileSave} disabled={!canManageSettings}>
               Save workspace profile
             </button>
           </div>
@@ -328,10 +336,10 @@ export default function Settings() {
           </div>
         </div>
         <div className="inline-actions">
-          <button className="button button--primary button--compact" type="button" onClick={handleExport}>
+          <button className="button button--primary button--compact" type="button" onClick={handleExport} disabled={!canManageSettings}>
             Export backup
           </button>
-          <button className="button button--ghost button--compact" type="button" onClick={() => importRef.current?.click()}>
+          <button className="button button--ghost button--compact" type="button" onClick={() => importRef.current?.click()} disabled={!canManageSettings}>
             Import backup
           </button>
         </div>

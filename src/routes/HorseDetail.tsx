@@ -7,7 +7,7 @@ import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { formatCompactCurrency, formatDateLabel, formatPercent } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
-import { useHorseRecord, useXbarStore } from '@/store/useXbarStore';
+import { useCurrentRoleCapability, useHorseRecord, useXbarStore } from '@/store/useXbarStore';
 import type { DocumentRecord, DocumentSource, GalleryAsset, SalesLead } from '@/types/xbar';
 
 const mediaKinds: GalleryAsset['kind'][] = ['Hero', 'Conformation', 'Sale Still', 'Pedigree', 'Document Cover'];
@@ -27,7 +27,13 @@ export default function HorseDetail() {
   const addHorseNote = useXbarStore((state) => state.addHorseNote);
   const updateHorseLocation = useXbarStore((state) => state.updateHorseLocation);
   const createSalesLead = useXbarStore((state) => state.createSalesLead);
+  const currentRole = useXbarStore((state) => state.currentRole);
   const pushToast = useUiStore((state) => state.pushToast);
+  const canManageSharedAccess = useCurrentRoleCapability('manageSharedAccess');
+  const canUploadMedia = useCurrentRoleCapability('uploadMedia');
+  const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
+  const canEditHorse = useCurrentRoleCapability('editHorse');
+  const canManageSales = useCurrentRoleCapability('manageSales');
 
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [mediaKind, setMediaKind] = useState<GalleryAsset['kind']>('Hero');
@@ -232,7 +238,7 @@ export default function HorseDetail() {
             <Link className="button button--primary button--compact" to={packet.sharePath}>
               Open share view
             </Link>
-            <button className="button button--ghost button--compact" type="button" onClick={handleSavedHorseToggle}>
+            <button className="button button--ghost button--compact" type="button" onClick={handleSavedHorseToggle} disabled={!canManageSharedAccess}>
               {saved ? 'In shared access' : 'Add to shared access'}
             </button>
             <Pill tone={horse.readiness.score >= 85 ? 'emerald' : horse.readiness.score >= 70 ? 'amber' : 'rose'}>
@@ -242,6 +248,11 @@ export default function HorseDetail() {
           </>
         }
       />
+      {!canManageSharedAccess || !canUploadMedia || !canUploadDocuments || !canEditHorse || !canManageSales ? (
+        <div className="callout callout--warning">
+          <strong>{currentRole} access:</strong> Sensitive actions on this horse profile are limited by workspace role.
+        </div>
+      ) : null}
 
       <section className="detail-hero">
         <div className="detail-hero__media">
@@ -331,7 +342,7 @@ export default function HorseDetail() {
               className="button button--ghost button--compact"
               type="button"
               onClick={handleLocationUpdate}
-              disabled={!location.barn.trim() && !location.pasture.trim() && !location.stall.trim()}
+              disabled={!canEditHorse || (!location.barn.trim() && !location.pasture.trim() && !location.stall.trim())}
             >
               Save location
             </button>
@@ -364,7 +375,7 @@ export default function HorseDetail() {
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
               <span className="field-label">Media kind</span>
-              <select className="field-input" value={mediaKind} onChange={(event) => setMediaKind(event.target.value as GalleryAsset['kind'])}>
+              <select className="field-input" value={mediaKind} onChange={(event) => setMediaKind(event.target.value as GalleryAsset['kind'])} disabled={!canUploadMedia}>
                 {mediaKinds.map((kind) => (
                   <option key={kind} value={kind}>
                     {kind}
@@ -374,15 +385,15 @@ export default function HorseDetail() {
             </label>
             <label className="field-stack">
               <span className="field-label">Upload images</span>
-              <input className="field-input field-input--file" type="file" multiple accept="image/*" onChange={(event) => setMediaFiles(Array.from(event.target.files ?? []))} />
+              <input className="field-input field-input--file" type="file" multiple accept="image/*" onChange={(event) => setMediaFiles(Array.from(event.target.files ?? []))} disabled={!canUploadMedia} />
             </label>
             <label className="field-stack field-stack--checkbox">
-              <input type="checkbox" checked={makePrimary} onChange={(event) => setMakePrimary(event.target.checked)} />
+              <input type="checkbox" checked={makePrimary} onChange={(event) => setMakePrimary(event.target.checked)} disabled={!canUploadMedia} />
               <span>Use first upload as hero image</span>
             </label>
           </div>
           <div className="inline-actions">
-            <button className="button button--primary button--compact" type="button" onClick={handleMediaUpload} disabled={isMediaUploading || !mediaFiles.length}>
+            <button className="button button--primary button--compact" type="button" onClick={handleMediaUpload} disabled={!canUploadMedia || isMediaUploading || !mediaFiles.length}>
               {isMediaUploading ? 'Uploading media...' : 'Upload media'}
             </button>
           </div>
@@ -486,7 +497,7 @@ export default function HorseDetail() {
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
               <span className="field-label">Document source</span>
-              <select className="field-input" value={docSource} onChange={(event) => setDocSource(event.target.value as DocumentSource)}>
+              <select className="field-input" value={docSource} onChange={(event) => setDocSource(event.target.value as DocumentSource)} disabled={!canUploadDocuments}>
                 {docSources.map((source) => (
                   <option key={source} value={source}>
                     {source}
@@ -496,11 +507,11 @@ export default function HorseDetail() {
             </label>
             <label className="field-stack field-stack--wide">
               <span className="field-label">Upload documents</span>
-              <input className="field-input field-input--file" type="file" multiple accept=".pdf,.txt,.csv,image/*" onChange={(event) => setDocFiles(Array.from(event.target.files ?? []))} />
+              <input className="field-input field-input--file" type="file" multiple accept=".pdf,.txt,.csv,image/*" onChange={(event) => setDocFiles(Array.from(event.target.files ?? []))} disabled={!canUploadDocuments} />
             </label>
           </div>
           <div className="inline-actions">
-            <button className="button button--ghost button--compact" type="button" onClick={handleDocumentUpload} disabled={isDocumentUploading || !docFiles.length}>
+            <button className="button button--ghost button--compact" type="button" onClick={handleDocumentUpload} disabled={!canUploadDocuments || isDocumentUploading || !docFiles.length}>
               {isDocumentUploading ? 'Uploading documents...' : 'Add to document intake'}
             </button>
           </div>
@@ -568,11 +579,11 @@ export default function HorseDetail() {
               <input className="field-input" value={leadName} onChange={(event) => {
                 setLeadName(event.target.value);
                 setLeadError('');
-              }} />
+              }} disabled={!canManageSales} />
             </label>
             <label className="field-stack">
               <span className="field-label">Lead channel</span>
-              <select className="field-input" value={leadChannel} onChange={(event) => setLeadChannel(event.target.value as SalesLead['channel'])}>
+              <select className="field-input" value={leadChannel} onChange={(event) => setLeadChannel(event.target.value as SalesLead['channel'])} disabled={!canManageSales}>
                 {leadChannels.map((channel) => (
                   <option key={channel} value={channel}>
                     {channel}
@@ -583,7 +594,7 @@ export default function HorseDetail() {
           </div>
           {leadError ? <div className="field-error">{leadError}</div> : null}
           <div className="inline-actions">
-            <button className="button button--primary button--compact" type="button" onClick={handleLeadCreate} disabled={!leadName.trim()}>
+            <button className="button button--primary button--compact" type="button" onClick={handleLeadCreate} disabled={!canManageSales || !leadName.trim()}>
               Add buyer lead
             </button>
           </div>
@@ -614,19 +625,19 @@ export default function HorseDetail() {
                   <input className="field-input" value={noteTitle} onChange={(event) => {
                     setNoteTitle(event.target.value);
                     setNoteError('');
-                  }} />
+                  }} disabled={!canEditHorse} />
                 </label>
                 <label className="field-stack field-stack--wide">
                   <span className="field-label">Note</span>
                   <textarea className="field-textarea" value={noteBody} onChange={(event) => {
                     setNoteBody(event.target.value);
                     setNoteError('');
-                  }} rows={4} />
+                  }} rows={4} disabled={!canEditHorse} />
                 </label>
               </div>
               {noteError ? <div className="field-error">{noteError}</div> : null}
               <div className="inline-actions">
-                <button className="button button--ghost button--compact" type="button" onClick={handleAddNote} disabled={!noteTitle.trim() || !noteBody.trim()}>
+                <button className="button button--ghost button--compact" type="button" onClick={handleAddNote} disabled={!canEditHorse || !noteTitle.trim() || !noteBody.trim()}>
                   Save note
                 </button>
               </div>

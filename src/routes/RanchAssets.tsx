@@ -5,7 +5,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
-import { useXbarStore } from '@/store/useXbarStore';
+import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { AssetCondition, AssetStatus } from '@/types/xbar';
 
 const statuses: AssetStatus[] = ['Available', 'Assigned', 'In Service'];
@@ -15,7 +15,9 @@ export default function RanchAssets() {
   const navigate = useNavigate();
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
   const updateAsset = useXbarStore((state) => state.updateAsset);
+  const currentRole = useXbarStore((state) => state.currentRole);
   const pushToast = useUiStore((state) => state.pushToast);
+  const canManageAssets = useCurrentRoleCapability('manageAssets');
   const assigned = ranchAssets.filter((asset) => asset.status === 'Assigned');
   const serviceSoon = ranchAssets.filter((asset) => asset.condition !== 'Excellent');
   const [selectedAssetId, setSelectedAssetId] = useState(ranchAssets[0]?.id ?? '');
@@ -63,18 +65,22 @@ export default function RanchAssets() {
           label: 'Select asset',
           onSelect: () => handleAssetSelection(menuAsset.id),
         },
-        {
-          id: 'mark-available',
-          label: 'Mark available',
-          onSelect: () => {
-            const result = updateAsset(menuAsset.id, { status: 'Available' });
-            pushToast({
-              title: result.ok ? 'Asset updated' : 'Asset update blocked',
-              message: result.message,
-              tone: result.ok ? 'success' : 'error',
-            });
-          },
-        },
+        ...(canManageAssets
+          ? [
+              {
+                id: 'mark-available',
+                label: 'Mark available',
+                onSelect: () => {
+                  const result = updateAsset(menuAsset.id, { status: 'Available' });
+                  pushToast({
+                    title: result.ok ? 'Asset updated' : 'Asset update blocked',
+                    message: result.message,
+                    tone: result.ok ? 'success' : 'error',
+                  });
+                },
+              },
+            ]
+          : []),
         ...(menuAsset.category === 'Medical Kit'
           ? [
               {
@@ -94,6 +100,11 @@ export default function RanchAssets() {
         title="Ranch toolkit and kits"
         description="Tack, kits, equipment."
       />
+      {!canManageAssets ? (
+        <div className="callout callout--warning">
+          <strong>{currentRole} access:</strong> Ranch asset updates are read-only for this role.
+        </div>
+      ) : null}
 
       <div className="metric-grid">
         <MetricCard label="Tracked assets" value={`${ranchAssets.length}`} detail="Tack, kits, stock" />
@@ -153,7 +164,7 @@ export default function RanchAssets() {
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
               <span className="field-label">Asset</span>
-              <select className="field-input" value={selectedAssetId} onChange={(event) => handleAssetSelection(event.target.value)}>
+              <select className="field-input" value={selectedAssetId} onChange={(event) => handleAssetSelection(event.target.value)} disabled={!canManageAssets}>
                 {ranchAssets.map((asset) => (
                   <option key={asset.id} value={asset.id}>
                     {asset.name}
@@ -163,7 +174,7 @@ export default function RanchAssets() {
             </label>
             <label className="field-stack">
               <span className="field-label">Status</span>
-              <select className="field-input" value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as AssetStatus }))}>
+              <select className="field-input" value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as AssetStatus }))} disabled={!canManageAssets}>
                 {statuses.map((status) => (
                   <option key={status} value={status}>
                     {status}
@@ -173,7 +184,7 @@ export default function RanchAssets() {
             </label>
             <label className="field-stack">
               <span className="field-label">Condition</span>
-              <select className="field-input" value={form.condition} onChange={(event) => setForm((current) => ({ ...current, condition: event.target.value as AssetCondition }))}>
+              <select className="field-input" value={form.condition} onChange={(event) => setForm((current) => ({ ...current, condition: event.target.value as AssetCondition }))} disabled={!canManageAssets}>
                 {conditions.map((condition) => (
                   <option key={condition} value={condition}>
                     {condition}
@@ -183,23 +194,23 @@ export default function RanchAssets() {
             </label>
             <label className="field-stack">
               <span className="field-label">Assigned to</span>
-              <input className="field-input" value={form.assignedTo} onChange={(event) => setForm((current) => ({ ...current, assignedTo: event.target.value }))} />
+              <input className="field-input" value={form.assignedTo} onChange={(event) => setForm((current) => ({ ...current, assignedTo: event.target.value }))} disabled={!canManageAssets} />
             </label>
             <label className="field-stack">
               <span className="field-label">Location</span>
-              <input className="field-input" value={form.location} onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))} />
+              <input className="field-input" value={form.location} onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))} disabled={!canManageAssets} />
             </label>
             <label className="field-stack">
               <span className="field-label">Next service</span>
-              <input className="field-input" type="date" value={form.nextService} onChange={(event) => setForm((current) => ({ ...current, nextService: event.target.value }))} />
+              <input className="field-input" type="date" value={form.nextService} onChange={(event) => setForm((current) => ({ ...current, nextService: event.target.value }))} disabled={!canManageAssets} />
             </label>
             <label className="field-stack field-stack--wide">
               <span className="field-label">Notes</span>
-              <textarea className="field-textarea" rows={4} value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} />
+              <textarea className="field-textarea" rows={4} value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} disabled={!canManageAssets} />
             </label>
           </div>
           <div className="inline-actions">
-            <button className="button button--primary button--compact" type="button" onClick={handleSave}>
+            <button className="button button--primary button--compact" type="button" onClick={handleSave} disabled={!canManageAssets}>
               Save asset changes
             </button>
           </div>

@@ -3,13 +3,15 @@ import { formatCurrency, formatDateLabel } from '@/lib/format';
 import { getStripePaymentLink, isBillingConfigured, stripeConfig } from '@/lib/platformConfig';
 import { buildRevenueBlueprint } from '@/lib/xbarGrowth';
 import { subscriptionTierConfig } from '@/lib/xbarRuntime';
-import { useXbarStore } from '@/store/useXbarStore';
+import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { SubscriptionTier } from '@/types/xbar';
 
 const tiers: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
 
 export default function Subscriptions() {
   const subscription = useXbarStore((state) => state.subscription);
+  const currentRole = useXbarStore((state) => state.currentRole);
+  const canManageBilling = useCurrentRoleCapability('manageBilling');
   const revenuePlan = buildRevenueBlueprint(subscription);
 
   return (
@@ -31,6 +33,11 @@ export default function Subscriptions() {
           </>
         )}
       </div>
+      {!canManageBilling ? (
+        <div className="callout callout--warning">
+          <strong>{currentRole} access:</strong> Billing actions are restricted to admin.
+        </div>
+      ) : null}
 
       <div className="metric-grid">
         <MetricCard label="Current tier" value={subscription.tier} detail={`${subscription.billingState} · renews ${formatDateLabel(subscription.renewalDate)}`} />
@@ -159,12 +166,12 @@ export default function Subscriptions() {
                 </div>
                 <div className="stack-item__copy">{current ? 'This is the active contract on this workspace.' : 'Package reference only.'}</div>
                 <div className="inline-actions">
-                  {current && stripeConfig.billingPortalUrl ? (
+                  {current && stripeConfig.billingPortalUrl && canManageBilling ? (
                     <a className="button button--ghost button--compact" href={stripeConfig.billingPortalUrl} target="_blank" rel="noreferrer">
                       Manage billing
                     </a>
                   ) : null}
-                  {!current && getStripePaymentLink(tier) ? (
+                  {!current && getStripePaymentLink(tier) && canManageBilling ? (
                     <a className="button button--primary button--compact" href={getStripePaymentLink(tier)} target="_blank" rel="noreferrer">
                       Start checkout
                     </a>
