@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { MouseEventHandler, ReactNode } from 'react';
 
 type Tone = 'blue' | 'slate' | 'emerald' | 'amber' | 'rose';
 
@@ -6,11 +6,13 @@ export function PageHeader({
   eyebrow,
   title,
   description,
+  showDescription = false,
   actions,
 }: {
   eyebrow?: string;
   title: string;
-  description: string;
+  description?: string;
+  showDescription?: boolean;
   actions?: ReactNode;
 }) {
   return (
@@ -18,7 +20,7 @@ export function PageHeader({
       <div className="page-header__copy">
         {eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}
         <h1 className="page-title">{title}</h1>
-        <p className="page-description">{description}</p>
+        {showDescription && description ? <p className="page-description">{description}</p> : null}
       </div>
       {actions ? <div className="page-actions">{actions}</div> : null}
     </header>
@@ -33,6 +35,7 @@ export function Panel({
   action,
   children,
   className = '',
+  onContextMenu,
 }: {
   eyebrow?: string;
   title: string;
@@ -41,9 +44,10 @@ export function Panel({
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  onContextMenu?: MouseEventHandler<HTMLElement>;
 }) {
   return (
-    <section className={`panel ${className}`.trim()}>
+    <section className={`panel ${className}`.trim()} onContextMenu={onContextMenu}>
       <div className="panel__header">
         <div>
           {eyebrow ? <div className="panel__eyebrow">{eyebrow}</div> : null}
@@ -65,17 +69,30 @@ export function MetricCard({
   value,
   detail,
   tone = 'blue',
+  className = '',
+  title,
+  onClick,
+  onContextMenu,
 }: {
   label: string;
   value: string;
-  detail: string;
+  detail?: string;
   tone?: Tone;
+  className?: string;
+  title?: string;
+  onClick?: MouseEventHandler<HTMLDivElement>;
+  onContextMenu?: MouseEventHandler<HTMLDivElement>;
 }) {
   return (
-    <div className={`metric-card metric-card--${tone}`}>
+    <div
+      className={`metric-card metric-card--${tone} ${className}`.trim()}
+      title={title}
+      onClick={onClick}
+      onContextMenu={onContextMenu}
+    >
       <div className="metric-card__label">{label}</div>
       <div className="metric-card__value">{value}</div>
-      <div className="metric-card__detail">{detail}</div>
+      {detail ? <div className="metric-card__detail">{detail}</div> : null}
     </div>
   );
 }

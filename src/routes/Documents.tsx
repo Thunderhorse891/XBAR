@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import type { MouseEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
@@ -23,7 +24,6 @@ export default function Documents() {
   const reviewDocument = useXbarStore((state) => state.reviewDocument);
   const discardDocument = useXbarStore((state) => state.discardDocument);
   const pushToast = useUiStore((state) => state.pushToast);
-  const currentRole = useXbarStore((state) => state.currentRole);
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
   const canReviewDocuments = useCurrentRoleCapability('reviewDocuments');
 
@@ -35,15 +35,38 @@ export default function Documents() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formErrors, setFormErrors] = useState<{ uploadedBy?: string; files?: string }>({});
   const [reviewAssignments, setReviewAssignments] = useState<Record<string, string>>({});
-  const [menuState, setMenuState] = useState<{ documentId: string; x: number; y: number } | null>(null);
+  const [menuState, setMenuState] = useState<
+    | { type: 'document'; documentId: string; x: number; y: number }
+    | { type: 'surface'; surfaceId: 'vault' | 'review' | 'buyer' | 'storage' | 'intake' | 'batches' | 'duplicates'; x: number; y: number }
+    | null
+  >(null);
   const [openingDocumentId, setOpeningDocumentId] = useState('');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched');
   const duplicates = documents.filter((document) => document.duplicateRisk === 'Possible Duplicate');
   const buyerSafeDocuments = documents.filter((document) => buildDocumentTrustProfile(document, horses).readyForProfile);
   const uploadOpen = searchParams.get('upload') === '1';
-  const menuDocument = documents.find((document) => document.id === menuState?.documentId);
+  const menuDocument = menuState?.type === 'document' ? documents.find((document) => document.id === menuState.documentId) : undefined;
   const menuHorseId = menuDocument ? reviewAssignments[menuDocument.id] ?? menuDocument.horseId : undefined;
+  const accessModeLabel =
+    canUploadDocuments && !canReviewDocuments
+      ? 'Upload only'
+      : !canUploadDocuments && canReviewDocuments
+        ? 'Review only'
+        : !canUploadDocuments && !canReviewDocuments
+          ? 'Read only'
+          : 'Full access';
+  const scrollToSection = (sectionId: string) => {
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  const openSurfaceMenu = (
+    surfaceId: 'vault' | 'review' | 'buyer' | 'storage' | 'intake' | 'batches' | 'duplicates',
+    event: MouseEvent,
+  ) => {
+    event.preventDefault();
+    setMenuState({ type: 'surface', surfaceId, x: event.clientX, y: event.clientY });
+  };
   const openDocument = async (document: Pick<DocumentRecord, 'id' | 'title' | 'fileUrl' | 'storagePath'>) => {
     const previewWindow = typeof window !== 'undefined' ? window.open('', '_blank') : null;
     if (previewWindow) {
@@ -72,7 +95,8 @@ export default function Documents() {
 
     window.open(access.url, '_blank', 'noopener,noreferrer');
   };
-  const menuItems = menuDocument
+  const menuItems =
+    menuDocument
     ? [
         ...(menuDocument.fileUrl || menuDocument.storagePath
           ? [
@@ -124,7 +148,113 @@ export default function Documents() {
             ]
           : []),
       ]
-    : [];
+    : menuState?.type === 'surface'
+      ? [
+          ...(menuState.surfaceId === 'vault'
+            ? [
+                {
+                  id: 'jump-intake',
+                  label: 'Jump to intake',
+                  onSelect: () => scrollToSection('documents-intake'),
+                },
+                {
+                  id: 'jump-review',
+                  label: 'Jump to review',
+                  onSelect: () => scrollToSection('documents-review'),
+                },
+              ]
+            : []),
+          ...(menuState.surfaceId === 'review'
+            ? [
+                {
+                  id: 'focus-review',
+                  label: 'Focus queue',
+                  onSelect: () => scrollToSection('documents-review'),
+                },
+                ...(reviewQueue[0] && (reviewQueue[0].fileUrl || reviewQueue[0].storagePath)
+                  ? [
+                      {
+                        id: 'open-next',
+                        label: 'Open next file',
+                        onSelect: () => {
+                          void openDocument(reviewQueue[0]);
+                        },
+                      },
+                    ]
+                  : []),
+              ]
+            : []),
+          ...(menuState.surfaceId === 'buyer'
+            ? [
+                {
+                  id: 'open-shared',
+                  label: 'Open shared access',
+                  onSelect: () => navigate('/shared-access'),
+                },
+                {
+                  id: 'focus-review-buyer',
+                  label: 'Jump to review',
+                  onSelect: () => scrollToSection('documents-review'),
+                },
+              ]
+            : []),
+          ...(menuState.surfaceId === 'storage'
+            ? [
+                {
+                  id: 'open-subscriptions',
+                  label: 'Open subscriptions',
+                  onSelect: () => navigate('/subscriptions'),
+                },
+              ]
+            : []),
+          ...(menuState.surfaceId === 'intake'
+            ? [
+                ...(canUploadDocuments
+                  ? [
+                      {
+                        id: 'choose-files',
+                        label: 'Choose files',
+                        onSelect: () => fileInputRef.current?.click(),
+                      },
+                    ]
+                  : []),
+                {
+                  id: 'focus-intake',
+                  label: 'Focus intake',
+                  onSelect: () => scrollToSection('documents-intake'),
+                },
+              ]
+            : []),
+          ...(menuState.surfaceId === 'batches'
+            ? [
+                {
+                  id: 'focus-batches',
+                  label: 'Focus batches',
+                  onSelect: () => scrollToSection('documents-batches'),
+                },
+                {
+                  id: 'focus-review-from-batches',
+                  label: 'Jump to review',
+                  onSelect: () => scrollToSection('documents-review'),
+                },
+              ]
+            : []),
+          ...(menuState.surfaceId === 'duplicates'
+            ? [
+                {
+                  id: 'focus-duplicates',
+                  label: 'Focus duplicates',
+                  onSelect: () => scrollToSection('documents-duplicates'),
+                },
+                {
+                  id: 'focus-review-from-duplicates',
+                  label: 'Jump to review',
+                  onSelect: () => scrollToSection('documents-review'),
+                },
+              ]
+            : []),
+        ]
+      : [];
 
   const handleIntake = async () => {
     const nextErrors: { uploadedBy?: string; files?: string } = {};
@@ -166,43 +296,67 @@ export default function Documents() {
     <>
       <PageHeader
         eyebrow="Documents"
-        title="Document intake and review"
-        description="Intake, assignment, records."
+        title="Document Desk"
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <Pill tone="slate">Manual queue</Pill>
+            <Pill tone="blue">{accessModeLabel}</Pill>
+          </div>
+        }
       />
 
-      <div className="callout">
-        <strong>Manual review:</strong> New uploads are assigned during intake review. No automatic extraction is running.
-      </div>
-      {!canUploadDocuments || !canReviewDocuments ? (
-        <div className="callout callout--warning">
-          <strong>{currentRole} access:</strong>{' '}
-          {canUploadDocuments && !canReviewDocuments
-            ? 'This role can upload files but cannot approve or discard records.'
-            : !canUploadDocuments && canReviewDocuments
-              ? 'This role can review records but cannot add new files.'
-              : 'This role is read-only in the document workspace.'}
-        </div>
-      ) : null}
-
       <div className="metric-grid">
-        <MetricCard label="Document vault" value={`${documents.length}`} detail="Registration, medical, transfer, insurance, and media records" />
-        <MetricCard label="Needs review" value={`${reviewQueue.length}`} detail="Files waiting on manual assignment" tone="amber" />
-        <MetricCard label="Buyer-safe docs" value={`${buyerSafeDocuments.length}`} detail="Approved documents strong enough for buyer-facing packet surfaces" tone="emerald" />
-        <MetricCard label="Storage used" value={`${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB`} detail="Workspace file storage against the current contract" tone="blue" />
+        <MetricCard
+          label="Vault"
+          value={`${documents.length}`}
+          tone="slate"
+          title="Registration, medical, transfer, insurance, and media records"
+          className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#0f1724]/10 hover:bg-[#fbfcfd]"
+          onClick={() => scrollToSection('documents-review')}
+          onContextMenu={(event) => openSurfaceMenu('vault', event)}
+        />
+        <MetricCard
+          label="Review"
+          value={`${reviewQueue.length}`}
+          tone="slate"
+          title="Files waiting on manual assignment"
+          className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#0f1724]/10 hover:bg-[#fbfcfd]"
+          onClick={() => scrollToSection('documents-review')}
+          onContextMenu={(event) => openSurfaceMenu('review', event)}
+        />
+        <MetricCard
+          label="Buyer-safe"
+          value={`${buyerSafeDocuments.length}`}
+          tone="emerald"
+          title="Approved documents cleared for buyer-facing packet surfaces"
+          className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#0f1724]/10 hover:bg-[#fbfcfd]"
+          onClick={() => navigate('/shared-access')}
+          onContextMenu={(event) => openSurfaceMenu('buyer', event)}
+        />
+        <MetricCard
+          label="Storage"
+          value={`${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB`}
+          tone="slate"
+          title="Workspace file storage against the current contract"
+          className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#0f1724]/10 hover:bg-[#fbfcfd]"
+          onClick={() => navigate('/subscriptions')}
+          onContextMenu={(event) => openSurfaceMenu('storage', event)}
+        />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel
-          eyebrow="Live intake"
-          title="Upload files"
-          description="Add files and review them manually."
+          eyebrow="Intake"
+          title="Add files"
           action={
             <Pill tone={uploadOpen ? 'blue' : 'slate'}>
               {uploadOpen ? 'Top-bar launch' : `${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB used`}
             </Pill>
           }
+          className="cursor-context-menu"
+          onContextMenu={(event) => openSurfaceMenu('intake', event)}
         >
-          <div className="form-grid">
+          <div id="documents-intake" className="form-grid">
             <label className="field-stack">
               <span className="field-label">Batch label</span>
               <input className="field-input" value={batchLabel} onChange={(event) => setBatchLabel(event.target.value)} disabled={!canUploadDocuments} />
@@ -239,6 +393,7 @@ export default function Documents() {
             <label className="field-stack field-stack--wide">
               <span className="field-label">Files</span>
               <input
+                ref={fileInputRef}
                 className="field-input field-input--file"
                 type="file"
                 multiple
@@ -256,17 +411,15 @@ export default function Documents() {
             <button className="button button--primary" type="button" onClick={handleIntake} disabled={!canUploadDocuments || isSubmitting || !uploadedBy.trim() || !files.length}>
               {isSubmitting ? 'Adding documents...' : 'Add documents'}
             </button>
-            <div className="detail-block subtle">
-              {files.length ? `${files.length} file${files.length === 1 ? '' : 's'} selected for intake.` : 'Choose files to add to the queue.'}
-            </div>
+            <Pill tone={files.length ? 'blue' : 'slate'}>{files.length ? `${files.length} queued` : 'No files'}</Pill>
           </div>
         </Panel>
 
-        <Panel eyebrow="Batch intake" title="Queue states" description="Recent intake activity.">
+        <Panel eyebrow="Batches" title="Queue states" className="cursor-context-menu" onContextMenu={(event) => openSurfaceMenu('batches', event)}>
           {intakeBatches.length ? (
-            <div className="stack-list">
+            <div id="documents-batches" className="stack-list">
               {intakeBatches.map((batch) => (
-                <div key={batch.id} className="stack-item">
+                <div key={batch.id} className="stack-item" onContextMenu={(event) => openSurfaceMenu('batches', event)}>
                   <div className="stack-item__top">
                     <div>
                       <div className="stack-item__title">{batch.label}</div>
@@ -296,9 +449,9 @@ export default function Documents() {
         </Panel>
       </div>
 
-      <Panel eyebrow="Review workbench" title="Confidence and match review" description="Approve and assign.">
+      <Panel eyebrow="Review" title="Queue" className="cursor-context-menu" onContextMenu={(event) => openSurfaceMenu('review', event)}>
         {reviewQueue.length ? (
-          <div className="table-shell">
+          <div id="documents-review" className="table-shell">
             <table className="data-table">
               <thead>
                 <tr>
@@ -319,7 +472,7 @@ export default function Documents() {
                       className="table-row--interactive"
                       onContextMenu={(event) => {
                         event.preventDefault();
-                        setMenuState({ documentId: document.id, x: event.clientX, y: event.clientY });
+                        setMenuState({ type: 'document', documentId: document.id, x: event.clientX, y: event.clientY });
                       }}
                     >
                       <td>
@@ -419,12 +572,12 @@ export default function Documents() {
       </Panel>
 
       {duplicates.length ? (
-        <Panel eyebrow="Duplicates" title="Potential duplicate uploads">
-          <div className="stack-list">
+        <Panel eyebrow="Duplicates" title="Review flags" className="cursor-context-menu" onContextMenu={(event) => openSurfaceMenu('duplicates', event)}>
+          <div id="documents-duplicates" className="stack-list">
             {duplicates.map((document) => {
               const trust = buildDocumentTrustProfile(document, horses);
               return (
-                <div key={document.id} className="stack-item">
+                <div key={document.id} className="stack-item" onContextMenu={(event) => openSurfaceMenu('duplicates', event)}>
                   <div className="stack-item__top">
                     <div className="stack-item__title">{document.title}</div>
                     <Pill tone="rose">{document.duplicateRisk}</Pill>
@@ -437,7 +590,7 @@ export default function Documents() {
         </Panel>
       ) : null}
 
-      <ContextMenu open={Boolean(menuDocument)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
+      <ContextMenu open={Boolean(menuItems.length)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
     </>
   );
 }

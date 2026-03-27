@@ -8,7 +8,7 @@
   --bg-deep: #e8ebf0;
   --surface: #ffffff;
   --surface-strong: #ffffff;
-  --sidebar: #03375d;
+  --sidebar: #101317;
   --sidebar-edge: rgba(255, 255, 255, 0.08);
   --text: #202225;
   --muted: #667085;
@@ -17,12 +17,12 @@
   --border-strong: #d1dbe4;
   --blue: #066b90;
   --blue-soft: rgba(6, 107, 144, 0.1);
-  --slate: #4a90b8;
-  --slate-soft: rgba(74, 144, 184, 0.12);
+  --slate: #667085;
+  --slate-soft: rgba(102, 112, 133, 0.12);
   --emerald: #1f8f5f;
   --emerald-soft: rgba(31, 143, 95, 0.12);
-  --amber: #4a90b8;
-  --amber-soft: rgba(74, 144, 184, 0.12);
+  --amber: #7a8797;
+  --amber-soft: rgba(122, 135, 151, 0.12);
   --rose: #cc3333;
   --rose-soft: rgba(204, 51, 51, 0.12);
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
@@ -251,9 +251,9 @@ a:focus-visible {
 }
 
 .nav-link--active {
-  background: rgba(46, 111, 242, 0.14);
+  background: rgba(255, 255, 255, 0.06);
   color: #ffffff;
-  border-color: rgba(46, 111, 242, 0.18);
+  border-color: rgba(6, 107, 144, 0.2);
   box-shadow: inset 3px 0 0 var(--blue);
   border-radius: 0;
 }
@@ -548,7 +548,7 @@ a:focus-visible {
 }
 
 .signal-card:hover {
-  border-color: rgba(46, 111, 242, 0.28);
+  border-color: rgba(6, 107, 144, 0.22);
   background: rgba(255, 255, 255, 0.04);
 }
 
@@ -801,7 +801,7 @@ a:focus-visible {
   position: absolute;
   inset: 0 0 auto 0;
   height: 2px;
-  background: var(--blue);
+  background: rgba(32, 34, 37, 0.34);
 }
 
 .metric-card--slate::before {
@@ -911,13 +911,13 @@ a:focus-visible {
 }
 
 .stack-item--interactive:hover {
-  background: rgba(46, 111, 242, 0.035);
+  background: rgba(6, 107, 144, 0.035);
   border-color: var(--border-strong);
 }
 
 .stack-item--selected {
-  background: rgba(46, 111, 242, 0.06);
-  border-color: rgba(46, 111, 242, 0.18);
+  background: rgba(6, 107, 144, 0.06);
+  border-color: rgba(6, 107, 144, 0.18);
 }
 
 .stack-item__top,
@@ -1132,7 +1132,7 @@ a:focus-visible {
 
 .filter-chip--active:hover,
 .view-toggle__button--active:hover {
-  background: #215ed8;
+  background: #055a7a;
 }
 
 .field-input {
@@ -1434,7 +1434,7 @@ a:focus-visible {
 }
 
 .table-row--selected {
-  background: rgba(46, 111, 242, 0.08);
+  background: rgba(6, 107, 144, 0.08);
 }
 
 .table-row--interactive {
@@ -1937,7 +1937,7 @@ a:focus-visible {
   }
 
   .mobile-dock__item--active {
-    background: rgba(46, 111, 242, 0.18);
+    background: rgba(255, 255, 255, 0.08);
     color: #ffffff;
   }
 
