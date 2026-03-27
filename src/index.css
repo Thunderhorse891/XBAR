@@ -8,15 +8,15 @@
   --bg-deep: #e8ebf0;
   --surface: #ffffff;
   --surface-strong: #ffffff;
-  --sidebar: #101317;
+  --sidebar: #0b0d10;
   --sidebar-edge: rgba(255, 255, 255, 0.08);
   --text: #202225;
   --muted: #667085;
   --muted-strong: #475467;
   --border: #dce4ec;
   --border-strong: #d1dbe4;
-  --blue: #066b90;
-  --blue-soft: rgba(6, 107, 144, 0.1);
+  --blue: #1b4a60;
+  --blue-soft: rgba(27, 74, 96, 0.08);
   --slate: #667085;
   --slate-soft: rgba(102, 112, 133, 0.12);
   --emerald: #1f8f5f;
@@ -86,14 +86,14 @@ button {
 }
 
 ::selection {
-  background: rgba(6, 107, 144, 0.16);
+  background: rgba(27, 74, 96, 0.12);
 }
 
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 a:focus-visible {
-  outline: 3px solid rgba(6, 107, 144, 0.22);
+  outline: 3px solid rgba(27, 74, 96, 0.16);
   outline-offset: 2px;
 }
 
@@ -392,7 +392,7 @@ a:focus-visible {
 }
 
 .button--primary:hover {
-  background: #055a7a;
+  background: #153848;
 }
 
 .button--ghost:hover {
@@ -514,10 +514,7 @@ a:focus-visible {
 }
 
 .dashboard-stage__description {
-  margin: 0;
-  max-width: 22rem;
-  color: rgba(237, 243, 248, 0.62);
-  line-height: 1.35;
+  display: none;
 }
 
 .dashboard-stage__chips,
@@ -572,9 +569,7 @@ a:focus-visible {
 }
 
 .signal-card__copy {
-  color: rgba(237, 243, 248, 0.58);
-  line-height: 1.3;
-  max-width: 18rem;
+  display: none;
 }
 
 .signal-card__value {
@@ -667,8 +662,7 @@ a:focus-visible {
 
 .dashboard-kpi__detail,
 .ledger-stat__detail {
-  color: rgba(237, 243, 248, 0.58);
-  line-height: 1.3;
+  display: none;
 }
 
 .app-error-shell {
@@ -757,6 +751,11 @@ a:focus-visible {
   max-width: 34rem;
   font-size: 0.86rem;
   color: var(--muted-strong);
+}
+
+.panel__description,
+.metric-card__detail {
+  display: none;
 }
 
 .page-actions {
@@ -944,7 +943,7 @@ a:focus-visible {
 .horse-card__subtitle,
 .horse-card__meta,
 .inline-metrics {
-  font-size: 0.9rem;
+  font-size: 0.84rem;
 }
 
 .inline-metrics,
@@ -1354,13 +1353,7 @@ a:focus-visible {
 }
 
 .horse-card__summary {
-  margin: 0;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  color: rgba(239, 244, 251, 0.7);
-  line-height: 1.45;
+  display: none;
 }
 
 .horse-card__readiness {
@@ -1662,7 +1655,7 @@ a:focus-visible {
   padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: #ffffff;
+  background: #fbfcfd;
   color: var(--muted-strong);
 }
 
@@ -1789,10 +1782,7 @@ a:focus-visible {
 }
 
 .ledger-stage__description {
-  margin: 0;
-  max-width: 24rem;
-  color: rgba(239, 244, 251, 0.64);
-  line-height: 1.35;
+  display: none;
 }
 
 .ledger-stage__stats {

@@ -127,7 +127,6 @@ export default function Dashboard() {
       <PageHeader
         eyebrow="Workspace"
         title="Ops Board"
-        description="Queue, transfers, buyers."
         actions={
           <>
             <Link to="/horses" className="button button--ghost button--compact">
@@ -144,13 +143,12 @@ export default function Dashboard() {
         <div className="dashboard-stage__hero">
           <div className="eyebrow">Live queue</div>
           <h2 className="dashboard-stage__title">Move the work.</h2>
-          <p className="dashboard-stage__description">Queue first. Transfers and buyers next.</p>
           <div className="inline-actions">
             <Link to="/documents" className="button button--primary button--compact">
-              Review intake
+              Review
             </Link>
             <Link to="/horses?new=1" className="button button--ghost button--compact">
-              Add horse
+              New horse
             </Link>
           </div>
           <div className="dashboard-stage__chips">
@@ -229,7 +227,6 @@ export default function Dashboard() {
                   <div className="stack-item__top">
                     <div>
                       <div className="stack-item__title">{item.title}</div>
-                      <div className="stack-item__copy">{item.summary}</div>
                     </div>
                     <div className="status-inline">
                       <Pill tone={item.tone}>{item.value}</Pill>
@@ -258,17 +255,14 @@ export default function Dashboard() {
                   }}
                 >
                   <div className="stack-item__top">
-                    <div>
-                      <div className="stack-item__title">{horse.name}</div>
-                      <div className="stack-item__copy">
-                        {horse.segment} · {horse.location.barn} · {horse.owner}
-                      </div>
-                    </div>
+                    <div className="stack-item__title">{horse.name}</div>
                     <Pill tone={horse.status === 'Medical Review' ? 'rose' : horse.readiness.score >= 85 ? 'emerald' : 'amber'}>
                       {horse.status}
                     </Pill>
                   </div>
                   <div className="inline-metrics">
+                      <span>{horse.segment}</span>
+                      <span>{horse.location.barn}</span>
                       <span>Trust {formatPercent(horse.readiness.score)}</span>
                       <span>{horse.documents.length} docs</span>
                       <span>{horse.alerts.length} alerts</span>
@@ -290,17 +284,14 @@ export default function Dashboard() {
               {intakeBatches.slice(0, 5).map((batch) => (
                 <Link key={batch.id} to="/documents" className="stack-item stack-item--interactive">
                   <div className="stack-item__top">
-                    <div>
-                      <div className="stack-item__title">{batch.label}</div>
-                      <div className="stack-item__copy">
-                        {batch.fileCount} files · {batch.source} · {formatDateLabel(batch.receivedAt)}
-                      </div>
-                    </div>
+                    <div className="stack-item__title">{batch.label}</div>
                     <Pill tone={batch.state === 'Completed' ? 'emerald' : batch.state === 'Reviewing' ? 'amber' : 'blue'}>
                       {batch.state}
                     </Pill>
                   </div>
                     <div className="inline-metrics">
+                      <span>{batch.source}</span>
+                      <span>{formatDateLabel(batch.receivedAt)}</span>
                       <span>{batch.processedCount}/{batch.fileCount} logged</span>
                       <span>{batch.matchedCount} matched</span>
                       <span>{batch.needsReviewCount} in review</span>
@@ -330,13 +321,11 @@ export default function Dashboard() {
                     }}
                   >
                     <div className="stack-item__top">
-                      <div>
-                        <div className="stack-item__title">{horse?.name ?? record.legalOwner}</div>
-                        <div className="stack-item__copy">Legal owner: {record.legalOwner}</div>
-                      </div>
+                      <div className="stack-item__title">{horse?.name ?? record.legalOwner}</div>
                       <Pill tone={record.transferStatus === 'Clear' ? 'emerald' : 'amber'}>{record.transferStatus}</Pill>
                     </div>
                     <div className="inline-metrics">
+                      <span>{record.legalOwner}</span>
                       <span>{record.pendingDocuments.length} pending docs</span>
                       <span>Due {formatDateLabel(record.complianceDeadline)}</span>
                       <span>Confidence {record.confidence}%</span>
@@ -369,17 +358,14 @@ export default function Dashboard() {
                     }}
                   >
                     <div className="stack-item__top">
-                      <div>
-                        <div className="stack-item__title">{lead.name}</div>
-                        <div className="stack-item__copy">
-                          {lead.channel} · {horse?.name ?? 'Unassigned horse'}
-                        </div>
-                      </div>
+                      <div className="stack-item__title">{lead.name}</div>
                       <Pill tone={lead.stage === 'Offer' ? 'emerald' : lead.stage === 'Qualified' ? 'blue' : 'amber'}>
                         {lead.stage}
                       </Pill>
                     </div>
                     <div className="inline-metrics">
+                      <span>{lead.channel}</span>
+                      <span>{horse?.name ?? 'Unassigned'}</span>
                       <span>Last touch {formatDateLabel(lead.lastTouch)}</span>
                       <span>{lead.savedListing ? 'Saved' : 'Not saved'}</span>
                       <span>{lead.shareReady ? 'Share ready' : 'Share pending'}</span>
@@ -408,10 +394,7 @@ export default function Dashboard() {
                 }}
               >
                 <div className="stack-item__top">
-                  <div>
-                    <div className="stack-item__title">{tool.title}</div>
-                    <div className="stack-item__copy">{tool.summary}</div>
-                  </div>
+                  <div className="stack-item__title">{tool.title}</div>
                   <Pill tone={tool.tone}>{tool.metric}</Pill>
                 </div>
               </Link>
@@ -419,19 +402,12 @@ export default function Dashboard() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Role" title={roleWorkspace.label} meta={<Pill tone="blue">{roleWorkspace.primaryModules.length} modules</Pill>}>
+        <Panel eyebrow="Role" title={roleWorkspace.label} meta={<Pill tone="slate">{roleWorkspace.primaryModules.length} modules</Pill>}>
           <div className="token-row">
             {roleWorkspace.primaryModules.map((module) => (
               <Pill key={module} tone="blue">
                 {module}
               </Pill>
-            ))}
-          </div>
-          <div className="bullet-list">
-            {roleWorkspace.permissions.map((permission) => (
-              <div key={permission} className="bullet-list__item">
-                {permission}
-              </div>
             ))}
           </div>
         </Panel>

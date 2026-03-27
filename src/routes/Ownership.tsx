@@ -18,7 +18,6 @@ export default function Ownership() {
   const updateOwnershipRecord = useXbarStore((state) => state.updateOwnershipRecord);
   const addOwnershipAuditEntry = useXbarStore((state) => state.addOwnershipAuditEntry);
   const addOwnershipStake = useXbarStore((state) => state.addOwnershipStake);
-  const currentRole = useXbarStore((state) => state.currentRole);
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageOwnership = useCurrentRoleCapability('manageOwnership');
 
@@ -87,14 +86,8 @@ export default function Ownership() {
     <>
       <PageHeader
         eyebrow="Ownership"
-        title="Ownership integrity"
-        description="Owners, splits, transfer status."
+        title="Ownership"
       />
-      {!canManageOwnership ? (
-        <div className="callout callout--warning">
-          <strong>{currentRole} access:</strong> Ownership records are read-only for this role.
-        </div>
-      ) : null}
 
       <div className="metric-grid">
         <MetricCard label="Ownership files" value={`${ownershipRecords.length}`} detail="Tracked ownership records" />
@@ -104,7 +97,7 @@ export default function Ownership() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Transfer queue" title="Open ownership work" description="Transfers and title hygiene.">
+        <Panel eyebrow="Transfer queue" title="Queue">
           {ownershipRecords.length ? (
             <div className="stack-list">
               {ownershipRecords.map((record) => {
@@ -124,13 +117,11 @@ export default function Ownership() {
                     }}
                   >
                     <div className="stack-item__top">
-                      <div>
-                        <div className="stack-item__title">{horse?.name ?? record.legalOwner}</div>
-                        <div className="stack-item__copy">Legal owner: {record.legalOwner}</div>
-                      </div>
+                      <div className="stack-item__title">{horse?.name ?? record.legalOwner}</div>
                       <Pill tone={record.transferStatus === 'Clear' ? 'emerald' : 'amber'}>{record.transferStatus}</Pill>
                     </div>
                     <div className="inline-metrics">
+                      <span>{record.legalOwner}</span>
                       <span>{record.pendingDocuments.length} pending docs</span>
                       <span>Due {formatDateLabel(record.complianceDeadline)}</span>
                       <span>Confidence {record.confidence}%</span>
@@ -144,7 +135,7 @@ export default function Ownership() {
           )}
         </Panel>
 
-        <Panel eyebrow="Share structure" title="Legal owners and co-owner splits" description="Structured ownership.">
+        <Panel eyebrow="Share structure" title="Splits">
           {withCoOwners.length ? (
             <div className="stack-list">
               {withCoOwners.map((horse) => (
@@ -167,7 +158,7 @@ export default function Ownership() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Transfer editor" title={selectedHorse ? `${selectedHorse.name} ownership controls` : 'Ownership controls'} description="Update transfer fields.">
+        <Panel eyebrow="Transfer editor" title={selectedHorse ? `${selectedHorse.name} transfer` : 'Transfer'}>
           {selectedRecord ? (
             <>
               <div className="form-grid form-grid--tight">
@@ -231,7 +222,7 @@ export default function Ownership() {
           )}
         </Panel>
 
-        <Panel eyebrow="Co-owner editor" title="Add co-owner or partner" description="Add a split.">
+        <Panel eyebrow="Co-owner editor" title="Add split">
           {selectedHorse ? (
             <>
               <div className="form-grid form-grid--tight">

@@ -16,7 +16,6 @@ export default function Sales() {
   const documents = useXbarStore((state) => state.documents);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const updateSalesLead = useXbarStore((state) => state.updateSalesLead);
-  const currentRole = useXbarStore((state) => state.currentRole);
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageSales = useCurrentRoleCapability('manageSales');
   const saleHorses = horses.filter(
@@ -93,14 +92,8 @@ export default function Sales() {
     <>
       <PageHeader
         eyebrow="Sales"
-        title="Sales Board"
-        description="Listings, buyers, follow-up."
+        title="Sales"
       />
-      {!canManageSales ? (
-        <div className="callout callout--warning">
-          <strong>{currentRole} access:</strong> Sales pipeline changes are read-only for this role.
-        </div>
-      ) : null}
 
       <div className="metric-grid">
         <MetricCard label="Sale horses" value={`${saleHorses.length}`} detail="Active pricing or buyer review" />
@@ -110,7 +103,7 @@ export default function Sales() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Listings" title="Sale-ready records" description="Live listings.">
+        <Panel eyebrow="Listings" title="Listings">
           {saleHorses.length ? (
             <div className="horse-grid">
               {saleHorses.map((horse) => (
@@ -163,7 +156,7 @@ export default function Sales() {
           )}
         </Panel>
 
-        <Panel eyebrow="Leads" title="Buyer flow" description="Lead pipeline.">
+        <Panel eyebrow="Leads" title="Pipeline">
           {salesLeads.length ? (
             <div className="stack-list">
               {salesLeads.map((lead) => {
@@ -215,7 +208,7 @@ export default function Sales() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Lead lifecycle" title={selectedLead ? `${selectedLead.name} pipeline controls` : 'Lead lifecycle'} description="Edit stage, follow-up, notes.">
+        <Panel eyebrow="Lead lifecycle" title={selectedLead ? `${selectedLead.name} lead` : 'Lead'}>
           {selectedLead ? (
             <>
               <div className="form-grid form-grid--tight">
@@ -293,32 +286,23 @@ export default function Sales() {
           )}
         </Panel>
 
-        <Panel eyebrow="Handoff" title="Share readiness" description="Live motion.">
+        <Panel eyebrow="Handoff" title="Handoff">
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__top">
-                <div>
-                  <div className="stack-item__title">Live share links</div>
-                  <div className="stack-item__copy">Sale horses clean enough to open as shareable records.</div>
-                </div>
+                <div className="stack-item__title">Live links</div>
                 <Pill tone={liveShareCount ? 'emerald' : 'amber'}>{liveShareCount}</Pill>
               </div>
             </div>
             <div className="stack-item">
               <div className="stack-item__top">
-                <div>
-                  <div className="stack-item__title">Saved demand</div>
-                  <div className="stack-item__copy">Watchlist pressure from the shared-access layer.</div>
-                </div>
+                <div className="stack-item__title">Saved demand</div>
                 <Pill tone={sharedAccess.savedHorses ? 'blue' : 'slate'}>{sharedAccess.savedHorses}</Pill>
               </div>
             </div>
             <div className="stack-item">
               <div className="stack-item__top">
-                <div>
-                  <div className="stack-item__title">Follow-ups due</div>
-                  <div className="stack-item__copy">Leads with a next-touch date at or before today.</div>
-                </div>
+                <div className="stack-item__title">Follow-ups</div>
                 <Pill tone={followUpsDue ? 'amber' : 'emerald'}>{followUpsDue}</Pill>
               </div>
             </div>

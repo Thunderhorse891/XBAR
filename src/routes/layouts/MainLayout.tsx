@@ -145,8 +145,8 @@ function NavSection({ title, items }: { title: string; items: NavItem[] }) {
               classNames(
                 'group flex items-center gap-3 border-l-[3px] px-3 py-2.5 text-sm font-medium transition-all duration-150 ease-[ease]',
                 isActive
-                  ? 'border-[#066B90] bg-[#E8F2F7] text-[#03375D]'
-                  : 'border-transparent text-white/78 hover:border-[#066B90]/35 hover:bg-white/5 hover:text-white',
+                  ? 'border-[#385464] bg-white/[0.045] text-white'
+                  : 'border-transparent text-white/74 hover:border-white/10 hover:bg-white/[0.035] hover:text-white',
               )
             }
           >
@@ -206,9 +206,9 @@ export default function MainLayout() {
 
   return (
     <div className="min-h-screen bg-[#f2f2f7] lg:grid lg:grid-cols-[276px,1fr]">
-      <aside className="hidden min-h-screen flex-col gap-5 border-r border-[#1b2128] bg-[#101317] px-[18px] py-6 text-white lg:flex">
+      <aside className="hidden min-h-screen flex-col gap-5 border-r border-[#16191d] bg-[#0b0d10] px-[18px] py-6 text-white lg:flex">
         <div className="flex items-center gap-3">
-          <div className="flex h-[52px] w-[52px] items-center justify-center rounded-2xl border border-white/10 bg-white/5 p-1.5">
+          <div className="flex h-[52px] w-[52px] items-center justify-center rounded-md border border-white/8 bg-white/[0.03] p-1.5">
             <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" className="h-full w-full object-contain" />
           </div>
           <div className="min-w-0">
@@ -217,7 +217,7 @@ export default function MainLayout() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/8 bg-white/5 p-3">
+        <div className="rounded-md border border-white/8 bg-white/[0.03] p-3">
           <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/45">Workspace</div>
           <div className="mt-2 text-sm font-semibold text-white">{roleWorkspace.label}</div>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -226,7 +226,7 @@ export default function MainLayout() {
                 key={module.label}
                 type="button"
                 onClick={() => navigate(module.path)}
-                className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/82 transition-all duration-150 ease-[ease] hover:border-[#066B90]/45 hover:bg-white/10 hover:text-white"
+                className="rounded-md border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/78 transition-all duration-150 ease-[ease] hover:border-white/16 hover:bg-white/[0.06] hover:text-white"
               >
                 {module.label}
               </button>
@@ -238,11 +238,11 @@ export default function MainLayout() {
         <NavSection title="Programs" items={programs} />
         <NavSection title="Platform" items={platformItems} />
 
-        <div className="mt-auto rounded-2xl border border-white/8 bg-white/5 p-3">
+        <div className="mt-auto rounded-md border border-white/8 bg-white/[0.03] p-3">
           <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/45">Contract</div>
           <div className="mt-2 flex items-center justify-between gap-3">
             <span className="text-sm font-semibold text-white">{subscription.tier}</span>
-            <Pill tone="blue">{subscription.billingState}</Pill>
+            <Pill tone="slate">{subscription.billingState}</Pill>
           </div>
           <div className="mt-2 text-xs text-white/62">
             {subscription.usage.seatsUsed}/{subscription.usage.seatLimit} seats in use
@@ -251,14 +251,14 @@ export default function MainLayout() {
       </aside>
 
       <div className="flex min-w-0 flex-col bg-[#f2f2f7]">
-        <header className="sticky top-0 z-10 border-b border-[#d8e0e8] bg-white/95 backdrop-blur-sm">
+        <header className="sticky top-0 z-10 border-b border-[#dde3ea] bg-white">
           <div className="flex min-h-[58px] flex-wrap items-center justify-between gap-4 px-5 py-3">
             <div className="flex items-center gap-3">
               <div className="text-[0.92rem] font-extrabold tracking-[0.01em] text-[#202225]">{currentLabel}</div>
               <span
                 className={classNames(
-                  'inline-flex min-h-[24px] items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]',
-                  pendingReview ? 'bg-[#e9eef2] text-[#475467]' : 'bg-emerald-50 text-emerald-700',
+                  'inline-flex min-h-[24px] items-center rounded-md px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]',
+                  pendingReview ? 'bg-[#edf1f4] text-[#475467]' : 'bg-[#edf4ef] text-[#2b6a4c]',
                 )}
               >
                 {pendingReview ? `${pendingReview} review` : 'Queue clear'}
@@ -273,12 +273,12 @@ export default function MainLayout() {
                   onChange={(event) => setSearch(event.target.value)}
                   onKeyDown={handleSearch}
                   placeholder="Search records"
-                  className="h-10 w-full rounded-full border border-[#d1dbe4] bg-white pl-10 pr-4 text-sm text-[#202225] transition-all duration-150 ease-[ease] placeholder:text-[#8a96a3] focus:border-[#066B90] focus:outline-none"
+                  className="h-10 w-full rounded-md border border-[#d1dbe4] bg-white pl-10 pr-4 text-sm text-[#202225] transition-all duration-150 ease-[ease] placeholder:text-[#8a96a3] focus:border-[#7d8a96] focus:outline-none"
                 />
               </label>
 
               <select
-                className="h-10 rounded-full border border-[#d1dbe4] bg-white px-4 text-sm font-medium text-[#202225] transition-all duration-150 ease-[ease] focus:border-[#066B90] focus:outline-none"
+                className="h-10 rounded-md border border-[#d1dbe4] bg-white px-4 text-sm font-medium text-[#202225] transition-all duration-150 ease-[ease] focus:border-[#7d8a96] focus:outline-none"
                 value={currentRole}
                 onChange={(event) => setCurrentRole(event.target.value as UserRole)}
                 aria-label="Workspace role"
@@ -291,15 +291,15 @@ export default function MainLayout() {
               </select>
 
               <button
-                className="inline-flex h-10 items-center justify-center rounded-full border border-[#d1dbe4] bg-white px-4 text-sm font-semibold text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#0f1724]/20 hover:bg-[#f7fafc]"
+                className="inline-flex h-10 items-center justify-center rounded-md border border-[#d1dbe4] bg-white px-4 text-sm font-semibold text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#c4ccd4] hover:bg-[#f7fafc]"
                 type="button"
                 onClick={() => setHelpOpen(true)}
               >
-                Guide
+                Help
               </button>
 
               <button
-                className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#d1dbe4] bg-white text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#4A90B8]/50 hover:bg-[#f7fafc] disabled:cursor-not-allowed disabled:opacity-50"
+                className="relative inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#d1dbe4] bg-white text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#c4ccd4] hover:bg-[#f7fafc] disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 onClick={() => navigate('/documents')}
                 aria-label="Open document review"
@@ -313,7 +313,7 @@ export default function MainLayout() {
               </button>
 
               <button
-                className="inline-flex h-10 items-center justify-center rounded-full border border-[#d1dbe4] bg-white px-4 text-sm font-semibold text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#4A90B8]/50 hover:bg-[#f7fafc] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center rounded-md border border-[#d1dbe4] bg-white px-4 text-sm font-semibold text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#c4ccd4] hover:bg-[#f7fafc] disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 onClick={() => navigate('/documents?upload=1')}
                 disabled={!canUploadDocuments}
@@ -322,7 +322,7 @@ export default function MainLayout() {
               </button>
 
               <button
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#066B90] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#055a7a] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#202225] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#151719] disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 onClick={() => navigate('/horses?new=1')}
                 disabled={!canCreateHorse}
@@ -338,14 +338,14 @@ export default function MainLayout() {
           <Outlet />
         </main>
 
-        <nav className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-2 rounded-2xl border border-white/10 bg-[#101317] p-2 text-white shadow-lg lg:hidden" aria-label="Mobile quick navigation">
+        <nav className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-2 rounded-md border border-white/10 bg-[#0b0d10] p-2 text-white shadow-lg lg:hidden" aria-label="Mobile quick navigation">
           <NavLink
             to="/"
             end
             className={({ isActive }) =>
               classNames(
-                'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-semibold transition-all duration-150 ease-[ease]',
-                isActive ? 'bg-[#E8F2F7] text-[#03375D]' : 'text-white/72 hover:bg-white/8 hover:text-white',
+                'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]',
+                isActive ? 'bg-white/[0.05] text-white' : 'text-white/72 hover:bg-white/8 hover:text-white',
               )
             }
           >
@@ -356,8 +356,8 @@ export default function MainLayout() {
             to="/horses"
             className={({ isActive }) =>
               classNames(
-                'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-semibold transition-all duration-150 ease-[ease]',
-                isActive ? 'bg-[#E8F2F7] text-[#03375D]' : 'text-white/72 hover:bg-white/8 hover:text-white',
+                'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]',
+                isActive ? 'bg-white/[0.05] text-white' : 'text-white/72 hover:bg-white/8 hover:text-white',
               )
             }
           >
@@ -368,8 +368,8 @@ export default function MainLayout() {
             to="/documents"
             className={({ isActive }) =>
               classNames(
-                'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-semibold transition-all duration-150 ease-[ease]',
-                isActive ? 'bg-[#E8F2F7] text-[#03375D]' : 'text-white/72 hover:bg-white/8 hover:text-white',
+                'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]',
+                isActive ? 'bg-white/[0.05] text-white' : 'text-white/72 hover:bg-white/8 hover:text-white',
               )
             }
           >
@@ -380,8 +380,8 @@ export default function MainLayout() {
             to="/sales"
             className={({ isActive }) =>
               classNames(
-                'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-semibold transition-all duration-150 ease-[ease]',
-                isActive ? 'bg-[#E8F2F7] text-[#03375D]' : 'text-white/72 hover:bg-white/8 hover:text-white',
+                'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]',
+                isActive ? 'bg-white/[0.05] text-white' : 'text-white/72 hover:bg-white/8 hover:text-white',
               )
             }
           >
@@ -389,7 +389,7 @@ export default function MainLayout() {
             <span>Sales</span>
           </NavLink>
           <button
-            className="flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-xl bg-[#066B90] text-[11px] font-semibold text-white transition-all duration-150 ease-[ease] hover:bg-[#055a7a] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md bg-[#202225] text-[11px] font-semibold text-white transition-all duration-150 ease-[ease] hover:bg-[#151719] disabled:cursor-not-allowed disabled:opacity-50"
             type="button"
             onClick={() => navigate('/horses?new=1')}
             disabled={!canCreateHorse}

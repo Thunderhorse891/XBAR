@@ -15,7 +15,6 @@ export default function RanchAssets() {
   const navigate = useNavigate();
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
   const updateAsset = useXbarStore((state) => state.updateAsset);
-  const currentRole = useXbarStore((state) => state.currentRole);
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageAssets = useCurrentRoleCapability('manageAssets');
   const assigned = ranchAssets.filter((asset) => asset.status === 'Assigned');
@@ -97,14 +96,8 @@ export default function RanchAssets() {
     <>
       <PageHeader
         eyebrow="Ranch toolkit"
-        title="Ranch toolkit and kits"
-        description="Tack, kits, equipment."
+        title="Ranch Toolkit"
       />
-      {!canManageAssets ? (
-        <div className="callout callout--warning">
-          <strong>{currentRole} access:</strong> Ranch asset updates are read-only for this role.
-        </div>
-      ) : null}
 
       <div className="metric-grid">
         <MetricCard label="Tracked assets" value={`${ranchAssets.length}`} detail="Tack, kits, stock" />
@@ -114,7 +107,7 @@ export default function RanchAssets() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Inventory" title="Asset register" description="Click rows. Right-click tools.">
+        <Panel eyebrow="Inventory" title="Register">
           {ranchAssets.length ? (
             <div className="table-shell">
               <table className="data-table">

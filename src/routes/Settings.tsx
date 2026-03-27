@@ -14,12 +14,10 @@ export default function Settings() {
   const updateWorkspaceProfile = useXbarStore((state) => state.updateWorkspaceProfile);
   const exportWorkspaceBackup = useXbarStore((state) => state.exportWorkspaceBackup);
   const importWorkspaceBackup = useXbarStore((state) => state.importWorkspaceBackup);
-  const currentRole = useXbarStore((state) => state.currentRole);
   const cloudStatus = useCloudStore((state) => state.status);
   const cloudSession = useCloudStore((state) => state.session);
   const lastCloudSyncAt = useCloudStore((state) => state.lastSyncAt);
   const cloudSyncState = useCloudStore((state) => state.syncState);
-  const cloudSyncMessage = useCloudStore((state) => state.syncMessage);
   const setLastCloudSyncAt = useCloudStore((state) => state.setLastSyncAt);
   const sendMagicLink = useCloudStore((state) => state.sendMagicLink);
   const signOutCloud = useCloudStore((state) => state.signOut);
@@ -170,27 +168,18 @@ export default function Settings() {
     <>
       <PageHeader
         eyebrow="Settings"
-        title="Workspace settings"
-        description="Profile, roles, backups."
+        title="Settings"
       />
-      {!canManageSettings || !canSyncCloud ? (
-        <div className="callout callout--warning">
-          <strong>{currentRole} access:</strong> Workspace administration is restricted by role.
-        </div>
-      ) : null}
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Cloud" title="Auth and workspace sync">
+        <Panel eyebrow="Cloud" title="Cloud">
           {isSupabaseConfigured() ? (
             cloudSession ? (
               <>
                 <div className="stack-list">
                   <div className="stack-item">
                     <div className="stack-item__top">
-                      <div>
-                        <div className="stack-item__title">{cloudSession.user.email ?? 'Signed-in user'}</div>
-                        <div className="stack-item__copy">Cloud auth is live for this workspace.</div>
-                      </div>
+                      <div className="stack-item__title">{cloudSession.user.email ?? 'Signed-in user'}</div>
                       <div className="status-inline">
                         <Pill tone="emerald">{cloudStatus === 'signed-in' ? 'Connected' : 'Ready'}</Pill>
                         <Pill tone={cloudSyncState === 'error' ? 'rose' : cloudSyncState === 'syncing' ? 'amber' : 'blue'}>
@@ -203,17 +192,14 @@ export default function Settings() {
                       <span>{lastCloudSyncAt ? `Last sync ${formatDateLabel(lastCloudSyncAt)}` : 'No cloud sync yet'}</span>
                       <span>{cloudSyncState === 'syncing' ? 'Saving changes' : cloudSyncState === 'error' ? 'Needs retry' : 'Watching workspace changes'}</span>
                     </div>
-                    <div className="detail-block subtle">
-                      {cloudSyncMessage || 'Signed-in workspaces autosave after changes and still support manual sync on demand.'}
-                    </div>
                   </div>
                 </div>
                 <div className="inline-actions">
                   <button className="button button--primary button--compact" type="button" onClick={handlePushCloud} disabled={!canSyncCloud || cloudBusy}>
-                    {cloudBusy ? 'Working...' : 'Push workspace to cloud'}
+                    {cloudBusy ? 'Working...' : 'Push cloud'}
                   </button>
                   <button className="button button--ghost button--compact" type="button" onClick={handlePullCloud} disabled={!canSyncCloud || cloudBusy}>
-                    Pull cloud workspace
+                    Pull cloud
                   </button>
                   <button className="button button--ghost button--compact" type="button" onClick={handleSignOutCloud} disabled={!canSyncCloud || cloudBusy}>
                     Sign out
@@ -228,7 +214,6 @@ export default function Settings() {
                     <input className="field-input" type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} disabled={!canSyncCloud} />
                   </label>
                 </div>
-                <div className="detail-block subtle">Magic-link auth enables real cloud sync and storage.</div>
                 <div className="inline-actions">
                   <button className="button button--primary button--compact" type="button" onClick={handleSendMagicLink} disabled={!canSyncCloud || cloudBusy || !authEmail.trim()}>
                     {cloudBusy ? 'Sending...' : 'Send magic link'}
@@ -244,7 +229,7 @@ export default function Settings() {
           )}
         </Panel>
 
-        <Panel eyebrow="Workspace profile" title="Business and default intake values">
+        <Panel eyebrow="Workspace profile" title="Profile">
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
               <span className="field-label">Business name</span>
@@ -281,20 +266,17 @@ export default function Settings() {
           </div>
           <div className="inline-actions">
             <button className="button button--primary button--compact" type="button" onClick={handleProfileSave} disabled={!canManageSettings}>
-              Save workspace profile
+              Save profile
             </button>
           </div>
         </Panel>
 
-        <Panel eyebrow="Role matrix" title="Workspace modes">
+        <Panel eyebrow="Role matrix" title="Roles">
           <div className="stack-list">
             {roleWorkspaces.map((workspace) => (
               <div key={workspace.role} className="stack-item">
                 <div className="stack-item__top">
-                  <div>
-                    <div className="stack-item__title">{workspace.role}</div>
-                    <div className="stack-item__copy">{workspace.summary}</div>
-                  </div>
+                  <div className="stack-item__title">{workspace.role}</div>
                   <Pill tone="blue">{workspace.primaryModules.length} modules</Pill>
                 </div>
                 <div className="token-row">
@@ -307,18 +289,18 @@ export default function Settings() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Deployment posture" title="Current runtime">
-          <div className="bullet-list">
-            <div className="bullet-list__item">This deployment is local-first with IndexedDB persistence.</div>
-            <div className="bullet-list__item">Cloud auth, autosave, and remote sync activate when Supabase env is configured.</div>
-            <div className="bullet-list__item">Documents are reviewed manually in the current workflow.</div>
-            <div className="bullet-list__item">Stripe payment links activate when billing env is configured.</div>
-            <div className="bullet-list__item">A full multi-user relational backend is still the next major milestone.</div>
+        <Panel eyebrow="Runtime" title="Runtime">
+          <div className="token-row">
+            <Pill tone="slate">Local-first</Pill>
+            <Pill tone="blue">Cloud optional</Pill>
+            <Pill tone="slate">Manual docs</Pill>
+            <Pill tone="slate">Payment links</Pill>
+            <Pill tone="amber">Backend next</Pill>
           </div>
         </Panel>
       </div>
 
-      <Panel eyebrow="Workspace backup" title="Export and restore data" description="Protect local records.">
+      <Panel eyebrow="Workspace backup" title="Backups">
         <input
           ref={importRef}
           type="file"
@@ -332,7 +314,6 @@ export default function Settings() {
               <div className="stack-item__title">Storage driver</div>
               <Pill tone="blue">{workspaceStorageDriverLabel}</Pill>
             </div>
-            <div className="stack-item__copy">Backups are essential until a shared backend is online.</div>
           </div>
         </div>
         <div className="inline-actions">

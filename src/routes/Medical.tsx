@@ -13,7 +13,6 @@ export default function Medical() {
   const documents = useXbarStore((state) => state.documents);
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
   const addMedicalEvent = useXbarStore((state) => state.addMedicalEvent);
-  const currentRole = useXbarStore((state) => state.currentRole);
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageMedical = useCurrentRoleCapability('manageMedical');
   const medicalWatch = horses.filter((horse) => horse.status === 'Medical Review');
@@ -52,14 +51,8 @@ export default function Medical() {
     <>
       <PageHeader
         eyebrow="Medical"
-        title="Medical control"
-        description="Watchlists, care, kits."
+        title="Medical"
       />
-      {!canManageMedical ? (
-        <div className="callout callout--warning">
-          <strong>{currentRole} access:</strong> Medical updates are read-only for this role.
-        </div>
-      ) : null}
 
       <div className="metric-grid">
         <MetricCard label="Watchlist" value={`${medicalWatch.length}`} detail="Horses needing care attention" tone="rose" />
@@ -69,7 +62,7 @@ export default function Medical() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Care watch" title="Horses needing visibility" description="Watchlist.">
+        <Panel eyebrow="Care watch" title="Watch">
           {medicalWatch.length ? (
             <div className="stack-list">
               {medicalWatch.map((horse) => (
@@ -102,7 +95,7 @@ export default function Medical() {
           )}
         </Panel>
 
-        <Panel eyebrow="Kit readiness" title="Travel and treatment assets" description="Kit status.">
+        <Panel eyebrow="Kit readiness" title="Kits">
           {kits.length ? (
             <div className="stack-list">
               {kits.map((asset) => (
@@ -127,7 +120,7 @@ export default function Medical() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Care action" title="Log a medical event" description="Add care history.">
+        <Panel eyebrow="Care action" title="Log care">
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
               <span className="field-label">Horse</span>
@@ -194,7 +187,7 @@ export default function Medical() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Next up" title="Care cadence" description="Recent events.">
+        <Panel eyebrow="Next up" title="Cadence">
           {medicalEvents.length ? (
             <div className="stack-list">
               {medicalEvents.slice(0, 5).map((event) => (
@@ -216,7 +209,7 @@ export default function Medical() {
         </Panel>
       </div>
 
-      <Panel eyebrow="Timeline" title="Recent care activity" description="Clinical history.">
+      <Panel eyebrow="Timeline" title="Timeline">
         {medicalEvents.length ? (
           <div className="table-shell">
             <table className="data-table">

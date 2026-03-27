@@ -10,7 +10,6 @@ const tiers: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Ente
 
 export default function Subscriptions() {
   const subscription = useXbarStore((state) => state.subscription);
-  const currentRole = useXbarStore((state) => state.currentRole);
   const canManageBilling = useCurrentRoleCapability('manageBilling');
   const revenuePlan = buildRevenueBlueprint(subscription);
 
@@ -18,26 +17,14 @@ export default function Subscriptions() {
     <>
       <PageHeader
         eyebrow="Subscriptions"
-        title="Contract"
-        description="Usage, limits, revenue."
+        title="Billing"
+        actions={
+          <>
+            <Pill tone={isBillingConfigured() ? 'emerald' : 'slate'}>{isBillingConfigured() ? 'Billing live' : 'Manual billing'}</Pill>
+            <Pill tone="slate">{subscription.tier}</Pill>
+          </>
+        }
       />
-
-      <div className={`callout ${isBillingConfigured() ? 'callout--info' : 'callout--warning'}`}>
-        {isBillingConfigured() ? (
-          <>
-            <strong>Stripe billing:</strong> Live payment links are configured for this workspace.
-          </>
-        ) : (
-          <>
-            <strong>Contract tracking:</strong> Billing is managed off-platform for this workspace.
-          </>
-        )}
-      </div>
-      {!canManageBilling ? (
-        <div className="callout callout--warning">
-          <strong>{currentRole} access:</strong> Billing actions are restricted to admin.
-        </div>
-      ) : null}
 
       <div className="metric-grid">
         <MetricCard label="Current tier" value={subscription.tier} detail={`${subscription.billingState} · renews ${formatDateLabel(subscription.renewalDate)}`} />
@@ -47,7 +34,7 @@ export default function Subscriptions() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Billing" title="Commercial posture">
+        <Panel eyebrow="Billing" title="Posture">
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__top">
@@ -73,7 +60,7 @@ export default function Subscriptions() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Usage" title="Seats, storage, access">
+        <Panel eyebrow="Usage" title="Usage">
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__top">
@@ -108,7 +95,7 @@ export default function Subscriptions() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--secondary">
-        <Panel eyebrow="Revenue" title="Path to $10M ARR" description="Scenarios.">
+        <Panel eyebrow="Revenue" title="Path to $10M">
           <div className="stack-list">
             {revenuePlan.scenarios.map((scenario) => (
               <div key={scenario.tier} className="stack-item">
@@ -121,13 +108,12 @@ export default function Subscriptions() {
                     {scenario.customersNeeded} customers
                   </Pill>
                 </div>
-                <div className="stack-item__copy">{scenario.summary}</div>
               </div>
             ))}
           </div>
         </Panel>
 
-        <Panel eyebrow="Pricing" title="Why teams pay more" description="Drivers.">
+        <Panel eyebrow="Pricing" title="Drivers">
           <div className="bullet-list">
             {revenuePlan.motions.map((motion) => (
               <div key={motion} className="bullet-list__item">
@@ -135,13 +121,10 @@ export default function Subscriptions() {
               </div>
             ))}
           </div>
-          <div className="detail-block subtle">
-            Trust, ownership clarity, buyer-safe profiles, and mobile execution.
-          </div>
         </Panel>
       </div>
 
-      <Panel eyebrow="Packaging" title="Product tiers" description="Read-only tiers.">
+      <Panel eyebrow="Packaging" title="Tiers">
         <div className="detail-grid">
           {tiers.map((tier) => {
             const config = subscriptionTierConfig[tier];
@@ -154,8 +137,11 @@ export default function Subscriptions() {
                     {current ? 'Current' : 'Available'}
                   </Pill>
                 </div>
-                <div className="stack-item__copy">
-                  {formatCurrency(config.monthlyRate)}/mo · {config.limits.seatLimit} seats · {config.limits.storageLimitGb} GB storage · {config.limits.sharedAccessSeatLimit} shared-access seats
+                <div className="inline-metrics">
+                  <span>{formatCurrency(config.monthlyRate)}/mo</span>
+                  <span>{config.limits.seatLimit} seats</span>
+                  <span>{config.limits.storageLimitGb} GB</span>
+                  <span>{config.limits.sharedAccessSeatLimit} shared</span>
                 </div>
                 <div className="token-row">
                   {config.featureFlags.map((flag) => (
@@ -164,7 +150,6 @@ export default function Subscriptions() {
                     </Pill>
                   ))}
                 </div>
-                <div className="stack-item__copy">{current ? 'This is the active contract on this workspace.' : 'Package reference only.'}</div>
                 <div className="inline-actions">
                   {current && stripeConfig.billingPortalUrl && canManageBilling ? (
                     <a className="button button--ghost button--compact" href={stripeConfig.billingPortalUrl} target="_blank" rel="noreferrer">

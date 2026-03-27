@@ -51,8 +51,7 @@ export default function SharedAccess() {
     <>
       <PageHeader
         eyebrow="Shared access"
-        title="Shared Links"
-        description="Links, saves, inquiries."
+        title="Shared Access"
       />
 
       <div className="metric-grid">
@@ -63,26 +62,24 @@ export default function SharedAccess() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Access" title="Owner delivery" description="Direct links.">
+        <Panel eyebrow="Access" title="Links">
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__top">
-                <div className="stack-item__title">Access mode</div>
+                <div className="stack-item__title">Mode</div>
                 <Pill tone="blue">Shared links</Pill>
               </div>
-              <div className="stack-item__copy">Direct record access.</div>
             </div>
             <div className="stack-item">
               <div className="stack-item__top">
-                <div className="stack-item__title">Inquiry routing</div>
+                <div className="stack-item__title">Inquiries</div>
                 <Pill tone="amber">{sharedAccess.openInquiries} open</Pill>
               </div>
-              <div className="stack-item__copy">Handled in the workspace.</div>
             </div>
           </div>
         </Panel>
 
-        <Panel eyebrow="Shared records" title="Visibility" description="Saved horses.">
+        <Panel eyebrow="Shared records" title="Saved horses">
           {sharedHorses.length ? (
             <div className="stack-list">
               {sharedHorses.map((horse) => {

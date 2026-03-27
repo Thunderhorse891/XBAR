@@ -40,10 +40,6 @@ export default function BuyerProfile() {
           Back to horse workspace
         </Link>
 
-        <div className={`callout${packet.buyerSafe ? '' : ' callout--warning'}`}>
-          {packet.buyerProfileNote}
-        </div>
-
         <section className="buyer-hero">
           <div className="buyer-hero__media">
             <img src={horse.profileImage} alt="" className="buyer-hero__image" />
@@ -51,7 +47,6 @@ export default function BuyerProfile() {
           <div className="buyer-hero__copy">
             <div className="eyebrow">Buyer profile</div>
             <h1 className="page-title">{horse.name}</h1>
-            <p className="page-description">{horse.summary}</p>
             <div className="status-inline">
               <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
               <Pill tone={packet.tone}>{formatPercent(packet.score)} packet trust</Pill>
@@ -87,7 +82,7 @@ export default function BuyerProfile() {
         </div>
 
         <div className="detail-grid">
-          <Panel eyebrow="Packet trust" title="Buyer-safe coverage">
+          <Panel eyebrow="Packet trust" title="Coverage">
             <div className="stack-list">
               {packet.requirements.map((requirement) => (
                 <div key={requirement.key} className="stack-item">
@@ -99,14 +94,9 @@ export default function BuyerProfile() {
                 </div>
               ))}
             </div>
-            <div className="inline-actions">
-              <div className="detail-block subtle">
-                Buyer questions still route through the sales desk.
-              </div>
-            </div>
           </Panel>
 
-          <Panel eyebrow="Horse profile" title="Sale-facing summary">
+          <Panel eyebrow="Horse profile" title="Profile">
             <div className="key-grid key-grid--wide">
               <KeyValue label="Registry" value={`${horse.registry} · ${horse.registrationNumber}`} />
               <KeyValue label="Breed / sex" value={`${horse.breed} · ${horse.sex}`} />
@@ -126,7 +116,7 @@ export default function BuyerProfile() {
         </div>
 
         <div className="detail-grid">
-          <Panel eyebrow="Verified support" title="Approved packet documents">
+          <Panel eyebrow="Verified support" title="Approved docs">
             <div className="stack-list">
               {visibleDocuments.length ? (
                 visibleDocuments.map(({ document, trust }) => (
@@ -149,7 +139,7 @@ export default function BuyerProfile() {
             </div>
           </Panel>
 
-          <Panel eyebrow="Record highlights" title="Profile facts">
+          <Panel eyebrow="Record highlights" title="Facts">
             <div className="token-row">
               {horse.documentFacts.length ? (
                 horse.documentFacts.map((fact) => (

@@ -57,7 +57,6 @@ export default function Horses() {
   const toggleSavedHorse = useXbarStore((state) => state.toggleSavedHorse);
   const addHorse = useXbarStore((state) => state.addHorse);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
-  const currentRole = useXbarStore((state) => state.currentRole);
   const pushToast = useUiStore((state) => state.pushToast);
   const canCreateHorse = useCurrentRoleCapability('createHorse');
   const canManageSharedAccess = useCurrentRoleCapability('manageSharedAccess');
@@ -184,8 +183,7 @@ export default function Horses() {
     <>
       <PageHeader
         eyebrow="Horse ledger"
-        title="Horse Ledger"
-        description="Records, trust, location."
+        title="Horses"
         actions={
           <div className="page-actions">
             <div className="view-toggle">
@@ -201,21 +199,11 @@ export default function Horses() {
               ))}
             </div>
             <button className="button button--primary button--compact" type="button" onClick={() => setSearchParams({ new: '1' })} disabled={!canCreateHorse}>
-              New horse
+              New
             </button>
           </div>
         }
       />
-      {!canCreateHorse || !canManageSharedAccess ? (
-        <div className="callout callout--warning">
-          <strong>{currentRole} access:</strong>{' '}
-          {!canCreateHorse && !canManageSharedAccess
-            ? 'This role is read-only in the horse ledger.'
-            : !canCreateHorse
-              ? 'This role cannot create horse records.'
-              : 'This role cannot change shared-access exposure from the horse ledger.'}
-        </div>
-      ) : null}
 
       {createOpen ? (
         <section className="panel">
@@ -332,7 +320,7 @@ export default function Horses() {
               }
               disabled={!canCreateHorse}
             >
-              Apply workspace defaults
+              Use defaults
             </button>
             <button className="button button--primary" type="button" onClick={handleCreateHorse} disabled={!canCreateHorse || !form.name.trim() || !form.barnName.trim() || !form.owner.trim() || !form.ownerEntity.trim() || !form.barn.trim() || !form.pasture.trim()}>
               Create horse
@@ -344,8 +332,7 @@ export default function Horses() {
       <section className="ledger-stage">
         <div className="ledger-stage__copy">
           <div className="eyebrow">Active ledger</div>
-          <h2 className="ledger-stage__title">Clean horse records.</h2>
-          <p className="ledger-stage__description">Open records. Right-click anything. Keep the ledger tight.</p>
+          <h2 className="ledger-stage__title">Clean records.</h2>
         </div>
         <div className="ledger-stage__stats">
           <div className="ledger-stat">
@@ -401,7 +388,7 @@ export default function Horses() {
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           className="field-input"
-          placeholder="Search by horse, AQHA, owner, or barn"
+          placeholder="Search horse, owner, barn"
         />
       </div>
 
@@ -514,7 +501,7 @@ export default function Horses() {
                         }}
                         disabled={!canManageSharedAccess}
                       >
-                        {saved ? 'Remove from shared' : 'Add to shared'}
+                        {saved ? 'Unshare' : 'Share'}
                       </button>
                       <Link
                         to={`/horses/${horse.id}`}

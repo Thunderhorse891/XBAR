@@ -31,6 +31,7 @@ export function Panel({
   eyebrow,
   title,
   description,
+  showDescription = false,
   meta,
   action,
   children,
@@ -40,6 +41,7 @@ export function Panel({
   eyebrow?: string;
   title: string;
   description?: string;
+  showDescription?: boolean;
   meta?: ReactNode;
   action?: ReactNode;
   children: ReactNode;
@@ -55,7 +57,7 @@ export function Panel({
             <h2 className="panel__title">{title}</h2>
             {meta ? <div className="panel__meta">{meta}</div> : null}
           </div>
-          {description ? <p className="panel__description">{description}</p> : null}
+          {showDescription && description ? <p className="panel__description">{description}</p> : null}
         </div>
         {action ? <div className="panel__action">{action}</div> : null}
       </div>
@@ -68,6 +70,7 @@ export function MetricCard({
   label,
   value,
   detail,
+  showDetail = false,
   tone = 'blue',
   className = '',
   title,
@@ -77,6 +80,7 @@ export function MetricCard({
   label: string;
   value: string;
   detail?: string;
+  showDetail?: boolean;
   tone?: Tone;
   className?: string;
   title?: string;
@@ -92,7 +96,7 @@ export function MetricCard({
     >
       <div className="metric-card__label">{label}</div>
       <div className="metric-card__value">{value}</div>
-      {detail ? <div className="metric-card__detail">{detail}</div> : null}
+      {showDetail && detail ? <div className="metric-card__detail">{detail}</div> : null}
     </div>
   );
 }

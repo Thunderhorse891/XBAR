@@ -12,7 +12,6 @@ export default function Breeding() {
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const addBreedingEvent = useXbarStore((state) => state.addBreedingEvent);
-  const currentRole = useXbarStore((state) => state.currentRole);
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageBreeding = useCurrentRoleCapability('manageBreeding');
   const breedingHorses = horses.filter((horse) => horse.segment === 'Stud' || horse.sex === 'Mare');
@@ -43,14 +42,8 @@ export default function Breeding() {
     <>
       <PageHeader
         eyebrow="Breeding"
-        title="Breeding program"
-        description="Studs, mares, timing."
+        title="Breeding"
       />
-      {!canManageBreeding ? (
-        <div className="callout callout--warning">
-          <strong>{currentRole} access:</strong> Breeding program updates are read-only for this role.
-        </div>
-      ) : null}
 
       <div className="metric-grid">
         <MetricCard label="Program horses" value={`${breedingHorses.length}`} detail="Mares and studs tracked in active breeding context" />
@@ -60,7 +53,7 @@ export default function Breeding() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Program board" title="Stud and mare pipeline" description="Program horses.">
+        <Panel eyebrow="Program board" title="Board">
           {breedingHorses.length ? (
             <div className="stack-list">
               {breedingHorses.map((horse) => (
@@ -95,7 +88,7 @@ export default function Breeding() {
           )}
         </Panel>
 
-        <Panel eyebrow="Milestones" title="Program timing" description="Recent events.">
+        <Panel eyebrow="Milestones" title="Milestones">
           {breedingHorses.some((horse) => horse.breedingTimeline.length) ? (
             <div className="stack-list">
               {breedingHorses.flatMap((horse) =>
