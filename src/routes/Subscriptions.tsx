@@ -1,5 +1,6 @@
 import { MetricCard, PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
 import { formatCurrency, formatDateLabel } from '@/lib/format';
+import { getStripePaymentLink, isBillingConfigured, stripeConfig } from '@/lib/platformConfig';
 import { buildRevenueBlueprint } from '@/lib/xbarGrowth';
 import { subscriptionTierConfig } from '@/lib/xbarRuntime';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -19,8 +20,16 @@ export default function Subscriptions() {
         description="Usage, limits, revenue."
       />
 
-      <div className="callout callout--warning">
-        <strong>Contract tracking:</strong> Billing is managed off-platform for this workspace.
+      <div className={`callout ${isBillingConfigured() ? 'callout--info' : 'callout--warning'}`}>
+        {isBillingConfigured() ? (
+          <>
+            <strong>Stripe billing:</strong> Live payment links are configured for this workspace.
+          </>
+        ) : (
+          <>
+            <strong>Contract tracking:</strong> Billing is managed off-platform for this workspace.
+          </>
+        )}
       </div>
 
       <div className="metric-grid">
@@ -149,6 +158,18 @@ export default function Subscriptions() {
                   ))}
                 </div>
                 <div className="stack-item__copy">{current ? 'This is the active contract on this workspace.' : 'Package reference only.'}</div>
+                <div className="inline-actions">
+                  {current && stripeConfig.billingPortalUrl ? (
+                    <a className="button button--ghost button--compact" href={stripeConfig.billingPortalUrl} target="_blank" rel="noreferrer">
+                      Manage billing
+                    </a>
+                  ) : null}
+                  {!current && getStripePaymentLink(tier) ? (
+                    <a className="button button--primary button--compact" href={getStripePaymentLink(tier)} target="_blank" rel="noreferrer">
+                      Start checkout
+                    </a>
+                  ) : null}
+                </div>
               </div>
             );
           })}

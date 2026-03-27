@@ -55,6 +55,7 @@ export interface GalleryAsset {
   label: string;
   kind: 'Hero' | 'Conformation' | 'Sale Still' | 'Pedigree' | 'Document Cover';
   url: string;
+  storagePath?: string;
   status: 'Approved' | 'Draft' | 'Pending';
 }
 
@@ -202,6 +203,11 @@ export interface DocumentRecord {
   extractedTextPreview: string;
   summary: string;
   entities: DocumentEntities;
+  fileUrl?: string;
+  storagePath?: string;
+  fileName?: string;
+  mimeType?: string;
+  fileSizeBytes?: number;
 }
 
 export interface IntakeBatch {

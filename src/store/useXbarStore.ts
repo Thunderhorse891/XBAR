@@ -22,6 +22,7 @@ import {
   readFileAsDataUrl,
   todayStamp,
 } from '@/lib/xbarRuntime';
+import { uploadDocumentAssetToCloud, uploadMediaAssetToCloud } from '@/lib/cloudWorkspace';
 import { workspaceStateStorage } from '@/lib/workspaceStorage';
 import {
   createOwnershipRecord,
@@ -544,21 +545,30 @@ export const useXbarStore = create<XbarStore>()(
         try {
           const selectedHorse = state.horses.find((horse) => horse.id === horseId);
           const batchId = createId('batch');
-          const documents = (await Promise.all(
-            fileList.map((file) =>
-              buildDocumentRecord({
+          const documents = await Promise.all(
+            fileList.map(async (file) => {
+              const uploadedAsset = await uploadDocumentAssetToCloud({
+                file,
+                horseId: selectedHorse?.id ?? horseId,
+              });
+              const document = await buildDocumentRecord({
                 file,
                 uploadedBy,
                 source,
                 selectedHorse,
                 horses: get().horses,
                 existingDocuments: get().documents,
-              }),
-            ),
-          )).map((document) => ({
-            ...document,
-            batchId,
-          }));
+              });
+              return {
+                ...document,
+                batchId,
+                fileName: file.name,
+                mimeType: file.type || undefined,
+                fileSizeBytes: file.size,
+                storagePath: uploadedAsset?.storagePath,
+              };
+            }),
+          );
 
           const batch: IntakeBatch = {
             id: batchId,
@@ -696,13 +706,17 @@ export const useXbarStore = create<XbarStore>()(
 
         try {
           const assets = await Promise.all(
-            fileList.map(async (file) => ({
-              id: createId('media'),
-              label: file.name.replace(/\.[^.]+$/, ''),
-              kind: kind ?? guessGalleryKind(file.name),
-              url: await readFileAsDataUrl(file),
-              status: 'Approved' as const,
-            })),
+            fileList.map(async (file) => {
+              const uploadedAsset = await uploadMediaAssetToCloud({ file, horseId });
+              return {
+                id: createId('media'),
+                label: file.name.replace(/\.[^.]+$/, ''),
+                kind: kind ?? guessGalleryKind(file.name),
+                url: uploadedAsset?.publicUrl ?? await readFileAsDataUrl(file),
+                storagePath: uploadedAsset?.storagePath,
+                status: 'Approved' as const,
+              };
+            }),
           );
 
           set((current) => ({

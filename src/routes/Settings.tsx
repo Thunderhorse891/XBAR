@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { PageHeader, Panel, Pill } from '@/components/app-ui';
+import { formatDateLabel } from '@/lib/format';
+import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
+import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { workspaceStorageDriverLabel } from '@/lib/workspaceStorage';
+import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 
@@ -10,9 +14,17 @@ export default function Settings() {
   const updateWorkspaceProfile = useXbarStore((state) => state.updateWorkspaceProfile);
   const exportWorkspaceBackup = useXbarStore((state) => state.exportWorkspaceBackup);
   const importWorkspaceBackup = useXbarStore((state) => state.importWorkspaceBackup);
+  const cloudStatus = useCloudStore((state) => state.status);
+  const cloudSession = useCloudStore((state) => state.session);
+  const lastCloudSyncAt = useCloudStore((state) => state.lastSyncAt);
+  const setLastCloudSyncAt = useCloudStore((state) => state.setLastSyncAt);
+  const sendMagicLink = useCloudStore((state) => state.sendMagicLink);
+  const signOutCloud = useCloudStore((state) => state.signOut);
   const pushToast = useUiStore((state) => state.pushToast);
   const importRef = useRef<HTMLInputElement | null>(null);
   const [profileDraft, setProfileDraft] = useState(workspaceProfile);
+  const [authEmail, setAuthEmail] = useState('');
+  const [cloudBusy, setCloudBusy] = useState(false);
 
   useEffect(() => {
     setProfileDraft(workspaceProfile);
@@ -88,6 +100,67 @@ export default function Settings() {
     });
   };
 
+  const handleSendMagicLink = async () => {
+    setCloudBusy(true);
+    const result = await sendMagicLink(authEmail);
+    pushToast({
+      title: result.ok ? 'Magic link sent' : 'Sign-in blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
+    setCloudBusy(false);
+  };
+
+  const handlePushCloud = async () => {
+    setCloudBusy(true);
+    const result = await saveWorkspaceBackupToCloud(exportWorkspaceBackup());
+    pushToast({
+      title: result.ok ? 'Cloud sync complete' : 'Cloud sync failed',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
+    if (result.ok && result.updatedAt) {
+      setLastCloudSyncAt(result.updatedAt);
+    }
+    setCloudBusy(false);
+  };
+
+  const handlePullCloud = async () => {
+    setCloudBusy(true);
+    const remote = await loadWorkspaceBackupFromCloud();
+    if (!remote.ok) {
+      pushToast({
+        title: 'Cloud pull failed',
+        message: remote.message,
+        tone: 'error',
+      });
+      setCloudBusy(false);
+      return;
+    }
+
+    const result = importWorkspaceBackup(remote.backup);
+    pushToast({
+      title: result.ok ? 'Cloud workspace loaded' : 'Cloud import blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
+    if (result.ok && remote.updatedAt) {
+      setLastCloudSyncAt(remote.updatedAt);
+    }
+    setCloudBusy(false);
+  };
+
+  const handleSignOutCloud = async () => {
+    setCloudBusy(true);
+    const result = await signOutCloud();
+    pushToast({
+      title: result.ok ? 'Signed out' : 'Sign-out failed',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
+    setCloudBusy(false);
+  };
+
   return (
     <>
       <PageHeader
@@ -97,6 +170,61 @@ export default function Settings() {
       />
 
       <div className="dashboard-grid dashboard-grid--primary">
+        <Panel eyebrow="Cloud" title="Auth and workspace sync">
+          {isSupabaseConfigured() ? (
+            cloudSession ? (
+              <>
+                <div className="stack-list">
+                  <div className="stack-item">
+                    <div className="stack-item__top">
+                      <div>
+                        <div className="stack-item__title">{cloudSession.user.email ?? 'Signed-in user'}</div>
+                        <div className="stack-item__copy">Cloud auth is live for this workspace.</div>
+                      </div>
+                      <Pill tone="emerald">{cloudStatus === 'signed-in' ? 'Connected' : 'Ready'}</Pill>
+                    </div>
+                    <div className="inline-metrics">
+                      <span>User ID {cloudSession.user.id.slice(0, 8)}</span>
+                      <span>{lastCloudSyncAt ? `Last sync ${formatDateLabel(lastCloudSyncAt)}` : 'No cloud sync yet'}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="inline-actions">
+                  <button className="button button--primary button--compact" type="button" onClick={handlePushCloud} disabled={cloudBusy}>
+                    {cloudBusy ? 'Working...' : 'Push workspace to cloud'}
+                  </button>
+                  <button className="button button--ghost button--compact" type="button" onClick={handlePullCloud} disabled={cloudBusy}>
+                    Pull cloud workspace
+                  </button>
+                  <button className="button button--ghost button--compact" type="button" onClick={handleSignOutCloud} disabled={cloudBusy}>
+                    Sign out
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="form-grid form-grid--tight">
+                  <label className="field-stack">
+                    <span className="field-label">Email</span>
+                    <input className="field-input" type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} />
+                  </label>
+                </div>
+                <div className="detail-block subtle">Magic-link auth enables real cloud sync and storage.</div>
+                <div className="inline-actions">
+                  <button className="button button--primary button--compact" type="button" onClick={handleSendMagicLink} disabled={cloudBusy || !authEmail.trim()}>
+                    {cloudBusy ? 'Sending...' : 'Send magic link'}
+                  </button>
+                </div>
+              </>
+            )
+          ) : (
+            <div className="bullet-list">
+              <div className="bullet-list__item">Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to enable cloud auth and sync.</div>
+              <div className="bullet-list__item">This keeps the current local-first flow working until cloud credentials are added.</div>
+            </div>
+          )}
+        </Panel>
+
         <Panel eyebrow="Workspace profile" title="Business and default intake values">
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
@@ -163,10 +291,10 @@ export default function Settings() {
         <Panel eyebrow="Deployment posture" title="Current runtime">
           <div className="bullet-list">
             <div className="bullet-list__item">This deployment is local-first with IndexedDB persistence.</div>
-            <div className="bullet-list__item">Shared access works through direct links and saved records.</div>
+            <div className="bullet-list__item">Cloud auth and remote sync activate when Supabase env is configured.</div>
             <div className="bullet-list__item">Documents are reviewed manually in the current workflow.</div>
-            <div className="bullet-list__item">Contracts are tracked here even when billing is handled separately.</div>
-            <div className="bullet-list__item">A multi-user backend is still the next major production milestone.</div>
+            <div className="bullet-list__item">Stripe payment links activate when billing env is configured.</div>
+            <div className="bullet-list__item">A full multi-user relational backend is still the next major milestone.</div>
           </div>
         </Panel>
       </div>

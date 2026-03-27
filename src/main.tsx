@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { CloudBootstrap } from './components/CloudBootstrap';
 import ErrorBoundary from './components/ErrorBoundary';
 import './index.css';
 
@@ -10,6 +11,7 @@ if (!rootElement) throw new Error("Root element not found.");
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <ErrorBoundary>
+      <CloudBootstrap />
       <App />
     </ErrorBoundary>
   </React.StrictMode>

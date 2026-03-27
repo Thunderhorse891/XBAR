@@ -48,11 +48,40 @@ node "C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js" run tauri dev
 - **Frontend:** React 18, TypeScript, Zustand, React Router
 - **Desktop:** Tauri v1 (Rust)
 - **Persistence:** IndexedDB primary, localStorage fallback, local JSON backup/restore
+- **Cloud Ready:** Supabase auth, storage, and workspace sync when env is configured
+- **Billing Ready:** Stripe payment links when env is configured
 - **Build:** Vite 5
+
+## Production Environment
+
+Copy `.env.example` to `.env.local` and set the values you plan to use in production.
+
+Required for cloud auth and sync:
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+
+Optional but recommended:
+
+- `VITE_SUPABASE_WORKSPACE_TABLE`
+- `VITE_SUPABASE_MEDIA_BUCKET`
+- `VITE_SUPABASE_DOCUMENT_BUCKET`
+- `VITE_STRIPE_PAYMENT_LINK_STARTER`
+- `VITE_STRIPE_PAYMENT_LINK_PROFESSIONAL`
+- `VITE_STRIPE_PAYMENT_LINK_RANCH_OPS`
+- `VITE_STRIPE_PAYMENT_LINK_ENTERPRISE`
+- `VITE_STRIPE_BILLING_PORTAL_URL`
+
+Supabase SQL bootstrap is included in:
+
+- `supabase/production-schema.sql`
 
 ## Current Product State
 
 - Local-first workspace with IndexedDB persistence and manual backup import/export
+- Real cloud auth and workspace sync are available when Supabase env is configured
+- Real media/document cloud storage is available when Supabase env is configured
+- Real Stripe checkout entry points are available when Stripe payment-link env is configured
 - Manual document intake and review queue
 - Shared-link access for buyer and owner views
-- Billing, external auth, and shared backend services are not connected yet
+- Full multi-user relational workflows and automated billing reconciliation still need backend completion
