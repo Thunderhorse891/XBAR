@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { PageHeader, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
-import { isBillingConfigured, isFacebookSharingConfigured, isSupabaseConfigured } from '@/lib/platformConfig';
+import { isBillingConfigured, isFacebookSharingConfigured, isRelationalCloudMirrorEnabled, isSupabaseConfigured } from '@/lib/platformConfig';
 import { workspaceStorageDriverLabel } from '@/lib/workspaceStorage';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -338,6 +338,9 @@ export default function Settings() {
           <div className="token-row">
             <Pill tone={isSupabaseConfigured() ? 'blue' : 'slate'}>{isSupabaseConfigured() ? 'Cloud auth on' : 'Cloud auth off'}</Pill>
             <Pill tone={cloudSession ? 'emerald' : 'slate'}>{cloudSession ? 'Cloud session live' : 'Local session'}</Pill>
+            <Pill tone={isRelationalCloudMirrorEnabled() ? 'emerald' : 'slate'}>
+              {isRelationalCloudMirrorEnabled() ? 'Relational mirror on' : 'Snapshot-only sync'}
+            </Pill>
             <Pill tone={isBillingConfigured() ? 'emerald' : 'slate'}>{isBillingConfigured() ? 'Stripe links live' : 'Stripe links off'}</Pill>
             <Pill tone={isFacebookSharingConfigured() ? 'emerald' : 'slate'}>{isFacebookSharingConfigured() ? 'Facebook share live' : 'Facebook share off'}</Pill>
             <Pill tone="blue">{workspaceStorageDriverLabel}</Pill>

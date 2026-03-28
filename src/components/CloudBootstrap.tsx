@@ -60,7 +60,7 @@ export function CloudBootstrap() {
 
         if (result.ok && result.updatedAt) {
           setLastSyncAt(result.updatedAt);
-          setSyncState('idle', 'Cloud autosave complete.');
+          setSyncState('idle', result.message);
           return;
         }
 

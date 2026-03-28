@@ -12,6 +12,7 @@ export const supabaseConfig = {
   workspaceTable: readEnv(env.VITE_SUPABASE_WORKSPACE_TABLE) || 'workspace_snapshots',
   mediaBucket: readEnv(env.VITE_SUPABASE_MEDIA_BUCKET) || 'horse-media',
   documentBucket: readEnv(env.VITE_SUPABASE_DOCUMENT_BUCKET) || 'horse-documents',
+  relationalMirrorEnabled: ['1', 'true', 'yes', 'on'].includes(readEnv(env.VITE_SUPABASE_RELATIONAL_MIRROR).toLowerCase()),
 };
 
 export const facebookConfig = {
@@ -31,6 +32,10 @@ export const stripeConfig = {
 
 export function isSupabaseConfigured() {
   return Boolean(supabaseConfig.url && supabaseConfig.anonKey);
+}
+
+export function isRelationalCloudMirrorEnabled() {
+  return isSupabaseConfigured() && supabaseConfig.relationalMirrorEnabled;
 }
 
 export function isBillingConfigured() {
