@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
-import { formatDateLabel, formatPercent } from '@/lib/format';
+import { formatDateLabel } from '@/lib/format';
 import { buildCommandCenter, buildFieldTools } from '@/lib/xbarGrowth';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
@@ -125,12 +125,11 @@ export default function Dashboard() {
   return (
     <>
       <PageHeader
-        eyebrow="Workspace"
-        title="Ops Board"
+        title="Overview"
         actions={
           <>
             <Link to="/horses" className="button button--ghost button--compact">
-              Ledger
+              Horses
             </Link>
             <Link to="/documents" className="button button--primary button--compact">
               Review
@@ -141,8 +140,7 @@ export default function Dashboard() {
 
       <section className="dashboard-stage">
         <div className="dashboard-stage__hero">
-          <div className="eyebrow">Live queue</div>
-          <h2 className="dashboard-stage__title">Move the work.</h2>
+          <h2 className="dashboard-stage__title">Private workspace</h2>
           <div className="inline-actions">
             <Link to="/documents" className="button button--primary button--compact">
               Review
@@ -153,10 +151,8 @@ export default function Dashboard() {
           </div>
           <div className="dashboard-stage__chips">
             <Pill tone="blue">{roleWorkspace.label}</Pill>
-            <Pill tone="emerald">{buyerReadyProfiles.length} buyer-safe</Pill>
-            <Pill tone={ownershipAttention.length ? 'amber' : 'emerald'}>
-              {ownershipAttention.length ? `${ownershipAttention.length} transfer blockers` : 'Transfers clear'}
-            </Pill>
+            <Pill tone="emerald">{buyerReadyProfiles.length} share-ready</Pill>
+            <Pill tone={ownershipAttention.length ? 'amber' : 'slate'}>{ownershipAttention.length ? `${ownershipAttention.length} blockers` : 'Clear'}</Pill>
           </div>
         </div>
 
@@ -211,7 +207,7 @@ export default function Dashboard() {
       </section>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Priority" title="Now">
+        <Panel title="Priority">
           {commandCenter.length ? (
             <div className="stack-list">
               {commandCenter.map((item) => (
@@ -241,7 +237,7 @@ export default function Dashboard() {
           )}
         </Panel>
 
-        <Panel eyebrow="Horse watch" title="At risk">
+        <Panel title="Watch">
           {attentionHorses.length ? (
             <div className="stack-list">
               {attentionHorses.map((horse) => (
@@ -263,8 +259,6 @@ export default function Dashboard() {
                   <div className="inline-metrics">
                       <span>{horse.segment}</span>
                       <span>{horse.location.barn}</span>
-                      <span>Trust {formatPercent(horse.readiness.score)}</span>
-                      <span>{horse.documents.length} docs</span>
                       <span>{horse.alerts.length} alerts</span>
                     </div>
                   <ProgressBar value={horse.readiness.score} tone={horse.readiness.score >= 85 ? 'emerald' : 'amber'} />
@@ -278,7 +272,7 @@ export default function Dashboard() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--secondary">
-        <Panel eyebrow="Documents" title="Intake">
+        <Panel title="Intake">
           {intakeBatches.length ? (
             <div className="stack-list">
               {intakeBatches.slice(0, 5).map((batch) => (
@@ -290,11 +284,9 @@ export default function Dashboard() {
                     </Pill>
                   </div>
                     <div className="inline-metrics">
-                      <span>{batch.source}</span>
                       <span>{formatDateLabel(batch.receivedAt)}</span>
                       <span>{batch.processedCount}/{batch.fileCount} logged</span>
-                      <span>{batch.matchedCount} matched</span>
-                      <span>{batch.needsReviewCount} in review</span>
+                      <span>{batch.needsReviewCount} review</span>
                     </div>
                 </Link>
               ))}
@@ -304,7 +296,7 @@ export default function Dashboard() {
           )}
         </Panel>
 
-        <Panel eyebrow="Ownership" title="Transfers">
+        <Panel title="Transfers">
           {ownershipRecords.length ? (
             <div className="stack-list">
               {ownershipRecords.slice(0, 5).map((record) => {
@@ -325,10 +317,9 @@ export default function Dashboard() {
                       <Pill tone={record.transferStatus === 'Clear' ? 'emerald' : 'amber'}>{record.transferStatus}</Pill>
                     </div>
                     <div className="inline-metrics">
-                      <span>{record.legalOwner}</span>
-                      <span>{record.pendingDocuments.length} pending docs</span>
+                      <span>{record.pendingDocuments.length} pending</span>
                       <span>Due {formatDateLabel(record.complianceDeadline)}</span>
-                      <span>Confidence {record.confidence}%</span>
+                      <span>{record.confidence}% confidence</span>
                     </div>
                   </button>
                 );
@@ -341,7 +332,7 @@ export default function Dashboard() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--secondary">
-        <Panel eyebrow="Leads" title="Buyer flow">
+        <Panel title="Leads">
           {salesLeads.length ? (
             <div className="stack-list">
               {salesLeads.slice(0, 5).map((lead) => {
@@ -364,11 +355,9 @@ export default function Dashboard() {
                       </Pill>
                     </div>
                     <div className="inline-metrics">
-                      <span>{lead.channel}</span>
                       <span>{horse?.name ?? 'Unassigned'}</span>
-                      <span>Last touch {formatDateLabel(lead.lastTouch)}</span>
-                      <span>{lead.savedListing ? 'Saved' : 'Not saved'}</span>
-                      <span>{lead.shareReady ? 'Share ready' : 'Share pending'}</span>
+                      <span>{lead.channel}</span>
+                      <span>{formatDateLabel(lead.lastTouch)}</span>
                     </div>
                   </button>
                 );
@@ -381,7 +370,7 @@ export default function Dashboard() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--secondary">
-        <Panel eyebrow="Shortcuts" title="Fast jumps">
+        <Panel title="Jump">
           <div className="stack-list">
             {fieldTools.map((tool) => (
               <Link
@@ -402,7 +391,7 @@ export default function Dashboard() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Role" title={roleWorkspace.label} meta={<Pill tone="slate">{roleWorkspace.primaryModules.length} modules</Pill>}>
+        <Panel title={roleWorkspace.label} meta={<Pill tone="slate">{roleWorkspace.primaryModules.length} modules</Pill>}>
           <div className="token-row">
             {roleWorkspace.primaryModules.map((module) => (
               <Pill key={module} tone="blue">
@@ -414,7 +403,7 @@ export default function Dashboard() {
       </div>
 
       {medicalWatch.length ? (
-        <Panel eyebrow="Medical watch" title="Recent care-sensitive horses">
+        <Panel title="Medical">
           <div className="table-shell">
             <table className="data-table">
               <thead>

@@ -306,11 +306,10 @@ export default function Documents() {
   return (
     <>
       <PageHeader
-        eyebrow="Workspace"
         title="Documents"
         actions={
           <div className="flex flex-wrap gap-2">
-            <Pill tone="slate">Manual queue</Pill>
+            <Pill tone="slate">Manual</Pill>
             <Pill tone="blue">{accessModeLabel}</Pill>
           </div>
         }
@@ -322,25 +321,25 @@ export default function Documents() {
           value={`${documents.length}`}
           tone="slate"
           title="Registration, medical, transfer, insurance, and media records"
-          className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#0f1724]/10 hover:bg-[#fbfcfd]"
+          className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#202225]/10 hover:bg-[#fffdfb]"
           onClick={() => scrollToSection('documents-review')}
           onContextMenu={(event) => openSurfaceMenu('vault', event)}
         />
         <MetricCard
-          label="Review"
+          label="Queue"
           value={`${reviewQueue.length}`}
           tone="slate"
           title="Files waiting on manual assignment"
-          className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#0f1724]/10 hover:bg-[#fbfcfd]"
+          className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#202225]/10 hover:bg-[#fffdfb]"
           onClick={() => scrollToSection('documents-review')}
           onContextMenu={(event) => openSurfaceMenu('review', event)}
         />
         <MetricCard
-          label="Buyer-safe"
+          label="Buyer docs"
           value={`${buyerSafeDocuments.length}`}
           tone="emerald"
           title="Approved documents cleared for buyer-facing packet surfaces"
-          className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#0f1724]/10 hover:bg-[#fbfcfd]"
+          className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#202225]/10 hover:bg-[#fffdfb]"
           onClick={() => navigate('/shared-access')}
           onContextMenu={(event) => openSurfaceMenu('buyer', event)}
         />
@@ -349,7 +348,7 @@ export default function Documents() {
           value={`${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB`}
           tone="slate"
           title="Workspace file storage against the current contract"
-          className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#0f1724]/10 hover:bg-[#fbfcfd]"
+          className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#202225]/10 hover:bg-[#fffdfb]"
           onClick={() => navigate('/subscriptions')}
           onContextMenu={(event) => openSurfaceMenu('storage', event)}
         />
@@ -365,7 +364,7 @@ export default function Documents() {
           <div className="flex flex-wrap gap-2">
             <Pill tone="slate">{reviewQueue.length} review</Pill>
             <Pill tone="blue">{intakeBatches.length} batches</Pill>
-            <Pill tone="emerald">{buyerSafeDocuments.length} buyer-safe</Pill>
+            <Pill tone="emerald">{buyerSafeDocuments.length} clear</Pill>
           </div>
         </div>
       </section>
@@ -373,8 +372,7 @@ export default function Documents() {
       {activeView === 'Intake' ? (
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel
-          eyebrow="Intake"
-          title="Add files"
+          title="Intake"
           action={
             <Pill tone={uploadOpen ? 'blue' : 'slate'}>{uploadOpen ? 'Top-bar launch' : `${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB used`}</Pill>
           }
@@ -427,14 +425,14 @@ export default function Documents() {
               </select>
             </label>
             <label className="field-stack">
-              <span className="field-label">Horse creation</span>
+              <span className="field-label">Horse</span>
               <button
                 type="button"
                 className={`button button--ghost button--compact justify-start ${createHorseFromBatch ? 'border-[#066B90] bg-[#E8F2F7] text-[#066B90]' : ''}`}
                 onClick={() => setCreateHorseFromBatch((current) => !current)}
                 disabled={!canUploadDocuments || Boolean(horseId)}
               >
-                {createHorseFromBatch ? 'Create horse from docs' : 'Keep review only'}
+                {createHorseFromBatch ? 'Create from docs' : 'Review only'}
               </button>
             </label>
             <label className="field-stack field-stack--wide">
@@ -456,7 +454,7 @@ export default function Documents() {
           </div>
           <div className="inline-actions">
             <button className="button button--primary" type="button" onClick={handleIntake} disabled={!canUploadDocuments || isSubmitting || !uploadedBy.trim() || !files.length}>
-              {isSubmitting ? 'Adding documents...' : 'Add documents'}
+              {isSubmitting ? 'Adding...' : 'Add docs'}
             </button>
             <Pill tone={files.length ? 'blue' : 'slate'}>{files.length ? `${files.length} queued` : 'No files'}</Pill>
           </div>
@@ -466,7 +464,7 @@ export default function Documents() {
       ) : null}
 
       {activeView === 'Review' ? (
-      <Panel eyebrow="Review" title="Queue" className="cursor-context-menu" onContextMenu={(event) => openSurfaceMenu('review', event)}>
+      <Panel title="Review" className="cursor-context-menu" onContextMenu={(event) => openSurfaceMenu('review', event)}>
         {reviewQueue.length ? (
           <div id="documents-review" className="table-shell">
             <table className="data-table">
@@ -590,7 +588,7 @@ export default function Documents() {
       ) : null}
 
       {activeView === 'Flags' ? (
-        <Panel eyebrow="Duplicates" title="Review flags" className="cursor-context-menu" onContextMenu={(event) => openSurfaceMenu('duplicates', event)}>
+        <Panel title="Flags" className="cursor-context-menu" onContextMenu={(event) => openSurfaceMenu('duplicates', event)}>
           {duplicates.length ? (
             <div id="documents-duplicates" className="stack-list">
               {duplicates.map((document) => {
@@ -613,7 +611,7 @@ export default function Documents() {
       ) : null}
 
       {activeView === 'Batches' ? (
-        <Panel eyebrow="Batches" title="Queue states" className="cursor-context-menu" onContextMenu={(event) => openSurfaceMenu('batches', event)}>
+        <Panel title="Batches" className="cursor-context-menu" onContextMenu={(event) => openSurfaceMenu('batches', event)}>
           {intakeBatches.length ? (
             <div id="documents-batches" className="stack-list">
               {intakeBatches.map((batch) => (

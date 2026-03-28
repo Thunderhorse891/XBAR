@@ -413,11 +413,11 @@ export default function HorseDetail() {
         Back to horses
       </Link>
 
-      <section className="rounded-[20px] border border-[#dde5ec] bg-white px-5 py-5 shadow-sm">
+      <section className="rounded-[10px] border border-[#e5ddd2] bg-[#fffdfb] px-5 py-5 shadow-sm">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
             <div className="mb-3 flex items-center gap-3">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#4A90B8]">{horse.ownerEntity}</span>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8f8276]">{horse.ownerEntity}</span>
               {hasRestrictedActions ? (
                 <span
                   className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#dce4ec] bg-[#f6f8fb] text-[#667085] transition-all duration-150 ease-[ease] hover:border-[#4A90B8]/40 hover:text-[#066B90]"
@@ -427,7 +427,7 @@ export default function HorseDetail() {
                 </span>
               ) : null}
             </div>
-            <h1 className="text-[clamp(2rem,4vw,3.25rem)] font-bold tracking-[-0.06em] text-[#202225]">{horse.name}</h1>
+            <h1 className="text-[clamp(2rem,4vw,3rem)] font-bold tracking-[-0.06em] text-[#202225]">{horse.name}</h1>
             <div className="mt-4 flex flex-wrap gap-2">
               {[horse.segment, horse.status, horse.location.barn].map((label, index) => (
                 <span
@@ -451,26 +451,26 @@ export default function HorseDetail() {
 
           <div className="flex flex-wrap gap-3">
             <Link
-              className="inline-flex h-11 items-center justify-center rounded-md bg-[#066B90] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#055a7a]"
+              className="inline-flex h-11 items-center justify-center rounded-md bg-[#202225] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#111315]"
               to={packet.sharePath}
               onClick={() => recordSharedChannel(horse.id, 'Direct Link')}
             >
-              Open share view
+              Preview
             </Link>
             <button
-              className="inline-flex h-11 items-center justify-center rounded-md border border-[#066B90] px-5 text-sm font-semibold text-[#066B90] transition-all duration-150 ease-[ease] hover:bg-[#E8F2F7] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-11 items-center justify-center rounded-md border border-[#d5cdc2] px-5 text-sm font-semibold text-[#202225] transition-all duration-150 ease-[ease] hover:bg-[#f5efe8] disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
               onClick={handleSavedHorseToggle}
               disabled={!canManageSharedAccess}
             >
-              {saved ? 'Remove from shared access' : 'Add to shared access'}
+              {saved ? 'Unshare' : 'Share'}
             </button>
           </div>
         </div>
       </section>
 
       <section className="grid items-stretch gap-5 lg:grid-cols-2">
-        <div className="relative flex h-full flex-col overflow-hidden rounded-[20px] border border-[#dde5ec] bg-white p-5 shadow-sm">
+        <div className="relative flex h-full flex-col overflow-hidden rounded-[10px] border border-[#e5ddd2] bg-[#fffdfb] p-5 shadow-sm">
           <div className="mb-5 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <span className="flex h-10 w-10 items-center justify-center rounded-md bg-[#E8F2F7] text-[#066B90]">
@@ -576,7 +576,7 @@ export default function HorseDetail() {
           </div>
         </div>
 
-        <div className="flex h-full flex-col rounded-[20px] border border-[#dde5ec] bg-white p-5 shadow-sm">
+        <div className="flex h-full flex-col rounded-[10px] border border-[#e5ddd2] bg-[#fffdfb] p-5 shadow-sm">
           <div className="mb-5 flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-md bg-[#E8F2F7] text-[#066B90]">
               <SharedAccessIcon className="h-5 w-5" />

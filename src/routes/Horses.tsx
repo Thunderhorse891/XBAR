@@ -186,8 +186,7 @@ export default function Horses() {
   return (
     <>
       <PageHeader
-        eyebrow="Workspace"
-        title="Horse Desk"
+        title="Horses"
         actions={
           <div className="page-actions">
             <SurfaceTabs
@@ -328,8 +327,8 @@ export default function Horses() {
       <section className="surface-hero surface-hero--dark">
         <div className="surface-hero__top">
           <div>
-            <div className="surface-hero__eyebrow">Live portfolio</div>
-            <h2 className="surface-hero__title">Active records</h2>
+            <div className="surface-hero__eyebrow">Portfolio</div>
+            <h2 className="surface-hero__title">Active horses</h2>
           </div>
           <div className="surface-hero__stats">
             <div className="surface-hero__stat">
@@ -337,11 +336,11 @@ export default function Horses() {
               <strong>{filtered.length}</strong>
             </div>
             <div className="surface-hero__stat">
-              <span>Sale ready</span>
+              <span>Ready</span>
               <strong>{saleReady.length}</strong>
             </div>
             <div className="surface-hero__stat">
-              <span>Share ready</span>
+              <span>Shared</span>
               <strong>{buyerReady.length}</strong>
             </div>
             <div className="surface-hero__stat">
@@ -365,7 +364,7 @@ export default function Horses() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className="field-input"
-            placeholder="Search horse, owner, barn"
+            placeholder="Search"
           />
         </div>
       </section>
@@ -438,7 +437,7 @@ export default function Horses() {
                       <strong>{formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)}</strong>
                     </div>
                     <div className="horse-card__metric">
-                      <span>Access</span>
+                      <span>Share</span>
                       <strong>{accessLabel}</strong>
                     </div>
                   </div>
@@ -478,7 +477,7 @@ export default function Horses() {
                       </div>
                       <div className="inline-metrics">
                         <span>{horse.gallery.length} assets</span>
-                        <span>{packet.readyCount} packet clear</span>
+                        <span>{packet.readyCount} clear</span>
                         <span>{horse.location.barn}</span>
                       </div>
                     </div>
@@ -487,7 +486,7 @@ export default function Horses() {
                   <div className="horse-card__footer">
                     <div className="status-inline">
                       {saved ? <Pill tone="blue">Shared</Pill> : null}
-                      <span>{showSaleSignals ? `${horse.sale.watchlistCount} watching` : `${horse.sale.inquiryCount} inquiries`}</span>
+                      <span>{showSaleSignals ? `${horse.sale.watchlistCount} watching` : `${horse.sale.inquiryCount} leads`}</span>
                     </div>
                     <div className="inline-actions inline-actions--card">
                       <button
