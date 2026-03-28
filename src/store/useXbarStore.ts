@@ -188,6 +188,13 @@ function normalizeBillingState(value: unknown): SubscriptionProfile['billingStat
 
 function restoreWorkspaceProfile(raw: unknown): WorkspaceProfile {
   const value = raw && typeof raw === 'object' ? (raw as Partial<WorkspaceProfile>) : {};
+  const workspaceShortcuts = Array.isArray(value.workspaceShortcuts)
+    ? value.workspaceShortcuts
+        .map((shortcut) => (typeof shortcut === 'string' ? shortcut.trim() : ''))
+        .filter(Boolean)
+        .filter((shortcut, index, all) => all.indexOf(shortcut) === index)
+        .slice(0, 6)
+    : workspaceProfileSeed.workspaceShortcuts;
 
   return {
     ranchName: value.ranchName?.trim() || workspaceProfileSeed.ranchName,
@@ -198,6 +205,7 @@ function restoreWorkspaceProfile(raw: unknown): WorkspaceProfile {
     operationsEmail: value.operationsEmail?.trim() || '',
     defaultBarn: value.defaultBarn?.trim() || '',
     defaultPasture: value.defaultPasture?.trim() || '',
+    workspaceShortcuts,
   };
 }
 

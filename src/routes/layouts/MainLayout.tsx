@@ -2,6 +2,7 @@ import type { ComponentType, KeyboardEvent, SVGProps } from 'react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Pill } from '@/components/app-ui';
+import { ContextMenu } from '@/components/ContextMenu';
 import { WorkspaceHelp, type HelpSection } from '@/components/WorkspaceHelp';
 import {
   AddIcon,
@@ -20,6 +21,7 @@ import {
   SubscriptionIcon,
 } from '@/components/icons';
 import { useCloudStore } from '@/store/useCloudStore';
+import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
 
 type NavItem = {
@@ -70,11 +72,30 @@ const workspaceShortcutRoutes: Record<string, string> = {
   Medical: '/medical',
   Breeding: '/breeding',
   Sales: '/sales',
+  'Ranch Toolkit': '/assets',
   'Ranch Assets': '/assets',
   Subscriptions: '/subscriptions',
   'Shared Access': '/shared-access',
   Settings: '/settings',
 };
+
+const workspaceShortcutOptions = [
+  'Dashboard',
+  'Horses',
+  'Documents',
+  'Ownership',
+  'Medical',
+  'Breeding',
+  'Sales',
+  'Ranch Toolkit',
+  'Subscriptions',
+  'Shared Access',
+  'Settings',
+] as const;
+
+function normalizeShortcutLabel(module: string) {
+  return module === 'Ranch Assets' ? 'Ranch Toolkit' : module;
+}
 
 const routeHelp: Record<string, HelpSection[]> = {
   Dashboard: [
@@ -164,16 +185,23 @@ export default function MainLayout() {
   const location = useLocation();
   const [search, setSearch] = useState('');
   const [helpOpen, setHelpOpen] = useState(false);
+  const [shortcutEditorOpen, setShortcutEditorOpen] = useState(false);
+  const [workspaceMenu, setWorkspaceMenu] = useState<{ x: number; y: number } | null>(null);
   const currentRole = useXbarStore((state) => state.currentRole);
   const subscription = useXbarStore((state) => state.subscription);
   const documents = useXbarStore((state) => state.documents);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
+  const updateWorkspaceProfile = useXbarStore((state) => state.updateWorkspaceProfile);
   const cloudStatus = useCloudStore((state) => state.status);
+  const cloudSession = useCloudStore((state) => state.session);
+  const signOutCloud = useCloudStore((state) => state.signOut);
   const roleWorkspace = useCurrentRoleWorkspace();
+  const pushToast = useUiStore((state) => state.pushToast);
   const canCreateHorse = useCurrentRoleCapability('createHorse');
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
   const canManageBilling = useCurrentRoleCapability('manageBilling');
   const canManageSettings = useCurrentRoleCapability('manageSettings');
+  const canSyncCloud = useCurrentRoleCapability('syncCloud');
   const platformItems = platform.filter((item) => {
     if (item.path === '/subscriptions') {
       return canManageBilling;
@@ -186,21 +214,80 @@ export default function MainLayout() {
 
   const pendingReview = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched').length;
   const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse Profile' : routeLabels[location.pathname] ?? 'Dashboard';
-  const workspaceShortcuts = roleWorkspace.primaryModules
+  const workspaceShortcutLabels = (workspaceProfile.workspaceShortcuts.length ? workspaceProfile.workspaceShortcuts : roleWorkspace.primaryModules.map(normalizeShortcutLabel))
+    .map(normalizeShortcutLabel)
+    .filter((module, index, all) => all.indexOf(module) === index)
+    .filter((module) => workspaceShortcutRoutes[module])
+    .slice(0, 6);
+  const workspaceShortcuts = workspaceShortcutLabels
     .map((module) => ({
       label: module,
       path: workspaceShortcutRoutes[module],
     }))
     .filter((item): item is { label: string; path: string } => Boolean(item.path));
   const helpSections = routeHelp[currentLabel] ?? routeHelp.Dashboard;
+  const accountLabel = cloudSession?.user?.email ?? currentRole;
+  const workspaceMenuItems = [
+    {
+      id: 'edit-shortcuts',
+      label: 'Edit shortcuts',
+      onSelect: () => setShortcutEditorOpen(true),
+    },
+    {
+      id: 'reset-shortcuts',
+      label: 'Reset shortcuts',
+      onSelect: () => {
+        const result = updateWorkspaceProfile({ workspaceShortcuts: [] });
+        pushToast({
+          title: result.ok ? 'Shortcuts reset' : 'Reset blocked',
+          message: result.ok ? 'Workspace shortcuts are back to role defaults.' : result.message,
+          tone: result.ok ? 'success' : 'error',
+        });
+      },
+    },
+    {
+      id: 'open-settings',
+      label: 'Open settings',
+      onSelect: () => navigate('/settings'),
+    },
+  ];
 
   useEffect(() => {
     setHelpOpen(false);
   }, [location.pathname]);
 
+  useEffect(() => {
+    setShortcutEditorOpen(false);
+    setWorkspaceMenu(null);
+  }, [location.pathname]);
+
   const handleSearch = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter' && search.trim()) {
       navigate(`/horses?search=${encodeURIComponent(search.trim())}`);
+    }
+  };
+
+  const handleShortcutToggle = (module: string) => {
+    const nextSelection = workspaceShortcutLabels.includes(module)
+      ? workspaceShortcutLabels.filter((item) => item !== module)
+      : [...workspaceShortcutLabels, module].slice(0, 6);
+    const result = updateWorkspaceProfile({ workspaceShortcuts: nextSelection });
+    pushToast({
+      title: result.ok ? 'Shortcuts updated' : 'Update blocked',
+      message: result.ok ? 'Workspace shortcuts were saved.' : result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
+  };
+
+  const handleCloudSignOut = async () => {
+    const result = await signOutCloud();
+    pushToast({
+      title: result.ok ? 'Signed out' : 'Sign-out failed',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
+    if (result.ok) {
+      navigate('/login', { replace: true });
     }
   };
 
@@ -217,15 +304,30 @@ export default function MainLayout() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-white/8 bg-[#11151a] p-4">
+        <div
+          className="rounded-xl border border-white/8 bg-[#11151a] p-4"
+          onContextMenu={(event) => {
+            event.preventDefault();
+            setWorkspaceMenu({ x: event.clientX, y: event.clientY });
+          }}
+        >
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/36">Workspace</div>
               <div className="mt-2 text-[0.95rem] font-semibold text-white">{roleWorkspace.label}</div>
             </div>
-            <span className="inline-flex min-h-[24px] items-center rounded-md border border-[#43515d] bg-[#171d22] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#93a4b1]">
-              {cloudStatus === 'signed-in' ? 'Cloud' : cloudStatus === 'unavailable' ? 'Local' : 'Limited'}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex min-h-[24px] items-center rounded-md border border-[#43515d] bg-[#171d22] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#93a4b1]">
+                {cloudStatus === 'signed-in' ? 'Cloud' : cloudStatus === 'unavailable' ? 'Local' : 'Limited'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShortcutEditorOpen(true)}
+                className="inline-flex min-h-[24px] items-center rounded-md border border-white/10 bg-white/[0.02] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/64 transition-all duration-150 ease-[ease] hover:border-white/16 hover:bg-white/[0.05] hover:text-white"
+              >
+                Edit
+              </button>
+            </div>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2">
             {workspaceShortcuts.map((module) => (
@@ -290,7 +392,7 @@ export default function MainLayout() {
               </label>
 
               <div className="inline-flex h-10 items-center gap-3 rounded-md border border-[#d5dce4] bg-white px-3 text-sm font-semibold text-[#202225]">
-                <span>{currentRole}</span>
+                <span className="max-w-[190px] truncate">{accountLabel}</span>
                 <span className={classNames('inline-flex rounded-sm border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]',
                   cloudStatus === 'signed-in'
                     ? 'border-[#d7e6dd] bg-[#f3faf6] text-[#2b6a4c]'
@@ -298,7 +400,7 @@ export default function MainLayout() {
                       ? 'border-[#e2e5ea] bg-[#f4f5f7] text-[#667085]'
                       : 'border-[#dce5eb] bg-[#f3f7fa] text-[#405b6a]',
                 )}>
-                  {cloudStatus === 'signed-in' ? 'Synced' : cloudStatus === 'unavailable' ? 'Local' : 'Limited'}
+                  {cloudSession ? currentRole : cloudStatus === 'unavailable' ? 'Local' : 'Guest'}
                 </span>
               </div>
 
@@ -309,6 +411,16 @@ export default function MainLayout() {
               >
                 Help
               </button>
+
+              {cloudSession && canSyncCloud ? (
+                <button
+                  className="inline-flex h-10 items-center justify-center rounded-md border border-[#d5dce4] bg-white px-4 text-sm font-semibold text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#c4ccd4] hover:bg-[#f7fafc]"
+                  type="button"
+                  onClick={() => void handleCloudSignOut()}
+                >
+                  Sign out
+                </button>
+              ) : null}
 
               <button
                 className="relative inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#d5dce4] bg-white text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#c4ccd4] hover:bg-[#f7fafc] disabled:cursor-not-allowed disabled:opacity-50"
@@ -412,6 +524,54 @@ export default function MainLayout() {
         </nav>
 
         <WorkspaceHelp open={helpOpen} title={currentLabel} sections={helpSections} onClose={() => setHelpOpen(false)} />
+        {shortcutEditorOpen ? (
+          <div className="fixed inset-0 z-[120] flex items-center justify-end bg-[#0a0d10]/42 p-4 backdrop-blur-[2px]" onClick={() => setShortcutEditorOpen(false)} role="presentation">
+            <aside
+              className="w-full max-w-[360px] rounded-xl border border-[#dce4ec] bg-white p-5 shadow-xl"
+              onClick={(event) => event.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Edit workspace shortcuts"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#667085]">Workspace</div>
+                  <h2 className="mt-2 text-lg font-bold tracking-[-0.04em] text-[#202225]">Edit shortcuts</h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShortcutEditorOpen(false)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#dce4ec] text-[#667085] transition-all duration-150 ease-[ease] hover:border-[#1b4a60]/40 hover:text-[#1b4a60]"
+                  aria-label="Close shortcut editor"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-2">
+                {workspaceShortcutOptions.map((module) => {
+                  const active = workspaceShortcutLabels.includes(module);
+                  return (
+                    <button
+                      key={module}
+                      type="button"
+                      onClick={() => handleShortcutToggle(module)}
+                      className={classNames(
+                        'rounded-md border px-3 py-3 text-left text-sm font-semibold transition-all duration-150 ease-[ease]',
+                        active
+                          ? 'border-[#101418] bg-[#101418] text-white'
+                          : 'border-[#dce4ec] bg-[#f8fafc] text-[#202225] hover:border-[#c7d1da] hover:bg-white',
+                      )}
+                    >
+                      {module}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-4 text-xs leading-6 text-[#667085]">Right-click the workspace card any time to reopen this editor.</div>
+            </aside>
+          </div>
+        ) : null}
+        <ContextMenu open={Boolean(workspaceMenu)} x={workspaceMenu?.x ?? 0} y={workspaceMenu?.y ?? 0} items={workspaceMenuItems} onClose={() => setWorkspaceMenu(null)} />
       </div>
     </div>
   );

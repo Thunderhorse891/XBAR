@@ -334,4 +334,5 @@ export interface WorkspaceProfile {
   operationsEmail: string;
   defaultBarn: string;
   defaultPasture: string;
+  workspaceShortcuts: string[];
 }

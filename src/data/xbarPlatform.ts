@@ -257,4 +257,5 @@ export const workspaceProfileSeed: WorkspaceProfile = {
   operationsEmail: '',
   defaultBarn: '',
   defaultPasture: '',
+  workspaceShortcuts: [],
 };
