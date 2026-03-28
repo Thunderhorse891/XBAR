@@ -157,8 +157,9 @@ export default function HorseDetail() {
   const documents = useXbarStore((state) => state.documents.filter((document) => document.horseId === id));
   const ownershipRecord = useXbarStore((state) => state.ownershipRecords.find((record) => record.horseId === id));
   const salesLeads = useXbarStore((state) => state.salesLeads.filter((lead) => lead.horseId === id));
-  const savedHorseIds = useXbarStore((state) => state.savedHorseIds);
-  const toggleSavedHorse = useXbarStore((state) => state.toggleSavedHorse);
+  const sharedListings = useXbarStore((state) => state.sharedListings);
+  const toggleSharedListing = useXbarStore((state) => state.toggleSharedListing);
+  const recordSharedChannel = useXbarStore((state) => state.recordSharedChannel);
   const uploadHorseMedia = useXbarStore((state) => state.uploadHorseMedia);
   const createDocumentIntake = useXbarStore((state) => state.createDocumentIntake);
   const addHorseNote = useXbarStore((state) => state.addHorseNote);
@@ -206,7 +207,8 @@ export default function HorseDetail() {
     );
   }
 
-  const saved = savedHorseIds.includes(horse.id);
+  const activeSharedListing = sharedListings.find((listing) => listing.horseId === horse.id && listing.state !== 'Archived');
+  const saved = Boolean(activeSharedListing);
   const packet = buildHorsePacketCompleteness(horse, documents, ownershipRecord);
   const buyerReadyDocuments = documents.filter((document) => buildDocumentTrustProfile(document, [horse]).readyForProfile);
   const hasRestrictedActions = !canManageSharedAccess || !canUploadMedia || !canUploadDocuments || !canEditHorse || !canManageSales;
@@ -248,11 +250,11 @@ export default function HorseDetail() {
           : 'border border-[#dce4ec] bg-[#f6f8fb] text-[#667085]';
 
   const handleSavedHorseToggle = () => {
-    toggleSavedHorse(horse.id);
+    const result = toggleSharedListing(horse.id);
     pushToast({
-      title: saved ? 'Removed from shared access' : 'Added to shared access',
-      message: `${horse.name} ${saved ? 'was removed from' : 'is now in'} the shared-access list.`,
-      tone: 'success',
+      title: result.ok ? (saved ? 'Removed from shared access' : 'Added to shared access') : 'Shared access blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
     });
   };
 
@@ -449,6 +451,7 @@ export default function HorseDetail() {
             <Link
               className="inline-flex h-11 items-center justify-center rounded-full bg-[#066B90] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#055a7a]"
               to={packet.sharePath}
+              onClick={() => recordSharedChannel(horse.id, 'Direct Link')}
             >
               Open share view
             </Link>
@@ -458,7 +461,7 @@ export default function HorseDetail() {
               onClick={handleSavedHorseToggle}
               disabled={!canManageSharedAccess}
             >
-              Add to shared access
+              {saved ? 'Remove from shared access' : 'Add to shared access'}
             </button>
           </div>
         </div>

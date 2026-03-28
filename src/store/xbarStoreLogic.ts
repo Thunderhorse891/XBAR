@@ -34,6 +34,7 @@ export type DocumentIntakeInput = {
   source: DocumentSource;
   uploadedBy: string;
   label?: string;
+  createHorseFromBatch?: boolean;
 };
 
 export type MediaUploadInput = {

@@ -1,31 +1,5 @@
 import { HorseRecord } from '@/types/xbar';
 
-const assetUrl = (fileName: string) => `${import.meta.env.BASE_URL}${fileName}`;
-
-const placeholderMedia = (horseName: string) => [
-  {
-    id: `${horseName}-hero`,
-    label: `${horseName} hero still`,
-    kind: 'Hero' as const,
-    url: assetUrl('xbar-logo-sleek.png'),
-    status: 'Approved' as const,
-  },
-  {
-    id: `${horseName}-sale`,
-    label: `${horseName} sale packet cover`,
-    kind: 'Sale Still' as const,
-    url: assetUrl('xbar-logo-sleek.png'),
-    status: 'Draft' as const,
-  },
-  {
-    id: `${horseName}-pedigree`,
-    label: `${horseName} pedigree board`,
-    kind: 'Pedigree' as const,
-    url: assetUrl('xbar-logo.png'),
-    status: 'Pending' as const,
-  },
-];
-
 export const horsesSeed: HorseRecord[] = [
   {
     id: 'horse-wiggy',
@@ -48,7 +22,7 @@ export const horsesSeed: HorseRecord[] = [
     owner: 'Erin Wyrick',
     ownerEntity: 'XBAR LLC',
     insuredValue: 185000,
-    profileImage: assetUrl('xbar-logo-sleek.png'),
+    profileImage: '',
     tags: ['sale-ready', 'aqha-verified', 'shared-access-visible'],
     bloodline: {
       sire: 'Red Buck Hancock',
@@ -83,7 +57,7 @@ export const horsesSeed: HorseRecord[] = [
         contact: 'portfolio@redcedar.com',
       },
     ],
-    gallery: placeholderMedia('wiggy'),
+    gallery: [],
     sale: {
       listingState: 'Market Ready',
       askPrice: 148000,
@@ -207,7 +181,7 @@ export const horsesSeed: HorseRecord[] = [
     owner: 'Erin Wyrick',
     ownerEntity: 'XBAR LLC',
     insuredValue: 240000,
-    profileImage: assetUrl('xbar-logo-sleek.png'),
+    profileImage: '',
     tags: ['stallion', 'breeding-program', 'insurance-current'],
     bloodline: {
       sire: 'Hancock Driftwood',
@@ -235,7 +209,7 @@ export const horsesSeed: HorseRecord[] = [
         contact: 'ops@xbarllc.com',
       },
     ],
-    gallery: placeholderMedia('hancock'),
+    gallery: [],
     sale: {
       listingState: 'Hold',
       askPrice: 0,
@@ -343,7 +317,7 @@ export const horsesSeed: HorseRecord[] = [
     owner: 'Erin Wyrick',
     ownerEntity: 'XBAR LLC',
     insuredValue: 128000,
-    profileImage: assetUrl('xbar-logo-sleek.png'),
+    profileImage: '',
     tags: ['medical-watch', 'travel-sensitive'],
     bloodline: {
       sire: 'Lil Man Hancock',
@@ -371,7 +345,7 @@ export const horsesSeed: HorseRecord[] = [
         contact: 'erin@xbarllc.com',
       },
     ],
-    gallery: placeholderMedia('bonny'),
+    gallery: [],
     sale: {
       listingState: 'Hold',
       askPrice: 0,
@@ -477,7 +451,7 @@ export const horsesSeed: HorseRecord[] = [
     owner: 'Jason Wyrick',
     ownerEntity: 'Blue Line Partners',
     insuredValue: 142000,
-    profileImage: assetUrl('xbar-logo-sleek.png'),
+    profileImage: '',
     tags: ['title-cleanup', 'sale-packet-open'],
     bloodline: {
       sire: 'Roan Drift Cutter',
@@ -512,7 +486,7 @@ export const horsesSeed: HorseRecord[] = [
         contact: 'ops@xbarllc.com',
       },
     ],
-    gallery: placeholderMedia('dolly'),
+    gallery: [],
     sale: {
       listingState: 'Buyer Review',
       askPrice: 132000,
@@ -611,7 +585,7 @@ export const horsesSeed: HorseRecord[] = [
     owner: 'XBAR LLC',
     ownerEntity: 'XBAR LLC',
     insuredValue: 96000,
-    profileImage: assetUrl('xbar-logo-sleek.png'),
+    profileImage: '',
     tags: ['training-string', 'no-open-alerts'],
     bloodline: {
       sire: 'High Noon Rebel',
@@ -639,7 +613,7 @@ export const horsesSeed: HorseRecord[] = [
         contact: 'ops@xbarllc.com',
       },
     ],
-    gallery: placeholderMedia('thunder'),
+    gallery: [],
     sale: {
       listingState: 'Private',
       askPrice: 0,
@@ -712,7 +686,7 @@ export const horsesSeed: HorseRecord[] = [
     owner: 'Jason Wyrick',
     ownerEntity: 'XBAR Legacy',
     insuredValue: 42000,
-    profileImage: assetUrl('xbar-logo-sleek.png'),
+    profileImage: '',
     tags: ['retired', 'shared-access'],
     bloodline: {
       sire: 'Midnight Valor',
@@ -740,7 +714,7 @@ export const horsesSeed: HorseRecord[] = [
         contact: 'jason@xbarllc.com',
       },
     ],
-    gallery: placeholderMedia('shadow'),
+    gallery: [],
     sale: {
       listingState: 'Hold',
       askPrice: 0,

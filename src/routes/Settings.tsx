@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { PageHeader, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
-import { isFacebookSharingConfigured, isSupabaseConfigured } from '@/lib/platformConfig';
+import { isBillingConfigured, isFacebookSharingConfigured, isSupabaseConfigured } from '@/lib/platformConfig';
 import { workspaceStorageDriverLabel } from '@/lib/workspaceStorage';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -236,8 +236,8 @@ export default function Settings() {
             )
           ) : (
             <div className="bullet-list">
-              <div className="bullet-list__item">Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to enable cloud auth and sync.</div>
-              <div className="bullet-list__item">This keeps the current local-first flow working until cloud credentials are added.</div>
+              <div className="bullet-list__item">Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to turn on cloud auth and sync.</div>
+              <div className="bullet-list__item">Until then, this workspace stays local to this browser.</div>
             </div>
           )}
         </Panel>
@@ -334,14 +334,14 @@ export default function Settings() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Runtime" title="Runtime">
+        <Panel eyebrow="Runtime" title="Capabilities">
           <div className="token-row">
-            <Pill tone="slate">Local-first</Pill>
-            <Pill tone="blue">Cloud optional</Pill>
-            <Pill tone="slate">Manual docs</Pill>
-            <Pill tone="slate">Payment links</Pill>
-            <Pill tone={isFacebookSharingConfigured() ? 'emerald' : 'slate'}>Facebook share</Pill>
-            <Pill tone="amber">Backend next</Pill>
+            <Pill tone={isSupabaseConfigured() ? 'blue' : 'slate'}>{isSupabaseConfigured() ? 'Cloud auth on' : 'Cloud auth off'}</Pill>
+            <Pill tone={cloudSession ? 'emerald' : 'slate'}>{cloudSession ? 'Cloud session live' : 'Local session'}</Pill>
+            <Pill tone={isBillingConfigured() ? 'emerald' : 'slate'}>{isBillingConfigured() ? 'Stripe links live' : 'Stripe links off'}</Pill>
+            <Pill tone={isFacebookSharingConfigured() ? 'emerald' : 'slate'}>{isFacebookSharingConfigured() ? 'Facebook share live' : 'Facebook share off'}</Pill>
+            <Pill tone="blue">{workspaceStorageDriverLabel}</Pill>
+            <Pill tone="slate">Review queue</Pill>
           </div>
         </Panel>
       </div>
@@ -351,7 +351,7 @@ export default function Settings() {
           ref={importRef}
           type="file"
           accept="application/json,.json"
-          style={{ display: 'none' }}
+          className="hidden"
           onChange={(event) => void handleImport(event.target.files?.[0])}
         />
         <div className="stack-list">

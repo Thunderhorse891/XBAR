@@ -6,8 +6,10 @@ import { useXbarStore } from '@/store/useXbarStore';
 export function CloudBootstrap() {
   const initialize = useCloudStore((state) => state.initialize);
   const cloudStatus = useCloudStore((state) => state.status);
+  const workspaceRole = useCloudStore((state) => state.workspaceRole);
   const setLastSyncAt = useCloudStore((state) => state.setLastSyncAt);
   const setSyncState = useCloudStore((state) => state.setSyncState);
+  const setCurrentRole = useXbarStore((state) => state.setCurrentRole);
 
   useEffect(() => {
     let dispose: (() => void) | void;
@@ -20,6 +22,10 @@ export function CloudBootstrap() {
       dispose?.();
     };
   }, [initialize]);
+
+  useEffect(() => {
+    setCurrentRole(workspaceRole);
+  }, [setCurrentRole, workspaceRole]);
 
   useEffect(() => {
     if (cloudStatus !== 'signed-in') {

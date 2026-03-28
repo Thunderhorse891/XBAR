@@ -1,5 +1,4 @@
 import { buildHorsePacketCompleteness } from './xbarPhaseTwo.js';
-import { subscriptionTierConfig } from './xbarRuntime.js';
 import type {
   DocumentRecord,
   HorseRecord,
@@ -8,8 +7,6 @@ import type {
   RanchAsset,
   SalesLead,
   SharedAccessSnapshot,
-  SubscriptionProfile,
-  SubscriptionTier,
 } from '../types/xbar.js';
 
 type Tone = 'blue' | 'slate' | 'emerald' | 'amber' | 'rose';
@@ -33,31 +30,6 @@ export type FieldToolCard = {
   href: string;
   tone: Tone;
 };
-
-export type RevenueScenario = {
-  tier: SubscriptionTier;
-  monthlyRate: number;
-  annualContractValue: number;
-  customersNeeded: number;
-  summary: string;
-};
-
-export type RevenueBlueprint = {
-  targetArr: number;
-  currentArr: number;
-  arrGap: number;
-  customersNeededAtCurrentTier: number;
-  recommendedMixArr: number;
-  recommendedMixLabel: string;
-  scenarios: RevenueScenario[];
-  motions: string[];
-};
-
-const ARR_TARGET = 10_000_000;
-
-function annualRecurringValue(monthlyRate: number) {
-  return monthlyRate * 12;
-}
 
 function buyerReadyProfiles(horses: HorseRecord[], documents: DocumentRecord[], ownershipRecords: OwnershipRecord[]) {
   return horses.filter((horse) =>
@@ -208,55 +180,12 @@ export function buildFieldTools(params: {
     },
     {
       id: 'owner-experience',
-      eyebrow: 'Subscriber value',
-      title: 'Shared access',
-      summary: 'Manage links, saves, and inquiries.',
-      metric: `${sharedAccess.activeOwners}/${sharedAccess.invitedOwners} active owners`,
+      eyebrow: 'Distribution',
+      title: 'Manage shares',
+      summary: 'Track live links and buyer follow-up.',
+      metric: `${sharedAccess.savedHorses} shared records`,
       href: '/shared-access',
-      tone: sharedAccess.activeOwners ? 'emerald' : 'slate',
+      tone: sharedAccess.savedHorses ? 'emerald' : 'slate',
     },
   ] satisfies FieldToolCard[];
-}
-
-export function buildRevenueBlueprint(subscription: SubscriptionProfile): RevenueBlueprint {
-  const scenarios = (Object.entries(subscriptionTierConfig) as [SubscriptionTier, (typeof subscriptionTierConfig)[SubscriptionTier]][]).map(
-    ([tier, config]) => {
-      const annualContractValue = annualRecurringValue(config.monthlyRate);
-      const customersNeeded = Math.ceil(ARR_TARGET / annualContractValue);
-      return {
-        tier,
-        monthlyRate: config.monthlyRate,
-        annualContractValue,
-        customersNeeded,
-        summary: `${customersNeeded} customers at ${tier} hits $10M ARR before setup fees and services.`,
-      };
-    },
-  );
-
-  const currentArr = annualRecurringValue(subscription.monthlyRate);
-  const currentTierScenario = scenarios.find((scenario) => scenario.tier === subscription.tier) ?? scenarios[0];
-  const recommendedMix = [
-    { tier: 'Professional' as const, customers: 220 },
-    { tier: 'Ranch Ops' as const, customers: 121 },
-    { tier: 'Enterprise' as const, customers: 50 },
-  ];
-  const recommendedMixArr = recommendedMix.reduce(
-    (sum, item) => sum + annualRecurringValue(subscriptionTierConfig[item.tier].monthlyRate) * item.customers,
-    0,
-  );
-
-  return {
-    targetArr: ARR_TARGET,
-    currentArr,
-    arrGap: Math.max(0, ARR_TARGET - currentArr),
-    customersNeededAtCurrentTier: currentTierScenario.customersNeeded,
-    recommendedMixArr,
-    recommendedMixLabel: recommendedMix.map((item) => `${item.customers} ${item.tier}`).join(' + '),
-    scenarios,
-    motions: [
-      'Charge for trust, ownership clarity, and premium shared access.',
-      'Use setup and migration fees to fund onboarding.',
-      'Win on depth: records, transfers, buyer trust, field speed.',
-    ],
-  };
 }

@@ -1,4 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
+import { EmptyState } from '@/components/EmptyState';
+import { HorseMediaPreview } from '@/components/HorseMediaPreview';
 import { KeyValue, MetricCard, Panel, Pill, ProgressBar } from '@/components/app-ui';
 import { buildPublicShareUrl, openFacebookShareDialog } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
@@ -46,7 +48,13 @@ export default function BuyerProfile() {
 
         <section className="buyer-hero">
           <div className="buyer-hero__media">
-            <img src={horse.profileImage} alt="" className="buyer-hero__image" />
+            <HorseMediaPreview
+              src={horse.profileImage || horse.gallery[0]?.url}
+              name={horse.name}
+              imageClassName="buyer-hero__image"
+              fallbackClassName="buyer-hero__image-fallback"
+              emptyLabel="No media"
+            />
           </div>
           <div className="buyer-hero__copy">
             <div className="eyebrow">Buyer profile</div>
@@ -155,9 +163,7 @@ export default function BuyerProfile() {
                   </div>
                 ))
               ) : (
-                <div className="detail-block subtle">
-                  No documents clear the buyer threshold yet.
-                </div>
+                <EmptyState compact title="No approved docs" description="No linked files clear the buyer-ready threshold yet." />
               )}
             </div>
           </Panel>

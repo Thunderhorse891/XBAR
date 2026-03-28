@@ -19,8 +19,8 @@ import {
   SettingsIcon,
   SubscriptionIcon,
 } from '@/components/icons';
+import { useCloudStore } from '@/store/useCloudStore';
 import { useCurrentRoleCapability, useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
-import type { UserRole } from '@/types/xbar';
 
 type NavItem = {
   label: string;
@@ -165,10 +165,10 @@ export default function MainLayout() {
   const [search, setSearch] = useState('');
   const [helpOpen, setHelpOpen] = useState(false);
   const currentRole = useXbarStore((state) => state.currentRole);
-  const setCurrentRole = useXbarStore((state) => state.setCurrentRole);
   const subscription = useXbarStore((state) => state.subscription);
   const documents = useXbarStore((state) => state.documents);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
+  const cloudStatus = useCloudStore((state) => state.status);
   const roleWorkspace = useCurrentRoleWorkspace();
   const canCreateHorse = useCurrentRoleCapability('createHorse');
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
@@ -277,18 +277,18 @@ export default function MainLayout() {
                 />
               </label>
 
-              <select
-                className="h-10 rounded-md border border-[#d1dbe4] bg-white px-4 text-sm font-medium text-[#202225] transition-all duration-150 ease-[ease] focus:border-[#7d8a96] focus:outline-none"
-                value={currentRole}
-                onChange={(event) => setCurrentRole(event.target.value as UserRole)}
-                aria-label="Workspace role"
-              >
-                <option value="Admin">Admin</option>
-                <option value="Ranch Manager">Ranch Manager</option>
-                <option value="Owner">Owner</option>
-                <option value="Medical Lead">Medical Lead</option>
-                <option value="Sales Lead">Sales Lead</option>
-              </select>
+              <div className="inline-flex h-10 items-center gap-2 rounded-md border border-[#d1dbe4] bg-white px-4 text-sm font-semibold text-[#202225]">
+                <span>{currentRole}</span>
+                <span className={classNames('inline-flex rounded-sm px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]',
+                  cloudStatus === 'signed-in'
+                    ? 'bg-[#edf4ef] text-[#2b6a4c]'
+                    : cloudStatus === 'unavailable'
+                      ? 'bg-[#f4f5f7] text-[#667085]'
+                      : 'bg-[#edf5fa] text-[#066B90]',
+                )}>
+                  {cloudStatus === 'signed-in' ? 'Synced role' : cloudStatus === 'unavailable' ? 'Local role' : 'Limited'}
+                </span>
+              </div>
 
               <button
                 className="inline-flex h-10 items-center justify-center rounded-md border border-[#d1dbe4] bg-white px-4 text-sm font-semibold text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#c4ccd4] hover:bg-[#f7fafc]"

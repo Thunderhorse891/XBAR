@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildCommandCenter, buildFieldTools, buildRevenueBlueprint } from '../src/lib/xbarGrowth.js';
+import { buildCommandCenter, buildFieldTools } from '../src/lib/xbarGrowth.js';
 import type {
   DocumentRecord,
   HorseRecord,
@@ -9,7 +9,6 @@ import type {
   RanchAsset,
   SalesLead,
   SharedAccessSnapshot,
-  SubscriptionProfile,
 } from '../src/types/xbar.js';
 
 const horse: HorseRecord = {
@@ -190,33 +189,6 @@ const sharedAccess: SharedAccessSnapshot = {
   savedHorses: 5,
   openInquiries: 2,
 };
-
-const subscription: SubscriptionProfile = {
-  tier: 'Professional',
-  monthlyRate: 1290,
-  renewalDate: '2026-04-12',
-  billingState: 'Active',
-  sharedAccessEnabled: true,
-  brandedListings: true,
-  featureFlags: ['Manual document review'],
-  usage: {
-    seatsUsed: 5,
-    seatLimit: 8,
-    documentsProcessed: 200,
-    documentLimit: 1800,
-    storageUsedGb: 12,
-    storageLimitGb: 200,
-    sharedAccessSeatsUsed: 4,
-    sharedAccessSeatLimit: 10,
-  },
-};
-
-test('buildRevenueBlueprint returns a credible ARR model', () => {
-  const blueprint = buildRevenueBlueprint(subscription);
-  assert.equal(blueprint.currentArr, 15480);
-  assert.ok(blueprint.customersNeededAtCurrentTier > 600);
-  assert.ok(blueprint.recommendedMixArr >= 10_000_000);
-});
 
 test('buildCommandCenter prioritizes trust and revenue actions', () => {
   const items = buildCommandCenter({

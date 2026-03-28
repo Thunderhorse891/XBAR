@@ -32,6 +32,7 @@ export default function Documents() {
   const [horseId, setHorseId] = useState('');
   const [uploadedBy, setUploadedBy] = useState('Ops Desk');
   const [batchLabel, setBatchLabel] = useState('Live intake batch');
+  const [createHorseFromBatch, setCreateHorseFromBatch] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formErrors, setFormErrors] = useState<{ uploadedBy?: string; files?: string }>({});
   const [reviewAssignments, setReviewAssignments] = useState<Record<string, string>>({});
@@ -277,6 +278,7 @@ export default function Documents() {
       source,
       uploadedBy,
       label: batchLabel,
+      createHorseFromBatch,
     });
 
     pushToast({
@@ -287,6 +289,7 @@ export default function Documents() {
     if (result.ok) {
       setFiles([]);
       setBatchLabel('Live intake batch');
+      setCreateHorseFromBatch(false);
       setSearchParams({});
     }
     setIsSubmitting(false);
@@ -381,7 +384,18 @@ export default function Documents() {
             </label>
             <label className="field-stack">
               <span className="field-label">Attach to horse</span>
-              <select className="field-input" value={horseId} onChange={(event) => setHorseId(event.target.value)} disabled={!canUploadDocuments}>
+              <select
+                className="field-input"
+                value={horseId}
+                onChange={(event) => {
+                  const nextHorseId = event.target.value;
+                  setHorseId(nextHorseId);
+                  if (nextHorseId) {
+                    setCreateHorseFromBatch(false);
+                  }
+                }}
+                disabled={!canUploadDocuments}
+              >
                 <option value="">Try local file-name match</option>
                 {horses.map((horse) => (
                   <option key={horse.id} value={horse.id}>
@@ -389,6 +403,17 @@ export default function Documents() {
                   </option>
                 ))}
               </select>
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Horse creation</span>
+              <button
+                type="button"
+                className={`button button--ghost button--compact justify-start ${createHorseFromBatch ? 'border-[#066B90] bg-[#E8F2F7] text-[#066B90]' : ''}`}
+                onClick={() => setCreateHorseFromBatch((current) => !current)}
+                disabled={!canUploadDocuments || Boolean(horseId)}
+              >
+                {createHorseFromBatch ? 'Create horse from docs' : 'Keep review only'}
+              </button>
             </label>
             <label className="field-stack field-stack--wide">
               <span className="field-label">Files</span>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
+import { HorseMediaPreview } from '@/components/HorseMediaPreview';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
@@ -98,7 +99,7 @@ export default function Sales() {
       <div className="metric-grid">
         <MetricCard label="Sale horses" value={`${saleHorses.length}`} detail="Active pricing or buyer review" />
         <MetricCard label="Buyer pipeline" value={`${salesLeads.filter((lead) => lead.stage !== 'Closed').length}`} detail="Open leads across all channels" tone="blue" />
-        <MetricCard label="Watchlist demand" value={`${sharedAccess.savedHorses}`} detail="Saved horses signal live buyer interest" tone="emerald" />
+        <MetricCard label="Shared records" value={`${sharedAccess.savedHorses}`} detail="Listings open in shared access" tone="emerald" />
         <MetricCard label="Transfer blockers" value={`${saleHorses.filter((horse) => horse.readiness.packetStatus === 'Needs Transfer Docs').length}`} detail="Listings with ownership or paperwork friction" tone="amber" />
       </div>
 
@@ -122,7 +123,12 @@ export default function Sales() {
                     return (
                       <>
                         <div className="horse-card__media">
-                          <img src={horse.profileImage} alt="" className="horse-card__image" />
+                          <HorseMediaPreview
+                            src={horse.profileImage || horse.gallery[0]?.url}
+                            name={horse.name}
+                            imageClassName="horse-card__image"
+                            fallbackClassName="horse-card__image-fallback"
+                          />
                           <div className="horse-card__media-copy">
                             <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
                           </div>
@@ -296,7 +302,7 @@ export default function Sales() {
             </div>
             <div className="stack-item">
               <div className="stack-item__top">
-                <div className="stack-item__title">Saved demand</div>
+                <div className="stack-item__title">Shared records</div>
                 <Pill tone={sharedAccess.savedHorses ? 'blue' : 'slate'}>{sharedAccess.savedHorses}</Pill>
               </div>
             </div>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
+import { HorseMediaPreview } from '@/components/HorseMediaPreview';
 import { PageHeader, Pill, ProgressBar } from '@/components/app-ui';
 import { DotsIcon } from '@/components/icons';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
@@ -53,8 +54,9 @@ export default function Horses() {
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
-  const savedHorseIds = useXbarStore((state) => state.savedHorseIds);
-  const toggleSavedHorse = useXbarStore((state) => state.toggleSavedHorse);
+  const sharedListings = useXbarStore((state) => state.sharedListings);
+  const toggleSharedListing = useXbarStore((state) => state.toggleSharedListing);
+  const recordSharedChannel = useXbarStore((state) => state.recordSharedChannel);
   const addHorse = useXbarStore((state) => state.addHorse);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const pushToast = useUiStore((state) => state.pushToast);
@@ -101,12 +103,12 @@ export default function Horses() {
 
   const handleSavedHorseToggle = (horseId: string) => {
     const horse = horses.find((item) => item.id === horseId);
-    const wasSaved = savedHorseIds.includes(horseId);
-    toggleSavedHorse(horseId);
+    const wasSaved = sharedListings.some((listing) => listing.horseId === horseId && listing.state !== 'Archived');
+    const result = toggleSharedListing(horseId);
     pushToast({
-      title: wasSaved ? 'Removed from shared access' : 'Added to shared access',
-      message: horse ? `${horse.name} ${wasSaved ? 'was removed from' : 'is now in'} the shared-access list.` : 'Shared access updated.',
-      tone: 'success',
+      title: result.ok ? (wasSaved ? 'Removed from shared access' : 'Added to shared access') : 'Shared access blocked',
+      message: horse && result.ok ? `${horse.name} ${wasSaved ? 'was removed from' : 'is now in'} the shared-access list.` : result.message,
+      tone: result.ok ? 'success' : 'error',
     });
   };
 
@@ -115,7 +117,7 @@ export default function Horses() {
   };
 
   const menuHorse = filtered.find((horse) => horse.id === menuState?.horseId) ?? horses.find((horse) => horse.id === menuState?.horseId);
-  const menuSaved = menuHorse ? savedHorseIds.includes(menuHorse.id) : false;
+  const menuSaved = menuHorse ? sharedListings.some((listing) => listing.horseId === menuHorse.id && listing.state !== 'Archived') : false;
   const menuItems = menuHorse
     ? [
         {
@@ -126,7 +128,10 @@ export default function Horses() {
         {
           id: 'open-share-view',
           label: 'Open share view',
-          onSelect: () => navigate(`/profiles/${menuHorse.id}`),
+          onSelect: () => {
+            recordSharedChannel(menuHorse.id, 'Direct Link');
+            navigate(`/profiles/${menuHorse.id}`);
+          },
         },
         ...(canManageSharedAccess
           ? [
@@ -396,7 +401,7 @@ export default function Horses() {
         filtered.length ? (
         <div className="horse-grid">
           {filtered.map((horse) => {
-            const saved = savedHorseIds.includes(horse.id);
+                const saved = sharedListings.some((listing) => listing.horseId === horse.id && listing.state !== 'Archived');
             const packet = buildHorsePacketCompleteness(
               horse,
               documents.filter((document) => document.horseId === horse.id),
@@ -415,7 +420,12 @@ export default function Horses() {
                 }}
               >
                 <div className="horse-card__media">
-                  <img src={horse.profileImage} alt="" className="horse-card__image" />
+                  <HorseMediaPreview
+                    src={horse.profileImage || horse.gallery[0]?.url}
+                    name={horse.name}
+                    imageClassName="horse-card__image"
+                    fallbackClassName="horse-card__image-fallback"
+                  />
                   <div className="horse-card__media-top">
                     <div className="status-inline">
                       <Pill tone={statusTone[horse.status]}>{horse.status}</Pill>

@@ -8,11 +8,13 @@ import {
   roleSeed,
   salesLeadsSeed,
   sharedAccessSeed,
+  sharedListingsSeed,
   subscriptionSeed,
   workspaceProfileSeed,
 } from '@/data/xbarPlatform';
 import {
   buildDocumentRecord,
+  buildSharePath,
   createId,
   createNumericToken,
   deriveSharedAccessSnapshot,
@@ -22,6 +24,7 @@ import {
   readFileAsDataUrl,
   todayStamp,
 } from '@/lib/xbarRuntime';
+import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { getCapabilityDeniedMessage, hasRoleCapability } from '@/lib/permissions';
 import { uploadDocumentAssetToCloud, uploadMediaAssetToCloud } from '@/lib/cloudWorkspace';
 import { workspaceStateStorage } from '@/lib/workspaceStorage';
@@ -42,7 +45,9 @@ import type {
   OwnershipStake,
   RoleCapability,
   SalesLead,
+  SharedListingRecord,
   SharedAccessSnapshot,
+  SharedChannel,
   UserRole,
   WorkspaceProfile,
 } from '@/types/xbar';
@@ -71,12 +76,13 @@ type XbarStore = {
   subscription: SubscriptionProfile;
   roleWorkspaces: RoleWorkspace[];
   salesLeads: SalesLead[];
+  sharedListings: SharedListingRecord[];
   sharedAccess: SharedAccessSnapshot;
   workspaceProfile: WorkspaceProfile;
-  savedHorseIds: string[];
   setCurrentRole: (role: UserRole) => void;
   updateWorkspaceProfile: (patch: Partial<WorkspaceProfile>) => ActionResult;
-  toggleSavedHorse: (horseId: string) => void;
+  toggleSharedListing: (horseId: string) => ActionResult;
+  recordSharedChannel: (horseId: string, channel: SharedChannel) => void;
   addHorse: (input: NewHorseInput) => ActionResult;
   createDocumentIntake: (input: DocumentIntakeInput) => Promise<ActionResult>;
   reviewDocument: (documentId: string, horseId?: string) => ActionResult;
@@ -104,7 +110,6 @@ type XbarStore = {
 
 type PersistedXbarState = Pick<
   XbarStore,
-  | 'currentRole'
   | 'horses'
   | 'documents'
   | 'intakeBatches'
@@ -113,9 +118,9 @@ type PersistedXbarState = Pick<
   | 'subscription'
   | 'roleWorkspaces'
   | 'salesLeads'
+  | 'sharedListings'
   | 'sharedAccess'
   | 'workspaceProfile'
-  | 'savedHorseIds'
 >;
 
 type WorkspaceBackup = {
@@ -125,10 +130,10 @@ type WorkspaceBackup = {
   workspace: PersistedXbarState;
 };
 
-const WORKSPACE_SCHEMA_VERSION = 4;
+const WORKSPACE_SCHEMA_VERSION = 5;
 
 const initialState = {
-  currentRole: 'Admin' as UserRole,
+  currentRole: (isSupabaseConfigured() ? 'Owner' : 'Admin') as UserRole,
   horses: horsesSeed,
   documents: documentsSeed,
   intakeBatches: intakeBatchesSeed,
@@ -137,12 +142,12 @@ const initialState = {
   subscription: subscriptionSeed,
   roleWorkspaces: roleSeed,
   salesLeads: salesLeadsSeed,
-  sharedAccess: sharedAccessSeed,
+  sharedListings: sharedListingsSeed,
+  sharedAccess: deriveSharedAccessSnapshot(sharedAccessSeed, sharedListingsSeed, salesLeadsSeed),
   workspaceProfile: workspaceProfileSeed,
-  savedHorseIds: ['horse-wiggy', 'horse-dolly'],
 };
 
-function syncDerivedValues(state: Pick<XbarStore, 'horses' | 'salesLeads' | 'savedHorseIds' | 'sharedAccess'>) {
+function syncDerivedValues(state: Pick<XbarStore, 'horses' | 'salesLeads' | 'sharedListings' | 'sharedAccess'>) {
   const horses = state.horses.map((horse) => {
     const leadCount = state.salesLeads.filter((lead) => lead.horseId === horse.id && lead.stage !== 'Closed').length;
     return {
@@ -156,7 +161,7 @@ function syncDerivedValues(state: Pick<XbarStore, 'horses' | 'salesLeads' | 'sav
 
   return {
     horses,
-    sharedAccess: deriveSharedAccessSnapshot(state.sharedAccess, state.savedHorseIds, state.salesLeads),
+    sharedAccess: deriveSharedAccessSnapshot(state.sharedAccess, state.sharedListings, state.salesLeads),
   };
 }
 
@@ -196,9 +201,22 @@ function restoreWorkspaceProfile(raw: unknown): WorkspaceProfile {
   };
 }
 
+function createSharedListingRecord(horseId: string, patch?: Partial<SharedListingRecord>): SharedListingRecord {
+  const timestamp = todayStamp();
+  return {
+    id: patch?.id ?? createId('share'),
+    horseId,
+    sharePath: patch?.sharePath ?? buildSharePath(horseId),
+    state: patch?.state ?? 'Draft',
+    channels: patch?.channels?.length ? patch.channels : ['Direct Link'],
+    createdAt: patch?.createdAt ?? timestamp,
+    updatedAt: patch?.updatedAt ?? timestamp,
+    lastSharedAt: patch?.lastSharedAt,
+  };
+}
+
 function selectPersistedState(state: PersistedXbarState): PersistedXbarState {
   return {
-    currentRole: state.currentRole,
     horses: state.horses,
     documents: state.documents,
     intakeBatches: state.intakeBatches,
@@ -207,9 +225,9 @@ function selectPersistedState(state: PersistedXbarState): PersistedXbarState {
     subscription: state.subscription,
     roleWorkspaces: state.roleWorkspaces,
     salesLeads: state.salesLeads,
+    sharedListings: state.sharedListings,
     sharedAccess: state.sharedAccess,
     workspaceProfile: state.workspaceProfile,
-    savedHorseIds: state.savedHorseIds,
   };
 }
 
@@ -265,8 +283,13 @@ function restorePersistedState(raw: unknown): PersistedXbarState {
         },
       }
     : initialState.subscription;
+  const legacySavedHorseIds = Array.isArray(state.savedHorseIds) ? (state.savedHorseIds as string[]) : [];
+  const sharedListings = Array.isArray(state.sharedListings)
+    ? (state.sharedListings as SharedListingRecord[]).map((listing) => createSharedListingRecord(listing.horseId, listing))
+    : legacySavedHorseIds.length
+      ? legacySavedHorseIds.map((horseId) => createSharedListingRecord(horseId, { state: 'Draft' }))
+      : initialState.sharedListings;
   const baseState: PersistedXbarState = {
-    currentRole: (state.currentRole as UserRole | undefined) ?? initialState.currentRole,
     horses,
     documents,
     intakeBatches,
@@ -283,6 +306,7 @@ function restorePersistedState(raw: unknown): PersistedXbarState {
             false,
         }))
       : initialState.salesLeads,
+    sharedListings,
     sharedAccess:
       state.sharedAccess && typeof state.sharedAccess === 'object'
         ? (state.sharedAccess as SharedAccessSnapshot)
@@ -290,12 +314,11 @@ function restorePersistedState(raw: unknown): PersistedXbarState {
           ? (state.portal as SharedAccessSnapshot)
           : initialState.sharedAccess,
     workspaceProfile: restoreWorkspaceProfile(state.workspaceProfile),
-    savedHorseIds: Array.isArray(state.savedHorseIds) ? (state.savedHorseIds as string[]) : initialState.savedHorseIds,
   };
   const derived = syncDerivedValues({
     horses: baseState.horses,
     salesLeads: baseState.salesLeads,
-    savedHorseIds: baseState.savedHorseIds,
+    sharedListings: baseState.sharedListings,
     sharedAccess: baseState.sharedAccess,
   });
 
@@ -334,7 +357,7 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
     owner: input.owner.trim(),
     ownerEntity: input.ownerEntity.trim(),
     insuredValue: 65000,
-    profileImage: `${import.meta.env.BASE_URL}xbar-logo-sleek.png`,
+    profileImage: '',
     tags: ['new-intake', 'media-needed'],
     bloodline: {
       sire: 'Pending intake',
@@ -402,6 +425,88 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
       },
     ],
     notes: [],
+  };
+}
+
+function guessHorseSexFromDocuments(documents: DocumentRecord[]): NewHorseInput['sex'] {
+  const haystack = `${documents.map((document) => `${document.title} ${document.extractedTextPreview}`).join(' ')}`.toLowerCase();
+  if (haystack.includes('gelding')) return 'Gelding';
+  if (haystack.includes('stud') || haystack.includes('stallion') || haystack.includes('colt')) return 'Stud';
+  if (haystack.includes('filly')) return 'Filly';
+  return 'Mare';
+}
+
+function buildHorseInputFromDocuments(documents: DocumentRecord[], workspaceProfile: WorkspaceProfile): NewHorseInput | null {
+  const horseName =
+    documents.map((document) => document.entities.horseName?.trim()).find(Boolean) ??
+    documents
+      .map((document) => document.title.replace(/[-_]/g, ' ').trim())
+      .find((title) => title.length >= 3) ??
+    '';
+  const registrationNumber = documents.map((document) => document.entities.registrationNumber?.trim()).find(Boolean) ?? '';
+  const ownerName =
+    documents.map((document) => document.entities.ownerName?.trim()).find(Boolean) ??
+    workspaceProfile.defaultOwnerName.trim() ??
+    '';
+  const ownerEntity = workspaceProfile.defaultOwnerEntity.trim() || workspaceProfile.businessName.trim() || ownerName || '';
+
+  if (!horseName && !registrationNumber) {
+    return null;
+  }
+
+  const normalizedHorseName = (horseName || registrationNumber).trim().toUpperCase();
+  const normalizedBarnName = normalizedHorseName.split(/\s+/).slice(0, 2).join(' ') || normalizedHorseName;
+
+  return {
+    name: normalizedHorseName,
+    barnName: normalizedBarnName,
+    segment: 'Sale Prospect',
+    status: 'Sale Prep',
+    sex: guessHorseSexFromDocuments(documents),
+    owner: ownerName || 'Pending Owner',
+    ownerEntity: ownerEntity || 'Pending Entity',
+    aqhaNumber: registrationNumber.startsWith('AQHA') ? registrationNumber : '',
+    registrationNumber,
+    barn: workspaceProfile.defaultBarn.trim() || 'Intake Barn',
+    pasture: workspaceProfile.defaultPasture.trim() || 'Pending Pasture',
+  };
+}
+
+function createHorseFromDocuments(documents: DocumentRecord[], workspaceProfile: WorkspaceProfile) {
+  const horseInput = buildHorseInputFromDocuments(documents, workspaceProfile);
+  if (!horseInput) {
+    return null;
+  }
+
+  const horse = createHorseRecord(horseInput, workspaceProfile);
+  const readyDocuments = documents.map((document) => ({
+    ...document,
+    horseId: horse.id,
+    state: 'Ready' as const,
+    confidence: Math.max(document.confidence, 0.91),
+    duplicateRisk: document.duplicateRisk === 'Possible Duplicate' ? 'Review' : document.duplicateRisk,
+    entities: {
+      ...document.entities,
+      horseName: document.entities.horseName ?? horse.name,
+      ownerName: document.entities.ownerName ?? horse.owner,
+      registrationNumber: document.entities.registrationNumber ?? horse.registrationNumber,
+    },
+    summary: `${document.title} was used to create ${horse.name} and is now attached to the new horse profile.`,
+  }));
+  const promotedHorse = readyDocuments.reduce(promoteDocument, horse);
+  const ownershipRecord = {
+    ...createOwnershipRecord(promotedHorse),
+    legalOwner: horse.owner,
+    pendingDocuments: readyDocuments
+      .filter((document) => document.type === 'Transfer Packet' || document.type === 'Bill of Sale')
+      .map((document) => document.title),
+    confidence: readyDocuments.some((document) => document.type === 'Registration') ? 78 : 52,
+  };
+
+  return {
+    horse: promotedHorse,
+    documents: readyDocuments,
+    ownershipRecord,
   };
 }
 
@@ -495,16 +600,36 @@ export const useXbarStore = create<XbarStore>()(
         set({ workspaceProfile: nextProfile });
         return { ok: true, message: 'Workspace profile updated.' };
       },
-      toggleSavedHorse: (horseId) => {
+      toggleSharedListing: (horseId) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageSharedAccess');
         if (deniedMessage) {
-          return;
+          return { ok: false, message: deniedMessage };
         }
 
+        if (!get().horses.some((horse) => horse.id === horseId)) {
+          return { ok: false, message: 'Horse record not found for shared access.' };
+        }
+
+        let isActive = false;
         set((state) => {
-          const nextSavedHorseIds = state.savedHorseIds.includes(horseId)
-            ? state.savedHorseIds.filter((id) => id !== horseId)
-            : [...state.savedHorseIds, horseId];
+          const existingListing = state.sharedListings.find((listing) => listing.horseId === horseId && listing.state !== 'Archived');
+          isActive = Boolean(existingListing);
+          const nextSharedListings = existingListing
+            ? state.sharedListings.map((listing) =>
+                listing.horseId === horseId
+                  ? {
+                      ...listing,
+                      state: 'Archived' as const,
+                      updatedAt: todayStamp(),
+                    }
+                  : listing,
+              )
+            : [
+                createSharedListingRecord(horseId, {
+                  state: 'Draft',
+                }),
+                ...state.sharedListings,
+              ];
 
           const horses = state.horses.map((horse) =>
             horse.id === horseId
@@ -512,22 +637,42 @@ export const useXbarStore = create<XbarStore>()(
                   ...horse,
                   sale: {
                     ...horse.sale,
-                    watchlistCount: Math.max(0, horse.sale.watchlistCount + (state.savedHorseIds.includes(horseId) ? -1 : 1)),
+                    watchlistCount: Math.max(0, horse.sale.watchlistCount + (existingListing ? -1 : 1)),
                   },
                 }
               : horse,
           );
 
           return {
-            savedHorseIds: nextSavedHorseIds,
-              ...syncDerivedValues({
-                horses,
-                salesLeads: state.salesLeads,
-                savedHorseIds: nextSavedHorseIds,
-                sharedAccess: state.sharedAccess,
-              }),
-            };
+            sharedListings: nextSharedListings,
+            ...syncDerivedValues({
+              horses,
+              salesLeads: state.salesLeads,
+              sharedListings: nextSharedListings,
+              sharedAccess: state.sharedAccess,
+            }),
+          };
         });
+        return {
+          ok: true,
+          message: isActive ? 'Horse removed from shared access.' : 'Horse added to shared access.',
+          id: horseId,
+        };
+      },
+      recordSharedChannel: (horseId, channel) => {
+        set((state) => ({
+          sharedListings: state.sharedListings.map((listing) =>
+            listing.horseId === horseId && listing.state !== 'Archived'
+              ? {
+                  ...listing,
+                  state: listing.state === 'Draft' ? 'Live' : listing.state,
+                  channels: listing.channels.includes(channel) ? listing.channels : [...listing.channels, channel],
+                  lastSharedAt: todayStamp(),
+                  updatedAt: todayStamp(),
+                }
+              : listing,
+          ),
+        }));
       },
       addHorse: (input) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'createHorse');
@@ -548,7 +693,7 @@ export const useXbarStore = create<XbarStore>()(
         }));
         return { ok: true, message: `${horse.name} is now live in the horse portfolio.`, id: horse.id };
       },
-      createDocumentIntake: async ({ files, horseId, source, uploadedBy, label }) => {
+      createDocumentIntake: async ({ files, horseId, source, uploadedBy, label, createHorseFromBatch }) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'uploadDocuments');
         if (deniedMessage) {
           return { ok: false, message: deniedMessage };
@@ -572,7 +717,7 @@ export const useXbarStore = create<XbarStore>()(
         try {
           const selectedHorse = state.horses.find((horse) => horse.id === horseId);
           const batchId = createId('batch');
-          const documents = await Promise.all(
+          let documents: DocumentRecord[] = await Promise.all(
             fileList.map(async (file) => {
               let uploadedAsset: Awaited<ReturnType<typeof uploadDocumentAssetToCloud>> = null;
               try {
@@ -603,7 +748,54 @@ export const useXbarStore = create<XbarStore>()(
               };
             }),
           );
+          const createdHorseBundles =
+            !selectedHorse && createHorseFromBatch
+              ? Array.from(
+                  documents
+                    .filter((document) => !document.horseId)
+                    .reduce((groups, document) => {
+                      const key =
+                        document.entities.registrationNumber?.trim() ||
+                        document.entities.horseName?.trim() ||
+                        document.title.trim().toUpperCase();
+                      if (!key) {
+                        return groups;
+                      }
+                      const group = groups.get(key) ?? [];
+                      group.push(document);
+                      groups.set(key, group);
+                      return groups;
+                    }, new Map<string, DocumentRecord[]>()),
+                )
+                  .map(([, groupedDocuments]) => {
+                    const horseInput = buildHorseInputFromDocuments(groupedDocuments, state.workspaceProfile);
+                    if (!horseInput) {
+                      return null;
+                    }
+
+                    const duplicateHorse = state.horses.some(
+                      (horse) =>
+                        horse.name === horseInput.name ||
+                        (horseInput.registrationNumber && horse.registrationNumber === horseInput.registrationNumber),
+                    );
+                    if (duplicateHorse) {
+                      return null;
+                    }
+
+                    return createHorseFromDocuments(groupedDocuments, state.workspaceProfile);
+                  })
+                  .filter((bundle): bundle is NonNullable<typeof bundle> => Boolean(bundle))
+              : [];
+
+          if (createdHorseBundles.length) {
+            const createdDocumentMap = new Map(
+              createdHorseBundles.flatMap((bundle) => bundle.documents.map((document) => [document.id, document] as const)),
+            );
+            documents = documents.map((document) => createdDocumentMap.get(document.id) ?? document);
+          }
           const localDocumentCount = documents.filter((document) => document.fileUrl && !document.storagePath).length;
+          const createdHorses = createdHorseBundles.map((bundle) => bundle.horse);
+          const createdOwnershipRecords = createdHorseBundles.map((bundle) => bundle.ownershipRecord);
 
           const batch: IntakeBatch = {
             id: batchId,
@@ -613,7 +805,7 @@ export const useXbarStore = create<XbarStore>()(
             fileCount: documents.length,
             processedCount: documents.length,
             needsReviewCount: documents.filter((document) => document.state === 'Needs Review').length,
-            matchedCount: documents.filter((document) => document.state === 'Matched').length,
+            matchedCount: documents.filter((document) => document.state === 'Matched' || document.state === 'Ready').length,
             state: documents.some((document) => document.state === 'Needs Review')
               ? 'Reviewing'
               : 'Completed',
@@ -623,7 +815,7 @@ export const useXbarStore = create<XbarStore>()(
             const allDocuments = [...documents, ...current.documents];
             const nextHorses = current.horses.map((horse) => {
               const matchedDocuments = documents.filter(
-                (document) => document.horseId === horse.id && document.state === 'Matched',
+                (document) => document.horseId === horse.id && (document.state === 'Matched' || document.state === 'Ready'),
               );
               return matchedDocuments.reduce(promoteDocument, horse);
             });
@@ -631,7 +823,8 @@ export const useXbarStore = create<XbarStore>()(
             return {
               documents: allDocuments,
               intakeBatches: [batch, ...current.intakeBatches],
-              horses: nextHorses,
+              horses: [...createdHorses, ...nextHorses],
+              ownershipRecords: [...createdOwnershipRecords, ...current.ownershipRecords],
               subscription: {
                 ...current.subscription,
                 usage: {
@@ -644,7 +837,7 @@ export const useXbarStore = create<XbarStore>()(
 
           return {
             ok: true,
-            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${localDocumentCount ? ` ${localDocumentCount} stored locally until cloud sync is available.` : ''}`,
+            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the intake batch.` : ''}${localDocumentCount ? ` ${localDocumentCount} stored locally until cloud sync is available.` : ''}`,
             id: batch.id,
           };
         } catch (error) {
@@ -883,7 +1076,7 @@ export const useXbarStore = create<XbarStore>()(
             ...syncDerivedValues({
               horses,
               salesLeads,
-              savedHorseIds: current.savedHorseIds,
+              sharedListings: current.sharedListings,
               sharedAccess: current.sharedAccess,
             }),
           };
@@ -918,7 +1111,7 @@ export const useXbarStore = create<XbarStore>()(
             ...syncDerivedValues({
               horses: current.horses,
               salesLeads,
-              savedHorseIds: current.savedHorseIds,
+              sharedListings: current.sharedListings,
               sharedAccess: current.sharedAccess,
             }),
           };
@@ -1261,7 +1454,6 @@ export const useXbarStore = create<XbarStore>()(
       migrate: (persistedState) => restorePersistedState(persistedState),
       partialize: (state) =>
         selectPersistedState({
-          currentRole: state.currentRole,
           horses: state.horses,
           documents: state.documents,
           intakeBatches: state.intakeBatches,
@@ -1270,9 +1462,9 @@ export const useXbarStore = create<XbarStore>()(
           subscription: state.subscription,
           roleWorkspaces: state.roleWorkspaces,
           salesLeads: state.salesLeads,
+          sharedListings: state.sharedListings,
           sharedAccess: state.sharedAccess,
           workspaceProfile: state.workspaceProfile,
-          savedHorseIds: state.savedHorseIds,
         }),
     },
   ),

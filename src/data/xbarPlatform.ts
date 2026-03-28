@@ -3,6 +3,7 @@ import {
   RanchAsset,
   RoleWorkspace,
   SalesLead,
+  SharedListingRecord,
   SharedAccessSnapshot,
   SubscriptionProfile,
   WorkspaceProfile,
@@ -218,11 +219,34 @@ export const salesLeadsSeed: SalesLead[] = [
 ];
 
 export const sharedAccessSeed: SharedAccessSnapshot = {
-  invitedOwners: 9,
-  activeOwners: 3,
-  savedHorses: 7,
-  openInquiries: 5,
+  invitedOwners: 0,
+  activeOwners: 0,
+  savedHorses: 0,
+  openInquiries: 0,
 };
+
+export const sharedListingsSeed: SharedListingRecord[] = [
+  {
+    id: 'share-horse-wiggy',
+    horseId: 'horse-wiggy',
+    sharePath: '/profiles/horse-wiggy',
+    state: 'Live',
+    channels: ['Direct Link', 'Facebook'],
+    createdAt: '2026-03-18',
+    updatedAt: '2026-03-24',
+    lastSharedAt: '2026-03-24',
+  },
+  {
+    id: 'share-horse-dolly',
+    horseId: 'horse-dolly',
+    sharePath: '/profiles/horse-dolly',
+    state: 'Draft',
+    channels: ['Direct Link'],
+    createdAt: '2026-03-20',
+    updatedAt: '2026-03-22',
+    lastSharedAt: '2026-03-22',
+  },
+];
 
 export const workspaceProfileSeed: WorkspaceProfile = {
   ranchName: 'Primary Ranch',

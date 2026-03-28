@@ -305,6 +305,19 @@ export interface SalesLead {
   shareReady: boolean;
 }
 
+export type SharedChannel = 'Direct Link' | 'Facebook';
+
+export interface SharedListingRecord {
+  id: string;
+  horseId: string;
+  sharePath: string;
+  state: 'Draft' | 'Live' | 'Archived';
+  channels: SharedChannel[];
+  createdAt: string;
+  updatedAt: string;
+  lastSharedAt?: string;
+}
+
 export interface SharedAccessSnapshot {
   invitedOwners: number;
   activeOwners: number;

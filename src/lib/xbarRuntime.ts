@@ -7,6 +7,7 @@ import type {
   GalleryAsset,
   HorseRecord,
   SalesLead,
+  SharedListingRecord,
   SharedAccessSnapshot,
   SubscriptionProfile,
   SubscriptionTier,
@@ -186,15 +187,21 @@ export function conditionTone(condition: AssetCondition) {
 
 export function deriveSharedAccessSnapshot(
   sharedAccess: SharedAccessSnapshot,
-  savedHorseIds: string[],
+  sharedListings: SharedListingRecord[],
   salesLeads: SalesLead[],
 ) {
-  const openInquiries = salesLeads.filter((lead) => lead.stage !== 'Closed').length;
+  const activeListings = sharedListings.filter((listing) => listing.state !== 'Archived');
+  const listedHorseIds = new Set(activeListings.map((listing) => listing.horseId));
+  const openInquiries = salesLeads.filter((lead) => lead.stage !== 'Closed' && listedHorseIds.has(lead.horseId)).length;
   return {
     ...sharedAccess,
-    savedHorses: savedHorseIds.length,
+    savedHorses: activeListings.length,
     openInquiries,
   };
+}
+
+export function buildSharePath(horseId: string) {
+  return `/profiles/${horseId}`;
 }
 
 export async function readFileAsDataUrl(file: File) {
