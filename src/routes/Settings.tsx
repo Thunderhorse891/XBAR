@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { PageHeader, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
-import { isSupabaseConfigured } from '@/lib/platformConfig';
+import { isFacebookSharingConfigured, isSupabaseConfigured } from '@/lib/platformConfig';
 import { workspaceStorageDriverLabel } from '@/lib/workspaceStorage';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -20,6 +20,7 @@ export default function Settings() {
   const cloudSyncState = useCloudStore((state) => state.syncState);
   const setLastCloudSyncAt = useCloudStore((state) => state.setLastSyncAt);
   const sendMagicLink = useCloudStore((state) => state.sendMagicLink);
+  const signInWithFacebook = useCloudStore((state) => state.signInWithFacebook);
   const signOutCloud = useCloudStore((state) => state.signOut);
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageSettings = useCurrentRoleCapability('manageSettings');
@@ -28,6 +29,7 @@ export default function Settings() {
   const [profileDraft, setProfileDraft] = useState(workspaceProfile);
   const [authEmail, setAuthEmail] = useState('');
   const [cloudBusy, setCloudBusy] = useState(false);
+  const facebookConnected = cloudSession?.user?.app_metadata?.provider === 'facebook';
 
   useEffect(() => {
     setProfileDraft(workspaceProfile);
@@ -164,6 +166,17 @@ export default function Settings() {
     setCloudBusy(false);
   };
 
+  const handleFacebookConnect = async () => {
+    setCloudBusy(true);
+    const result = await signInWithFacebook();
+    pushToast({
+      title: result.ok ? 'Facebook connect started' : 'Facebook connect failed',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
+    setCloudBusy(false);
+  };
+
   return (
     <>
       <PageHeader
@@ -289,12 +302,45 @@ export default function Settings() {
           </div>
         </Panel>
 
+        <Panel eyebrow="Channels" title="Facebook">
+          <div className="stack-list">
+            <div className="stack-item">
+              <div className="stack-item__top">
+                <div className="stack-item__title">Share dialog</div>
+                <div className="status-inline">
+                  <Pill tone={isFacebookSharingConfigured() ? 'emerald' : 'slate'}>
+                    {isFacebookSharingConfigured() ? 'Configured' : 'App ID missing'}
+                  </Pill>
+                  <Pill tone={facebookConnected ? 'emerald' : 'slate'}>
+                    {facebookConnected ? 'Connected' : 'Not connected'}
+                  </Pill>
+                </div>
+              </div>
+              <div className="inline-metrics">
+                <span>Buyer share links can open in Facebook</span>
+                <span>Post flow uses Facebook&apos;s own share window</span>
+              </div>
+            </div>
+          </div>
+          <div className="inline-actions">
+            <button
+              className="button button--primary button--compact"
+              type="button"
+              onClick={handleFacebookConnect}
+              disabled={!canSyncCloud || cloudBusy || !isSupabaseConfigured()}
+            >
+              {facebookConnected ? 'Reconnect Facebook' : 'Connect Facebook'}
+            </button>
+          </div>
+        </Panel>
+
         <Panel eyebrow="Runtime" title="Runtime">
           <div className="token-row">
             <Pill tone="slate">Local-first</Pill>
             <Pill tone="blue">Cloud optional</Pill>
             <Pill tone="slate">Manual docs</Pill>
             <Pill tone="slate">Payment links</Pill>
+            <Pill tone={isFacebookSharingConfigured() ? 'emerald' : 'slate'}>Facebook share</Pill>
             <Pill tone="amber">Backend next</Pill>
           </div>
         </Panel>

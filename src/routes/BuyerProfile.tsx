@@ -1,12 +1,15 @@
 import { Link, useParams } from 'react-router-dom';
 import { KeyValue, MetricCard, Panel, Pill, ProgressBar } from '@/components/app-ui';
+import { buildPublicShareUrl, openFacebookShareDialog } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
+import { useUiStore } from '@/store/useUiStore';
 import { useHorseRecord, useXbarStore } from '@/store/useXbarStore';
 
 export default function BuyerProfile() {
   const { id } = useParams<{ id: string }>();
   const horse = useHorseRecord(id);
+  const pushToast = useUiStore((state) => state.pushToast);
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents.filter((document) => document.horseId === id));
   const ownershipRecord = useXbarStore((state) => state.ownershipRecords.find((record) => record.horseId === id));
@@ -26,6 +29,7 @@ export default function BuyerProfile() {
   }
 
   const packet = buildHorsePacketCompleteness(horse, documents, ownershipRecord);
+  const publicShareUrl = buildPublicShareUrl(packet.sharePath);
   const visibleDocuments = documents
     .map((document) => ({
       document,
@@ -55,6 +59,25 @@ export default function BuyerProfile() {
             <div className="buyer-share">
               <span>Share path</span>
               <strong>{packet.sharePath}</strong>
+            </div>
+            <div className="inline-actions">
+              <a className="button button--ghost button--compact" href={publicShareUrl} target="_blank" rel="noreferrer">
+                Open public view
+              </a>
+              <button
+                className="button button--primary button--compact"
+                type="button"
+                onClick={() => {
+                  const result = openFacebookShareDialog(packet.sharePath);
+                  pushToast({
+                    title: result.ok ? 'Facebook ready' : 'Facebook unavailable',
+                    message: result.message,
+                    tone: result.ok ? 'success' : 'error',
+                  });
+                }}
+              >
+                Post to Facebook
+              </button>
             </div>
           </div>
         </section>

@@ -66,6 +66,8 @@ Optional but recommended:
 - `VITE_SUPABASE_WORKSPACE_TABLE`
 - `VITE_SUPABASE_MEDIA_BUCKET`
 - `VITE_SUPABASE_DOCUMENT_BUCKET`
+- `VITE_FACEBOOK_APP_ID`
+- `VITE_PUBLIC_APP_URL`
 - `VITE_STRIPE_PAYMENT_LINK_STARTER`
 - `VITE_STRIPE_PAYMENT_LINK_PROFESSIONAL`
 - `VITE_STRIPE_PAYMENT_LINK_RANCH_OPS`
@@ -81,6 +83,7 @@ Supabase SQL bootstrap is included in:
 - Local-first workspace with IndexedDB persistence and manual backup import/export
 - Real cloud auth and workspace sync are available when Supabase env is configured
 - Real media/document cloud storage is available when Supabase env is configured
+- Facebook share posting is available when a Meta app ID is configured
 - Real Stripe checkout entry points are available when Stripe payment-link env is configured
 - Manual document intake and review queue
 - Shared-link access for buyer and owner views

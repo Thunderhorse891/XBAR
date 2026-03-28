@@ -21,6 +21,8 @@
     "src/lib/xbarRuntime.ts",
     "src/lib/xbarPhaseTwo.ts",
     "src/lib/xbarGrowth.ts",
+    "src/lib/platformConfig.ts",
+    "src/lib/facebookSharing.ts",
     "src/lib/permissions.ts",
     "src/vite-env.d.ts",
     "tests/**/*.ts"

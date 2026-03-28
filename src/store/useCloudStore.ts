@@ -22,6 +22,7 @@ type CloudStore = {
   setLastSyncAt: (value: string) => void;
   setSyncState: (state: CloudSyncState, message?: string) => void;
   sendMagicLink: (email: string) => Promise<CloudActionResult>;
+  signInWithFacebook: () => Promise<CloudActionResult>;
   signOut: () => Promise<CloudActionResult>;
 };
 
@@ -89,6 +90,26 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     }
 
     return { ok: true, message: 'Magic link sent. Check your inbox to finish sign-in.' };
+  },
+  signInWithFacebook: async () => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+
+    const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    const { error } = await client.auth.signInWithOAuth({
+      provider: 'facebook',
+      options: {
+        redirectTo,
+      },
+    });
+
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    return { ok: true, message: 'Facebook sign-in started.' };
   },
   signOut: async () => {
     const client = getSupabaseClient();

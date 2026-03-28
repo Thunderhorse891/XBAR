@@ -3,11 +3,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
+import { buildPublicShareUrl, openFacebookShareDialog } from '@/lib/facebookSharing';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
+import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 
 export default function SharedAccess() {
   const navigate = useNavigate();
+  const pushToast = useUiStore((state) => state.pushToast);
   const sharedAccess = useXbarStore((state) => state.sharedAccess);
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
@@ -43,6 +46,18 @@ export default function SharedAccess() {
           id: 'open-share',
           label: 'Open share link',
           onSelect: () => navigate(menuPacket.sharePath),
+        },
+        {
+          id: 'post-facebook',
+          label: 'Post to Facebook',
+          onSelect: () => {
+            const result = openFacebookShareDialog(menuPacket.sharePath);
+            pushToast({
+              title: result.ok ? 'Facebook ready' : 'Facebook unavailable',
+              message: result.message,
+              tone: result.ok ? 'success' : 'error',
+            });
+          },
         },
       ]
     : [];
@@ -84,6 +99,7 @@ export default function SharedAccess() {
             <div className="stack-list">
               {sharedHorses.map((horse) => {
                 const packet = packetByHorseId[horse.id];
+                const publicShareUrl = buildPublicShareUrl(packet.sharePath);
 
                 return (
                   <div
@@ -111,6 +127,24 @@ export default function SharedAccess() {
                       <Link className="button button--ghost button--compact" to={packet.sharePath} onClick={(event) => event.stopPropagation()}>
                         Open share link
                       </Link>
+                      <a className="button button--ghost button--compact" href={publicShareUrl} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
+                        Public view
+                      </a>
+                      <button
+                        className="button button--primary button--compact"
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          const result = openFacebookShareDialog(packet.sharePath);
+                          pushToast({
+                            title: result.ok ? 'Facebook ready' : 'Facebook unavailable',
+                            message: result.message,
+                            tone: result.ok ? 'success' : 'error',
+                          });
+                        }}
+                      >
+                        Post to Facebook
+                      </button>
                     </div>
                   </div>
                 );
