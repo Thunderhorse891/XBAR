@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
-import { PageHeader, Pill, ProgressBar } from '@/components/app-ui';
+import { PageHeader, Pill, ProgressBar, SurfaceTabs } from '@/components/app-ui';
 import { DotsIcon } from '@/components/icons';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
@@ -91,7 +91,6 @@ export default function Horses() {
   });
 
   const saleReady = filtered.filter((horse) => horse.readiness.score >= 80);
-  const medicalWatch = filtered.filter((horse) => horse.status === 'Medical Review');
   const transferRisk = filtered.filter((horse) => ownershipRecords.find((record) => record.horseId === horse.id)?.transferStatus !== 'Clear');
   const buyerReady = filtered.filter((horse) =>
     buildHorsePacketCompleteness(
@@ -187,22 +186,15 @@ export default function Horses() {
   return (
     <>
       <PageHeader
-        eyebrow="Horse ledger"
-        title="Horses"
+        eyebrow="Workspace"
+        title="Horse Desk"
         actions={
           <div className="page-actions">
-            <div className="view-toggle">
-              {(['Portfolio', 'Registry'] as ViewMode[]).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  className={`view-toggle__button${viewMode === mode ? ' view-toggle__button--active' : ''}`}
-                  onClick={() => setViewMode(mode)}
-                >
-                  {mode}
-                </button>
-              ))}
-            </div>
+            <SurfaceTabs
+              items={['Portfolio', 'Registry']}
+              active={viewMode}
+              onChange={(mode) => setViewMode(mode as ViewMode)}
+            />
             <button className="button button--primary button--compact" type="button" onClick={() => setSearchParams({ new: '1' })} disabled={!canCreateHorse}>
               New
             </button>
@@ -216,7 +208,6 @@ export default function Horses() {
               <div>
                 <div className="panel__eyebrow">Live intake</div>
                 <h2 className="panel__title">New horse</h2>
-                <p className="panel__description">Add a horse to this workspace.</p>
               </div>
               <button className="button button--ghost button--compact" type="button" onClick={() => setSearchParams({})}>
                 Close
@@ -334,74 +325,56 @@ export default function Horses() {
         </section>
       ) : null}
 
-      <section className="ledger-stage">
-        <div className="ledger-stage__copy">
-          <div className="eyebrow">Active ledger</div>
-          <h2 className="ledger-stage__title">Clean records.</h2>
-        </div>
-        <div className="ledger-stage__stats">
-          <div className="ledger-stat">
-            <span className="ledger-stat__label">Horses</span>
-            <strong className="ledger-stat__value">{filtered.length}</strong>
-            <span className="ledger-stat__detail">{saleReady.length} sale ready</span>
+      <section className="surface-hero surface-hero--dark">
+        <div className="surface-hero__top">
+          <div>
+            <div className="surface-hero__eyebrow">Live portfolio</div>
+            <h2 className="surface-hero__title">Active records</h2>
           </div>
-          <div className="ledger-stat">
-            <span className="ledger-stat__label">Share ready</span>
-            <strong className="ledger-stat__value">{buyerReady.length}</strong>
-            <span className="ledger-stat__detail">Records cleared to share</span>
-          </div>
-          <div className="ledger-stat">
-            <span className="ledger-stat__label">Medical watch</span>
-            <strong className="ledger-stat__value">{medicalWatch.length}</strong>
-            <span className="ledger-stat__detail">Care-sensitive records</span>
-          </div>
-          <div className="ledger-stat">
-            <span className="ledger-stat__label">Transfer risk</span>
-            <strong className="ledger-stat__value">{transferRisk.length}</strong>
-            <span className="ledger-stat__detail">{formatCompactCurrency(saleReady.reduce((sum, horse) => sum + horse.sale.askPrice, 0))} asking</span>
+          <div className="surface-hero__stats">
+            <div className="surface-hero__stat">
+              <span>Records</span>
+              <strong>{filtered.length}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Sale ready</span>
+              <strong>{saleReady.length}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Share ready</span>
+              <strong>{buyerReady.length}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Transfer risk</span>
+              <strong>{transferRisk.length}</strong>
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="ledger-toolbar">
-        <div className="ledger-toolbar__title">
-          <div className="ledger-toolbar__label">{viewMode}</div>
-          <strong>{filtered.length} records</strong>
-        </div>
-        <div className="ledger-toolbar__meta">
-          <span>{saleReady.length} sale ready</span>
-          <span>{buyerReady.length} share ready</span>
-          <span>{transferRisk.length} transfer blockers</span>
+      <section className="surface-panel">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <SurfaceTabs
+            items={segments}
+            active={segmentFilter}
+            onChange={(segment) => setSegmentFilter(segment as SegmentFilter)}
+            className="surface-tabs--wrap"
+          />
+
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="field-input"
+            placeholder="Search horse, owner, barn"
+          />
         </div>
       </section>
-
-      <div className="filter-bar">
-        <div className="filter-row">
-          {segments.map((segment) => (
-            <button
-              key={segment}
-              type="button"
-              className={`filter-chip${segmentFilter === segment ? ' filter-chip--active' : ''}`}
-              onClick={() => setSegmentFilter(segment)}
-            >
-              {segment}
-            </button>
-          ))}
-        </div>
-
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          className="field-input"
-          placeholder="Search horse, owner, barn"
-        />
-      </div>
 
       {viewMode === 'Portfolio' ? (
         filtered.length ? (
         <div className="horse-grid">
           {filtered.map((horse) => {
-                const saved = sharedListings.some((listing) => listing.horseId === horse.id && listing.state !== 'Archived');
+            const saved = sharedListings.some((listing) => listing.horseId === horse.id && listing.state !== 'Archived');
             const packet = buildHorsePacketCompleteness(
               horse,
               documents.filter((document) => document.horseId === horse.id),
@@ -409,6 +382,7 @@ export default function Horses() {
             );
             const valueLabel = horse.segment === 'Sale Prospect' && horse.sale.askPrice ? 'Ask' : 'Insured';
             const accessLabel = saved ? 'Shared' : 'Private';
+            const showSaleSignals = horse.segment === 'Sale Prospect' || horse.status === 'Sale Prep';
             return (
               <div
                 key={horse.id}
@@ -479,7 +453,7 @@ export default function Horses() {
                       <strong>{horse.location.pasture}</strong>
                     </div>
                     <div className="horse-card__meta-cell">
-                      <span>Record ID</span>
+                      <span>Registry</span>
                       <strong>{horse.registrationNumber}</strong>
                     </div>
                     <div className="horse-card__meta-cell">
@@ -488,18 +462,32 @@ export default function Horses() {
                     </div>
                   </div>
 
-                  <div className="horse-card__readiness">
-                    <div className="horse-card__readiness-head">
-                      <span>Trust</span>
-                      <strong>{formatPercent(packet.score)}</strong>
+                  {showSaleSignals ? (
+                    <div className="horse-card__readiness">
+                      <div className="horse-card__readiness-head">
+                        <span>Sale readiness</span>
+                        <strong>{formatPercent(packet.score)}</strong>
+                      </div>
+                      <ProgressBar value={packet.score} tone={packet.tone} />
                     </div>
-                    <ProgressBar value={packet.score} tone={packet.tone} />
-                  </div>
+                  ) : (
+                    <div className="horse-card__readiness horse-card__readiness--meta">
+                      <div className="horse-card__readiness-head">
+                        <span>Care status</span>
+                        <strong>{horse.status}</strong>
+                      </div>
+                      <div className="inline-metrics">
+                        <span>{horse.gallery.length} assets</span>
+                        <span>{packet.readyCount} packet clear</span>
+                        <span>{horse.location.barn}</span>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="horse-card__footer">
                     <div className="status-inline">
                       {saved ? <Pill tone="blue">Shared</Pill> : null}
-                      <span>{horse.sale.watchlistCount} watching</span>
+                      <span>{showSaleSignals ? `${horse.sale.watchlistCount} watching` : `${horse.sale.inquiryCount} inquiries`}</span>
                     </div>
                     <div className="inline-actions inline-actions--card">
                       <button
@@ -530,7 +518,7 @@ export default function Horses() {
         ) : (
           <EmptyState
             title="No horses match this view"
-            description="Change the segment filter, clear the search, or add a horse record."
+            description="Adjust filters, clear search, or add a horse."
             action={
               <button className="button button--primary button--compact" type="button" onClick={() => setSearchParams({ new: '1' })} disabled={!canCreateHorse}>
                 Add horse
@@ -586,7 +574,7 @@ export default function Horses() {
       ) : (
         <EmptyState
           title="No horses match this registry view"
-          description="Change the segment filter, clear the search, or add a horse record."
+          description="Adjust filters, clear search, or add a horse."
           action={
               <button className="button button--primary button--compact" type="button" onClick={() => setSearchParams({ new: '1' })} disabled={!canCreateHorse}>
                 Add horse

@@ -78,52 +78,52 @@ const workspaceShortcutRoutes: Record<string, string> = {
 
 const routeHelp: Record<string, HelpSection[]> = {
   Dashboard: [
-    { label: 'Focus', text: 'Watch blockers first. Cards open the related workspace and right-click exposes quick actions.' },
-    { label: 'Signals', text: 'Queue, medical, ownership, and sales are the highest-priority surfaces.' },
+    { label: 'Focus', text: 'Start with blockers and queue risk.' },
+    { label: 'Actions', text: 'Open cards or right-click records for shortcuts.' },
   ],
   Horses: [
-    { label: 'Browse', text: 'Cards open horse records. Table rows and cards support quick actions.' },
-    { label: 'Create', text: 'Use New for intake. Save only the fields you actually know.' },
+    { label: 'Browse', text: 'Cards and rows open the full horse record.' },
+    { label: 'Create', text: 'Use New for intake and save only confirmed data.' },
   ],
   Documents: [
-    { label: 'Intake', text: 'Add files on the left. Attach to a horse only when you are sure.' },
-    { label: 'Review', text: 'Approve or discard from the queue. Right-click cards, batches, and rows for shortcuts.' },
+    { label: 'Intake', text: 'Upload first. Attach only when the match is clear.' },
+    { label: 'Review', text: 'Approve, discard, or open files from the queue.' },
   ],
   Ownership: [
-    { label: 'Transfer', text: 'Use this page to clear blockers, update status, and audit ownership changes.' },
-    { label: 'Records', text: 'Right-click rows for quick navigation and transfer actions.' },
+    { label: 'Transfer', text: 'Clear blockers and move transfers forward here.' },
+    { label: 'Records', text: 'Right-click rows for transfer actions and jumps.' },
   ],
   Medical: [
-    { label: 'Care', text: 'Track treatment, visit cadence, and alerts from one page.' },
-    { label: 'Actions', text: 'Right-click watch items for fast horse or care actions.' },
+    { label: 'Care', text: 'Track treatment, alerts, and visit cadence.' },
+    { label: 'Actions', text: 'Right-click watch items for fast care actions.' },
   ],
   Breeding: [
-    { label: 'Program', text: 'Manage pairings, milestones, and foaling events from the breeding workspace.' },
-    { label: 'Actions', text: 'Right-click entries to jump into the horse record or update the program.' },
+    { label: 'Program', text: 'Manage pairings, milestones, and foaling work.' },
+    { label: 'Actions', text: 'Right-click entries to jump or update quickly.' },
   ],
   Sales: [
-    { label: 'Pipeline', text: 'Track leads, stages, and listing posture in one flow.' },
-    { label: 'Actions', text: 'Right-click horses or leads for offer and follow-up shortcuts.' },
+    { label: 'Pipeline', text: 'Track leads, stages, and listing posture.' },
+    { label: 'Actions', text: 'Right-click horses or leads for next-step actions.' },
   ],
   'Ranch Toolkit': [
-    { label: 'Assets', text: 'Use this workspace for equipment, kits, and service cadence.' },
-    { label: 'Actions', text: 'Right-click asset rows to update status and jump into related work.' },
+    { label: 'Assets', text: 'Keep equipment, kits, and service work in one place.' },
+    { label: 'Actions', text: 'Right-click rows to update status or jump out.' },
   ],
   Subscriptions: [
-    { label: 'Billing', text: 'This page tracks the contract and linked billing path.' },
-    { label: 'Limits', text: 'Watch seats, storage, and access limits here.' },
+    { label: 'Billing', text: 'Track contract, billing path, and plan state.' },
+    { label: 'Limits', text: 'Watch seats, storage, and access limits.' },
   ],
   'Shared Access': [
-    { label: 'Shares', text: 'Stage the buyer-facing list here and review share-safe records.' },
-    { label: 'Actions', text: 'Right-click saved horses for link and access shortcuts.' },
+    { label: 'Shares', text: 'Stage the share list and monitor buyer-safe records.' },
+    { label: 'Actions', text: 'Right-click saved horses for link shortcuts.' },
   ],
   Settings: [
-    { label: 'Profile', text: 'Manage workspace defaults, sync, and backup from one place.' },
-    { label: 'Recovery', text: 'Use backup and cloud controls before large data changes.' },
+    { label: 'Profile', text: 'Manage defaults, sync, and backup here.' },
+    { label: 'Recovery', text: 'Use backup controls before large changes.' },
   ],
   'Horse Profile': [
-    { label: 'Top row', text: 'Media, readiness, and share posture live at the top of the record.' },
-    { label: 'Sections', text: 'Use the lower panels for documents, ownership, notes, and care history.' },
+    { label: 'Top row', text: 'Media, readiness, and share status sit up top.' },
+    { label: 'Sections', text: 'Use the tabs below for docs, ops, and activity.' },
   ],
 };
 
@@ -134,7 +134,7 @@ function classNames(...parts: Array<string | false | null | undefined>) {
 function NavSection({ title, items }: { title: string; items: NavItem[] }) {
   return (
     <div className="flex flex-col gap-2">
-      <div className="px-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-[#666666]">{title}</div>
+      <div className="px-3 text-[10px] font-semibold uppercase tracking-[0.28em] text-white/32">{title}</div>
       <div className="flex flex-col gap-1">
         {items.map(({ label, path, icon: Icon }) => (
           <NavLink
@@ -145,8 +145,8 @@ function NavSection({ title, items }: { title: string; items: NavItem[] }) {
               classNames(
                 'group flex items-center gap-3 border-l-[3px] px-3 py-2.5 text-sm font-medium transition-all duration-150 ease-[ease]',
                 isActive
-                  ? 'border-[#385464] bg-white/[0.045] text-white'
-                  : 'border-transparent text-white/74 hover:border-white/10 hover:bg-white/[0.035] hover:text-white',
+                  ? 'border-[#4d6675] bg-white/[0.06] text-white'
+                  : 'border-transparent text-white/68 hover:border-white/10 hover:bg-white/[0.03] hover:text-white',
               )
             }
           >
@@ -205,28 +205,35 @@ export default function MainLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f2f2f7] lg:grid lg:grid-cols-[276px,1fr]">
-      <aside className="hidden min-h-screen flex-col gap-5 border-r border-[#16191d] bg-[#0b0d10] px-[18px] py-6 text-white lg:flex">
+    <div className="min-h-screen bg-[#edf0f4] lg:grid lg:grid-cols-[248px,1fr]">
+      <aside className="hidden min-h-screen flex-col gap-6 border-r border-white/6 bg-[#090b0d] px-5 py-5 text-white lg:flex">
         <div className="flex items-center gap-3">
-          <div className="flex h-[52px] w-[52px] items-center justify-center rounded-md border border-white/8 bg-white/[0.03] p-1.5">
+          <div className="flex h-[52px] w-[52px] items-center justify-center rounded-lg border border-white/8 bg-white/[0.03] p-1.5">
             <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" className="h-full w-full object-contain" />
           </div>
           <div className="min-w-0">
             <div className="truncate text-[1.04rem] font-extrabold uppercase tracking-[0.14em]">{workspaceProfile.businessName || 'XBAR'}</div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/55">{workspaceProfile.ranchName || 'Horse Ledger'}</div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/40">{workspaceProfile.ranchName || 'Horse Ledger'}</div>
           </div>
         </div>
 
-        <div className="rounded-md border border-white/8 bg-white/[0.03] p-3">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/45">Workspace</div>
-          <div className="mt-2 text-sm font-semibold text-white">{roleWorkspace.label}</div>
-          <div className="mt-3 flex flex-wrap gap-2">
+        <div className="rounded-xl border border-white/8 bg-[#11151a] p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/36">Workspace</div>
+              <div className="mt-2 text-[0.95rem] font-semibold text-white">{roleWorkspace.label}</div>
+            </div>
+            <span className="inline-flex min-h-[24px] items-center rounded-md border border-[#43515d] bg-[#171d22] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#93a4b1]">
+              {cloudStatus === 'signed-in' ? 'Cloud' : cloudStatus === 'unavailable' ? 'Local' : 'Limited'}
+            </span>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2">
             {workspaceShortcuts.map((module) => (
               <button
                 key={module.label}
                 type="button"
                 onClick={() => navigate(module.path)}
-                className="rounded-md border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/78 transition-all duration-150 ease-[ease] hover:border-white/16 hover:bg-white/[0.06] hover:text-white"
+                className="rounded-md border border-white/10 bg-white/[0.02] px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-white/72 transition-all duration-150 ease-[ease] hover:border-white/16 hover:bg-white/[0.05] hover:text-white"
               >
                 {module.label}
               </button>
@@ -238,27 +245,32 @@ export default function MainLayout() {
         <NavSection title="Programs" items={programs} />
         <NavSection title="Platform" items={platformItems} />
 
-        <div className="mt-auto rounded-md border border-white/8 bg-white/[0.03] p-3">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/45">Contract</div>
-          <div className="mt-2 flex items-center justify-between gap-3">
+        <div className="mt-auto rounded-xl border border-white/8 bg-[#11151a] p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/36">Runtime</div>
+          <div className="mt-3 flex items-center justify-between gap-3">
             <span className="text-sm font-semibold text-white">{subscription.tier}</span>
             <Pill tone="slate">{subscription.billingState}</Pill>
           </div>
-          <div className="mt-2 text-xs text-white/62">
-            {subscription.usage.seatsUsed}/{subscription.usage.seatLimit} seats in use
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-white/58">
+            <div className="rounded-md border border-white/8 bg-white/[0.02] px-3 py-2">
+              Seats {subscription.usage.seatsUsed}/{subscription.usage.seatLimit}
+            </div>
+            <div className="rounded-md border border-white/8 bg-white/[0.02] px-3 py-2">
+              Docs {pendingReview} review
+            </div>
           </div>
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-col bg-[#f2f2f7]">
-        <header className="sticky top-0 z-10 border-b border-[#dde3ea] bg-white">
-          <div className="flex min-h-[58px] flex-wrap items-center justify-between gap-4 px-5 py-3">
+      <div className="flex min-w-0 flex-col bg-[#edf0f4]">
+        <header className="sticky top-0 z-10 border-b border-[#dde4eb] bg-[#f6f8fb]/95 backdrop-blur">
+          <div className="flex min-h-[56px] flex-wrap items-center justify-between gap-4 px-5 py-3">
             <div className="flex items-center gap-3">
-              <div className="text-[0.92rem] font-extrabold tracking-[0.01em] text-[#202225]">{currentLabel}</div>
+              <div className="text-[0.96rem] font-extrabold tracking-[0.01em] text-[#202225]">{currentLabel}</div>
               <span
                 className={classNames(
-                  'inline-flex min-h-[24px] items-center rounded-md px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]',
-                  pendingReview ? 'bg-[#edf1f4] text-[#475467]' : 'bg-[#edf4ef] text-[#2b6a4c]',
+                  'inline-flex min-h-[24px] items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]',
+                  pendingReview ? 'border-[#d6dde4] bg-white text-[#52616d]' : 'border-[#d7e6dd] bg-[#f3faf6] text-[#2b6a4c]',
                 )}
               >
                 {pendingReview ? `${pendingReview} review` : 'Queue clear'}
@@ -272,26 +284,26 @@ export default function MainLayout() {
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   onKeyDown={handleSearch}
-                  placeholder="Search records"
-                  className="h-10 w-full rounded-md border border-[#d1dbe4] bg-white pl-10 pr-4 text-sm text-[#202225] transition-all duration-150 ease-[ease] placeholder:text-[#8a96a3] focus:border-[#7d8a96] focus:outline-none"
+                  placeholder="Search horses or docs"
+                  className="h-10 w-full rounded-md border border-[#d5dce4] bg-white pl-10 pr-4 text-sm text-[#202225] transition-all duration-150 ease-[ease] placeholder:text-[#8a96a3] focus:border-[#8997a3] focus:outline-none"
                 />
               </label>
 
-              <div className="inline-flex h-10 items-center gap-2 rounded-md border border-[#d1dbe4] bg-white px-4 text-sm font-semibold text-[#202225]">
+              <div className="inline-flex h-10 items-center gap-3 rounded-md border border-[#d5dce4] bg-white px-3 text-sm font-semibold text-[#202225]">
                 <span>{currentRole}</span>
-                <span className={classNames('inline-flex rounded-sm px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]',
+                <span className={classNames('inline-flex rounded-sm border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]',
                   cloudStatus === 'signed-in'
-                    ? 'bg-[#edf4ef] text-[#2b6a4c]'
+                    ? 'border-[#d7e6dd] bg-[#f3faf6] text-[#2b6a4c]'
                     : cloudStatus === 'unavailable'
-                      ? 'bg-[#f4f5f7] text-[#667085]'
-                      : 'bg-[#edf5fa] text-[#066B90]',
+                      ? 'border-[#e2e5ea] bg-[#f4f5f7] text-[#667085]'
+                      : 'border-[#dce5eb] bg-[#f3f7fa] text-[#405b6a]',
                 )}>
-                  {cloudStatus === 'signed-in' ? 'Synced role' : cloudStatus === 'unavailable' ? 'Local role' : 'Limited'}
+                  {cloudStatus === 'signed-in' ? 'Synced' : cloudStatus === 'unavailable' ? 'Local' : 'Limited'}
                 </span>
               </div>
 
               <button
-                className="inline-flex h-10 items-center justify-center rounded-md border border-[#d1dbe4] bg-white px-4 text-sm font-semibold text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#c4ccd4] hover:bg-[#f7fafc]"
+                className="inline-flex h-10 items-center justify-center rounded-md border border-[#d5dce4] bg-white px-4 text-sm font-semibold text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#c4ccd4] hover:bg-[#f7fafc]"
                 type="button"
                 onClick={() => setHelpOpen(true)}
               >
@@ -299,7 +311,7 @@ export default function MainLayout() {
               </button>
 
               <button
-                className="relative inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#d1dbe4] bg-white text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#c4ccd4] hover:bg-[#f7fafc] disabled:cursor-not-allowed disabled:opacity-50"
+                className="relative inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#d5dce4] bg-white text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#c4ccd4] hover:bg-[#f7fafc] disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 onClick={() => navigate('/documents')}
                 aria-label="Open document review"
@@ -313,7 +325,7 @@ export default function MainLayout() {
               </button>
 
               <button
-                className="inline-flex h-10 items-center justify-center rounded-md border border-[#d1dbe4] bg-white px-4 text-sm font-semibold text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#c4ccd4] hover:bg-[#f7fafc] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center rounded-md border border-[#d5dce4] bg-white px-4 text-sm font-semibold text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#c4ccd4] hover:bg-[#f7fafc] disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 onClick={() => navigate('/documents?upload=1')}
                 disabled={!canUploadDocuments}
@@ -338,7 +350,7 @@ export default function MainLayout() {
           <Outlet />
         </main>
 
-        <nav className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-2 rounded-md border border-white/10 bg-[#0b0d10] p-2 text-white shadow-lg lg:hidden" aria-label="Mobile quick navigation">
+        <nav className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-2 rounded-lg border border-white/10 bg-[#090b0d] p-2 text-white shadow-lg lg:hidden" aria-label="Mobile quick navigation">
           <NavLink
             to="/"
             end

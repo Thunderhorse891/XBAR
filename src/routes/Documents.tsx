@@ -1,8 +1,8 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
-import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
+import { MetricCard, PageHeader, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
 import { EmptyState } from '@/components/EmptyState';
 import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { formatDateTimeLabel } from '@/lib/format';
@@ -12,6 +12,7 @@ import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { DocumentRecord, DocumentSource } from '@/types/xbar';
 
 const sources: DocumentSource[] = ['Manual Upload', 'Bulk Intake', 'Shared Upload', 'Sales Packet'];
+type DocumentsView = 'Review' | 'Intake' | 'Batches' | 'Flags';
 
 export default function Documents() {
   const navigate = useNavigate();
@@ -48,6 +49,7 @@ export default function Documents() {
   const duplicates = documents.filter((document) => document.duplicateRisk === 'Possible Duplicate');
   const buyerSafeDocuments = documents.filter((document) => buildDocumentTrustProfile(document, horses).readyForProfile);
   const uploadOpen = searchParams.get('upload') === '1';
+  const [activeView, setActiveView] = useState<DocumentsView>(uploadOpen ? 'Intake' : 'Review');
   const menuDocument = menuState?.type === 'document' ? documents.find((document) => document.id === menuState.documentId) : undefined;
   const menuHorseId = menuDocument ? reviewAssignments[menuDocument.id] ?? menuDocument.horseId : undefined;
   const accessModeLabel =
@@ -58,6 +60,12 @@ export default function Documents() {
         : !canUploadDocuments && !canReviewDocuments
           ? 'Read only'
           : 'Full access';
+
+  useEffect(() => {
+    if (uploadOpen) {
+      setActiveView('Intake');
+    }
+  }, [uploadOpen]);
   const scrollToSection = (sectionId: string) => {
     document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -298,8 +306,8 @@ export default function Documents() {
   return (
     <>
       <PageHeader
-        eyebrow="Documents"
-        title="Document Desk"
+        eyebrow="Workspace"
+        title="Documents"
         actions={
           <div className="flex flex-wrap gap-2">
             <Pill tone="slate">Manual queue</Pill>
@@ -347,14 +355,28 @@ export default function Documents() {
         />
       </div>
 
+      <section className="surface-panel">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <SurfaceTabs
+            items={['Review', 'Intake', 'Batches', 'Flags']}
+            active={activeView}
+            onChange={(view) => setActiveView(view as DocumentsView)}
+          />
+          <div className="flex flex-wrap gap-2">
+            <Pill tone="slate">{reviewQueue.length} review</Pill>
+            <Pill tone="blue">{intakeBatches.length} batches</Pill>
+            <Pill tone="emerald">{buyerSafeDocuments.length} buyer-safe</Pill>
+          </div>
+        </div>
+      </section>
+
+      {activeView === 'Intake' ? (
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel
           eyebrow="Intake"
           title="Add files"
           action={
-            <Pill tone={uploadOpen ? 'blue' : 'slate'}>
-              {uploadOpen ? 'Top-bar launch' : `${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB used`}
-            </Pill>
+            <Pill tone={uploadOpen ? 'blue' : 'slate'}>{uploadOpen ? 'Top-bar launch' : `${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB used`}</Pill>
           }
           className="cursor-context-menu"
           onContextMenu={(event) => openSurfaceMenu('intake', event)}
@@ -440,40 +462,10 @@ export default function Documents() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Batches" title="Queue states" className="cursor-context-menu" onContextMenu={(event) => openSurfaceMenu('batches', event)}>
-          {intakeBatches.length ? (
-            <div id="documents-batches" className="stack-list">
-              {intakeBatches.map((batch) => (
-                <div key={batch.id} className="stack-item" onContextMenu={(event) => openSurfaceMenu('batches', event)}>
-                  <div className="stack-item__top">
-                    <div>
-                      <div className="stack-item__title">{batch.label}</div>
-                      <div className="stack-item__copy">
-                        {batch.fileCount} files · {batch.source} · {formatDateTimeLabel(batch.receivedAt)}
-                      </div>
-                    </div>
-                    <Pill tone={batch.state === 'Completed' ? 'emerald' : batch.state === 'Reviewing' ? 'amber' : 'blue'}>
-                      {batch.state}
-                    </Pill>
-                  </div>
-                  <div className="inline-metrics">
-                    <span>{batch.processedCount}/{batch.fileCount} logged</span>
-                    <span>{batch.matchedCount} matched</span>
-                    <span>{batch.needsReviewCount} waiting on review</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              compact
-              title="No intake batches yet"
-              description="Upload a batch to start the queue."
-            />
-          )}
-        </Panel>
       </div>
+      ) : null}
 
+      {activeView === 'Review' ? (
       <Panel eyebrow="Review" title="Queue" className="cursor-context-menu" onContextMenu={(event) => openSurfaceMenu('review', event)}>
         {reviewQueue.length ? (
           <div id="documents-review" className="table-shell">
@@ -515,7 +507,7 @@ export default function Documents() {
                       <td>
                         <div className="table-cell__stack">
                           <Pill tone={document.state === 'Ready' ? 'emerald' : document.state === 'Matched' ? 'blue' : trust.tone}>{document.state}</Pill>
-                          <span>{document.duplicateRisk === 'Possible Duplicate' ? 'Duplicate review needed' : 'Manual assignment required'}</span>
+                          <span>{document.duplicateRisk === 'Possible Duplicate' ? 'Duplicate check' : 'Manual match'}</span>
                         </div>
                       </td>
                       <td>
@@ -591,27 +583,63 @@ export default function Documents() {
         ) : (
           <EmptyState
             title="Review queue is clear"
-            description="Nothing is waiting on review."
+            description="Nothing is waiting."
           />
         )}
       </Panel>
+      ) : null}
 
-      {duplicates.length ? (
+      {activeView === 'Flags' ? (
         <Panel eyebrow="Duplicates" title="Review flags" className="cursor-context-menu" onContextMenu={(event) => openSurfaceMenu('duplicates', event)}>
-          <div id="documents-duplicates" className="stack-list">
-            {duplicates.map((document) => {
-              const trust = buildDocumentTrustProfile(document, horses);
-              return (
-                <div key={document.id} className="stack-item" onContextMenu={(event) => openSurfaceMenu('duplicates', event)}>
-                  <div className="stack-item__top">
-                    <div className="stack-item__title">{document.title}</div>
-                    <Pill tone="rose">{document.duplicateRisk}</Pill>
+          {duplicates.length ? (
+            <div id="documents-duplicates" className="stack-list">
+              {duplicates.map((document) => {
+                const trust = buildDocumentTrustProfile(document, horses);
+                return (
+                  <div key={document.id} className="stack-item" onContextMenu={(event) => openSurfaceMenu('duplicates', event)}>
+                    <div className="stack-item__top">
+                      <div className="stack-item__title">{document.title}</div>
+                      <Pill tone="rose">{document.duplicateRisk}</Pill>
+                    </div>
+                    <div className="stack-item__copy">{trust.duplicateSummary}</div>
                   </div>
-                  <div className="stack-item__copy">{trust.duplicateSummary}</div>
+                );
+              })}
+            </div>
+          ) : (
+            <EmptyState compact title="No review flags" description="Duplicate flags land here." />
+          )}
+        </Panel>
+      ) : null}
+
+      {activeView === 'Batches' ? (
+        <Panel eyebrow="Batches" title="Queue states" className="cursor-context-menu" onContextMenu={(event) => openSurfaceMenu('batches', event)}>
+          {intakeBatches.length ? (
+            <div id="documents-batches" className="stack-list">
+              {intakeBatches.map((batch) => (
+                <div key={batch.id} className="stack-item" onContextMenu={(event) => openSurfaceMenu('batches', event)}>
+                  <div className="stack-item__top">
+                    <div>
+                      <div className="stack-item__title">{batch.label}</div>
+                      <div className="stack-item__copy">
+                        {batch.fileCount} files · {batch.source} · {formatDateTimeLabel(batch.receivedAt)}
+                      </div>
+                    </div>
+                    <Pill tone={batch.state === 'Completed' ? 'emerald' : batch.state === 'Reviewing' ? 'amber' : 'blue'}>
+                      {batch.state}
+                    </Pill>
+                  </div>
+                  <div className="inline-metrics">
+                    <span>{batch.processedCount}/{batch.fileCount} logged</span>
+                    <span>{batch.matchedCount} matched</span>
+                    <span>{batch.needsReviewCount} waiting</span>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState compact title="No intake batches" description="Upload a batch to start the queue." />
+          )}
         </Panel>
       ) : null}
 

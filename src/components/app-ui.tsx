@@ -111,6 +111,35 @@ export function Pill({
   return <span className={`pill pill--${tone}`}>{children}</span>;
 }
 
+export function SurfaceTabs({
+  items,
+  active,
+  onChange,
+  className = '',
+}: {
+  items: readonly string[];
+  active: string;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  return (
+    <div className={`surface-tabs ${className}`.trim()} role="tablist" aria-orientation="horizontal">
+      {items.map((item) => (
+        <button
+          key={item}
+          type="button"
+          role="tab"
+          aria-selected={active === item}
+          className={`surface-tab${active === item ? ' surface-tab--active' : ''}`}
+          onClick={() => onChange(item)}
+        >
+          {item}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function ProgressBar({
   value,
   tone = 'blue',

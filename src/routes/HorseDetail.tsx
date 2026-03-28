@@ -1,7 +1,7 @@
 import { useId, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { EmptyState } from '@/components/EmptyState';
-import { KeyValue, Panel, Pill } from '@/components/app-ui';
+import { KeyValue, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
 import { ChevronLeftIcon, SharedAccessIcon } from '@/components/icons';
 import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { formatCompactCurrency, formatDateLabel, formatPercent } from '@/lib/format';
@@ -13,6 +13,7 @@ import type { DocumentRecord, DocumentSource, GalleryAsset, SalesLead } from '@/
 const mediaKinds: GalleryAsset['kind'][] = ['Hero', 'Conformation', 'Sale Still', 'Pedigree', 'Document Cover'];
 const leadChannels: SalesLead['channel'][] = ['Facebook', 'Instagram', 'Referral', 'Site Inquiry'];
 const docSources: DocumentSource[] = ['Manual Upload', 'Bulk Intake', 'Shared Upload', 'Sales Packet'];
+type DetailTab = 'Overview' | 'Docs' | 'Ops' | 'Activity';
 const profileBadgeStyles = [
   'border border-[#066B90]/15 bg-[#E8F2F7] text-[#066B90]',
   'border border-[#4A90B8]/15 bg-[#edf5fa] text-[#4A90B8]',
@@ -115,7 +116,7 @@ function StatusChip({ label, detail, ready }: { label: string; detail: string; r
     <div className="group relative">
       <span
         className={classNames(
-          'inline-flex min-h-[32px] cursor-default items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold tracking-[0.02em] ring-1 transition-all duration-150 ease-[ease]',
+          'inline-flex min-h-[32px] cursor-default items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold tracking-[0.02em] ring-1 transition-all duration-150 ease-[ease]',
           ready
             ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
             : 'bg-red-50 text-red-700 ring-red-200',
@@ -124,7 +125,7 @@ function StatusChip({ label, detail, ready }: { label: string; detail: string; r
         <span aria-hidden="true">{ready ? '✓' : '✗'}</span>
         <span>{label}</span>
       </span>
-      <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-44 -translate-x-1/2 rounded-2xl bg-[#202225] px-3 py-2 text-xs font-medium leading-5 text-white shadow-lg group-hover:block group-focus-within:block">
+      <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-44 -translate-x-1/2 rounded-md bg-[#202225] px-3 py-2 text-xs font-medium leading-5 text-white shadow-lg group-hover:block group-focus-within:block">
         {detail}
       </div>
     </div>
@@ -141,8 +142,8 @@ function StatPill({
   label: string;
 }) {
   return (
-    <div className="flex min-w-[112px] flex-1 items-center gap-3 rounded-full border border-[#dce4ec] bg-[#f7fafc] px-3 py-2 shadow-sm transition-all duration-150 ease-[ease] hover:border-[#4A90B8]/40 hover:bg-white">
-      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#066B90] ring-1 ring-[#dce4ec]">{icon}</span>
+    <div className="flex min-w-[112px] flex-1 items-center gap-3 rounded-md border border-[#dce4ec] bg-[#f7fafc] px-3 py-2 shadow-sm transition-all duration-150 ease-[ease] hover:border-[#4A90B8]/40 hover:bg-white">
+      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-white text-[#066B90] ring-1 ring-[#dce4ec]">{icon}</span>
       <div className="min-w-0">
         <div className="text-sm font-bold tracking-[-0.03em] text-[#202225]">{value}</div>
         <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#667085]">{label}</div>
@@ -188,6 +189,7 @@ export default function HorseDetail() {
   const [leadChannel, setLeadChannel] = useState<SalesLead['channel']>('Facebook');
   const [leadError, setLeadError] = useState('');
   const [locationError, setLocationError] = useState('');
+  const [activeTab, setActiveTab] = useState<DetailTab>('Overview');
   const [location, setLocation] = useState({
     barn: horse?.location.barn ?? '',
     pasture: horse?.location.pasture ?? '',
@@ -418,7 +420,7 @@ export default function HorseDetail() {
               <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#4A90B8]">{horse.ownerEntity}</span>
               {hasRestrictedActions ? (
                 <span
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#dce4ec] bg-[#f6f8fb] text-[#667085] transition-all duration-150 ease-[ease] hover:border-[#4A90B8]/40 hover:text-[#066B90]"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#dce4ec] bg-[#f6f8fb] text-[#667085] transition-all duration-150 ease-[ease] hover:border-[#4A90B8]/40 hover:text-[#066B90]"
                   title={`${currentRole} access limits some profile actions.`}
                 >
                   <LockIcon className="h-4 w-4" />
@@ -431,7 +433,7 @@ export default function HorseDetail() {
                 <span
                   key={`${label}-${index}`}
                   className={classNames(
-                    'inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold tracking-[0.02em]',
+                    'inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold tracking-[0.02em]',
                     profileBadgeStyles[index],
                   )}
                 >
@@ -449,14 +451,14 @@ export default function HorseDetail() {
 
           <div className="flex flex-wrap gap-3">
             <Link
-              className="inline-flex h-11 items-center justify-center rounded-full bg-[#066B90] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#055a7a]"
+              className="inline-flex h-11 items-center justify-center rounded-md bg-[#066B90] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#055a7a]"
               to={packet.sharePath}
               onClick={() => recordSharedChannel(horse.id, 'Direct Link')}
             >
               Open share view
             </Link>
             <button
-              className="inline-flex h-11 items-center justify-center rounded-full border border-[#066B90] px-5 text-sm font-semibold text-[#066B90] transition-all duration-150 ease-[ease] hover:bg-[#E8F2F7] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-11 items-center justify-center rounded-md border border-[#066B90] px-5 text-sm font-semibold text-[#066B90] transition-all duration-150 ease-[ease] hover:bg-[#E8F2F7] disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
               onClick={handleSavedHorseToggle}
               disabled={!canManageSharedAccess}
@@ -471,7 +473,7 @@ export default function HorseDetail() {
         <div className="relative flex h-full flex-col overflow-hidden rounded-[20px] border border-[#dde5ec] bg-white p-5 shadow-sm">
           <div className="mb-5 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E8F2F7] text-[#066B90]">
+              <span className="flex h-10 w-10 items-center justify-center rounded-md bg-[#E8F2F7] text-[#066B90]">
                 <PhotoIcon className="h-5 w-5" />
               </span>
               <div className="text-sm font-semibold tracking-[0.02em] text-[#202225]">Media Vault</div>
@@ -480,7 +482,7 @@ export default function HorseDetail() {
               type="button"
               onClick={() => mediaInputRef.current?.click()}
               disabled={!canUploadMedia}
-              className="inline-flex h-10 items-center justify-center rounded-full border border-[#066B90] px-4 text-sm font-semibold text-[#066B90] transition-all duration-150 ease-[ease] hover:bg-[#E8F2F7] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center rounded-md border border-[#066B90] px-4 text-sm font-semibold text-[#066B90] transition-all duration-150 ease-[ease] hover:bg-[#E8F2F7] disabled:cursor-not-allowed disabled:opacity-50"
             >
               + Upload
             </button>
@@ -507,7 +509,7 @@ export default function HorseDetail() {
               asset ? (
                 <div
                   key={asset.id}
-                  className="group relative z-10 aspect-[4/3] overflow-hidden rounded-[18px] border border-[#dce4ec] bg-[#f6f8fb]"
+                  className="group relative z-10 aspect-[4/3] overflow-hidden rounded-xl border border-[#dce4ec] bg-[#f6f8fb]"
                 >
                   <img
                     src={asset.url}
@@ -526,7 +528,7 @@ export default function HorseDetail() {
                 <label
                   key={`empty-${index}`}
                   htmlFor={mediaInputId}
-                  className="relative z-10 flex aspect-[4/3] cursor-pointer items-center justify-center rounded-[18px] border border-dashed border-[#d1dbe4] bg-[#f8fbfd] text-xs font-semibold uppercase tracking-[0.22em] text-[#4A90B8] transition-all duration-150 ease-[ease] hover:border-[#066B90] hover:bg-[#eef6fa]"
+                  className="relative z-10 flex aspect-[4/3] cursor-pointer items-center justify-center rounded-xl border border-dashed border-[#d1dbe4] bg-[#f8fbfd] text-xs font-semibold uppercase tracking-[0.22em] text-[#4A90B8] transition-all duration-150 ease-[ease] hover:border-[#066B90] hover:bg-[#eef6fa]"
                 >
                   + Upload
                 </label>
@@ -534,14 +536,14 @@ export default function HorseDetail() {
             )}
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-[#dce4ec] bg-[#f7fafc] px-4 py-3">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#dce4ec] bg-[#f7fafc] px-4 py-3">
             <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#4A90B8]">
               <span>{horse.gallery.length} assets</span>
               {mediaFiles.length ? <span>{mediaFiles.length} queued</span> : null}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <select
-                className="h-10 rounded-full border border-[#d1dbe4] bg-white px-3 text-sm font-medium text-[#202225] transition-all duration-150 ease-[ease] focus:border-[#066B90] focus:outline-none"
+                className="h-10 rounded-md border border-[#d1dbe4] bg-white px-3 text-sm font-medium text-[#202225] transition-all duration-150 ease-[ease] focus:border-[#066B90] focus:outline-none"
                 value={mediaKind}
                 onChange={(event) => setMediaKind(event.target.value as GalleryAsset['kind'])}
                 disabled={!canUploadMedia}
@@ -552,7 +554,7 @@ export default function HorseDetail() {
                   </option>
                 ))}
               </select>
-              <label className="inline-flex h-10 items-center gap-2 rounded-full border border-[#d1dbe4] bg-white px-3 text-sm font-medium text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#4A90B8]/50">
+              <label className="inline-flex h-10 items-center gap-2 rounded-md border border-[#d1dbe4] bg-white px-3 text-sm font-medium text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#4A90B8]/50">
                 <input
                   type="checkbox"
                   className="h-4 w-4 rounded border-[#c2d1dc] text-[#066B90] focus:ring-[#066B90]"
@@ -563,7 +565,7 @@ export default function HorseDetail() {
                 Hero
               </label>
               <button
-                className="inline-flex h-10 items-center justify-center rounded-full bg-[#066B90] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#055a7a] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center rounded-md bg-[#066B90] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#055a7a] disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 onClick={() => void handleMediaUpload()}
                 disabled={!canUploadMedia || isMediaUploading || !mediaFiles.length}
@@ -576,7 +578,7 @@ export default function HorseDetail() {
 
         <div className="flex h-full flex-col rounded-[20px] border border-[#dde5ec] bg-white p-5 shadow-sm">
           <div className="mb-5 flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E8F2F7] text-[#066B90]">
+            <span className="flex h-10 w-10 items-center justify-center rounded-md bg-[#E8F2F7] text-[#066B90]">
               <SharedAccessIcon className="h-5 w-5" />
             </span>
             <div className="text-sm font-semibold tracking-[0.02em] text-[#202225]">Sale Readiness</div>
@@ -597,7 +599,7 @@ export default function HorseDetail() {
           </div>
 
           <div className="mt-5">
-            <span className={classNames('inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold tracking-[0.02em]', shareBadgeStyles)}>
+            <span className={classNames('inline-flex items-center gap-2 rounded-md px-3 py-2 text-xs font-semibold tracking-[0.02em]', shareBadgeStyles)}>
               <LinkIcon className="h-3.5 w-3.5" />
               {packet.buyerProfileStatus}
             </span>
@@ -605,6 +607,22 @@ export default function HorseDetail() {
         </div>
       </section>
 
+      <section className="surface-panel">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <SurfaceTabs
+            items={['Overview', 'Docs', 'Ops', 'Activity']}
+            active={activeTab}
+            onChange={(tab) => setActiveTab(tab as DetailTab)}
+          />
+          <div className="flex flex-wrap gap-2">
+            <Pill tone="slate">{documents.length} docs</Pill>
+            <Pill tone="blue">{buyerReadyDocuments.length} clear</Pill>
+            <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
+          </div>
+        </div>
+      </section>
+
+      {activeTab === 'Overview' ? (
       <div className="detail-grid">
         <Panel eyebrow="Identity" title="Registry">
           <div className="key-grid key-grid--wide">
@@ -658,6 +676,9 @@ export default function HorseDetail() {
         </Panel>
       </div>
 
+      ) : null}
+
+      {activeTab === 'Docs' ? (
       <div className="detail-grid">
         <Panel eyebrow="Snapshot" title="Snapshot">
           <div className="stack-list">
@@ -720,7 +741,7 @@ export default function HorseDetail() {
                 </div>
               ))
             ) : (
-              <EmptyState compact title="No documents linked" description="Upload documents to build packet trust for this horse." />
+              <EmptyState compact title="No documents linked" description="Upload docs to build packet trust." />
             )}
             {!!horse.documentFacts.length && (
               <div className="token-row">
@@ -755,7 +776,10 @@ export default function HorseDetail() {
           </div>
         </Panel>
       </div>
+      ) : null}
 
+      {activeTab === 'Ops' ? (
+        <>
       <div className="detail-grid">
         <Panel eyebrow="Ownership" title="Ownership">
           <div className="stack-list">
@@ -792,7 +816,7 @@ export default function HorseDetail() {
               ))}
             </div>
           ) : (
-            <EmptyState compact title="No medical timeline yet" description="Add medical events from the Medical module or after a new exam." />
+            <EmptyState compact title="No medical timeline" description="Add a care event after the next exam." />
           )}
         </Panel>
       </div>
@@ -816,7 +840,7 @@ export default function HorseDetail() {
                 </div>
               ))
             ) : (
-              <EmptyState compact title="No breeding program yet" description="Add breeding milestones from the Breeding module when this horse enters the program." />
+              <EmptyState compact title="No breeding program" description="Add milestones when the horse enters the program." />
             )}
             {salesLeads.length ? (
               <div className="stack-item">
@@ -830,7 +854,7 @@ export default function HorseDetail() {
                 </div>
               </div>
             ) : (
-              <EmptyState compact title="No active buyer leads" description="Add a lead below to start tracking contact and offer movement." />
+              <EmptyState compact title="No buyer leads" description="Add a lead to track movement." />
             )}
           </div>
           <div className="form-grid form-grid--tight">
@@ -897,7 +921,10 @@ export default function HorseDetail() {
           </div>
         </Panel>
       </div>
+        </>
+      ) : null}
 
+      {activeTab === 'Activity' ? (
       <Panel eyebrow="Activity" title="Activity">
         <div className="detail-grid">
           <div className="stack-list">
@@ -970,6 +997,7 @@ export default function HorseDetail() {
           </div>
         </div>
       </Panel>
+      ) : null}
     </>
   );
 }

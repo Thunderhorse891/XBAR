@@ -765,6 +765,116 @@ a:focus-visible {
   flex-wrap: wrap;
 }
 
+.surface-panel {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: var(--shadow-soft);
+}
+
+.surface-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.surface-tab {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: #ffffff;
+  color: var(--muted-strong);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.surface-tab:hover {
+  border-color: var(--border);
+  background: #f7f9fb;
+}
+
+.surface-tab--active {
+  background: #101418;
+  border-color: #101418;
+  color: #ffffff;
+}
+
+.surface-hero {
+  padding: 18px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.surface-hero--dark {
+  background: linear-gradient(180deg, #0f1318 0%, #090c10 100%);
+  border-color: #101418;
+  color: #eff4fb;
+  box-shadow: none;
+}
+
+.surface-hero__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.surface-hero__eyebrow {
+  color: rgba(239, 244, 251, 0.52);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.surface-hero__title {
+  margin: 10px 0 0;
+  font-size: clamp(1.5rem, 2vw, 2rem);
+  line-height: 0.96;
+  letter-spacing: -0.06em;
+  font-weight: 800;
+}
+
+.surface-hero__stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  min-width: min(540px, 100%);
+}
+
+.surface-hero__stat {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.surface-hero__stat span {
+  color: rgba(239, 244, 251, 0.52);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.69rem;
+  font-weight: 700;
+}
+
+.surface-hero__stat strong {
+  font-size: 1.35rem;
+  line-height: 1;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+}
+
 .metric-grid,
 .dashboard-grid,
 .detail-grid,
@@ -1927,6 +2037,11 @@ a:focus-visible {
     grid-template-columns: 1fr;
   }
 
+  .surface-hero__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
+  }
+
   .ledger-toolbar {
     flex-direction: column;
     align-items: flex-start;
@@ -1948,6 +2063,10 @@ a:focus-visible {
 
   .shell-content {
     padding: 18px 18px 104px;
+  }
+
+  .surface-hero__stats {
+    grid-template-columns: 1fr;
   }
 
   .mobile-dock {
