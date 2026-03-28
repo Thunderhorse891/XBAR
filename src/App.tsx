@@ -1,6 +1,7 @@
 import { Suspense, lazy } from 'react';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
+import { RequireCloudAuth } from './components/RequireCloudAuth';
 import { ToastViewport } from './components/ToastViewport';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -9,6 +10,7 @@ const BuyerProfile = lazy(() => import('./routes/BuyerProfile'));
 const Documents = lazy(() => import('./routes/Documents'));
 const HorseDetail = lazy(() => import('./routes/HorseDetail'));
 const Horses = lazy(() => import('./routes/Horses'));
+const Login = lazy(() => import('./routes/Login'));
 const MainLayout = lazy(() => import('./routes/layouts/MainLayout'));
 const Medical = lazy(() => import('./routes/Medical'));
 const NotFound = lazy(() => import('./routes/NotFound'));
@@ -27,7 +29,8 @@ export default function App() {
         <Suspense fallback={<div className="app-loading-shell">Loading workspace...</div>}>
           <Routes>
             <Route path="/profiles/:id" element={<BuyerProfile />} />
-            <Route path="/" element={<MainLayout />}>
+            <Route path="/login" element={<Login />} />
+            <Route path="/" element={<RequireCloudAuth><MainLayout /></RequireCloudAuth>}>
               <Route index element={<Dashboard />} />
               <Route path="horses" element={<Horses />} />
               <Route path="horses/:id" element={<HorseDetail />} />
