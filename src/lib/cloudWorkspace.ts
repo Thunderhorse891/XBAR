@@ -4,6 +4,7 @@ import { getSupabaseClient } from '@/lib/supabaseClient';
 import type { Session } from '@supabase/supabase-js';
 import type {
   DocumentRecord,
+  ExpenseReceipt,
   HorseRecord,
   IntakeBatch,
   OwnershipRecord,
@@ -24,6 +25,7 @@ type CloudWorkspaceBackup = {
     documents?: DocumentRecord[];
     intakeBatches?: IntakeBatch[];
     ownershipRecords?: OwnershipRecord[];
+    expenseReceipts?: ExpenseReceipt[];
     ranchAssets?: RanchAsset[];
     subscription?: SubscriptionProfile;
     salesLeads?: SalesLead[];
@@ -261,6 +263,7 @@ async function replaceWorkspaceRows(params: {
     | 'documents'
     | 'intake_batches'
     | 'ownership_records'
+    | 'expense_receipts'
     | 'ranch_assets'
     | 'sales_leads'
     | 'shared_listings';
@@ -424,6 +427,24 @@ async function saveWorkspaceBackupToRelationalCloud(backup: unknown, session: Se
     });
 
     await replaceWorkspaceRows({
+      table: 'expense_receipts',
+      idColumn: 'receipt_id',
+      workspaceId,
+      rows: (workspace.expenseReceipts ?? []).map((receipt) => ({
+        workspace_id: workspaceId,
+        receipt_id: receipt.id,
+        horse_id: receipt.horseId ?? '',
+        title: receipt.title,
+        category: receipt.category,
+        vendor: receipt.vendor,
+        amount: receipt.amount,
+        receipt_date: receipt.receiptDate,
+        payload: receipt,
+        updated_at: updatedAt,
+      })),
+    });
+
+    await replaceWorkspaceRows({
       table: 'ranch_assets',
       idColumn: 'asset_id',
       workspaceId,
@@ -524,6 +545,7 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
     documentsResult,
     intakeBatchesResult,
     ownershipRecordsResult,
+    expenseReceiptsResult,
     ranchAssetsResult,
     salesLeadsResult,
     sharedListingsResult,
@@ -534,6 +556,7 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
     client.from('documents').select('payload, updated_at').eq('workspace_id', workspaceId),
     client.from('intake_batches').select('payload, updated_at').eq('workspace_id', workspaceId),
     client.from('ownership_records').select('payload, updated_at').eq('workspace_id', workspaceId),
+    client.from('expense_receipts').select('payload, updated_at').eq('workspace_id', workspaceId),
     client.from('ranch_assets').select('payload, updated_at').eq('workspace_id', workspaceId),
     client.from('sales_leads').select('payload, updated_at').eq('workspace_id', workspaceId),
     client.from('shared_listings').select('payload, updated_at').eq('workspace_id', workspaceId),
@@ -546,6 +569,7 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
     documentsResult.error,
     intakeBatchesResult.error,
     ownershipRecordsResult.error,
+    expenseReceiptsResult.error,
     ranchAssetsResult.error,
     salesLeadsResult.error,
     sharedListingsResult.error,
@@ -562,12 +586,13 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
 
   const backup: CloudWorkspaceBackup = {
     app: 'XBAR',
-    version: 5,
+    version: 6,
     exportedAt: pickNewestTimestamp([
       ...(horsesResult.data ?? []).map((row) => row.updated_at),
       ...(documentsResult.data ?? []).map((row) => row.updated_at),
       ...(intakeBatchesResult.data ?? []).map((row) => row.updated_at),
       ...(ownershipRecordsResult.data ?? []).map((row) => row.updated_at),
+      ...(expenseReceiptsResult.data ?? []).map((row) => row.updated_at),
       ...(ranchAssetsResult.data ?? []).map((row) => row.updated_at),
       ...(salesLeadsResult.data ?? []).map((row) => row.updated_at),
       ...(sharedListingsResult.data ?? []).map((row) => row.updated_at),
@@ -579,6 +604,7 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
       documents: extractPayloadList<DocumentRecord>(documentsResult.data),
       intakeBatches: extractPayloadList<IntakeBatch>(intakeBatchesResult.data),
       ownershipRecords: extractPayloadList<OwnershipRecord>(ownershipRecordsResult.data),
+      expenseReceipts: extractPayloadList<ExpenseReceipt>(expenseReceiptsResult.data),
       ranchAssets: extractPayloadList<RanchAsset>(ranchAssetsResult.data),
       salesLeads: extractPayloadList<SalesLead>(salesLeadsResult.data),
       sharedListings: extractPayloadList<SharedListingRecord>(sharedListingsResult.data),
@@ -592,6 +618,7 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
       backup.workspace?.documents?.length ||
       backup.workspace?.intakeBatches?.length ||
       backup.workspace?.ownershipRecords?.length ||
+      backup.workspace?.expenseReceipts?.length ||
       backup.workspace?.ranchAssets?.length ||
       backup.workspace?.salesLeads?.length ||
       backup.workspace?.sharedListings?.length ||

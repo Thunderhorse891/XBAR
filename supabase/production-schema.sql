@@ -94,6 +94,21 @@ create table if not exists public.ownership_records (
   primary key (workspace_id, ownership_record_id)
 );
 
+create table if not exists public.expense_receipts (
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  receipt_id text not null,
+  horse_id text not null default '',
+  title text not null default '',
+  category text not null default '',
+  vendor text not null default '',
+  amount double precision not null default 0,
+  receipt_date text not null default '',
+  payload jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now()),
+  created_at timestamptz not null default timezone('utc', now()),
+  primary key (workspace_id, receipt_id)
+);
+
 create table if not exists public.ranch_assets (
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
   asset_id text not null,
@@ -153,6 +168,8 @@ create index if not exists idx_horses_workspace_registration on public.horses(wo
 create index if not exists idx_documents_workspace_horse on public.documents(workspace_id, horse_id);
 create index if not exists idx_documents_workspace_state on public.documents(workspace_id, state);
 create index if not exists idx_ownership_workspace_horse on public.ownership_records(workspace_id, horse_id);
+create index if not exists idx_expense_receipts_workspace_horse on public.expense_receipts(workspace_id, horse_id);
+create index if not exists idx_expense_receipts_workspace_date on public.expense_receipts(workspace_id, receipt_date);
 create index if not exists idx_assets_workspace_status on public.ranch_assets(workspace_id, status);
 create index if not exists idx_sales_workspace_stage on public.sales_leads(workspace_id, stage);
 create index if not exists idx_shared_listings_workspace_state on public.shared_listings(workspace_id, state);
@@ -164,6 +181,7 @@ alter table public.horses enable row level security;
 alter table public.documents enable row level security;
 alter table public.intake_batches enable row level security;
 alter table public.ownership_records enable row level security;
+alter table public.expense_receipts enable row level security;
 alter table public.ranch_assets enable row level security;
 alter table public.sales_leads enable row level security;
 alter table public.shared_listings enable row level security;
@@ -368,6 +386,34 @@ with check (
     select 1
     from public.workspaces w
     where w.id = ownership_records.workspace_id
+      and w.owner_user_id = auth.uid()
+  )
+);
+
+create policy if not exists "expense receipts own workspace"
+on public.expense_receipts
+for all
+to authenticated
+using (
+  exists (
+    select 1
+    from public.workspace_memberships m
+    where m.workspace_id = expense_receipts.workspace_id
+      and m.user_id = auth.uid()
+      and m.status = 'active'
+  )
+  or exists (
+    select 1
+    from public.workspaces w
+    where w.id = expense_receipts.workspace_id
+      and w.owner_user_id = auth.uid()
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.workspaces w
+    where w.id = expense_receipts.workspace_id
       and w.owner_user_id = auth.uid()
   )
 );

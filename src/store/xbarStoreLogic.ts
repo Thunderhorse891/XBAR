@@ -4,6 +4,7 @@ import type {
   AssetStatus,
   DocumentRecord,
   DocumentSource,
+  ExpenseCategory,
   HorseNote,
   HorseRecord,
   HorseSegment,
@@ -64,6 +65,18 @@ export type LocationPatch = {
   barn?: string;
   pasture?: string;
   stall?: string;
+};
+
+export type ExpenseReceiptInput = {
+  horseId?: string;
+  title: string;
+  category: ExpenseCategory;
+  vendor: string;
+  amount: number;
+  receiptDate: string;
+  notes?: string;
+  uploadedBy: string;
+  file?: File | null;
 };
 
 function requireValue(value: string, label: string, minLength = 2) {
@@ -131,6 +144,16 @@ export function validateAssetPatch(patch: AssetPatch) {
   }
 
   return null;
+}
+
+export function validateExpenseReceiptInput(input: ExpenseReceiptInput) {
+  return (
+    requireValue(input.title, 'Receipt label', 2) ??
+    requireValue(input.vendor, 'Vendor', 2) ??
+    requireValue(input.uploadedBy, 'Uploaded by', 2) ??
+    (!Number.isFinite(input.amount) || input.amount <= 0 ? 'Amount must be greater than zero.' : null) ??
+    (!input.receiptDate?.trim() ? 'Receipt date is required.' : null)
+  );
 }
 
 export function summarizeBatch(batch: IntakeBatch, documents: DocumentRecord[]): IntakeBatch {

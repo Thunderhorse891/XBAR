@@ -65,6 +65,16 @@ export type AssetStatus = 'Available' | 'Assigned' | 'In Service';
 
 export type AssetCondition = 'Excellent' | 'Service Soon' | 'Attention Required';
 
+export type ExpenseCategory =
+  | 'Feed'
+  | 'Wormer'
+  | 'Dental Float'
+  | 'Farrier'
+  | 'Vet Care'
+  | 'Supplements'
+  | 'Bedding'
+  | 'Travel';
+
 export interface GalleryAsset {
   id: string;
   label: string;
@@ -258,6 +268,24 @@ export interface RanchAsset {
   location: string;
   nextService: string;
   notes: string;
+}
+
+export interface ExpenseReceipt {
+  id: string;
+  horseId?: string;
+  title: string;
+  category: ExpenseCategory;
+  vendor: string;
+  amount: number;
+  receiptDate: string;
+  notes?: string;
+  uploadedAt: string;
+  uploadedBy: string;
+  fileUrl?: string;
+  storagePath?: string;
+  fileName?: string;
+  mimeType?: string;
+  fileSizeBytes?: number;
 }
 
 export interface SubscriptionUsage {

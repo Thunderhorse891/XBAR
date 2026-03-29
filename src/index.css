@@ -503,6 +503,10 @@ a:focus-visible {
   justify-content: center;
 }
 
+.dashboard-stage--ops {
+  grid-template-columns: 1fr 0.95fr 0.78fr;
+}
+
 .dashboard-stage__title {
   margin: 0;
   font-family: inherit;
@@ -522,6 +526,14 @@ a:focus-visible {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.dashboard-stage__notes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--muted-strong);
+  font-size: 0.88rem;
 }
 
 .dashboard-stage__board {
@@ -610,6 +622,11 @@ a:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.dashboard-brand-panel--ops {
+  min-height: 100%;
+  justify-content: space-between;
 }
 
 .dashboard-brand-panel__mark {
@@ -908,6 +925,17 @@ a:focus-visible {
   overflow: hidden;
 }
 
+.metric-card--interactive {
+  cursor: pointer;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+
+.metric-card--interactive:hover {
+  border-color: rgba(6, 107, 144, 0.2);
+  box-shadow: var(--shadow);
+  background: #ffffff;
+}
+
 .metric-card::before {
   content: "";
   position: absolute;
@@ -997,6 +1025,26 @@ a:focus-visible {
 .panel__action {
   display: flex;
   align-items: flex-start;
+}
+
+.dashboard-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.dashboard-budget-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.dashboard-receipt-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
 .stack-list,
@@ -2111,6 +2159,10 @@ a:focus-visible {
   .buyer-hero,
   .command-stage,
   .ledger-stage {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-budget-strip {
     grid-template-columns: 1fr;
   }
 

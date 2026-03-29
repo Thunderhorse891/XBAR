@@ -3,6 +3,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import { documentsSeed, intakeBatchesSeed } from '@/data/xbarDocuments';
 import { horsesSeed } from '@/data/xbarHorses';
 import {
+  expenseReceiptsSeed,
   ownershipSeed,
   ranchAssetsSeed,
   roleSeed,
@@ -30,6 +31,7 @@ import { uploadDocumentAssetToCloud, uploadMediaAssetToCloud } from '@/lib/cloud
 import { workspaceStateStorage } from '@/lib/workspaceStorage';
 import {
   createOwnershipRecord,
+  validateExpenseReceiptInput,
   summarizeBatch,
   validateAssetPatch,
   validateHorseNoteInput,
@@ -39,6 +41,7 @@ import {
 } from '@/store/xbarStoreLogic';
 import type {
   DocumentFact,
+  ExpenseReceipt,
   HorseNote,
   HorseRecord,
   IntakeBatch,
@@ -58,7 +61,7 @@ import type {
   RoleWorkspace,
   SubscriptionProfile,
 } from '@/types/xbar';
-import type { AssetPatch, DocumentIntakeInput, LeadInput, LocationPatch, MediaUploadInput, NewHorseInput } from '@/store/xbarStoreLogic';
+import type { AssetPatch, DocumentIntakeInput, ExpenseReceiptInput, LeadInput, LocationPatch, MediaUploadInput, NewHorseInput } from '@/store/xbarStoreLogic';
 
 type ActionResult = {
   ok: boolean;
@@ -72,6 +75,7 @@ type XbarStore = {
   documents: DocumentRecord[];
   intakeBatches: IntakeBatch[];
   ownershipRecords: OwnershipRecord[];
+  expenseReceipts: ExpenseReceipt[];
   ranchAssets: RanchAsset[];
   subscription: SubscriptionProfile;
   roleWorkspaces: RoleWorkspace[];
@@ -88,6 +92,7 @@ type XbarStore = {
   reviewDocument: (documentId: string, horseId?: string) => ActionResult;
   discardDocument: (documentId: string) => ActionResult;
   uploadHorseMedia: (input: MediaUploadInput) => Promise<ActionResult>;
+  addExpenseReceipt: (input: ExpenseReceiptInput) => Promise<ActionResult>;
   createSalesLead: (input: LeadInput) => ActionResult;
   updateSalesLead: (
     leadId: string,
@@ -114,6 +119,7 @@ type PersistedXbarState = Pick<
   | 'documents'
   | 'intakeBatches'
   | 'ownershipRecords'
+  | 'expenseReceipts'
   | 'ranchAssets'
   | 'subscription'
   | 'roleWorkspaces'
@@ -130,7 +136,7 @@ type WorkspaceBackup = {
   workspace: PersistedXbarState;
 };
 
-const WORKSPACE_SCHEMA_VERSION = 5;
+const WORKSPACE_SCHEMA_VERSION = 6;
 
 const initialState = {
   currentRole: (isSupabaseConfigured() ? 'Owner' : 'Admin') as UserRole,
@@ -138,6 +144,7 @@ const initialState = {
   documents: documentsSeed,
   intakeBatches: intakeBatchesSeed,
   ownershipRecords: ownershipSeed,
+  expenseReceipts: expenseReceiptsSeed,
   ranchAssets: ranchAssetsSeed,
   subscription: subscriptionSeed,
   roleWorkspaces: roleSeed,
@@ -223,12 +230,37 @@ function createSharedListingRecord(horseId: string, patch?: Partial<SharedListin
   };
 }
 
+function createExpenseReceiptRecord(
+  input: ExpenseReceiptInput,
+  patch?: Partial<Pick<ExpenseReceipt, 'fileUrl' | 'storagePath' | 'fileName' | 'mimeType' | 'fileSizeBytes'>>,
+): ExpenseReceipt {
+  const file = input.file ?? undefined;
+  return {
+    id: createId('receipt'),
+    horseId: input.horseId?.trim() || undefined,
+    title: input.title.trim(),
+    category: input.category,
+    vendor: input.vendor.trim(),
+    amount: Number(input.amount),
+    receiptDate: input.receiptDate,
+    notes: input.notes?.trim() || '',
+    uploadedAt: nowStamp(),
+    uploadedBy: input.uploadedBy.trim(),
+    fileUrl: patch?.fileUrl,
+    storagePath: patch?.storagePath,
+    fileName: patch?.fileName ?? file?.name,
+    mimeType: patch?.mimeType ?? file?.type ?? undefined,
+    fileSizeBytes: patch?.fileSizeBytes ?? file?.size,
+  };
+}
+
 function selectPersistedState(state: PersistedXbarState): PersistedXbarState {
   return {
     horses: state.horses,
     documents: state.documents,
     intakeBatches: state.intakeBatches,
     ownershipRecords: state.ownershipRecords,
+    expenseReceipts: state.expenseReceipts,
     ranchAssets: state.ranchAssets,
     subscription: state.subscription,
     roleWorkspaces: state.roleWorkspaces,
@@ -302,6 +334,7 @@ function restorePersistedState(raw: unknown): PersistedXbarState {
     documents,
     intakeBatches,
     ownershipRecords: Array.isArray(state.ownershipRecords) ? (state.ownershipRecords as OwnershipRecord[]) : initialState.ownershipRecords,
+    expenseReceipts: Array.isArray(state.expenseReceipts) ? (state.expenseReceipts as ExpenseReceipt[]) : initialState.expenseReceipts,
     ranchAssets: Array.isArray(state.ranchAssets) ? (state.ranchAssets as RanchAsset[]) : initialState.ranchAssets,
     subscription,
     roleWorkspaces: Array.isArray(state.roleWorkspaces) ? (state.roleWorkspaces as RoleWorkspace[]) : initialState.roleWorkspaces,
@@ -1026,6 +1059,89 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Media upload failed. Check the selected files and try again.' };
         }
       },
+      addExpenseReceipt: async (input) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageAssets');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
+        const validationError = validateExpenseReceiptInput(input);
+        if (validationError) {
+          return { ok: false, message: validationError };
+        }
+
+        const state = get();
+        if (input.horseId && !state.horses.some((horse) => horse.id === input.horseId)) {
+          return { ok: false, message: 'Horse record not found for this receipt.' };
+        }
+
+        const fileList = input.file ? [input.file] : [];
+        const storageIncrease = estimateStorageGb(fileList);
+        if (fileList.length && state.subscription.usage.storageUsedGb + storageIncrease > state.subscription.usage.storageLimitGb) {
+          return { ok: false, message: 'Storage limit reached for the current plan. Remove files or upgrade before adding more receipts.' };
+        }
+
+        try {
+          let uploadedAsset: Awaited<ReturnType<typeof uploadDocumentAssetToCloud>> = null;
+          if (input.file) {
+            try {
+              uploadedAsset = await uploadDocumentAssetToCloud({
+                file: input.file,
+                horseId: input.horseId,
+              });
+            } catch (error) {
+              console.error('Cloud receipt upload failed; storing receipt locally instead.', error);
+            }
+          }
+
+          const localFileUrl = input.file && !uploadedAsset?.storagePath ? await readFileAsDataUrl(input.file) : undefined;
+          const receipt = createExpenseReceiptRecord(input, {
+            fileUrl: localFileUrl,
+            storagePath: uploadedAsset?.storagePath,
+            fileName: input.file?.name,
+            mimeType: input.file?.type || undefined,
+            fileSizeBytes: input.file?.size,
+          });
+
+          set((current) => ({
+            expenseReceipts: [receipt, ...current.expenseReceipts],
+            horses: current.horses.map((horse) =>
+              horse.id === receipt.horseId
+                ? {
+                    ...horse,
+                    activity: [
+                      {
+                        id: createId('activity'),
+                        date: receipt.receiptDate,
+                        title: `${receipt.category} receipt logged`,
+                        summary: `${receipt.vendor} receipt added for ${receipt.category.toLowerCase()} spend.`,
+                        owner: receipt.uploadedBy,
+                        category: 'Operations' as const,
+                      },
+                      ...horse.activity,
+                    ],
+                  }
+                : horse,
+            ),
+            subscription: {
+              ...current.subscription,
+              usage: {
+                ...current.subscription.usage,
+                storageUsedGb: normalizeUsage(current.subscription.usage.storageUsedGb + storageIncrease),
+              },
+            },
+          }));
+
+          return {
+            ok: true,
+            message: `${receipt.category} receipt logged.${input.file && !uploadedAsset?.storagePath ? ' Receipt file is stored locally until cloud sync is available.' : ''}`,
+            id: receipt.id,
+          };
+        } catch (error) {
+          console.error('Expense receipt upload failed', error);
+          return { ok: false, message: 'Receipt upload failed. Check the fields and try again.' };
+        }
+      },
       createSalesLead: ({ horseId, name, channel, shareReady }) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageSales');
         if (deniedMessage) {
@@ -1466,6 +1582,7 @@ export const useXbarStore = create<XbarStore>()(
           documents: state.documents,
           intakeBatches: state.intakeBatches,
           ownershipRecords: state.ownershipRecords,
+          expenseReceipts: state.expenseReceipts,
           ranchAssets: state.ranchAssets,
           subscription: state.subscription,
           roleWorkspaces: state.roleWorkspaces,

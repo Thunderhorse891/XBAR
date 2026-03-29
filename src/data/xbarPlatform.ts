@@ -1,4 +1,5 @@
 import {
+  ExpenseReceipt,
   OwnershipRecord,
   RanchAsset,
   RoleWorkspace,
@@ -118,6 +119,56 @@ export const ranchAssetsSeed: RanchAsset[] = [
     location: 'Supply Shed',
     nextService: '2026-03-27',
     notes: 'Current reserve covers nine days at the present burn rate.',
+  },
+];
+
+export const expenseReceiptsSeed: ExpenseReceipt[] = [
+  {
+    id: 'receipt-feed-mar',
+    horseId: 'horse-wiggy',
+    title: 'Performance feed pallet',
+    category: 'Feed',
+    vendor: 'Cactus Feed Supply',
+    amount: 1240,
+    receiptDate: '2026-03-22',
+    notes: 'April feed reserve for sale string.',
+    uploadedAt: '2026-03-22T09:12:00.000Z',
+    uploadedBy: 'Ops Desk',
+  },
+  {
+    id: 'receipt-wormer-bonny',
+    horseId: 'horse-bonny',
+    title: 'Spring wormer',
+    category: 'Wormer',
+    vendor: 'Rolling Plains Vet',
+    amount: 96,
+    receiptDate: '2025-11-14',
+    notes: 'Five-dose ivermectin pack logged against travel string.',
+    uploadedAt: '2025-11-14T14:06:00.000Z',
+    uploadedBy: 'Medical Lead',
+  },
+  {
+    id: 'receipt-dental-dolly',
+    horseId: 'horse-dolly',
+    title: 'Dental float',
+    category: 'Dental Float',
+    vendor: 'High Desert Equine',
+    amount: 240,
+    receiptDate: '2025-02-16',
+    notes: 'Annual float completed during conditioning cycle.',
+    uploadedAt: '2025-02-16T16:25:00.000Z',
+    uploadedBy: 'Medical Lead',
+  },
+  {
+    id: 'receipt-feed-yard',
+    title: 'Hay and bedding run',
+    category: 'Bedding',
+    vendor: 'North Yard Milling',
+    amount: 420,
+    receiptDate: '2026-03-19',
+    notes: 'Shared yard expense for intake and pasture rotation.',
+    uploadedAt: '2026-03-19T11:30:00.000Z',
+    uploadedBy: 'Ranch Manager',
   },
 ];
 

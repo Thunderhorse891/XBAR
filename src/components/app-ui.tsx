@@ -89,7 +89,7 @@ export function MetricCard({
 }) {
   return (
     <div
-      className={`metric-card metric-card--${tone} ${className}`.trim()}
+      className={`metric-card metric-card--${tone}${onClick || onContextMenu ? ' metric-card--interactive' : ''} ${className}`.trim()}
       title={title}
       onClick={onClick}
       onContextMenu={onContextMenu}
