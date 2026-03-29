@@ -371,11 +371,11 @@ export default function HorseDetail() {
         Back to horses
       </Link>
 
-      <section className="rounded-[10px] border border-[#e5ddd2] bg-[#fffdfb] px-5 py-5 shadow-sm">
+      <section className="rounded-[10px] border border-[#d7e0e8] bg-[linear-gradient(180deg,#ffffff_0%,#f7fafc_100%)] px-5 py-5 shadow-sm">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
             <div className="mb-3 flex items-center gap-3">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8f8276]">{horse.ownerEntity}</span>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7a8c9a]">{horse.ownerEntity}</span>
               {hasRestrictedActions ? (
                 <span
                   className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#dce4ec] bg-[#f6f8fb] text-[#667085] transition-all duration-150 ease-[ease] hover:border-[#4A90B8]/40 hover:text-[#066B90]"
@@ -409,14 +409,14 @@ export default function HorseDetail() {
 
           <div className="flex flex-wrap gap-3">
             <Link
-              className="inline-flex h-11 items-center justify-center rounded-md bg-[#2a4556] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#233b4a]"
+              className="inline-flex h-11 items-center justify-center rounded-md bg-[#066B90] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#055a7a]"
               to={packet.sharePath}
               onClick={() => recordSharedChannel(horse.id, 'Direct Link')}
             >
               Preview
             </Link>
             <button
-              className="inline-flex h-11 items-center justify-center rounded-md border border-[#d5cdc2] px-5 text-sm font-semibold text-[#4d433a] transition-all duration-150 ease-[ease] hover:bg-[#f5efe8] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-11 items-center justify-center rounded-md border border-[#cad6df] bg-white px-5 text-sm font-semibold text-[#435463] transition-all duration-150 ease-[ease] hover:border-[#4A90B8]/40 hover:bg-[#f5f9fc] disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
               onClick={handleSavedHorseToggle}
               disabled={!canManageSharedAccess}
@@ -428,7 +428,7 @@ export default function HorseDetail() {
       </section>
 
       <section className="grid items-stretch gap-5 lg:grid-cols-2">
-        <div className="relative flex h-full flex-col overflow-hidden rounded-[10px] border border-[#e5ddd2] bg-[#fffdfb] p-5 shadow-sm">
+        <div className="relative flex h-full flex-col overflow-hidden rounded-[10px] border border-[#d7e0e8] bg-[linear-gradient(180deg,#ffffff_0%,#f8fbfd_100%)] p-5 shadow-sm">
           <div className="mb-5 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <span className="flex h-10 w-10 items-center justify-center rounded-md bg-[#E8F2F7] text-[#066B90]">
@@ -467,14 +467,14 @@ export default function HorseDetail() {
               asset ? (
                 <div
                   key={asset.id}
-                  className="group relative z-10 aspect-[4/3] overflow-hidden rounded-xl border border-[#dce4ec] bg-[#f6f8fb]"
+                  className="group relative z-10 aspect-[4/3] overflow-hidden rounded-xl border border-[#dce4ec] bg-[linear-gradient(145deg,#f7fafc_0%,#eef4f8_100%)]"
                 >
                   <img
                     src={asset.url}
                     alt={asset.label}
                     className="h-full w-full object-cover transition-all duration-150 ease-[ease] group-hover:scale-[1.02]"
                   />
-                  <div className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-[#2a4556]/70 via-[#2a4556]/18 to-transparent p-3 text-white">
+                  <div className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-[#0c4458]/72 via-[#066B90]/18 to-transparent p-3 text-white">
                     <div>
                       <div className="text-xs font-semibold tracking-[0.02em]">{asset.label}</div>
                       <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-white/70">{asset.kind}</div>
@@ -534,7 +534,7 @@ export default function HorseDetail() {
           </div>
         </div>
 
-        <div className="flex h-full flex-col rounded-[10px] border border-[#e5ddd2] bg-[#fffdfb] p-5 shadow-sm">
+        <div className="flex h-full flex-col rounded-[10px] border border-[#d7e0e8] bg-[linear-gradient(180deg,#ffffff_0%,#f8fbfd_100%)] p-5 shadow-sm">
           <div className="mb-5 flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-md bg-[#E8F2F7] text-[#066B90]">
               <SharedAccessIcon className="h-5 w-5" />
@@ -545,7 +545,7 @@ export default function HorseDetail() {
           <ReadinessGauge value={packet.score} />
 
           <div className="mt-5">
-            <div className="mb-3 flex items-center justify-between gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8f8276]">
+            <div className="mb-3 flex items-center justify-between gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7a8c9a]">
               <span>Sale packet</span>
               <span>{salePacketReadyCount}/{packet.saleSlots.length} ready</span>
             </div>
