@@ -310,12 +310,12 @@ export default function MainLayout() {
             setWorkspaceMenu({ x: event.clientX, y: event.clientY });
           }}
         >
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-3">
             <div className="min-w-0">
               <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7a8c9a]">Workspace</div>
               <div className="mt-2 text-[0.95rem] font-semibold text-[#1f2b35]">{roleWorkspace.label}</div>
             </div>
-            <div className="shrink-0 overflow-hidden rounded-full border border-[#d0dae2] bg-white/95 shadow-sm">
+            <div className="shrink-0 self-start overflow-hidden rounded-full border border-[#d0dae2] bg-white/95 shadow-sm">
               <div className="flex items-center">
                 <span className="inline-flex min-h-[32px] items-center border-r border-[#d0dae2] bg-[#eef6fb] px-3.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#0c6f97]">
                   {cloudStatus === 'signed-in' ? 'Cloud' : cloudStatus === 'unavailable' ? 'Local' : 'Limited'}
