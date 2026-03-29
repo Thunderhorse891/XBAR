@@ -4,33 +4,60 @@
 
 :root {
   color-scheme: light;
-  --bg: #f4f0ea;
-  --bg-deep: #ece5dc;
-  --surface: #ffffff;
-  --surface-strong: #ffffff;
-  --sidebar: #f7f2eb;
-  --sidebar-edge: rgba(32, 34, 37, 0.08);
-  --text: #202225;
-  --muted: #667085;
-  --muted-strong: #475467;
-  --border: #e2dacf;
-  --border-strong: #d4ccc2;
-  --blue: #2a4556;
-  --blue-soft: rgba(42, 69, 86, 0.08);
-  --slate: #667085;
-  --slate-soft: rgba(102, 112, 133, 0.12);
-  --emerald: #1f8f5f;
-  --emerald-soft: rgba(31, 143, 95, 0.12);
-  --amber: #7a8797;
-  --amber-soft: rgba(122, 135, 151, 0.12);
-  --rose: #cc3333;
-  --rose-soft: rgba(204, 51, 51, 0.12);
-  --shadow: 0 12px 30px rgba(23, 26, 31, 0.06), 0 2px 6px rgba(23, 26, 31, 0.04);
-  --shadow-soft: 0 6px 16px rgba(23, 26, 31, 0.05);
-  --radius-xl: 10px;
-  --radius-lg: 8px;
-  --radius-md: 6px;
-  --radius-sm: 4px;
+
+  /* Brand */
+  --brand:       #B87333;
+  --brand-dark:  #8B5A1F;
+  --brand-light: #E8A653;
+  --brand-soft:  rgba(184, 115, 51, 0.12);
+
+  /* Surfaces */
+  --bg:            #F6F3EF;
+  --bg-deep:       #EDE8E1;
+  --surface:       #FFFFFF;
+  --surface-strong:#FAFAF9;
+  --sidebar:       #141210;
+  --sidebar-edge:  rgba(255, 255, 255, 0.06);
+
+  /* Typography */
+  --text:         #1A1614;
+  --muted:        #6B6460;
+  --muted-strong: #4A4440;
+
+  /* Borders */
+  --border:        #E4DDD6;
+  --border-strong: #D6CEC6;
+
+  /* Semantic — primary (copper brand) */
+  --blue:      #B87333;
+  --blue-soft: rgba(184, 115, 51, 0.10);
+
+  /* Semantic — neutral */
+  --slate:      #6B7280;
+  --slate-soft: rgba(107, 114, 128, 0.12);
+
+  /* Semantic — success */
+  --emerald:      #16A34A;
+  --emerald-soft: rgba(22, 163, 74, 0.12);
+
+  /* Semantic — warning */
+  --amber:      #D97706;
+  --amber-soft: rgba(217, 119, 6, 0.12);
+
+  /* Semantic — danger */
+  --rose:      #DC2626;
+  --rose-soft: rgba(220, 38, 38, 0.12);
+
+  /* Elevation */
+  --shadow:      0 1px 3px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.04);
+  --shadow-soft: 0 1px 2px rgba(0,0,0,0.05), 0 2px 6px rgba(0,0,0,0.03);
+  --shadow-lift: 0 8px 24px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.06);
+
+  /* Radii */
+  --radius-xl: 12px;
+  --radius-lg:  8px;
+  --radius-md:  6px;
+  --radius-sm:  4px;
 }
 
 * {
@@ -45,11 +72,12 @@ body,
 
 body {
   margin: 0;
-  font-family: Inter, "Segoe UI Variable Text", "Aptos", "Segoe UI", sans-serif;
+  font-family: 'Inter', 'Segoe UI Variable Text', 'Aptos', 'Segoe UI', system-ui, sans-serif;
   background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
 }
 
 .app-loading-shell {
@@ -86,14 +114,14 @@ button {
 }
 
 ::selection {
-  background: rgba(27, 74, 96, 0.12);
+  background: rgba(184, 115, 51, 0.15);
 }
 
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 a:focus-visible {
-  outline: 3px solid rgba(27, 74, 96, 0.16);
+  outline: 2px solid rgba(184, 115, 51, 0.50);
   outline-offset: 2px;
 }
 

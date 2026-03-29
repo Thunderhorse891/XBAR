@@ -147,34 +147,41 @@ const routeHelp: Record<string, HelpSection[]> = {
   ],
 };
 
-function classNames(...parts: Array<string | false | null | undefined>) {
+function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(' ');
 }
 
 function NavSection({ title, items }: { title: string; items: NavItem[] }) {
   return (
-    <div className="flex flex-col gap-2">
-      <div className="px-3 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8f8276]">{title}</div>
-      <div className="flex flex-col gap-1">
-        {items.map(({ label, path, icon: Icon }) => (
-          <NavLink
-            key={label}
-            to={path}
-            end={path === '/'}
-            className={({ isActive }) =>
-              classNames(
-                'group flex items-center gap-3 border-l-[3px] px-3 py-2.5 text-sm font-medium transition-all duration-150 ease-[ease]',
-                isActive
-                  ? 'border-[#2a4556] bg-[#fdfbf8] text-[#2a4556]'
-                  : 'border-transparent text-[#5b6670] hover:border-[#d5ccc2] hover:bg-white/70 hover:text-[#202225]',
-              )
-            }
-          >
-            <Icon className="h-[18px] w-[18px] shrink-0" />
-            <span>{label}</span>
-          </NavLink>
-        ))}
+    <div className="flex flex-col gap-1">
+      <div className="mb-1 px-3 text-[9px] font-bold uppercase tracking-[0.30em] text-white/25">
+        {title}
       </div>
+      {items.map(({ label, path, icon: Icon }) => (
+        <NavLink
+          key={label}
+          to={path}
+          end={path === '/'}
+          className={({ isActive }) =>
+            cx(
+              'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all duration-150',
+              isActive
+                ? 'bg-[#B87333]/[0.18] text-[#F4B460]'
+                : 'text-white/50 hover:bg-white/[0.05] hover:text-white/85',
+            )
+          }
+        >
+          {({ isActive }) => (
+            <>
+              {isActive && (
+                <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[#B87333]" />
+              )}
+              <Icon className="h-[17px] w-[17px] shrink-0" />
+              <span>{label}</span>
+            </>
+          )}
+        </NavLink>
+      ))}
     </div>
   );
 }
@@ -186,6 +193,7 @@ export default function MainLayout() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [shortcutEditorOpen, setShortcutEditorOpen] = useState(false);
   const [workspaceMenu, setWorkspaceMenu] = useState<{ x: number; y: number } | null>(null);
+
   const currentRole = useXbarStore((state) => state.currentRole);
   const subscription = useXbarStore((state) => state.subscription);
   const documents = useXbarStore((state) => state.documents);
@@ -201,31 +209,38 @@ export default function MainLayout() {
   const canManageBilling = useCurrentRoleCapability('manageBilling');
   const canManageSettings = useCurrentRoleCapability('manageSettings');
   const canSyncCloud = useCurrentRoleCapability('syncCloud');
+
   const platformItems = platform.filter((item) => {
-    if (item.path === '/subscriptions') {
-      return canManageBilling;
-    }
-    if (item.path === '/settings') {
-      return canManageSettings;
-    }
+    if (item.path === '/subscriptions') return canManageBilling;
+    if (item.path === '/settings') return canManageSettings;
     return true;
   });
 
-  const pendingReview = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched').length;
-  const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse Profile' : routeLabels[location.pathname] ?? 'Dashboard';
-  const workspaceShortcutLabels = (workspaceProfile.workspaceShortcuts.length ? workspaceProfile.workspaceShortcuts : roleWorkspace.primaryModules.map(normalizeShortcutLabel))
+  const pendingReview = documents.filter(
+    (d) => d.state === 'Needs Review' || d.state === 'Matched',
+  ).length;
+
+  const currentLabel = location.pathname.startsWith('/horses/')
+    ? 'Horse Profile'
+    : routeLabels[location.pathname] ?? 'Dashboard';
+
+  const workspaceShortcutLabels = (
+    workspaceProfile.workspaceShortcuts.length
+      ? workspaceProfile.workspaceShortcuts
+      : roleWorkspace.primaryModules.map(normalizeShortcutLabel)
+  )
     .map(normalizeShortcutLabel)
-    .filter((module, index, all) => all.indexOf(module) === index)
-    .filter((module) => workspaceShortcutRoutes[module])
+    .filter((m, i, all) => all.indexOf(m) === i)
+    .filter((m) => workspaceShortcutRoutes[m])
     .slice(0, 4);
+
   const workspaceShortcuts = workspaceShortcutLabels
-    .map((module) => ({
-      label: module,
-      path: workspaceShortcutRoutes[module],
-    }))
+    .map((m) => ({ label: m, path: workspaceShortcutRoutes[m] }))
     .filter((item): item is { label: string; path: string } => Boolean(item.path));
+
   const helpSections = routeHelp[currentLabel] ?? routeHelp.Dashboard;
   const accountLabel = cloudSession?.user?.email ?? currentRole;
+
   const workspaceMenuItems = [
     {
       id: 'edit-shortcuts',
@@ -239,26 +254,18 @@ export default function MainLayout() {
         const result = updateWorkspaceProfile({ workspaceShortcuts: [] });
         pushToast({
           title: result.ok ? 'Shortcuts reset' : 'Reset blocked',
-          message: result.ok ? 'Workspace shortcuts are back to role defaults.' : result.message,
+          message: result.ok
+            ? 'Workspace shortcuts are back to role defaults.'
+            : result.message,
           tone: result.ok ? 'success' : 'error',
         });
       },
     },
-    {
-      id: 'open-settings',
-      label: 'Open settings',
-      onSelect: () => navigate('/settings'),
-    },
+    { id: 'open-settings', label: 'Open settings', onSelect: () => navigate('/settings') },
   ];
 
-  useEffect(() => {
-    setHelpOpen(false);
-  }, [location.pathname]);
-
-  useEffect(() => {
-    setShortcutEditorOpen(false);
-    setWorkspaceMenu(null);
-  }, [location.pathname]);
+  useEffect(() => { setHelpOpen(false); }, [location.pathname]);
+  useEffect(() => { setShortcutEditorOpen(false); setWorkspaceMenu(null); }, [location.pathname]);
 
   const handleSearch = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter' && search.trim()) {
@@ -267,10 +274,10 @@ export default function MainLayout() {
   };
 
   const handleShortcutToggle = (module: string) => {
-    const nextSelection = workspaceShortcutLabels.includes(module)
-      ? workspaceShortcutLabels.filter((item) => item !== module)
+    const next = workspaceShortcutLabels.includes(module)
+      ? workspaceShortcutLabels.filter((m) => m !== module)
       : [...workspaceShortcutLabels, module].slice(0, 6);
-    const result = updateWorkspaceProfile({ workspaceShortcuts: nextSelection });
+    const result = updateWorkspaceProfile({ workspaceShortcuts: next });
     pushToast({
       title: result.ok ? 'Shortcuts updated' : 'Update blocked',
       message: result.ok ? 'Workspace shortcuts were saved.' : result.message,
@@ -285,291 +292,346 @@ export default function MainLayout() {
       message: result.message,
       tone: result.ok ? 'success' : 'error',
     });
-    if (result.ok) {
-      navigate('/login', { replace: true });
-    }
+    if (result.ok) navigate('/login', { replace: true });
   };
 
+  const cloudBadgeLabel =
+    cloudStatus === 'signed-in' ? 'Cloud' : cloudStatus === 'unavailable' ? 'Local' : 'Limited';
+
   return (
-    <div className="min-h-screen bg-[#f5f1eb] lg:grid lg:grid-cols-[248px,1fr]">
-      <aside className="hidden min-h-screen flex-col gap-6 border-r border-[#e5ddd2] bg-[#f8f4ee] px-5 py-5 text-[#202225] lg:flex">
-        <div className="flex items-center gap-3">
-          <div className="flex h-[52px] w-[52px] items-center justify-center rounded-lg border border-[#e5ddd2] bg-white p-1.5 shadow-sm">
-            <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" className="h-full w-full object-contain" />
+    <div className="min-h-screen bg-[#F6F3EF] lg:grid lg:grid-cols-[252px,1fr]">
+
+      {/* ── Sidebar ─────────────────────────────────────────── */}
+      <aside className="hidden min-h-screen flex-col border-r border-white/[0.055] bg-[#141210] lg:flex">
+
+        {/* Brand lockup */}
+        <div className="flex items-center gap-3 px-5 py-5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#B87333] shadow-[0_2px_8px_rgba(184,115,51,0.45)]">
+            <img
+              src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`}
+              alt="XBAR"
+              className="h-6 w-6 object-contain brightness-[10]"
+            />
           </div>
           <div className="min-w-0">
-            <div className="truncate text-[1.04rem] font-extrabold uppercase tracking-[0.14em]">{workspaceProfile.businessName || 'XBAR'}</div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8f8276]">{workspaceProfile.ranchName || 'Horse Ledger'}</div>
+            <div className="truncate text-[0.92rem] font-extrabold uppercase tracking-[0.16em] text-white">
+              {workspaceProfile.businessName || 'XBAR'}
+            </div>
+            <div className="truncate text-[9px] font-semibold uppercase tracking-[0.28em] text-white/30">
+              {workspaceProfile.ranchName || 'Horse Ledger'}
+            </div>
           </div>
         </div>
 
-        <div
-          className="rounded-[10px] border border-[#e5ddd2] bg-[#fcfaf7] p-4 shadow-sm"
-          onContextMenu={(event) => {
-            event.preventDefault();
-            setWorkspaceMenu({ x: event.clientX, y: event.clientY });
-          }}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8f8276]">Workspace</div>
-              <div className="mt-2 text-[0.95rem] font-semibold text-[#202225]">{roleWorkspace.label}</div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="inline-flex min-h-[24px] items-center rounded-md border border-[#d9cfc4] bg-white px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#756b63]">
-                {cloudStatus === 'signed-in' ? 'Cloud' : cloudStatus === 'unavailable' ? 'Local' : 'Limited'}
-              </span>
-              <button
-                type="button"
-                onClick={() => setShortcutEditorOpen(true)}
-                className="inline-flex min-h-[24px] items-center rounded-md border border-[#d9cfc4] bg-white px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#5d6771] transition-all duration-150 ease-[ease] hover:border-[#cbbfb2] hover:bg-[#f8f3ed] hover:text-[#202225]"
-              >
-                Edit
-              </button>
-            </div>
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            {workspaceShortcuts.map((module) => (
-              <button
-                key={module.label}
-                type="button"
-                onClick={() => navigate(module.path)}
-                className="rounded-md border border-[#e5ddd2] bg-white px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-[#5b6670] transition-all duration-150 ease-[ease] hover:border-[#cbbfb2] hover:bg-[#f8f3ed] hover:text-[#202225]"
-              >
-                {module.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <NavSection title="Operations" items={operations} />
-        <NavSection title="Programs" items={programs} />
-        <NavSection title="Platform" items={platformItems} />
-
-        <div className="mt-auto flex items-center justify-between gap-3 border-t border-[#e5ddd2] pt-4 text-xs text-[#8f8276]">
-          <span>{subscription.tier}</span>
-          <button
-            type="button"
-            onClick={() => navigate('/settings')}
-            className="rounded-md border border-[#e5ddd2] bg-white px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#5b6670] transition-all duration-150 ease-[ease] hover:border-[#cbbfb2] hover:bg-[#f8f3ed] hover:text-[#202225]"
+        {/* Workspace card */}
+        <div className="mx-3 mb-2">
+          <div
+            className="rounded-xl border border-white/[0.07] bg-white/[0.04] p-3.5"
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setWorkspaceMenu({ x: e.clientX, y: e.clientY });
+            }}
           >
-            Settings
-          </button>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-[9px] font-bold uppercase tracking-[0.28em] text-white/25">
+                  Workspace
+                </div>
+                <div className="mt-1 truncate text-[0.84rem] font-semibold text-white/70">
+                  {roleWorkspace.label}
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <span
+                  className={cx(
+                    'inline-flex items-center rounded-md px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em]',
+                    cloudStatus === 'signed-in'
+                      ? 'bg-emerald-500/15 text-emerald-400'
+                      : cloudStatus === 'unavailable'
+                        ? 'bg-white/[0.07] text-white/35'
+                        : 'bg-amber-500/15 text-amber-400',
+                  )}
+                >
+                  {cloudBadgeLabel}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShortcutEditorOpen(true)}
+                  className="inline-flex items-center rounded-md bg-white/[0.06] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-white/35 transition-colors hover:bg-white/[0.10] hover:text-white/60"
+                >
+                  Edit
+                </button>
+              </div>
+            </div>
+            {workspaceShortcuts.length > 0 && (
+              <div className="mt-3 grid grid-cols-2 gap-1.5">
+                {workspaceShortcuts.map((sc) => (
+                  <button
+                    key={sc.label}
+                    type="button"
+                    onClick={() => navigate(sc.path)}
+                    className="rounded-lg bg-white/[0.05] px-2.5 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45 transition-colors hover:bg-white/[0.09] hover:text-white/75"
+                  >
+                    {sc.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-3" aria-label="Main navigation">
+          <NavSection title="Operations" items={operations} />
+          <NavSection title="Programs" items={programs} />
+          <NavSection title="Platform" items={platformItems} />
+        </nav>
+
+        {/* Sidebar footer */}
+        <div className="border-t border-white/[0.06] px-5 py-4">
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] font-bold uppercase tracking-[0.24em] text-white/20">
+              {subscription.tier}
+            </span>
+            <button
+              type="button"
+              onClick={() => navigate('/settings')}
+              className="rounded-md bg-white/[0.05] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.18em] text-white/30 transition-colors hover:bg-white/[0.09] hover:text-white/60"
+            >
+              Settings
+            </button>
+          </div>
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-col bg-[#f5f1eb]">
-        <header className="sticky top-0 z-10 border-b border-[#e5ddd2] bg-[#fbf8f4]/92 backdrop-blur">
-          <div className="flex min-h-[56px] flex-wrap items-center justify-between gap-4 px-5 py-3">
-            <div className="flex items-center gap-3">
-              <div className="text-[0.96rem] font-extrabold tracking-[0.01em] text-[#202225]">{currentLabel}</div>
+      {/* ── Main content area ───────────────────────────────── */}
+      <div className="flex min-w-0 flex-col">
+
+        {/* Topbar */}
+        <header className="sticky top-0 z-10 border-b border-[#E4DDD6] bg-white/95 backdrop-blur-xl">
+          <div className="flex min-h-[58px] items-center justify-between gap-3 px-5 py-2.5">
+
+            {/* Left: page title + status */}
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-[0.95rem] font-bold tracking-[-0.01em] text-[#1A1614]">
+                {currentLabel}
+              </h1>
               <span
-                className={classNames(
-                  'inline-flex min-h-[24px] items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]',
-                  pendingReview ? 'border-[#ddd4ca] bg-white text-[#5b6670]' : 'border-[#d7e6dd] bg-[#f3faf6] text-[#2b6a4c]',
+                className={cx(
+                  'inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold',
+                  pendingReview
+                    ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+                    : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
                 )}
               >
                 {pendingReview ? `${pendingReview} review` : 'Live'}
               </span>
             </div>
 
-            <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
-              <label className="relative min-w-[220px] max-w-[420px] flex-1">
-                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[#7b8794]" />
+            {/* Right: controls */}
+            <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
+
+              {/* Search */}
+              <label className="relative min-w-[200px] max-w-[380px] flex-1">
+                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-[16px] w-[16px] -translate-y-1/2 text-[#9B9490]" />
                 <input
                   value={search}
-                  onChange={(event) => setSearch(event.target.value)}
+                  onChange={(e) => setSearch(e.target.value)}
                   onKeyDown={handleSearch}
-                  placeholder="Search"
-                  className="h-10 w-full rounded-md border border-[#d5cdc2] bg-white pl-10 pr-4 text-sm text-[#202225] transition-all duration-150 ease-[ease] placeholder:text-[#8a96a3] focus:border-[#8f8276] focus:outline-none"
+                  placeholder="Search horses…"
+                  className="h-9 w-full rounded-lg border border-[#E4DDD6] bg-[#F9F7F4] pl-9 pr-3 text-[13px] text-[#1A1614] placeholder:text-[#9B9490] transition-all focus:border-[#B87333] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#B87333]/15"
                 />
               </label>
 
-              <div className="inline-flex h-10 items-center gap-3 rounded-md border border-[#d5cdc2] bg-white px-3 text-sm font-semibold text-[#202225]">
-                <span className="max-w-[190px] truncate">{accountLabel}</span>
-                <span className={classNames('inline-flex rounded-sm border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]',
-                  cloudStatus === 'signed-in'
-                    ? 'border-[#d7e6dd] bg-[#f3faf6] text-[#2b6a4c]'
-                    : cloudStatus === 'unavailable'
-                      ? 'border-[#e2e5ea] bg-[#f4f5f7] text-[#667085]'
-                      : 'border-[#dce5eb] bg-[#f3f7fa] text-[#405b6a]',
-                )}>
+              {/* Account chip */}
+              <div className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#E4DDD6] bg-white px-3 text-[13px] font-medium text-[#1A1614]">
+                <span className="max-w-[160px] truncate">{accountLabel}</span>
+                <span
+                  className={cx(
+                    'inline-flex items-center rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em]',
+                    cloudSession
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : cloudStatus === 'unavailable'
+                        ? 'bg-[#F0EDE9] text-[#6B6460]'
+                        : 'bg-sky-50 text-sky-700',
+                  )}
+                >
                   {cloudSession ? currentRole : cloudStatus === 'unavailable' ? 'Local' : 'Guest'}
                 </span>
               </div>
 
+              {/* Help */}
               <button
-                className="inline-flex h-10 items-center justify-center rounded-md border border-[#d5cdc2] bg-white px-4 text-sm font-semibold text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#cbbfb2] hover:bg-[#f8f3ed]"
                 type="button"
                 onClick={() => setHelpOpen(true)}
+                className="inline-flex h-9 items-center rounded-lg border border-[#E4DDD6] bg-white px-3.5 text-[13px] font-semibold text-[#4A4440] transition-all hover:border-[#D6CEC6] hover:bg-[#F6F3EF]"
               >
                 Help
               </button>
 
+              {/* Sign out */}
               {cloudSession && canSyncCloud ? (
                 <button
-                  className="inline-flex h-10 items-center justify-center rounded-md border border-[#d5cdc2] bg-white px-4 text-sm font-semibold text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#cbbfb2] hover:bg-[#f8f3ed]"
                   type="button"
                   onClick={() => void handleCloudSignOut()}
+                  className="inline-flex h-9 items-center rounded-lg border border-[#E4DDD6] bg-white px-3.5 text-[13px] font-semibold text-[#4A4440] transition-all hover:border-[#D6CEC6] hover:bg-[#F6F3EF]"
                 >
                   Sign out
                 </button>
               ) : null}
 
+              {/* Bell */}
               <button
-                className="relative inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#d5cdc2] bg-white text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#cbbfb2] hover:bg-[#f8f3ed] disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 onClick={() => navigate('/documents')}
                 aria-label="Open document review"
+                className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#E4DDD6] bg-white text-[#4A4440] transition-all hover:border-[#D6CEC6] hover:bg-[#F6F3EF]"
               >
-                <BellIcon className="h-[18px] w-[18px]" />
+                <BellIcon className="h-[17px] w-[17px]" />
                 {pendingReview ? (
-                  <span className="absolute right-0.5 top-0.5 min-w-[18px] rounded-full bg-[#CC3333] px-1.5 py-0.5 text-[10px] font-bold text-white">
+                  <span className="absolute right-0.5 top-0.5 min-w-[16px] rounded-full bg-[#DC2626] px-1 py-px text-[9px] font-bold leading-none text-white">
                     {pendingReview}
                   </span>
                 ) : null}
               </button>
 
+              {/* Intake */}
               <button
-                className="inline-flex h-10 items-center justify-center rounded-md border border-[#d5cdc2] bg-white px-4 text-sm font-semibold text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#cbbfb2] hover:bg-[#f8f3ed] disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 onClick={() => navigate('/documents?upload=1')}
                 disabled={!canUploadDocuments}
+                className="inline-flex h-9 items-center rounded-lg border border-[#E4DDD6] bg-white px-3.5 text-[13px] font-semibold text-[#4A4440] transition-all hover:border-[#D6CEC6] hover:bg-[#F6F3EF] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Intake
               </button>
 
+              {/* New horse — brand CTA */}
               <button
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#2a4556] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#233b4a] disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 onClick={() => navigate('/horses?new=1')}
                 disabled={!canCreateHorse}
+                className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#B87333] px-4 text-[13px] font-bold text-white shadow-sm transition-all hover:bg-[#A06828] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
               >
-                <AddIcon className="h-[16px] w-[16px]" />
-                New
+                <AddIcon className="h-[15px] w-[15px]" />
+                New Horse
               </button>
             </div>
           </div>
         </header>
 
-        <main className="flex flex-col gap-[18px] px-6 py-5">
+        {/* Page content */}
+        <main className="flex flex-col gap-5 px-6 py-5 pb-24 lg:pb-5">
           <Outlet />
         </main>
 
-        <nav className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-2 rounded-lg border border-[#e5ddd2] bg-[#fbf8f4] p-2 text-[#202225] shadow-lg lg:hidden" aria-label="Mobile quick navigation">
-          <NavLink
-            to="/"
-            end
-            className={({ isActive }) =>
-              classNames(
-                'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]',
-                isActive ? 'bg-[#f3ece4] text-[#202225]' : 'text-[#6b7280] hover:bg-white hover:text-[#202225]',
-              )
-            }
-          >
-            <DashboardIcon className="h-[18px] w-[18px]" />
-            <span>Home</span>
-          </NavLink>
-          <NavLink
-            to="/horses"
-            className={({ isActive }) =>
-              classNames(
-                'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]',
-                isActive ? 'bg-[#f3ece4] text-[#202225]' : 'text-[#6b7280] hover:bg-white hover:text-[#202225]',
-              )
-            }
-          >
-            <HorsesIcon className="h-[18px] w-[18px]" />
-            <span>Horses</span>
-          </NavLink>
-          <NavLink
-            to="/documents"
-            className={({ isActive }) =>
-              classNames(
-                'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]',
-                isActive ? 'bg-[#f3ece4] text-[#202225]' : 'text-[#6b7280] hover:bg-white hover:text-[#202225]',
-              )
-            }
-          >
-            <DocumentsIcon className="h-[18px] w-[18px]" />
-            <span>Docs</span>
-          </NavLink>
-          <NavLink
-            to="/sales"
-            className={({ isActive }) =>
-              classNames(
-                'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]',
-                isActive ? 'bg-[#f3ece4] text-[#202225]' : 'text-[#6b7280] hover:bg-white hover:text-[#202225]',
-              )
-            }
-          >
-            <SalesIcon className="h-[18px] w-[18px]" />
-            <span>Sales</span>
-          </NavLink>
+        {/* Mobile bottom dock */}
+        <nav
+          className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-1.5 rounded-2xl border border-[#E4DDD6] bg-white/95 p-2 shadow-lift backdrop-blur-xl lg:hidden"
+          aria-label="Mobile navigation"
+        >
+          {[
+            { to: '/', end: true, icon: DashboardIcon, label: 'Home' },
+            { to: '/horses', end: false, icon: HorsesIcon, label: 'Horses' },
+            { to: '/documents', end: false, icon: DocumentsIcon, label: 'Docs' },
+            { to: '/sales', end: false, icon: SalesIcon, label: 'Sales' },
+          ].map(({ to, end, icon: Icon, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              className={({ isActive }) =>
+                cx(
+                  'flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-semibold transition-all',
+                  isActive
+                    ? 'bg-[#B87333]/[0.10] text-[#B87333]'
+                    : 'text-[#6B6460] hover:bg-[#F6F3EF] hover:text-[#1A1614]',
+                )
+              }
+            >
+              <Icon className="h-[19px] w-[19px]" />
+              <span>{label}</span>
+            </NavLink>
+          ))}
           <button
-            className="flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md bg-[#2a4556] text-[11px] font-semibold text-white transition-all duration-150 ease-[ease] hover:bg-[#233b4a] disabled:cursor-not-allowed disabled:opacity-50"
             type="button"
             onClick={() => navigate('/horses?new=1')}
             disabled={!canCreateHorse}
+            className="flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-xl bg-[#B87333] text-[10px] font-bold text-white shadow-sm transition-all hover:bg-[#A06828] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <AddIcon className="h-[18px] w-[18px]" />
+            <AddIcon className="h-[19px] w-[19px]" />
             <span>New</span>
           </button>
         </nav>
-
-        <WorkspaceHelp open={helpOpen} title={currentLabel} sections={helpSections} onClose={() => setHelpOpen(false)} />
-        {shortcutEditorOpen ? (
-          <div className="fixed inset-0 z-[120] flex items-center justify-end bg-[#f0e9e1]/70 p-4 backdrop-blur-[2px]" onClick={() => setShortcutEditorOpen(false)} role="presentation">
-            <aside
-              className="w-full max-w-[360px] rounded-[12px] border border-[#e5ddd2] bg-[#fffdfb] p-5 shadow-xl"
-              onClick={(event) => event.stopPropagation()}
-              role="dialog"
-              aria-modal="true"
-              aria-label="Edit workspace shortcuts"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#667085]">Workspace</div>
-                  <h2 className="mt-2 text-lg font-bold tracking-[-0.04em] text-[#202225]">Edit shortcuts</h2>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShortcutEditorOpen(false)}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#dce4ec] text-[#667085] transition-all duration-150 ease-[ease] hover:border-[#2a4556]/20 hover:text-[#2a4556]"
-                  aria-label="Close shortcut editor"
-                >
-                  ×
-                </button>
-              </div>
-              <div className="mt-5 grid grid-cols-2 gap-2">
-                {workspaceShortcutOptions.map((module) => {
-                  const active = workspaceShortcutLabels.includes(module);
-                  return (
-                    <button
-                      key={module}
-                      type="button"
-                      onClick={() => handleShortcutToggle(module)}
-                      className={classNames(
-                        'rounded-md border px-3 py-3 text-left text-sm font-semibold transition-all duration-150 ease-[ease]',
-                        active
-                          ? 'border-[#2a4556] bg-[#2a4556] text-white'
-                          : 'border-[#e5ddd2] bg-white text-[#202225] hover:border-[#cbbfb2] hover:bg-[#f8f3ed]',
-                      )}
-                    >
-                      {module}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="mt-4 text-xs leading-6 text-[#667085]">Right-click the workspace card any time to reopen this editor.</div>
-            </aside>
-          </div>
-        ) : null}
-        <ContextMenu open={Boolean(workspaceMenu)} x={workspaceMenu?.x ?? 0} y={workspaceMenu?.y ?? 0} items={workspaceMenuItems} onClose={() => setWorkspaceMenu(null)} />
       </div>
+
+      {/* Panels & overlays */}
+      <WorkspaceHelp open={helpOpen} title={currentLabel} sections={helpSections} onClose={() => setHelpOpen(false)} />
+
+      {shortcutEditorOpen ? (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-end bg-black/30 p-4 backdrop-blur-sm"
+          onClick={() => setShortcutEditorOpen(false)}
+          role="presentation"
+        >
+          <aside
+            className="w-full max-w-[340px] rounded-2xl border border-[#E4DDD6] bg-white p-5 shadow-lift"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Edit workspace shortcuts"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-[9px] font-bold uppercase tracking-[0.28em] text-[#9B9490]">
+                  Workspace
+                </div>
+                <h2 className="mt-1.5 text-[1.05rem] font-bold tracking-[-0.02em] text-[#1A1614]">
+                  Edit shortcuts
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShortcutEditorOpen(false)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#E4DDD6] text-[#6B6460] transition-all hover:border-[#B87333]/30 hover:text-[#B87333]"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              {workspaceShortcutOptions.map((module) => {
+                const active = workspaceShortcutLabels.includes(module);
+                return (
+                  <button
+                    key={module}
+                    type="button"
+                    onClick={() => handleShortcutToggle(module)}
+                    className={cx(
+                      'rounded-xl border px-3 py-2.5 text-left text-[12px] font-semibold transition-all',
+                      active
+                        ? 'border-[#B87333] bg-[#B87333] text-white shadow-sm'
+                        : 'border-[#E4DDD6] bg-[#F9F7F4] text-[#1A1614] hover:border-[#B87333]/40 hover:bg-[#FDF6EE]',
+                    )}
+                  >
+                    {module}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-4 text-[11px] leading-5 text-[#9B9490]">
+              Right-click the workspace card any time to reopen this editor.
+            </p>
+          </aside>
+        </div>
+      ) : null}
+
+      <ContextMenu
+        open={Boolean(workspaceMenu)}
+        x={workspaceMenu?.x ?? 0}
+        y={workspaceMenu?.y ?? 0}
+        items={workspaceMenuItems}
+        onClose={() => setWorkspaceMenu(null)}
+      />
     </div>
   );
 }
-
-
-
