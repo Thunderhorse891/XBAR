@@ -5,22 +5,30 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:web": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "tsc -p tsconfig.test.json && node .codex-test-dist/tests/xbarStoreLogic.test.js && node .codex-test-dist/tests/xbarPhaseTwo.test.js && node .codex-test-dist/tests/xbarGrowth.test.js && node .codex-test-dist/tests/permissions.test.js && node .codex-test-dist/tests/facebookSharing.test.js && node .codex-test-dist/tests/dashboardOps.test.js",
     "test:store": "npm run test",
-    "tauri": "tauri"
+    "mobile:sync": "npm run build && cap sync",
+    "mobile:copy": "npm run build && cap copy",
+    "mobile:add:ios": "cap add ios",
+    "mobile:add:android": "cap add android",
+    "mobile:open:ios": "cap open ios",
+    "mobile:open:android": "cap open android"
   },
   "dependencies": {
+    "@capacitor/android": "^8.3.0",
+    "@capacitor/cli": "^8.3.0",
+    "@capacitor/core": "^8.3.0",
+    "@capacitor/ios": "^8.3.0",
     "@supabase/supabase-js": "^2.100.1",
-    "@tauri-apps/api": "^1.6.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.22.0",
     "zustand": "^4.5.0"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^1.6.0",
     "@types/node": "^20.11.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",

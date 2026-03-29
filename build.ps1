@@ -1,9 +1,8 @@
 $ErrorActionPreference = "Stop"
 
-Write-Host "🚀 Building XBAR Horse Tracker Desktop App..." -ForegroundColor Cyan
+Write-Host "🚀 Building XBAR web bundle..." -ForegroundColor Cyan
 
-# Validate project structure
-$requiredPaths = @("src-tauri", "package.json", "src")
+$requiredPaths = @("package.json", "src")
 foreach ($path in $requiredPaths) {
     if (-not (Test-Path $path)) {
         Write-Host "❌ Missing required path: $path" -ForegroundColor Red
@@ -13,32 +12,21 @@ foreach ($path in $requiredPaths) {
 
 Write-Host "✅ Project structure validated" -ForegroundColor Green
 
-# Install dependencies
 Write-Host "📦 Installing dependencies..." -ForegroundColor Yellow
 npm install
-
 if ($LASTEXITCODE -ne 0) {
     Write-Host "❌ Dependency installation failed" -ForegroundColor Red
     exit 1
 }
 
-# Build process
-Write-Host "🌐 Building web assets..." -ForegroundColor Yellow
+Write-Host "🌐 Building production web assets..." -ForegroundColor Yellow
 npm run build
-
 if ($LASTEXITCODE -ne 0) {
     Write-Host "❌ Web build failed" -ForegroundColor Red
     exit 1
 }
 
-Write-Host "🖥️  Building desktop application..." -ForegroundColor Yellow
-cargo tauri build
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "❌ Tauri build failed" -ForegroundColor Red
-    exit 1
-}
-
+Write-Host "📱 Capacitor sync is optional once iOS or Android targets are added." -ForegroundColor Yellow
 Write-Host "✅ Build completed successfully!" -ForegroundColor Green
-Write-Host "📁 Installer: src-tauri/target/release/bundle/" -ForegroundColor Cyan
+Write-Host "📁 Web bundle: dist/" -ForegroundColor Cyan
 exit 0

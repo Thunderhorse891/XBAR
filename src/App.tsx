@@ -1,5 +1,5 @@
 import { Suspense, lazy } from 'react';
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import { RequireCloudAuth } from './components/RequireCloudAuth';
 import { ToastViewport } from './components/ToastViewport';
@@ -21,9 +21,19 @@ const Settings = lazy(() => import('./routes/Settings'));
 const SharedAccess = lazy(() => import('./routes/SharedAccess'));
 const Subscriptions = lazy(() => import('./routes/Subscriptions'));
 
+function useHashRouting() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return import.meta.env.VITE_ROUTER_MODE === 'hash' || window.location.hostname.endsWith('github.io');
+}
+
 export default function App() {
+  const Router = useHashRouting() ? HashRouter : BrowserRouter;
+
   return (
-    <HashRouter>
+    <Router>
       <ErrorBoundary>
         <ToastViewport />
         <Suspense fallback={<div className="app-loading-shell">Loading workspace...</div>}>
@@ -50,6 +60,6 @@ export default function App() {
           </Routes>
         </Suspense>
       </ErrorBoundary>
-    </HashRouter>
+    </Router>
   );
 }

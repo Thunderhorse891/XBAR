@@ -16,8 +16,8 @@ const leadChannels: SalesLead['channel'][] = ['Facebook', 'Instagram', 'Referral
 const docSources: DocumentSource[] = ['Manual Upload', 'Bulk Intake', 'Shared Upload', 'Sales Packet'];
 type DetailTab = 'Overview' | 'Docs' | 'Ops' | 'Activity';
 const profileBadgeStyles = [
-  'border border-[#066B90]/15 bg-[#E8F2F7] text-[#066B90]',
-  'border border-[#4A90B8]/15 bg-[#edf5fa] text-[#4A90B8]',
+  'border border-[#3D6B4F]/15 bg-[#EDF4EE] text-[#3D6B4F]',
+  'border border-[#8B5E3C]/15 bg-[#F8F0E8] text-[#8B5E3C]',
   'border border-[#CC3333]/15 bg-[#fff4f4] text-[#CC3333]',
 ] as const;
 
@@ -85,7 +85,7 @@ function ReadinessGauge({ value }: { value: number }) {
   const radius = 48;
   const circumference = 2 * Math.PI * radius;
   const dashOffset = circumference - (normalized / 100) * circumference;
-  const gaugeColor = normalized >= 75 ? '#066B90' : '#4A90B8';
+  const gaugeColor = normalized >= 75 ? '#3D6B4F' : '#8B5E3C';
 
   return (
     <div className="relative mx-auto h-40 w-40">
@@ -104,9 +104,9 @@ function ReadinessGauge({ value }: { value: number }) {
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#4A90B8]">Ready</span>
-        <span className="mt-1 text-4xl font-bold tracking-[-0.06em] text-[#202225]">{normalized}</span>
-        <span className="text-sm font-semibold text-[#667085]">%</span>
+        <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8B5E3C]">Ready</span>
+        <span className="mt-1 text-4xl font-bold tracking-[-0.06em] text-[#201d1a]">{normalized}</span>
+        <span className="text-sm font-semibold text-[#756a5f]">%</span>
       </div>
     </div>
   );
@@ -123,11 +123,11 @@ function StatPill({
   label: string;
 }) {
   return (
-    <div className="flex min-w-[112px] flex-1 items-center gap-3 rounded-md border border-[#dce4ec] bg-[#f7fafc] px-3 py-2 shadow-sm transition-all duration-150 ease-[ease] hover:border-[#4A90B8]/40 hover:bg-white">
-      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-white text-[#066B90] ring-1 ring-[#dce4ec]">{icon}</span>
+    <div className="flex min-w-[112px] flex-1 items-center gap-3 rounded-md border border-[#ddd3c7] bg-[#faf5ee] px-3 py-2 shadow-sm transition-all duration-150 ease-[ease] hover:border-[#3D6B4F]/30 hover:bg-white">
+      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-white text-[#3D6B4F] ring-1 ring-[#ddd3c7]">{icon}</span>
       <div className="min-w-0">
-        <div className="text-sm font-bold tracking-[-0.03em] text-[#202225]">{value}</div>
-        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#667085]">{label}</div>
+        <div className="text-sm font-bold tracking-[-0.03em] text-[#201d1a]">{value}</div>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#756a5f]">{label}</div>
       </div>
     </div>
   );
@@ -202,12 +202,12 @@ export default function HorseDetail() {
 
   const shareBadgeStyles =
     packet.buyerProfileStatus === 'Live'
-      ? 'border border-[#066B90]/15 bg-[#E8F2F7] text-[#066B90]'
+      ? 'border border-[#3D6B4F]/15 bg-[#EDF4EE] text-[#3D6B4F]'
       : packet.buyerProfileStatus === 'Blocked'
         ? 'border border-[#CC3333]/15 bg-[#fff4f4] text-[#CC3333]'
         : packet.buyerProfileStatus === 'Needs Review'
-          ? 'border border-[#4A90B8]/15 bg-[#edf5fa] text-[#4A90B8]'
-          : 'border border-[#dce4ec] bg-[#f6f8fb] text-[#667085]';
+          ? 'border border-[#8B5E3C]/15 bg-[#F8F0E8] text-[#8B5E3C]'
+          : 'border border-[#ddd3c7] bg-[#f7f1ea] text-[#756a5f]';
 
   const handleSavedHorseToggle = () => {
     const result = toggleSharedListing(horse.id);
@@ -365,27 +365,27 @@ export default function HorseDetail() {
     <>
       <Link
         to="/horses"
-        className="inline-flex w-fit items-center gap-2 text-sm font-semibold text-[#066B90] transition-all duration-150 ease-[ease] hover:text-[#03375D]"
+        className="inline-flex w-fit items-center gap-2 text-sm font-semibold text-[#3D6B4F] transition-all duration-150 ease-[ease] hover:text-[#2E523C]"
       >
         <ChevronLeftIcon className="h-4 w-4" />
         Back to horses
       </Link>
 
-      <section className="rounded-[10px] border border-[#d7e0e8] bg-[linear-gradient(180deg,#ffffff_0%,#f7fafc_100%)] px-5 py-5 shadow-sm">
+      <section className="rounded-[10px] border border-[#ddd3c7] bg-[linear-gradient(180deg,#fffdfa_0%,#f7f1ea_100%)] px-5 py-5 shadow-sm">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
             <div className="mb-3 flex items-center gap-3">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7a8c9a]">{horse.ownerEntity}</span>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8f8378]">{horse.ownerEntity}</span>
               {hasRestrictedActions ? (
                 <span
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#dce4ec] bg-[#f6f8fb] text-[#667085] transition-all duration-150 ease-[ease] hover:border-[#4A90B8]/40 hover:text-[#066B90]"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#ddd3c7] bg-[#f7f1ea] text-[#756a5f] transition-all duration-150 ease-[ease] hover:border-[#3D6B4F]/30 hover:text-[#3D6B4F]"
                   title={`${currentRole} access limits some profile actions.`}
                 >
                   <LockIcon className="h-4 w-4" />
                 </span>
               ) : null}
             </div>
-            <h1 className="text-[clamp(2rem,4vw,3rem)] font-bold tracking-[-0.06em] text-[#202225]">{horse.name}</h1>
+            <h1 className="text-[clamp(2rem,4vw,3rem)] font-bold tracking-[-0.06em] text-[#201d1a]">{horse.name}</h1>
             <div className="mt-4 flex flex-wrap gap-2">
               {[horse.segment, horse.status, horse.location.barn].map((label, index) => (
                 <span
@@ -398,7 +398,7 @@ export default function HorseDetail() {
                   <span
                     className={classNames(
                       'h-2.5 w-2.5 rounded-full',
-                      index === 0 ? 'bg-[#066B90]' : index === 1 ? 'bg-[#4A90B8]' : 'bg-[#CC3333]',
+                      index === 0 ? 'bg-[#3D6B4F]' : index === 1 ? 'bg-[#8B5E3C]' : 'bg-[#CC3333]',
                     )}
                   />
                   {label}
@@ -409,14 +409,14 @@ export default function HorseDetail() {
 
           <div className="flex flex-wrap gap-3">
             <Link
-              className="inline-flex h-11 items-center justify-center rounded-md bg-[#066B90] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#055a7a]"
+              className="inline-flex h-11 items-center justify-center rounded-md bg-[#3D6B4F] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#2E523C]"
               to={packet.sharePath}
               onClick={() => recordSharedChannel(horse.id, 'Direct Link')}
             >
               Preview
             </Link>
             <button
-              className="inline-flex h-11 items-center justify-center rounded-md border border-[#cad6df] bg-white px-5 text-sm font-semibold text-[#435463] transition-all duration-150 ease-[ease] hover:border-[#4A90B8]/40 hover:bg-[#f5f9fc] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-11 items-center justify-center rounded-md border border-[#ddd3c7] bg-white px-5 text-sm font-semibold text-[#4d463f] transition-all duration-150 ease-[ease] hover:border-[#3D6B4F]/30 hover:bg-[#f5efe8] disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
               onClick={handleSavedHorseToggle}
               disabled={!canManageSharedAccess}
@@ -428,19 +428,19 @@ export default function HorseDetail() {
       </section>
 
       <section className="grid items-stretch gap-5 lg:grid-cols-2">
-        <div className="relative flex h-full flex-col overflow-hidden rounded-[10px] border border-[#d7e0e8] bg-[linear-gradient(180deg,#ffffff_0%,#f8fbfd_100%)] p-5 shadow-sm">
+        <div className="relative flex h-full flex-col overflow-hidden rounded-[10px] border border-[#ddd3c7] bg-[linear-gradient(180deg,#fffdfa_0%,#f7f1ea_100%)] p-5 shadow-sm">
           <div className="mb-5 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-md bg-[#E8F2F7] text-[#066B90]">
+              <span className="flex h-10 w-10 items-center justify-center rounded-md bg-[#EDF4EE] text-[#3D6B4F]">
                 <PhotoIcon className="h-5 w-5" />
               </span>
-              <div className="text-sm font-semibold tracking-[0.02em] text-[#202225]">Media Vault</div>
+              <div className="text-sm font-semibold tracking-[0.02em] text-[#201d1a]">Media Vault</div>
             </div>
             <button
               type="button"
               onClick={() => mediaInputRef.current?.click()}
               disabled={!canUploadMedia}
-              className="inline-flex h-10 items-center justify-center rounded-md border border-[#066B90] px-4 text-sm font-semibold text-[#066B90] transition-all duration-150 ease-[ease] hover:bg-[#E8F2F7] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center rounded-md border border-[#3D6B4F] px-4 text-sm font-semibold text-[#3D6B4F] transition-all duration-150 ease-[ease] hover:bg-[#EDF4EE] disabled:cursor-not-allowed disabled:opacity-50"
             >
               + Upload
             </button>
@@ -467,14 +467,14 @@ export default function HorseDetail() {
               asset ? (
                 <div
                   key={asset.id}
-                  className="group relative z-10 aspect-[4/3] overflow-hidden rounded-xl border border-[#dce4ec] bg-[linear-gradient(145deg,#f7fafc_0%,#eef4f8_100%)]"
+                  className="group relative z-10 aspect-[4/3] overflow-hidden rounded-xl border border-[#ddd3c7] bg-[linear-gradient(145deg,#faf5ee_0%,#f3ece3_100%)]"
                 >
                   <img
                     src={asset.url}
                     alt={asset.label}
                     className="h-full w-full object-cover transition-all duration-150 ease-[ease] group-hover:scale-[1.02]"
                   />
-                  <div className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-[#0c4458]/72 via-[#066B90]/18 to-transparent p-3 text-white">
+                  <div className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-[#2E523C]/72 via-[#3D6B4F]/18 to-transparent p-3 text-white">
                     <div>
                       <div className="text-xs font-semibold tracking-[0.02em]">{asset.label}</div>
                       <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-white/70">{asset.kind}</div>
@@ -486,7 +486,7 @@ export default function HorseDetail() {
                 <label
                   key={`empty-${index}`}
                   htmlFor={mediaInputId}
-                  className="relative z-10 flex aspect-[4/3] cursor-pointer items-center justify-center rounded-xl border border-dashed border-[#d1dbe4] bg-[#f8fbfd] text-xs font-semibold uppercase tracking-[0.22em] text-[#4A90B8] transition-all duration-150 ease-[ease] hover:border-[#066B90] hover:bg-[#eef6fa]"
+                  className="relative z-10 flex aspect-[4/3] cursor-pointer items-center justify-center rounded-xl border border-dashed border-[#d2c7b9] bg-[#faf5ee] text-xs font-semibold uppercase tracking-[0.22em] text-[#8B5E3C] transition-all duration-150 ease-[ease] hover:border-[#3D6B4F] hover:bg-[#f3ece3]"
                 >
                   + Upload
                 </label>
@@ -494,14 +494,14 @@ export default function HorseDetail() {
             )}
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#dce4ec] bg-[#f7fafc] px-4 py-3">
-            <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#4A90B8]">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#ddd3c7] bg-[#faf5ee] px-4 py-3">
+            <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8B5E3C]">
               <span>{horse.gallery.length} assets</span>
               {mediaFiles.length ? <span>{mediaFiles.length} queued</span> : null}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <select
-                className="h-10 rounded-md border border-[#d1dbe4] bg-white px-3 text-sm font-medium text-[#202225] transition-all duration-150 ease-[ease] focus:border-[#066B90] focus:outline-none"
+                className="h-10 rounded-md border border-[#d2c7b9] bg-white px-3 text-sm font-medium text-[#201d1a] transition-all duration-150 ease-[ease] focus:border-[#3D6B4F] focus:outline-none"
                 value={mediaKind}
                 onChange={(event) => setMediaKind(event.target.value as GalleryAsset['kind'])}
                 disabled={!canUploadMedia}
@@ -512,10 +512,10 @@ export default function HorseDetail() {
                   </option>
                 ))}
               </select>
-              <label className="inline-flex h-10 items-center gap-2 rounded-md border border-[#d1dbe4] bg-white px-3 text-sm font-medium text-[#202225] transition-all duration-150 ease-[ease] hover:border-[#4A90B8]/50">
+              <label className="inline-flex h-10 items-center gap-2 rounded-md border border-[#d2c7b9] bg-white px-3 text-sm font-medium text-[#201d1a] transition-all duration-150 ease-[ease] hover:border-[#3D6B4F]/40">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border-[#c2d1dc] text-[#066B90] focus:ring-[#066B90]"
+                  className="h-4 w-4 rounded border-[#c2b7aa] text-[#3D6B4F] focus:ring-[#3D6B4F]"
                   checked={makePrimary}
                   onChange={(event) => setMakePrimary(event.target.checked)}
                   disabled={!canUploadMedia}
@@ -523,7 +523,7 @@ export default function HorseDetail() {
                 Hero
               </label>
               <button
-                className="inline-flex h-10 items-center justify-center rounded-md bg-[#066B90] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#055a7a] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center rounded-md bg-[#3D6B4F] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#2E523C] disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 onClick={() => void handleMediaUpload()}
                 disabled={!canUploadMedia || isMediaUploading || !mediaFiles.length}
@@ -534,9 +534,9 @@ export default function HorseDetail() {
           </div>
         </div>
 
-        <div className="flex h-full flex-col rounded-[10px] border border-[#d7e0e8] bg-[linear-gradient(180deg,#ffffff_0%,#f8fbfd_100%)] p-5 shadow-sm">
+        <div className="flex h-full flex-col rounded-[10px] border border-[#ddd3c7] bg-[linear-gradient(180deg,#fffdfa_0%,#f7f1ea_100%)] p-5 shadow-sm">
           <div className="mb-5 flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-md bg-[#E8F2F7] text-[#066B90]">
+            <span className="flex h-10 w-10 items-center justify-center rounded-md bg-[#EDF4EE] text-[#3D6B4F]">
               <SharedAccessIcon className="h-5 w-5" />
             </span>
             <div className="text-sm font-semibold tracking-[0.02em] text-[#202225]">Sale Readiness</div>
@@ -872,7 +872,7 @@ export default function HorseDetail() {
             <div className="stack-item">
               <div className="stack-item__top">
                 <div className="stack-item__title">Share path</div>
-                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[#4A90B8]">{packet.shareSlug}</span>
+                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8B5E3C]">{packet.shareSlug}</span>
               </div>
               <div className="inline-metrics">
                 <span>{packet.sharePath}</span>

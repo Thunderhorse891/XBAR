@@ -321,7 +321,7 @@ export default function Documents() {
           value={`${documents.length}`}
           tone="slate"
           title="Registration, medical, transfer, insurance, and media records"
-              className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#066B90]/12 hover:bg-[#f7fafc]"
+          className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#3D6B4F]/12 hover:bg-[#faf5ee]"
           onClick={() => scrollToSection('documents-review')}
           onContextMenu={(event) => openSurfaceMenu('vault', event)}
         />
@@ -330,7 +330,7 @@ export default function Documents() {
           value={`${reviewQueue.length}`}
           tone="slate"
           title="Files waiting on manual assignment"
-              className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#066B90]/12 hover:bg-[#f7fafc]"
+          className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#3D6B4F]/12 hover:bg-[#faf5ee]"
           onClick={() => scrollToSection('documents-review')}
           onContextMenu={(event) => openSurfaceMenu('review', event)}
         />
@@ -339,7 +339,7 @@ export default function Documents() {
           value={`${buyerSafeDocuments.length}`}
           tone="emerald"
           title="Approved documents cleared for buyer-facing packet surfaces"
-              className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#066B90]/12 hover:bg-[#f7fafc]"
+          className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#3D6B4F]/12 hover:bg-[#faf5ee]"
           onClick={() => navigate('/shared-access')}
           onContextMenu={(event) => openSurfaceMenu('buyer', event)}
         />
@@ -348,7 +348,7 @@ export default function Documents() {
           value={`${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB`}
           tone="slate"
           title="Workspace file storage against the current contract"
-              className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#066B90]/12 hover:bg-[#f7fafc]"
+          className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#3D6B4F]/12 hover:bg-[#faf5ee]"
           onClick={() => navigate('/subscriptions')}
           onContextMenu={(event) => openSurfaceMenu('storage', event)}
         />
@@ -428,7 +428,7 @@ export default function Documents() {
               <span className="field-label">Horse</span>
               <button
                 type="button"
-                className={`button button--ghost button--compact justify-start ${createHorseFromBatch ? 'border-[#066B90] bg-[#E8F2F7] text-[#066B90]' : ''}`}
+                    className={`button button--ghost button--compact justify-start ${createHorseFromBatch ? 'border-[#3D6B4F] bg-[#EDF4EE] text-[#3D6B4F]' : ''}`}
                 onClick={() => setCreateHorseFromBatch((current) => !current)}
                 disabled={!canUploadDocuments || Boolean(horseId)}
               >

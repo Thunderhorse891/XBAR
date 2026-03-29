@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-Write-Host "🚀 Setting up XBAR Horse Tracker..." -ForegroundColor Cyan
+Write-Host "🚀 Setting up XBAR web + mobile workspace..." -ForegroundColor Cyan
 
 $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
 if (-not $nodeCommand) {
@@ -15,10 +15,8 @@ if (-not (Test-Path $npmCommand)) {
     $npmCommand = "npm"
 }
 
-# Check prerequisites
 $requirements = @(
     @{Name="Node.js"; Command={ & $nodeCommand.Source --version }; Install="https://nodejs.org/"},
-    @{Name="Rust"; Command={ cargo --version }; Install="winget install Rustlang.Rust"},
     @{Name="npm"; Command={ & $npmCommand --version }; Install="Install Node.js from https://nodejs.org/"}
 )
 
@@ -33,9 +31,8 @@ foreach ($req in $requirements) {
     }
 }
 
-Write-Host "✅ All prerequisites found!" -ForegroundColor Green
+Write-Host "✅ Core web prerequisites found!" -ForegroundColor Green
 
-# Install dependencies
 Write-Host "📦 Installing dependencies..." -ForegroundColor Yellow
 & $npmCommand install
 
@@ -44,6 +41,5 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# Launch development mode
-Write-Host "🎯 Starting development server..." -ForegroundColor Green
-& $npmCommand run tauri dev
+Write-Host "🌐 Starting web development server..." -ForegroundColor Green
+& $npmCommand run dev

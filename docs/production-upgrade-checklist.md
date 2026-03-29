@@ -3,8 +3,9 @@
 ## Platform
 
 - Deploy the web app to a real runtime surface such as Vercel or Netlify.
-- Add Capacitor so the existing React app can ship to iOS and Android from one codebase.
-- Retire the Tauri-first product path once Capacitor and the hosted web runtime are stable.
+- Capacitor scaffold is now active so the existing React app can ship to iOS and Android from one codebase.
+- Browser routing is now ready for hosted platforms, with hash routing preserved for GitHub Pages previews.
+- Retire the remaining legacy Tauri source once the web and Capacitor runtime is fully validated.
 
 ## Product
 
@@ -18,10 +19,11 @@
 ## Design System
 
 - Rebuild the product shell around one consistent token system for spacing, typography, shadows, and color.
-- Move the UI toward a premium SaaS direction: quiet surfaces, tighter hierarchy, stronger typography, and fewer generic cards.
+- Move the UI toward a premium SaaS direction: quiet surfaces, tighter hierarchy, stronger typography, richer materials, and fewer generic cards.
 - Keep one brand accent and neutral semantic colors instead of ad hoc page-by-page styling.
 - Add loading skeletons, stronger empty states, and mobile-sized touch targets.
 - Standardize icons to one family and one stroke system.
+- Keep the shell aligned to the new warm neutral + ranch accent palette across login, dashboard, horses, and documents.
 
 ## Suggested Stack Direction
 
@@ -29,4 +31,4 @@
 - Capacitor for mobile distribution.
 - Supabase for auth, database, storage, and invitations.
 - Stripe with Checkout, Billing Portal, and webhooks for subscriptions.
-- A unified component system layered on top of the current app, with room to migrate to a stronger token-driven UI library.
+- A unified component system layered on top of the current app, with room to migrate to a stronger token-driven UI library such as shadcn/ui.

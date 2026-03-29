@@ -1,15 +1,15 @@
 #!/bin/bash
-echo "Setting up XBAR Desktop App..."
+set -e
 
-if !command -v node > /dev/null 2>&1; then
-  echo "█ Node.js is required."
+echo "Setting up XBAR web + mobile app..."
+
+if !command -v node >/dev/null 2>&1; then
+  echo "Node.js is required."
+  exit 1
 fi
 
-echo "█ Installing dependencies..."
+echo "Installing dependencies..."
 npm install
 
-echo "█ Loading installed files..."
-npm run build
-
-echo "...Launching the app..."
-npm run tauri
+echo "Launching the web app..."
+npm run dev
