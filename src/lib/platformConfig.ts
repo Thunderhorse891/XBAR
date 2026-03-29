@@ -6,13 +6,33 @@ function readEnv(value: string | undefined) {
   return value?.trim() ?? '';
 }
 
+function readFlag(value: string | undefined, defaultValue: boolean) {
+  const normalized = readEnv(value).toLowerCase();
+  if (!normalized) {
+    return defaultValue;
+  }
+
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+
+  if (['0', 'false', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+
+  return defaultValue;
+}
+
+const relationalSyncEnv = env.VITE_SUPABASE_RELATIONAL_SYNC ?? env.VITE_SUPABASE_RELATIONAL_MIRROR;
+
 export const supabaseConfig = {
   url: readEnv(env.VITE_SUPABASE_URL),
   anonKey: readEnv(env.VITE_SUPABASE_ANON_KEY),
   workspaceTable: readEnv(env.VITE_SUPABASE_WORKSPACE_TABLE) || 'workspace_snapshots',
   mediaBucket: readEnv(env.VITE_SUPABASE_MEDIA_BUCKET) || 'horse-media',
   documentBucket: readEnv(env.VITE_SUPABASE_DOCUMENT_BUCKET) || 'horse-documents',
-  relationalMirrorEnabled: ['1', 'true', 'yes', 'on'].includes(readEnv(env.VITE_SUPABASE_RELATIONAL_MIRROR).toLowerCase()),
+  relationalSyncEnabled: readFlag(relationalSyncEnv, true),
+  snapshotFallbackEnabled: readFlag(env.VITE_SUPABASE_SNAPSHOT_FALLBACK, true),
 };
 
 export const facebookConfig = {
@@ -34,8 +54,16 @@ export function isSupabaseConfigured() {
   return Boolean(supabaseConfig.url && supabaseConfig.anonKey);
 }
 
+export function isRelationalCloudEnabled() {
+  return isSupabaseConfigured() && supabaseConfig.relationalSyncEnabled;
+}
+
 export function isRelationalCloudMirrorEnabled() {
-  return isSupabaseConfigured() && supabaseConfig.relationalMirrorEnabled;
+  return isRelationalCloudEnabled();
+}
+
+export function isSnapshotFallbackEnabled() {
+  return isSupabaseConfigured() && supabaseConfig.snapshotFallbackEnabled;
 }
 
 export function isBillingConfigured() {

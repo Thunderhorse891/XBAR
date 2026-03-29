@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test:store": "tsc -p tsconfig.test.json && node --test .codex-test-dist/tests/xbarStoreLogic.test.js .codex-test-dist/tests/xbarPhaseTwo.test.js .codex-test-dist/tests/xbarGrowth.test.js",
+    "test": "tsc -p tsconfig.test.json && node .codex-test-dist/tests/xbarStoreLogic.test.js && node .codex-test-dist/tests/xbarPhaseTwo.test.js && node .codex-test-dist/tests/xbarGrowth.test.js && node .codex-test-dist/tests/permissions.test.js && node .codex-test-dist/tests/facebookSharing.test.js",
+    "test:store": "npm run test",
     "tauri": "tauri"
   },
   "dependencies": {

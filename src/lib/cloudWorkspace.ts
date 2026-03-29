@@ -1,4 +1,4 @@
-import { isRelationalCloudMirrorEnabled, supabaseConfig } from '@/lib/platformConfig';
+import { isRelationalCloudEnabled, isSnapshotFallbackEnabled, supabaseConfig } from '@/lib/platformConfig';
 import { createId } from '@/lib/xbarRuntime';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import type { Session } from '@supabase/supabase-js';
@@ -37,6 +37,17 @@ type RelationalMirrorResult = {
   message: string;
 };
 
+type WorkspaceAccessProfile = {
+  workspaceId: string | null;
+  workspaceRole: UserRole;
+  source: 'workspace-owner' | 'workspace-membership' | 'session';
+};
+
+type RelationalWorkspaceRow = {
+  payload?: unknown;
+  updated_at?: string | null;
+};
+
 const userRoles: UserRole[] = ['Admin', 'Ranch Manager', 'Owner', 'Medical Lead', 'Sales Lead'];
 
 function sanitizeStorageSegment(value: string) {
@@ -60,6 +71,24 @@ function resolveSessionRole(session: Session) {
     normalizeWorkspaceRole(session.user.user_metadata?.role) ??
     'Owner'
   );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function extractPayloadList<T>(rows: RelationalWorkspaceRow[] | null | undefined): T[] {
+  return (rows ?? []).flatMap((row) => (isRecord(row.payload) ? [row.payload as T] : []));
+}
+
+function extractPayloadItem<T>(row: RelationalWorkspaceRow | null | undefined): T | undefined {
+  return row && isRecord(row.payload) ? (row.payload as T) : undefined;
+}
+
+function pickNewestTimestamp(values: Array<string | null | undefined>) {
+  return values
+    .filter((value): value is string => Boolean(value))
+    .sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? '';
 }
 
 function normalizeBackup(backup: unknown): CloudWorkspaceBackup | null {
@@ -87,6 +116,71 @@ async function getActiveSession() {
   }
 
   return data.session;
+}
+
+export async function loadWorkspaceAccessProfile(sessionOverride?: Session | null): Promise<WorkspaceAccessProfile> {
+  const session = sessionOverride ?? (await getActiveSession());
+  if (!session?.user) {
+    return {
+      workspaceId: null,
+      workspaceRole: 'Owner',
+      source: 'session',
+    };
+  }
+
+  if (!isRelationalCloudEnabled()) {
+    return {
+      workspaceId: null,
+      workspaceRole: resolveSessionRole(session),
+      source: 'session',
+    };
+  }
+
+  const client = getSupabaseClient();
+  if (!client) {
+    return {
+      workspaceId: null,
+      workspaceRole: resolveSessionRole(session),
+      source: 'session',
+    };
+  }
+
+  const { data: ownedWorkspace, error: ownedWorkspaceError } = await client
+    .from('workspaces')
+    .select('id')
+    .eq('owner_user_id', session.user.id)
+    .eq('workspace_key', 'primary')
+    .maybeSingle();
+
+  if (!ownedWorkspaceError && ownedWorkspace?.id) {
+    return {
+      workspaceId: ownedWorkspace.id as string,
+      workspaceRole: 'Admin',
+      source: 'workspace-owner',
+    };
+  }
+
+  const { data: membership, error: membershipError } = await client
+    .from('workspace_memberships')
+    .select('workspace_id, role')
+    .eq('user_id', session.user.id)
+    .eq('status', 'active')
+    .limit(1)
+    .maybeSingle();
+
+  if (!membershipError && membership?.workspace_id) {
+    return {
+      workspaceId: membership.workspace_id as string,
+      workspaceRole: normalizeWorkspaceRole(membership.role) ?? resolveSessionRole(session),
+      source: 'workspace-membership',
+    };
+  }
+
+  return {
+    workspaceId: null,
+    workspaceRole: resolveSessionRole(session),
+    source: 'session',
+  };
 }
 
 async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBackup) {
@@ -219,7 +313,34 @@ async function replaceWorkspaceRows(params: {
   }
 }
 
-async function mirrorWorkspaceBackupToRelationalCloud(backup: unknown, session: Session): Promise<RelationalMirrorResult> {
+async function saveWorkspaceSnapshotToCloud(backup: unknown, session: Session, updatedAt: string) {
+  const client = getSupabaseClient();
+  if (!client) {
+    return { ok: false, message: 'Supabase is not configured for this build.' } as const;
+  }
+
+  const { error } = await client.from(supabaseConfig.workspaceTable).upsert(
+    {
+      user_id: session.user.id,
+      workspace_key: 'primary',
+      payload: backup,
+      updated_at: updatedAt,
+    },
+    { onConflict: 'user_id,workspace_key' },
+  );
+
+  if (error) {
+    return { ok: false, message: error.message } as const;
+  }
+
+  return {
+    ok: true,
+    message: 'Legacy snapshot backup updated.',
+    updatedAt,
+  } as const;
+}
+
+async function saveWorkspaceBackupToRelationalCloud(backup: unknown, session: Session): Promise<RelationalMirrorResult> {
   const normalized = normalizeBackup(backup);
   if (!normalized) {
     return {
@@ -376,14 +497,117 @@ async function mirrorWorkspaceBackupToRelationalCloud(backup: unknown, session: 
 
     return {
       ok: true,
-      message: 'Relational mirror updated.',
+      message: 'Relational workspace updated.',
     };
   } catch (error) {
     return {
       ok: false,
-      message: error instanceof Error ? error.message : 'Unable to update the relational cloud mirror.',
+      message: error instanceof Error ? error.message : 'Unable to update the relational workspace.',
     };
   }
+}
+
+async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
+  const client = getSupabaseClient();
+  if (!client) {
+    return { ok: false, message: 'Supabase is not configured for this build.' } as const;
+  }
+
+  const accessProfile = await loadWorkspaceAccessProfile(session);
+  if (!accessProfile.workspaceId) {
+    return { ok: false, message: 'No relational workspace exists for this account yet.' } as const;
+  }
+
+  const workspaceId = accessProfile.workspaceId;
+  const [
+    horsesResult,
+    documentsResult,
+    intakeBatchesResult,
+    ownershipRecordsResult,
+    ranchAssetsResult,
+    salesLeadsResult,
+    sharedListingsResult,
+    subscriptionResult,
+    profileResult,
+  ] = await Promise.all([
+    client.from('horses').select('payload, updated_at').eq('workspace_id', workspaceId),
+    client.from('documents').select('payload, updated_at').eq('workspace_id', workspaceId),
+    client.from('intake_batches').select('payload, updated_at').eq('workspace_id', workspaceId),
+    client.from('ownership_records').select('payload, updated_at').eq('workspace_id', workspaceId),
+    client.from('ranch_assets').select('payload, updated_at').eq('workspace_id', workspaceId),
+    client.from('sales_leads').select('payload, updated_at').eq('workspace_id', workspaceId),
+    client.from('shared_listings').select('payload, updated_at').eq('workspace_id', workspaceId),
+    client.from('workspace_subscription_profiles').select('payload, updated_at').eq('workspace_id', workspaceId).maybeSingle(),
+    client.from('workspace_profiles').select('payload, updated_at').eq('workspace_id', workspaceId).maybeSingle(),
+  ]);
+
+  const errors = [
+    horsesResult.error,
+    documentsResult.error,
+    intakeBatchesResult.error,
+    ownershipRecordsResult.error,
+    ranchAssetsResult.error,
+    salesLeadsResult.error,
+    sharedListingsResult.error,
+    subscriptionResult.error,
+    profileResult.error,
+  ].filter(Boolean);
+
+  if (errors.length) {
+    return {
+      ok: false,
+      message: errors[0]?.message ?? 'Unable to load relational workspace data.',
+    } as const;
+  }
+
+  const backup: CloudWorkspaceBackup = {
+    app: 'XBAR',
+    version: 5,
+    exportedAt: pickNewestTimestamp([
+      ...(horsesResult.data ?? []).map((row) => row.updated_at),
+      ...(documentsResult.data ?? []).map((row) => row.updated_at),
+      ...(intakeBatchesResult.data ?? []).map((row) => row.updated_at),
+      ...(ownershipRecordsResult.data ?? []).map((row) => row.updated_at),
+      ...(ranchAssetsResult.data ?? []).map((row) => row.updated_at),
+      ...(salesLeadsResult.data ?? []).map((row) => row.updated_at),
+      ...(sharedListingsResult.data ?? []).map((row) => row.updated_at),
+      subscriptionResult.data?.updated_at,
+      profileResult.data?.updated_at,
+    ]),
+    workspace: {
+      horses: extractPayloadList<HorseRecord>(horsesResult.data),
+      documents: extractPayloadList<DocumentRecord>(documentsResult.data),
+      intakeBatches: extractPayloadList<IntakeBatch>(intakeBatchesResult.data),
+      ownershipRecords: extractPayloadList<OwnershipRecord>(ownershipRecordsResult.data),
+      ranchAssets: extractPayloadList<RanchAsset>(ranchAssetsResult.data),
+      salesLeads: extractPayloadList<SalesLead>(salesLeadsResult.data),
+      sharedListings: extractPayloadList<SharedListingRecord>(sharedListingsResult.data),
+      subscription: extractPayloadItem<SubscriptionProfile>(subscriptionResult.data),
+      workspaceProfile: extractPayloadItem<WorkspaceProfile>(profileResult.data),
+    },
+  };
+
+  const hasWorkspaceData = Boolean(
+    backup.workspace?.horses?.length ||
+      backup.workspace?.documents?.length ||
+      backup.workspace?.intakeBatches?.length ||
+      backup.workspace?.ownershipRecords?.length ||
+      backup.workspace?.ranchAssets?.length ||
+      backup.workspace?.salesLeads?.length ||
+      backup.workspace?.sharedListings?.length ||
+      backup.workspace?.subscription ||
+      backup.workspace?.workspaceProfile,
+  );
+
+  if (!hasWorkspaceData) {
+    return { ok: false, message: 'No relational workspace records are stored for this account yet.' } as const;
+  }
+
+  return {
+    ok: true,
+    backup,
+    updatedAt: backup.exportedAt ?? '',
+  } as const;
 }
 
 export async function saveWorkspaceBackupToCloud(backup: unknown) {
@@ -398,38 +622,55 @@ export async function saveWorkspaceBackupToCloud(backup: unknown) {
   }
 
   const updatedAt = new Date().toISOString();
-  const { error } = await client.from(supabaseConfig.workspaceTable).upsert(
-    {
-      user_id: session.user.id,
-      workspace_key: 'primary',
-      payload: backup,
-      updated_at: updatedAt,
-    },
-    { onConflict: 'user_id,workspace_key' },
-  );
+  if (isRelationalCloudEnabled()) {
+    const relational = await saveWorkspaceBackupToRelationalCloud(backup, session);
+    if (relational.ok) {
+      if (isSnapshotFallbackEnabled()) {
+        const snapshot = await saveWorkspaceSnapshotToCloud(backup, session, updatedAt);
+        return {
+          ok: true,
+          message: snapshot.ok ? 'Cloud sync complete. Relational workspace updated.' : `Relational workspace updated, but snapshot backup failed: ${snapshot.message}`,
+          updatedAt,
+        };
+      }
 
-  if (error) {
-    return { ok: false, message: error.message };
-  }
+      return {
+        ok: true,
+        message: 'Cloud sync complete. Relational workspace updated.',
+        updatedAt,
+      };
+    }
 
-  if (isRelationalCloudMirrorEnabled()) {
-    const mirror = await mirrorWorkspaceBackupToRelationalCloud(backup, session);
-    if (!mirror.ok) {
+    if (!isSnapshotFallbackEnabled()) {
       return {
         ok: false,
-        message: mirror.message,
+        message: relational.message,
+        updatedAt,
+      };
+    }
+
+    const snapshot = await saveWorkspaceSnapshotToCloud(backup, session, updatedAt);
+    if (snapshot.ok) {
+      return {
+        ok: true,
+        message: `Relational workspace unavailable. Saved a legacy snapshot instead. ${relational.message}`,
         updatedAt,
       };
     }
 
     return {
-      ok: true,
-      message: 'Cloud sync complete. Relational mirror updated.',
+      ok: false,
+      message: `${relational.message} ${snapshot.message}`.trim(),
       updatedAt,
     };
   }
 
-  return { ok: true, message: 'Cloud sync complete.', updatedAt };
+  const snapshot = await saveWorkspaceSnapshotToCloud(backup, session, updatedAt);
+  if (!snapshot.ok) {
+    return { ok: false, message: snapshot.message, updatedAt };
+  }
+
+  return { ok: true, message: 'Cloud sync complete. Legacy snapshot updated.', updatedAt };
 }
 
 export async function loadWorkspaceBackupFromCloud() {
@@ -441,6 +682,17 @@ export async function loadWorkspaceBackupFromCloud() {
   const session = await getActiveSession();
   if (!session?.user) {
     return { ok: false, message: 'Sign in before pulling cloud data.' } as const;
+  }
+
+  if (isRelationalCloudEnabled()) {
+    const relational = await loadWorkspaceBackupFromRelationalCloud(session);
+    if (relational.ok) {
+      return relational;
+    }
+
+    if (!isSnapshotFallbackEnabled()) {
+      return relational;
+    }
   }
 
   const { data, error } = await client
@@ -455,7 +707,7 @@ export async function loadWorkspaceBackupFromCloud() {
   }
 
   if (!data?.payload) {
-    return { ok: false, message: 'No cloud snapshot has been saved for this account yet.' } as const;
+    return { ok: false, message: 'No cloud workspace has been saved for this account yet.' } as const;
   }
 
   return {

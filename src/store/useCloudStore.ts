@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Session } from '@supabase/supabase-js';
+import { loadWorkspaceAccessProfile } from '@/lib/cloudWorkspace';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import type { UserRole } from '@/types/xbar';
@@ -16,6 +17,7 @@ type CloudStore = {
   initialized: boolean;
   status: CloudStatus;
   session: Session | null;
+  workspaceId: string;
   workspaceRole: UserRole;
   lastSyncAt: string;
   syncState: CloudSyncState;
@@ -28,30 +30,11 @@ type CloudStore = {
   signOut: () => Promise<CloudActionResult>;
 };
 
-const userRoles: UserRole[] = ['Admin', 'Ranch Manager', 'Owner', 'Medical Lead', 'Sales Lead'];
-
-function normalizeWorkspaceRole(value: unknown): UserRole | null {
-  return typeof value === 'string' && userRoles.includes(value as UserRole) ? (value as UserRole) : null;
-}
-
-function resolveSessionRole(session: Session | null) {
-  if (!session?.user) {
-    return 'Owner' as UserRole;
-  }
-
-  return (
-    normalizeWorkspaceRole(session.user.app_metadata?.workspace_role) ??
-    normalizeWorkspaceRole(session.user.app_metadata?.role) ??
-    normalizeWorkspaceRole(session.user.user_metadata?.workspace_role) ??
-    normalizeWorkspaceRole(session.user.user_metadata?.role) ??
-    'Owner'
-  );
-}
-
 export const useCloudStore = create<CloudStore>((set, get) => ({
   initialized: false,
   status: isSupabaseConfigured() ? 'loading' : 'unavailable',
   session: null,
+  workspaceId: '',
   workspaceRole: isSupabaseConfigured() ? 'Owner' : 'Admin',
   lastSyncAt: '',
   syncState: 'idle',
@@ -63,28 +46,41 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
 
     const client = getSupabaseClient();
     if (!client) {
-      set({ initialized: true, status: 'unavailable', session: null, workspaceRole: 'Admin' });
+      set({ initialized: true, status: 'unavailable', session: null, workspaceId: '', workspaceRole: 'Admin' });
       return;
     }
 
+    const syncSessionState = async (session: Session | null, initialized = false) => {
+      if (!session) {
+        set({
+          ...(initialized ? { initialized: true } : {}),
+          status: 'signed-out',
+          session: null,
+          workspaceId: '',
+          workspaceRole: 'Owner',
+        });
+        return;
+      }
+
+      const accessProfile = await loadWorkspaceAccessProfile(session);
+      set({
+        ...(initialized ? { initialized: true } : {}),
+        status: 'signed-in',
+        session,
+        workspaceId: accessProfile.workspaceId ?? '',
+        workspaceRole: accessProfile.workspaceRole,
+      });
+    };
+
     const { data, error } = await client.auth.getSession();
     if (error) {
-      set({ initialized: true, status: 'signed-out', session: null, workspaceRole: 'Owner' });
+      set({ initialized: true, status: 'signed-out', session: null, workspaceId: '', workspaceRole: 'Owner' });
     } else {
-      set({
-        initialized: true,
-        status: data.session ? 'signed-in' : 'signed-out',
-        session: data.session,
-        workspaceRole: resolveSessionRole(data.session),
-      });
+      await syncSessionState(data.session, true);
     }
 
     const { data: subscription } = client.auth.onAuthStateChange((_event, session) => {
-      set({
-        status: session ? 'signed-in' : 'signed-out',
-        session,
-        workspaceRole: resolveSessionRole(session),
-      });
+      void syncSessionState(session);
     });
 
     return () => subscription.subscription.unsubscribe();
@@ -148,7 +144,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     }
 
     set({ session: null, status: 'signed-out' });
-    set({ syncState: 'idle', syncMessage: '' });
+    set({ workspaceId: '', workspaceRole: 'Owner', syncState: 'idle', syncMessage: '' });
     return { ok: true, message: 'Signed out of cloud sync.' };
   },
 }));

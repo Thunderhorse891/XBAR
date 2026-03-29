@@ -64,7 +64,8 @@ Required for cloud auth and sync:
 Optional but recommended:
 
 - `VITE_SUPABASE_WORKSPACE_TABLE`
-- `VITE_SUPABASE_RELATIONAL_MIRROR`
+- `VITE_SUPABASE_RELATIONAL_SYNC`
+- `VITE_SUPABASE_SNAPSHOT_FALLBACK`
 - `VITE_SUPABASE_MEDIA_BUCKET`
 - `VITE_SUPABASE_DOCUMENT_BUCKET`
 - `VITE_FACEBOOK_APP_ID`
@@ -82,11 +83,17 @@ Supabase SQL bootstrap is included in:
 ## Current Product State
 
 - Local-first workspace with IndexedDB persistence and manual backup import/export
-- Real cloud auth and workspace sync are available when Supabase env is configured
-- Optional normalized Supabase mirror is available when `VITE_SUPABASE_RELATIONAL_MIRROR=true`
+- Real cloud auth and relational workspace sync are available when Supabase env is configured
+- Supabase relational tables are now the primary runtime sync path; legacy snapshots remain an optional fallback for recovery
 - Real media/document cloud storage is available when Supabase env is configured
 - Facebook share posting is available when a Meta app ID is configured
 - Real Stripe checkout entry points are available when Stripe payment-link env is configured
 - Manual document intake and review queue
 - Shared-link access for buyer and owner views
 - Full multi-user relational workflows and automated billing reconciliation still need backend completion
+
+## Cloud Runtime
+
+- When `VITE_SUPABASE_RELATIONAL_SYNC=true`, the app saves horses, documents, intake batches, ownership records, leads, listings, subscription state, and workspace profile into the normalized Supabase tables in `supabase/production-schema.sql`.
+- When `VITE_SUPABASE_SNAPSHOT_FALLBACK=true`, the app also writes a legacy `workspace_snapshots` record for recovery and backward compatibility.
+- Workspace roles are resolved from `workspace_memberships` and owned `workspaces` before falling back to auth metadata.

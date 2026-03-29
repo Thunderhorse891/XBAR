@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { PageHeader, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
-import { isBillingConfigured, isFacebookSharingConfigured, isRelationalCloudMirrorEnabled, isSupabaseConfigured } from '@/lib/platformConfig';
+import { isBillingConfigured, isFacebookSharingConfigured, isRelationalCloudEnabled, isSupabaseConfigured, isSnapshotFallbackEnabled } from '@/lib/platformConfig';
 import { workspaceStorageDriverLabel } from '@/lib/workspaceStorage';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -16,6 +16,7 @@ export default function Settings() {
   const importWorkspaceBackup = useXbarStore((state) => state.importWorkspaceBackup);
   const cloudStatus = useCloudStore((state) => state.status);
   const cloudSession = useCloudStore((state) => state.session);
+  const workspaceId = useCloudStore((state) => state.workspaceId);
   const lastCloudSyncAt = useCloudStore((state) => state.lastSyncAt);
   const cloudSyncState = useCloudStore((state) => state.syncState);
   const setLastCloudSyncAt = useCloudStore((state) => state.setLastSyncAt);
@@ -201,9 +202,9 @@ export default function Settings() {
                       </div>
                     </div>
                     <div className="inline-metrics">
-                      <span>User ID {cloudSession.user.id.slice(0, 8)}</span>
+                      <span>{workspaceId ? `Workspace ${workspaceId.slice(0, 8)}` : `User ${cloudSession.user.id.slice(0, 8)}`}</span>
                       <span>{lastCloudSyncAt ? `Last sync ${formatDateLabel(lastCloudSyncAt)}` : 'No cloud sync yet'}</span>
-                      <span>{cloudSyncState === 'syncing' ? 'Saving changes' : cloudSyncState === 'error' ? 'Needs retry' : 'Watching workspace changes'}</span>
+                      <span>{cloudSyncState === 'syncing' ? 'Saving relational records' : cloudSyncState === 'error' ? 'Needs retry' : 'Watching workspace changes'}</span>
                     </div>
                   </div>
                 </div>
@@ -338,9 +339,10 @@ export default function Settings() {
           <div className="token-row">
             <Pill tone={isSupabaseConfigured() ? 'blue' : 'slate'}>{isSupabaseConfigured() ? 'Cloud auth on' : 'Cloud auth off'}</Pill>
             <Pill tone={cloudSession ? 'emerald' : 'slate'}>{cloudSession ? 'Cloud session live' : 'Local session'}</Pill>
-            <Pill tone={isRelationalCloudMirrorEnabled() ? 'emerald' : 'slate'}>
-              {isRelationalCloudMirrorEnabled() ? 'Relational mirror on' : 'Snapshot-only sync'}
+            <Pill tone={isRelationalCloudEnabled() ? 'emerald' : 'slate'}>
+              {isRelationalCloudEnabled() ? 'Relational sync on' : 'Snapshot-only sync'}
             </Pill>
+            <Pill tone={isSnapshotFallbackEnabled() ? 'blue' : 'slate'}>{isSnapshotFallbackEnabled() ? 'Snapshot fallback on' : 'Snapshot fallback off'}</Pill>
             <Pill tone={isBillingConfigured() ? 'emerald' : 'slate'}>{isBillingConfigured() ? 'Stripe links live' : 'Stripe links off'}</Pill>
             <Pill tone={isFacebookSharingConfigured() ? 'emerald' : 'slate'}>{isFacebookSharingConfigured() ? 'Facebook share live' : 'Facebook share off'}</Pill>
             <Pill tone="blue">{workspaceStorageDriverLabel}</Pill>
