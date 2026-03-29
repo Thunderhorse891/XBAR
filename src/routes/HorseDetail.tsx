@@ -1,6 +1,7 @@
 import { useId, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { EmptyState } from '@/components/EmptyState';
+import { SalePacketSlots } from '@/components/SalePacketSlots';
 import { KeyValue, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
 import { ChevronLeftIcon, SharedAccessIcon } from '@/components/icons';
 import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
@@ -111,26 +112,6 @@ function ReadinessGauge({ value }: { value: number }) {
   );
 }
 
-function StatusChip({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
-  return (
-    <div className="group relative">
-      <span
-        className={classNames(
-          'inline-flex min-h-[32px] cursor-default items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold tracking-[0.02em] ring-1 transition-all duration-150 ease-[ease]',
-          ready
-            ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
-            : 'bg-red-50 text-red-700 ring-red-200',
-        )}
-      >
-        <span aria-hidden="true">{ready ? '✓' : '✗'}</span>
-        <span>{label}</span>
-      </span>
-      <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-44 -translate-x-1/2 rounded-md bg-[#202225] px-3 py-2 text-xs font-medium leading-5 text-white shadow-lg group-hover:block group-focus-within:block">
-        {detail}
-      </div>
-    </div>
-  );
-}
 
 function StatPill({
   icon,
@@ -215,32 +196,9 @@ export default function HorseDetail() {
   const buyerReadyDocuments = documents.filter((document) => buildDocumentTrustProfile(document, [horse]).readyForProfile);
   const hasRestrictedActions = !canManageSharedAccess || !canUploadMedia || !canUploadDocuments || !canEditHorse || !canManageSales;
 
-  const readinessByKey = useMemo(
-    () =>
-      new Map(
-        packet.requirements
-          .filter((requirement) => ['identity', 'ownership', 'medical', 'media'].includes(requirement.key))
-          .map((requirement) => [requirement.key, requirement]),
-      ),
-    [packet.requirements],
-  );
-
-  const readinessChips = [
-    { key: 'identity', label: 'Identity' },
-    { key: 'ownership', label: 'Ownership' },
-    { key: 'medical', label: 'Medical' },
-    { key: 'media', label: 'Visuals' },
-  ].map(({ key, label }) => {
-    const requirement = readinessByKey.get(key);
-    return {
-      key,
-      label,
-      detail: requirement?.detail ?? 'No packet signal yet.',
-      ready: requirement?.status === 'ready',
-    };
-  });
 
   const gallerySlots = useMemo(() => Array.from({ length: 4 }, (_, index) => horse.gallery[index] ?? null), [horse.gallery]);
+  const salePacketReadyCount = packet.saleSlots.filter((slot) => slot.status === 'ready').length;
 
   const shareBadgeStyles =
     packet.buyerProfileStatus === 'Live'
@@ -451,14 +409,14 @@ export default function HorseDetail() {
 
           <div className="flex flex-wrap gap-3">
             <Link
-              className="inline-flex h-11 items-center justify-center rounded-md bg-[#202225] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#111315]"
+              className="inline-flex h-11 items-center justify-center rounded-md bg-[#2a4556] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#233b4a]"
               to={packet.sharePath}
               onClick={() => recordSharedChannel(horse.id, 'Direct Link')}
             >
               Preview
             </Link>
             <button
-              className="inline-flex h-11 items-center justify-center rounded-md border border-[#d5cdc2] px-5 text-sm font-semibold text-[#202225] transition-all duration-150 ease-[ease] hover:bg-[#f5efe8] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-11 items-center justify-center rounded-md border border-[#d5cdc2] px-5 text-sm font-semibold text-[#4d433a] transition-all duration-150 ease-[ease] hover:bg-[#f5efe8] disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
               onClick={handleSavedHorseToggle}
               disabled={!canManageSharedAccess}
@@ -516,7 +474,7 @@ export default function HorseDetail() {
                     alt={asset.label}
                     className="h-full w-full object-cover transition-all duration-150 ease-[ease] group-hover:scale-[1.02]"
                   />
-                  <div className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-[#202225]/78 via-[#202225]/24 to-transparent p-3 text-white">
+                  <div className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-[#2a4556]/70 via-[#2a4556]/18 to-transparent p-3 text-white">
                     <div>
                       <div className="text-xs font-semibold tracking-[0.02em]">{asset.label}</div>
                       <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-white/70">{asset.kind}</div>
@@ -586,10 +544,12 @@ export default function HorseDetail() {
 
           <ReadinessGauge value={packet.score} />
 
-          <div className="mt-5 flex flex-wrap gap-2">
-            {readinessChips.map((chip) => (
-              <StatusChip key={chip.key} label={chip.label} detail={chip.detail} ready={chip.ready} />
-            ))}
+          <div className="mt-5">
+            <div className="mb-3 flex items-center justify-between gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8f8276]">
+              <span>Sale packet</span>
+              <span>{salePacketReadyCount}/{packet.saleSlots.length} ready</span>
+            </div>
+            <SalePacketSlots slots={packet.saleSlots} />
           </div>
 
           <div className="mt-5 flex flex-wrap gap-3">
@@ -1001,3 +961,6 @@ export default function HorseDetail() {
     </>
   );
 }
+
+
+

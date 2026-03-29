@@ -165,7 +165,7 @@ function NavSection({ title, items }: { title: string; items: NavItem[] }) {
               classNames(
                 'group flex items-center gap-3 border-l-[3px] px-3 py-2.5 text-sm font-medium transition-all duration-150 ease-[ease]',
                 isActive
-                  ? 'border-[#202225] bg-white text-[#202225] shadow-sm'
+                  ? 'border-[#2a4556] bg-[#fdfbf8] text-[#2a4556]'
                   : 'border-transparent text-[#5b6670] hover:border-[#d5ccc2] hover:bg-white/70 hover:text-[#202225]',
               )
             }
@@ -440,7 +440,7 @@ export default function MainLayout() {
               </button>
 
               <button
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#202225] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#111315] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#2a4556] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#233b4a] disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 onClick={() => navigate('/horses?new=1')}
                 disabled={!canCreateHorse}
@@ -507,7 +507,7 @@ export default function MainLayout() {
             <span>Sales</span>
           </NavLink>
           <button
-            className="flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md bg-[#202225] text-[11px] font-semibold text-white transition-all duration-150 ease-[ease] hover:bg-[#111315] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md bg-[#2a4556] text-[11px] font-semibold text-white transition-all duration-150 ease-[ease] hover:bg-[#233b4a] disabled:cursor-not-allowed disabled:opacity-50"
             type="button"
             onClick={() => navigate('/horses?new=1')}
             disabled={!canCreateHorse}
@@ -535,7 +535,7 @@ export default function MainLayout() {
                 <button
                   type="button"
                   onClick={() => setShortcutEditorOpen(false)}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#dce4ec] text-[#667085] transition-all duration-150 ease-[ease] hover:border-[#202225]/20 hover:text-[#202225]"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#dce4ec] text-[#667085] transition-all duration-150 ease-[ease] hover:border-[#2a4556]/20 hover:text-[#2a4556]"
                   aria-label="Close shortcut editor"
                 >
                   ×
@@ -552,7 +552,7 @@ export default function MainLayout() {
                       className={classNames(
                         'rounded-md border px-3 py-3 text-left text-sm font-semibold transition-all duration-150 ease-[ease]',
                         active
-                          ? 'border-[#202225] bg-[#202225] text-white'
+                          ? 'border-[#2a4556] bg-[#2a4556] text-white'
                           : 'border-[#e5ddd2] bg-white text-[#202225] hover:border-[#cbbfb2] hover:bg-[#f8f3ed]',
                       )}
                     >
@@ -570,5 +570,6 @@ export default function MainLayout() {
     </div>
   );
 }
+
 
 

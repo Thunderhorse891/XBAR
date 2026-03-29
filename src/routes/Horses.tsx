@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
+import { SalePacketSlots } from '@/components/SalePacketSlots';
 import { PageHeader, Pill, ProgressBar, SurfaceTabs } from '@/components/app-ui';
 import { DotsIcon } from '@/components/icons';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
@@ -483,6 +484,14 @@ export default function Horses() {
                     </div>
                   )}
 
+                  <div className="horse-card__packet">
+                    <div className="horse-card__packet-head">
+                      <span>Sale packet</span>
+                      <strong>{packet.saleSlots.filter((slot) => slot.status === 'ready').length}/{packet.saleSlots.length}</strong>
+                    </div>
+                    <SalePacketSlots slots={packet.saleSlots} compact />
+                  </div>
+
                   <div className="horse-card__footer">
                     <div className="status-inline">
                       {saved ? <Pill tone="blue">Shared</Pill> : null}
@@ -586,3 +595,6 @@ export default function Horses() {
     </>
   );
 }
+
+
+

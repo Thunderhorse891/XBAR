@@ -1,7 +1,8 @@
 import { Link, useParams } from 'react-router-dom';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
-import { KeyValue, MetricCard, Panel, Pill, ProgressBar } from '@/components/app-ui';
+import { SalePacketSlots } from '@/components/SalePacketSlots';
+import { KeyValue, MetricCard, Panel, Pill } from '@/components/app-ui';
 import { buildPublicShareUrl, openFacebookShareDialog } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
@@ -38,6 +39,9 @@ export default function BuyerProfile() {
       trust: buildDocumentTrustProfile(document, horses),
     }))
     .filter(({ trust }) => trust.readyForProfile);
+  const salePhotoAssets = horse.gallery.filter(
+    (asset) => asset.status === 'Approved' && (asset.kind === 'Hero' || asset.kind === 'Conformation' || asset.kind === 'Sale Still'),
+  ).slice(0, 4);
 
   return (
     <main className="buyer-shell">
@@ -108,23 +112,13 @@ export default function BuyerProfile() {
             label="Target price"
             value={formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)}
             detail={`${horse.sale.watchlistCount} watchers and ${horse.sale.inquiryCount} inquiries`}
-            tone="amber"
+            tone="slate"
           />
         </div>
 
         <div className="detail-grid">
-          <Panel eyebrow="Packet trust" title="Coverage">
-            <div className="stack-list">
-              {packet.requirements.map((requirement) => (
-                <div key={requirement.key} className="stack-item">
-                  <div className="stack-item__top">
-                    <div className="stack-item__title">{requirement.label}</div>
-                    <Pill tone={requirement.tone}>{requirement.status}</Pill>
-                  </div>
-                  <div className="stack-item__copy">{requirement.detail}</div>
-                </div>
-              ))}
-            </div>
+          <Panel eyebrow="Sale packet" title="Coverage">
+            <SalePacketSlots slots={packet.saleSlots} />
           </Panel>
 
           <Panel eyebrow="Horse profile" title="Profile">
@@ -136,13 +130,7 @@ export default function BuyerProfile() {
               <KeyValue label="Bloodline" value={`${horse.bloodline.sire} / ${horse.bloodline.dam}`} />
               <KeyValue label="Family" value={horse.bloodline.family} />
             </div>
-            <div className="stack-item">
-              <div className="stack-item__top">
-                <div className="stack-item__title">Readiness bar</div>
-                <Pill tone={packet.tone}>{formatPercent(packet.score)}</Pill>
-              </div>
-              <ProgressBar value={packet.score} tone={packet.tone} />
-            </div>
+
           </Panel>
         </div>
 
@@ -168,21 +156,32 @@ export default function BuyerProfile() {
             </div>
           </Panel>
 
-          <Panel eyebrow="Record highlights" title="Facts">
-            <div className="token-row">
-              {horse.documentFacts.length ? (
-                horse.documentFacts.map((fact) => (
-                  <Pill key={fact.id} tone="blue">
-                    {fact.label}: {fact.value}
-                  </Pill>
-                ))
-              ) : (
-                <Pill tone="slate">No record facts promoted yet</Pill>
-              )}
-            </div>
+          <Panel eyebrow="AQHA photos" title="Photo set">
+            {salePhotoAssets.length ? (
+              <div className="media-strip">
+                {salePhotoAssets.map((asset) => (
+                  <div key={asset.id} className="media-tile">
+                    <div className="media-tile__image-shell">
+                      <img src={asset.url} alt={asset.label} className="media-tile__image" />
+                    </div>
+                    <div className="media-tile__label">{asset.label}</div>
+                    <div className="media-tile__meta">
+                      <span>{asset.kind}</span>
+                      <Pill tone="blue">{asset.status}</Pill>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState compact title="No AQHA photos" description="Add approved hero and conformation photos before sharing." />
+            )}
           </Panel>
         </div>
       </div>
     </main>
   );
 }
+
+
+
+

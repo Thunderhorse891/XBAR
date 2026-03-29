@@ -20,6 +20,14 @@ export type PacketRequirement = {
   tone: Tone;
 };
 
+export type SalePacketSlot = {
+  key: 'aqha-papers' | 'transfer-papers' | 'coggins' | 'health-cert' | 'aqha-photos';
+  label: string;
+  status: PacketStatus;
+  detail: string;
+  tone: Tone;
+};
+
 export type DocumentTrustProfile = {
   trustScore: number;
   tone: Tone;
@@ -47,6 +55,7 @@ export type PacketCompleteness = {
   shareSlug: string;
   sharePath: string;
   requirements: PacketRequirement[];
+  saleSlots: SalePacketSlot[];
 };
 
 function scoreTone(score: number): Tone {
@@ -86,6 +95,26 @@ function isDocumentResolved(document: DocumentRecord) {
 
 function collectDocuments(documents: DocumentRecord[], types: DocumentRecord['type'][]) {
   return documents.filter((document) => types.includes(document.type));
+}
+
+function buildSalePacketSlot(params: {
+  key: SalePacketSlot['key'];
+  label: string;
+  ready: boolean;
+  review: boolean;
+  readyDetail: string;
+  reviewDetail: string;
+  missingDetail: string;
+}): SalePacketSlot {
+  const status: PacketStatus = params.ready ? 'ready' : params.review ? 'review' : 'missing';
+
+  return {
+    key: params.key,
+    label: params.label,
+    status,
+    detail: status === 'ready' ? params.readyDetail : status === 'review' ? params.reviewDetail : params.missingDetail,
+    tone: statusTone(status),
+  };
 }
 
 function describeDuplicateRisk(document: DocumentRecord) {
@@ -150,6 +179,14 @@ export function buildHorsePacketCompleteness(
   const mediaDocs = collectDocuments(documents, ['Media Kit']);
   const hasApprovedHero = horse.gallery.some((asset) => asset.kind === 'Hero' && asset.status === 'Approved');
   const hasApprovedSaleStill = horse.gallery.some((asset) => asset.kind === 'Sale Still' && asset.status === 'Approved');
+  const hasApprovedConformation = horse.gallery.some(
+    (asset) => asset.kind === 'Conformation' && asset.status === 'Approved',
+  );
+  const approvedSalePhotos = horse.gallery.filter(
+    (asset) =>
+      asset.status === 'Approved' &&
+      (asset.kind === 'Hero' || asset.kind === 'Conformation' || asset.kind === 'Sale Still'),
+  );
   const hasHighAlert = horse.alerts.some(
     (alert) =>
       alert.severity === 'high' &&
@@ -161,6 +198,64 @@ export function buildHorsePacketCompleteness(
     horse.sale.listingState === 'Market Ready' ||
     horse.sale.watchlistCount > 0 ||
     horse.sale.inquiryCount > 0;
+
+  const cogginsDocs = collectDocuments(documents, ['Coggins']);
+  const vetDocs = collectDocuments(documents, ['Vet Record']);
+  const saleSlots: SalePacketSlot[] = [
+    buildSalePacketSlot({
+      key: 'aqha-papers',
+      label: 'AQHA papers',
+      ready: registrationDocs.some(isDocumentReady),
+      review: registrationDocs.some(isDocumentResolved) || horse.registered,
+      readyDetail: 'AQHA registration is approved and attached.',
+      reviewDetail: 'Registration data is attached but still needs final confirmation.',
+      missingDetail: 'No AQHA registration paper is attached yet.',
+    }),
+    buildSalePacketSlot({
+      key: 'transfer-papers',
+      label: 'Transfer papers',
+      ready: ownershipRecord?.transferStatus === 'Clear' && ownershipDocs.some(isDocumentReady),
+      review: ownershipDocs.some(isDocumentResolved) || Boolean(ownershipRecord),
+      readyDetail: 'Transfer packet is clear and attached.',
+      reviewDetail:
+        ownershipRecord?.transferStatus === 'Clear'
+          ? 'Transfer support is attached but still needs final review.'
+          : ownershipRecord
+            ? `Transfer is ${ownershipRecord.transferStatus.toLowerCase()}.`
+            : 'Transfer support is attached but still needs review.',
+      missingDetail: 'No transfer packet is attached yet.',
+    }),
+    buildSalePacketSlot({
+      key: 'coggins',
+      label: 'Coggins',
+      ready: cogginsDocs.some(isDocumentReady),
+      review: cogginsDocs.some(isDocumentResolved),
+      readyDetail: 'Current coggins is approved for travel and sale.',
+      reviewDetail: 'Coggins is attached but still needs buyer-safe review.',
+      missingDetail: 'No coggins is attached yet.',
+    }),
+    buildSalePacketSlot({
+      key: 'health-cert',
+      label: 'Health cert',
+      ready: vetDocs.some(isDocumentReady) && horse.status !== 'Medical Review',
+      review: vetDocs.some(isDocumentResolved) || horse.status === 'Medical Review',
+      readyDetail: 'Health support is approved and current.',
+      reviewDetail:
+        horse.status === 'Medical Review'
+          ? 'Medical review is still open on the horse profile.'
+          : 'Health support is attached but still needs final review.',
+      missingDetail: 'No health certification is attached yet.',
+    }),
+    buildSalePacketSlot({
+      key: 'aqha-photos',
+      label: 'AQHA photos',
+      ready: hasApprovedHero && (hasApprovedConformation || hasApprovedSaleStill) && approvedSalePhotos.length >= 2,
+      review: approvedSalePhotos.length > 0 || horse.gallery.length > 0 || mediaDocs.some(isDocumentResolved),
+      readyDetail: 'Approved hero and conformation photos are ready for the share view.',
+      reviewDetail: 'Photos exist, but the sale set still needs stronger approved coverage.',
+      missingDetail: 'No approved AQHA photo set is attached yet.',
+    }),
+  ];
 
   const requirements: PacketRequirement[] = [
     {
@@ -318,5 +413,6 @@ export function buildHorsePacketCompleteness(
       ...requirement,
       tone: statusTone(requirement.status),
     })),
+    saleSlots,
   };
 }

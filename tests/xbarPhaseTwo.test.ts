@@ -268,6 +268,9 @@ test('buildHorsePacketCompleteness reflects live and blocked buyer profile state
   assert.equal(wiggyPacket.buyerProfileStatus, 'Needs Review');
   assert.equal(wiggyPacket.sharePath, '/profiles/horse-wiggy');
   assert.ok(wiggyPacket.score >= 80);
+  assert.equal(wiggyPacket.saleSlots.find((slot) => slot.key === 'aqha-papers')?.status, 'ready');
+  assert.equal(wiggyPacket.saleSlots.find((slot) => slot.key === 'health-cert')?.status, 'ready');
+  assert.equal(wiggyPacket.saleSlots.find((slot) => slot.key === 'aqha-photos')?.status, 'ready');
 
   const dollyPacket = buildHorsePacketCompleteness(
     dolly,
@@ -276,4 +279,6 @@ test('buildHorsePacketCompleteness reflects live and blocked buyer profile state
   );
   assert.equal(dollyPacket.buyerProfileStatus, 'Blocked');
   assert.equal(dollyPacket.buyerSafe, false);
+  assert.equal(dollyPacket.saleSlots.find((slot) => slot.key === 'coggins')?.status, 'missing');
+  assert.equal(dollyPacket.saleSlots.find((slot) => slot.key === 'transfer-papers')?.status, 'review');
 });
