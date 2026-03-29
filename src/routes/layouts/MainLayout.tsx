@@ -1,7 +1,6 @@
 import type { ComponentType, KeyboardEvent, SVGProps } from 'react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Pill } from '@/components/app-ui';
 import { ContextMenu } from '@/components/ContextMenu';
 import { WorkspaceHelp, type HelpSection } from '@/components/WorkspaceHelp';
 import {
@@ -218,7 +217,7 @@ export default function MainLayout() {
     .map(normalizeShortcutLabel)
     .filter((module, index, all) => all.indexOf(module) === index)
     .filter((module) => workspaceShortcutRoutes[module])
-    .slice(0, 6);
+    .slice(0, 4);
   const workspaceShortcuts = workspaceShortcutLabels
     .map((module) => ({
       label: module,
@@ -347,20 +346,15 @@ export default function MainLayout() {
         <NavSection title="Programs" items={programs} />
         <NavSection title="Platform" items={platformItems} />
 
-        <div className="mt-auto rounded-[10px] border border-[#e5ddd2] bg-[#fcfaf7] p-4 shadow-sm">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8f8276]">Runtime</div>
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <span className="text-sm font-semibold text-[#202225]">{subscription.tier}</span>
-            <Pill tone="slate">{subscription.billingState}</Pill>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[#6b7280]">
-            <div className="rounded-md border border-[#e5ddd2] bg-white px-3 py-2">
-              Seats {subscription.usage.seatsUsed}/{subscription.usage.seatLimit}
-            </div>
-            <div className="rounded-md border border-[#e5ddd2] bg-white px-3 py-2">
-              Docs {pendingReview} review
-            </div>
-          </div>
+        <div className="mt-auto flex items-center justify-between gap-3 border-t border-[#e5ddd2] pt-4 text-xs text-[#8f8276]">
+          <span>{subscription.tier}</span>
+          <button
+            type="button"
+            onClick={() => navigate('/settings')}
+            className="rounded-md border border-[#e5ddd2] bg-white px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#5b6670] transition-all duration-150 ease-[ease] hover:border-[#cbbfb2] hover:bg-[#f8f3ed] hover:text-[#202225]"
+          >
+            Settings
+          </button>
         </div>
       </aside>
 
@@ -375,7 +369,7 @@ export default function MainLayout() {
                   pendingReview ? 'border-[#ddd4ca] bg-white text-[#5b6670]' : 'border-[#d7e6dd] bg-[#f3faf6] text-[#2b6a4c]',
                 )}
               >
-                {pendingReview ? `${pendingReview} review` : 'Queue clear'}
+                {pendingReview ? `${pendingReview} review` : 'Live'}
               </span>
             </div>
 
@@ -386,7 +380,7 @@ export default function MainLayout() {
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   onKeyDown={handleSearch}
-                  placeholder="Search horses or docs"
+                  placeholder="Search"
                   className="h-10 w-full rounded-md border border-[#d5cdc2] bg-white pl-10 pr-4 text-sm text-[#202225] transition-all duration-150 ease-[ease] placeholder:text-[#8a96a3] focus:border-[#8f8276] focus:outline-none"
                 />
               </label>
@@ -576,3 +570,5 @@ export default function MainLayout() {
     </div>
   );
 }
+
+

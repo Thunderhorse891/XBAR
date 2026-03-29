@@ -561,6 +561,10 @@ a:focus-visible {
   color: rgba(71, 84, 103, 0.72);
 }
 
+.signal-card__module {
+  display: none;
+}
+
 .signal-card__title {
   font-size: 1.08rem;
   font-weight: 700;
@@ -830,11 +834,7 @@ a:focus-visible {
 }
 
 .surface-hero__eyebrow {
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
-  font-size: 0.72rem;
-  font-weight: 700;
+  display: none;
 }
 
 .surface-hero__title {
