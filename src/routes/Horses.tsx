@@ -101,10 +101,10 @@ export default function Horses() {
     ).buyerSafe,
   );
 
-  const handleSavedHorseToggle = (horseId: string) => {
+  const handleSavedHorseToggle = async (horseId: string) => {
     const horse = horses.find((item) => item.id === horseId);
     const wasSaved = sharedListings.some((listing) => listing.horseId === horseId && listing.state !== 'Archived');
-    const result = toggleSharedListing(horseId);
+    const result = await toggleSharedListing(horseId);
     pushToast({
       title: result.ok ? (wasSaved ? 'Removed from shared access' : 'Added to shared access') : 'Shared access blocked',
       message: horse && result.ok ? `${horse.name} ${wasSaved ? 'was removed from' : 'is now in'} the shared-access list.` : result.message,
@@ -128,8 +128,8 @@ export default function Horses() {
         {
           id: 'open-share-view',
           label: 'Open share view',
-          onSelect: () => {
-            recordSharedChannel(menuHorse.id, 'Direct Link');
+          onSelect: async () => {
+            await recordSharedChannel(menuHorse.id, 'Direct Link');
             navigate(`/profiles/${menuHorse.id}`, { state: { internalPreview: true } });
           },
         },
@@ -138,7 +138,7 @@ export default function Horses() {
               {
                 id: 'toggle-shared',
                 label: menuSaved ? 'Remove from shared access' : 'Add to shared access',
-                onSelect: () => handleSavedHorseToggle(menuHorse.id),
+                onSelect: async () => handleSavedHorseToggle(menuHorse.id),
               },
             ]
           : []),
@@ -501,9 +501,9 @@ export default function Horses() {
                       <button
                         className="button button--ghost button--compact"
                         type="button"
-                        onClick={(event) => {
+                        onClick={async (event) => {
                           event.stopPropagation();
-                          handleSavedHorseToggle(horse.id);
+                          await handleSavedHorseToggle(horse.id);
                         }}
                         disabled={!canManageSharedAccess}
                       >

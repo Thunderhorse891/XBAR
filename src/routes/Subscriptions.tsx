@@ -1,8 +1,11 @@
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
+import { startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency, formatDateLabel } from '@/lib/format';
 import { getStripePaymentLink, isBillingConfigured, stripeConfig } from '@/lib/platformConfig';
 import { subscriptionTierConfig } from '@/lib/xbarRuntime';
+import { useCloudStore } from '@/store/useCloudStore';
+import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { SubscriptionTier } from '@/types/xbar';
 
@@ -12,6 +15,9 @@ export default function Subscriptions() {
   const subscription = useXbarStore((state) => state.subscription);
   const canManageBilling = useCurrentRoleCapability('manageBilling');
   const billingConfigured = isBillingConfigured();
+  const session = useCloudStore((state) => state.session);
+  const workspaceId = useCloudStore((state) => state.workspaceId);
+  const pushToast = useUiStore((state) => state.pushToast);
 
   return (
     <>
@@ -149,14 +155,37 @@ export default function Subscriptions() {
                       </Pill>
                     ))}
                   </div>
-                  <div className="inline-actions">
-                    {!current && paymentLink && canManageBilling ? (
-                      <a className="button button--primary button--compact" href={paymentLink} target="_blank" rel="noreferrer">
-                        Open checkout
-                      </a>
-                    ) : null}
+                    <div className="inline-actions">
+                      {!current && paymentLink && canManageBilling ? (
+                        <button
+                          className="button button--primary button--compact"
+                          type="button"
+                          onClick={async () => {
+                            const managedCheckout = await startManagedCheckout({
+                              tier,
+                              workspaceId,
+                              accessToken: session?.access_token ?? '',
+                            });
+
+                            if (managedCheckout.ok) {
+                              window.location.href = managedCheckout.url;
+                              return;
+                            }
+
+                            pushToast({
+                              title: 'Managed checkout unavailable',
+                              message: managedCheckout.message,
+                              tone: 'error',
+                            });
+
+                            window.open(paymentLink, '_blank', 'noopener,noreferrer');
+                          }}
+                        >
+                          Open checkout
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
               );
             })}
           </div>

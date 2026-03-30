@@ -209,8 +209,8 @@ export default function HorseDetail() {
           ? 'border border-[#8B5E3C]/15 bg-[#F8F0E8] text-[#8B5E3C]'
           : 'border border-[#ddd3c7] bg-[#f7f1ea] text-[#756a5f]';
 
-  const handleSavedHorseToggle = () => {
-    const result = toggleSharedListing(horse.id);
+  const handleSavedHorseToggle = async () => {
+    const result = await toggleSharedListing(horse.id);
     pushToast({
       title: result.ok ? (saved ? 'Removed from shared access' : 'Added to shared access') : 'Shared access blocked',
       message: result.message,
@@ -412,14 +412,14 @@ export default function HorseDetail() {
               className="inline-flex h-11 items-center justify-center rounded-md bg-[#3D6B4F] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#2E523C]"
               to={packet.sharePath}
               state={{ internalPreview: true }}
-              onClick={() => recordSharedChannel(horse.id, 'Direct Link')}
+              onClick={() => void recordSharedChannel(horse.id, 'Direct Link')}
             >
               Preview
             </Link>
             <button
               className="inline-flex h-11 items-center justify-center rounded-md border border-[#ddd3c7] bg-white px-5 text-sm font-semibold text-[#4d463f] transition-all duration-150 ease-[ease] hover:border-[#3D6B4F]/30 hover:bg-[#f5efe8] disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
-              onClick={handleSavedHorseToggle}
+              onClick={() => void handleSavedHorseToggle()}
               disabled={!canManageSharedAccess}
             >
               {saved ? 'Unshare' : 'Share'}

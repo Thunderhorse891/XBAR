@@ -1,5 +1,7 @@
 import type { ErrorInfo, ReactNode } from 'react';
 import { Component } from 'react';
+import { trackRuntimeEvent } from '@/lib/runtimeEvents';
+import { useCloudStore } from '@/store/useCloudStore';
 import { useXbarStore } from '@/store/useXbarStore';
 
 type ErrorBoundaryProps = {
@@ -19,6 +21,16 @@ class ErrorBoundaryImpl extends Component<ErrorBoundaryProps, ErrorBoundaryState
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('XBAR UI error boundary', error, errorInfo);
+    void trackRuntimeEvent({
+      workspaceId: useCloudStore.getState().workspaceId,
+      eventName: 'ui.error_boundary',
+      severity: 'error',
+      payload: {
+        message: error.message,
+        stack: error.stack ?? '',
+        componentStack: errorInfo.componentStack,
+      },
+    });
   }
 
   handleReload = () => {

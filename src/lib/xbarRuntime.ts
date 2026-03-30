@@ -14,6 +14,7 @@ import type {
   SubscriptionProfile,
   SubscriptionTier,
 } from '../types/xbar.js';
+import { readDocumentText } from './documentIntelligence.js';
 
 const GIGABYTE = 1024 * 1024 * 1024;
 const BASE36_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -226,17 +227,8 @@ export async function readFileAsDataUrl(file: File) {
 }
 
 async function readFileTextSnippet(file: File) {
-  const fileIsTextLike =
-    file.type.startsWith('text/') ||
-    /\.(txt|csv|json|md)$/i.test(file.name);
-
-  if (!fileIsTextLike) {
-    return '';
-  }
-
   try {
-    const text = await file.text();
-    return text.slice(0, 320);
+    return await readDocumentText(file);
   } catch {
     return '';
   }

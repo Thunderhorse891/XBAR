@@ -190,8 +190,8 @@ export default function Settings() {
     setCloudBusy(false);
   };
 
-  const handleInviteMember = () => {
-    const result = inviteWorkspaceMember(inviteEmail, inviteRole);
+  const handleInviteMember = async () => {
+    const result = await inviteWorkspaceMember(inviteEmail, inviteRole);
     pushToast({
       title: result.ok ? 'Invite staged' : 'Invite blocked',
       message: result.message,
@@ -382,8 +382,8 @@ export default function Settings() {
                       <button
                         className="button button--ghost button--compact"
                         type="button"
-                        onClick={() => {
-                          const result = removeWorkspaceMember(member.id);
+                        onClick={async () => {
+                          const result = await removeWorkspaceMember(member.id);
                           pushToast({
                             title: result.ok ? 'Member removed' : 'Removal blocked',
                             message: result.message,
@@ -444,8 +444,8 @@ export default function Settings() {
                       <button
                         className="button button--ghost button--compact"
                         type="button"
-                        onClick={() => {
-                          const result = revokeWorkspaceInvitation(invite.id);
+                        onClick={async () => {
+                          const result = await revokeWorkspaceInvitation(invite.id);
                           pushToast({
                             title: result.ok ? 'Invite revoked' : 'Revoke blocked',
                             message: result.message,

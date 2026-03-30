@@ -27,7 +27,15 @@ import {
 import { countReservedSharedAccessSeats, countReservedWorkspaceSeats, normalizeWorkspaceEmail, validateWorkspaceInvitation } from '@/lib/workspaceAccess';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { getCapabilityDeniedMessage, hasRoleCapability } from '@/lib/permissions';
-import { uploadDocumentAssetToCloud, uploadMediaAssetToCloud } from '@/lib/cloudWorkspace';
+import {
+  createWorkspaceInvitationInCloud,
+  removeWorkspaceMemberFromCloud,
+  revokeWorkspaceInvitationInCloud,
+  updateSharedListingChannelsInCloud,
+  uploadDocumentAssetToCloud,
+  uploadMediaAssetToCloud,
+  upsertSharedListingInCloud,
+} from '@/lib/cloudWorkspace';
 import { workspaceStateStorage } from '@/lib/workspaceStorage';
 import {
   createOwnershipRecord,
@@ -90,14 +98,14 @@ type XbarStore = {
   setCurrentRole: (role: UserRole) => void;
   initializeWorkspace: (profile: Partial<WorkspaceProfile>) => ActionResult;
   updateWorkspaceProfile: (patch: Partial<WorkspaceProfile>) => ActionResult;
-  toggleSharedListing: (horseId: string) => ActionResult;
-  recordSharedChannel: (horseId: string, channel: SharedChannel) => void;
-  rotateSharedListingToken: (horseId: string) => ActionResult;
-  updateSharedListingAccessMode: (horseId: string, accessMode: SharedListingRecord['accessMode']) => ActionResult;
-  inviteWorkspaceMember: (email: string, role: UserRole) => ActionResult;
-  revokeWorkspaceInvitation: (invitationId: string) => ActionResult;
+  toggleSharedListing: (horseId: string) => Promise<ActionResult>;
+  recordSharedChannel: (horseId: string, channel: SharedChannel) => Promise<void>;
+  rotateSharedListingToken: (horseId: string) => Promise<ActionResult>;
+  updateSharedListingAccessMode: (horseId: string, accessMode: SharedListingRecord['accessMode']) => Promise<ActionResult>;
+  inviteWorkspaceMember: (email: string, role: UserRole) => Promise<ActionResult>;
+  revokeWorkspaceInvitation: (invitationId: string) => Promise<ActionResult>;
   activateWorkspaceInvitation: (invitationId: string) => ActionResult;
-  removeWorkspaceMember: (memberId: string) => ActionResult;
+  removeWorkspaceMember: (memberId: string) => Promise<ActionResult>;
   addHorse: (input: NewHorseInput) => ActionResult;
   createDocumentIntake: (input: DocumentIntakeInput) => Promise<ActionResult>;
   reviewDocument: (documentId: string, horseId?: string) => ActionResult;
@@ -849,34 +857,47 @@ export const useXbarStore = create<XbarStore>()(
         });
         return { ok: true, message: 'Workspace profile updated.' };
       },
-      toggleSharedListing: (horseId) => {
+      toggleSharedListing: async (horseId) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageSharedAccess');
         if (deniedMessage) {
           return { ok: false, message: deniedMessage };
         }
 
-        if (!get().horses.some((horse) => horse.id === horseId)) {
+        const state = get();
+        if (!state.horses.some((horse) => horse.id === horseId)) {
           return { ok: false, message: 'Horse record not found for shared access.' };
         }
 
-        let isActive = false;
+        const existingListing = state.sharedListings.find((listing) => listing.horseId === horseId && listing.state !== 'Archived');
+        const isActive = Boolean(existingListing);
+        const cloudListing = existingListing
+          ? {
+              ...existingListing,
+              state: 'Archived' as const,
+              updatedAt: todayStamp(),
+            }
+          : createSharedListingRecord(horseId, {
+              state: 'Draft',
+            });
+
+        if (isSupabaseConfigured()) {
+          const cloudResult = await upsertSharedListingInCloud(cloudListing);
+          if (!cloudResult.ok) {
+            return { ok: false, message: cloudResult.message };
+          }
+        }
+
         set((state) => {
-          const existingListing = state.sharedListings.find((listing) => listing.horseId === horseId && listing.state !== 'Archived');
-          isActive = Boolean(existingListing);
           const nextSharedListings = existingListing
             ? state.sharedListings.map((listing) =>
                 listing.horseId === horseId
                   ? {
-                      ...listing,
-                      state: 'Archived' as const,
-                      updatedAt: todayStamp(),
+                      ...cloudListing,
                     }
                   : listing,
               )
             : [
-                createSharedListingRecord(horseId, {
-                  state: 'Draft',
-                }),
+                cloudListing,
                 ...state.sharedListings,
               ];
 
@@ -911,7 +932,14 @@ export const useXbarStore = create<XbarStore>()(
           id: horseId,
         };
       },
-      recordSharedChannel: (horseId, channel) => {
+      recordSharedChannel: async (horseId, channel) => {
+        if (isSupabaseConfigured()) {
+          const cloudResult = await updateSharedListingChannelsInCloud({ horseId, channel });
+          if (!cloudResult.ok) {
+            console.error('Shared channel sync failed', cloudResult.message);
+          }
+        }
+
         set((state) => ({
           sharedListings: state.sharedListings.map((listing) =>
             listing.horseId === horseId && listing.state !== 'Archived'
@@ -926,24 +954,37 @@ export const useXbarStore = create<XbarStore>()(
           ),
         }));
       },
-      rotateSharedListingToken: (horseId) => {
+      rotateSharedListingToken: async (horseId) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageSharedAccess');
         if (deniedMessage) {
           return { ok: false, message: deniedMessage };
         }
 
-        if (!get().sharedListings.some((listing) => listing.horseId === horseId && listing.state !== 'Archived')) {
+        const state = get();
+        const existingListing = state.sharedListings.find((listing) => listing.horseId === horseId && listing.state !== 'Archived');
+        if (!existingListing) {
           return { ok: false, message: 'Shared listing not found for this horse.' };
+        }
+
+        const nextListing = {
+          ...existingListing,
+          shareToken: createShareAccessToken(),
+          tokenIssuedAt: todayStamp(),
+          updatedAt: todayStamp(),
+        };
+
+        if (isSupabaseConfigured()) {
+          const cloudResult = await upsertSharedListingInCloud(nextListing);
+          if (!cloudResult.ok) {
+            return { ok: false, message: cloudResult.message };
+          }
         }
 
         set((state) => ({
           sharedListings: state.sharedListings.map((listing) =>
             listing.horseId === horseId && listing.state !== 'Archived'
               ? {
-                  ...listing,
-                  shareToken: createShareAccessToken(),
-                  tokenIssuedAt: todayStamp(),
-                  updatedAt: todayStamp(),
+                  ...nextListing,
                 }
               : listing,
           ),
@@ -951,23 +992,36 @@ export const useXbarStore = create<XbarStore>()(
 
         return { ok: true, message: 'Share token rotated.', id: horseId };
       },
-      updateSharedListingAccessMode: (horseId, accessMode) => {
+      updateSharedListingAccessMode: async (horseId, accessMode) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageSharedAccess');
         if (deniedMessage) {
           return { ok: false, message: deniedMessage };
         }
 
-        if (!get().sharedListings.some((listing) => listing.horseId === horseId && listing.state !== 'Archived')) {
+        const state = get();
+        const existingListing = state.sharedListings.find((listing) => listing.horseId === horseId && listing.state !== 'Archived');
+        if (!existingListing) {
           return { ok: false, message: 'Shared listing not found for this horse.' };
+        }
+
+        const nextListing = {
+          ...existingListing,
+          accessMode,
+          updatedAt: todayStamp(),
+        };
+
+        if (isSupabaseConfigured()) {
+          const cloudResult = await upsertSharedListingInCloud(nextListing);
+          if (!cloudResult.ok) {
+            return { ok: false, message: cloudResult.message };
+          }
         }
 
         set((state) => ({
           sharedListings: state.sharedListings.map((listing) =>
             listing.horseId === horseId && listing.state !== 'Archived'
               ? {
-                  ...listing,
-                  accessMode,
-                  updatedAt: todayStamp(),
+                  ...nextListing,
                 }
               : listing,
           ),
@@ -979,7 +1033,7 @@ export const useXbarStore = create<XbarStore>()(
           id: horseId,
         };
       },
-      inviteWorkspaceMember: (email, role) => {
+      inviteWorkspaceMember: async (email, role) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageSettings');
         if (deniedMessage) {
           return { ok: false, message: deniedMessage };
@@ -1008,6 +1062,13 @@ export const useXbarStore = create<XbarStore>()(
           invitedAt: nowStamp(),
         };
 
+        if (isSupabaseConfigured()) {
+          const cloudResult = await createWorkspaceInvitationInCloud(invite);
+          if (!cloudResult.ok) {
+            return { ok: false, message: cloudResult.message };
+          }
+        }
+
         const workspaceInvitations = [invite, ...state.workspaceInvitations];
         const derived = syncDerivedValues({
           horses: state.horses,
@@ -1028,7 +1089,7 @@ export const useXbarStore = create<XbarStore>()(
 
         return { ok: true, message: `Invite reserved for ${invite.email}.`, id: invite.id };
       },
-      revokeWorkspaceInvitation: (invitationId) => {
+      revokeWorkspaceInvitation: async (invitationId) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageSettings');
         if (deniedMessage) {
           return { ok: false, message: deniedMessage };
@@ -1037,6 +1098,13 @@ export const useXbarStore = create<XbarStore>()(
         const state = get();
         if (!state.workspaceInvitations.some((invite) => invite.id === invitationId && invite.status === 'Pending')) {
           return { ok: false, message: 'Pending invite not found.' };
+        }
+
+        if (isSupabaseConfigured()) {
+          const cloudResult = await revokeWorkspaceInvitationInCloud(invitationId);
+          if (!cloudResult.ok) {
+            return { ok: false, message: cloudResult.message };
+          }
         }
 
         const workspaceInvitations = state.workspaceInvitations.map((invite) =>
@@ -1120,7 +1188,7 @@ export const useXbarStore = create<XbarStore>()(
 
         return { ok: true, message: `${invite.email} is now active.`, id: invitationId };
       },
-      removeWorkspaceMember: (memberId) => {
+      removeWorkspaceMember: async (memberId) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageSettings');
         if (deniedMessage) {
           return { ok: false, message: deniedMessage };
@@ -1135,6 +1203,13 @@ export const useXbarStore = create<XbarStore>()(
         const activeAdmins = state.workspaceMembers.filter((item) => item.status === 'Active' && item.role === 'Admin');
         if (member.role === 'Admin' && member.status === 'Active' && activeAdmins.length <= 1) {
           return { ok: false, message: 'Keep at least one active admin on the workspace.' };
+        }
+
+        if (isSupabaseConfigured()) {
+          const cloudResult = await removeWorkspaceMemberFromCloud(member);
+          if (!cloudResult.ok) {
+            return { ok: false, message: cloudResult.message };
+          }
         }
 
         const workspaceMembers = state.workspaceMembers.filter((item) => item.id !== memberId);

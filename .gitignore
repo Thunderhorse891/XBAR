@@ -7,3 +7,5 @@ dist/
 .playwright-cli/
 output/playwright/
 .codex-test-dist/
+playwright-report/
+test-results/

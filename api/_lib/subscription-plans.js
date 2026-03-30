@@ -1,0 +1,104 @@
+export const subscriptionPlans = {
+  Starter: {
+    monthlyRate: 390,
+    sharedAccessEnabled: false,
+    brandedListings: false,
+    featureFlags: ['Horse records', 'Basic listings', 'Local document vault'],
+    limits: {
+      seatLimit: 2,
+      documentLimit: 250,
+      storageLimitGb: 25,
+      sharedAccessSeatLimit: 0,
+    },
+  },
+  Professional: {
+    monthlyRate: 1290,
+    sharedAccessEnabled: true,
+    brandedListings: true,
+    featureFlags: ['Role-aware dashboards', 'Shared access links', 'Branded sale packets', 'Manual document review', 'Operations workspace'],
+    limits: {
+      seatLimit: 8,
+      documentLimit: 1800,
+      storageLimitGb: 200,
+      sharedAccessSeatLimit: 10,
+    },
+  },
+  'Ranch Ops': {
+    monthlyRate: 2490,
+    sharedAccessEnabled: true,
+    brandedListings: true,
+    featureFlags: ['Expanded document intake', 'Branded sale packets', 'Role-aware dashboards', 'Shared access links', 'Ranch asset operations', 'Lead intelligence'],
+    limits: {
+      seatLimit: 20,
+      documentLimit: 6000,
+      storageLimitGb: 750,
+      sharedAccessSeatLimit: 40,
+    },
+  },
+  Enterprise: {
+    monthlyRate: 4990,
+    sharedAccessEnabled: true,
+    brandedListings: true,
+    featureFlags: ['Custom shared access', 'Expanded document intake', 'Dedicated access branding', 'Priority operations support', 'Custom integrations', 'Advanced audit controls'],
+    limits: {
+      seatLimit: 60,
+      documentLimit: 20000,
+      storageLimitGb: 2500,
+      sharedAccessSeatLimit: 200,
+    },
+  },
+};
+
+export function getStripePriceIdByTier(tier) {
+  const envMap = {
+    Starter: process.env.STRIPE_PRICE_ID_STARTER || '',
+    Professional: process.env.STRIPE_PRICE_ID_PROFESSIONAL || '',
+    'Ranch Ops': process.env.STRIPE_PRICE_ID_RANCH_OPS || '',
+    Enterprise: process.env.STRIPE_PRICE_ID_ENTERPRISE || '',
+  };
+
+  return envMap[tier] || '';
+}
+
+export function findTierByPriceId(priceId) {
+  return Object.keys(subscriptionPlans).find((tier) => getStripePriceIdByTier(tier) === priceId) || null;
+}
+
+export function normalizeBillingState(status) {
+  if (status === 'active' || status === 'trialing') {
+    return 'Active';
+  }
+
+  if (status === 'past_due' || status === 'unpaid' || status === 'incomplete_expired') {
+    return 'Past Due';
+  }
+
+  return 'Manual Billing';
+}
+
+export function buildSubscriptionProfile(params) {
+  const tier = params.tier in subscriptionPlans ? params.tier : 'Starter';
+  const plan = subscriptionPlans[tier];
+  const existingUsage = params.existingUsage || {};
+  const renewalDate = params.renewalDate || '';
+
+  return {
+    tier,
+    monthlyRate: plan.monthlyRate,
+    renewalDate,
+    billingState: normalizeBillingState(params.billingStatus),
+    sharedAccessEnabled: plan.sharedAccessEnabled,
+    brandedListings: plan.brandedListings,
+    featureFlags: plan.featureFlags,
+    usage: {
+      seatsUsed: Number(existingUsage.seatsUsed || 0),
+      seatLimit: plan.limits.seatLimit,
+      documentsProcessed: Number(existingUsage.documentsProcessed || 0),
+      documentLimit: plan.limits.documentLimit,
+      storageUsedGb: Number(existingUsage.storageUsedGb || 0),
+      storageLimitGb: plan.limits.storageLimitGb,
+      sharedAccessSeatsUsed: Number(existingUsage.sharedAccessSeatsUsed || 0),
+      sharedAccessSeatLimit: plan.limits.sharedAccessSeatLimit,
+    },
+  };
+}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Pill } from '@/components/app-ui';
-import { isSupabaseConfigured } from '@/lib/platformConfig';
+import { isCloudAuthRequired, isLocalModeEnabled, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 
@@ -19,6 +19,8 @@ export default function Login() {
     const next = (location.state as { from?: string } | null)?.from;
     return next || '/';
   }, [location.state]);
+  const cloudRequired = isCloudAuthRequired();
+  const allowLocalMode = isLocalModeEnabled();
 
   useEffect(() => {
     if (session && status === 'signed-in') {
@@ -75,7 +77,9 @@ export default function Login() {
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-xl border border-[#ddd8cf] bg-white/80 px-4 py-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7e8891]">Auth</div>
-              <div className="mt-2 text-sm font-semibold text-[#1e242b]">{isSupabaseConfigured() ? 'Supabase live' : 'Local mode'}</div>
+              <div className="mt-2 text-sm font-semibold text-[#1e242b]">
+                {isSupabaseConfigured() ? 'Supabase live' : allowLocalMode ? 'Local mode' : 'Cloud required'}
+              </div>
             </div>
             <div className="rounded-xl border border-[#ddd8cf] bg-white/80 px-4 py-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7e8891]">Access</div>
@@ -95,7 +99,9 @@ export default function Login() {
                 <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7e8891]">Workspace login</div>
                 <h2 className="mt-2 text-[1.7rem] font-bold tracking-[-0.05em] text-[#1e242b]">Enter XBAR</h2>
               </div>
-              <Pill tone={isSupabaseConfigured() ? 'blue' : 'slate'}>{isSupabaseConfigured() ? 'Cloud auth' : 'Local only'}</Pill>
+              <Pill tone={isSupabaseConfigured() ? 'blue' : cloudRequired ? 'rose' : 'slate'}>
+                {isSupabaseConfigured() ? 'Cloud auth' : cloudRequired ? 'Cloud required' : 'Local only'}
+              </Pill>
             </div>
 
             {isSupabaseConfigured() ? (
@@ -137,17 +143,31 @@ export default function Login() {
                 </div>
               </>
             ) : (
-              <div className="mt-8 rounded-xl border border-[#ddd8cf] bg-[#f4efe8] px-4 py-4 text-sm leading-7 text-[#5a5148]">
-                Supabase auth is not configured for this build yet, so this app is currently running in local workspace mode. Add
-                {' '}
-                <code>VITE_SUPABASE_URL</code>
-                {' '}
-                and
-                {' '}
-                <code>VITE_SUPABASE_ANON_KEY</code>
-                {' '}
-                to turn on real user login.
-              </div>
+              cloudRequired ? (
+                <div className="mt-8 rounded-xl border border-[#e5c7c7] bg-[#fff4f4] px-4 py-4 text-sm leading-7 text-[#7b3a3a]">
+                  Cloud auth is required for this production build. Add
+                  {' '}
+                  <code>VITE_SUPABASE_URL</code>
+                  {' '}
+                  and
+                  {' '}
+                  <code>VITE_SUPABASE_ANON_KEY</code>
+                  {' '}
+                  before opening the workspace.
+                </div>
+              ) : (
+                <div className="mt-8 rounded-xl border border-[#ddd8cf] bg-[#f4efe8] px-4 py-4 text-sm leading-7 text-[#5a5148]">
+                  Supabase auth is not configured for this build yet, so this app is currently running in local workspace mode. Add
+                  {' '}
+                  <code>VITE_SUPABASE_URL</code>
+                  {' '}
+                  and
+                  {' '}
+                  <code>VITE_SUPABASE_ANON_KEY</code>
+                  {' '}
+                  to turn on real user login.
+                </div>
+              )
             )}
           </div>
         </section>

@@ -35,6 +35,10 @@ export const supabaseConfig = {
   snapshotFallbackEnabled: readFlag(env.VITE_SUPABASE_SNAPSHOT_FALLBACK, true),
 };
 
+export const authConfig = {
+  allowLocalMode: readFlag(env.VITE_ALLOW_LOCAL_MODE, Boolean(env.DEV)),
+};
+
 export const facebookConfig = {
   appId: readEnv(env.VITE_FACEBOOK_APP_ID),
   publicAppUrl: readEnv(env.VITE_PUBLIC_APP_URL),
@@ -50,8 +54,24 @@ export const stripeConfig = {
   billingPortalUrl: readEnv(env.VITE_STRIPE_BILLING_PORTAL_URL),
 };
 
+export const apiConfig = {
+  baseUrl: readEnv(env.VITE_API_BASE_URL),
+};
+
+export const monitoringConfig = {
+  enabled: readFlag(env.VITE_RUNTIME_MONITORING_ENABLED, true),
+};
+
 export function isSupabaseConfigured() {
   return Boolean(supabaseConfig.url && supabaseConfig.anonKey);
+}
+
+export function isLocalModeEnabled() {
+  return authConfig.allowLocalMode;
+}
+
+export function isCloudAuthRequired() {
+  return !isSupabaseConfigured() && !isLocalModeEnabled();
 }
 
 export function isRelationalCloudEnabled() {

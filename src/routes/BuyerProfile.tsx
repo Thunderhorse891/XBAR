@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
@@ -5,6 +6,7 @@ import { SalePacketSlots } from '@/components/SalePacketSlots';
 import { KeyValue, MetricCard, Panel, Pill } from '@/components/app-ui';
 import { buildPublicShareUrl, openFacebookShareDialog } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
+import { loadPublicBuyerProfile, trackPublicBuyerProfileView, type PublicBuyerProfilePayload } from '@/lib/publicShare';
 import { hasBuyerShareAccess } from '@/lib/workspaceAccess';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
@@ -14,25 +16,116 @@ export default function BuyerProfile() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const horse = useHorseRecord(id);
+  const localHorse = useHorseRecord(id);
   const pushToast = useUiStore((state) => state.pushToast);
-  const horses = useXbarStore((state) => state.horses);
-  const documents = useXbarStore((state) => state.documents.filter((document) => document.horseId === id));
-  const ownershipRecord = useXbarStore((state) => state.ownershipRecords.find((record) => record.horseId === id));
-  const sharedListing = useXbarStore((state) => state.sharedListings.find((listing) => listing.horseId === id && listing.state !== 'Archived'));
+  const localHorses = useXbarStore((state) => state.horses);
+  const localDocuments = useXbarStore((state) => state.documents.filter((document) => document.horseId === id));
+  const localOwnershipRecord = useXbarStore((state) => state.ownershipRecords.find((record) => record.horseId === id));
+  const localSharedListing = useXbarStore((state) => state.sharedListings.find((listing) => listing.horseId === id && listing.state !== 'Archived'));
   const shareToken = searchParams.get('t')?.trim() ?? '';
   const internalPreview = location.state && typeof location.state === 'object' && 'internalPreview' in location.state
     ? Boolean((location.state as { internalPreview?: boolean }).internalPreview)
     : false;
+  const [remoteState, setRemoteState] = useState<{
+    status: 'idle' | 'loading' | 'loaded' | 'error';
+    payload?: PublicBuyerProfilePayload;
+    message?: string;
+    source?: 'rpc' | 'local';
+  }>(() => ({
+    status: internalPreview ? 'idle' : 'loading',
+  }));
+  const sharePath = useMemo(() => (id ? `/profiles/${id}` : ''), [id]);
+
+  useEffect(() => {
+    if (!id || internalPreview) {
+      return;
+    }
+
+    let disposed = false;
+    setRemoteState((current) => ({
+      ...current,
+      status: 'loading',
+      message: undefined,
+    }));
+
+    void loadPublicBuyerProfile({
+      sharePath,
+      shareToken,
+    }).then((result) => {
+      if (disposed) {
+        return;
+      }
+
+      if (result.ok) {
+        setRemoteState({
+          status: 'loaded',
+          payload: result.payload,
+          source: result.source,
+        });
+        void trackPublicBuyerProfileView({ sharePath, shareToken });
+        return;
+      }
+
+      if (localHorse) {
+        setRemoteState({
+          status: 'loaded',
+          payload: {
+            horse: localHorse,
+            documents: localDocuments,
+            ownershipRecord: localOwnershipRecord,
+            sharedListing: localSharedListing,
+          },
+          source: 'local',
+          message: result.message,
+        });
+        return;
+      }
+
+      setRemoteState({
+        status: 'error',
+        message: result.message,
+      });
+    });
+
+    return () => {
+      disposed = true;
+    };
+  }, [id, internalPreview, localDocuments, localHorse, localOwnershipRecord, localSharedListing, sharePath, shareToken]);
+
+  const resolvedPayload = internalPreview
+    ? localHorse
+      ? {
+          horse: localHorse,
+          documents: localDocuments,
+          ownershipRecord: localOwnershipRecord,
+          sharedListing: localSharedListing,
+        }
+      : undefined
+    : remoteState.payload;
+
+  const horse = resolvedPayload?.horse;
+  const documents = resolvedPayload?.documents ?? [];
+  const ownershipRecord = resolvedPayload?.ownershipRecord;
+  const sharedListing = resolvedPayload?.sharedListing;
+  const matchingHorses = internalPreview || remoteState.source === 'local' ? localHorses : horse ? [horse] : [];
 
   if (!horse) {
     return (
       <main className="buyer-shell">
         <div className="buyer-shell__inner">
-          <Panel title="Buyer profile unavailable" description="Record not found in this workspace.">
-            <Link className="button button--ghost" to="/horses">
-              Back to horses
-            </Link>
+          <Panel
+            title={remoteState.status === 'loading' ? 'Loading buyer room' : 'Buyer profile unavailable'}
+            description={
+              remoteState.status === 'loading'
+                ? 'Loading the cloud listing and packet data.'
+                : remoteState.message ?? 'Record not found in this workspace.'
+            }
+          >
+            {internalPreview ? (
+              <Link className="button button--ghost" to="/horses">
+                Back to horses
+              </Link>
+            ) : null}
           </Panel>
         </div>
       </main>
@@ -41,12 +134,12 @@ export default function BuyerProfile() {
 
   const packet = buildHorsePacketCompleteness(horse, documents, ownershipRecord);
   const publicShareToken = sharedListing?.accessMode === 'Private Token' ? sharedListing.shareToken : undefined;
-  const accessAllowed = hasBuyerShareAccess(sharedListing, shareToken, internalPreview);
+  const accessAllowed = internalPreview ? hasBuyerShareAccess(sharedListing, shareToken, true) : remoteState.status === 'loaded';
   const publicShareUrl = buildPublicShareUrl(packet.sharePath, publicShareToken);
   const visibleDocuments = documents
     .map((document) => ({
       document,
-      trust: buildDocumentTrustProfile(document, horses),
+      trust: buildDocumentTrustProfile(document, matchingHorses),
     }))
     .filter(({ trust }) => trust.readyForProfile);
   const salePhotoAssets = horse.gallery.filter(
@@ -100,6 +193,7 @@ export default function BuyerProfile() {
               <Pill tone={sharedListing?.accessMode === 'Public Link' ? 'emerald' : 'slate'}>
                 {sharedListing?.accessMode ?? 'Private Token'}
               </Pill>
+              {!internalPreview && remoteState.source === 'rpc' ? <Pill tone="emerald">Cloud listing</Pill> : null}
             </div>
             <div className="buyer-share">
               <span>Share path</span>

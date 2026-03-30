@@ -85,8 +85,8 @@ export default function SharedAccess() {
         {
           id: 'open-share',
           label: 'Preview buyer room',
-          onSelect: () => {
-            recordSharedChannel(menuHorse.id, 'Direct Link');
+          onSelect: async () => {
+            await recordSharedChannel(menuHorse.id, 'Direct Link');
             navigate(menuPacket.sharePath, { state: { internalPreview: true } });
           },
         },
@@ -102,9 +102,9 @@ export default function SharedAccess() {
               {
                 id: 'toggle-access',
                 label: menuListing.accessMode === 'Private Token' ? 'Make public' : 'Require token',
-                onSelect: () => {
+                onSelect: async () => {
                   const nextAccessMode = menuListing.accessMode === 'Private Token' ? 'Public Link' : 'Private Token';
-                  const result = updateSharedListingAccessMode(menuHorse.id, nextAccessMode);
+                  const result = await updateSharedListingAccessMode(menuHorse.id, nextAccessMode);
                   pushToast({
                     title: result.ok ? 'Access updated' : 'Access blocked',
                     message: result.message,
@@ -117,8 +117,8 @@ export default function SharedAccess() {
                     {
                       id: 'rotate-token',
                       label: 'Rotate token',
-                      onSelect: () => {
-                        const result = rotateSharedListingToken(menuHorse.id);
+                      onSelect: async () => {
+                        const result = await rotateSharedListingToken(menuHorse.id);
                         pushToast({
                           title: result.ok ? 'Token rotated' : 'Token blocked',
                           message: result.message,
@@ -133,10 +133,10 @@ export default function SharedAccess() {
         {
           id: 'post-facebook',
           label: 'Post to Facebook',
-          onSelect: () => {
+          onSelect: async () => {
             const result = openFacebookShareDialog(menuPacket.sharePath, getShareToken(menuListing));
             if (result.ok) {
-              recordSharedChannel(menuHorse.id, 'Facebook');
+              await recordSharedChannel(menuHorse.id, 'Facebook');
             }
             pushToast({
               title: result.ok ? 'Facebook ready' : 'Facebook unavailable',
@@ -228,9 +228,9 @@ export default function SharedAccess() {
                         className="button button--ghost button--compact"
                         to={packet.sharePath}
                         state={{ internalPreview: true }}
-                        onClick={(event) => {
+                        onClick={async (event) => {
                           event.stopPropagation();
-                          recordSharedChannel(horse.id, 'Direct Link');
+                          await recordSharedChannel(horse.id, 'Direct Link');
                         }}
                       >
                         Open share link
@@ -240,9 +240,9 @@ export default function SharedAccess() {
                         href={publicShareUrl}
                         target="_blank"
                         rel="noreferrer"
-                        onClick={(event) => {
+                        onClick={async (event) => {
                           event.stopPropagation();
-                          recordSharedChannel(horse.id, 'Direct Link');
+                          await recordSharedChannel(horse.id, 'Direct Link');
                         }}
                       >
                         Open buyer link
@@ -260,11 +260,11 @@ export default function SharedAccess() {
                       <button
                         className="button button--primary button--compact"
                         type="button"
-                        onClick={(event) => {
+                        onClick={async (event) => {
                           event.stopPropagation();
                           const result = openFacebookShareDialog(packet.sharePath, getShareToken(sharedListing));
                           if (result.ok) {
-                            recordSharedChannel(horse.id, 'Facebook');
+                            await recordSharedChannel(horse.id, 'Facebook');
                           }
                           pushToast({
                             title: result.ok ? 'Facebook ready' : 'Facebook unavailable',
@@ -279,10 +279,10 @@ export default function SharedAccess() {
                         <button
                           className="button button--ghost button--compact"
                           type="button"
-                          onClick={(event) => {
+                          onClick={async (event) => {
                             event.stopPropagation();
                             const nextAccessMode = sharedListing.accessMode === 'Private Token' ? 'Public Link' : 'Private Token';
-                            const result = updateSharedListingAccessMode(horse.id, nextAccessMode);
+                            const result = await updateSharedListingAccessMode(horse.id, nextAccessMode);
                             pushToast({
                               title: result.ok ? 'Access updated' : 'Access blocked',
                               message: result.message,

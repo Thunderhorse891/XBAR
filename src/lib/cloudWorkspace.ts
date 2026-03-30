@@ -1,5 +1,5 @@
 import { isRelationalCloudEnabled, isSnapshotFallbackEnabled, supabaseConfig } from '@/lib/platformConfig';
-import { createId } from '@/lib/xbarRuntime';
+import { createId, todayStamp } from '@/lib/xbarRuntime';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import type { Session } from '@supabase/supabase-js';
 import type {
@@ -10,6 +10,7 @@ import type {
   OwnershipRecord,
   RanchAsset,
   SalesLead,
+  SharedChannel,
   SharedListingRecord,
   SubscriptionProfile,
   UserRole,
@@ -700,6 +701,10 @@ async function saveWorkspaceBackupToRelationalCloud(backup: unknown, session: Se
         listing_id: listing.id,
         horse_id: listing.horseId,
         share_path: listing.sharePath,
+        access_mode: listing.accessMode,
+        share_token: listing.shareToken,
+        token_issued_at: listing.tokenIssuedAt || updatedAt,
+        published_at: listing.state === 'Live' ? updatedAt : null,
         state: listing.state,
         channels: listing.channels,
         payload: listing,
@@ -1091,4 +1096,183 @@ export async function getDocumentAccessUrl(document: Pick<DocumentRecord, 'fileU
     ok: true,
     url: data.signedUrl,
   } as const;
+}
+
+async function getCloudWorkspaceContext() {
+  const client = getSupabaseClient();
+  if (!client) {
+    return { ok: false, message: 'Supabase is not configured for this build.' } as const;
+  }
+
+  const session = await getActiveSession();
+  if (!session?.user) {
+    return { ok: false, message: 'Sign in before changing cloud workspace access.' } as const;
+  }
+
+  const accessProfile = await loadWorkspaceAccessProfile(session);
+  if (!accessProfile.workspaceId) {
+    return { ok: false, message: 'No cloud workspace is connected to this account yet.' } as const;
+  }
+
+  return {
+    ok: true,
+    client,
+    session,
+    workspaceId: accessProfile.workspaceId,
+  } as const;
+}
+
+export async function createWorkspaceInvitationInCloud(invitation: WorkspaceInvitationRecord) {
+  const context = await getCloudWorkspaceContext();
+  if (!context.ok) {
+    return context;
+  }
+
+  const { error } = await context.client.from('workspace_invitations').insert({
+    workspace_id: context.workspaceId,
+    invitation_id: invitation.id,
+    email: normalizeWorkspaceEmail(invitation.email),
+    role: invitation.role,
+    status: invitation.status.toLowerCase(),
+    invited_by_user_id: context.session.user.id,
+    payload: invitation,
+    updated_at: invitation.invitedAt,
+  });
+
+  if (error) {
+    return { ok: false, message: error.message } as const;
+  }
+
+  return { ok: true, message: 'Workspace invitation saved to cloud.' } as const;
+}
+
+export async function revokeWorkspaceInvitationInCloud(invitationId: string, acceptedAt?: string) {
+  const context = await getCloudWorkspaceContext();
+  if (!context.ok) {
+    return context;
+  }
+
+  const nextStatus = acceptedAt ? 'accepted' : 'revoked';
+  const { data: existing, error: existingError } = await context.client
+    .from('workspace_invitations')
+    .select('payload')
+    .eq('workspace_id', context.workspaceId)
+    .eq('invitation_id', invitationId)
+    .maybeSingle();
+
+  if (existingError || !existing?.payload) {
+    return { ok: false, message: existingError?.message ?? 'Invite not found in cloud workspace.' } as const;
+  }
+
+  const payload =
+    existing.payload && typeof existing.payload === 'object'
+      ? {
+          ...(existing.payload as Record<string, unknown>),
+          status: acceptedAt ? 'Accepted' : 'Revoked',
+          ...(acceptedAt ? { acceptedAt } : { revokedAt: new Date().toISOString() }),
+        }
+      : existing.payload;
+
+  const { error } = await context.client
+    .from('workspace_invitations')
+    .update({
+      status: nextStatus,
+      payload,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('workspace_id', context.workspaceId)
+    .eq('invitation_id', invitationId);
+
+  if (error) {
+    return { ok: false, message: error.message } as const;
+  }
+
+  return { ok: true, message: acceptedAt ? 'Workspace invite accepted in cloud.' : 'Workspace invite revoked in cloud.' } as const;
+}
+
+export async function removeWorkspaceMemberFromCloud(member: WorkspaceMemberRecord) {
+  const context = await getCloudWorkspaceContext();
+  if (!context.ok) {
+    return context;
+  }
+
+  const normalizedEmail = normalizeWorkspaceEmail(member.email);
+  const { error } = await context.client
+    .from('workspace_memberships')
+    .delete()
+    .eq('workspace_id', context.workspaceId)
+    .eq('email', normalizedEmail);
+
+  if (error) {
+    return { ok: false, message: error.message } as const;
+  }
+
+  return { ok: true, message: 'Workspace member removed from cloud.' } as const;
+}
+
+export async function upsertSharedListingInCloud(listing: SharedListingRecord) {
+  const context = await getCloudWorkspaceContext();
+  if (!context.ok) {
+    return context;
+  }
+
+  const { error } = await context.client.from('shared_listings').upsert(
+    {
+      workspace_id: context.workspaceId,
+      listing_id: listing.id,
+      horse_id: listing.horseId,
+      share_path: listing.sharePath,
+      access_mode: listing.accessMode,
+      share_token: listing.shareToken,
+      token_issued_at: listing.tokenIssuedAt || new Date().toISOString(),
+      published_at: listing.state === 'Live' ? new Date().toISOString() : null,
+      state: listing.state,
+      channels: listing.channels,
+      payload: listing,
+      updated_at: listing.updatedAt,
+    },
+    {
+      onConflict: 'workspace_id,listing_id',
+    },
+  );
+
+  if (error) {
+    return { ok: false, message: error.message } as const;
+  }
+
+  return { ok: true, message: 'Shared listing saved to cloud.' } as const;
+}
+
+export async function updateSharedListingChannelsInCloud(params: {
+  horseId: string;
+  channel: SharedChannel;
+  state?: SharedListingRecord['state'];
+}) {
+  const context = await getCloudWorkspaceContext();
+  if (!context.ok) {
+    return context;
+  }
+
+  const { data: existing, error: existingError } = await context.client
+    .from('shared_listings')
+    .select('payload')
+    .eq('workspace_id', context.workspaceId)
+    .eq('horse_id', params.horseId)
+    .not('state', 'eq', 'Archived')
+    .maybeSingle();
+
+  if (existingError || !existing?.payload || typeof existing.payload !== 'object') {
+    return { ok: false, message: existingError?.message ?? 'Shared listing not found in cloud workspace.' } as const;
+  }
+
+  const payload = existing.payload as SharedListingRecord;
+  const nextListing: SharedListingRecord = {
+    ...payload,
+    channels: payload.channels.includes(params.channel) ? payload.channels : [...payload.channels, params.channel],
+    state: params.state ?? (payload.state === 'Draft' ? 'Live' : payload.state),
+    lastSharedAt: todayStamp(),
+    updatedAt: todayStamp(),
+  };
+
+  return upsertSharedListingInCloud(nextListing);
 }

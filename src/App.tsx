@@ -1,9 +1,11 @@
-import { Suspense, lazy } from 'react';
-import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { Suspense, lazy, useEffect } from 'react';
+import { BrowserRouter, HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import { RequireCloudAuth } from './components/RequireCloudAuth';
 import { RequireWorkspaceSetup } from './components/RequireWorkspaceSetup';
 import { ToastViewport } from './components/ToastViewport';
+import { trackRuntimeEvent } from './lib/runtimeEvents';
+import { useCloudStore } from './store/useCloudStore';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Breeding = lazy(() => import('./routes/Breeding'));
@@ -31,6 +33,25 @@ function useHashRouting() {
   return import.meta.env.VITE_ROUTER_MODE === 'hash' || window.location.hostname.endsWith('github.io');
 }
 
+function RouteTelemetry() {
+  const location = useLocation();
+  const workspaceId = useCloudStore((state) => state.workspaceId);
+
+  useEffect(() => {
+    void trackRuntimeEvent({
+      workspaceId: workspaceId || undefined,
+      eventName: 'navigation.page_view',
+      severity: 'info',
+      payload: {
+        pathname: location.pathname,
+        search: location.search,
+      },
+    });
+  }, [location.pathname, location.search, workspaceId]);
+
+  return null;
+}
+
 export default function App() {
   const Router = useHashRouting() ? HashRouter : BrowserRouter;
 
@@ -38,6 +59,7 @@ export default function App() {
     <Router>
       <ErrorBoundary>
         <ToastViewport />
+        <RouteTelemetry />
         <Suspense fallback={<div className="app-loading-shell">Loading workspace...</div>}>
           <Routes>
             <Route path="/profiles/:id" element={<BuyerProfile />} />
