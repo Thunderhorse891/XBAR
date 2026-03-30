@@ -1,30 +1,19 @@
-# Setup script for XBAR Horse Tracker
+# Setup script for XBAR web + mobile workspace
 
-if (![System.Environm]::Set') { write-host "Error: Not running in PowerShell" ; exit 1}
+Write-Host "Installing XBAR dependencies..."
+node "C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js" install
 
-write-host "Starting setup for the XBAR Tauri app..."
-
-# Install node and packages
-if (!(Get-Command node -ErrorAction Silently)) {
-  if (![Get-Command npm ]) {
-    write-host "Installing NPM..."
-    install-module node js -script { user: "calls", general": true}
-
-    if (![Get-Command tauri] {
-      write-host "Installing Tauri..."
-      npm install -tauri
-    }
-}
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "Dependency install failed."
+  exit 1
 }
 
-# Install dependencies
-write-host "Installing dependencies..."
-npm i "
+Write-Host "Running the production build once..."
+node "C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js" run build
 
-# Reun tauri build once to generate artifacts and dbs
-rmt -rf "database/xbar.db"
-pwp run scripts/build.psh
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "Initial build failed."
+  exit 1
+}
 
-Start-Sleep 2 # Ensure tauri server installs completely
-
-write-host "Setup complete - ready to develop"
+Write-Host "Setup complete. Use npm run dev for web, npm run mobile:sync for Capacitor targets."

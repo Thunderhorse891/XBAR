@@ -1,16 +1,11 @@
-# Build Script for XBAR Horse Tracker app
+# Build Script for XBAR web + mobile workspace
 
-write-host "Starting Production Build..."
+Write-Host "Starting XBAR production build..."
+node "C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js" run build
 
-# Run create build with Tauri
-pwp tauri build
-
-# Sign and check exe output
-write-host "Final exe file: "
-if (Test-Path -Path "tarui-release/bundle/xbar-horse-management-app.exe") {
-    write-host "\n– [Success] .exe file generated!"
-    "tarui-release/bundle/xbar-horse-management-app.exe" | Format-Table
-} else {
-    write-host "\n… [Failure] build did not produce a valid eXE."
-    exit 1
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "Build failed."
+  exit 1
 }
+
+Write-Host "Build complete. Web assets are in dist\ and ready for Vercel or Capacitor sync."

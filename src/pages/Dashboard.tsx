@@ -132,6 +132,74 @@ export default function Dashboard() {
                 : []),
             ]
           : [];
+  const hasWorkspaceData = Boolean(
+    horses.length ||
+    documents.length ||
+    ownershipRecords.length ||
+    expenseReceipts.length ||
+    salesLeads.length ||
+    intakeBatches.length ||
+    ranchAssets.length,
+  );
+
+  if (!hasWorkspaceData) {
+    return (
+      <>
+        <PageHeader
+          title="Operations"
+          actions={
+            <>
+              <Link to="/horses?new=1" className="button button--primary button--compact">
+                New horse
+              </Link>
+              <Link to="/documents?upload=1" className="button button--ghost button--compact">
+                Upload docs
+              </Link>
+            </>
+          }
+        />
+
+        <div className="dashboard-grid dashboard-grid--primary">
+          <Panel eyebrow="Workspace" title="Start the ledger">
+            <EmptyState
+              title="No records yet"
+              description="Create the first horse, upload a packet, or import a backup to start the workspace."
+              action={
+                <div className="inline-actions">
+                  <Link to="/horses?new=1" className="button button--primary button--compact">
+                    Create horse
+                  </Link>
+                  <Link to="/documents?upload=1" className="button button--ghost button--compact">
+                    Batch intake
+                  </Link>
+                  <Link to="/settings" className="button button--ghost button--compact">
+                    Settings
+                  </Link>
+                </div>
+              }
+            />
+          </Panel>
+
+          <Panel eyebrow="Quick start" title="What to do first">
+            <div className="stack-list">
+              <div className="stack-item">
+                <div className="stack-item__title">Horse record</div>
+                <div className="stack-item__copy">Add one horse or let intake create it from registration, coggins, and transfer papers.</div>
+              </div>
+              <div className="stack-item">
+                <div className="stack-item__title">Documents</div>
+                <div className="stack-item__copy">Upload the first packet so trust scoring, ownership, and sale readiness have source files.</div>
+              </div>
+              <div className="stack-item">
+                <div className="stack-item__title">Budget</div>
+                <div className="stack-item__copy">Log feed, wormer, dental float, and vet receipts to start the operating budget view.</div>
+              </div>
+            </div>
+          </Panel>
+        </div>
+      </>
+    );
+  }
 
   async function handleReceiptSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

@@ -180,7 +180,7 @@ export async function loadWorkspaceAccessProfile(sessionOverride?: Session | nul
 
   return {
     workspaceId: null,
-    workspaceRole: resolveSessionRole(session),
+    workspaceRole: 'Admin',
     source: 'session',
   };
 }

@@ -5,7 +5,7 @@
 - Deploy the web app to a real runtime surface such as Vercel or Netlify.
 - Capacitor scaffold is now active so the existing React app can ship to iOS and Android from one codebase.
 - Browser routing is now ready for hosted platforms, with hash routing preserved for GitHub Pages previews.
-- Retire the remaining legacy Tauri source once the web and Capacitor runtime is fully validated.
+- Legacy desktop wrapper source has been removed from the active repo path so the platform direction is now web + mobile only.
 
 ## Product
 

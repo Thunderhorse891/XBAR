@@ -23,6 +23,9 @@ export default function Ownership() {
 
   const pending = ownershipRecords.filter((record) => record.transferStatus !== 'Clear');
   const withCoOwners = horses.filter((horse) => horse.ownership.length > 1);
+  const confidenceAverage = ownershipRecords.length
+    ? Math.round(ownershipRecords.reduce((sum, record) => sum + record.confidence, 0) / ownershipRecords.length)
+    : 0;
   const [selectedRecordId, setSelectedRecordId] = useState(ownershipRecords[0]?.id ?? '');
   const selectedRecord = ownershipRecords.find((record) => record.id === selectedRecordId) ?? ownershipRecords[0];
   const selectedHorse = horses.find((horse) => horse.id === selectedRecord?.horseId);
@@ -93,7 +96,7 @@ export default function Ownership() {
         <MetricCard label="Ownership files" value={`${ownershipRecords.length}`} detail="Tracked ownership records" />
         <MetricCard label="Open transfers" value={`${pending.length}`} detail="Waiting on signatures or AQHA" tone="amber" />
         <MetricCard label="Co-owner splits" value={`${withCoOwners.length}`} detail="Structured shares" tone="blue" />
-        <MetricCard label="Confidence" value={`${Math.round(ownershipRecords.reduce((sum, record) => sum + record.confidence, 0) / ownershipRecords.length)}%`} detail="Average record certainty" tone="emerald" />
+        <MetricCard label="Confidence" value={`${confidenceAverage}%`} detail="Average record certainty" tone="emerald" />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">

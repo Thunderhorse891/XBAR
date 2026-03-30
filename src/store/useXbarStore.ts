@@ -1,7 +1,5 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { documentsSeed, intakeBatchesSeed } from '@/data/xbarDocuments';
-import { horsesSeed } from '@/data/xbarHorses';
 import {
   expenseReceiptsSeed,
   ownershipSeed,
@@ -84,6 +82,7 @@ type XbarStore = {
   sharedAccess: SharedAccessSnapshot;
   workspaceProfile: WorkspaceProfile;
   setCurrentRole: (role: UserRole) => void;
+  initializeWorkspace: (profile: Partial<WorkspaceProfile>) => ActionResult;
   updateWorkspaceProfile: (patch: Partial<WorkspaceProfile>) => ActionResult;
   toggleSharedListing: (horseId: string) => ActionResult;
   recordSharedChannel: (horseId: string, channel: SharedChannel) => void;
@@ -136,22 +135,31 @@ type WorkspaceBackup = {
   workspace: PersistedXbarState;
 };
 
-const WORKSPACE_SCHEMA_VERSION = 6;
+const WORKSPACE_SCHEMA_VERSION = 7;
+const legacyDemoHorseIds = new Set(['horse-wiggy', 'horse-hancock', 'horse-bonny', 'horse-dolly', 'horse-thunder', 'horse-shadow']);
+const legacyDemoWorkspaceNames = new Set(['', 'XBAR']);
+const legacyDemoRanchNames = new Set(['', 'Primary Ranch']);
+
+function createEmptyWorkspaceState(): PersistedXbarState {
+  return {
+    horses: [],
+    documents: [],
+    intakeBatches: [],
+    ownershipRecords: ownershipSeed,
+    expenseReceipts: expenseReceiptsSeed,
+    ranchAssets: ranchAssetsSeed,
+    subscription: subscriptionSeed,
+    roleWorkspaces: roleSeed,
+    salesLeads: salesLeadsSeed,
+    sharedListings: sharedListingsSeed,
+    sharedAccess: deriveSharedAccessSnapshot(sharedAccessSeed, sharedListingsSeed, salesLeadsSeed),
+    workspaceProfile: workspaceProfileSeed,
+  };
+}
 
 const initialState = {
   currentRole: (isSupabaseConfigured() ? 'Owner' : 'Admin') as UserRole,
-  horses: horsesSeed,
-  documents: documentsSeed,
-  intakeBatches: intakeBatchesSeed,
-  ownershipRecords: ownershipSeed,
-  expenseReceipts: expenseReceiptsSeed,
-  ranchAssets: ranchAssetsSeed,
-  subscription: subscriptionSeed,
-  roleWorkspaces: roleSeed,
-  salesLeads: salesLeadsSeed,
-  sharedListings: sharedListingsSeed,
-  sharedAccess: deriveSharedAccessSnapshot(sharedAccessSeed, sharedListingsSeed, salesLeadsSeed),
-  workspaceProfile: workspaceProfileSeed,
+  ...createEmptyWorkspaceState(),
 };
 
 function syncDerivedValues(state: Pick<XbarStore, 'horses' | 'salesLeads' | 'sharedListings' | 'sharedAccess'>) {
@@ -213,7 +221,25 @@ function restoreWorkspaceProfile(raw: unknown): WorkspaceProfile {
     defaultBarn: value.defaultBarn?.trim() || '',
     defaultPasture: value.defaultPasture?.trim() || '',
     workspaceShortcuts,
+    setupCompleteAt: value.setupCompleteAt?.trim() || '',
   };
+}
+
+function isWorkspaceSetup(profile: WorkspaceProfile) {
+  return Boolean(profile.setupCompleteAt?.trim());
+}
+
+function looksLikeLegacyDemoWorkspace(state: PersistedXbarState) {
+  if (isWorkspaceSetup(state.workspaceProfile)) {
+    return false;
+  }
+
+  return (
+    legacyDemoWorkspaceNames.has(state.workspaceProfile.businessName.trim()) &&
+    legacyDemoRanchNames.has(state.workspaceProfile.ranchName.trim()) &&
+    state.horses.length > 0 &&
+    state.horses.every((horse) => legacyDemoHorseIds.has(horse.id))
+  );
 }
 
 function createSharedListingRecord(horseId: string, patch?: Partial<SharedListingRecord>): SharedListingRecord {
@@ -631,6 +657,33 @@ export const useXbarStore = create<XbarStore>()(
     (set, get) => ({
       ...initialState,
       setCurrentRole: (role) => set({ currentRole: role }),
+      initializeWorkspace: (profile) => {
+        const businessName = profile.businessName?.trim() ?? '';
+        const ranchName = profile.ranchName?.trim() ?? '';
+        if (!businessName || !ranchName) {
+          return { ok: false, message: 'Business name and ranch name are required to create the workspace.' };
+        }
+
+        const current = get();
+        const nextProfile = restoreWorkspaceProfile({
+          ...current.workspaceProfile,
+          ...profile,
+          businessName,
+          ranchName,
+          setupCompleteAt: current.workspaceProfile.setupCompleteAt || nowStamp(),
+        });
+        const resetLegacyDemo = looksLikeLegacyDemoWorkspace(selectPersistedState(current));
+
+        set({
+          ...(resetLegacyDemo ? createEmptyWorkspaceState() : {}),
+          workspaceProfile: nextProfile,
+        });
+
+        return {
+          ok: true,
+          message: resetLegacyDemo ? 'Workspace created and legacy demo records were cleared.' : 'Workspace created.',
+        };
+      },
       updateWorkspaceProfile: (patch) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageSettings');
         if (deniedMessage) {
@@ -1612,4 +1665,8 @@ export function useHorseRecord(id?: string) {
 
 export function useCurrentRoleCapability(capability: RoleCapability) {
   return useXbarStore((state) => hasRoleCapability(state.currentRole, capability));
+}
+
+export function useWorkspaceReady() {
+  return useXbarStore((state) => isWorkspaceSetup(state.workspaceProfile));
 }

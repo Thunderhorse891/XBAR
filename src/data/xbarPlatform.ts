@@ -11,190 +11,39 @@ import {
 } from '@/types/xbar';
 
 export const ownershipSeed: OwnershipRecord[] = [
-  {
-    id: 'ownership-wiggy',
-    horseId: 'horse-wiggy',
-    legalOwner: 'Erin Wyrick',
-    transferStatus: 'Clear',
-    pendingDocuments: [],
-    complianceDeadline: '2026-04-30',
-    confidence: 98,
-    auditTrail: ['Ownership memo refreshed 2026-03-18', 'Co-owner disclosure packet approved 2026-03-20'],
-  },
-  {
-    id: 'ownership-bonny',
-    horseId: 'horse-bonny',
-    legalOwner: 'Erin Wyrick',
-    transferStatus: 'Pending Signatures',
-    pendingDocuments: ['Owner signature page', 'Transport approval memo'],
-    complianceDeadline: '2026-03-25',
-    confidence: 72,
-    auditTrail: ['Travel packet uploaded via shared link', 'Signature mismatch flagged during manual review'],
-  },
-  {
-    id: 'ownership-dolly',
-    horseId: 'horse-dolly',
-    legalOwner: 'Jason Wyrick',
-    transferStatus: 'AQHA Review',
-    pendingDocuments: ['AQHA transfer clearance'],
-    complianceDeadline: '2026-03-29',
-    confidence: 81,
-    auditTrail: ['Buyer packet updated 2026-03-20', 'AQHA packet still under review'],
-  },
-  {
-    id: 'ownership-shadow',
-    horseId: 'horse-shadow',
-    legalOwner: 'Jason Wyrick',
-    transferStatus: 'Clear',
-    pendingDocuments: [],
-    complianceDeadline: '2026-06-01',
-    confidence: 95,
-    auditTrail: ['Legacy owner archive synced to shared access'],
-  },
+  // Empty by default. Ownership records are created from real horse records or imported backups.
 ];
 
 export const ranchAssetsSeed: RanchAsset[] = [
-  {
-    id: 'asset-1',
-    name: 'Sale photo lighting kit',
-    category: 'Equipment',
-    status: 'Assigned',
-    condition: 'Excellent',
-    assignedTo: 'Sales Barn',
-    location: 'Media Locker',
-    nextService: '2026-06-01',
-    notes: 'Used for premium listing shoots and buyer packet stills.',
-  },
-  {
-    id: 'asset-2',
-    name: 'Travel medical kit 02',
-    category: 'Medical Kit',
-    status: 'Assigned',
-    condition: 'Service Soon',
-    assignedTo: 'Bonny travel hold',
-    location: 'Treatment Barn',
-    nextService: '2026-03-30',
-    notes: 'Refill wraps and anti-inflammatory stock before release.',
-  },
-  {
-    id: 'asset-3',
-    name: 'Stud collection cart',
-    category: 'Equipment',
-    status: 'Available',
-    condition: 'Excellent',
-    assignedTo: 'Breeding Barn',
-    location: 'Breeding Barn',
-    nextService: '2026-05-14',
-    notes: 'Primary breeding program support equipment.',
-  },
-  {
-    id: 'asset-4',
-    name: 'Records room document scanner',
-    category: 'Equipment',
-    status: 'In Service',
-    condition: 'Attention Required',
-    assignedTo: 'Ops Desk',
-    location: 'Records Room',
-    nextService: '2026-03-26',
-    notes: 'Scanner hardware is dropping page contrast on larger batches.',
-  },
-  {
-    id: 'asset-5',
-    name: 'Show tack set - blue leather',
-    category: 'Tack',
-    status: 'Assigned',
-    condition: 'Excellent',
-    assignedTo: 'Thunder',
-    location: 'Training Barn',
-    nextService: '2026-04-08',
-    notes: 'Conditioned and reserved for training string.',
-  },
-  {
-    id: 'asset-6',
-    name: 'Feed reserve pallet',
-    category: 'Feed & Supply',
-    status: 'Available',
-    condition: 'Service Soon',
-    assignedTo: 'North Yard',
-    location: 'Supply Shed',
-    nextService: '2026-03-27',
-    notes: 'Current reserve covers nine days at the present burn rate.',
-  },
+  // Empty by default. Assets should be entered by the customer or imported.
 ];
 
 export const expenseReceiptsSeed: ExpenseReceipt[] = [
-  {
-    id: 'receipt-feed-mar',
-    horseId: 'horse-wiggy',
-    title: 'Performance feed pallet',
-    category: 'Feed',
-    vendor: 'Cactus Feed Supply',
-    amount: 1240,
-    receiptDate: '2026-03-22',
-    notes: 'April feed reserve for sale string.',
-    uploadedAt: '2026-03-22T09:12:00.000Z',
-    uploadedBy: 'Ops Desk',
-  },
-  {
-    id: 'receipt-wormer-bonny',
-    horseId: 'horse-bonny',
-    title: 'Spring wormer',
-    category: 'Wormer',
-    vendor: 'Rolling Plains Vet',
-    amount: 96,
-    receiptDate: '2025-11-14',
-    notes: 'Five-dose ivermectin pack logged against travel string.',
-    uploadedAt: '2025-11-14T14:06:00.000Z',
-    uploadedBy: 'Medical Lead',
-  },
-  {
-    id: 'receipt-dental-dolly',
-    horseId: 'horse-dolly',
-    title: 'Dental float',
-    category: 'Dental Float',
-    vendor: 'High Desert Equine',
-    amount: 240,
-    receiptDate: '2025-02-16',
-    notes: 'Annual float completed during conditioning cycle.',
-    uploadedAt: '2025-02-16T16:25:00.000Z',
-    uploadedBy: 'Medical Lead',
-  },
-  {
-    id: 'receipt-feed-yard',
-    title: 'Hay and bedding run',
-    category: 'Bedding',
-    vendor: 'North Yard Milling',
-    amount: 420,
-    receiptDate: '2026-03-19',
-    notes: 'Shared yard expense for intake and pasture rotation.',
-    uploadedAt: '2026-03-19T11:30:00.000Z',
-    uploadedBy: 'Ranch Manager',
-  },
+  // Empty by default. Budgeting starts when real receipts are uploaded.
 ];
 
 export const subscriptionSeed: SubscriptionProfile = {
-  tier: 'Professional',
-  monthlyRate: 1290,
-  renewalDate: '2026-04-12',
+  tier: 'Starter',
+  monthlyRate: 0,
+  renewalDate: '',
   billingState: 'Manual Billing',
-  sharedAccessEnabled: true,
-  brandedListings: true,
+  sharedAccessEnabled: false,
+  brandedListings: false,
   featureFlags: [
-    'Role-aware dashboards',
-    'Shared access links',
-    'Branded sale packets',
+    'First-run workspace setup',
     'Manual document intake',
-    'Ranch asset operations',
+    'Receipt logging',
+    'Horse ledger',
   ],
   usage: {
-    seatsUsed: 5,
-    seatLimit: 8,
-    documentsProcessed: 912,
-    documentLimit: 1800,
-    storageUsedGb: 82,
-    storageLimitGb: 200,
-    sharedAccessSeatsUsed: 3,
-    sharedAccessSeatLimit: 10,
+    seatsUsed: 0,
+    seatLimit: 2,
+    documentsProcessed: 0,
+    documentLimit: 250,
+    storageUsedGb: 0,
+    storageLimitGb: 5,
+    sharedAccessSeatsUsed: 0,
+    sharedAccessSeatLimit: 1,
   },
 };
 
@@ -237,36 +86,7 @@ export const roleSeed: RoleWorkspace[] = [
 ];
 
 export const salesLeadsSeed: SalesLead[] = [
-  {
-    id: 'lead-1',
-    name: 'Lauren Chase',
-    channel: 'Facebook',
-    horseId: 'horse-wiggy',
-    stage: 'Qualified',
-    lastTouch: '2026-03-23',
-    savedListing: true,
-    shareReady: false,
-  },
-  {
-    id: 'lead-2',
-    name: 'Harbor Ridge Equine',
-    channel: 'Referral',
-    horseId: 'horse-dolly',
-    stage: 'Offer',
-    lastTouch: '2026-03-22',
-    savedListing: false,
-    shareReady: true,
-  },
-  {
-    id: 'lead-3',
-    name: 'Megan Reyes',
-    channel: 'Instagram',
-    horseId: 'horse-wiggy',
-    stage: 'New',
-    lastTouch: '2026-03-24',
-    savedListing: true,
-    shareReady: false,
-  },
+  // Empty by default. Leads should only appear when captured from real outreach.
 ];
 
 export const sharedAccessSeed: SharedAccessSnapshot = {
@@ -277,31 +97,12 @@ export const sharedAccessSeed: SharedAccessSnapshot = {
 };
 
 export const sharedListingsSeed: SharedListingRecord[] = [
-  {
-    id: 'share-horse-wiggy',
-    horseId: 'horse-wiggy',
-    sharePath: '/profiles/horse-wiggy',
-    state: 'Live',
-    channels: ['Direct Link', 'Facebook'],
-    createdAt: '2026-03-18',
-    updatedAt: '2026-03-24',
-    lastSharedAt: '2026-03-24',
-  },
-  {
-    id: 'share-horse-dolly',
-    horseId: 'horse-dolly',
-    sharePath: '/profiles/horse-dolly',
-    state: 'Draft',
-    channels: ['Direct Link'],
-    createdAt: '2026-03-20',
-    updatedAt: '2026-03-22',
-    lastSharedAt: '2026-03-22',
-  },
+  // Empty by default. Shared listings are created from real horses.
 ];
 
 export const workspaceProfileSeed: WorkspaceProfile = {
-  ranchName: 'Primary Ranch',
-  businessName: 'XBAR',
+  ranchName: '',
+  businessName: '',
   defaultOwnerName: '',
   defaultOwnerEntity: '',
   ranchManagerName: '',
@@ -309,4 +110,5 @@ export const workspaceProfileSeed: WorkspaceProfile = {
   defaultBarn: '',
   defaultPasture: '',
   workspaceShortcuts: [],
+  setupCompleteAt: '',
 };

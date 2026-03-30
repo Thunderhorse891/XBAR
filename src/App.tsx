@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react';
 import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import { RequireCloudAuth } from './components/RequireCloudAuth';
+import { RequireWorkspaceSetup } from './components/RequireWorkspaceSetup';
 import { ToastViewport } from './components/ToastViewport';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -18,6 +19,7 @@ const Ownership = lazy(() => import('./routes/Ownership'));
 const RanchAssets = lazy(() => import('./routes/RanchAssets'));
 const Sales = lazy(() => import('./routes/Sales'));
 const Settings = lazy(() => import('./routes/Settings'));
+const SetupWorkspace = lazy(() => import('./routes/SetupWorkspace'));
 const SharedAccess = lazy(() => import('./routes/SharedAccess'));
 const Subscriptions = lazy(() => import('./routes/Subscriptions'));
 
@@ -40,7 +42,8 @@ export default function App() {
           <Routes>
             <Route path="/profiles/:id" element={<BuyerProfile />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/" element={<RequireCloudAuth><MainLayout /></RequireCloudAuth>}>
+            <Route path="/setup" element={<RequireCloudAuth><SetupWorkspace /></RequireCloudAuth>} />
+            <Route path="/" element={<RequireCloudAuth><RequireWorkspaceSetup><MainLayout /></RequireWorkspaceSetup></RequireCloudAuth>}>
               <Route index element={<Dashboard />} />
               <Route path="horses" element={<Horses />} />
               <Route path="horses/:id" element={<HorseDetail />} />

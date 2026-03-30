@@ -363,4 +363,5 @@ export interface WorkspaceProfile {
   defaultBarn: string;
   defaultPasture: string;
   workspaceShortcuts: string[];
+  setupCompleteAt: string;
 }
