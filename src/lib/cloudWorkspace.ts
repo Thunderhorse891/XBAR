@@ -13,6 +13,8 @@ import type {
   SharedListingRecord,
   SubscriptionProfile,
   UserRole,
+  WorkspaceInvitationRecord,
+  WorkspaceMemberRecord,
   WorkspaceProfile,
 } from '@/types/xbar';
 
@@ -30,6 +32,8 @@ type CloudWorkspaceBackup = {
     subscription?: SubscriptionProfile;
     salesLeads?: SalesLead[];
     sharedListings?: SharedListingRecord[];
+    workspaceMembers?: WorkspaceMemberRecord[];
+    workspaceInvitations?: WorkspaceInvitationRecord[];
     workspaceProfile?: WorkspaceProfile;
   };
 };
@@ -50,6 +54,14 @@ type RelationalWorkspaceRow = {
   updated_at?: string | null;
 };
 
+type RelationalMembershipRow = {
+  email?: string | null;
+  role?: string | null;
+  status?: string | null;
+  payload?: unknown;
+  updated_at?: string | null;
+};
+
 const userRoles: UserRole[] = ['Admin', 'Ranch Manager', 'Owner', 'Medical Lead', 'Sales Lead'];
 
 function sanitizeStorageSegment(value: string) {
@@ -63,6 +75,10 @@ function sanitizeStorageSegment(value: string) {
 
 function normalizeWorkspaceRole(value: unknown): UserRole | null {
   return typeof value === 'string' && userRoles.includes(value as UserRole) ? (value as UserRole) : null;
+}
+
+function normalizeWorkspaceEmail(value: unknown) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
 
 function resolveSessionRole(session: Session) {
@@ -120,6 +136,92 @@ async function getActiveSession() {
   return data.session;
 }
 
+async function acceptPendingWorkspaceInvitation(session: Session) {
+  const client = getSupabaseClient();
+  if (!client || !session.user.email) {
+    return null;
+  }
+
+  const normalizedEmail = normalizeWorkspaceEmail(session.user.email);
+  if (!normalizedEmail) {
+    return null;
+  }
+
+  const { data: invitation, error: invitationError } = await client
+    .from('workspace_invitations')
+    .select('workspace_id, invitation_id, role, email, payload')
+    .eq('status', 'pending')
+    .eq('email', normalizedEmail)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (invitationError || !invitation?.workspace_id) {
+    return null;
+  }
+
+  const acceptedAt = new Date().toISOString();
+  const payload =
+    invitation.payload && typeof invitation.payload === 'object'
+      ? {
+          ...(invitation.payload as Record<string, unknown>),
+          status: 'Accepted',
+          acceptedAt,
+        }
+      : {
+          id: invitation.invitation_id,
+          email: normalizedEmail,
+          role: invitation.role,
+          status: 'Accepted',
+          acceptedAt,
+        };
+
+  const role = normalizeWorkspaceRole(invitation.role) ?? 'Owner';
+  const { error: membershipError } = await client.from('workspace_memberships').upsert(
+    {
+      workspace_id: invitation.workspace_id,
+      user_id: session.user.id,
+      email: normalizedEmail,
+      display_name: session.user.user_metadata?.full_name ?? session.user.user_metadata?.name ?? normalizedEmail,
+      role,
+      status: 'active',
+      payload: {
+        id: `member-${normalizedEmail}`,
+        email: normalizedEmail,
+        role,
+        status: 'Active',
+        joinedAt: acceptedAt,
+        source: 'Invite',
+      },
+      updated_at: acceptedAt,
+    },
+    { onConflict: 'workspace_id,email' },
+  );
+
+  if (membershipError) {
+    return null;
+  }
+
+  const { error: invitationUpdateError } = await client
+    .from('workspace_invitations')
+    .update({
+      status: 'accepted',
+      payload,
+      updated_at: acceptedAt,
+    })
+    .eq('workspace_id', invitation.workspace_id)
+    .eq('invitation_id', invitation.invitation_id);
+
+  if (invitationUpdateError) {
+    return null;
+  }
+
+  return {
+    workspaceId: invitation.workspace_id as string,
+    role,
+  };
+}
+
 export async function loadWorkspaceAccessProfile(sessionOverride?: Session | null): Promise<WorkspaceAccessProfile> {
   const session = sessionOverride ?? (await getActiveSession());
   if (!session?.user) {
@@ -159,6 +261,15 @@ export async function loadWorkspaceAccessProfile(sessionOverride?: Session | nul
       workspaceId: ownedWorkspace.id as string,
       workspaceRole: 'Admin',
       source: 'workspace-owner',
+    };
+  }
+
+  const acceptedInvitation = await acceptPendingWorkspaceInvitation(session);
+  if (acceptedInvitation?.workspaceId) {
+    return {
+      workspaceId: acceptedInvitation.workspaceId,
+      workspaceRole: acceptedInvitation.role,
+      source: 'workspace-membership',
     };
   }
 
@@ -222,11 +333,21 @@ async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBa
     {
       workspace_id: workspaceId,
       user_id: session.user.id,
+      email: normalizeWorkspaceEmail(session.user.email),
+      display_name: session.user.user_metadata?.full_name ?? session.user.user_metadata?.name ?? membershipRole,
       role: membershipRole,
       status: 'active',
+      payload: {
+        id: `member-${normalizeWorkspaceEmail(session.user.email) || session.user.id}`,
+        email: normalizeWorkspaceEmail(session.user.email),
+        role: membershipRole,
+        status: 'Active',
+        joinedAt: updatedAt,
+        source: 'Owner',
+      },
       updated_at: updatedAt,
     },
-    { onConflict: 'workspace_id,user_id' },
+    { onConflict: 'workspace_id,email' },
   );
 
   if (membershipError) {
@@ -266,7 +387,8 @@ async function replaceWorkspaceRows(params: {
     | 'expense_receipts'
     | 'ranch_assets'
     | 'sales_leads'
-    | 'shared_listings';
+    | 'shared_listings'
+    | 'workspace_invitations';
   idColumn: string;
   workspaceId: string;
   rows: Record<string, unknown>[];
@@ -316,6 +438,73 @@ async function replaceWorkspaceRows(params: {
   }
 }
 
+async function syncWorkspaceMembershipRows(params: {
+  workspaceId: string;
+  session: Session;
+  members: WorkspaceMemberRecord[];
+  updatedAt: string;
+}) {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error('Supabase is not configured for this build.');
+  }
+
+  const { workspaceId, session, members, updatedAt } = params;
+  const normalizedMembers = members.filter((member) => Boolean(member.email));
+  const nextEmails = new Set(normalizedMembers.map((member) => normalizeWorkspaceEmail(member.email)));
+
+  const { data: existingRows, error: existingError } = await client
+    .from('workspace_memberships')
+    .select('email')
+    .eq('workspace_id', workspaceId);
+
+  if (existingError) {
+    throw new Error(existingError.message);
+  }
+
+  const staleEmails = ((existingRows ?? []) as Array<{ email?: string | null }>)
+    .map((row) => normalizeWorkspaceEmail(row.email))
+    .filter((email) => email && !nextEmails.has(email));
+
+  if (staleEmails.length) {
+    const { error: deleteError } = await client
+      .from('workspace_memberships')
+      .delete()
+      .eq('workspace_id', workspaceId)
+      .in('email', staleEmails);
+
+    if (deleteError) {
+      throw new Error(deleteError.message);
+    }
+  }
+
+  if (!normalizedMembers.length) {
+    return;
+  }
+
+  const rows = normalizedMembers.map((member) => {
+    const normalizedEmail = normalizeWorkspaceEmail(member.email);
+    return {
+      workspace_id: workspaceId,
+      user_id: normalizedEmail === normalizeWorkspaceEmail(session.user.email) ? session.user.id : null,
+      email: normalizedEmail,
+      display_name: normalizedEmail.split('@')[0] ?? normalizedEmail,
+      role: member.role,
+      status: member.status === 'Active' ? 'active' : 'inactive',
+      payload: member,
+      updated_at: updatedAt,
+    };
+  });
+
+  const { error: upsertError } = await client.from('workspace_memberships').upsert(rows, {
+    onConflict: 'workspace_id,email',
+  });
+
+  if (upsertError) {
+    throw new Error(upsertError.message);
+  }
+}
+
 async function saveWorkspaceSnapshotToCloud(backup: unknown, session: Session, updatedAt: string) {
   const client = getSupabaseClient();
   if (!client) {
@@ -356,6 +545,29 @@ async function saveWorkspaceBackupToRelationalCloud(backup: unknown, session: Se
     const workspaceId = await ensurePrimaryWorkspace(session, normalized);
     const updatedAt = normalized.exportedAt ?? new Date().toISOString();
     const workspace = normalized.workspace ?? {};
+
+    await syncWorkspaceMembershipRows({
+      workspaceId,
+      session,
+      members: workspace.workspaceMembers ?? [],
+      updatedAt,
+    });
+
+    await replaceWorkspaceRows({
+      table: 'workspace_invitations',
+      idColumn: 'invitation_id',
+      workspaceId,
+      rows: (workspace.workspaceInvitations ?? []).map((invitation) => ({
+        workspace_id: workspaceId,
+        invitation_id: invitation.id,
+        email: normalizeWorkspaceEmail(invitation.email),
+        role: invitation.role,
+        status: invitation.status.toLowerCase(),
+        invited_by_user_id: session.user.id,
+        payload: invitation,
+        updated_at: updatedAt,
+      })),
+    });
 
     await replaceWorkspaceRows({
       table: 'horses',
@@ -541,6 +753,8 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
 
   const workspaceId = accessProfile.workspaceId;
   const [
+    membershipsResult,
+    invitationsResult,
     horsesResult,
     documentsResult,
     intakeBatchesResult,
@@ -552,6 +766,8 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
     subscriptionResult,
     profileResult,
   ] = await Promise.all([
+    client.from('workspace_memberships').select('email, role, status, payload, updated_at').eq('workspace_id', workspaceId),
+    client.from('workspace_invitations').select('payload, updated_at').eq('workspace_id', workspaceId),
     client.from('horses').select('payload, updated_at').eq('workspace_id', workspaceId),
     client.from('documents').select('payload, updated_at').eq('workspace_id', workspaceId),
     client.from('intake_batches').select('payload, updated_at').eq('workspace_id', workspaceId),
@@ -565,6 +781,8 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
   ]);
 
   const errors = [
+    membershipsResult.error,
+    invitationsResult.error,
     horsesResult.error,
     documentsResult.error,
     intakeBatchesResult.error,
@@ -586,8 +804,10 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
 
   const backup: CloudWorkspaceBackup = {
     app: 'XBAR',
-    version: 6,
+    version: 8,
     exportedAt: pickNewestTimestamp([
+      ...(membershipsResult.data ?? []).map((row) => row.updated_at),
+      ...(invitationsResult.data ?? []).map((row) => row.updated_at),
       ...(horsesResult.data ?? []).map((row) => row.updated_at),
       ...(documentsResult.data ?? []).map((row) => row.updated_at),
       ...(intakeBatchesResult.data ?? []).map((row) => row.updated_at),
@@ -600,6 +820,28 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
       profileResult.data?.updated_at,
     ]),
     workspace: {
+      workspaceMembers: (membershipsResult.data ?? []).flatMap((row) => {
+        if (isRecord(row.payload)) {
+          return [row.payload as unknown as WorkspaceMemberRecord];
+        }
+
+        const email = normalizeWorkspaceEmail((row as RelationalMembershipRow).email);
+        if (!email) {
+          return [];
+        }
+
+        return [
+          {
+            id: `member-${email}`,
+            email,
+            role: normalizeWorkspaceRole((row as RelationalMembershipRow).role) ?? 'Owner',
+            status: (row as RelationalMembershipRow).status === 'inactive' ? 'Inactive' : 'Active',
+            joinedAt: row.updated_at ?? new Date().toISOString(),
+            source: 'Invite',
+          } satisfies WorkspaceMemberRecord,
+        ];
+      }),
+      workspaceInvitations: extractPayloadList<WorkspaceInvitationRecord>(invitationsResult.data),
       horses: extractPayloadList<HorseRecord>(horsesResult.data),
       documents: extractPayloadList<DocumentRecord>(documentsResult.data),
       intakeBatches: extractPayloadList<IntakeBatch>(intakeBatchesResult.data),
@@ -615,6 +857,8 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
 
   const hasWorkspaceData = Boolean(
     backup.workspace?.horses?.length ||
+      backup.workspace?.workspaceMembers?.length ||
+      backup.workspace?.workspaceInvitations?.length ||
       backup.workspace?.documents?.length ||
       backup.workspace?.intakeBatches?.length ||
       backup.workspace?.ownershipRecords?.length ||

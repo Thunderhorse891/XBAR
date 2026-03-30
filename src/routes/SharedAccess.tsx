@@ -7,6 +7,7 @@ import { buildPublicShareUrl, openFacebookShareDialog } from '@/lib/facebookShar
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
+import type { SharedListingRecord } from '@/types/xbar';
 
 export default function SharedAccess() {
   const navigate = useNavigate();
@@ -16,6 +17,8 @@ export default function SharedAccess() {
   const salesLeads = useXbarStore((state) => state.salesLeads);
   const sharedListings = useXbarStore((state) => state.sharedListings);
   const recordSharedChannel = useXbarStore((state) => state.recordSharedChannel);
+  const rotateSharedListingToken = useXbarStore((state) => state.rotateSharedListingToken);
+  const updateSharedListingAccessMode = useXbarStore((state) => state.updateSharedListingAccessMode);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
   const activeSharedListings = sharedListings.filter((listing) => listing.state !== 'Archived');
@@ -41,6 +44,37 @@ export default function SharedAccess() {
   );
   const menuHorse = sharedHorses.find((horse) => horse.id === menuState?.horseId);
   const menuPacket = menuHorse ? packetByHorseId[menuHorse.id] : undefined;
+  const menuListing = menuHorse ? activeSharedListings.find((listing) => listing.horseId === menuHorse.id) : undefined;
+
+  const getShareToken = (listing: SharedListingRecord | undefined) => (listing?.accessMode === 'Private Token' ? listing.shareToken : undefined);
+  const copyShareLink = async (path: string, listing?: SharedListingRecord) => {
+    const url = buildPublicShareUrl(path, getShareToken(listing));
+    if (!navigator?.clipboard?.writeText) {
+      pushToast({
+        title: 'Copy unavailable',
+        message: 'Clipboard access is not available in this browser.',
+        tone: 'error',
+      });
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(url);
+      pushToast({
+        title: 'Buyer link copied',
+        message: 'The protected buyer link is ready to paste.',
+        tone: 'success',
+      });
+    } catch (error) {
+      console.error('Copy share link failed', error);
+      pushToast({
+        title: 'Copy failed',
+        message: 'The buyer link could not be copied.',
+        tone: 'error',
+      });
+    }
+  };
+
   const menuItems = menuHorse && menuPacket
     ? [
         {
@@ -50,17 +84,57 @@ export default function SharedAccess() {
         },
         {
           id: 'open-share',
-          label: 'Open share link',
+          label: 'Preview buyer room',
           onSelect: () => {
             recordSharedChannel(menuHorse.id, 'Direct Link');
-            navigate(menuPacket.sharePath);
+            navigate(menuPacket.sharePath, { state: { internalPreview: true } });
           },
         },
+        {
+          id: 'copy-link',
+          label: 'Copy buyer link',
+          onSelect: () => {
+            void copyShareLink(menuPacket.sharePath, menuListing);
+          },
+        },
+        ...(menuListing
+          ? [
+              {
+                id: 'toggle-access',
+                label: menuListing.accessMode === 'Private Token' ? 'Make public' : 'Require token',
+                onSelect: () => {
+                  const nextAccessMode = menuListing.accessMode === 'Private Token' ? 'Public Link' : 'Private Token';
+                  const result = updateSharedListingAccessMode(menuHorse.id, nextAccessMode);
+                  pushToast({
+                    title: result.ok ? 'Access updated' : 'Access blocked',
+                    message: result.message,
+                    tone: result.ok ? 'success' : 'error',
+                  });
+                },
+              },
+              ...(menuListing.accessMode === 'Private Token'
+                ? [
+                    {
+                      id: 'rotate-token',
+                      label: 'Rotate token',
+                      onSelect: () => {
+                        const result = rotateSharedListingToken(menuHorse.id);
+                        pushToast({
+                          title: result.ok ? 'Token rotated' : 'Token blocked',
+                          message: result.message,
+                          tone: result.ok ? 'success' : 'error',
+                        });
+                      },
+                    },
+                  ]
+                : []),
+            ]
+          : []),
         {
           id: 'post-facebook',
           label: 'Post to Facebook',
           onSelect: () => {
-            const result = openFacebookShareDialog(menuPacket.sharePath);
+            const result = openFacebookShareDialog(menuPacket.sharePath, getShareToken(menuListing));
             if (result.ok) {
               recordSharedChannel(menuHorse.id, 'Facebook');
             }
@@ -121,8 +195,8 @@ export default function SharedAccess() {
             <div className="stack-list">
               {sharedHorses.map((horse) => {
                 const packet = packetByHorseId[horse.id];
-                const publicShareUrl = buildPublicShareUrl(packet.sharePath);
                 const sharedListing = activeSharedListings.find((listing) => listing.horseId === horse.id);
+                const publicShareUrl = buildPublicShareUrl(packet.sharePath, getShareToken(sharedListing));
 
                 return (
                   <div
@@ -139,6 +213,9 @@ export default function SharedAccess() {
                       <div className="status-inline">
                         <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
                         <Pill tone={sharedListing?.state === 'Live' ? 'emerald' : 'blue'}>{sharedListing?.state ?? horse.sale.listingState}</Pill>
+                        <Pill tone={sharedListing?.accessMode === 'Public Link' ? 'emerald' : 'slate'}>
+                          {sharedListing?.accessMode ?? 'Private Token'}
+                        </Pill>
                       </div>
                     </div>
                     <div className="inline-metrics">
@@ -150,6 +227,7 @@ export default function SharedAccess() {
                       <Link
                         className="button button--ghost button--compact"
                         to={packet.sharePath}
+                        state={{ internalPreview: true }}
                         onClick={(event) => {
                           event.stopPropagation();
                           recordSharedChannel(horse.id, 'Direct Link');
@@ -167,14 +245,24 @@ export default function SharedAccess() {
                           recordSharedChannel(horse.id, 'Direct Link');
                         }}
                       >
-                        Public view
+                        Open buyer link
                       </a>
+                      <button
+                        className="button button--ghost button--compact"
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void copyShareLink(packet.sharePath, sharedListing);
+                        }}
+                      >
+                        Copy link
+                      </button>
                       <button
                         className="button button--primary button--compact"
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          const result = openFacebookShareDialog(packet.sharePath);
+                          const result = openFacebookShareDialog(packet.sharePath, getShareToken(sharedListing));
                           if (result.ok) {
                             recordSharedChannel(horse.id, 'Facebook');
                           }
@@ -187,6 +275,24 @@ export default function SharedAccess() {
                       >
                         Post to Facebook
                       </button>
+                      {sharedListing ? (
+                        <button
+                          className="button button--ghost button--compact"
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            const nextAccessMode = sharedListing.accessMode === 'Private Token' ? 'Public Link' : 'Private Token';
+                            const result = updateSharedListingAccessMode(horse.id, nextAccessMode);
+                            pushToast({
+                              title: result.ok ? 'Access updated' : 'Access blocked',
+                              message: result.message,
+                              tone: result.ok ? 'success' : 'error',
+                            });
+                          }}
+                        >
+                          {sharedListing.accessMode === 'Private Token' ? 'Make public' : 'Require token'}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 );

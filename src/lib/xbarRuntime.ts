@@ -7,6 +7,8 @@ import type {
   GalleryAsset,
   HorseRecord,
   SalesLead,
+  WorkspaceInvitationRecord,
+  WorkspaceMemberRecord,
   SharedListingRecord,
   SharedAccessSnapshot,
   SubscriptionProfile,
@@ -125,6 +127,10 @@ export function createNumericToken(length: number) {
   return Array.from({ length }, (_, index) => String((Date.now() + index) % 10)).join('');
 }
 
+export function createShareAccessToken(length = 18) {
+  return createRandomBase36(length);
+}
+
 export function todayStamp() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -189,12 +195,18 @@ export function deriveSharedAccessSnapshot(
   sharedAccess: SharedAccessSnapshot,
   sharedListings: SharedListingRecord[],
   salesLeads: SalesLead[],
+  workspaceInvitations: WorkspaceInvitationRecord[] = [],
+  workspaceMembers: WorkspaceMemberRecord[] = [],
 ) {
   const activeListings = sharedListings.filter((listing) => listing.state !== 'Archived');
   const listedHorseIds = new Set(activeListings.map((listing) => listing.horseId));
   const openInquiries = salesLeads.filter((lead) => lead.stage !== 'Closed' && listedHorseIds.has(lead.horseId)).length;
+  const invitedOwners = workspaceInvitations.filter((invite) => invite.status === 'Pending' && invite.role === 'Owner').length;
+  const activeOwners = workspaceMembers.filter((member) => member.status === 'Active' && member.role === 'Owner').length;
   return {
     ...sharedAccess,
+    invitedOwners,
+    activeOwners,
     savedHorses: activeListings.length,
     openInquiries,
   };

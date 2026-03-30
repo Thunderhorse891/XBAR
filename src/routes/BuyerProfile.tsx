@@ -1,21 +1,29 @@
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
 import { SalePacketSlots } from '@/components/SalePacketSlots';
 import { KeyValue, MetricCard, Panel, Pill } from '@/components/app-ui';
 import { buildPublicShareUrl, openFacebookShareDialog } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
+import { hasBuyerShareAccess } from '@/lib/workspaceAccess';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
 import { useHorseRecord, useXbarStore } from '@/store/useXbarStore';
 
 export default function BuyerProfile() {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const horse = useHorseRecord(id);
   const pushToast = useUiStore((state) => state.pushToast);
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents.filter((document) => document.horseId === id));
   const ownershipRecord = useXbarStore((state) => state.ownershipRecords.find((record) => record.horseId === id));
+  const sharedListing = useXbarStore((state) => state.sharedListings.find((listing) => listing.horseId === id && listing.state !== 'Archived'));
+  const shareToken = searchParams.get('t')?.trim() ?? '';
+  const internalPreview = location.state && typeof location.state === 'object' && 'internalPreview' in location.state
+    ? Boolean((location.state as { internalPreview?: boolean }).internalPreview)
+    : false;
 
   if (!horse) {
     return (
@@ -32,7 +40,9 @@ export default function BuyerProfile() {
   }
 
   const packet = buildHorsePacketCompleteness(horse, documents, ownershipRecord);
-  const publicShareUrl = buildPublicShareUrl(packet.sharePath);
+  const publicShareToken = sharedListing?.accessMode === 'Private Token' ? sharedListing.shareToken : undefined;
+  const accessAllowed = hasBuyerShareAccess(sharedListing, shareToken, internalPreview);
+  const publicShareUrl = buildPublicShareUrl(packet.sharePath, publicShareToken);
   const visibleDocuments = documents
     .map((document) => ({
       document,
@@ -43,12 +53,32 @@ export default function BuyerProfile() {
     (asset) => asset.status === 'Approved' && (asset.kind === 'Hero' || asset.kind === 'Conformation' || asset.kind === 'Sale Still'),
   ).slice(0, 4);
 
+  if (!accessAllowed) {
+    return (
+      <main className="buyer-shell">
+        <div className="buyer-shell__inner">
+          <Panel title="Share link locked" description="This buyer room requires a valid access link from the workspace.">
+            <div className="inline-actions">
+              {internalPreview ? (
+                <Link className="button button--ghost" to={`/horses/${horse.id}`}>
+                  Back to horse
+                </Link>
+              ) : null}
+            </div>
+          </Panel>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="buyer-shell">
       <div className="buyer-shell__inner">
-        <Link className="inline-link" to={`/horses/${horse.id}`}>
-          Back to horse workspace
-        </Link>
+        {internalPreview ? (
+          <Link className="inline-link" to={`/horses/${horse.id}`}>
+            Back to horse workspace
+          </Link>
+        ) : null}
 
         <section className="buyer-hero">
           <div className="buyer-hero__media">
@@ -67,6 +97,9 @@ export default function BuyerProfile() {
               <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
               <Pill tone={packet.tone}>{formatPercent(packet.score)} packet trust</Pill>
               <Pill tone="blue">{horse.sale.listingState}</Pill>
+              <Pill tone={sharedListing?.accessMode === 'Public Link' ? 'emerald' : 'slate'}>
+                {sharedListing?.accessMode ?? 'Private Token'}
+              </Pill>
             </div>
             <div className="buyer-share">
               <span>Share path</span>
@@ -80,7 +113,7 @@ export default function BuyerProfile() {
                 className="button button--primary button--compact"
                 type="button"
                 onClick={() => {
-                  const result = openFacebookShareDialog(packet.sharePath);
+                  const result = openFacebookShareDialog(packet.sharePath, publicShareToken);
                   pushToast({
                     title: result.ok ? 'Facebook ready' : 'Facebook unavailable',
                     message: result.message,

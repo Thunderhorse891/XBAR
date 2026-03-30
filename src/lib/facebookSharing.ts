@@ -18,28 +18,29 @@ function readBaseUrl() {
   return (typeof import.meta !== 'undefined' && (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.BASE_URL) || '/';
 }
 
-export function buildPublicShareUrl(path: string) {
+export function buildPublicShareUrl(path: string, shareToken?: string) {
   const normalizedPath = normalizeAppPath(path);
+  const tokenSuffix = shareToken ? `${normalizedPath.includes('?') ? '&' : '?'}t=${encodeURIComponent(shareToken)}` : '';
   const configuredBase = facebookConfig.publicAppUrl;
 
   if (configuredBase) {
-    return `${ensureTrailingSlash(configuredBase.replace(/#.*$/, ''))}#${normalizedPath}`;
+    return `${ensureTrailingSlash(configuredBase.replace(/#.*$/, ''))}#${normalizedPath}${tokenSuffix}`;
   }
 
   if (typeof window !== 'undefined') {
     const base = new URL(readBaseUrl(), window.location.origin);
-    return `${base.toString()}#${normalizedPath}`;
+    return `${base.toString()}#${normalizedPath}${tokenSuffix}`;
   }
 
-  return `#${normalizedPath}`;
+  return `#${normalizedPath}${tokenSuffix}`;
 }
 
-export function buildFacebookShareDialogUrl(path: string) {
+export function buildFacebookShareDialogUrl(path: string, shareToken?: string) {
   if (!isFacebookSharingConfigured()) {
     return null;
   }
 
-  const shareUrl = buildPublicShareUrl(path);
+  const shareUrl = buildPublicShareUrl(path, shareToken);
   const redirectUrl = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : shareUrl;
   const dialogUrl = new URL('https://www.facebook.com/dialog/share');
   dialogUrl.searchParams.set('app_id', facebookConfig.appId);
@@ -49,8 +50,8 @@ export function buildFacebookShareDialogUrl(path: string) {
   return dialogUrl.toString();
 }
 
-export function openFacebookShareDialog(path: string): FacebookShareResult {
-  const dialogUrl = buildFacebookShareDialogUrl(path);
+export function openFacebookShareDialog(path: string, shareToken?: string): FacebookShareResult {
+  const dialogUrl = buildFacebookShareDialogUrl(path, shareToken);
   if (!dialogUrl) {
     return {
       ok: false,

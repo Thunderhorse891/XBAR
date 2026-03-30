@@ -16,6 +16,7 @@ import {
   buildSharePath,
   createId,
   createNumericToken,
+  createShareAccessToken,
   deriveSharedAccessSnapshot,
   estimateStorageGb,
   guessGalleryKind,
@@ -23,6 +24,7 @@ import {
   readFileAsDataUrl,
   todayStamp,
 } from '@/lib/xbarRuntime';
+import { countReservedSharedAccessSeats, countReservedWorkspaceSeats, normalizeWorkspaceEmail, validateWorkspaceInvitation } from '@/lib/workspaceAccess';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { getCapabilityDeniedMessage, hasRoleCapability } from '@/lib/permissions';
 import { uploadDocumentAssetToCloud, uploadMediaAssetToCloud } from '@/lib/cloudWorkspace';
@@ -51,6 +53,8 @@ import type {
   SharedChannel,
   UserRole,
   WorkspaceProfile,
+  WorkspaceInvitationRecord,
+  WorkspaceMemberRecord,
 } from '@/types/xbar';
 import type {
   DocumentRecord,
@@ -80,12 +84,20 @@ type XbarStore = {
   salesLeads: SalesLead[];
   sharedListings: SharedListingRecord[];
   sharedAccess: SharedAccessSnapshot;
+  workspaceMembers: WorkspaceMemberRecord[];
+  workspaceInvitations: WorkspaceInvitationRecord[];
   workspaceProfile: WorkspaceProfile;
   setCurrentRole: (role: UserRole) => void;
   initializeWorkspace: (profile: Partial<WorkspaceProfile>) => ActionResult;
   updateWorkspaceProfile: (patch: Partial<WorkspaceProfile>) => ActionResult;
   toggleSharedListing: (horseId: string) => ActionResult;
   recordSharedChannel: (horseId: string, channel: SharedChannel) => void;
+  rotateSharedListingToken: (horseId: string) => ActionResult;
+  updateSharedListingAccessMode: (horseId: string, accessMode: SharedListingRecord['accessMode']) => ActionResult;
+  inviteWorkspaceMember: (email: string, role: UserRole) => ActionResult;
+  revokeWorkspaceInvitation: (invitationId: string) => ActionResult;
+  activateWorkspaceInvitation: (invitationId: string) => ActionResult;
+  removeWorkspaceMember: (memberId: string) => ActionResult;
   addHorse: (input: NewHorseInput) => ActionResult;
   createDocumentIntake: (input: DocumentIntakeInput) => Promise<ActionResult>;
   reviewDocument: (documentId: string, horseId?: string) => ActionResult;
@@ -125,6 +137,8 @@ type PersistedXbarState = Pick<
   | 'salesLeads'
   | 'sharedListings'
   | 'sharedAccess'
+  | 'workspaceMembers'
+  | 'workspaceInvitations'
   | 'workspaceProfile'
 >;
 
@@ -135,7 +149,7 @@ type WorkspaceBackup = {
   workspace: PersistedXbarState;
 };
 
-const WORKSPACE_SCHEMA_VERSION = 7;
+const WORKSPACE_SCHEMA_VERSION = 8;
 const legacyDemoHorseIds = new Set(['horse-wiggy', 'horse-hancock', 'horse-bonny', 'horse-dolly', 'horse-thunder', 'horse-shadow']);
 const legacyDemoWorkspaceNames = new Set(['', 'XBAR']);
 const legacyDemoRanchNames = new Set(['', 'Primary Ranch']);
@@ -153,6 +167,8 @@ function createEmptyWorkspaceState(): PersistedXbarState {
     salesLeads: salesLeadsSeed,
     sharedListings: sharedListingsSeed,
     sharedAccess: deriveSharedAccessSnapshot(sharedAccessSeed, sharedListingsSeed, salesLeadsSeed),
+    workspaceMembers: [],
+    workspaceInvitations: [],
     workspaceProfile: workspaceProfileSeed,
   };
 }
@@ -162,7 +178,9 @@ const initialState = {
   ...createEmptyWorkspaceState(),
 };
 
-function syncDerivedValues(state: Pick<XbarStore, 'horses' | 'salesLeads' | 'sharedListings' | 'sharedAccess'>) {
+function syncDerivedValues(
+  state: Pick<XbarStore, 'horses' | 'salesLeads' | 'sharedListings' | 'sharedAccess' | 'workspaceMembers' | 'workspaceInvitations' | 'subscription'>,
+) {
   const horses = state.horses.map((horse) => {
     const leadCount = state.salesLeads.filter((lead) => lead.horseId === horse.id && lead.stage !== 'Closed').length;
     return {
@@ -174,9 +192,26 @@ function syncDerivedValues(state: Pick<XbarStore, 'horses' | 'salesLeads' | 'sha
     };
   });
 
+  const seatsUsed = countReservedWorkspaceSeats(state.workspaceMembers, state.workspaceInvitations);
+  const sharedAccessSeatsUsed = countReservedSharedAccessSeats(state.workspaceMembers, state.workspaceInvitations);
+
   return {
     horses,
-    sharedAccess: deriveSharedAccessSnapshot(state.sharedAccess, state.sharedListings, state.salesLeads),
+    sharedAccess: deriveSharedAccessSnapshot(
+      state.sharedAccess,
+      state.sharedListings,
+      state.salesLeads,
+      state.workspaceInvitations,
+      state.workspaceMembers,
+    ),
+    subscription: {
+      ...state.subscription,
+      usage: {
+        ...state.subscription.usage,
+        seatsUsed,
+        sharedAccessSeatsUsed,
+      },
+    },
   };
 }
 
@@ -248,12 +283,78 @@ function createSharedListingRecord(horseId: string, patch?: Partial<SharedListin
     id: patch?.id ?? createId('share'),
     horseId,
     sharePath: patch?.sharePath ?? buildSharePath(horseId),
+    accessMode: patch?.accessMode ?? 'Private Token',
+    shareToken: patch?.shareToken?.trim() || createShareAccessToken(),
+    tokenIssuedAt: patch?.tokenIssuedAt ?? timestamp,
     state: patch?.state ?? 'Draft',
     channels: patch?.channels?.length ? patch.channels : ['Direct Link'],
     createdAt: patch?.createdAt ?? timestamp,
     updatedAt: patch?.updatedAt ?? timestamp,
     lastSharedAt: patch?.lastSharedAt,
   };
+}
+
+function createInitialWorkspaceMember(profile: WorkspaceProfile): WorkspaceMemberRecord {
+  return {
+    id: createId('member'),
+    email: normalizeWorkspaceEmail(profile.operationsEmail) || 'workspace-admin@xbar.local',
+    role: 'Admin',
+    status: 'Active',
+    invitedAt: profile.setupCompleteAt,
+    joinedAt: profile.setupCompleteAt || todayStamp(),
+    source: 'Owner',
+  };
+}
+
+function restoreWorkspaceMembers(raw: unknown): WorkspaceMemberRecord[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw
+    .map((member) => (member && typeof member === 'object' ? (member as Partial<WorkspaceMemberRecord>) : null))
+    .filter(Boolean)
+    .map((member) => {
+      const status: WorkspaceMemberRecord['status'] = member?.status === 'Inactive' ? 'Inactive' : 'Active';
+      const source: WorkspaceMemberRecord['source'] = member?.source === 'Invite' ? 'Invite' : 'Owner';
+
+      return {
+        id: member?.id?.trim() || createId('member'),
+        email: normalizeWorkspaceEmail(member?.email ?? ''),
+        role: member?.role ?? 'Owner',
+        status,
+        invitedAt: member?.invitedAt?.trim() || undefined,
+        joinedAt: member?.joinedAt?.trim() || todayStamp(),
+        source,
+      };
+    })
+    .filter((member) => Boolean(member.email));
+}
+
+function restoreWorkspaceInvitations(raw: unknown): WorkspaceInvitationRecord[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw
+    .map((invite) => (invite && typeof invite === 'object' ? (invite as Partial<WorkspaceInvitationRecord>) : null))
+    .filter(Boolean)
+    .map((invite) => {
+      const status: WorkspaceInvitationRecord['status'] =
+        invite?.status === 'Accepted' || invite?.status === 'Revoked' ? invite.status : 'Pending';
+
+      return {
+        id: invite?.id?.trim() || createId('invite'),
+        email: normalizeWorkspaceEmail(invite?.email ?? ''),
+        role: invite?.role ?? 'Owner',
+        status,
+        invitedBy: invite?.invitedBy?.trim() || 'Workspace Admin',
+        invitedAt: invite?.invitedAt?.trim() || todayStamp(),
+        acceptedAt: invite?.acceptedAt?.trim() || undefined,
+        revokedAt: invite?.revokedAt?.trim() || undefined,
+      };
+    })
+    .filter((invite) => Boolean(invite.email));
 }
 
 function createExpenseReceiptRecord(
@@ -293,6 +394,8 @@ function selectPersistedState(state: PersistedXbarState): PersistedXbarState {
     salesLeads: state.salesLeads,
     sharedListings: state.sharedListings,
     sharedAccess: state.sharedAccess,
+    workspaceMembers: state.workspaceMembers,
+    workspaceInvitations: state.workspaceInvitations,
     workspaceProfile: state.workspaceProfile,
   };
 }
@@ -355,6 +458,13 @@ function restorePersistedState(raw: unknown): PersistedXbarState {
     : legacySavedHorseIds.length
       ? legacySavedHorseIds.map((horseId) => createSharedListingRecord(horseId, { state: 'Draft' }))
       : initialState.sharedListings;
+  const workspaceMembers = restoreWorkspaceMembers(state.workspaceMembers);
+  const workspaceInvitations = restoreWorkspaceInvitations(state.workspaceInvitations);
+  const workspaceProfile = restoreWorkspaceProfile(state.workspaceProfile);
+  const normalizedWorkspaceMembers =
+    workspaceMembers.length || !workspaceProfile.setupCompleteAt
+      ? workspaceMembers
+      : [createInitialWorkspaceMember(workspaceProfile)];
   const baseState: PersistedXbarState = {
     horses,
     documents,
@@ -380,19 +490,25 @@ function restorePersistedState(raw: unknown): PersistedXbarState {
         : state.portal && typeof state.portal === 'object'
           ? (state.portal as SharedAccessSnapshot)
           : initialState.sharedAccess,
-    workspaceProfile: restoreWorkspaceProfile(state.workspaceProfile),
+    workspaceMembers: normalizedWorkspaceMembers,
+    workspaceInvitations,
+    workspaceProfile,
   };
   const derived = syncDerivedValues({
     horses: baseState.horses,
     salesLeads: baseState.salesLeads,
     sharedListings: baseState.sharedListings,
     sharedAccess: baseState.sharedAccess,
+    workspaceMembers: normalizedWorkspaceMembers,
+    workspaceInvitations: baseState.workspaceInvitations,
+    subscription: baseState.subscription,
   });
 
   return {
     ...baseState,
     horses: derived.horses,
     sharedAccess: derived.sharedAccess,
+    subscription: derived.subscription,
   };
 }
 
@@ -673,9 +789,24 @@ export const useXbarStore = create<XbarStore>()(
           setupCompleteAt: current.workspaceProfile.setupCompleteAt || nowStamp(),
         });
         const resetLegacyDemo = looksLikeLegacyDemoWorkspace(selectPersistedState(current));
+        const seedState = resetLegacyDemo ? createEmptyWorkspaceState() : selectPersistedState(current);
+        const workspaceMembers = seedState.workspaceMembers.length ? seedState.workspaceMembers : [createInitialWorkspaceMember(nextProfile)];
+        const derived = syncDerivedValues({
+          horses: seedState.horses,
+          salesLeads: seedState.salesLeads,
+          sharedListings: seedState.sharedListings,
+          sharedAccess: seedState.sharedAccess,
+          workspaceMembers,
+          workspaceInvitations: seedState.workspaceInvitations,
+          subscription: seedState.subscription,
+        });
 
         set({
-          ...(resetLegacyDemo ? createEmptyWorkspaceState() : {}),
+          ...seedState,
+          subscription: derived.subscription,
+          sharedAccess: derived.sharedAccess,
+          horses: derived.horses,
+          workspaceMembers,
           workspaceProfile: nextProfile,
         });
 
@@ -690,8 +821,32 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: deniedMessage };
         }
 
-        const nextProfile = restoreWorkspaceProfile({ ...get().workspaceProfile, ...patch });
-        set({ workspaceProfile: nextProfile });
+        const current = get();
+        const nextProfile = restoreWorkspaceProfile({ ...current.workspaceProfile, ...patch });
+        const workspaceMembers = current.workspaceMembers.map((member, index) =>
+          index === 0 && member.source === 'Owner'
+            ? {
+                ...member,
+                email: normalizeWorkspaceEmail(nextProfile.operationsEmail) || member.email,
+              }
+            : member,
+        );
+        const derived = syncDerivedValues({
+          horses: current.horses,
+          salesLeads: current.salesLeads,
+          sharedListings: current.sharedListings,
+          sharedAccess: current.sharedAccess,
+          workspaceMembers,
+          workspaceInvitations: current.workspaceInvitations,
+          subscription: current.subscription,
+        });
+        set({
+          workspaceProfile: nextProfile,
+          workspaceMembers,
+          subscription: derived.subscription,
+          sharedAccess: derived.sharedAccess,
+          horses: derived.horses,
+        });
         return { ok: true, message: 'Workspace profile updated.' };
       },
       toggleSharedListing: (horseId) => {
@@ -744,6 +899,9 @@ export const useXbarStore = create<XbarStore>()(
               salesLeads: state.salesLeads,
               sharedListings: nextSharedListings,
               sharedAccess: state.sharedAccess,
+              workspaceMembers: state.workspaceMembers,
+              workspaceInvitations: state.workspaceInvitations,
+              subscription: state.subscription,
             }),
           };
         });
@@ -767,6 +925,237 @@ export const useXbarStore = create<XbarStore>()(
               : listing,
           ),
         }));
+      },
+      rotateSharedListingToken: (horseId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageSharedAccess');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
+        if (!get().sharedListings.some((listing) => listing.horseId === horseId && listing.state !== 'Archived')) {
+          return { ok: false, message: 'Shared listing not found for this horse.' };
+        }
+
+        set((state) => ({
+          sharedListings: state.sharedListings.map((listing) =>
+            listing.horseId === horseId && listing.state !== 'Archived'
+              ? {
+                  ...listing,
+                  shareToken: createShareAccessToken(),
+                  tokenIssuedAt: todayStamp(),
+                  updatedAt: todayStamp(),
+                }
+              : listing,
+          ),
+        }));
+
+        return { ok: true, message: 'Share token rotated.', id: horseId };
+      },
+      updateSharedListingAccessMode: (horseId, accessMode) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageSharedAccess');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
+        if (!get().sharedListings.some((listing) => listing.horseId === horseId && listing.state !== 'Archived')) {
+          return { ok: false, message: 'Shared listing not found for this horse.' };
+        }
+
+        set((state) => ({
+          sharedListings: state.sharedListings.map((listing) =>
+            listing.horseId === horseId && listing.state !== 'Archived'
+              ? {
+                  ...listing,
+                  accessMode,
+                  updatedAt: todayStamp(),
+                }
+              : listing,
+          ),
+        }));
+
+        return {
+          ok: true,
+          message: accessMode === 'Public Link' ? 'Buyer link is now public.' : 'Buyer link now requires a token.',
+          id: horseId,
+        };
+      },
+      inviteWorkspaceMember: (email, role) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageSettings');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
+        const state = get();
+        const validationError = validateWorkspaceInvitation({
+          email,
+          role,
+          members: state.workspaceMembers,
+          invitations: state.workspaceInvitations,
+          seatLimit: state.subscription.usage.seatLimit,
+          sharedAccessSeatLimit: state.subscription.usage.sharedAccessSeatLimit,
+        });
+
+        if (validationError) {
+          return { ok: false, message: validationError };
+        }
+
+        const invite: WorkspaceInvitationRecord = {
+          id: createId('invite'),
+          email: normalizeWorkspaceEmail(email),
+          role,
+          status: 'Pending',
+          invitedBy: state.workspaceProfile.ranchManagerName.trim() || state.workspaceProfile.businessName.trim() || 'Workspace Admin',
+          invitedAt: nowStamp(),
+        };
+
+        const workspaceInvitations = [invite, ...state.workspaceInvitations];
+        const derived = syncDerivedValues({
+          horses: state.horses,
+          salesLeads: state.salesLeads,
+          sharedListings: state.sharedListings,
+          sharedAccess: state.sharedAccess,
+          workspaceMembers: state.workspaceMembers,
+          workspaceInvitations,
+          subscription: state.subscription,
+        });
+
+        set({
+          workspaceInvitations,
+          subscription: derived.subscription,
+          sharedAccess: derived.sharedAccess,
+          horses: derived.horses,
+        });
+
+        return { ok: true, message: `Invite reserved for ${invite.email}.`, id: invite.id };
+      },
+      revokeWorkspaceInvitation: (invitationId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageSettings');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
+        const state = get();
+        if (!state.workspaceInvitations.some((invite) => invite.id === invitationId && invite.status === 'Pending')) {
+          return { ok: false, message: 'Pending invite not found.' };
+        }
+
+        const workspaceInvitations = state.workspaceInvitations.map((invite) =>
+          invite.id === invitationId
+            ? {
+                ...invite,
+                status: 'Revoked' as const,
+                revokedAt: nowStamp(),
+              }
+            : invite,
+        );
+        const derived = syncDerivedValues({
+          horses: state.horses,
+          salesLeads: state.salesLeads,
+          sharedListings: state.sharedListings,
+          sharedAccess: state.sharedAccess,
+          workspaceMembers: state.workspaceMembers,
+          workspaceInvitations,
+          subscription: state.subscription,
+        });
+
+        set({
+          workspaceInvitations,
+          subscription: derived.subscription,
+          sharedAccess: derived.sharedAccess,
+          horses: derived.horses,
+        });
+
+        return { ok: true, message: 'Invite revoked.', id: invitationId };
+      },
+      activateWorkspaceInvitation: (invitationId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageSettings');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
+        const state = get();
+        const invite = state.workspaceInvitations.find((item) => item.id === invitationId && item.status === 'Pending');
+        if (!invite) {
+          return { ok: false, message: 'Pending invite not found.' };
+        }
+
+        const workspaceInvitations = state.workspaceInvitations.map((item) =>
+          item.id === invitationId
+            ? {
+                ...item,
+                status: 'Accepted' as const,
+                acceptedAt: nowStamp(),
+              }
+            : item,
+        );
+        const workspaceMembers = [
+          {
+            id: createId('member'),
+            email: invite.email,
+            role: invite.role,
+            status: 'Active' as const,
+            invitedAt: invite.invitedAt,
+            joinedAt: nowStamp(),
+            source: 'Invite' as const,
+          },
+          ...state.workspaceMembers.filter((member) => normalizeWorkspaceEmail(member.email) !== invite.email),
+        ];
+        const derived = syncDerivedValues({
+          horses: state.horses,
+          salesLeads: state.salesLeads,
+          sharedListings: state.sharedListings,
+          sharedAccess: state.sharedAccess,
+          workspaceMembers,
+          workspaceInvitations,
+          subscription: state.subscription,
+        });
+
+        set({
+          workspaceMembers,
+          workspaceInvitations,
+          subscription: derived.subscription,
+          sharedAccess: derived.sharedAccess,
+          horses: derived.horses,
+        });
+
+        return { ok: true, message: `${invite.email} is now active.`, id: invitationId };
+      },
+      removeWorkspaceMember: (memberId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageSettings');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
+        const state = get();
+        const member = state.workspaceMembers.find((item) => item.id === memberId);
+        if (!member) {
+          return { ok: false, message: 'Workspace member not found.' };
+        }
+
+        const activeAdmins = state.workspaceMembers.filter((item) => item.status === 'Active' && item.role === 'Admin');
+        if (member.role === 'Admin' && member.status === 'Active' && activeAdmins.length <= 1) {
+          return { ok: false, message: 'Keep at least one active admin on the workspace.' };
+        }
+
+        const workspaceMembers = state.workspaceMembers.filter((item) => item.id !== memberId);
+        const derived = syncDerivedValues({
+          horses: state.horses,
+          salesLeads: state.salesLeads,
+          sharedListings: state.sharedListings,
+          sharedAccess: state.sharedAccess,
+          workspaceMembers,
+          workspaceInvitations: state.workspaceInvitations,
+          subscription: state.subscription,
+        });
+
+        set({
+          workspaceMembers,
+          subscription: derived.subscription,
+          sharedAccess: derived.sharedAccess,
+          horses: derived.horses,
+        });
+
+        return { ok: true, message: `${member.email} removed from the workspace.`, id: memberId };
       },
       addHorse: (input) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'createHorse');
@@ -1255,6 +1644,9 @@ export const useXbarStore = create<XbarStore>()(
               salesLeads,
               sharedListings: current.sharedListings,
               sharedAccess: current.sharedAccess,
+              workspaceMembers: current.workspaceMembers,
+              workspaceInvitations: current.workspaceInvitations,
+              subscription: current.subscription,
             }),
           };
         });
@@ -1290,6 +1682,9 @@ export const useXbarStore = create<XbarStore>()(
               salesLeads,
               sharedListings: current.sharedListings,
               sharedAccess: current.sharedAccess,
+              workspaceMembers: current.workspaceMembers,
+              workspaceInvitations: current.workspaceInvitations,
+              subscription: current.subscription,
             }),
           };
         });
@@ -1642,6 +2037,8 @@ export const useXbarStore = create<XbarStore>()(
           salesLeads: state.salesLeads,
           sharedListings: state.sharedListings,
           sharedAccess: state.sharedAccess,
+          workspaceMembers: state.workspaceMembers,
+          workspaceInvitations: state.workspaceInvitations,
           workspaceProfile: state.workspaceProfile,
         }),
     },

@@ -14,12 +14,35 @@ create table if not exists public.workspaces (
 create table if not exists public.workspace_memberships (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete cascade,
+  email text not null default '',
+  display_name text not null default '',
   role text not null default 'Owner',
   status text not null default 'active',
+  payload jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default timezone('utc', now()),
   created_at timestamptz not null default timezone('utc', now()),
   unique (workspace_id, user_id)
+);
+
+alter table if exists public.workspace_memberships alter column user_id drop not null;
+alter table if exists public.workspace_memberships add column if not exists email text not null default '';
+alter table if exists public.workspace_memberships add column if not exists display_name text not null default '';
+alter table if exists public.workspace_memberships add column if not exists payload jsonb not null default '{}'::jsonb;
+
+create unique index if not exists idx_workspace_memberships_workspace_email_unique on public.workspace_memberships(workspace_id, email);
+
+create table if not exists public.workspace_invitations (
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  invitation_id text not null,
+  email text not null,
+  role text not null default 'Owner',
+  status text not null default 'pending',
+  invited_by_user_id uuid references auth.users(id) on delete set null,
+  payload jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now()),
+  created_at timestamptz not null default timezone('utc', now()),
+  primary key (workspace_id, invitation_id)
 );
 
 create table if not exists public.workspace_profiles (
@@ -163,6 +186,8 @@ create table if not exists public.workspace_subscription_profiles (
 
 create index if not exists idx_workspaces_owner_key on public.workspaces(owner_user_id, workspace_key);
 create index if not exists idx_workspace_memberships_user on public.workspace_memberships(user_id);
+create index if not exists idx_workspace_memberships_workspace_email on public.workspace_memberships(workspace_id, email);
+create index if not exists idx_workspace_invitations_workspace_email on public.workspace_invitations(workspace_id, email);
 create index if not exists idx_horses_workspace_status on public.horses(workspace_id, status);
 create index if not exists idx_horses_workspace_registration on public.horses(workspace_id, registration_number);
 create index if not exists idx_documents_workspace_horse on public.documents(workspace_id, horse_id);
@@ -176,6 +201,7 @@ create index if not exists idx_shared_listings_workspace_state on public.shared_
 
 alter table public.workspaces enable row level security;
 alter table public.workspace_memberships enable row level security;
+alter table public.workspace_invitations enable row level security;
 alter table public.workspace_profiles enable row level security;
 alter table public.horses enable row level security;
 alter table public.documents enable row level security;
@@ -192,6 +218,20 @@ on public.workspaces
 for select
 to authenticated
 using (auth.uid() = owner_user_id);
+
+create policy if not exists "workspaces select active memberships"
+on public.workspaces
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.workspace_memberships m
+    where m.workspace_id = workspaces.id
+      and m.user_id = auth.uid()
+      and m.status = 'active'
+  )
+);
 
 create policy if not exists "workspaces insert own"
 on public.workspaces
@@ -214,9 +254,97 @@ using (
   auth.uid() = user_id
   or exists (
     select 1
+    from public.workspace_memberships m
+    where m.workspace_id = workspace_memberships.workspace_id
+      and m.user_id = auth.uid()
+      and m.status = 'active'
+  )
+  or exists (
+    select 1
     from public.workspaces w
     where w.id = workspace_id
       and w.owner_user_id = auth.uid()
+  )
+);
+
+create policy if not exists "workspace invitations select own or workspace access"
+on public.workspace_invitations
+for select
+to authenticated
+using (
+  lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+  or exists (
+    select 1
+    from public.workspaces w
+    where w.id = workspace_invitations.workspace_id
+      and w.owner_user_id = auth.uid()
+  )
+  or exists (
+    select 1
+    from public.workspace_memberships m
+    where m.workspace_id = workspace_invitations.workspace_id
+      and m.user_id = auth.uid()
+      and m.status = 'active'
+  )
+);
+
+create policy if not exists "workspace invitations insert owner or admin"
+on public.workspace_invitations
+for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from public.workspaces w
+    where w.id = workspace_invitations.workspace_id
+      and w.owner_user_id = auth.uid()
+  )
+  or exists (
+    select 1
+    from public.workspace_memberships m
+    where m.workspace_id = workspace_invitations.workspace_id
+      and m.user_id = auth.uid()
+      and m.status = 'active'
+      and m.role = 'Admin'
+  )
+);
+
+create policy if not exists "workspace invitations update owner admin or invitee"
+on public.workspace_invitations
+for update
+to authenticated
+using (
+  lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+  or exists (
+    select 1
+    from public.workspaces w
+    where w.id = workspace_invitations.workspace_id
+      and w.owner_user_id = auth.uid()
+  )
+  or exists (
+    select 1
+    from public.workspace_memberships m
+    where m.workspace_id = workspace_invitations.workspace_id
+      and m.user_id = auth.uid()
+      and m.status = 'active'
+      and m.role = 'Admin'
+  )
+)
+with check (
+  lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+  or exists (
+    select 1
+    from public.workspaces w
+    where w.id = workspace_invitations.workspace_id
+      and w.owner_user_id = auth.uid()
+  )
+  or exists (
+    select 1
+    from public.workspace_memberships m
+    where m.workspace_id = workspace_invitations.workspace_id
+      and m.user_id = auth.uid()
+      and m.status = 'active'
+      and m.role = 'Admin'
   )
 );
 
@@ -275,6 +403,20 @@ with check (
     from public.workspaces w
     where w.id = workspace_id
       and w.owner_user_id = auth.uid()
+  )
+);
+
+create policy if not exists "workspace profiles select active memberships"
+on public.workspace_profiles
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.workspace_memberships m
+    where m.workspace_id = workspace_profiles.workspace_id
+      and m.user_id = auth.uid()
+      and m.status = 'active'
   )
 );
 
@@ -498,6 +640,26 @@ with check (
     select 1
     from public.workspaces w
     where w.id = shared_listings.workspace_id
+      and w.owner_user_id = auth.uid()
+  )
+);
+
+create policy if not exists "subscription profiles select active memberships"
+on public.workspace_subscription_profiles
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.workspace_memberships m
+    where m.workspace_id = workspace_subscription_profiles.workspace_id
+      and m.user_id = auth.uid()
+      and m.status = 'active'
+  )
+  or exists (
+    select 1
+    from public.workspaces w
+    where w.id = workspace_subscription_profiles.workspace_id
       and w.owner_user_id = auth.uid()
   )
 );

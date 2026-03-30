@@ -130,7 +130,7 @@ export default function Horses() {
           label: 'Open share view',
           onSelect: () => {
             recordSharedChannel(menuHorse.id, 'Direct Link');
-            navigate(`/profiles/${menuHorse.id}`);
+            navigate(`/profiles/${menuHorse.id}`, { state: { internalPreview: true } });
           },
         },
         ...(canManageSharedAccess

@@ -7,11 +7,19 @@ import { workspaceStorageDriverLabel } from '@/lib/workspaceStorage';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
+import type { UserRole } from '@/types/xbar';
 
 export default function Settings() {
   const roleWorkspaces = useXbarStore((state) => state.roleWorkspaces);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
+  const workspaceMembers = useXbarStore((state) => state.workspaceMembers);
+  const workspaceInvitations = useXbarStore((state) => state.workspaceInvitations);
+  const subscription = useXbarStore((state) => state.subscription);
   const updateWorkspaceProfile = useXbarStore((state) => state.updateWorkspaceProfile);
+  const inviteWorkspaceMember = useXbarStore((state) => state.inviteWorkspaceMember);
+  const revokeWorkspaceInvitation = useXbarStore((state) => state.revokeWorkspaceInvitation);
+  const activateWorkspaceInvitation = useXbarStore((state) => state.activateWorkspaceInvitation);
+  const removeWorkspaceMember = useXbarStore((state) => state.removeWorkspaceMember);
   const exportWorkspaceBackup = useXbarStore((state) => state.exportWorkspaceBackup);
   const importWorkspaceBackup = useXbarStore((state) => state.importWorkspaceBackup);
   const cloudStatus = useCloudStore((state) => state.status);
@@ -29,8 +37,12 @@ export default function Settings() {
   const importRef = useRef<HTMLInputElement | null>(null);
   const [profileDraft, setProfileDraft] = useState(workspaceProfile);
   const [authEmail, setAuthEmail] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<UserRole>('Owner');
   const [cloudBusy, setCloudBusy] = useState(false);
   const facebookConnected = cloudSession?.user?.app_metadata?.provider === 'facebook';
+  const activeMembers = workspaceMembers.filter((member) => member.status === 'Active');
+  const pendingInvites = workspaceInvitations.filter((invite) => invite.status === 'Pending');
 
   useEffect(() => {
     setProfileDraft(workspaceProfile);
@@ -178,6 +190,19 @@ export default function Settings() {
     setCloudBusy(false);
   };
 
+  const handleInviteMember = () => {
+    const result = inviteWorkspaceMember(inviteEmail, inviteRole);
+    pushToast({
+      title: result.ok ? 'Invite staged' : 'Invite blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
+    if (result.ok) {
+      setInviteEmail('');
+      setInviteRole('Owner');
+    }
+  };
+
   return (
     <>
       <PageHeader
@@ -282,6 +307,164 @@ export default function Settings() {
             <button className="button button--primary button--compact" type="button" onClick={handleProfileSave} disabled={!canManageSettings}>
               Save profile
             </button>
+          </div>
+        </Panel>
+
+        <Panel eyebrow="Workspace access" title="Access">
+          <div className="stack-list">
+            <div className="stack-item">
+              <div className="stack-item__top">
+                <div className="stack-item__title">Seats</div>
+                <div className="status-inline">
+                  <Pill tone={subscription.usage.seatsUsed >= subscription.usage.seatLimit ? 'rose' : 'blue'}>
+                    {subscription.usage.seatsUsed}/{subscription.usage.seatLimit}
+                  </Pill>
+                  <Pill tone={subscription.usage.sharedAccessSeatsUsed >= subscription.usage.sharedAccessSeatLimit && subscription.usage.sharedAccessSeatLimit > 0 ? 'rose' : 'emerald'}>
+                    {subscription.usage.sharedAccessSeatsUsed}/{subscription.usage.sharedAccessSeatLimit} shared
+                  </Pill>
+                </div>
+              </div>
+              <div className="inline-metrics">
+                <span>{activeMembers.length} active members</span>
+                <span>{pendingInvites.length} pending invites</span>
+                <span>{isSupabaseConfigured() ? 'Matching email sign-in accepts invites automatically' : 'Local mode can mark invites joined manually'}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="form-grid form-grid--tight">
+            <label className="field-stack">
+              <span className="field-label">Invite email</span>
+              <input className="field-input" type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} disabled={!canManageSettings} />
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Role</span>
+              <select className="field-input" value={inviteRole} onChange={(event) => setInviteRole(event.target.value as UserRole)} disabled={!canManageSettings}>
+                <option value="Admin">Admin</option>
+                <option value="Ranch Manager">Ranch Manager</option>
+                <option value="Owner">Owner</option>
+                <option value="Medical Lead">Medical Lead</option>
+                <option value="Sales Lead">Sales Lead</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="inline-actions">
+            <button className="button button--primary button--compact" type="button" onClick={handleInviteMember} disabled={!canManageSettings || !inviteEmail.trim()}>
+              Invite member
+            </button>
+          </div>
+
+          <div className="detail-grid">
+            <div className="panel panel--nested">
+              <div className="panel__header panel__header--compact">
+                <div>
+                  <div className="panel__eyebrow">Members</div>
+                  <h3 className="panel__title">Active team</h3>
+                </div>
+              </div>
+              <div className="stack-list">
+                {activeMembers.length ? activeMembers.map((member) => (
+                  <div key={member.id} className="stack-item">
+                    <div className="stack-item__top">
+                      <div>
+                        <div className="stack-item__title">{member.email}</div>
+                        <div className="stack-item__copy">
+                          {member.role} · {member.source === 'Owner' ? 'Workspace owner' : `Joined ${formatDateLabel(member.joinedAt)}`}
+                        </div>
+                      </div>
+                      <div className="status-inline">
+                        <Pill tone={member.role === 'Admin' ? 'blue' : member.role === 'Owner' ? 'emerald' : 'slate'}>{member.role}</Pill>
+                        <Pill tone="emerald">Active</Pill>
+                      </div>
+                    </div>
+                    <div className="inline-actions">
+                      <button
+                        className="button button--ghost button--compact"
+                        type="button"
+                        onClick={() => {
+                          const result = removeWorkspaceMember(member.id);
+                          pushToast({
+                            title: result.ok ? 'Member removed' : 'Removal blocked',
+                            message: result.message,
+                            tone: result.ok ? 'success' : 'error',
+                          });
+                        }}
+                        disabled={!canManageSettings}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                )) : (
+                  <div className="stack-item">
+                    <div className="stack-item__copy">No active members yet.</div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="panel panel--nested">
+              <div className="panel__header panel__header--compact">
+                <div>
+                  <div className="panel__eyebrow">Invites</div>
+                  <h3 className="panel__title">Pending</h3>
+                </div>
+              </div>
+              <div className="stack-list">
+                {pendingInvites.length ? pendingInvites.map((invite) => (
+                  <div key={invite.id} className="stack-item">
+                    <div className="stack-item__top">
+                      <div>
+                        <div className="stack-item__title">{invite.email}</div>
+                        <div className="stack-item__copy">
+                          {invite.role} · Sent {formatDateLabel(invite.invitedAt)}
+                        </div>
+                      </div>
+                      <Pill tone={invite.role === 'Owner' ? 'emerald' : 'blue'}>{invite.role}</Pill>
+                    </div>
+                    <div className="inline-actions">
+                      {!isSupabaseConfigured() ? (
+                        <button
+                          className="button button--ghost button--compact"
+                          type="button"
+                          onClick={() => {
+                            const result = activateWorkspaceInvitation(invite.id);
+                            pushToast({
+                              title: result.ok ? 'Invite activated' : 'Activation blocked',
+                              message: result.message,
+                              tone: result.ok ? 'success' : 'error',
+                            });
+                          }}
+                          disabled={!canManageSettings}
+                        >
+                          Mark joined
+                        </button>
+                      ) : null}
+                      <button
+                        className="button button--ghost button--compact"
+                        type="button"
+                        onClick={() => {
+                          const result = revokeWorkspaceInvitation(invite.id);
+                          pushToast({
+                            title: result.ok ? 'Invite revoked' : 'Revoke blocked',
+                            message: result.message,
+                            tone: result.ok ? 'success' : 'error',
+                          });
+                        }}
+                        disabled={!canManageSettings}
+                      >
+                        Revoke
+                      </button>
+                    </div>
+                  </div>
+                )) : (
+                  <div className="stack-item">
+                    <div className="stack-item__copy">No invites are holding seats right now.</div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </Panel>
 

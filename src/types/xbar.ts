@@ -334,11 +334,15 @@ export interface SalesLead {
 }
 
 export type SharedChannel = 'Direct Link' | 'Facebook';
+export type SharedAccessMode = 'Public Link' | 'Private Token';
 
 export interface SharedListingRecord {
   id: string;
   horseId: string;
   sharePath: string;
+  accessMode: SharedAccessMode;
+  shareToken: string;
+  tokenIssuedAt: string;
   state: 'Draft' | 'Live' | 'Archived';
   channels: SharedChannel[];
   createdAt: string;
@@ -351,6 +355,27 @@ export interface SharedAccessSnapshot {
   activeOwners: number;
   savedHorses: number;
   openInquiries: number;
+}
+
+export interface WorkspaceMemberRecord {
+  id: string;
+  email: string;
+  role: UserRole;
+  status: 'Active' | 'Inactive';
+  invitedAt?: string;
+  joinedAt: string;
+  source: 'Owner' | 'Invite';
+}
+
+export interface WorkspaceInvitationRecord {
+  id: string;
+  email: string;
+  role: UserRole;
+  status: 'Pending' | 'Accepted' | 'Revoked';
+  invitedBy: string;
+  invitedAt: string;
+  acceptedAt?: string;
+  revokedAt?: string;
 }
 
 export interface WorkspaceProfile {

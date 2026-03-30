@@ -84,7 +84,7 @@ export default function Sales() {
         {
           id: 'open-profile',
           label: 'Open share view',
-          onSelect: () => navigate(`/profiles/${menuHorse.id}`),
+          onSelect: () => navigate(`/profiles/${menuHorse.id}`, { state: { internalPreview: true } }),
         },
       ]
       : [];
@@ -146,7 +146,7 @@ export default function Sales() {
                             <span>{formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)}</span>
                           </div>
                           <div className="inline-actions inline-actions--card">
-                            <Link className="button button--ghost button--compact" to={packet.sharePath} onClick={(event) => event.stopPropagation()}>
+                            <Link className="button button--ghost button--compact" to={packet.sharePath} state={{ internalPreview: true }} onClick={(event) => event.stopPropagation()}>
                               Open share view
                             </Link>
                           </div>

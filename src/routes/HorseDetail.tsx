@@ -411,6 +411,7 @@ export default function HorseDetail() {
             <Link
               className="inline-flex h-11 items-center justify-center rounded-md bg-[#3D6B4F] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#2E523C]"
               to={packet.sharePath}
+              state={{ internalPreview: true }}
               onClick={() => recordSharedChannel(horse.id, 'Direct Link')}
             >
               Preview
