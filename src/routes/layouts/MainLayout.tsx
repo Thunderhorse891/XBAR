@@ -1,7 +1,6 @@
 import type { ComponentType, KeyboardEvent, SVGProps } from 'react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { ContextMenu } from '@/components/ContextMenu';
 import { WorkspaceHelp, type HelpSection } from '@/components/WorkspaceHelp';
 import {
   AddIcon,
@@ -82,21 +81,6 @@ const workspaceShortcutRoutes: Record<string, string> = {
   Settings: '/settings',
 };
 
-const workspaceShortcutOptions = [
-  'Dashboard',
-  'Horses',
-  'Documents',
-  'Weather',
-  'Ownership',
-  'Medical',
-  'Breeding',
-  'Sales',
-  'Ranch Toolkit',
-  'Subscriptions',
-  'Shared Access',
-  'Settings',
-] as const;
-
 const workspaceShortcutIcons: Record<string, NavItem['icon']> = [...operations, ...programs, ...platform].reduce(
   (collection, item) => {
     collection[item.label] = item.icon;
@@ -105,9 +89,7 @@ const workspaceShortcutIcons: Record<string, NavItem['icon']> = [...operations, 
   {} as Record<string, NavItem['icon']>,
 );
 
-function normalizeShortcutLabel(module: string) {
-  return module === 'Ranch Assets' ? 'Ranch Toolkit' : module;
-}
+const coreWorkspaceShortcuts = ['Dashboard', 'Horses', 'Documents', 'Weather'] as const;
 
 const routeHelp: Record<string, HelpSection[]> = {
   Dashboard: [
@@ -201,13 +183,10 @@ export default function MainLayout() {
   const location = useLocation();
   const [search, setSearch] = useState('');
   const [helpOpen, setHelpOpen] = useState(false);
-  const [shortcutEditorOpen, setShortcutEditorOpen] = useState(false);
-  const [workspaceMenu, setWorkspaceMenu] = useState<{ x: number; y: number } | null>(null);
   const currentRole = useXbarStore((state) => state.currentRole);
   const subscription = useXbarStore((state) => state.subscription);
   const documents = useXbarStore((state) => state.documents);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
-  const updateWorkspaceProfile = useXbarStore((state) => state.updateWorkspaceProfile);
   const cloudStatus = useCloudStore((state) => state.status);
   const cloudSession = useCloudStore((state) => state.session);
   const signOutCloud = useCloudStore((state) => state.signOut);
@@ -230,72 +209,22 @@ export default function MainLayout() {
 
   const pendingReview = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched').length;
   const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse Profile' : routeLabels[location.pathname] ?? 'Dashboard';
-  const workspaceShortcutSeed = workspaceProfile.workspaceShortcuts.length
-    ? workspaceProfile.workspaceShortcuts
-    : ['Horses', 'Documents', 'Weather', ...roleWorkspace.primaryModules.map(normalizeShortcutLabel)];
-  const workspaceShortcutLabels = workspaceShortcutSeed
-    .map(normalizeShortcutLabel)
-    .filter((module, index, all) => all.indexOf(module) === index)
-    .filter((module) => workspaceShortcutRoutes[module])
-    .slice(0, 4);
-  const workspaceShortcuts = workspaceShortcutLabels
+  const workspaceShortcuts = coreWorkspaceShortcuts
     .map((module) => ({
       label: module,
       path: workspaceShortcutRoutes[module],
-    }))
-    .filter((item): item is { label: string; path: string } => Boolean(item.path));
+    }));
   const helpSections = routeHelp[currentLabel] ?? routeHelp.Dashboard;
   const accountLabel = cloudSession?.user?.email ?? currentRole;
-  const workspaceMenuItems = [
-    {
-      id: 'edit-shortcuts',
-      label: 'Edit shortcuts',
-      onSelect: () => setShortcutEditorOpen(true),
-    },
-    {
-      id: 'reset-shortcuts',
-      label: 'Reset shortcuts',
-      onSelect: () => {
-        const result = updateWorkspaceProfile({ workspaceShortcuts: [] });
-        pushToast({
-          title: result.ok ? 'Shortcuts reset' : 'Reset blocked',
-          message: result.ok ? 'Workspace shortcuts are back to role defaults.' : result.message,
-          tone: result.ok ? 'success' : 'error',
-        });
-      },
-    },
-    {
-      id: 'open-settings',
-      label: 'Open settings',
-      onSelect: () => navigate('/settings'),
-    },
-  ];
 
   useEffect(() => {
     setHelpOpen(false);
-  }, [location.pathname]);
-
-  useEffect(() => {
-    setShortcutEditorOpen(false);
-    setWorkspaceMenu(null);
   }, [location.pathname]);
 
   const handleSearch = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter' && search.trim()) {
       navigate(`/horses?search=${encodeURIComponent(search.trim())}`);
     }
-  };
-
-  const handleShortcutToggle = (module: string) => {
-    const nextSelection = workspaceShortcutLabels.includes(module)
-      ? workspaceShortcutLabels.filter((item) => item !== module)
-      : [...workspaceShortcutLabels, module].slice(0, 6);
-    const result = updateWorkspaceProfile({ workspaceShortcuts: nextSelection });
-    pushToast({
-      title: result.ok ? 'Shortcuts updated' : 'Update blocked',
-      message: result.ok ? 'Workspace shortcuts were saved.' : result.message,
-      tone: result.ok ? 'success' : 'error',
-    });
   };
 
   const handleCloudSignOut = async () => {
@@ -323,25 +252,18 @@ export default function MainLayout() {
           </div>
         </div>
 
-        <div
-          className="rounded-[18px] border border-[#dbe4ed] bg-[linear-gradient(180deg,#ffffff_0%,#f5f9fc_100%)] p-4 shadow-[0_18px_38px_rgba(15,23,42,0.05)]"
-          onContextMenu={(event) => {
-            event.preventDefault();
-            setWorkspaceMenu({ x: event.clientX, y: event.clientY });
-          }}
-        >
+        <div className="rounded-[18px] border border-[#dbe4ed] bg-[linear-gradient(180deg,#ffffff_0%,#f5f9fc_100%)] p-4 shadow-[0_18px_38px_rgba(15,23,42,0.05)]">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8794a2]">Daily desk</div>
-              <div className="mt-2 text-[1rem] font-bold tracking-[-0.03em] text-[#16202b]">Open ranch work fast</div>
+              <div className="mt-2 text-[1rem] font-bold tracking-[-0.03em] text-[#16202b]">Core routes</div>
             </div>
-            <button
-              type="button"
-              onClick={() => setShortcutEditorOpen(true)}
+            <NavLink
+              to="/settings"
               className="inline-flex min-h-[34px] items-center rounded-full border border-[#dbe4ed] bg-white px-3.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#627181] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:text-[#16202b]"
             >
-              Customize
-            </button>
+              Settings
+            </NavLink>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#dbe4ed] bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#4b5a69]">
@@ -353,20 +275,28 @@ export default function MainLayout() {
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2.5">
             {workspaceShortcuts.map((module) => (
-              <button
+              <NavLink
                 key={module.label}
-                type="button"
-                onClick={() => navigate(module.path)}
-                className="group flex min-h-[56px] items-center gap-3 rounded-[14px] border border-[#e1e8ef] bg-white px-3.5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-[#4e5d6d] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#eef6fb] hover:text-[#16202b]"
+                to={module.path}
+                end={module.path === '/'}
+                className={({ isActive }) =>
+                  classNames(
+                    'group flex min-h-[56px] items-center gap-3 rounded-[14px] border px-3.5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.16em] transition-all duration-150 ease-[ease]',
+                    isActive
+                      ? 'border-[#0c6f97] bg-[#eef6fb] text-[#16202b]'
+                      : 'border-[#e1e8ef] bg-white text-[#4e5d6d] hover:border-[#0c6f97] hover:bg-[#eef6fb] hover:text-[#16202b]',
+                  )
+                }
               >
                 {(() => {
                   const ShortcutIcon = workspaceShortcutIcons[module.label] ?? DashboardIcon;
                   return <ShortcutIcon className="h-[16px] w-[16px] shrink-0 text-[#0c6f97]" />;
                 })()}
                 <span className="leading-4">{module.label}</span>
-              </button>
+              </NavLink>
             ))}
           </div>
+          <div className="mt-4 text-xs leading-6 text-[#6a7178]">This strip stays focused on the four routes ranch users need most often.</div>
         </div>
 
         <NavSection title="Operations" items={operations} />
@@ -545,54 +475,6 @@ export default function MainLayout() {
         </nav>
 
         <WorkspaceHelp open={helpOpen} title={currentLabel} sections={helpSections} onClose={() => setHelpOpen(false)} />
-        {shortcutEditorOpen ? (
-          <div className="fixed inset-0 z-[120] flex items-center justify-end bg-[#16202b]/10 p-4 backdrop-blur-[2px]" onClick={() => setShortcutEditorOpen(false)} role="presentation">
-            <aside
-              className="w-full max-w-[360px] rounded-[16px] border border-[#dde5ee] bg-white p-5 shadow-xl"
-              onClick={(event) => event.stopPropagation()}
-              role="dialog"
-              aria-modal="true"
-              aria-label="Edit workspace shortcuts"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8794a2]">Quick access</div>
-                  <h2 className="mt-2 text-lg font-bold tracking-[-0.04em] text-[#16202b]">Edit shortcuts</h2>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShortcutEditorOpen(false)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#dde5ee] text-[#6a7178] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#edf6fa] hover:text-[#16202b]"
-                  aria-label="Close shortcut editor"
-                >
-                  ×
-                </button>
-              </div>
-              <div className="mt-5 grid grid-cols-2 gap-2">
-                {workspaceShortcutOptions.map((module) => {
-                  const active = workspaceShortcutLabels.includes(module);
-                  return (
-                    <button
-                      key={module}
-                      type="button"
-                      onClick={() => handleShortcutToggle(module)}
-                      className={classNames(
-                        'rounded-md border px-3 py-3 text-left text-sm font-semibold transition-all duration-150 ease-[ease]',
-                        active
-                          ? 'border-[#0c6f97] bg-[#0c6f97] text-white'
-                          : 'border-[#dde5ee] bg-white text-[#16202b] hover:border-[#0c6f97] hover:bg-[#edf6fa]',
-                      )}
-                    >
-                      {module}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="mt-4 text-xs leading-6 text-[#6a7178]">Use this space for the modules you need every day on the ranch. Right-click the card any time to reopen this editor.</div>
-            </aside>
-          </div>
-        ) : null}
-        <ContextMenu open={Boolean(workspaceMenu)} x={workspaceMenu?.x ?? 0} y={workspaceMenu?.y ?? 0} items={workspaceMenuItems} onClose={() => setWorkspaceMenu(null)} />
       </div>
     </div>
   );
