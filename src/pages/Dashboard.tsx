@@ -1,10 +1,11 @@
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { buildBudgetSummary, buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
 import { formatCompactCurrency, formatCurrency, formatDateLabel } from '@/lib/format';
+import { resolveWeatherByQuery, type WeatherForecast } from '@/lib/weather';
 import { useCurrentRoleCapability, useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
 import { useUiStore } from '@/store/useUiStore';
 import type { ExpenseCategory } from '@/types/xbar';
@@ -33,12 +34,16 @@ export default function Dashboard() {
   const salesLeads = useXbarStore((state) => state.salesLeads);
   const intakeBatches = useXbarStore((state) => state.intakeBatches);
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
+  const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const addExpenseReceipt = useXbarStore((state) => state.addExpenseReceipt);
   const roleWorkspace = useCurrentRoleWorkspace();
   const canManageBudget = useCurrentRoleCapability('manageAssets');
   const [menuState, setMenuState] = useState<DashboardMenuState | null>(null);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [savingReceipt, setSavingReceipt] = useState(false);
+  const [weather, setWeather] = useState<WeatherForecast | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [weatherError, setWeatherError] = useState<string | null>(null);
   const [receiptDraft, setReceiptDraft] = useState({
     horseId: '',
     title: '',
@@ -59,6 +64,41 @@ export default function Dashboard() {
   const qualifiedBuyerCount = salesLeads.filter((lead) => lead.stage === 'Qualified' || lead.stage === 'Offer').length;
   const feedReserveAsset = ranchAssets.find((asset) => asset.category === 'Feed & Supply');
   const recentBatches = intakeBatches.slice(0, 4);
+
+  useEffect(() => {
+    const ranchQuery = workspaceProfile.ranchName.trim();
+    if (!ranchQuery) {
+      setWeather(null);
+      setWeatherError('Set the ranch name to load a local forecast.');
+      return;
+    }
+
+    let cancelled = false;
+    setWeatherLoading(true);
+    setWeatherError(null);
+
+    void resolveWeatherByQuery(ranchQuery)
+      .then((forecast) => {
+        if (!cancelled) {
+          setWeather(forecast);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setWeather(null);
+          setWeatherError(error instanceof Error ? error.message : 'Weather could not load.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setWeatherLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceProfile.ranchName]);
 
   const menuHorse = menuState?.type === 'horse' ? horses.find((horse) => horse.id === menuState.id) : undefined;
   const menuRecord = menuState?.type === 'record' ? ownershipRecords.find((record) => record.id === menuState.id) : undefined;
@@ -152,6 +192,9 @@ export default function Dashboard() {
               <Link to="/horses?new=1" className="button button--primary button--compact">
                 New horse
               </Link>
+              <Link to="/weather" className="button button--ghost button--compact">
+                Weather
+              </Link>
               <Link to="/documents?upload=1" className="button button--ghost button--compact">
                 Upload docs
               </Link>
@@ -193,6 +236,10 @@ export default function Dashboard() {
               <div className="stack-item">
                 <div className="stack-item__title">Budget</div>
                 <div className="stack-item__copy">Log feed, wormer, dental float, and vet receipts to start the operating budget view.</div>
+              </div>
+              <div className="stack-item">
+                <div className="stack-item__title">Weather</div>
+                <div className="stack-item__copy">Load the ranch forecast so turnout, hauling, and breeding windows are visible on the desk.</div>
               </div>
             </div>
           </Panel>
@@ -240,6 +287,9 @@ export default function Dashboard() {
         title="Operations"
         actions={
           <>
+            <Link to="/weather" className="button button--ghost button--compact">
+              Weather
+            </Link>
             <Link to="/documents" className="button button--ghost button--compact">
               Review docs
             </Link>
@@ -300,9 +350,9 @@ export default function Dashboard() {
         </div>
 
         <div className="command-stage__support">
-          <div className="command-stage__support-card">
-            <div className="command-stage__support-label">Feed reserve</div>
-            <strong className="command-stage__support-title">{feedReserveAsset?.name ?? 'Not logged'}</strong>
+        <div className="command-stage__support-card">
+          <div className="command-stage__support-label">Feed reserve</div>
+          <strong className="command-stage__support-title">{feedReserveAsset?.name ?? 'Not logged'}</strong>
             <div className="command-stage__support-copy">
               <span>{feedReserveAsset?.notes ?? 'Add feed receipts to start reserve tracking.'}</span>
               {feedReserveAsset?.nextService ? <span>Service {formatDateLabel(feedReserveAsset.nextService)}</span> : <span>No service date</span>}
@@ -316,6 +366,20 @@ export default function Dashboard() {
             <div className="command-stage__support-copy">
               <span>{recentBatches[0] ? `${recentBatches[0].processedCount}/${recentBatches[0].fileCount} logged` : 'Upload the first packet.'}</span>
               <span>{reviewQueue.length} waiting on review</span>
+            </div>
+          </div>
+          <div className="command-stage__support-card">
+            <div className="command-stage__support-label">Weather watch</div>
+            <strong className="command-stage__support-title">
+              {weatherLoading ? 'Loading weather' : weather ? `${weather.current.temperatureF}°F · ${weather.current.weatherLabel}` : 'Forecast offline'}
+            </strong>
+            <div className="command-stage__support-copy">
+              <span>
+                {weather
+                  ? `${weather.today.rainChance}% rain · ${weather.current.windMph} mph wind · UV ${weather.today.uvIndex}`
+                  : weatherError || 'Open Weather and set the ranch location.'}
+              </span>
+              <span>{weather ? weather.notes.turnout : 'Use weather to plan turnout, hauling, and breeding work.'}</span>
             </div>
           </div>
         </div>
@@ -406,9 +470,14 @@ export default function Dashboard() {
             title="Care board"
             meta={<Pill tone={careDueCount ? 'amber' : 'emerald'}>{careDueCount ? 'Due now' : 'Current'}</Pill>}
             action={
-              <Link to="/medical" className="button button--ghost button--compact">
-                Medical
-              </Link>
+              <div className="inline-actions">
+                <Link to="/weather" className="button button--ghost button--compact">
+                  Weather
+                </Link>
+                <Link to="/medical" className="button button--ghost button--compact">
+                  Medical
+                </Link>
+              </div>
             }
           >
             {careBoard.length ? (

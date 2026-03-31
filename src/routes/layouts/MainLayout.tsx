@@ -18,6 +18,7 @@ import {
   SearchIcon,
   SettingsIcon,
   SubscriptionIcon,
+  WeatherIcon,
 } from '@/components/icons';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -33,6 +34,7 @@ const operations: NavItem[] = [
   { label: 'Dashboard', path: '/', icon: DashboardIcon },
   { label: 'Horses', path: '/horses', icon: HorsesIcon },
   { label: 'Documents', path: '/documents', icon: DocumentsIcon },
+  { label: 'Weather', path: '/weather', icon: WeatherIcon },
   { label: 'Ownership', path: '/ownership', icon: OwnershipIcon },
 ];
 
@@ -53,6 +55,7 @@ const routeLabels: Record<string, string> = {
   '/': 'Dashboard',
   '/horses': 'Horses',
   '/documents': 'Documents',
+  '/weather': 'Weather',
   '/ownership': 'Ownership',
   '/medical': 'Medical',
   '/breeding': 'Breeding',
@@ -67,6 +70,7 @@ const workspaceShortcutRoutes: Record<string, string> = {
   Dashboard: '/',
   Horses: '/horses',
   Documents: '/documents',
+  Weather: '/weather',
   Ownership: '/ownership',
   Medical: '/medical',
   Breeding: '/breeding',
@@ -82,6 +86,7 @@ const workspaceShortcutOptions = [
   'Dashboard',
   'Horses',
   'Documents',
+  'Weather',
   'Ownership',
   'Medical',
   'Breeding',
@@ -108,6 +113,10 @@ const routeHelp: Record<string, HelpSection[]> = {
   Documents: [
     { label: 'Intake', text: 'Upload first. Attach only when the match is clear.' },
     { label: 'Review', text: 'Approve, discard, or open files from the queue.' },
+  ],
+  Weather: [
+    { label: 'Forecast', text: 'Use ranch weather to plan turnout, hauling, and handling windows.' },
+    { label: 'Actions', text: 'Search any location or use current position for a live forecast.' },
   ],
   Ownership: [
     { label: 'Transfer', text: 'Clear blockers and move transfers forward here.' },
@@ -213,7 +222,10 @@ export default function MainLayout() {
 
   const pendingReview = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched').length;
   const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse Profile' : routeLabels[location.pathname] ?? 'Dashboard';
-  const workspaceShortcutLabels = (workspaceProfile.workspaceShortcuts.length ? workspaceProfile.workspaceShortcuts : roleWorkspace.primaryModules.map(normalizeShortcutLabel))
+  const workspaceShortcutSeed = workspaceProfile.workspaceShortcuts.length
+    ? workspaceProfile.workspaceShortcuts
+    : ['Horses', 'Documents', 'Weather', ...roleWorkspace.primaryModules.map(normalizeShortcutLabel)];
+  const workspaceShortcutLabels = workspaceShortcutSeed
     .map(normalizeShortcutLabel)
     .filter((module, index, all) => all.indexOf(module) === index)
     .filter((module) => workspaceShortcutRoutes[module])
@@ -312,20 +324,20 @@ export default function MainLayout() {
         >
           <div className="flex flex-col gap-3">
             <div className="min-w-0">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8794a2]">Workspace</div>
-              <div className="mt-2 text-[0.95rem] font-semibold text-[#16202b]">{roleWorkspace.label}</div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8794a2]">Quick access</div>
+              <div className="mt-2 text-[0.95rem] font-semibold text-[#16202b]">{roleWorkspace.label} view</div>
             </div>
             <div className="shrink-0 self-start overflow-hidden rounded-[12px] border border-[#dbe4ed] bg-[#f5f8fb] shadow-sm">
               <div className="flex items-center">
                 <span className="inline-flex min-h-[32px] items-center border-r border-[#dbe4ed] bg-[#edf6fa] px-3.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#0c6f97]">
-                  {cloudStatus === 'signed-in' ? 'Cloud' : cloudStatus === 'unavailable' ? 'Local' : 'Limited'}
+                  {cloudStatus === 'signed-in' ? 'Cloud' : 'Browser'}
                 </span>
                 <button
                   type="button"
                   onClick={() => setShortcutEditorOpen(true)}
                   className="inline-flex min-h-[32px] items-center px-3.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#627181] transition-all duration-150 ease-[ease] hover:bg-white hover:text-[#16202b]"
                 >
-                  Edit
+                  Customize
                 </button>
               </div>
             </div>
@@ -371,7 +383,7 @@ export default function MainLayout() {
                   pendingReview ? 'border-[#dbe4ed] bg-[#f4f8fb] text-[#627181]' : 'border-[#d7e8ef] bg-[#edf6fa] text-[#0c6f97]',
                 )}
               >
-                {pendingReview ? `${pendingReview} review` : 'Live'}
+                {pendingReview ? `${pendingReview} review` : 'Ready'}
               </span>
             </div>
 
@@ -396,7 +408,7 @@ export default function MainLayout() {
                       ? 'border-[#d8e1ea] bg-[#eef3f8] text-[#607384]'
                       : 'border-[#d8e1ea] bg-[#eef3f8] text-[#607384]',
                 )}>
-                  {cloudSession ? currentRole : cloudStatus === 'unavailable' ? 'Local' : 'Guest'}
+                  {cloudSession ? currentRole : 'Browser'}
                 </span>
               </div>
 
@@ -531,7 +543,7 @@ export default function MainLayout() {
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8794a2]">Workspace</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8794a2]">Quick access</div>
                   <h2 className="mt-2 text-lg font-bold tracking-[-0.04em] text-[#16202b]">Edit shortcuts</h2>
                 </div>
                 <button
@@ -563,7 +575,7 @@ export default function MainLayout() {
                   );
                 })}
               </div>
-              <div className="mt-4 text-xs leading-6 text-[#6a7178]">Right-click the workspace card any time to reopen this editor.</div>
+              <div className="mt-4 text-xs leading-6 text-[#6a7178]">Use this space for the modules you need every day on the ranch. Right-click the card any time to reopen this editor.</div>
             </aside>
           </div>
         ) : null}

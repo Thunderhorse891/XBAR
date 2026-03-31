@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -1676,6 +1678,44 @@ a:focus-visible {
   line-height: 1.45;
 }
 
+.weather-hour-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.weather-hour-card {
+  display: flex;
+  min-height: 132px;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 248, 252, 0.96));
+  padding: 14px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+.weather-hour-card__time {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.weather-hour-card__temp {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  color: var(--text);
+}
+
+.weather-hour-card__meta {
+  font-size: 0.83rem;
+  color: var(--muted-strong);
+}
+
 .horse-card__readiness-head span {
   color: var(--muted);
 }
@@ -2295,7 +2335,8 @@ a:focus-visible {
   .media-strip,
   .form-grid,
   .sale-packet-grid,
-  .sale-packet-grid--compact {
+  .sale-packet-grid--compact,
+  .weather-hour-grid {
     grid-template-columns: 1fr;
   }
 

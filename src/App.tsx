@@ -24,6 +24,7 @@ const Settings = lazy(() => import('./routes/Settings'));
 const SetupWorkspace = lazy(() => import('./routes/SetupWorkspace'));
 const SharedAccess = lazy(() => import('./routes/SharedAccess'));
 const Subscriptions = lazy(() => import('./routes/Subscriptions'));
+const Weather = lazy(() => import('./routes/Weather'));
 
 function useHashRouting() {
   if (typeof window === 'undefined') {
@@ -70,6 +71,7 @@ export default function App() {
               <Route path="horses" element={<Horses />} />
               <Route path="horses/:id" element={<HorseDetail />} />
               <Route path="documents" element={<Documents />} />
+              <Route path="weather" element={<Weather />} />
               <Route path="ownership" element={<Ownership />} />
               <Route path="medical" element={<Medical />} />
               <Route path="breeding" element={<Breeding />} />

@@ -135,6 +135,17 @@ export function SettingsIcon(props: IconProps) {
   );
 }
 
+export function WeatherIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M7 16.5a3.5 3.5 0 1 1 .6-6.9A5 5 0 0 1 17 8a4 4 0 1 1 .8 7.9H7Z" />
+      <path d="M9 19.5h.01" />
+      <path d="M12 18.5l-1 3" />
+      <path d="M16 18.5l-1 3" />
+    </IconBase>
+  );
+}
+
 export function SearchIcon(props: IconProps) {
   return (
     <IconBase {...props}>
