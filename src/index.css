@@ -472,22 +472,20 @@ a:focus-visible {
 .command-stage,
 .portfolio-stage {
   display: grid;
-  gap: 16px;
-  padding: 24px;
-  border-radius: 18px;
+  gap: 20px;
+  padding: 28px 28px 26px;
+  border-radius: 24px;
   border: 1px solid var(--border);
-  background:
-    radial-gradient(circle at top right, rgba(12, 111, 151, 0.08), transparent 32%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(244, 248, 252, 0.98) 100%);
-  box-shadow: var(--shadow);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(244, 248, 252, 0.97) 100%);
+  box-shadow: 0 32px 64px rgba(15, 23, 42, 0.07), 0 8px 24px rgba(15, 23, 42, 0.04);
 }
 
 .command-stage {
-  grid-template-columns: 1.2fr 0.9fr 0.7fr;
+  grid-template-columns: 1.24fr 0.84fr 0.78fr;
 }
 
 .portfolio-stage {
-  grid-template-columns: 1fr 0.92fr;
+  grid-template-columns: 1.08fr 0.92fr;
   align-items: end;
 }
 
@@ -514,9 +512,9 @@ a:focus-visible {
 .command-stage__title,
 .portfolio-stage__title {
   margin: 0;
-  max-width: 12ch;
-  font-size: clamp(2.1rem, 3vw, 3.2rem);
-  line-height: 0.92;
+  max-width: 14ch;
+  font-size: clamp(2.2rem, 3.2vw, 3.45rem);
+  line-height: 0.95;
   letter-spacing: -0.07em;
 }
 
@@ -538,10 +536,10 @@ a:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 14px 16px;
-  border-radius: 14px;
-  border: 1px solid rgba(12, 111, 151, 0.1);
-  background: rgba(255, 255, 255, 0.84);
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(12, 111, 151, 0.12);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 253, 0.96));
 }
 
 .command-stage__ledger-item span,
@@ -578,10 +576,10 @@ a:focus-visible {
   flex-direction: column;
   gap: 10px;
   min-height: 100%;
-  padding: 16px;
-  border-radius: 16px;
+  padding: 18px;
+  border-radius: 18px;
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.9);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 250, 252, 0.96));
 }
 
 .command-stage__support-copy {
@@ -604,11 +602,11 @@ a:focus-visible {
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  padding: 14px 16px;
+  padding: 16px 18px;
   border: 1px solid var(--border);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.84);
-  box-shadow: var(--shadow-soft);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.05);
 }
 
 .portfolio-toolbar__controls {
@@ -1404,8 +1402,8 @@ a:focus-visible {
 }
 
 .horse-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 22px;
 }
 
 .horse-card {
@@ -1413,10 +1411,11 @@ a:focus-visible {
   display: flex;
   flex-direction: column;
   min-height: 100%;
-  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
   color: var(--text);
-  border-color: var(--border);
-  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.06);
   transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
 }
 
@@ -1432,7 +1431,7 @@ a:focus-visible {
 .horse-card__media {
   position: relative;
   overflow: hidden;
-  min-height: 248px;
+  min-height: 280px;
   background: linear-gradient(145deg, rgba(242, 246, 250, 0.98) 0%, rgba(255, 255, 255, 0.98) 52%, rgba(230, 237, 244, 0.98) 100%);
   border-bottom: 1px solid var(--border);
 }
@@ -1521,7 +1520,7 @@ a:focus-visible {
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 34px 20px 18px;
+  padding: 52px 22px 20px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1532,10 +1531,10 @@ a:focus-visible {
 }
 
 .horse-card__body {
-  padding: 18px 18px 20px;
+  padding: 20px 20px 22px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
   background: #ffffff;
 }
 
@@ -1572,18 +1571,18 @@ a:focus-visible {
 
 .horse-card__facts {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .horse-card__fact {
-  min-height: 64px;
-  padding: 12px 14px;
-  border-radius: 12px;
+  min-height: 58px;
+  padding: 12px 13px;
+  border-radius: 14px;
   border: 1px solid var(--border);
-  background: #f7fafc;
+  background: linear-gradient(180deg, #f9fbfd 0%, #f4f8fb 100%);
   color: var(--text);
-  font-size: 0.94rem;
+  font-size: 0.9rem;
   font-weight: 600;
 }
 
@@ -2344,7 +2343,8 @@ a:focus-visible {
   .filter-bar,
   .topbar,
   .topbar__controls,
-  .detail-hero__media {
+  .detail-hero__media,
+  .horse-card__facts {
     display: flex;
     flex-direction: column;
     align-items: stretch;

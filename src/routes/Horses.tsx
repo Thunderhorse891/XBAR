@@ -203,9 +203,14 @@ export default function Horses() {
       <PageHeader
         title="Horses"
         actions={
-          <button className="button button--primary button--compact" type="button" onClick={() => setSearchParams({ new: '1' })} disabled={!canCreateHorse}>
-            New horse
-          </button>
+          <>
+            <Link to="/documents?upload=1" className="button button--ghost button--compact">
+              Batch intake
+            </Link>
+            <button className="button button--primary button--compact" type="button" onClick={() => setSearchParams({ new: '1' })} disabled={!canCreateHorse}>
+              New horse
+            </button>
+          </>
         }
       />
 
@@ -213,8 +218,8 @@ export default function Horses() {
         <section className="panel">
             <div className="panel__header">
               <div>
-                <div className="panel__eyebrow">Live intake</div>
-                <h2 className="panel__title">New horse</h2>
+                <div className="panel__eyebrow">Horse intake</div>
+                <h2 className="panel__title">Add horse</h2>
               </div>
               <button className="button button--ghost button--compact" type="button" onClick={() => setSearchParams({})}>
                 Close
@@ -334,12 +339,12 @@ export default function Horses() {
 
       <section className="portfolio-stage">
         <div className="portfolio-stage__lead">
-          <div className="portfolio-stage__eyebrow">Horse ledger</div>
-          <h2 className="portfolio-stage__title">Premium records for sale, care, and chain of title.</h2>
+          <div className="portfolio-stage__eyebrow">Horse desk</div>
+          <h2 className="portfolio-stage__title">Sale, care, and title at a glance.</h2>
           <div className="portfolio-stage__notes">
             <Pill tone="blue">{viewMode}</Pill>
             <Pill tone={buyerReady.length ? 'emerald' : 'slate'}>{buyerReady.length} buyer ready</Pill>
-            <Pill tone={transferRisk.length ? 'rose' : 'emerald'}>{transferRisk.length} transfer risk</Pill>
+            <Pill tone={transferRisk.length ? 'rose' : 'emerald'}>{transferRisk.length} title risk</Pill>
           </div>
         </div>
 
@@ -357,7 +362,7 @@ export default function Horses() {
             <strong>{buyerReady.length}</strong>
           </div>
           <div className="portfolio-stage__stat">
-            <span>Risk</span>
+            <span>Issues</span>
             <strong>{transferRisk.length}</strong>
           </div>
         </div>
@@ -382,7 +387,7 @@ export default function Horses() {
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           className="field-input field-input--wide"
-          placeholder="Search horses"
+          placeholder="Search horse, owner, AQHA"
         />
       </section>
 
@@ -469,12 +474,8 @@ export default function Horses() {
                       {horse.location.barn}
                     </span>
                     <span className="horse-card__fact">
-                      <strong>Registry</strong>
-                      {horse.registrationNumber}
-                    </span>
-                    <span className="horse-card__fact">
-                      <strong>Docs</strong>
-                      {horse.documents.length}
+                      <strong>AQHA</strong>
+                      {horse.aqhaNumber || horse.registrationNumber || 'Pending'}
                     </span>
                   </div>
 
@@ -523,14 +524,14 @@ export default function Horses() {
                         }}
                         disabled={!canManageSharedAccess}
                       >
-                        {saved ? 'Unshare' : 'Share'}
+                        {saved ? 'Unshare' : 'Share room'}
                       </button>
                       <Link
                         to={`/horses/${horse.id}`}
                         className="button button--primary button--compact"
                         onClick={(event) => event.stopPropagation()}
                       >
-                        Open record
+                        Record
                       </Link>
                     </div>
                   </div>

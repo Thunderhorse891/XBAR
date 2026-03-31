@@ -21,6 +21,8 @@ export default function Login() {
   }, [location.state]);
   const cloudRequired = isCloudAuthRequired();
   const allowLocalMode = isLocalModeEnabled();
+  const authLabel = isSupabaseConfigured() ? 'Cloud live' : allowLocalMode ? 'Browser access' : 'Cloud required';
+  const syncLabel = isSupabaseConfigured() ? 'Cloud autosave' : 'Browser storage';
 
   useEffect(() => {
     if (session && status === 'signed-in') {
@@ -51,75 +53,111 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f4f7fb] px-5 py-8">
-      <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-[1180px] gap-6 lg:grid-cols-[0.95fr,1.05fr]">
-        <section className="flex flex-col justify-between rounded-2xl border border-[#d8e1ea] bg-[linear-gradient(145deg,#ffffff_0%,#eff4f8_100%)] p-8 text-[#1e242b] shadow-sm">
-          <div>
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f7fafc_0%,#eef3f8_100%)] px-5 py-6 lg:px-8">
+      <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-[1280px] items-stretch overflow-hidden rounded-[28px] border border-[#dbe4ed] bg-white shadow-[0_40px_80px_rgba(15,23,42,0.08)]">
+        <section className="relative hidden w-[52%] overflow-hidden border-r border-[#e4ebf2] bg-[radial-gradient(circle_at_top_right,rgba(12,111,151,0.16),transparent_28%),linear-gradient(180deg,#fbfdff_0%,#eff5f9_100%)] p-12 lg:flex lg:flex-col lg:justify-between">
+          <div className="absolute inset-y-0 right-[-90px] w-[240px] rounded-full bg-[rgba(12,111,151,0.08)] blur-3xl" aria-hidden="true" />
+          <div className="relative z-[1]">
             <div className="flex items-center gap-3">
-              <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-[#d8e1ea] bg-white p-1.5 shadow-sm">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[#d8e1ea] bg-white p-1.5 shadow-sm">
                 <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" className="h-full w-full object-contain" />
               </div>
               <div>
                 <div className="text-lg font-extrabold uppercase tracking-[0.14em]">XBAR</div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7e8891]">Horse Ledger</div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7e8891]">Private ranch software</div>
               </div>
             </div>
 
-            <div className="mt-10">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7e8891]">Secure access</div>
-              <h1 className="mt-3 text-[clamp(2.3rem,4vw,4rem)] font-bold tracking-[-0.07em] text-[#1e242b]">Sign in</h1>
-              <p className="mt-4 max-w-[28rem] text-sm leading-7 text-[#5d6670]">
-                Access the XBAR workspace, sync cloud records, and manage buyer-safe horse files from one account.
+            <div className="mt-14 max-w-[34rem]">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7e8891]">Login</div>
+              <h1 className="mt-4 text-[clamp(2.8rem,4vw,4.5rem)] font-extrabold leading-[0.95] tracking-[-0.08em] text-[#1e242b]">
+                Horses, paperwork, and buyers from one desk.
+              </h1>
+              <p className="mt-5 max-w-[28rem] text-[15px] leading-7 text-[#586673]">
+                Built for ranches, breeders, and sale teams that need clean records, fast intake, and buyer-safe sharing.
               </p>
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-[#d8e1ea] bg-white/80 px-4 py-3">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7e8891]">Auth</div>
-              <div className="mt-2 text-sm font-semibold text-[#1e242b]">
-                {isSupabaseConfigured() ? 'Supabase live' : allowLocalMode ? 'Browser access' : 'Cloud required'}
+          <div className="relative z-[1] space-y-4">
+            <div className="rounded-[22px] border border-[#dbe4ed] bg-white/88 p-5 shadow-sm">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7e8891]">What you open</div>
+              <div className="mt-3 grid gap-3">
+                <div className="flex items-center justify-between gap-4 border-b border-[#edf2f7] pb-3">
+                  <span className="text-sm font-semibold text-[#1e242b]">Horse desk</span>
+                  <span className="text-sm text-[#5f6c79]">Sale, care, title</span>
+                </div>
+                <div className="flex items-center justify-between gap-4 border-b border-[#edf2f7] pb-3">
+                  <span className="text-sm font-semibold text-[#1e242b]">Document intake</span>
+                  <span className="text-sm text-[#5f6c79]">Packets, trust, review</span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-sm font-semibold text-[#1e242b]">Ranch desk</span>
+                  <span className="text-sm text-[#5f6c79]">Weather, care, budget</span>
+                </div>
               </div>
             </div>
-            <div className="rounded-xl border border-[#d8e1ea] bg-white/80 px-4 py-3">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7e8891]">Access</div>
-              <div className="mt-2 text-sm font-semibold text-[#1e242b]">Role-aware</div>
-            </div>
-            <div className="rounded-xl border border-[#d8e1ea] bg-white/80 px-4 py-3">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7e8891]">Sync</div>
-              <div className="mt-2 text-sm font-semibold text-[#1e242b]">{isSupabaseConfigured() ? 'Cloud autosave' : 'Browser storage'}</div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-[18px] border border-[#dbe4ed] bg-white/84 px-4 py-3">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7e8891]">Auth</div>
+                <div className="mt-2 text-sm font-semibold text-[#1e242b]">{authLabel}</div>
+              </div>
+              <div className="rounded-[18px] border border-[#dbe4ed] bg-white/84 px-4 py-3">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7e8891]">Access</div>
+                <div className="mt-2 text-sm font-semibold text-[#1e242b]">Role aware</div>
+              </div>
+              <div className="rounded-[18px] border border-[#dbe4ed] bg-white/84 px-4 py-3">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7e8891]">Sync</div>
+                <div className="mt-2 text-sm font-semibold text-[#1e242b]">{syncLabel}</div>
+              </div>
             </div>
           </div>
         </section>
 
-        <section className="flex items-center">
-          <div className="w-full rounded-2xl border border-[#d8e1ea] bg-white p-8 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7e8891]">Workspace login</div>
-                <h2 className="mt-2 text-[1.7rem] font-bold tracking-[-0.05em] text-[#1e242b]">Enter XBAR</h2>
+        <section className="flex flex-1 items-center bg-white px-6 py-8 lg:px-12">
+          <div className="mx-auto w-full max-w-[460px]">
+            <div className="lg:hidden">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#dbe4ed] bg-[#f7fafc] p-1.5 shadow-sm">
+                  <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" className="h-full w-full object-contain" />
+                </div>
+                <div>
+                  <div className="text-base font-extrabold uppercase tracking-[0.14em] text-[#1e242b]">XBAR</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7e8891]">Private ranch software</div>
+                </div>
               </div>
-              <Pill tone={isSupabaseConfigured() ? 'blue' : cloudRequired ? 'rose' : 'slate'}>
-                {isSupabaseConfigured() ? 'Secure login' : cloudRequired ? 'Secure login required' : 'Browser access'}
-              </Pill>
+            </div>
+
+            <div className="mt-8 lg:mt-0">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7e8891]">Workspace access</div>
+                  <h2 className="mt-2 text-[1.95rem] font-extrabold tracking-[-0.06em] text-[#1e242b]">Enter XBAR</h2>
+                </div>
+                <Pill tone={isSupabaseConfigured() ? 'blue' : cloudRequired ? 'rose' : 'slate'}>
+                  {isSupabaseConfigured() ? 'Secure login' : cloudRequired ? 'Cloud required' : 'Browser access'}
+                </Pill>
+              </div>
+              <p className="mt-3 max-w-[28rem] text-sm leading-7 text-[#5f6c79]">
+                Sign in to sync the workspace, or open browser access when cloud auth is not enabled yet.
+              </p>
             </div>
 
             {isSupabaseConfigured() ? (
-              <>
-                <div className="mt-8 grid gap-4">
-                  <label className="field-stack">
-                    <span className="field-label">Email</span>
-                    <input
-                      className="field-input"
-                      type="email"
-                      value={email}
-                      onChange={(event) => setEmail(event.target.value)}
-                      placeholder="owner@xbar.com"
-                    />
-                  </label>
-                </div>
+              <div className="mt-8 rounded-[24px] border border-[#dbe4ed] bg-[#fbfdff] p-6 shadow-sm">
+                <label className="field-stack">
+                  <span className="field-label">Email</span>
+                  <input
+                    className="field-input"
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="owner@xbar.com"
+                  />
+                </label>
 
-                <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                <div className="mt-5 flex flex-col gap-3">
                   <button
                     className="button button--primary"
                     type="button"
@@ -138,36 +176,28 @@ export default function Login() {
                   </button>
                 </div>
 
-                <div className="mt-6 rounded-xl border border-[#dbe5eb] bg-[#f2f8fb] px-4 py-4 text-sm leading-6 text-[#50606d]">
-                  Use your email to receive a secure sign-in link, or continue with Facebook if your workspace enables that connector.
+                <div className="mt-5 rounded-[18px] border border-[#e3ebf2] bg-white px-4 py-4 text-sm leading-6 text-[#50606d]">
+                  Email sends a secure login link. Facebook is available when that workspace connector is enabled.
                 </div>
-              </>
+              </div>
+            ) : !allowLocalMode ? (
+              <div className="mt-8 rounded-[24px] border border-[#e5c7c7] bg-[#fff4f4] px-5 py-5 text-sm leading-7 text-[#7b3a3a] shadow-sm">
+                Cloud auth is required for this production build. Add <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> before opening the workspace.
+              </div>
             ) : (
-              cloudRequired ? (
-                <div className="mt-8 rounded-xl border border-[#e5c7c7] bg-[#fff4f4] px-4 py-4 text-sm leading-7 text-[#7b3a3a]">
-                  Cloud auth is required for this production build. Add
-                  {' '}
-                  <code>VITE_SUPABASE_URL</code>
-                  {' '}
-                  and
-                  {' '}
-                  <code>VITE_SUPABASE_ANON_KEY</code>
-                  {' '}
-                  before opening the workspace.
+              <div className="mt-8 rounded-[24px] border border-[#dbe4ed] bg-[#fbfdff] p-6 shadow-sm">
+                <div className="rounded-[18px] border border-[#e3ebf2] bg-white px-4 py-4 text-sm leading-7 text-[#50606d]">
+                  Browser access is available right now, so you can open the workspace without waiting on cloud auth.
                 </div>
-              ) : (
-                <div className="mt-8 rounded-xl border border-[#d8e1ea] bg-[#eff4f8] px-4 py-4 text-sm leading-7 text-[#4f6272]">
-                  This build is using browser access so you can open the workspace without cloud login. Add
-                  {' '}
-                  <code>VITE_SUPABASE_URL</code>
-                  {' '}
-                  and
-                  {' '}
-                  <code>VITE_SUPABASE_ANON_KEY</code>
-                  {' '}
-                  to turn on real user login.
+                <div className="mt-5 flex flex-col gap-3">
+                  <button className="button button--primary" type="button" onClick={() => navigate('/setup', { replace: true })}>
+                    Open browser workspace
+                  </button>
+                  <div className="text-sm leading-6 text-[#647281]">
+                    Add <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> when you want real user login.
+                  </div>
                 </div>
-              )
+              </div>
             )}
           </div>
         </section>

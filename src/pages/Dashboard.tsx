@@ -186,7 +186,7 @@ export default function Dashboard() {
     return (
       <>
         <PageHeader
-          title="Operations"
+          title="Ranch desk"
           actions={
             <>
               <Link to="/horses?new=1" className="button button--primary button--compact">
@@ -203,10 +203,10 @@ export default function Dashboard() {
         />
 
         <div className="dashboard-grid dashboard-grid--primary">
-          <Panel eyebrow="Workspace" title="Start the ledger">
+          <Panel eyebrow="Workspace" title="Start the ranch desk">
             <EmptyState
               title="No records yet"
-              description="Create the first horse, upload a packet, or import a backup to start the workspace."
+              description="Create the first horse, upload a packet, or load the ranch forecast to start working."
               action={
                 <div className="inline-actions">
                   <Link to="/horses?new=1" className="button button--primary button--compact">
@@ -218,28 +218,31 @@ export default function Dashboard() {
                   <Link to="/settings" className="button button--ghost button--compact">
                     Settings
                   </Link>
+                  <Link to="/weather" className="button button--ghost button--compact">
+                    Weather
+                  </Link>
                 </div>
               }
             />
           </Panel>
 
-          <Panel eyebrow="Quick start" title="What to do first">
+          <Panel eyebrow="Quick start" title="Start here">
             <div className="stack-list">
               <div className="stack-item">
                 <div className="stack-item__title">Horse record</div>
-                <div className="stack-item__copy">Add one horse or let intake create it from registration, coggins, and transfer papers.</div>
+                <div className="stack-item__copy">Add one horse or let intake build it from the packet.</div>
               </div>
               <div className="stack-item">
                 <div className="stack-item__title">Documents</div>
-                <div className="stack-item__copy">Upload the first packet so trust scoring, ownership, and sale readiness have source files.</div>
+                <div className="stack-item__copy">Upload the first packet so trust and ownership have source files.</div>
               </div>
               <div className="stack-item">
                 <div className="stack-item__title">Budget</div>
-                <div className="stack-item__copy">Log feed, wormer, dental float, and vet receipts to start the operating budget view.</div>
+                <div className="stack-item__copy">Log feed, wormer, dental float, and vet receipts.</div>
               </div>
               <div className="stack-item">
                 <div className="stack-item__title">Weather</div>
-                <div className="stack-item__copy">Load the ranch forecast so turnout, hauling, and breeding windows are visible on the desk.</div>
+                <div className="stack-item__copy">Load the ranch forecast for turnout, hauling, and breeding windows.</div>
               </div>
             </div>
           </Panel>
@@ -284,7 +287,7 @@ export default function Dashboard() {
   return (
     <>
       <PageHeader
-        title="Operations"
+        title="Ranch desk"
         actions={
           <>
             <Link to="/weather" className="button button--ghost button--compact">
@@ -302,12 +305,13 @@ export default function Dashboard() {
 
       <section className="command-stage">
         <div className="command-stage__lead">
-          <div className="command-stage__eyebrow">Barn floor</div>
-          <h2 className="command-stage__title">Know what breaks sale flow before the barn does.</h2>
+          <div className="command-stage__eyebrow">{workspaceProfile.ranchName || 'Daily operations'}</div>
+          <h2 className="command-stage__title">What needs attention today.</h2>
           <div className="command-stage__chips">
             <Pill tone="blue">{roleWorkspace.label}</Pill>
             <Pill tone={transferGaps.length ? 'rose' : 'emerald'}>{transferGaps.length} transfer gaps</Pill>
             <Pill tone={careDueCount ? 'amber' : 'emerald'}>{careDueCount} care due</Pill>
+            {weather ? <Pill tone="slate">{weather.current.temperatureF}°F</Pill> : null}
           </div>
           <div className="command-stage__ledger">
             <div className="command-stage__ledger-item">
@@ -327,7 +331,7 @@ export default function Dashboard() {
 
         <div className="command-stage__rail">
           <MetricCard
-            label="Transfer papers"
+            label="Transfer gaps"
             value={String(transferGaps.length)}
             tone={transferGaps.length ? 'rose' : 'emerald'}
             onClick={() => navigate('/ownership')}
@@ -341,7 +345,7 @@ export default function Dashboard() {
             title="Open care board"
           />
           <MetricCard
-            label="Monthly spend"
+            label="This month"
             value={formatCompactCurrency(budgetSummary.total)}
             tone="blue"
             onClick={() => navigate('/')}
@@ -351,7 +355,7 @@ export default function Dashboard() {
 
         <div className="command-stage__support">
         <div className="command-stage__support-card">
-          <div className="command-stage__support-label">Feed reserve</div>
+          <div className="command-stage__support-label">Feed room</div>
           <strong className="command-stage__support-title">{feedReserveAsset?.name ?? 'Not logged'}</strong>
             <div className="command-stage__support-copy">
               <span>{feedReserveAsset?.notes ?? 'Add feed receipts to start reserve tracking.'}</span>
@@ -359,7 +363,7 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="command-stage__support-card">
-            <div className="command-stage__support-label">Intake pulse</div>
+            <div className="command-stage__support-label">Intake</div>
             <strong className="command-stage__support-title">
               {recentBatches[0]?.label ?? 'No batch yet'}
             </strong>
@@ -419,7 +423,7 @@ export default function Dashboard() {
       <div className="dashboard-board">
         <div className="dashboard-board__main">
           <Panel
-            title="Transfer deck"
+            title="Transfer gaps"
             meta={<Pill tone={transferGaps.length ? 'rose' : 'emerald'}>{transferGaps.length ? 'Needs action' : 'Clear'}</Pill>}
             action={
               <Link to="/ownership" className="button button--ghost button--compact">
@@ -733,7 +737,7 @@ export default function Dashboard() {
         </Panel>
 
         <Panel
-          title="Queue and leads"
+          title="Queue"
           meta={<Pill tone={reviewQueue.length ? 'amber' : 'emerald'}>{reviewQueue.length ? 'Active' : 'Quiet'}</Pill>}
         >
           <div className="stack-list">

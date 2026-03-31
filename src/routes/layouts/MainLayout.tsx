@@ -97,6 +97,14 @@ const workspaceShortcutOptions = [
   'Settings',
 ] as const;
 
+const workspaceShortcutIcons: Record<string, NavItem['icon']> = [...operations, ...programs, ...platform].reduce(
+  (collection, item) => {
+    collection[item.label] = item.icon;
+    return collection;
+  },
+  {} as Record<string, NavItem['icon']>,
+);
+
 function normalizeShortcutLabel(module: string) {
   return module === 'Ranch Assets' ? 'Ranch Toolkit' : module;
 }
@@ -316,41 +324,46 @@ export default function MainLayout() {
         </div>
 
         <div
-          className="rounded-[16px] border border-[#dbe4ed] bg-white p-4 shadow-[0_18px_38px_rgba(15,23,42,0.05)]"
+          className="rounded-[18px] border border-[#dbe4ed] bg-[linear-gradient(180deg,#ffffff_0%,#f5f9fc_100%)] p-4 shadow-[0_18px_38px_rgba(15,23,42,0.05)]"
           onContextMenu={(event) => {
             event.preventDefault();
             setWorkspaceMenu({ x: event.clientX, y: event.clientY });
           }}
         >
-          <div className="flex flex-col gap-3">
+          <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8794a2]">Quick access</div>
-              <div className="mt-2 text-[0.95rem] font-semibold text-[#16202b]">{roleWorkspace.label} view</div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8794a2]">Daily desk</div>
+              <div className="mt-2 text-[1rem] font-bold tracking-[-0.03em] text-[#16202b]">Open ranch work fast</div>
             </div>
-            <div className="shrink-0 self-start overflow-hidden rounded-[12px] border border-[#dbe4ed] bg-[#f5f8fb] shadow-sm">
-              <div className="flex items-center">
-                <span className="inline-flex min-h-[32px] items-center border-r border-[#dbe4ed] bg-[#edf6fa] px-3.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#0c6f97]">
-                  {cloudStatus === 'signed-in' ? 'Cloud' : 'Browser'}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShortcutEditorOpen(true)}
-                  className="inline-flex min-h-[32px] items-center px-3.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#627181] transition-all duration-150 ease-[ease] hover:bg-white hover:text-[#16202b]"
-                >
-                  Customize
-                </button>
-              </div>
-            </div>
+            <button
+              type="button"
+              onClick={() => setShortcutEditorOpen(true)}
+              className="inline-flex min-h-[34px] items-center rounded-full border border-[#dbe4ed] bg-white px-3.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#627181] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:text-[#16202b]"
+            >
+              Customize
+            </button>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#dbe4ed] bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#4b5a69]">
+              {roleWorkspace.label}
+            </span>
+            <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#d7e8ef] bg-[#edf6fa] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#0c6f97]">
+              {cloudStatus === 'signed-in' ? 'Cloud sync' : 'Browser access'}
+            </span>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2.5">
             {workspaceShortcuts.map((module) => (
               <button
                 key={module.label}
                 type="button"
                 onClick={() => navigate(module.path)}
-                className="rounded-[12px] border border-[#e1e8ef] bg-[#f8fbfe] px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-[#627181] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#eef6fb] hover:text-[#16202b]"
+                className="group flex min-h-[56px] items-center gap-3 rounded-[14px] border border-[#e1e8ef] bg-white px-3.5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-[#4e5d6d] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#eef6fb] hover:text-[#16202b]"
               >
-                {module.label}
+                {(() => {
+                  const ShortcutIcon = workspaceShortcutIcons[module.label] ?? DashboardIcon;
+                  return <ShortcutIcon className="h-[16px] w-[16px] shrink-0 text-[#0c6f97]" />;
+                })()}
+                <span className="leading-4">{module.label}</span>
               </button>
             ))}
           </div>
