@@ -5,33 +5,6 @@ import { isCloudAuthRequired, isLocalModeEnabled, isSupabaseConfigured } from '@
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 
-const legalRailItems = [
-  {
-    label: 'Subscription software',
-    copy: 'Workspace use is intended for licensed, recurring subscription access.',
-  },
-  {
-    label: 'Private records',
-    copy: 'Horse records, documents, and buyer rooms stay tied to the operating workspace.',
-  },
-  {
-    label: 'Controlled sharing',
-    copy: 'Buyer-facing links are meant for controlled review, not open public distribution.',
-  },
-  {
-    label: 'Account terms',
-    copy: 'Use of the workspace is subject to account, privacy, and billing terms.',
-  },
-  {
-    label: 'Operational use',
-    copy: 'Built for ranches, breeders, trainers, and sale teams managing active horse inventory.',
-  },
-  {
-    label: 'Copyright',
-    copy: '© 2026 XBAR. All rights reserved.',
-  },
-] as const;
-
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -98,43 +71,43 @@ export default function Login() {
             <div className="mt-14 max-w-[34rem]">
               <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7e8891]">Login</div>
               <h1 className="mt-4 text-[clamp(2.8rem,4vw,4.5rem)] font-extrabold leading-[0.95] tracking-[-0.08em] text-[#1e242b]">
-                Horses, paperwork, and buyers from one desk.
+                Private ranch software for horses, paperwork, and buyers.
               </h1>
               <p className="mt-5 max-w-[28rem] text-[15px] leading-7 text-[#586673]">
-                Built for ranches, breeders, and sale teams that need clean records, fast intake, and buyer-safe sharing.
+                Built for ranches, breeders, and sale teams that need clean records, clean packet flow, and clear access.
               </p>
             </div>
           </div>
 
-          <div className="relative z-[1] space-y-4">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-[18px] border border-[#dbe4ed] bg-white/84 px-4 py-3">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7e8891]">Auth</div>
-                <div className="mt-2 text-sm font-semibold text-[#1e242b]">{authLabel}</div>
+          <div className="relative z-[1] max-w-[34rem] border-t border-[#e4ebf2] pt-8">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-4 border-b border-[#edf2f7] pb-4">
+                <span className="text-sm font-semibold text-[#1e242b]">Horse desk</span>
+                <span className="text-sm text-[#5f6c79]">Sale, care, title</span>
               </div>
-              <div className="rounded-[18px] border border-[#dbe4ed] bg-white/84 px-4 py-3">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7e8891]">Access</div>
-                <div className="mt-2 text-sm font-semibold text-[#1e242b]">Role aware</div>
+              <div className="flex items-center justify-between gap-4 border-b border-[#edf2f7] pb-4">
+                <span className="text-sm font-semibold text-[#1e242b]">Document intake</span>
+                <span className="text-sm text-[#5f6c79]">Packet, trust, review</span>
               </div>
-              <div className="rounded-[18px] border border-[#dbe4ed] bg-white/84 px-4 py-3">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7e8891]">Sync</div>
-                <div className="mt-2 text-sm font-semibold text-[#1e242b]">{syncLabel}</div>
-              </div>
-            </div>
-
-            <div className="login-legal-marquee">
-              <div className="login-legal-track">
-                {[...legalRailItems, ...legalRailItems].map((item, index) => (
-                  <article key={`${item.label}-${index}`} className="login-legal-card">
-                    <div className="login-legal-card__label">{item.label}</div>
-                    <div className="login-legal-card__copy">{item.copy}</div>
-                  </article>
-                ))}
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-sm font-semibold text-[#1e242b]">Ranch desk</span>
+                <span className="text-sm text-[#5f6c79]">Weather, care, budget</span>
               </div>
             </div>
 
-            <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#7e8891]">
-              © 2026 XBAR Software. Subscription workspace for ranch, breeding, and sale operations.
+            <div className="mt-8 flex flex-wrap gap-2">
+              <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#dbe4ed] bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#4f6070]">
+                {authLabel}
+              </span>
+              <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#dbe4ed] bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#4f6070]">
+                Role aware
+              </span>
+              <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#dbe4ed] bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#4f6070]">
+                {syncLabel}
+              </span>
+            </div>
+            <div className="mt-4 max-w-[30rem] text-[12px] leading-6 text-[#7b8894]">
+              Subscription workspace for ranch, breeding, and sale operations. Terms, privacy, and billing apply to account use.
             </div>
           </div>
         </section>
