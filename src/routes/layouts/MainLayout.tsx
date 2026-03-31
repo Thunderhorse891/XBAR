@@ -65,32 +65,6 @@ const routeLabels: Record<string, string> = {
   '/settings': 'Settings',
 };
 
-const workspaceShortcutRoutes: Record<string, string> = {
-  Dashboard: '/',
-  Horses: '/horses',
-  Documents: '/documents',
-  Weather: '/weather',
-  Ownership: '/ownership',
-  Medical: '/medical',
-  Breeding: '/breeding',
-  Sales: '/sales',
-  'Ranch Toolkit': '/assets',
-  'Ranch Assets': '/assets',
-  Subscriptions: '/subscriptions',
-  'Shared Access': '/shared-access',
-  Settings: '/settings',
-};
-
-const workspaceShortcutIcons: Record<string, NavItem['icon']> = [...operations, ...programs, ...platform].reduce(
-  (collection, item) => {
-    collection[item.label] = item.icon;
-    return collection;
-  },
-  {} as Record<string, NavItem['icon']>,
-);
-
-const coreWorkspaceShortcuts = ['Dashboard', 'Horses', 'Documents', 'Weather'] as const;
-
 const routeHelp: Record<string, HelpSection[]> = {
   Dashboard: [
     { label: 'Focus', text: 'Start with blockers and queue risk.' },
@@ -209,11 +183,6 @@ export default function MainLayout() {
 
   const pendingReview = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched').length;
   const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse Profile' : routeLabels[location.pathname] ?? 'Dashboard';
-  const workspaceShortcuts = coreWorkspaceShortcuts
-    .map((module) => ({
-      label: module,
-      path: workspaceShortcutRoutes[module],
-    }));
   const helpSections = routeHelp[currentLabel] ?? routeHelp.Dashboard;
   const accountLabel = cloudSession?.user?.email ?? currentRole;
 
@@ -252,66 +221,35 @@ export default function MainLayout() {
           </div>
         </div>
 
-        <div className="rounded-[18px] border border-[#dbe4ed] bg-[linear-gradient(180deg,#ffffff_0%,#f5f9fc_100%)] p-4 shadow-[0_18px_38px_rgba(15,23,42,0.05)]">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8794a2]">Daily desk</div>
-              <div className="mt-2 text-[1rem] font-bold tracking-[-0.03em] text-[#16202b]">Core routes</div>
-            </div>
-            <NavLink
-              to="/settings"
-              className="inline-flex min-h-[34px] items-center rounded-full border border-[#dbe4ed] bg-white px-3.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#627181] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:text-[#16202b]"
-            >
-              Settings
-            </NavLink>
+        <div className="rounded-[18px] border border-[#dbe4ed] bg-white p-4 shadow-[0_12px_24px_rgba(15,23,42,0.04)]">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8794a2]">Workspace</div>
+          <div className="mt-2 text-[1rem] font-bold tracking-[-0.03em] text-[#16202b]">
+            {workspaceProfile.ranchName || workspaceProfile.businessName || 'Primary ranch'}
           </div>
+          <div className="mt-1 text-sm text-[#667482]">{roleWorkspace.label}</div>
           <div className="mt-3 flex flex-wrap gap-2">
             <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#dbe4ed] bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#4b5a69]">
-              {roleWorkspace.label}
+              {subscription.tier}
             </span>
             <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#d7e8ef] bg-[#edf6fa] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#0c6f97]">
               {cloudStatus === 'signed-in' ? 'Cloud sync' : 'Browser access'}
             </span>
+            {pendingReview ? (
+              <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#dbe4ed] bg-[#f4f8fb] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#627181]">
+                {pendingReview} review
+              </span>
+            ) : null}
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-2.5">
-            {workspaceShortcuts.map((module) => (
-              <NavLink
-                key={module.label}
-                to={module.path}
-                end={module.path === '/'}
-                className={({ isActive }) =>
-                  classNames(
-                    'group flex min-h-[56px] items-center gap-3 rounded-[14px] border px-3.5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.16em] transition-all duration-150 ease-[ease]',
-                    isActive
-                      ? 'border-[#0c6f97] bg-[#eef6fb] text-[#16202b]'
-                      : 'border-[#e1e8ef] bg-white text-[#4e5d6d] hover:border-[#0c6f97] hover:bg-[#eef6fb] hover:text-[#16202b]',
-                  )
-                }
-              >
-                {(() => {
-                  const ShortcutIcon = workspaceShortcutIcons[module.label] ?? DashboardIcon;
-                  return <ShortcutIcon className="h-[16px] w-[16px] shrink-0 text-[#0c6f97]" />;
-                })()}
-                <span className="leading-4">{module.label}</span>
-              </NavLink>
-            ))}
-          </div>
-          <div className="mt-4 text-xs leading-6 text-[#6a7178]">This strip stays focused on the four routes ranch users need most often.</div>
+          <div className="mt-4 text-xs leading-6 text-[#6a7178]">Use the navigation below for every workspace route. Settings and shared access stay in the Platform section.</div>
         </div>
 
         <NavSection title="Operations" items={operations} />
         <NavSection title="Programs" items={programs} />
         <NavSection title="Platform" items={platformItems} />
 
-        <div className="mt-auto flex items-center justify-between gap-3 border-t border-[#dde5ee] pt-4 text-xs text-[#8794a2]">
-          <span>{subscription.tier}</span>
-          <button
-            type="button"
-            onClick={() => navigate('/settings')}
-            className="rounded-[12px] border border-[#dde5ee] bg-white px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#627181] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#eef6fb] hover:text-[#16202b]"
-          >
-            Settings
-          </button>
+        <div className="mt-auto border-t border-[#dde5ee] pt-4 text-xs text-[#8794a2]">
+          <div className="font-semibold text-[#5f6c79]">{workspaceProfile.businessName || 'XBAR'}</div>
+          <div className="mt-1">{subscription.tier} plan</div>
         </div>
       </aside>
 
