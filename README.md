@@ -6,7 +6,7 @@ Premium horse records, document trust, and ranch operations across web and mobil
 
 - Web app: Vite + React, ready for hosted deployment on Vercel or similar
 - Mobile app: Capacitor wrapping the same React app for iOS and Android
-- Desktop: legacy Tauri source is still present during migration, but the active product path is now web + Capacitor
+- Desktop: no longer the active path; the repo is now centered on web + Capacitor
 
 ## Getting Started
 
@@ -117,3 +117,7 @@ Supabase SQL bootstrap is included in:
 - Manual document intake and review queue
 - Shared-link access for buyer and owner views
 - Full OCR, webhook-driven billing reconciliation, invitations, and real marketplace workflows still need backend completion
+
+## Handoff
+
+- Project handoff notes live in `docs/PROJECT_HANDOFF.md`
