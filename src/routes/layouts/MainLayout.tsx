@@ -291,10 +291,10 @@ export default function MainLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f4f1ec] lg:grid lg:grid-cols-[248px,1fr]">
-      <aside className="hidden min-h-screen flex-col gap-6 border-r border-[#ddd8cf] bg-[#f6f2ec] px-5 py-5 text-[#1e242b] lg:flex">
+      <div className="min-h-screen bg-[#f4f7fb] lg:grid lg:grid-cols-[248px,1fr]">
+      <aside className="hidden min-h-screen flex-col gap-6 border-r border-[#d8e1ea] bg-[#f7f9fc] px-5 py-5 text-[#1e242b] lg:flex">
         <div className="flex items-center gap-3">
-          <div className="flex h-[52px] w-[52px] items-center justify-center rounded-lg border border-[#d8d2c8] bg-white p-1.5 shadow-sm">
+          <div className="flex h-[52px] w-[52px] items-center justify-center rounded-lg border border-[#d8e1ea] bg-white p-1.5 shadow-sm">
             <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" className="h-full w-full object-contain" />
           </div>
           <div className="min-w-0">
@@ -304,7 +304,7 @@ export default function MainLayout() {
         </div>
 
         <div
-          className="rounded-[12px] border border-[#ddd8cf] bg-white p-4 shadow-sm"
+          className="rounded-[12px] border border-[#d8e1ea] bg-white p-4 shadow-sm"
           onContextMenu={(event) => {
             event.preventDefault();
             setWorkspaceMenu({ x: event.clientX, y: event.clientY });
@@ -312,12 +312,12 @@ export default function MainLayout() {
         >
           <div className="flex flex-col gap-3">
             <div className="min-w-0">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8c857b]">Workspace</div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7b8896]">Workspace</div>
               <div className="mt-2 text-[0.95rem] font-semibold text-[#1e242b]">{roleWorkspace.label}</div>
             </div>
-            <div className="shrink-0 self-start overflow-hidden rounded-full border border-[#d7d0c7] bg-[#f4efe8] shadow-sm">
+            <div className="shrink-0 self-start overflow-hidden rounded-full border border-[#d8e1ea] bg-[#eef3f8] shadow-sm">
               <div className="flex items-center">
-                <span className="inline-flex min-h-[32px] items-center border-r border-[#d7d0c7] bg-[#eaf4f8] px-3.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#0c6f97]">
+                <span className="inline-flex min-h-[32px] items-center border-r border-[#d8e1ea] bg-[#edf6fa] px-3.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#0c6f97]">
                   {cloudStatus === 'signed-in' ? 'Cloud' : cloudStatus === 'unavailable' ? 'Local' : 'Limited'}
                 </span>
                 <button
@@ -336,7 +336,7 @@ export default function MainLayout() {
                 key={module.label}
                 type="button"
                 onClick={() => navigate(module.path)}
-                className="rounded-[10px] border border-[#ddd8cf] bg-[#fcfbf9] px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-[#5e646b] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#eff6fa] hover:text-[#1e242b]"
+                className="rounded-[10px] border border-[#d8e1ea] bg-[#fcfdff] px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-[#5e646b] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#eff6fa] hover:text-[#1e242b]"
               >
                 {module.label}
               </button>
@@ -348,20 +348,20 @@ export default function MainLayout() {
         <NavSection title="Programs" items={programs} />
         <NavSection title="Platform" items={platformItems} />
 
-        <div className="mt-auto flex items-center justify-between gap-3 border-t border-[#ddd8cf] pt-4 text-xs text-[#8c857b]">
+        <div className="mt-auto flex items-center justify-between gap-3 border-t border-[#d8e1ea] pt-4 text-xs text-[#7b8896]">
           <span>{subscription.tier}</span>
           <button
             type="button"
             onClick={() => navigate('/settings')}
-            className="rounded-[10px] border border-[#ddd8cf] bg-white px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#5f666d] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#eff6fa] hover:text-[#1e242b]"
+            className="rounded-[10px] border border-[#d8e1ea] bg-white px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#5f666d] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#eff6fa] hover:text-[#1e242b]"
           >
             Settings
           </button>
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-col bg-[#f4f1ec]">
-        <header className="sticky top-0 z-10 border-b border-[#ddd8cf] bg-[#fbfaf8]/92 backdrop-blur">
+      <div className="flex min-w-0 flex-col bg-[#f4f7fb]">
+        <header className="sticky top-0 z-10 border-b border-[#d8e1ea] bg-[#fbfdff]/92 backdrop-blur">
           <div className="flex min-h-[56px] flex-wrap items-center justify-between gap-4 px-5 py-3">
             <div className="flex items-center gap-3">
               <div className="text-[0.96rem] font-extrabold tracking-[0.01em] text-[#1e242b]">{currentLabel}</div>
@@ -383,25 +383,25 @@ export default function MainLayout() {
                   onChange={(event) => setSearch(event.target.value)}
                   onKeyDown={handleSearch}
                   placeholder="Search"
-                  className="h-10 w-full rounded-md border border-[#ddd8cf] bg-white pl-10 pr-4 text-sm text-[#1e242b] transition-all duration-150 ease-[ease] placeholder:text-[#8f959c] focus:border-[#0c6f97] focus:outline-none"
+                className="h-10 w-full rounded-md border border-[#d8e1ea] bg-white pl-10 pr-4 text-sm text-[#1e242b] transition-all duration-150 ease-[ease] placeholder:text-[#8f959c] focus:border-[#0c6f97] focus:outline-none"
                 />
               </label>
 
-              <div className="inline-flex h-10 items-center gap-3 rounded-md border border-[#ddd8cf] bg-white px-3 text-sm font-semibold text-[#1e242b]">
+              <div className="inline-flex h-10 items-center gap-3 rounded-md border border-[#d8e1ea] bg-white px-3 text-sm font-semibold text-[#1e242b]">
                 <span className="max-w-[190px] truncate">{accountLabel}</span>
                 <span className={classNames('inline-flex rounded-sm border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]',
                   cloudStatus === 'signed-in'
                     ? 'border-[#d7e8ef] bg-[#edf6fa] text-[#0c6f97]'
                     : cloudStatus === 'unavailable'
-                      ? 'border-[#ddd8cf] bg-[#f4efe8] text-[#726659]'
-                      : 'border-[#ddd8cf] bg-[#f3eee7] text-[#5a5148]',
+                      ? 'border-[#d8e1ea] bg-[#eef3f8] text-[#607384]'
+                      : 'border-[#d8e1ea] bg-[#eef3f8] text-[#607384]',
                 )}>
                   {cloudSession ? currentRole : cloudStatus === 'unavailable' ? 'Local' : 'Guest'}
                 </span>
               </div>
 
               <button
-                className="inline-flex h-10 items-center justify-center rounded-md border border-[#ddd8cf] bg-white px-4 text-sm font-semibold text-[#1e242b] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#eff6fa]"
+                className="inline-flex h-10 items-center justify-center rounded-md border border-[#d8e1ea] bg-white px-4 text-sm font-semibold text-[#1e242b] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#eff6fa]"
                 type="button"
                 onClick={() => setHelpOpen(true)}
               >
@@ -410,7 +410,7 @@ export default function MainLayout() {
 
               {cloudSession && canSyncCloud ? (
                 <button
-                  className="inline-flex h-10 items-center justify-center rounded-md border border-[#ddd8cf] bg-white px-4 text-sm font-semibold text-[#1e242b] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#eff6fa]"
+                  className="inline-flex h-10 items-center justify-center rounded-md border border-[#d8e1ea] bg-white px-4 text-sm font-semibold text-[#1e242b] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#eff6fa]"
                   type="button"
                   onClick={() => void handleCloudSignOut()}
                 >
@@ -419,7 +419,7 @@ export default function MainLayout() {
               ) : null}
 
               <button
-                className="relative inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#ddd8cf] bg-white text-[#1e242b] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#eff6fa] disabled:cursor-not-allowed disabled:opacity-50"
+                className="relative inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#d8e1ea] bg-white text-[#1e242b] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#eff6fa] disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 onClick={() => navigate('/documents')}
                 aria-label="Open document review"
@@ -433,7 +433,7 @@ export default function MainLayout() {
               </button>
 
               <button
-                className="inline-flex h-10 items-center justify-center rounded-md border border-[#ddd8cf] bg-white px-4 text-sm font-semibold text-[#1e242b] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#eff6fa] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center rounded-md border border-[#d8e1ea] bg-white px-4 text-sm font-semibold text-[#1e242b] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#eff6fa] disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 onClick={() => navigate('/documents?upload=1')}
                 disabled={!canUploadDocuments}
@@ -458,7 +458,7 @@ export default function MainLayout() {
           <Outlet />
         </main>
 
-        <nav className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-2 rounded-lg border border-[#ddd8cf] bg-[#fbfaf8] p-2 text-[#1e242b] shadow-lg lg:hidden" aria-label="Mobile quick navigation">
+        <nav className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-2 rounded-lg border border-[#d8e1ea] bg-[#fbfdff] p-2 text-[#1e242b] shadow-lg lg:hidden" aria-label="Mobile quick navigation">
           <NavLink
             to="/"
             end
@@ -521,9 +521,9 @@ export default function MainLayout() {
 
         <WorkspaceHelp open={helpOpen} title={currentLabel} sections={helpSections} onClose={() => setHelpOpen(false)} />
         {shortcutEditorOpen ? (
-          <div className="fixed inset-0 z-[120] flex items-center justify-end bg-[#2c2621]/28 p-4 backdrop-blur-[2px]" onClick={() => setShortcutEditorOpen(false)} role="presentation">
+          <div className="fixed inset-0 z-[120] flex items-center justify-end bg-[#1e242b]/18 p-4 backdrop-blur-[2px]" onClick={() => setShortcutEditorOpen(false)} role="presentation">
             <aside
-              className="w-full max-w-[360px] rounded-[12px] border border-[#ddd8cf] bg-white p-5 shadow-xl"
+              className="w-full max-w-[360px] rounded-[12px] border border-[#d8e1ea] bg-white p-5 shadow-xl"
               onClick={(event) => event.stopPropagation()}
               role="dialog"
               aria-modal="true"
@@ -537,7 +537,7 @@ export default function MainLayout() {
                 <button
                   type="button"
                   onClick={() => setShortcutEditorOpen(false)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#ddd8cf] text-[#6a7178] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#edf6fa] hover:text-[#1e242b]"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#d8e1ea] text-[#6a7178] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#edf6fa] hover:text-[#1e242b]"
                   aria-label="Close shortcut editor"
                 >
                   ×
@@ -555,7 +555,7 @@ export default function MainLayout() {
                         'rounded-md border px-3 py-3 text-left text-sm font-semibold transition-all duration-150 ease-[ease]',
                         active
                           ? 'border-[#0c6f97] bg-[#0c6f97] text-white'
-                          : 'border-[#ddd8cf] bg-white text-[#1e242b] hover:border-[#0c6f97] hover:bg-[#edf6fa]',
+                          : 'border-[#d8e1ea] bg-white text-[#1e242b] hover:border-[#0c6f97] hover:bg-[#edf6fa]',
                       )}
                     >
                       {module}

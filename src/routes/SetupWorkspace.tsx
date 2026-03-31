@@ -60,7 +60,7 @@ export default function SetupWorkspace() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f4f1ec] px-5 py-8">
+    <div className="min-h-screen bg-[#f4f7fb] px-5 py-8">
       <div className="mx-auto flex max-w-[1180px] flex-col gap-6">
         <PageHeader
           eyebrow="Workspace setup"

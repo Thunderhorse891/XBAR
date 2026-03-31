@@ -62,12 +62,20 @@ export const monitoringConfig = {
   enabled: readFlag(env.VITE_RUNTIME_MONITORING_ENABLED, true),
 };
 
+export function isStaticPreviewHost() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return window.location.hostname.endsWith('github.io');
+}
+
 export function isSupabaseConfigured() {
   return Boolean(supabaseConfig.url && supabaseConfig.anonKey);
 }
 
 export function isLocalModeEnabled() {
-  return authConfig.allowLocalMode;
+  return authConfig.allowLocalMode || isStaticPreviewHost();
 }
 
 export function isCloudAuthRequired() {

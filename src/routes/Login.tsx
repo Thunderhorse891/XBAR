@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Pill } from '@/components/app-ui';
-import { isCloudAuthRequired, isLocalModeEnabled, isSupabaseConfigured } from '@/lib/platformConfig';
+import { isCloudAuthRequired, isLocalModeEnabled, isStaticPreviewHost, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 
@@ -21,6 +21,7 @@ export default function Login() {
   }, [location.state]);
   const cloudRequired = isCloudAuthRequired();
   const allowLocalMode = isLocalModeEnabled();
+  const previewMode = isStaticPreviewHost();
 
   useEffect(() => {
     if (session && status === 'signed-in') {
@@ -51,12 +52,12 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f4f1ec] px-5 py-8">
+    <div className="min-h-screen bg-[#f4f7fb] px-5 py-8">
       <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-[1180px] gap-6 lg:grid-cols-[0.95fr,1.05fr]">
-        <section className="flex flex-col justify-between rounded-2xl border border-[#ddd8cf] bg-[linear-gradient(145deg,#ffffff_0%,#f1ede7_100%)] p-8 text-[#1e242b] shadow-sm">
+        <section className="flex flex-col justify-between rounded-2xl border border-[#d8e1ea] bg-[linear-gradient(145deg,#ffffff_0%,#eff4f8_100%)] p-8 text-[#1e242b] shadow-sm">
           <div>
             <div className="flex items-center gap-3">
-              <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-[#d8d2c8] bg-white p-1.5 shadow-sm">
+              <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-[#d8e1ea] bg-white p-1.5 shadow-sm">
                 <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" className="h-full w-full object-contain" />
               </div>
               <div>
@@ -75,25 +76,25 @@ export default function Login() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-[#ddd8cf] bg-white/80 px-4 py-3">
+            <div className="rounded-xl border border-[#d8e1ea] bg-white/80 px-4 py-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7e8891]">Auth</div>
               <div className="mt-2 text-sm font-semibold text-[#1e242b]">
-                {isSupabaseConfigured() ? 'Supabase live' : allowLocalMode ? 'Local mode' : 'Cloud required'}
+                {isSupabaseConfigured() ? 'Supabase live' : previewMode ? 'Preview mode' : allowLocalMode ? 'Local mode' : 'Cloud required'}
               </div>
             </div>
-            <div className="rounded-xl border border-[#ddd8cf] bg-white/80 px-4 py-3">
+            <div className="rounded-xl border border-[#d8e1ea] bg-white/80 px-4 py-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7e8891]">Access</div>
               <div className="mt-2 text-sm font-semibold text-[#1e242b]">Role-aware</div>
             </div>
-            <div className="rounded-xl border border-[#ddd8cf] bg-white/80 px-4 py-3">
+            <div className="rounded-xl border border-[#d8e1ea] bg-white/80 px-4 py-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7e8891]">Sync</div>
-              <div className="mt-2 text-sm font-semibold text-[#1e242b]">Cloud autosave</div>
+              <div className="mt-2 text-sm font-semibold text-[#1e242b]">{previewMode ? 'Preview sandbox' : 'Cloud autosave'}</div>
             </div>
           </div>
         </section>
 
         <section className="flex items-center">
-          <div className="w-full rounded-2xl border border-[#ddd8cf] bg-white p-8 shadow-sm">
+          <div className="w-full rounded-2xl border border-[#d8e1ea] bg-white p-8 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7e8891]">Workspace login</div>
@@ -156,8 +157,8 @@ export default function Login() {
                   before opening the workspace.
                 </div>
               ) : (
-                <div className="mt-8 rounded-xl border border-[#ddd8cf] bg-[#f4efe8] px-4 py-4 text-sm leading-7 text-[#5a5148]">
-                  Supabase auth is not configured for this build yet, so this app is currently running in local workspace mode. Add
+                <div className="mt-8 rounded-xl border border-[#d8e1ea] bg-[#eff4f8] px-4 py-4 text-sm leading-7 text-[#4f6272]">
+                  {previewMode ? 'This public preview is running in preview mode so you can access the workspace without cloud auth. Add' : 'Supabase auth is not configured for this build yet, so this app is currently running in local workspace mode. Add'}
                   {' '}
                   <code>VITE_SUPABASE_URL</code>
                   {' '}
