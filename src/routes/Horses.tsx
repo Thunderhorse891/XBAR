@@ -189,16 +189,9 @@ export default function Horses() {
       <PageHeader
         title="Horses"
         actions={
-          <div className="page-actions">
-            <SurfaceTabs
-              items={['Portfolio', 'Registry']}
-              active={viewMode}
-              onChange={(mode) => setViewMode(mode as ViewMode)}
-            />
-            <button className="button button--primary button--compact" type="button" onClick={() => setSearchParams({ new: '1' })} disabled={!canCreateHorse}>
-              New
-            </button>
-          </div>
+          <button className="button button--primary button--compact" type="button" onClick={() => setSearchParams({ new: '1' })} disabled={!canCreateHorse}>
+            New horse
+          </button>
         }
       />
 
@@ -325,49 +318,58 @@ export default function Horses() {
         </section>
       ) : null}
 
-      <section className="surface-hero surface-hero--dark">
-        <div className="surface-hero__top">
-          <div>
-            <div className="surface-hero__eyebrow">Portfolio</div>
-            <h2 className="surface-hero__title">Active horses</h2>
+      <section className="portfolio-stage">
+        <div className="portfolio-stage__lead">
+          <div className="portfolio-stage__eyebrow">Horse ledger</div>
+          <h2 className="portfolio-stage__title">Premium records for sale, care, and chain of title.</h2>
+          <div className="portfolio-stage__notes">
+            <Pill tone="blue">{viewMode}</Pill>
+            <Pill tone={buyerReady.length ? 'emerald' : 'slate'}>{buyerReady.length} buyer ready</Pill>
+            <Pill tone={transferRisk.length ? 'rose' : 'emerald'}>{transferRisk.length} transfer risk</Pill>
           </div>
-          <div className="surface-hero__stats">
-            <div className="surface-hero__stat">
-              <span>Records</span>
-              <strong>{filtered.length}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Ready</span>
-              <strong>{saleReady.length}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Shared</span>
-              <strong>{buyerReady.length}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Transfer risk</span>
-              <strong>{transferRisk.length}</strong>
-            </div>
+        </div>
+
+        <div className="portfolio-stage__stats">
+          <div className="portfolio-stage__stat">
+            <span>Records</span>
+            <strong>{filtered.length}</strong>
+          </div>
+          <div className="portfolio-stage__stat">
+            <span>Ready</span>
+            <strong>{saleReady.length}</strong>
+          </div>
+          <div className="portfolio-stage__stat">
+            <span>Shared</span>
+            <strong>{buyerReady.length}</strong>
+          </div>
+          <div className="portfolio-stage__stat">
+            <span>Risk</span>
+            <strong>{transferRisk.length}</strong>
           </div>
         </div>
       </section>
 
-      <section className="surface-panel">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <section className="portfolio-toolbar">
+        <div className="portfolio-toolbar__controls">
+          <SurfaceTabs
+            items={['Portfolio', 'Registry']}
+            active={viewMode}
+            onChange={(mode) => setViewMode(mode as ViewMode)}
+          />
           <SurfaceTabs
             items={segments}
             active={segmentFilter}
             onChange={(segment) => setSegmentFilter(segment as SegmentFilter)}
             className="surface-tabs--wrap"
           />
-
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="field-input"
-            placeholder="Search"
-          />
         </div>
+
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          className="field-input field-input--wide"
+          placeholder="Search horses"
+        />
       </section>
 
       {viewMode === 'Portfolio' ? (
@@ -443,23 +445,23 @@ export default function Horses() {
                     </div>
                   </div>
 
-                  <div className="horse-card__meta-grid">
-                    <div className="horse-card__meta-cell">
-                      <span>Owner</span>
-                      <strong>{horse.owner}</strong>
-                    </div>
-                    <div className="horse-card__meta-cell">
-                      <span>Pasture</span>
-                      <strong>{horse.location.pasture}</strong>
-                    </div>
-                    <div className="horse-card__meta-cell">
-                      <span>Registry</span>
-                      <strong>{horse.registrationNumber}</strong>
-                    </div>
-                    <div className="horse-card__meta-cell">
-                      <span>Documents</span>
-                      <strong>{horse.documents.length}</strong>
-                    </div>
+                  <div className="horse-card__facts">
+                    <span className="horse-card__fact">
+                      <strong>Owner</strong>
+                      {horse.owner}
+                    </span>
+                    <span className="horse-card__fact">
+                      <strong>Barn</strong>
+                      {horse.location.barn}
+                    </span>
+                    <span className="horse-card__fact">
+                      <strong>Registry</strong>
+                      {horse.registrationNumber}
+                    </span>
+                    <span className="horse-card__fact">
+                      <strong>Docs</strong>
+                      {horse.documents.length}
+                    </span>
                   </div>
 
                   {showSaleSignals ? (
