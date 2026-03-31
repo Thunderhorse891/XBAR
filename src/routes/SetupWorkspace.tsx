@@ -1,7 +1,7 @@
 import { type FormEvent, useMemo, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
-import { isSupabaseConfigured } from '@/lib/platformConfig';
+import { isStaticPreviewHost, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useWorkspaceReady, useXbarStore } from '@/store/useXbarStore';
@@ -25,6 +25,7 @@ export default function SetupWorkspace() {
     defaultBarn: workspaceProfile.defaultBarn,
     defaultPasture: workspaceProfile.defaultPasture,
   });
+  const previewMode = isStaticPreviewHost();
 
   const accessLabel = useMemo(() => {
     if (!isSupabaseConfigured()) {
@@ -59,6 +60,29 @@ export default function SetupWorkspace() {
     navigate('/', { replace: true });
   };
 
+  const handlePreviewWorkspace = () => {
+    const result = initializeWorkspace({
+      businessName: 'XBAR',
+      ranchName: 'Preview Ranch',
+      ranchManagerName: 'Preview Manager',
+      operationsEmail: 'preview@xbar.app',
+      defaultOwnerName: 'Preview Ranch',
+      defaultOwnerEntity: 'XBAR Preview LLC',
+      defaultBarn: 'Barn A',
+      defaultPasture: 'North Pasture',
+    });
+
+    pushToast({
+      title: result.ok ? 'Preview ready' : 'Preview blocked',
+      message: result.ok ? 'Opening the preview workspace.' : result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
+
+    if (result.ok) {
+      navigate('/', { replace: true });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#f4f7fb] px-5 py-8">
       <div className="mx-auto flex max-w-[1180px] flex-col gap-6">
@@ -75,6 +99,16 @@ export default function SetupWorkspace() {
           <MetricCard label="Imports" value="Backup ready" tone="blue" />
           <MetricCard label="Runtime" value={isSupabaseConfigured() ? 'Cloud auth' : 'Local'} tone="slate" />
         </div>
+
+        {previewMode ? (
+          <Panel eyebrow="Preview" title="Open the app">
+            <div className="inline-actions">
+              <button className="button button--primary" type="button" onClick={handlePreviewWorkspace}>
+                Open preview workspace
+              </button>
+            </div>
+          </Panel>
+        ) : null}
 
         <div className="dashboard-grid dashboard-grid--primary">
           <Panel eyebrow="Foundation" title="What happens next">
