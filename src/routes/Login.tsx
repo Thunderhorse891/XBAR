@@ -5,6 +5,33 @@ import { isCloudAuthRequired, isLocalModeEnabled, isSupabaseConfigured } from '@
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 
+const legalRailItems = [
+  {
+    label: 'Subscription software',
+    copy: 'Workspace use is intended for licensed, recurring subscription access.',
+  },
+  {
+    label: 'Private records',
+    copy: 'Horse records, documents, and buyer rooms stay tied to the operating workspace.',
+  },
+  {
+    label: 'Controlled sharing',
+    copy: 'Buyer-facing links are meant for controlled review, not open public distribution.',
+  },
+  {
+    label: 'Account terms',
+    copy: 'Use of the workspace is subject to account, privacy, and billing terms.',
+  },
+  {
+    label: 'Operational use',
+    copy: 'Built for ranches, breeders, trainers, and sale teams managing active horse inventory.',
+  },
+  {
+    label: 'Copyright',
+    copy: '© 2026 XBAR. All rights reserved.',
+  },
+] as const;
+
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -80,24 +107,6 @@ export default function Login() {
           </div>
 
           <div className="relative z-[1] space-y-4">
-            <div className="rounded-[22px] border border-[#dbe4ed] bg-white/88 p-5 shadow-sm">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7e8891]">What you open</div>
-              <div className="mt-3 grid gap-3">
-                <div className="flex items-center justify-between gap-4 border-b border-[#edf2f7] pb-3">
-                  <span className="text-sm font-semibold text-[#1e242b]">Horse desk</span>
-                  <span className="text-sm text-[#5f6c79]">Sale, care, title</span>
-                </div>
-                <div className="flex items-center justify-between gap-4 border-b border-[#edf2f7] pb-3">
-                  <span className="text-sm font-semibold text-[#1e242b]">Document intake</span>
-                  <span className="text-sm text-[#5f6c79]">Packets, trust, review</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-sm font-semibold text-[#1e242b]">Ranch desk</span>
-                  <span className="text-sm text-[#5f6c79]">Weather, care, budget</span>
-                </div>
-              </div>
-            </div>
-
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-[18px] border border-[#dbe4ed] bg-white/84 px-4 py-3">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7e8891]">Auth</div>
@@ -111,6 +120,21 @@ export default function Login() {
                 <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7e8891]">Sync</div>
                 <div className="mt-2 text-sm font-semibold text-[#1e242b]">{syncLabel}</div>
               </div>
+            </div>
+
+            <div className="login-legal-marquee">
+              <div className="login-legal-track">
+                {[...legalRailItems, ...legalRailItems].map((item, index) => (
+                  <article key={`${item.label}-${index}`} className="login-legal-card">
+                    <div className="login-legal-card__label">{item.label}</div>
+                    <div className="login-legal-card__copy">{item.copy}</div>
+                  </article>
+                ))}
+              </div>
+            </div>
+
+            <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#7e8891]">
+              © 2026 XBAR Software. Subscription workspace for ranch, breeding, and sale operations.
             </div>
           </div>
         </section>
@@ -179,6 +203,9 @@ export default function Login() {
                 <div className="mt-5 rounded-[18px] border border-[#e3ebf2] bg-white px-4 py-4 text-sm leading-6 text-[#50606d]">
                   Email sends a secure login link. Facebook is available when that workspace connector is enabled.
                 </div>
+                <div className="mt-4 text-xs leading-6 text-[#7a8794]">
+                  By continuing, you agree to the workspace terms, privacy notice, and subscription billing terms that govern this account.
+                </div>
               </div>
             ) : !allowLocalMode ? (
               <div className="mt-8 rounded-[24px] border border-[#e5c7c7] bg-[#fff4f4] px-5 py-5 text-sm leading-7 text-[#7b3a3a] shadow-sm">
@@ -196,6 +223,9 @@ export default function Login() {
                   <div className="text-sm leading-6 text-[#647281]">
                     Add <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> when you want real user login.
                   </div>
+                </div>
+                <div className="mt-4 text-xs leading-6 text-[#7a8794]">
+                  Browser access is for workspace setup and preview. Production use should run behind configured account, privacy, and billing terms.
                 </div>
               </div>
             )}
