@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Pill } from '@/components/app-ui';
-import { isCloudAuthRequired, isLocalModeEnabled, isStaticPreviewHost, isSupabaseConfigured } from '@/lib/platformConfig';
+import { isCloudAuthRequired, isLocalModeEnabled, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 
@@ -21,7 +21,6 @@ export default function Login() {
   }, [location.state]);
   const cloudRequired = isCloudAuthRequired();
   const allowLocalMode = isLocalModeEnabled();
-  const previewMode = isStaticPreviewHost();
 
   useEffect(() => {
     if (session && status === 'signed-in') {
@@ -79,7 +78,7 @@ export default function Login() {
             <div className="rounded-xl border border-[#d8e1ea] bg-white/80 px-4 py-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7e8891]">Auth</div>
               <div className="mt-2 text-sm font-semibold text-[#1e242b]">
-                {isSupabaseConfigured() ? 'Supabase live' : previewMode ? 'Preview mode' : allowLocalMode ? 'Local mode' : 'Cloud required'}
+                {isSupabaseConfigured() ? 'Supabase live' : allowLocalMode ? 'Browser access' : 'Cloud required'}
               </div>
             </div>
             <div className="rounded-xl border border-[#d8e1ea] bg-white/80 px-4 py-3">
@@ -88,7 +87,7 @@ export default function Login() {
             </div>
             <div className="rounded-xl border border-[#d8e1ea] bg-white/80 px-4 py-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7e8891]">Sync</div>
-              <div className="mt-2 text-sm font-semibold text-[#1e242b]">{previewMode ? 'Preview sandbox' : 'Cloud autosave'}</div>
+              <div className="mt-2 text-sm font-semibold text-[#1e242b]">{isSupabaseConfigured() ? 'Cloud autosave' : 'Browser storage'}</div>
             </div>
           </div>
         </section>
@@ -101,7 +100,7 @@ export default function Login() {
                 <h2 className="mt-2 text-[1.7rem] font-bold tracking-[-0.05em] text-[#1e242b]">Enter XBAR</h2>
               </div>
               <Pill tone={isSupabaseConfigured() ? 'blue' : cloudRequired ? 'rose' : 'slate'}>
-                {isSupabaseConfigured() ? 'Cloud auth' : cloudRequired ? 'Cloud required' : 'Local only'}
+                {isSupabaseConfigured() ? 'Secure login' : cloudRequired ? 'Secure login required' : 'Browser access'}
               </Pill>
             </div>
 
@@ -158,7 +157,7 @@ export default function Login() {
                 </div>
               ) : (
                 <div className="mt-8 rounded-xl border border-[#d8e1ea] bg-[#eff4f8] px-4 py-4 text-sm leading-7 text-[#4f6272]">
-                  {previewMode ? 'This public preview is running in preview mode so you can access the workspace without cloud auth. Add' : 'Supabase auth is not configured for this build yet, so this app is currently running in local workspace mode. Add'}
+                  This build is using browser access so you can open the workspace without cloud login. Add
                   {' '}
                   <code>VITE_SUPABASE_URL</code>
                   {' '}

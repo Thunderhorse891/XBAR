@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
+import { buildPublicShareUrl } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
@@ -14,9 +15,11 @@ export default function Sales() {
   const horses = useXbarStore((state) => state.horses);
   const salesLeads = useXbarStore((state) => state.salesLeads);
   const sharedAccess = useXbarStore((state) => state.sharedAccess);
+  const sharedListings = useXbarStore((state) => state.sharedListings);
   const documents = useXbarStore((state) => state.documents);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const updateSalesLead = useXbarStore((state) => state.updateSalesLead);
+  const recordSharedChannel = useXbarStore((state) => state.recordSharedChannel);
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageSales = useCurrentRoleCapability('manageSales');
   const saleHorses = horses.filter(
@@ -46,6 +49,11 @@ export default function Sales() {
   const [menuState, setMenuState] = useState<{ type: 'lead' | 'horse'; id: string; x: number; y: number } | null>(null);
   const menuLead = menuState?.type === 'lead' ? salesLeads.find((lead) => lead.id === menuState.id) : undefined;
   const menuHorse = menuState?.type === 'horse' ? saleHorses.find((horse) => horse.id === menuState.id) : undefined;
+  const menuListing = menuHorse ? sharedListings.find((listing) => listing.horseId === menuHorse.id && listing.state !== 'Archived') : undefined;
+  const menuPacket = menuHorse ? packetByHorseId[menuHorse.id] : undefined;
+  const menuShareUrl = menuPacket
+    ? buildPublicShareUrl(menuPacket.sharePath, menuListing?.accessMode === 'Private Token' ? menuListing.shareToken : undefined)
+    : '';
   const menuItems = menuLead
     ? [
         ...(canManageSales
@@ -83,8 +91,13 @@ export default function Sales() {
           },
         {
           id: 'open-profile',
-          label: 'Open share view',
-          onSelect: () => navigate(`/profiles/${menuHorse.id}`, { state: { internalPreview: true } }),
+          label: 'Open buyer link',
+          onSelect: async () => {
+            await recordSharedChannel(menuHorse.id, 'Direct Link');
+            if (typeof window !== 'undefined') {
+              window.open(menuShareUrl, '_blank', 'noopener,noreferrer');
+            }
+          },
         },
       ]
       : [];
@@ -119,6 +132,11 @@ export default function Sales() {
                 >
                   {(() => {
                     const packet = packetByHorseId[horse.id];
+                    const sharedListing = sharedListings.find((listing) => listing.horseId === horse.id && listing.state !== 'Archived');
+                    const publicShareUrl = buildPublicShareUrl(
+                      packet.sharePath,
+                      sharedListing?.accessMode === 'Private Token' ? sharedListing.shareToken : undefined,
+                    );
 
                     return (
                       <>
@@ -146,9 +164,18 @@ export default function Sales() {
                             <span>{formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)}</span>
                           </div>
                           <div className="inline-actions inline-actions--card">
-                            <Link className="button button--ghost button--compact" to={packet.sharePath} state={{ internalPreview: true }} onClick={(event) => event.stopPropagation()}>
-                              Open share view
-                            </Link>
+                            <a
+                              className="button button--ghost button--compact"
+                              href={publicShareUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={async (event) => {
+                                event.stopPropagation();
+                                await recordSharedChannel(horse.id, 'Direct Link');
+                              }}
+                            >
+                              Open buyer link
+                            </a>
                           </div>
                         </div>
                       </>
@@ -200,7 +227,7 @@ export default function Sales() {
                     </div>
                     <div className="inline-metrics">
                       <span>{lead.savedListing ? 'Saved listing' : 'Not saved yet'}</span>
-                      <span>{lead.shareReady ? 'Share link issued' : 'Share link staged'}</span>
+                      <span>{lead.shareReady ? 'Buyer link live' : 'Buyer link private'}</span>
                       <span>Last touch {formatDateLabel(lead.lastTouch)}</span>
                     </div>
                   </button>

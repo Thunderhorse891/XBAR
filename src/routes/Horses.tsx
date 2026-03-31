@@ -6,6 +6,7 @@ import { HorseMediaPreview } from '@/components/HorseMediaPreview';
 import { SalePacketSlots } from '@/components/SalePacketSlots';
 import { PageHeader, Pill, ProgressBar, SurfaceTabs } from '@/components/app-ui';
 import { DotsIcon } from '@/components/icons';
+import { buildPublicShareUrl } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
@@ -118,7 +119,18 @@ export default function Horses() {
 
   const menuHorse = filtered.find((horse) => horse.id === menuState?.horseId) ?? horses.find((horse) => horse.id === menuState?.horseId);
   const menuSaved = menuHorse ? sharedListings.some((listing) => listing.horseId === menuHorse.id && listing.state !== 'Archived') : false;
-  const menuItems = menuHorse
+  const menuPacket = menuHorse
+    ? buildHorsePacketCompleteness(
+        menuHorse,
+        documents.filter((document) => document.horseId === menuHorse.id),
+        ownershipRecords.find((record) => record.horseId === menuHorse.id),
+      )
+    : undefined;
+  const menuListing = menuHorse ? sharedListings.find((listing) => listing.horseId === menuHorse.id && listing.state !== 'Archived') : undefined;
+  const menuShareUrl = menuPacket
+    ? buildPublicShareUrl(menuPacket.sharePath, menuListing?.accessMode === 'Private Token' ? menuListing.shareToken : undefined)
+    : '';
+  const menuItems = menuHorse && menuPacket
     ? [
         {
           id: 'open-profile',
@@ -127,10 +139,12 @@ export default function Horses() {
         },
         {
           id: 'open-share-view',
-          label: 'Open share view',
+          label: 'Open buyer link',
           onSelect: async () => {
             await recordSharedChannel(menuHorse.id, 'Direct Link');
-            navigate(`/profiles/${menuHorse.id}`, { state: { internalPreview: true } });
+            if (typeof window !== 'undefined') {
+              window.open(menuShareUrl, '_blank', 'noopener,noreferrer');
+            }
           },
         },
         ...(canManageSharedAccess

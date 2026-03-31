@@ -64,7 +64,7 @@ test('blocks duplicate or over-capacity invites', () => {
   );
 });
 
-test('buyer room access honors private tokens and internal preview', () => {
+test('buyer room access honors private tokens and public links', () => {
   const listing: SharedListingRecord = {
     id: 'listing-1',
     horseId: 'horse-1',
@@ -78,8 +78,7 @@ test('buyer room access honors private tokens and internal preview', () => {
     updatedAt: '2026-03-30',
   };
 
-  assert.equal(hasBuyerShareAccess(listing, '', false), false);
-  assert.equal(hasBuyerShareAccess(listing, 'secret', false), true);
-  assert.equal(hasBuyerShareAccess(listing, '', true), true);
-  assert.equal(hasBuyerShareAccess({ ...listing, accessMode: 'Public Link' }, '', false), true);
+  assert.equal(hasBuyerShareAccess(listing, ''), false);
+  assert.equal(hasBuyerShareAccess(listing, 'secret'), true);
+  assert.equal(hasBuyerShareAccess({ ...listing, accessMode: 'Public Link' }, ''), true);
 });

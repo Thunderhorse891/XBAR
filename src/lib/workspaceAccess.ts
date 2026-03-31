@@ -53,12 +53,12 @@ export function validateWorkspaceInvitation(params: InviteValidationParams) {
   return null;
 }
 
-export function hasBuyerShareAccess(listing: SharedListingRecord | undefined, shareToken: string, internalPreview: boolean) {
+export function hasBuyerShareAccess(listing: SharedListingRecord | undefined, shareToken: string) {
   if (!listing || listing.state === 'Archived') {
     return false;
   }
 
-  if (internalPreview || listing.accessMode === 'Public Link') {
+  if (listing.accessMode === 'Public Link') {
     return true;
   }
 

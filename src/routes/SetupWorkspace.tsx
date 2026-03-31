@@ -29,9 +29,9 @@ export default function SetupWorkspace() {
 
   const accessLabel = useMemo(() => {
     if (!isSupabaseConfigured()) {
-      return 'Local mode';
+      return 'Browser setup';
     }
-    return status === 'signed-in' ? 'Cloud connected' : 'Cloud pending';
+    return status === 'signed-in' ? 'Cloud ready' : 'Sign-in pending';
   }, [status]);
 
   if (workspaceReady) {
@@ -60,21 +60,23 @@ export default function SetupWorkspace() {
     navigate('/', { replace: true });
   };
 
-  const handlePreviewWorkspace = () => {
+  const handleQuickStart = () => {
+    const businessName = form.businessName.trim() || 'My Ranch LLC';
+    const ranchName = form.ranchName.trim() || 'Main Ranch';
     const result = initializeWorkspace({
-      businessName: 'XBAR',
-      ranchName: 'Preview Ranch',
-      ranchManagerName: 'Preview Manager',
-      operationsEmail: 'preview@xbar.app',
-      defaultOwnerName: 'Preview Ranch',
-      defaultOwnerEntity: 'XBAR Preview LLC',
-      defaultBarn: 'Barn A',
-      defaultPasture: 'North Pasture',
+      businessName,
+      ranchName,
+      ranchManagerName: form.ranchManagerName.trim() || 'Operations Lead',
+      operationsEmail: form.operationsEmail.trim() || 'owner@ranch.local',
+      defaultOwnerName: form.defaultOwnerName.trim() || ranchName,
+      defaultOwnerEntity: form.defaultOwnerEntity.trim() || businessName,
+      defaultBarn: form.defaultBarn.trim() || 'Barn 1',
+      defaultPasture: form.defaultPasture.trim() || 'Pasture 1',
     });
 
     pushToast({
-      title: result.ok ? 'Preview ready' : 'Preview blocked',
-      message: result.ok ? 'Opening the preview workspace.' : result.message,
+      title: result.ok ? 'Workspace ready' : 'Setup blocked',
+      message: result.ok ? 'Opening your workspace.' : result.message,
       tone: result.ok ? 'success' : 'error',
     });
 
@@ -97,14 +99,14 @@ export default function SetupWorkspace() {
         <div className="metric-grid">
           <MetricCard label="Startup" value="Empty" tone="emerald" />
           <MetricCard label="Imports" value="Backup ready" tone="blue" />
-          <MetricCard label="Runtime" value={isSupabaseConfigured() ? 'Cloud auth' : 'Local'} tone="slate" />
+          <MetricCard label="Runtime" value={isSupabaseConfigured() ? 'Cloud' : 'Browser'} tone="slate" />
         </div>
 
         {previewMode ? (
-          <Panel eyebrow="Preview" title="Open the app">
+          <Panel eyebrow="Quick start" title="Open the app">
             <div className="inline-actions">
-              <button className="button button--primary" type="button" onClick={handlePreviewWorkspace}>
-                Open preview workspace
+              <button className="button button--primary" type="button" onClick={handleQuickStart}>
+                Open workspace
               </button>
             </div>
           </Panel>

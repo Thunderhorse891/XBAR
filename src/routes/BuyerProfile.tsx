@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
 import { SalePacketSlots } from '@/components/SalePacketSlots';
@@ -14,7 +14,6 @@ import { useHorseRecord, useXbarStore } from '@/store/useXbarStore';
 
 export default function BuyerProfile() {
   const { id } = useParams<{ id: string }>();
-  const location = useLocation();
   const [searchParams] = useSearchParams();
   const localHorse = useHorseRecord(id);
   const pushToast = useUiStore((state) => state.pushToast);
@@ -23,21 +22,33 @@ export default function BuyerProfile() {
   const localOwnershipRecord = useXbarStore((state) => state.ownershipRecords.find((record) => record.horseId === id));
   const localSharedListing = useXbarStore((state) => state.sharedListings.find((listing) => listing.horseId === id && listing.state !== 'Archived'));
   const shareToken = searchParams.get('t')?.trim() ?? '';
-  const internalPreview = location.state && typeof location.state === 'object' && 'internalPreview' in location.state
-    ? Boolean((location.state as { internalPreview?: boolean }).internalPreview)
-    : false;
+  const localAccessAllowed = hasBuyerShareAccess(localSharedListing, shareToken);
+  const localPayload = useMemo(
+    () =>
+      localHorse && localAccessAllowed
+        ? {
+            horse: localHorse,
+            documents: localDocuments,
+            ownershipRecord: localOwnershipRecord,
+            sharedListing: localSharedListing,
+          }
+        : undefined,
+    [localAccessAllowed, localDocuments, localHorse, localOwnershipRecord, localSharedListing],
+  );
   const [remoteState, setRemoteState] = useState<{
     status: 'idle' | 'loading' | 'loaded' | 'error';
     payload?: PublicBuyerProfilePayload;
     message?: string;
     source?: 'rpc' | 'local';
   }>(() => ({
-    status: internalPreview ? 'idle' : 'loading',
+    status: localPayload ? 'loaded' : 'loading',
+    payload: localPayload,
+    source: localPayload ? 'local' : undefined,
   }));
   const sharePath = useMemo(() => (id ? `/profiles/${id}` : ''), [id]);
 
   useEffect(() => {
-    if (!id || internalPreview) {
+    if (!id) {
       return;
     }
 
@@ -66,15 +77,10 @@ export default function BuyerProfile() {
         return;
       }
 
-      if (localHorse) {
+      if (localPayload) {
         setRemoteState({
           status: 'loaded',
-          payload: {
-            horse: localHorse,
-            documents: localDocuments,
-            ownershipRecord: localOwnershipRecord,
-            sharedListing: localSharedListing,
-          },
+          payload: localPayload,
           source: 'local',
           message: result.message,
         });
@@ -90,38 +96,33 @@ export default function BuyerProfile() {
     return () => {
       disposed = true;
     };
-  }, [id, internalPreview, localDocuments, localHorse, localOwnershipRecord, localSharedListing, sharePath, shareToken]);
+  }, [id, localPayload, sharePath, shareToken]);
 
-  const resolvedPayload = internalPreview
-    ? localHorse
-      ? {
-          horse: localHorse,
-          documents: localDocuments,
-          ownershipRecord: localOwnershipRecord,
-          sharedListing: localSharedListing,
-        }
-      : undefined
-    : remoteState.payload;
+  const resolvedPayload = remoteState.payload ?? localPayload;
 
   const horse = resolvedPayload?.horse;
   const documents = resolvedPayload?.documents ?? [];
   const ownershipRecord = resolvedPayload?.ownershipRecord;
   const sharedListing = resolvedPayload?.sharedListing;
-  const matchingHorses = internalPreview || remoteState.source === 'local' ? localHorses : horse ? [horse] : [];
+  const matchingHorses = remoteState.source === 'local' || !remoteState.payload ? localHorses : horse ? [horse] : [];
 
   if (!horse) {
+    const title = remoteState.status === 'loading'
+      ? 'Loading buyer room'
+      : localHorse && localSharedListing
+        ? 'Share link locked'
+        : 'Buyer profile unavailable';
+    const description = remoteState.status === 'loading'
+      ? 'Loading listing and packet data.'
+      : localHorse && localSharedListing && !localAccessAllowed
+        ? 'This buyer room requires a valid access link from the workspace.'
+        : remoteState.message ?? 'Record not found in this workspace.';
+
     return (
       <main className="buyer-shell">
         <div className="buyer-shell__inner">
-          <Panel
-            title={remoteState.status === 'loading' ? 'Loading buyer room' : 'Buyer profile unavailable'}
-            description={
-              remoteState.status === 'loading'
-                ? 'Loading the cloud listing and packet data.'
-                : remoteState.message ?? 'Record not found in this workspace.'
-            }
-          >
-            {internalPreview ? (
+          <Panel title={title} description={description}>
+            {localHorse ? (
               <Link className="button button--ghost" to="/horses">
                 Back to horses
               </Link>
@@ -134,7 +135,6 @@ export default function BuyerProfile() {
 
   const packet = buildHorsePacketCompleteness(horse, documents, ownershipRecord);
   const publicShareToken = sharedListing?.accessMode === 'Private Token' ? sharedListing.shareToken : undefined;
-  const accessAllowed = internalPreview ? hasBuyerShareAccess(sharedListing, shareToken, true) : remoteState.status === 'loaded';
   const publicShareUrl = buildPublicShareUrl(packet.sharePath, publicShareToken);
   const visibleDocuments = documents
     .map((document) => ({
@@ -146,28 +146,10 @@ export default function BuyerProfile() {
     (asset) => asset.status === 'Approved' && (asset.kind === 'Hero' || asset.kind === 'Conformation' || asset.kind === 'Sale Still'),
   ).slice(0, 4);
 
-  if (!accessAllowed) {
-    return (
-      <main className="buyer-shell">
-        <div className="buyer-shell__inner">
-          <Panel title="Share link locked" description="This buyer room requires a valid access link from the workspace.">
-            <div className="inline-actions">
-              {internalPreview ? (
-                <Link className="button button--ghost" to={`/horses/${horse.id}`}>
-                  Back to horse
-                </Link>
-              ) : null}
-            </div>
-          </Panel>
-        </div>
-      </main>
-    );
-  }
-
   return (
     <main className="buyer-shell">
       <div className="buyer-shell__inner">
-        {internalPreview ? (
+        {localHorse ? (
           <Link className="inline-link" to={`/horses/${horse.id}`}>
             Back to horse workspace
           </Link>
@@ -193,7 +175,6 @@ export default function BuyerProfile() {
               <Pill tone={sharedListing?.accessMode === 'Public Link' ? 'emerald' : 'slate'}>
                 {sharedListing?.accessMode ?? 'Private Token'}
               </Pill>
-              {!internalPreview && remoteState.source === 'rpc' ? <Pill tone="emerald">Cloud listing</Pill> : null}
             </div>
             <div className="buyer-share">
               <span>Share path</span>

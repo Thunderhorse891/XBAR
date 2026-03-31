@@ -531,7 +531,7 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
     id,
     name,
     barnName,
-    summary: `${barnName} is a newly staged XBAR horse record ready for intake, media, ownership, and care workflows.`,
+    summary: `${barnName} is a new XBAR horse record ready for intake, media, ownership, and care workflows.`,
     segment: input.segment,
     status: input.status,
     breed: 'Quarter Horse',
@@ -820,7 +820,7 @@ export const useXbarStore = create<XbarStore>()(
 
         return {
           ok: true,
-          message: resetLegacyDemo ? 'Workspace created and legacy demo records were cleared.' : 'Workspace created.',
+          message: resetLegacyDemo ? 'Workspace created and legacy starter records were cleared.' : 'Workspace created.',
         };
       },
       updateWorkspaceProfile: (patch) => {

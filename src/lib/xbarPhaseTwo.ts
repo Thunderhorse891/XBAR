@@ -39,7 +39,7 @@ export type DocumentTrustProfile = {
   readyForProfile: boolean;
 };
 
-export type BuyerProfileStatus = 'Live' | 'Needs Review' | 'Blocked' | 'Staged';
+export type BuyerProfileStatus = 'Live' | 'Needs Review' | 'Blocked' | 'Private';
 
 export type PacketCompleteness = {
   score: number;
@@ -323,7 +323,7 @@ export function buildHorsePacketCompleteness(
             : 'missing',
       detail:
         hasApprovedHero && (hasApprovedSaleStill || mediaDocs.some(isDocumentReady))
-          ? 'Hero imagery and packet media are staged for a buyer view.'
+        ? 'Hero imagery and packet media are approved for buyer presentation.'
           : horse.gallery.length || mediaDocs.length
             ? 'Visual assets exist, but the packet still needs stronger coverage.'
             : 'No buyer-facing media packet is attached yet.',
@@ -344,7 +344,7 @@ export function buildHorsePacketCompleteness(
             : 'missing',
       detail:
         mediaDocs.some(isDocumentReady) && horse.sale.socialReady && !hasHighAlert
-          ? 'Buyer-safe packet is staged for a live share link.'
+          ? 'Buyer-safe packet is approved for live sharing.'
           : hasHighAlert
             ? 'A high-severity alert is still blocking a buyer-safe release.'
             : 'Buyer packet is present but still needs trust review.',
@@ -364,7 +364,7 @@ export function buildHorsePacketCompleteness(
   const reviewCount = requirements.filter((requirement) => requirement.status === 'review').length;
   const missingCount = requirements.filter((requirement) => requirement.status === 'missing').length;
 
-  let buyerProfileStatus: BuyerProfileStatus = 'Staged';
+  let buyerProfileStatus: BuyerProfileStatus = 'Private';
   if (activeListing) {
     if (score >= 84 && reviewCount === 0 && !hasHighAlert) {
       buyerProfileStatus = 'Live';
@@ -406,7 +406,7 @@ export function buildHorsePacketCompleteness(
           ? 'The buyer-facing profile is useful, but still carries unresolved trust checks.'
           : buyerProfileStatus === 'Blocked'
             ? 'Keep this link internal until the trust blockers clear.'
-            : 'Share link is staged, but no live buyer motion is active yet.',
+            : 'Keep this buyer room private until outreach starts.',
     shareSlug,
     sharePath,
     requirements: requirements.map((requirement) => ({

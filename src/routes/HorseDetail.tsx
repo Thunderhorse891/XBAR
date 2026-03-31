@@ -5,6 +5,7 @@ import { SalePacketSlots } from '@/components/SalePacketSlots';
 import { KeyValue, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
 import { ChevronLeftIcon, SharedAccessIcon } from '@/components/icons';
 import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
+import { buildPublicShareUrl } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatDateLabel, formatPercent } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
@@ -193,6 +194,10 @@ export default function HorseDetail() {
   const activeSharedListing = sharedListings.find((listing) => listing.horseId === horse.id && listing.state !== 'Archived');
   const saved = Boolean(activeSharedListing);
   const packet = buildHorsePacketCompleteness(horse, documents, ownershipRecord);
+  const publicShareUrl = buildPublicShareUrl(
+    packet.sharePath,
+    activeSharedListing?.accessMode === 'Private Token' ? activeSharedListing.shareToken : undefined,
+  );
   const buyerReadyDocuments = documents.filter((document) => buildDocumentTrustProfile(document, [horse]).readyForProfile);
   const hasRestrictedActions = !canManageSharedAccess || !canUploadMedia || !canUploadDocuments || !canEditHorse || !canManageSales;
 
@@ -408,14 +413,15 @@ export default function HorseDetail() {
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <Link
+            <a
               className="inline-flex h-11 items-center justify-center rounded-md bg-[#0c6f97] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#095a7a]"
-              to={packet.sharePath}
-              state={{ internalPreview: true }}
+              href={publicShareUrl}
+              target="_blank"
+              rel="noreferrer"
               onClick={() => void recordSharedChannel(horse.id, 'Direct Link')}
             >
-              Preview
-            </Link>
+              Open buyer link
+            </a>
             <button
               className="inline-flex h-11 items-center justify-center rounded-md border border-[#d8e1ea] bg-white px-5 text-sm font-semibold text-[#445162] transition-all duration-150 ease-[ease] hover:border-[#0c6f97]/30 hover:bg-[#eef3f8] disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
@@ -790,7 +796,7 @@ export default function HorseDetail() {
               <div className="inline-metrics">
                 <span>{horse.sale.listingState}</span>
                 <span>Confidence {formatPercent(horse.sale.buyerConfidence)}</span>
-                <span>{horse.sale.socialReady ? 'Social ready' : 'Social staged'}</span>
+                <span>{horse.sale.socialReady ? 'Social ready' : 'Share pending'}</span>
               </div>
             </div>
             {horse.breedingTimeline.length ? (

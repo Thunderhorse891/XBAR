@@ -193,7 +193,7 @@ export default function Settings() {
   const handleInviteMember = async () => {
     const result = await inviteWorkspaceMember(inviteEmail, inviteRole);
     pushToast({
-      title: result.ok ? 'Invite staged' : 'Invite blocked',
+      title: result.ok ? 'Invite created' : 'Invite blocked',
       message: result.message,
       tone: result.ok ? 'success' : 'error',
     });
@@ -327,7 +327,7 @@ export default function Settings() {
               <div className="inline-metrics">
                 <span>{activeMembers.length} active members</span>
                 <span>{pendingInvites.length} pending invites</span>
-                <span>{isSupabaseConfigured() ? 'Matching email sign-in accepts invites automatically' : 'Local mode can mark invites joined manually'}</span>
+                <span>{isSupabaseConfigured() ? 'Matching email sign-in accepts invites automatically' : 'Browser access can confirm invites manually'}</span>
               </div>
             </div>
           </div>

@@ -84,10 +84,12 @@ export default function SharedAccess() {
         },
         {
           id: 'open-share',
-          label: 'Preview buyer room',
+          label: 'Open buyer link',
           onSelect: async () => {
             await recordSharedChannel(menuHorse.id, 'Direct Link');
-            navigate(menuPacket.sharePath, { state: { internalPreview: true } });
+            if (typeof window !== 'undefined') {
+              window.open(buildPublicShareUrl(menuPacket.sharePath, getShareToken(menuListing)), '_blank', 'noopener,noreferrer');
+            }
           },
         },
         {
@@ -226,14 +228,12 @@ export default function SharedAccess() {
                     <div className="inline-actions">
                       <Link
                         className="button button--ghost button--compact"
-                        to={packet.sharePath}
-                        state={{ internalPreview: true }}
-                        onClick={async (event) => {
+                        to={`/horses/${horse.id}`}
+                        onClick={(event) => {
                           event.stopPropagation();
-                          await recordSharedChannel(horse.id, 'Direct Link');
                         }}
                       >
-                        Open share link
+                        Open record
                       </Link>
                       <a
                         className="button button--ghost button--compact"
