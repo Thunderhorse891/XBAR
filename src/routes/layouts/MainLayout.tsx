@@ -254,7 +254,7 @@ export default function MainLayout() {
       </aside>
 
       <div className="flex min-w-0 flex-col bg-[#f6f8fb]">
-        <header className="sticky top-0 z-10 border-b border-[#dde5ee] bg-[#fbfdff]/86 backdrop-blur">
+        <header className="sticky top-0 z-10 border-b border-[#dde5ee] bg-[#fbfdff]/90 backdrop-blur">
           <div className="flex min-h-[56px] flex-wrap items-center justify-between gap-4 px-5 py-3">
             <div className="flex items-center gap-3">
               <div className="text-[0.96rem] font-extrabold tracking-[0.01em] text-[#16202b]">{currentLabel}</div>
@@ -417,6 +417,3 @@ export default function MainLayout() {
     </div>
   );
 }
-
-
-

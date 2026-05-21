@@ -1,4 +1,4 @@
-import type { MouseEventHandler, ReactNode } from 'react';
+import type { KeyboardEvent, MouseEventHandler, ReactNode } from 'react';
 
 type Tone = 'blue' | 'slate' | 'emerald' | 'amber' | 'rose';
 
@@ -93,6 +93,9 @@ export function MetricCard({
       title={title}
       onClick={onClick}
       onContextMenu={onContextMenu}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e: KeyboardEvent<HTMLDivElement>) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(e as unknown as Parameters<MouseEventHandler<HTMLDivElement>>[0]); } } : undefined}
     >
       <div className="metric-card__label">{label}</div>
       <div className="metric-card__value">{value}</div>

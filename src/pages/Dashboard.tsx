@@ -354,9 +354,9 @@ export default function Dashboard() {
         </div>
 
         <div className="command-stage__support">
-        <div className="command-stage__support-card">
-          <div className="command-stage__support-label">Feed room</div>
-          <strong className="command-stage__support-title">{feedReserveAsset?.name ?? 'Not logged'}</strong>
+          <div className="command-stage__support-card">
+            <div className="command-stage__support-label">Feed room</div>
+            <strong className="command-stage__support-title">{feedReserveAsset?.name ?? 'Not logged'}</strong>
             <div className="command-stage__support-copy">
               <span>{feedReserveAsset?.notes ?? 'Add feed receipts to start reserve tracking.'}</span>
               {feedReserveAsset?.nextService ? <span>Service {formatDateLabel(feedReserveAsset.nextService)}</span> : <span>No service date</span>}

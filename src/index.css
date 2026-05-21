@@ -21,10 +21,10 @@
   --blue-soft: rgba(12, 111, 151, 0.08);
   --slate: #6f8296;
   --slate-soft: rgba(111, 130, 150, 0.12);
-  --emerald: #0f7ea8;
-  --emerald-soft: rgba(15, 126, 168, 0.1);
-  --amber: #7d8ea0;
-  --amber-soft: rgba(125, 142, 160, 0.1);
+  --emerald: #059669;
+  --emerald-soft: rgba(5, 150, 105, 0.1);
+  --amber: #d97706;
+  --amber-soft: rgba(217, 119, 6, 0.1);
   --rose: #bf4040;
   --rose-soft: rgba(191, 64, 64, 0.12);
   --shadow: 0 24px 48px rgba(15, 23, 42, 0.08), 0 6px 18px rgba(15, 23, 42, 0.04);
@@ -689,7 +689,8 @@ a:focus-visible {
 
 .dashboard-kpi__detail,
 .ledger-stat__detail {
-  display: none;
+  font-size: 0.82rem;
+  color: var(--muted);
 }
 
 .app-error-shell {
@@ -774,17 +775,23 @@ a:focus-visible {
 }
 
 .page-description {
-  display: none;
+  margin-top: 6px;
+  font-size: 0.9rem;
 }
 
-.panel__description,
+.panel__description {
+  margin-top: 6px;
+  font-size: 0.9rem;
+}
+
 .metric-card__detail {
-  display: none;
+  margin-top: 4px;
+  font-size: 0.82rem;
 }
 
 .eyebrow,
 .panel__eyebrow {
-  display: none;
+  display: block;
 }
 
 .page-actions {
@@ -857,7 +864,12 @@ a:focus-visible {
 }
 
 .surface-hero__eyebrow {
-  display: none;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--blue);
+  margin-bottom: 8px;
 }
 
 .surface-hero__title {
@@ -1587,7 +1599,9 @@ a:focus-visible {
 }
 
 .horse-card__summary {
-  display: none;
+  font-size: 0.84rem;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 .horse-card__readiness {
@@ -2050,7 +2064,8 @@ a:focus-visible {
 }
 
 .empty-state__description {
-  display: none;
+  font-size: 0.88rem;
+  color: var(--muted);
 }
 
 .empty-state__action {
@@ -2144,7 +2159,8 @@ a:focus-visible {
 }
 
 .ledger-stage__description {
-  display: none;
+  font-size: 0.9rem;
+  color: var(--muted);
 }
 
 .ledger-stage__stats {

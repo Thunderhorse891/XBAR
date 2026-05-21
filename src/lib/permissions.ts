@@ -27,7 +27,11 @@ const roleCapabilityMap: Record<UserRole, RoleCapability[]> = {
     'manageSharedAccess',
   ],
   Owner: [
+    'editHorse',
     'uploadDocuments',
+    'reviewDocuments',
+    'manageMedical',
+    'syncCloud',
   ],
   'Medical Lead': [
     'uploadDocuments',

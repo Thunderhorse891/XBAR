@@ -143,8 +143,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: error.message };
     }
 
-    set({ session: null, status: 'signed-out' });
-    set({ workspaceId: '', workspaceRole: 'Owner', syncState: 'idle', syncMessage: '' });
+    set({ session: null, status: 'signed-out', workspaceId: '', workspaceRole: 'Owner', syncState: 'idle', syncMessage: '' });
     return { ok: true, message: 'Signed out of cloud sync.' };
   },
 }));
