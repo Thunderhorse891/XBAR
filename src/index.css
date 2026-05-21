@@ -17,8 +17,8 @@
   --muted-strong: #3f4b5c;
   --border: #d9e2eb;
   --border-strong: #c9d4df;
-  --blue: #0c6f97;
-  --blue-soft: rgba(12, 111, 151, 0.08);
+  --blue: #1155dd;
+  --blue-soft: rgba(17, 85, 221, 0.09);
   --slate: #6f8296;
   --slate-soft: rgba(111, 130, 150, 0.12);
   --emerald: #059669;
@@ -1765,7 +1765,7 @@ a:focus-visible,
 }
 
 .horse-card .button--primary:hover {
-  background: #095a7a;
+  background: #0d44b0;
 }
 
 .table-shell {
@@ -2339,7 +2339,7 @@ a:focus-visible,
   }
 
   .mobile-dock__item--active {
-    background: #edf6fa;
+    background: #eaeffd;
     color: var(--text);
   }
 
