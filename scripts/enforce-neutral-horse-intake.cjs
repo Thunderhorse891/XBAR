@@ -139,3 +139,4 @@ for (const text of forbidden) {
 
 fs.writeFileSync(storePath, source, 'utf8');
 console.log('Neutral horse intake enforcement complete.');
+// trigger workflow after workflow file exists on this branch
