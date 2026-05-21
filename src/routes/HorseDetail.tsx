@@ -86,7 +86,7 @@ function ReadinessGauge({ value }: { value: number }) {
   const radius = 48;
   const circumference = 2 * Math.PI * radius;
   const dashOffset = circumference - (normalized / 100) * circumference;
-  const gaugeColor = normalized >= 75 ? '#0c6f97' : '#708194';
+  const gaugeColor = normalized >= 75 ? 'var(--emerald)' : normalized >= 50 ? 'var(--amber)' : 'var(--rose)';
 
   return (
     <div className="relative mx-auto h-40 w-40">
@@ -481,7 +481,7 @@ export default function HorseDetail() {
                     alt={asset.label}
                     className="h-full w-full object-cover transition-all duration-150 ease-[ease] group-hover:scale-[1.02]"
                   />
-                    <div className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-[#113146]/72 via-[#0c6f97]/18 to-transparent p-3 text-white">
+                  <div className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-[#113146]/72 via-[#0c6f97]/18 to-transparent p-3 text-white">
                     <div>
                       <div className="text-xs font-semibold tracking-[0.02em]">{asset.label}</div>
                       <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-white/70">{asset.kind}</div>
@@ -530,7 +530,7 @@ export default function HorseDetail() {
                 Hero
               </label>
               <button
-              className="inline-flex h-10 items-center justify-center rounded-md bg-[#0c6f97] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#095a7a] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center rounded-md bg-[#0c6f97] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#095a7a] disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 onClick={() => void handleMediaUpload()}
                 disabled={!canUploadMedia || isMediaUploading || !mediaFiles.length}
@@ -879,7 +879,7 @@ export default function HorseDetail() {
             <div className="stack-item">
               <div className="stack-item__top">
                 <div className="stack-item__title">Share path</div>
-                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6b7785]">{packet.shareSlug}</span>
+                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6b7785]">{packet.shareSlug}</span>
               </div>
               <div className="inline-metrics">
                 <span>{packet.sharePath}</span>
@@ -968,6 +968,3 @@ export default function HorseDetail() {
     </>
   );
 }
-
-
-

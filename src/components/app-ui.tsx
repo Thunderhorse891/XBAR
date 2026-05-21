@@ -6,7 +6,7 @@ export function PageHeader({
   eyebrow,
   title,
   description,
-  showDescription = false,
+  showDescription = true,
   actions,
 }: {
   eyebrow?: string;
@@ -31,7 +31,7 @@ export function Panel({
   eyebrow,
   title,
   description,
-  showDescription = false,
+  showDescription = true,
   meta,
   action,
   children,
@@ -70,7 +70,7 @@ export function MetricCard({
   label,
   value,
   detail,
-  showDetail = false,
+  showDetail = true,
   tone = 'blue',
   className = '',
   title,

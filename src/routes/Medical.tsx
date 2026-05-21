@@ -69,7 +69,10 @@ export default function Medical() {
                 <div
                   key={horse.id}
                   className="stack-item stack-item--interactive"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => navigate(`/horses/${horse.id}`)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/horses/${horse.id}`); } }}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     setMenuState({ horseId: horse.id, x: event.clientX, y: event.clientY });

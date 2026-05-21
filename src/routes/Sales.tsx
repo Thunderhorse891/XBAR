@@ -89,17 +89,17 @@ export default function Sales() {
             label: 'Open horse record',
             onSelect: () => navigate(`/horses/${menuHorse.id}`),
           },
-        {
-          id: 'open-profile',
-          label: 'Open buyer link',
-          onSelect: async () => {
-            await recordSharedChannel(menuHorse.id, 'Direct Link');
-            if (typeof window !== 'undefined') {
-              window.open(menuShareUrl, '_blank', 'noopener,noreferrer');
-            }
+          {
+            id: 'open-profile',
+            label: 'Open buyer link',
+            onSelect: async () => {
+              await recordSharedChannel(menuHorse.id, 'Direct Link');
+              if (typeof window !== 'undefined') {
+                window.open(menuShareUrl, '_blank', 'noopener,noreferrer');
+              }
+            },
           },
-        },
-      ]
+        ]
       : [];
 
   return (
@@ -124,7 +124,10 @@ export default function Sales() {
                 <div
                   key={horse.id}
                   className="horse-card horse-card--interactive"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => navigate(`/horses/${horse.id}`)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/horses/${horse.id}`); } }}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     setMenuState({ type: 'horse', id: horse.id, x: event.clientX, y: event.clientY });

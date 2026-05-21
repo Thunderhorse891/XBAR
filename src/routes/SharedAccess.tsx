@@ -204,7 +204,10 @@ export default function SharedAccess() {
                   <div
                     key={horse.id}
                     className="stack-item stack-item--interactive"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => navigate(packet.sharePath)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(packet.sharePath); } }}
                     onContextMenu={(event) => {
                       event.preventDefault();
                       setMenuState({ horseId: horse.id, x: event.clientX, y: event.clientY });
