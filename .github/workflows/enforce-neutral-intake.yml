@@ -1,0 +1,42 @@
+name: Enforce Neutral Horse Intake
+
+on:
+  push:
+    branches:
+      - codex/fix-neutral-horse-intake
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/fix-neutral-horse-intake
+
+      - name: Apply neutral horse intake patch
+        run: node scripts/enforce-neutral-horse-intake.cjs
+
+      - name: Verify generated-data patterns are gone
+        run: |
+          ! grep -R "AQHA-.*Date.now" src/store/useXbarStore.ts
+          ! grep -R "createNumericToken(10)" src/store/useXbarStore.ts
+          ! grep -R "insuredValue: 65000" src/store/useXbarStore.ts
+          ! grep -R "age: 4," src/store/useXbarStore.ts
+          ! grep -R "Initial intake complete. Clinical review pending." src/store/useXbarStore.ts
+
+      - name: Commit source patch
+        run: |
+          git config user.name "github-actions-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/store/useXbarStore.ts
+          if git diff --cached --quiet; then
+            echo "No source patch needed."
+          else
+            git commit -m "Stop generating fake horse intake data"
+            git push
+          fi
