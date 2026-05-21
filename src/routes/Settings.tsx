@@ -110,6 +110,15 @@ export default function Settings() {
       return;
     }
 
+    if (profileDraft.operationsEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profileDraft.operationsEmail.trim())) {
+      pushToast({
+        title: 'Profile not saved',
+        message: 'Operations email must be a valid address.',
+        tone: 'error',
+      });
+      return;
+    }
+
     const result = updateWorkspaceProfile(profileDraft);
     pushToast({
       title: result.ok ? 'Profile saved' : 'Profile not saved',

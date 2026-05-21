@@ -2,8 +2,8 @@
   "name": "XBAR",
   "short_name": "XBAR",
   "description": "Horse records, document trust, and ranch operations from one workspace.",
-  "theme_color": "#0c6f97",
-  "background_color": "#f3f1ee",
+  "theme_color": "#1155dd",
+  "background_color": "#060c1a",
   "display": "standalone",
   "start_url": "/",
   "icons": [

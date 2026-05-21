@@ -388,6 +388,7 @@ export default function Horses() {
           onChange={(event) => setSearch(event.target.value)}
           className="field-input field-input--wide"
           placeholder="Search horse, owner, AQHA"
+          aria-label="Search horses"
         />
       </section>
 
@@ -408,7 +409,10 @@ export default function Horses() {
               <div
                 key={horse.id}
                 className="horse-card horse-card--interactive"
+                role="button"
+                tabIndex={0}
                 onClick={() => navigate(`/horses/${horse.id}`)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/horses/${horse.id}`); } }}
                 onContextMenu={(event) => {
                   event.preventDefault();
                   openHorseMenu(horse.id, event.clientX, event.clientY);
@@ -612,6 +616,3 @@ export default function Horses() {
     </>
   );
 }
-
-
-

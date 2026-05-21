@@ -127,7 +127,7 @@ function classNames(...parts: Array<string | false | null | undefined>) {
 function NavSection({ title, items }: { title: string; items: NavItem[] }) {
   return (
     <div className="flex flex-col gap-2">
-      <div className="px-3 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8693a1]">{title}</div>
+      <div className="px-3 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#3a5570]">{title}</div>
       <div className="flex flex-col gap-1">
         {items.map(({ label, path, icon: Icon }) => (
           <NavLink
@@ -138,8 +138,8 @@ function NavSection({ title, items }: { title: string; items: NavItem[] }) {
               classNames(
                 'group flex items-center gap-3 border-l-[3px] px-3 py-2.5 text-sm font-medium transition-all duration-150 ease-[ease]',
                 isActive
-                  ? 'border-[#0c6f97] bg-white text-[#16202b] shadow-[0_10px_24px_rgba(15,23,42,0.04)]'
-                  : 'border-transparent text-[#64707d] hover:border-[#d9e2eb] hover:bg-white hover:text-[#16202b]',
+                  ? 'border-[#2266ee] bg-[#0e2248] text-white shadow-[0_8px_20px_rgba(34,102,238,0.18)]'
+                  : 'border-transparent text-[#7a98b4] hover:border-[#1a3050] hover:bg-[#0d1f38] hover:text-white',
               )
             }
           >
@@ -210,58 +210,58 @@ export default function MainLayout() {
 
   return (
       <div className="min-h-screen bg-[#f6f8fb] lg:grid lg:grid-cols-[236px,1fr]">
-      <aside className="hidden min-h-screen flex-col gap-6 border-r border-[#dde5ee] bg-[#fbfdff] px-5 py-6 text-[#16202b] lg:flex">
+      <aside className="hidden min-h-screen flex-col gap-6 border-r border-[#0e1e32] bg-[#060d1a] px-5 py-6 text-[#c2d4e8] lg:flex">
         <div className="flex items-center gap-3">
-          <div className="flex h-[52px] w-[52px] items-center justify-center rounded-lg border border-[#dbe4ed] bg-white p-1.5 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
+          <div className="flex h-[52px] w-[52px] items-center justify-center rounded-lg border border-[#1a2e46] bg-[#080f1e] p-1.5 shadow-[0_12px_28px_rgba(0,0,0,0.5)]">
             <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" className="h-full w-full object-contain" />
           </div>
           <div className="min-w-0">
-            <div className="truncate text-[1.04rem] font-extrabold uppercase tracking-[0.14em]">{workspaceProfile.businessName || 'XBAR'}</div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8a96a4]">{workspaceProfile.ranchName || 'Horse Ledger'}</div>
+            <div className="truncate text-[1.04rem] font-extrabold uppercase tracking-[0.14em] text-white">{workspaceProfile.businessName || 'XBAR'}</div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#3d5c78]">{workspaceProfile.ranchName || 'Horse Ledger'}</div>
           </div>
         </div>
 
-        <div className="rounded-[18px] border border-[#dbe4ed] bg-white p-4 shadow-[0_12px_24px_rgba(15,23,42,0.04)]">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8794a2]">Workspace</div>
-          <div className="mt-2 text-[1rem] font-bold tracking-[-0.03em] text-[#16202b]">
+        <div className="rounded-[18px] border border-[#162436] bg-[#0c1a2e] p-4 shadow-[0_12px_24px_rgba(0,0,0,0.3)]">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#3a5570]">Workspace</div>
+          <div className="mt-2 text-[1rem] font-bold tracking-[-0.03em] text-[#ddeaf8]">
             {workspaceProfile.ranchName || workspaceProfile.businessName || 'Primary ranch'}
           </div>
-          <div className="mt-1 text-sm text-[#667482]">{roleWorkspace.label}</div>
+          <div className="mt-1 text-sm text-[#6080a0]">{roleWorkspace.label}</div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#dbe4ed] bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#4b5a69]">
+            <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#1a2e46] bg-[#0a1628] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#7a9ab8]">
               {subscription.tier}
             </span>
-            <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#d7e8ef] bg-[#edf6fa] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#0c6f97]">
+            <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#1a3a6a] bg-[#0e213e] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#4488dd]">
               {cloudStatus === 'signed-in' ? 'Cloud sync' : 'Browser access'}
             </span>
             {pendingReview ? (
-              <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#dbe4ed] bg-[#f4f8fb] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#627181]">
+              <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#1a2e46] bg-[#0a1628] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#6a8aaa]">
                 {pendingReview} review
               </span>
             ) : null}
           </div>
-          <div className="mt-4 text-xs leading-6 text-[#6a7178]">Use the navigation below for every workspace route. Settings and shared access stay in the Platform section.</div>
+          <div className="mt-4 text-xs leading-6 text-[#304a60]">Use the navigation below for every workspace route. Settings and shared access stay in the Platform section.</div>
         </div>
 
         <NavSection title="Operations" items={operations} />
         <NavSection title="Programs" items={programs} />
         <NavSection title="Platform" items={platformItems} />
 
-        <div className="mt-auto border-t border-[#dde5ee] pt-4 text-xs text-[#8794a2]">
-          <div className="font-semibold text-[#5f6c79]">{workspaceProfile.businessName || 'XBAR'}</div>
+        <div className="mt-auto border-t border-[#0e1e32] pt-4 text-xs text-[#3a5268]">
+          <div className="font-semibold text-[#5a7a98]">{workspaceProfile.businessName || 'XBAR'}</div>
           <div className="mt-1">{subscription.tier} plan</div>
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-col bg-[#f6f8fb]">
-        <header className="sticky top-0 z-10 border-b border-[#dde5ee] bg-[#fbfdff]/86 backdrop-blur">
+        <header className="sticky top-0 z-10 border-b border-[#dde5ee] bg-[#fbfdff]/90 backdrop-blur">
           <div className="flex min-h-[56px] flex-wrap items-center justify-between gap-4 px-5 py-3">
             <div className="flex items-center gap-3">
               <div className="text-[0.96rem] font-extrabold tracking-[0.01em] text-[#16202b]">{currentLabel}</div>
               <span
                 className={classNames(
                   'inline-flex min-h-[24px] items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]',
-                  pendingReview ? 'border-[#dbe4ed] bg-[#f4f8fb] text-[#627181]' : 'border-[#d7e8ef] bg-[#edf6fa] text-[#0c6f97]',
+                  pendingReview ? 'border-[#dbe4ed] bg-[#f4f8fb] text-[#627181]' : 'border-[#d7e8ef] bg-[#eaeffd] text-[#1155dd]',
                 )}
               >
                 {pendingReview ? `${pendingReview} review` : 'Ready'}
@@ -276,7 +276,7 @@ export default function MainLayout() {
                   onChange={(event) => setSearch(event.target.value)}
                   onKeyDown={handleSearch}
                   placeholder="Search"
-                className="h-10 w-full rounded-md border border-[#dde5ee] bg-white pl-10 pr-4 text-sm text-[#16202b] transition-all duration-150 ease-[ease] placeholder:text-[#8f959c] focus:border-[#0c6f97] focus:outline-none"
+                className="h-10 w-full rounded-md border border-[#dde5ee] bg-white pl-10 pr-4 text-sm text-[#16202b] transition-all duration-150 ease-[ease] placeholder:text-[#8f959c] focus:border-[#1155dd] focus:outline-none"
                 />
               </label>
 
@@ -284,7 +284,7 @@ export default function MainLayout() {
                 <span className="max-w-[190px] truncate">{accountLabel}</span>
                 <span className={classNames('inline-flex rounded-sm border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]',
                   cloudStatus === 'signed-in'
-                    ? 'border-[#d7e8ef] bg-[#edf6fa] text-[#0c6f97]'
+                    ? 'border-[#d7e8ef] bg-[#eaeffd] text-[#1155dd]'
                     : cloudStatus === 'unavailable'
                       ? 'border-[#d8e1ea] bg-[#eef3f8] text-[#607384]'
                       : 'border-[#d8e1ea] bg-[#eef3f8] text-[#607384]',
@@ -294,7 +294,7 @@ export default function MainLayout() {
               </div>
 
               <button
-                className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#eef6fb]"
+                className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb]"
                 type="button"
                 onClick={() => setHelpOpen(true)}
               >
@@ -303,7 +303,7 @@ export default function MainLayout() {
 
               {cloudSession && canSyncCloud ? (
                 <button
-                  className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#eef6fb]"
+                  className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb]"
                   type="button"
                   onClick={() => void handleCloudSignOut()}
                 >
@@ -312,7 +312,7 @@ export default function MainLayout() {
               ) : null}
 
               <button
-                className="relative inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#eef6fb] disabled:cursor-not-allowed disabled:opacity-50"
+                className="relative inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb] disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 onClick={() => navigate('/documents')}
                 aria-label="Open document review"
@@ -326,7 +326,7 @@ export default function MainLayout() {
               </button>
 
               <button
-                className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#0c6f97] hover:bg-[#eef6fb] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb] disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 onClick={() => navigate('/documents?upload=1')}
                 disabled={!canUploadDocuments}
@@ -335,7 +335,7 @@ export default function MainLayout() {
               </button>
 
               <button
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#0c6f97] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#095a7a] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#1155dd] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#0d44b0] disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 onClick={() => navigate('/horses?new=1')}
                 disabled={!canCreateHorse}
@@ -358,7 +358,7 @@ export default function MainLayout() {
             className={({ isActive }) =>
               classNames(
                 'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]',
-                isActive ? 'bg-[#edf6fa] text-[#0c6f97]' : 'text-[#798088] hover:bg-white hover:text-[#16202b]',
+                isActive ? 'bg-[#eaeffd] text-[#1155dd]' : 'text-[#798088] hover:bg-white hover:text-[#16202b]',
               )
             }
           >
@@ -370,7 +370,7 @@ export default function MainLayout() {
             className={({ isActive }) =>
               classNames(
                 'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]',
-                isActive ? 'bg-[#edf6fa] text-[#0c6f97]' : 'text-[#798088] hover:bg-white hover:text-[#16202b]',
+                isActive ? 'bg-[#eaeffd] text-[#1155dd]' : 'text-[#798088] hover:bg-white hover:text-[#16202b]',
               )
             }
           >
@@ -382,7 +382,7 @@ export default function MainLayout() {
             className={({ isActive }) =>
               classNames(
                 'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]',
-                isActive ? 'bg-[#edf6fa] text-[#0c6f97]' : 'text-[#798088] hover:bg-white hover:text-[#16202b]',
+                isActive ? 'bg-[#eaeffd] text-[#1155dd]' : 'text-[#798088] hover:bg-white hover:text-[#16202b]',
               )
             }
           >
@@ -394,7 +394,7 @@ export default function MainLayout() {
             className={({ isActive }) =>
               classNames(
                 'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]',
-                isActive ? 'bg-[#edf6fa] text-[#0c6f97]' : 'text-[#798088] hover:bg-white hover:text-[#16202b]',
+                isActive ? 'bg-[#eaeffd] text-[#1155dd]' : 'text-[#798088] hover:bg-white hover:text-[#16202b]',
               )
             }
           >
@@ -402,7 +402,7 @@ export default function MainLayout() {
             <span>Sales</span>
           </NavLink>
           <button
-            className="flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md bg-[#0c6f97] text-[11px] font-semibold text-white transition-all duration-150 ease-[ease] hover:bg-[#095a7a] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md bg-[#1155dd] text-[11px] font-semibold text-white transition-all duration-150 ease-[ease] hover:bg-[#0d44b0] disabled:cursor-not-allowed disabled:opacity-50"
             type="button"
             onClick={() => navigate('/horses?new=1')}
             disabled={!canCreateHorse}
@@ -417,6 +417,3 @@ export default function MainLayout() {
     </div>
   );
 }
-
-
-

@@ -1,6 +1,15 @@
 import { rankHorseMatches } from './xbarRuntime.js';
 import type { DocumentRecord, HorseRecord, OwnershipRecord, ProcessingState } from '../types/xbar.js';
 
+const TRUST_CONFIDENCE_WEIGHT = 68;
+const TRUST_ENTITY_WEIGHT = 18;
+const TRUST_ENTITY_TOTAL = 6;
+const TRUST_SCORE_FLOOR = 24;
+const TRUST_SCORE_CAP = 99;
+const REVIEW_PARTIAL_CREDIT = 0.55;
+const BUYER_LIVE_THRESHOLD = 84;
+const BUYER_NEEDS_REVIEW_THRESHOLD = 60;
+
 type Tone = 'blue' | 'slate' | 'emerald' | 'amber' | 'rose';
 type PacketStatus = 'ready' | 'review' | 'missing';
 
@@ -149,10 +158,15 @@ export function buildDocumentTrustProfile(document: DocumentRecord, horses: Hors
 
   const duplicatePenalty = document.duplicateRisk === 'Possible Duplicate' ? 18 : document.duplicateRisk === 'Review' ? 8 : 0;
   const trustScore = Math.max(
-    24,
+    TRUST_SCORE_FLOOR,
     Math.min(
-      99,
-      Math.round(document.confidence * 68 + (entityCount / 6) * 18 + stateBonus(document.state) - duplicatePenalty),
+      TRUST_SCORE_CAP,
+      Math.round(
+        document.confidence * TRUST_CONFIDENCE_WEIGHT +
+          (entityCount / TRUST_ENTITY_TOTAL) * TRUST_ENTITY_WEIGHT +
+          stateBonus(document.state) -
+          duplicatePenalty,
+      ),
     ),
   );
 
@@ -356,7 +370,7 @@ export function buildHorsePacketCompleteness(
   const totalWeight = requirements.reduce((sum, requirement) => sum + requirement.weight, 0) || 1;
   const earnedWeight = requirements.reduce((sum, requirement) => {
     if (requirement.status === 'ready') return sum + requirement.weight;
-    if (requirement.status === 'review') return sum + requirement.weight * 0.55;
+    if (requirement.status === 'review') return sum + requirement.weight * REVIEW_PARTIAL_CREDIT;
     return sum;
   }, 0);
   const score = Math.round((earnedWeight / totalWeight) * 100);
@@ -366,9 +380,9 @@ export function buildHorsePacketCompleteness(
 
   let buyerProfileStatus: BuyerProfileStatus = 'Private';
   if (activeListing) {
-    if (score >= 84 && reviewCount === 0 && !hasHighAlert) {
+    if (score >= BUYER_LIVE_THRESHOLD && reviewCount === 0 && !hasHighAlert) {
       buyerProfileStatus = 'Live';
-    } else if (score >= 60 && readyCount > 0) {
+    } else if (score >= BUYER_NEEDS_REVIEW_THRESHOLD && readyCount > 0) {
       buyerProfileStatus = 'Needs Review';
     } else {
       buyerProfileStatus = 'Blocked';

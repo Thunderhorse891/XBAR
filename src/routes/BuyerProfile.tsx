@@ -289,7 +289,3 @@ export default function BuyerProfile() {
     </main>
   );
 }
-
-
-
-
