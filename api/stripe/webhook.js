@@ -34,7 +34,7 @@ async function syncWorkspaceSubscription({ workspaceId, customerId, subscription
     existingUsage,
   });
 
-  await supabase.from('workspace_subscription_profiles').upsert({
+  const { error: profileError } = await supabase.from('workspace_subscription_profiles').upsert({
     workspace_id: workspaceId,
     tier,
     billing_state: nextProfile.billingState,
@@ -42,8 +42,11 @@ async function syncWorkspaceSubscription({ workspaceId, customerId, subscription
     payload: nextProfile,
     updated_at: new Date().toISOString(),
   });
+  if (profileError) {
+    throw new Error(`Subscription profile sync failed: ${profileError.message}`);
+  }
 
-  await supabase.from('workspace_billing_customers').upsert({
+  const { error: customerError } = await supabase.from('workspace_billing_customers').upsert({
     workspace_id: workspaceId,
     stripe_customer_id: customerId || '',
     stripe_subscription_id: subscriptionId || '',
@@ -52,14 +55,20 @@ async function syncWorkspaceSubscription({ workspaceId, customerId, subscription
     entitlement_payload: nextProfile,
     updated_at: new Date().toISOString(),
   });
+  if (customerError) {
+    throw new Error(`Billing customer sync failed: ${customerError.message}`);
+  }
 
-  await supabase.from('workspace_subscription_events').upsert({
+  const { error: eventError } = await supabase.from('workspace_subscription_events').upsert({
     workspace_id: workspaceId,
     stripe_event_id: eventId,
     event_type: eventType,
     payload,
     processed_at: new Date().toISOString(),
   });
+  if (eventError) {
+    throw new Error(`Subscription event log failed: ${eventError.message}`);
+  }
 }
 
 export default async function handler(req, res) {

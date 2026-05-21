@@ -388,6 +388,7 @@ export default function Horses() {
           onChange={(event) => setSearch(event.target.value)}
           className="field-input field-input--wide"
           placeholder="Search horse, owner, AQHA"
+          aria-label="Search horses"
         />
       </section>
 
