@@ -2,9 +2,12 @@ import { getSupabaseClient } from '@/lib/supabaseClient';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import type { DocumentRecord, HorseRecord, OwnershipRecord, SharedListingRecord } from '@/types/xbar';
 
+export type PublicHorseDTO = HorseRecord;
+export type PublicDocumentDTO = DocumentRecord;
+
 export type PublicBuyerProfilePayload = {
-  horse: HorseRecord;
-  documents: DocumentRecord[];
+  horse: PublicHorseDTO;
+  documents: PublicDocumentDTO[];
   ownershipRecord?: OwnershipRecord;
   sharedListing?: SharedListingRecord;
 };
@@ -35,10 +38,50 @@ function parsePublicBuyerProfilePayload(value: unknown): PublicBuyerProfilePaylo
   }
 
   return {
-    horse: horse as unknown as HorseRecord,
-    documents: Array.isArray(value.documents) ? (value.documents as DocumentRecord[]) : [],
+    horse: sanitizePublicHorse(horse as unknown as HorseRecord),
+    documents: Array.isArray(value.documents) ? value.documents.map(sanitizePublicDocument).filter((document): document is PublicDocumentDTO => Boolean(document)) : [],
     ownershipRecord: isRecord(value.ownershipRecord) ? (value.ownershipRecord as unknown as OwnershipRecord) : undefined,
     sharedListing: isRecord(value.sharedListing) ? (value.sharedListing as unknown as SharedListingRecord) : undefined,
+  };
+}
+
+function sanitizePublicHorse(horse: HorseRecord): PublicHorseDTO {
+  return {
+    ...horse,
+    medicalNotes: '',
+    lastVetVisit: '',
+    ownership: [],
+    documentFacts: [],
+    alerts: [],
+    notes: [],
+  };
+}
+
+function sanitizePublicDocument(value: unknown): PublicDocumentDTO | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const document = value as unknown as DocumentRecord;
+  return {
+    id: document.id,
+    title: document.title,
+    type: document.type,
+    horseId: document.horseId,
+    uploadedBy: '',
+    uploadedAt: document.uploadedAt,
+    source: document.source,
+    state: document.state,
+    confidence: document.confidence,
+    duplicateRisk: document.duplicateRisk,
+    extractedTextPreview: '',
+    summary: document.summary,
+    entities: document.entities ?? {},
+    fileUrl: undefined,
+    storagePath: undefined,
+    fileName: document.fileName,
+    mimeType: document.mimeType,
+    fileSizeBytes: document.fileSizeBytes,
   };
 }
 

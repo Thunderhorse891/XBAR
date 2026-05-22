@@ -1,6 +1,7 @@
 import type { SubscriptionTier } from '../types/xbar.js';
 
 const env = ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {}) as Record<string, string | undefined>;
+const isE2eMode = env.MODE === 'e2e';
 
 function readEnv(value: string | undefined) {
   return value?.trim() ?? '';
@@ -26,8 +27,8 @@ function readFlag(value: string | undefined, defaultValue: boolean) {
 const relationalSyncEnv = env.VITE_SUPABASE_RELATIONAL_SYNC ?? env.VITE_SUPABASE_RELATIONAL_MIRROR;
 
 export const supabaseConfig = {
-  url: readEnv(env.VITE_SUPABASE_URL),
-  anonKey: readEnv(env.VITE_SUPABASE_ANON_KEY),
+  url: isE2eMode ? '' : readEnv(env.VITE_SUPABASE_URL),
+  anonKey: isE2eMode ? '' : readEnv(env.VITE_SUPABASE_ANON_KEY),
   workspaceTable: readEnv(env.VITE_SUPABASE_WORKSPACE_TABLE) || 'workspace_snapshots',
   mediaBucket: readEnv(env.VITE_SUPABASE_MEDIA_BUCKET) || 'horse-media',
   documentBucket: readEnv(env.VITE_SUPABASE_DOCUMENT_BUCKET) || 'horse-documents',
@@ -36,7 +37,7 @@ export const supabaseConfig = {
 };
 
 export const authConfig = {
-  allowLocalMode: readFlag(env.VITE_ALLOW_LOCAL_MODE, Boolean(env.DEV)),
+  allowLocalMode: isE2eMode || readFlag(env.VITE_ALLOW_LOCAL_MODE, Boolean(env.DEV)),
 };
 
 export const facebookConfig = {
