@@ -15,13 +15,11 @@ import {
   buildDocumentRecord,
   buildSharePath,
   createId,
-  createNumericToken,
   createShareAccessToken,
   deriveSharedAccessSnapshot,
   estimateStorageGb,
   guessGalleryKind,
   nowStamp,
-  readFileAsDataUrl,
   todayStamp,
 } from '@/lib/xbarRuntime';
 import { countReservedSharedAccessSeats, countReservedWorkspaceSeats, normalizeWorkspaceEmail, validateWorkspaceInvitation } from '@/lib/workspaceAccess';
@@ -531,29 +529,29 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
     id,
     name,
     barnName,
-    summary: `${barnName} is a new XBAR horse record ready for intake, media, ownership, and care workflows.`,
+    summary: `${barnName} is a new XBAR horse record awaiting verified intake details.`,
     segment: input.segment,
     status: input.status,
-    breed: 'Quarter Horse',
-    registry: 'AQHA',
-    aqhaNumber: input.aqhaNumber?.trim() || `AQHA-${Date.now().toString().slice(-6)}`,
-    registrationNumber: input.registrationNumber?.trim() || `${barnName.toUpperCase().replace(/\s+/g, '-')}-${new Date().getFullYear()}`,
+    breed: 'Pending verification',
+    registry: input.aqhaNumber?.trim() ? 'AQHA' : 'Pending',
+    aqhaNumber: input.aqhaNumber?.trim() || '',
+    registrationNumber: input.registrationNumber?.trim() || '',
     registered: Boolean(input.aqhaNumber || input.registrationNumber),
-    age: 4,
-    foaledOn: `${new Date().getFullYear() - 4}-03-01`,
+    age: 0,
+    foaledOn: '',
     sex: input.sex,
-    color: 'To be confirmed',
-    markings: 'Intake photos pending',
-    microchipId: `9810${createNumericToken(10)}`,
+    color: 'Pending verification',
+    markings: '',
+    microchipId: '',
     owner: input.owner.trim(),
     ownerEntity: input.ownerEntity.trim(),
-    insuredValue: 65000,
+    insuredValue: 0,
     profileImage: '',
-    tags: ['new-intake', 'media-needed'],
+    tags: ['intake-pending'],
     bloodline: {
-      sire: 'Pending intake',
-      dam: 'Pending intake',
-      family: 'Pending pedigree review',
+      sire: '',
+      dam: '',
+      family: '',
     },
     location: {
       ranch: ranchName,
@@ -580,18 +578,18 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
     sale: {
       listingState: 'Hold',
       askPrice: 0,
-      buyerConfidence: 50,
+      buyerConfidence: 0,
       inquiryCount: 0,
       watchlistCount: 0,
       socialReady: false,
     },
     readiness: {
-      score: 42,
-      blockers: ['Hero image missing', 'Ownership packet not uploaded', 'Medical summary not reviewed'],
-      packetStatus: 'Needs Photos',
+      score: 0,
+      blockers: ['Registration not verified', 'Ownership packet not uploaded', 'Medical summary not reviewed', 'Sale photos missing'],
+      packetStatus: 'Needs Transfer Docs',
     },
-    medicalNotes: 'Initial intake complete. Clinical review pending.',
-    lastVetVisit: todayStamp(),
+    medicalNotes: '',
+    lastVetVisit: '',
     documents: [],
     medicalTimeline: [],
     breedingTimeline: [],
@@ -610,7 +608,7 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
       {
         id: createId('alert'),
         title: 'Finish intake packet',
-        summary: 'Media, registration, and initial ownership documents still need to be uploaded.',
+        summary: 'Registration, media, medical, and ownership details must be verified before this record is buyer-ready.',
         severity: 'medium',
         module: 'Documents',
       },
@@ -1294,7 +1292,7 @@ export const useXbarStore = create<XbarStore>()(
                 horses: get().horses,
                 existingDocuments: get().documents,
               });
-              const localFileUrl = uploadedAsset?.storagePath ? undefined : await readFileAsDataUrl(file);
+              const localFileUrl = undefined;
               return {
                 ...document,
                 batchId,
@@ -1351,7 +1349,7 @@ export const useXbarStore = create<XbarStore>()(
             );
             documents = documents.map((document) => createdDocumentMap.get(document.id) ?? document);
           }
-          const localDocumentCount = documents.filter((document) => document.fileUrl && !document.storagePath).length;
+          const localDocumentCount = documents.filter((document) => !document.storagePath).length;
           const createdHorses = createdHorseBundles.map((bundle) => bundle.horse);
           const createdOwnershipRecords = createdHorseBundles.map((bundle) => bundle.ownershipRecord);
 
@@ -1395,7 +1393,7 @@ export const useXbarStore = create<XbarStore>()(
 
           return {
             ok: true,
-            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the intake batch.` : ''}${localDocumentCount ? ` ${localDocumentCount} stored locally until cloud sync is available.` : ''}`,
+            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the intake batch.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only because cloud file storage is not available.` : ''}`,
             id: batch.id,
           };
         } catch (error) {
@@ -1518,7 +1516,7 @@ export const useXbarStore = create<XbarStore>()(
                 id: createId('media'),
                 label: file.name.replace(/\.[^.]+$/, ''),
                 kind: kind ?? guessGalleryKind(file.name),
-                url: uploadedAsset?.publicUrl ?? await readFileAsDataUrl(file),
+                url: uploadedAsset?.publicUrl ?? '',
                 storagePath: uploadedAsset?.storagePath,
                 status: 'Approved' as const,
               };
@@ -1568,7 +1566,7 @@ export const useXbarStore = create<XbarStore>()(
 
           return {
             ok: true,
-            message: `${assets.length} media asset${assets.length === 1 ? '' : 's'} uploaded.${localAssetCount ? ` ${localAssetCount} stored locally until cloud sync is available.` : ''}`,
+            message: `${assets.length} media asset${assets.length === 1 ? '' : 's'} uploaded.${localAssetCount ? ` ${localAssetCount} kept as metadata only because cloud media storage is not available.` : ''}`,
             id: horseId,
           };
         } catch (error) {
@@ -1611,7 +1609,7 @@ export const useXbarStore = create<XbarStore>()(
             }
           }
 
-          const localFileUrl = input.file && !uploadedAsset?.storagePath ? await readFileAsDataUrl(input.file) : undefined;
+          const localFileUrl = undefined;
           const receipt = createExpenseReceiptRecord(input, {
             fileUrl: localFileUrl,
             storagePath: uploadedAsset?.storagePath,
@@ -1651,7 +1649,7 @@ export const useXbarStore = create<XbarStore>()(
 
           return {
             ok: true,
-            message: `${receipt.category} receipt logged.${input.file && !uploadedAsset?.storagePath ? ' Receipt file is stored locally until cloud sync is available.' : ''}`,
+            message: `${receipt.category} receipt logged.${input.file && !uploadedAsset?.storagePath ? ' Receipt file metadata was saved, but the file itself requires cloud storage.' : ''}`,
             id: receipt.id,
           };
         } catch (error) {
@@ -2031,6 +2029,15 @@ export const useXbarStore = create<XbarStore>()(
 
         if (!get().horses.some((horse) => horse.id === horseId)) {
           return { ok: false, message: 'Horse record not found for this ownership update.' };
+        }
+
+        const horse = get().horses.find((item) => item.id === horseId);
+        const currentShareTotal = horse?.ownership.reduce((total, item) => total + item.share, 0) ?? 0;
+        if (currentShareTotal + stake.share > 100) {
+          return {
+            ok: false,
+            message: `Ownership split cannot exceed 100%. Current split is ${currentShareTotal}%.`,
+          };
         }
 
         const nextStake: OwnershipStake = {

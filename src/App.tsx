@@ -31,6 +31,10 @@ function useHashRouting() {
     return false;
   }
 
+  if (import.meta.env.MODE === 'e2e') {
+    return false;
+  }
+
   return import.meta.env.VITE_ROUTER_MODE === 'hash' || window.location.hostname.endsWith('github.io');
 }
 

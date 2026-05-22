@@ -22,10 +22,11 @@ export default function BuyerProfile() {
   const localOwnershipRecord = useXbarStore((state) => state.ownershipRecords.find((record) => record.horseId === id));
   const localSharedListing = useXbarStore((state) => state.sharedListings.find((listing) => listing.horseId === id && listing.state !== 'Archived'));
   const shareToken = searchParams.get('t')?.trim() ?? '';
+  const localPreviewAllowed = searchParams.get('preview') === 'local';
   const localAccessAllowed = hasBuyerShareAccess(localSharedListing, shareToken);
   const localPayload = useMemo(
     () =>
-      localHorse && localAccessAllowed
+      localPreviewAllowed && localHorse && localAccessAllowed
         ? {
             horse: localHorse,
             documents: localDocuments,
@@ -33,7 +34,7 @@ export default function BuyerProfile() {
             sharedListing: localSharedListing,
           }
         : undefined,
-    [localAccessAllowed, localDocuments, localHorse, localOwnershipRecord, localSharedListing],
+    [localAccessAllowed, localDocuments, localHorse, localOwnershipRecord, localPreviewAllowed, localSharedListing],
   );
   const [remoteState, setRemoteState] = useState<{
     status: 'idle' | 'loading' | 'loaded' | 'error';
@@ -109,12 +110,12 @@ export default function BuyerProfile() {
   if (!horse) {
     const title = remoteState.status === 'loading'
       ? 'Loading buyer room'
-      : localHorse && localSharedListing
+      : localPreviewAllowed && localHorse && localSharedListing
         ? 'Share link locked'
         : 'Buyer profile unavailable';
     const description = remoteState.status === 'loading'
       ? 'Loading listing and packet data.'
-      : localHorse && localSharedListing && !localAccessAllowed
+      : localPreviewAllowed && localHorse && localSharedListing && !localAccessAllowed
         ? 'This buyer room requires a valid access link from the workspace.'
         : remoteState.message ?? 'Record not found in this workspace.';
 
@@ -122,7 +123,7 @@ export default function BuyerProfile() {
       <main className="buyer-shell">
         <div className="buyer-shell__inner">
           <Panel title={title} description={description}>
-            {localHorse ? (
+            {localPreviewAllowed && localHorse ? (
               <Link className="button button--ghost" to="/horses">
                 Back to horses
               </Link>
