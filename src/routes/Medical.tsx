@@ -6,6 +6,18 @@ import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
+import type { MedicalEventType } from '@/types/xbar';
+
+const medicalEventTypes: MedicalEventType[] = [
+  'Vet visit',
+  'Vaccine',
+  'Coggins',
+  'Injury',
+  'Dental',
+  'Deworming',
+  'Treatment',
+  'Historical note',
+];
 
 export default function Medical() {
   const navigate = useNavigate();
@@ -29,6 +41,7 @@ export default function Medical() {
   const [eventTitle, setEventTitle] = useState('Vet follow-up');
   const [eventBody, setEventBody] = useState('');
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
+  const [eventType, setEventType] = useState<MedicalEventType>('Vet visit');
   const [eventError, setEventError] = useState('');
   const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
   const menuHorse = horses.find((horse) => horse.id === menuState?.horseId);
@@ -139,6 +152,24 @@ export default function Medical() {
               <span className="field-label">Event date</span>
               <input className="field-input" type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} disabled={!canManageMedical} />
             </label>
+            <label className="field-stack">
+              <span className="field-label">Event type</span>
+              <select
+                className="field-select"
+                value={eventType}
+                onChange={(event) => {
+                  setEventType(event.target.value as MedicalEventType);
+                  setEventError('');
+                }}
+                disabled={!canManageMedical}
+              >
+                {medicalEventTypes.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="field-stack field-stack--wide">
               <span className="field-label">Event title</span>
               <input className="field-input" value={eventTitle} onChange={(event) => {
@@ -160,8 +191,8 @@ export default function Medical() {
               className="button button--primary button--compact"
               type="button"
               onClick={() => {
-                if (!selectedHorseId || !eventTitle.trim() || !eventBody.trim() || !eventDate.trim()) {
-                  setEventError('Horse, date, title, and care note are required.');
+                if (!selectedHorseId || !eventTitle.trim() || !eventBody.trim() || !eventDate.trim() || !eventType) {
+                  setEventError('Horse, date, event type, title, and care note are required.');
                   return;
                 }
 
@@ -170,6 +201,7 @@ export default function Medical() {
                   body: eventBody,
                   author: 'Medical Desk',
                   date: eventDate,
+                  type: eventType,
                 });
 
                 pushToast({
@@ -185,7 +217,7 @@ export default function Medical() {
               }}
               disabled={!canManageMedical}
             >
-              Save medical event
+              Save care event
             </button>
           </div>
         </Panel>

@@ -282,3 +282,49 @@ test('buildHorsePacketCompleteness reflects live and blocked buyer profile state
   assert.equal(dollyPacket.saleSlots.find((slot) => slot.key === 'coggins')?.status, 'missing');
   assert.equal(dollyPacket.saleSlots.find((slot) => slot.key === 'transfer-papers')?.status, 'review');
 });
+
+test('buildHorsePacketCompleteness requires current dated Coggins evidence', () => {
+  const wiggy = horsesSeed.find((entry) => entry.id === 'horse-wiggy');
+  assert.ok(wiggy);
+
+  const undatedPacket = buildHorsePacketCompleteness(wiggy, [
+    createDocument({
+      id: 'doc-undated-coggins',
+      title: 'Undated Coggins',
+      type: 'Coggins',
+      horseId: wiggy.id,
+      entities: {
+        horseName: wiggy.name,
+      },
+    }),
+  ]);
+  assert.equal(undatedPacket.saleSlots.find((slot) => slot.key === 'coggins')?.status, 'review');
+
+  const expiredPacket = buildHorsePacketCompleteness(wiggy, [
+    createDocument({
+      id: 'doc-expired-coggins',
+      title: 'Expired Coggins',
+      type: 'Coggins',
+      horseId: wiggy.id,
+      entities: {
+        horseName: wiggy.name,
+        examDate: '2024-01-12',
+      },
+    }),
+  ]);
+  assert.equal(expiredPacket.saleSlots.find((slot) => slot.key === 'coggins')?.status, 'review');
+
+  const currentPacket = buildHorsePacketCompleteness(wiggy, [
+    createDocument({
+      id: 'doc-current-coggins',
+      title: 'Current Coggins',
+      type: 'Coggins',
+      horseId: wiggy.id,
+      entities: {
+        horseName: wiggy.name,
+        examDate: '2026-04-12',
+      },
+    }),
+  ]);
+  assert.equal(currentPacket.saleSlots.find((slot) => slot.key === 'coggins')?.status, 'ready');
+});

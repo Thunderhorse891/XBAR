@@ -51,6 +51,7 @@ import type {
   HorseNote,
   HorseRecord,
   IntakeBatch,
+  MedicalEventType,
   OwnershipStake,
   RoleCapability,
   SalesLead,
@@ -117,7 +118,10 @@ type XbarStore = {
   ) => ActionResult;
   updateAsset: (assetId: string, patch: AssetPatch) => ActionResult;
   addHorseNote: (horseId: string, note: Pick<HorseNote, 'title' | 'body' | 'author' | 'tone'>) => ActionResult;
-  addMedicalEvent: (horseId: string, event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string }) => ActionResult;
+  addMedicalEvent: (
+    horseId: string,
+    event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string; type: MedicalEventType },
+  ) => ActionResult;
   addBreedingEvent: (horseId: string, event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string }) => ActionResult;
   updateHorseLocation: (horseId: string, patch: LocationPatch) => ActionResult;
   updateOwnershipRecord: (
@@ -759,6 +763,8 @@ function createTimelineEvent(params: {
   owner: string;
   date: string;
   category: 'Medical' | 'Breeding' | 'Ownership' | 'Sales' | 'Operations';
+  status?: string;
+  severity?: 'low' | 'medium' | 'high';
 }) {
   return {
     id: createId('event'),
@@ -767,6 +773,8 @@ function createTimelineEvent(params: {
     owner: params.owner.trim(),
     date: params.date,
     category: params.category,
+    status: params.status,
+    severity: params.severity,
   } as const;
 }
 
@@ -1838,20 +1846,24 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: deniedMessage };
         }
 
-        if (!event.title.trim() || !event.body.trim() || !event.author.trim() || !event.date.trim()) {
-          return { ok: false, message: 'Medical events need a title, note, owner, and date.' };
+        if (!event.title.trim() || !event.body.trim() || !event.author.trim() || !event.date.trim() || !event.type.trim()) {
+          return { ok: false, message: 'Medical events need a type, title, note, owner, and date.' };
         }
 
         if (!get().horses.some((horse) => horse.id === horseId)) {
           return { ok: false, message: 'Horse record not found for this medical event.' };
         }
 
+        const reviewEventTypes: MedicalEventType[] = ['Vet visit', 'Injury', 'Treatment'];
+        const shouldOpenMedicalReview = reviewEventTypes.includes(event.type);
         const nextEvent = createTimelineEvent({
           title: event.title,
           summary: event.body,
           owner: event.author,
           date: event.date,
           category: 'Medical',
+          status: event.type,
+          severity: event.type === 'Injury' ? 'high' : event.type === 'Treatment' ? 'medium' : undefined,
         });
 
         set((state) => ({
@@ -1859,9 +1871,9 @@ export const useXbarStore = create<XbarStore>()(
             horse.id === horseId
               ? {
                   ...horse,
-                  status: 'Medical Review',
-                  lastVetVisit: event.date,
-                  medicalNotes: event.body,
+                  status: shouldOpenMedicalReview ? 'Medical Review' : horse.status,
+                  lastVetVisit: event.type === 'Vet visit' ? event.date : horse.lastVetVisit,
+                  medicalNotes: shouldOpenMedicalReview ? event.body : horse.medicalNotes,
                   medicalTimeline: [nextEvent, ...horse.medicalTimeline],
                   activity: [nextEvent, ...horse.activity],
                 }

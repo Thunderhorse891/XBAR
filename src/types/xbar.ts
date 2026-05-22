@@ -55,6 +55,16 @@ export type ProcessingState =
 
 export type Severity = 'low' | 'medium' | 'high';
 
+export type MedicalEventType =
+  | 'Vet visit'
+  | 'Vaccine'
+  | 'Coggins'
+  | 'Injury'
+  | 'Dental'
+  | 'Deworming'
+  | 'Treatment'
+  | 'Historical note';
+
 export type TransferStatus = 'Clear' | 'Pending Signatures' | 'AQHA Review' | 'Attention Required';
 
 export type SubscriptionTier = 'Starter' | 'Professional' | 'Ranch Ops' | 'Enterprise';

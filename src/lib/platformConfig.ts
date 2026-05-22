@@ -61,6 +61,7 @@ export const apiConfig = {
 
 export const monitoringConfig = {
   enabled: readFlag(env.VITE_RUNTIME_MONITORING_ENABLED, true),
+  apiFallbackEnabled: readFlag(env.VITE_RUNTIME_TELEMETRY_API_ENABLED, Boolean(readEnv(env.VITE_API_BASE_URL))),
 };
 
 export function isStaticPreviewHost() {
