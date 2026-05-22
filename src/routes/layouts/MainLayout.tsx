@@ -30,51 +30,51 @@ type NavItem = {
 };
 
 const operations: NavItem[] = [
-  { label: 'Dashboard', path: '/', icon: DashboardIcon },
-  { label: 'Horses', path: '/horses', icon: HorsesIcon },
-  { label: 'Documents', path: '/documents', icon: DocumentsIcon },
+  { label: 'Ranch Desk', path: '/', icon: DashboardIcon },
+  { label: 'Horse Ledger', path: '/horses', icon: HorsesIcon },
+  { label: 'Document Vault', path: '/documents', icon: DocumentsIcon },
   { label: 'Weather', path: '/weather', icon: WeatherIcon },
-  { label: 'Ownership', path: '/ownership', icon: OwnershipIcon },
+  { label: 'Title & Transfer', path: '/ownership', icon: OwnershipIcon },
 ];
 
 const programs: NavItem[] = [
-  { label: 'Medical', path: '/medical', icon: MedicalIcon },
+  { label: 'Care Records', path: '/medical', icon: MedicalIcon },
   { label: 'Breeding', path: '/breeding', icon: BreedingIcon },
-  { label: 'Sales', path: '/sales', icon: SalesIcon },
+  { label: 'Sale Board', path: '/sales', icon: SalesIcon },
 ];
 
 const platform: NavItem[] = [
-  { label: 'Ranch Toolkit', path: '/assets', icon: AssetsIcon },
+  { label: 'Ranch Ops', path: '/assets', icon: AssetsIcon },
   { label: 'Subscriptions', path: '/subscriptions', icon: SubscriptionIcon },
-  { label: 'Shared Access', path: '/shared-access', icon: SharedAccessIcon },
+  { label: 'Buyer Rooms', path: '/shared-access', icon: SharedAccessIcon },
   { label: 'Settings', path: '/settings', icon: SettingsIcon },
 ];
 
 const routeLabels: Record<string, string> = {
-  '/': 'Dashboard',
-  '/horses': 'Horses',
-  '/documents': 'Documents',
+  '/': 'Ranch Desk',
+  '/horses': 'Horse Ledger',
+  '/documents': 'Document Vault',
   '/weather': 'Weather',
-  '/ownership': 'Ownership',
-  '/medical': 'Medical',
+  '/ownership': 'Title & Transfer',
+  '/medical': 'Care Records',
   '/breeding': 'Breeding',
-  '/sales': 'Sales',
-  '/assets': 'Ranch Toolkit',
+  '/sales': 'Sale Board',
+  '/assets': 'Ranch Ops',
   '/subscriptions': 'Subscriptions',
-  '/shared-access': 'Shared Access',
+  '/shared-access': 'Buyer Rooms',
   '/settings': 'Settings',
 };
 
 const routeHelp: Record<string, HelpSection[]> = {
-  Dashboard: [
+  'Ranch Desk': [
     { label: 'Focus', text: 'Start with blockers and queue risk.' },
     { label: 'Actions', text: 'Open cards or right-click records for shortcuts.' },
   ],
-  Horses: [
+  'Horse Ledger': [
     { label: 'Browse', text: 'Cards and rows open the full horse record.' },
     { label: 'Create', text: 'Use New for intake and save only confirmed data.' },
   ],
-  Documents: [
+  'Document Vault': [
     { label: 'Intake', text: 'Upload first. Attach only when the match is clear.' },
     { label: 'Review', text: 'Approve, discard, or open files from the queue.' },
   ],
@@ -82,11 +82,11 @@ const routeHelp: Record<string, HelpSection[]> = {
     { label: 'Forecast', text: 'Use ranch weather to plan turnout, hauling, and handling windows.' },
     { label: 'Actions', text: 'Search any location or use current position for a live forecast.' },
   ],
-  Ownership: [
+  'Title & Transfer': [
     { label: 'Transfer', text: 'Clear blockers and move transfers forward here.' },
     { label: 'Records', text: 'Right-click rows for transfer actions and jumps.' },
   ],
-  Medical: [
+  'Care Records': [
     { label: 'Care', text: 'Track treatment, alerts, and visit cadence.' },
     { label: 'Actions', text: 'Right-click watch items for fast care actions.' },
   ],
@@ -94,11 +94,11 @@ const routeHelp: Record<string, HelpSection[]> = {
     { label: 'Program', text: 'Manage pairings, milestones, and foaling work.' },
     { label: 'Actions', text: 'Right-click entries to jump or update quickly.' },
   ],
-  Sales: [
+  'Sale Board': [
     { label: 'Pipeline', text: 'Track leads, stages, and listing posture.' },
     { label: 'Actions', text: 'Right-click horses or leads for next-step actions.' },
   ],
-  'Ranch Toolkit': [
+  'Ranch Ops': [
     { label: 'Assets', text: 'Keep equipment, kits, and service work in one place.' },
     { label: 'Actions', text: 'Right-click rows to update status or jump out.' },
   ],
@@ -106,7 +106,7 @@ const routeHelp: Record<string, HelpSection[]> = {
     { label: 'Billing', text: 'Track contract, billing path, and plan state.' },
     { label: 'Limits', text: 'Watch seats, storage, and access limits.' },
   ],
-  'Shared Access': [
+  'Buyer Rooms': [
     { label: 'Shares', text: 'Stage the share list and monitor buyer-safe records.' },
     { label: 'Actions', text: 'Right-click saved horses for link shortcuts.' },
   ],

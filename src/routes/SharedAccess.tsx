@@ -75,6 +75,23 @@ export default function SharedAccess() {
     }
   };
 
+  const confirmPublicLink = (horseName: string, packet: ReturnType<typeof buildHorsePacketCompleteness>) => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    return window.confirm(
+      [
+        `Make ${horseName} public?`,
+        '',
+        'Anyone with the link can view the buyer room without a token.',
+        'Buyer-safe fields include horse identity, approved sale photos, sale readiness, and approved packet documents only.',
+        '',
+        `Current packet status: ${packet.buyerProfileStatus}.`,
+      ].join('\n'),
+    );
+  };
+
   const menuItems = menuHorse && menuPacket
     ? [
         {
@@ -106,6 +123,10 @@ export default function SharedAccess() {
                 label: menuListing.accessMode === 'Private Token' ? 'Make public' : 'Require token',
                 onSelect: async () => {
                   const nextAccessMode = menuListing.accessMode === 'Private Token' ? 'Public Link' : 'Private Token';
+                  if (nextAccessMode === 'Public Link' && !confirmPublicLink(menuHorse.name, menuPacket)) {
+                    return;
+                  }
+
                   const result = await updateSharedListingAccessMode(menuHorse.id, nextAccessMode);
                   pushToast({
                     title: result.ok ? 'Access updated' : 'Access blocked',
@@ -153,12 +174,12 @@ export default function SharedAccess() {
   return (
     <>
       <PageHeader
-        eyebrow="Shared access"
-        title="Shared Access"
+        eyebrow="Buyer rooms"
+        title="Buyer Rooms"
       />
 
       <div className="metric-grid">
-        <MetricCard label="Shared records" value={`${activeSharedListings.length}`} detail="Active links" tone="blue" />
+        <MetricCard label="Buyer rooms" value={`${activeSharedListings.length}`} detail="Active links" tone="blue" />
         <MetricCard label="Live links" value={`${liveSharedListings.length}`} detail="Open to buyers" tone="emerald" />
         <MetricCard label="Facebook posts" value={`${facebookSharedListings.length}`} detail="Sent through Facebook" tone="slate" />
         <MetricCard label="Open inquiries" value={`${openSharedLeads.length}`} detail="Leads tied to shared horses" tone="amber" />
@@ -192,7 +213,7 @@ export default function SharedAccess() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Listings" title="Shared horses">
+        <Panel eyebrow="Listings" title="Buyer rooms">
           {sharedHorses.length ? (
             <div className="stack-list">
               {sharedHorses.map((horse) => {
@@ -285,6 +306,10 @@ export default function SharedAccess() {
                           onClick={async (event) => {
                             event.stopPropagation();
                             const nextAccessMode = sharedListing.accessMode === 'Private Token' ? 'Public Link' : 'Private Token';
+                            if (nextAccessMode === 'Public Link' && !confirmPublicLink(horse.name, packet)) {
+                              return;
+                            }
+
                             const result = await updateSharedListingAccessMode(horse.id, nextAccessMode);
                             pushToast({
                               title: result.ok ? 'Access updated' : 'Access blocked',
@@ -302,7 +327,7 @@ export default function SharedAccess() {
               })}
             </div>
           ) : (
-            <EmptyState compact title="No shared horses" description="Add a horse to shared access from the horse ledger or profile." />
+            <EmptyState compact title="No buyer rooms" description="Add a horse to buyer rooms from the horse ledger or profile." />
           )}
         </Panel>
       </div>

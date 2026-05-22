@@ -54,6 +54,30 @@ function RouteTelemetry() {
     });
   }, [location.pathname, location.search, workspaceId]);
 
+  useEffect(() => {
+    const path = location.pathname;
+    const title = path.startsWith('/profiles/')
+      ? 'XBAR | Buyer Room'
+      : path.startsWith('/horses/')
+        ? 'XBAR | Horse Record'
+        : path === '/horses'
+          ? 'XBAR | Horse Ledger'
+          : path === '/documents'
+            ? 'XBAR | Document Vault'
+            : path === '/shared-access'
+              ? 'XBAR | Buyer Rooms'
+              : path === '/settings'
+                ? 'XBAR | Settings'
+                : path === '/setup'
+                  ? 'XBAR | Setup'
+                  : path === '/login'
+                    ? 'XBAR | Login'
+                    : path === '/'
+                      ? 'XBAR | Ranch Desk'
+                      : `XBAR | ${path.split('/').filter(Boolean).map((part) => part[0].toUpperCase() + part.slice(1)).join(' ') || 'Workspace'}`;
+    document.title = title;
+  }, [location.pathname]);
+
   return null;
 }
 
