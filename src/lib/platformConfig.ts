@@ -64,6 +64,10 @@ export const monitoringConfig = {
   apiFallbackEnabled: readFlag(env.VITE_RUNTIME_TELEMETRY_API_ENABLED, Boolean(readEnv(env.VITE_API_BASE_URL))),
 };
 
+export const publicShareConfig = {
+  localPreviewEnabled: isE2eMode || readFlag(env.VITE_PUBLIC_SHARE_LOCAL_PREVIEW, Boolean(env.DEV)),
+};
+
 export function isStaticPreviewHost() {
   if (typeof window === 'undefined') {
     return false;
@@ -102,6 +106,10 @@ export function isBillingConfigured() {
 
 export function isFacebookSharingConfigured() {
   return Boolean(facebookConfig.appId);
+}
+
+export function isPublicShareLocalPreviewEnabled() {
+  return publicShareConfig.localPreviewEnabled;
 }
 
 export function getStripePaymentLink(tier: SubscriptionTier) {

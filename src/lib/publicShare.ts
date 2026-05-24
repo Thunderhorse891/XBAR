@@ -1,15 +1,65 @@
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
-import type { DocumentRecord, HorseRecord, OwnershipRecord, SharedListingRecord } from '@/types/xbar';
+import type { DocumentRecord, HorseAlert, HorseRecord, OwnershipRecord, SharedListingRecord } from '@/types/xbar';
 
-export type PublicHorseDTO = HorseRecord;
-export type PublicDocumentDTO = DocumentRecord;
+export type PublicHorseDTO = Pick<
+  HorseRecord,
+  | 'id'
+  | 'name'
+  | 'barnName'
+  | 'summary'
+  | 'segment'
+  | 'status'
+  | 'breed'
+  | 'registry'
+  | 'aqhaNumber'
+  | 'registrationNumber'
+  | 'registered'
+  | 'age'
+  | 'foaledOn'
+  | 'sex'
+  | 'color'
+  | 'markings'
+  | 'insuredValue'
+  | 'profileImage'
+  | 'bloodline'
+  | 'gallery'
+  | 'sale'
+  | 'readiness'
+> & {
+  alerts: Array<Pick<HorseAlert, 'severity' | 'module'>>;
+};
+
+export type PublicDocumentDTO = Pick<
+  DocumentRecord,
+  | 'id'
+  | 'title'
+  | 'type'
+  | 'horseId'
+  | 'uploadedAt'
+  | 'source'
+  | 'state'
+  | 'confidence'
+  | 'duplicateRisk'
+  | 'extractedTextPreview'
+  | 'summary'
+  | 'entities'
+  | 'fileName'
+  | 'mimeType'
+  | 'fileSizeBytes'
+>;
+
+export type PublicOwnershipDTO = Pick<OwnershipRecord, 'id' | 'horseId' | 'transferStatus' | 'confidence'>;
+
+export type PublicSharedListingDTO = Pick<SharedListingRecord, 'id' | 'horseId' | 'sharePath' | 'accessMode' | 'state' | 'channels' | 'updatedAt'> & {
+  shareToken?: string;
+};
 
 export type PublicBuyerProfilePayload = {
   horse: PublicHorseDTO;
   documents: PublicDocumentDTO[];
-  ownershipRecord?: OwnershipRecord;
-  sharedListing?: SharedListingRecord;
+  ownershipRecord?: PublicOwnershipDTO;
+  sharedListing?: PublicSharedListingDTO;
 };
 
 type PublicBuyerProfileResult =
@@ -40,20 +90,44 @@ function parsePublicBuyerProfilePayload(value: unknown): PublicBuyerProfilePaylo
   return {
     horse: sanitizePublicHorse(horse as unknown as HorseRecord),
     documents: Array.isArray(value.documents) ? value.documents.map(sanitizePublicDocument).filter((document): document is PublicDocumentDTO => Boolean(document)) : [],
-    ownershipRecord: isRecord(value.ownershipRecord) ? (value.ownershipRecord as unknown as OwnershipRecord) : undefined,
-    sharedListing: isRecord(value.sharedListing) ? (value.sharedListing as unknown as SharedListingRecord) : undefined,
+    ownershipRecord: sanitizePublicOwnership(value.ownershipRecord),
+    sharedListing: sanitizePublicSharedListing(value.sharedListing),
   };
 }
 
 function sanitizePublicHorse(horse: HorseRecord): PublicHorseDTO {
   return {
-    ...horse,
-    medicalNotes: '',
-    lastVetVisit: '',
-    ownership: [],
-    documentFacts: [],
-    alerts: [],
-    notes: [],
+    id: horse.id,
+    name: horse.name,
+    barnName: horse.barnName,
+    summary: horse.summary,
+    segment: horse.segment,
+    status: horse.status,
+    breed: horse.breed,
+    registry: horse.registry,
+    aqhaNumber: horse.aqhaNumber,
+    registrationNumber: horse.registrationNumber,
+    registered: horse.registered,
+    age: horse.age,
+    foaledOn: horse.foaledOn,
+    sex: horse.sex,
+    color: horse.color,
+    markings: horse.markings,
+    insuredValue: horse.insuredValue,
+    profileImage: horse.profileImage,
+    bloodline: horse.bloodline,
+    gallery: horse.gallery.filter((asset) => asset.status === 'Approved'),
+    sale: horse.sale,
+    readiness: {
+      ...horse.readiness,
+      blockers: [],
+    },
+    alerts: horse.alerts
+      .filter((alert) => alert.severity === 'high' && ['Medical', 'Ownership', 'Documents'].includes(alert.module))
+      .map((alert) => ({
+        severity: alert.severity,
+        module: alert.module,
+      })),
   };
 }
 
@@ -68,7 +142,6 @@ function sanitizePublicDocument(value: unknown): PublicDocumentDTO | null {
     title: document.title,
     type: document.type,
     horseId: document.horseId,
-    uploadedBy: '',
     uploadedAt: document.uploadedAt,
     source: document.source,
     state: document.state,
@@ -77,11 +150,41 @@ function sanitizePublicDocument(value: unknown): PublicDocumentDTO | null {
     extractedTextPreview: '',
     summary: document.summary,
     entities: document.entities ?? {},
-    fileUrl: undefined,
-    storagePath: undefined,
     fileName: document.fileName,
     mimeType: document.mimeType,
     fileSizeBytes: document.fileSizeBytes,
+  };
+}
+
+function sanitizePublicOwnership(value: unknown): PublicOwnershipDTO | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const record = value as unknown as OwnershipRecord;
+  return {
+    id: record.id,
+    horseId: record.horseId,
+    transferStatus: record.transferStatus,
+    confidence: record.confidence,
+  };
+}
+
+function sanitizePublicSharedListing(value: unknown): PublicSharedListingDTO | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const listing = value as unknown as SharedListingRecord;
+  return {
+    id: listing.id,
+    horseId: listing.horseId,
+    sharePath: listing.sharePath,
+    accessMode: listing.accessMode,
+    state: listing.state,
+    channels: listing.channels,
+    updatedAt: listing.updatedAt,
+    shareToken: listing.accessMode === 'Private Token' ? listing.shareToken : undefined,
   };
 }
 
