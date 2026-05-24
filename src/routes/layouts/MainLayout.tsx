@@ -9,6 +9,7 @@ import {
   BreedingIcon,
   DashboardIcon,
   DocumentsIcon,
+  DotsIcon,
   HorsesIcon,
   MedicalIcon,
   OwnershipIcon,
@@ -157,6 +158,7 @@ export default function MainLayout() {
   const location = useLocation();
   const [search, setSearch] = useState('');
   const [helpOpen, setHelpOpen] = useState(false);
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const currentRole = useXbarStore((state) => state.currentRole);
   const subscription = useXbarStore((state) => state.subscription);
   const documents = useXbarStore((state) => state.documents);
@@ -180,6 +182,8 @@ export default function MainLayout() {
     }
     return true;
   });
+  const mobilePrimaryPaths = new Set(['/', '/horses', '/documents', '/sales']);
+  const mobileMoreItems = [...operations, ...programs, ...platformItems].filter((item) => !mobilePrimaryPaths.has(item.path));
 
   const pendingReview = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched').length;
   const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse Profile' : routeLabels[location.pathname] ?? 'Dashboard';
@@ -188,6 +192,7 @@ export default function MainLayout() {
 
   useEffect(() => {
     setHelpOpen(false);
+    setMobileMoreOpen(false);
   }, [location.pathname]);
 
   const handleSearch = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -351,6 +356,56 @@ export default function MainLayout() {
           <Outlet />
         </main>
 
+        {mobileMoreOpen ? (
+          <>
+            <button
+              className="fixed inset-0 z-30 bg-[#061426]/30 lg:hidden"
+              type="button"
+              aria-label="Close mobile menu"
+              onClick={() => setMobileMoreOpen(false)}
+            />
+            <div id="mobile-more-menu" className="fixed bottom-[94px] left-3 right-3 z-50 rounded-lg border border-[#d8e1ea] bg-[#fbfdff] p-3 text-[#16202b] shadow-xl lg:hidden">
+              {canCreateHorse ? (
+                <button
+                  className="mb-2 flex min-h-[50px] w-full items-center gap-3 rounded-md bg-[#1155dd] px-3 text-left text-sm font-semibold text-white transition-all duration-150 ease-[ease] hover:bg-[#0d44b0]"
+                  type="button"
+                  onClick={() => {
+                    setMobileMoreOpen(false);
+                    navigate('/horses?new=1');
+                  }}
+                >
+                  <AddIcon className="h-[18px] w-[18px] shrink-0" />
+                  <span>New horse</span>
+                </button>
+              ) : null}
+              <div className="grid grid-cols-2 gap-2">
+                {mobileMoreItems.map(({ label, path, icon: Icon }) => {
+                  const isActive = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
+                  return (
+                    <button
+                      key={label}
+                      className={classNames(
+                        'flex min-h-[54px] items-center gap-3 rounded-md border px-3 text-left text-sm font-semibold transition-all duration-150 ease-[ease]',
+                        isActive
+                          ? 'border-[#c8d7ff] bg-[#eaeffd] text-[#1155dd]'
+                          : 'border-[#e3e9f0] bg-white text-[#33475c] hover:border-[#1155dd] hover:bg-[#eef6fb]',
+                      )}
+                      type="button"
+                      onClick={() => {
+                        setMobileMoreOpen(false);
+                        navigate(path);
+                      }}
+                    >
+                      <Icon className="h-[18px] w-[18px] shrink-0" />
+                      <span className="min-w-0 truncate">{label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        ) : null}
+
         <nav className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-2 rounded-lg border border-[#dde5ee] bg-[#fbfdff] p-2 text-[#16202b] shadow-lg lg:hidden" aria-label="Mobile quick navigation">
           <NavLink
             to="/"
@@ -402,13 +457,19 @@ export default function MainLayout() {
             <span>Sales</span>
           </NavLink>
           <button
-            className="flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md bg-[#1155dd] text-[11px] font-semibold text-white transition-all duration-150 ease-[ease] hover:bg-[#0d44b0] disabled:cursor-not-allowed disabled:opacity-50"
+            className={classNames(
+              'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]',
+              mobileMoreOpen || mobileMoreItems.some((item) => location.pathname.startsWith(item.path) && item.path !== '/')
+                ? 'bg-[#eaeffd] text-[#1155dd]'
+                : 'text-[#798088] hover:bg-white hover:text-[#16202b]',
+            )}
             type="button"
-            onClick={() => navigate('/horses?new=1')}
-            disabled={!canCreateHorse}
+            onClick={() => setMobileMoreOpen((current) => !current)}
+            aria-expanded={mobileMoreOpen}
+            aria-controls="mobile-more-menu"
           >
-            <AddIcon className="h-[18px] w-[18px]" />
-            <span>New</span>
+            <DotsIcon className="h-[18px] w-[18px]" />
+            <span>More</span>
           </button>
         </nav>
 

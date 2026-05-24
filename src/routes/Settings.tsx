@@ -9,6 +9,10 @@ import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { UserRole } from '@/types/xbar';
 
+function roleLabel(role: UserRole) {
+  return role === 'Owner' ? 'Horse Owner / Client' : role;
+}
+
 export default function Settings() {
   const roleWorkspaces = useXbarStore((state) => state.roleWorkspaces);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
@@ -351,7 +355,7 @@ export default function Settings() {
               <select className="field-input" value={inviteRole} onChange={(event) => setInviteRole(event.target.value as UserRole)} disabled={!canManageSettings}>
                 <option value="Admin">Admin</option>
                 <option value="Ranch Manager">Ranch Manager</option>
-                <option value="Owner">Owner</option>
+                <option value="Owner">Horse Owner / Client</option>
                 <option value="Medical Lead">Medical Lead</option>
                 <option value="Sales Lead">Sales Lead</option>
               </select>
@@ -379,11 +383,11 @@ export default function Settings() {
                       <div>
                         <div className="stack-item__title">{member.email}</div>
                         <div className="stack-item__copy">
-                          {member.role} · {member.source === 'Owner' ? 'Workspace owner' : `Joined ${formatDateLabel(member.joinedAt)}`}
+                          {roleLabel(member.role)} · {member.source === 'Owner' ? 'Workspace owner' : `Joined ${formatDateLabel(member.joinedAt)}`}
                         </div>
                       </div>
                       <div className="status-inline">
-                        <Pill tone={member.role === 'Admin' ? 'blue' : member.role === 'Owner' ? 'emerald' : 'slate'}>{member.role}</Pill>
+                        <Pill tone={member.role === 'Admin' ? 'blue' : member.role === 'Owner' ? 'emerald' : 'slate'}>{roleLabel(member.role)}</Pill>
                         <Pill tone="emerald">Active</Pill>
                       </div>
                     </div>
@@ -427,10 +431,10 @@ export default function Settings() {
                       <div>
                         <div className="stack-item__title">{invite.email}</div>
                         <div className="stack-item__copy">
-                          {invite.role} · Sent {formatDateLabel(invite.invitedAt)}
+                          {roleLabel(invite.role)} · Sent {formatDateLabel(invite.invitedAt)}
                         </div>
                       </div>
-                      <Pill tone={invite.role === 'Owner' ? 'emerald' : 'blue'}>{invite.role}</Pill>
+                      <Pill tone={invite.role === 'Owner' ? 'emerald' : 'blue'}>{roleLabel(invite.role)}</Pill>
                     </div>
                     <div className="inline-actions">
                       {!isSupabaseConfigured() ? (
