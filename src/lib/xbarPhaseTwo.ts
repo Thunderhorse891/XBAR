@@ -16,6 +16,19 @@ const CURRENT_HEALTH_SUPPORT_DAYS = 180;
 type Tone = 'blue' | 'slate' | 'emerald' | 'amber' | 'rose';
 type PacketStatus = 'ready' | 'review' | 'missing';
 
+type PacketHorseInput = Pick<HorseRecord, 'id' | 'name' | 'status' | 'registered' | 'gallery' | 'sale'> & {
+  alerts: Array<Pick<HorseRecord['alerts'][number], 'severity' | 'module'>>;
+};
+
+type PacketDocumentInput = Pick<DocumentRecord, 'type' | 'state' | 'entities'>;
+
+type DocumentTrustInput = Pick<
+  DocumentRecord,
+  'title' | 'extractedTextPreview' | 'entities' | 'state' | 'duplicateRisk' | 'confidence' | 'horseId'
+>;
+
+type PacketOwnershipInput = Pick<OwnershipRecord, 'transferStatus'>;
+
 export type MatchCandidate = {
   horseId: string;
   horseName: string;
@@ -97,19 +110,19 @@ function normalizeShareSlug(value: string) {
     .replace(/^-|-$/g, '');
 }
 
-function isDocumentReady(document: DocumentRecord) {
+function isDocumentReady(document: PacketDocumentInput) {
   return document.state === 'Ready';
 }
 
-function isDocumentResolved(document: DocumentRecord) {
+function isDocumentResolved(document: PacketDocumentInput) {
   return document.state === 'Ready' || document.state === 'Matched' || document.state === 'Archived';
 }
 
-function collectDocuments(documents: DocumentRecord[], types: DocumentRecord['type'][]) {
+function collectDocuments<TDocument extends PacketDocumentInput>(documents: TDocument[], types: DocumentRecord['type'][]) {
   return documents.filter((document) => types.includes(document.type));
 }
 
-function getDocumentExamTime(document: DocumentRecord) {
+function getDocumentExamTime(document: PacketDocumentInput) {
   const examDate = document.entities.examDate;
   if (!examDate) {
     return null;
@@ -119,7 +132,7 @@ function getDocumentExamTime(document: DocumentRecord) {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
-function isCurrentDatedDocument(document: DocumentRecord, maxAgeDays: number) {
+function isCurrentDatedDocument(document: PacketDocumentInput, maxAgeDays: number) {
   const examTime = getDocumentExamTime(document);
   if (examTime === null) {
     return false;
@@ -128,11 +141,11 @@ function isCurrentDatedDocument(document: DocumentRecord, maxAgeDays: number) {
   return Date.now() - examTime <= maxAgeDays * DAY_MS;
 }
 
-function hasCurrentReadyDocument(documents: DocumentRecord[], maxAgeDays: number) {
+function hasCurrentReadyDocument(documents: PacketDocumentInput[], maxAgeDays: number) {
   return documents.some((document) => isDocumentReady(document) && isCurrentDatedDocument(document, maxAgeDays));
 }
 
-function hasResolvedDocumentMissingCurrentDate(documents: DocumentRecord[], maxAgeDays: number) {
+function hasResolvedDocumentMissingCurrentDate(documents: PacketDocumentInput[], maxAgeDays: number) {
   return documents.some((document) => isDocumentResolved(document) && !isCurrentDatedDocument(document, maxAgeDays));
 }
 
@@ -156,7 +169,7 @@ function buildSalePacketSlot(params: {
   };
 }
 
-function describeDuplicateRisk(document: DocumentRecord) {
+function describeDuplicateRisk(document: DocumentTrustInput) {
   if (document.duplicateRisk === 'Possible Duplicate') {
     return 'Possible duplicate against an existing vault record.';
   }
@@ -166,7 +179,7 @@ function describeDuplicateRisk(document: DocumentRecord) {
   return 'No duplicate warning on this document.';
 }
 
-export function buildDocumentTrustProfile(document: DocumentRecord, horses: HorseRecord[]): DocumentTrustProfile {
+export function buildDocumentTrustProfile(document: DocumentTrustInput, horses: HorseRecord[]): DocumentTrustProfile {
   const entityCount = Object.values(document.entities).filter(Boolean).length;
   const candidateMatches = rankHorseMatches(
     horses,
@@ -213,9 +226,9 @@ export function buildDocumentTrustProfile(document: DocumentRecord, horses: Hors
 }
 
 export function buildHorsePacketCompleteness(
-  horse: HorseRecord,
-  documents: DocumentRecord[],
-  ownershipRecord?: OwnershipRecord,
+  horse: PacketHorseInput,
+  documents: PacketDocumentInput[],
+  ownershipRecord?: PacketOwnershipInput,
 ): PacketCompleteness {
   const registrationDocs = collectDocuments(documents, ['Registration', 'Bill of Sale']);
   const ownershipDocs = collectDocuments(documents, ['Ownership Memo', 'Transfer Packet']);

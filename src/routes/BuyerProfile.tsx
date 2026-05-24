@@ -6,6 +6,7 @@ import { SalePacketSlots } from '@/components/SalePacketSlots';
 import { KeyValue, MetricCard, Panel, Pill } from '@/components/app-ui';
 import { buildPublicShareUrl, openFacebookShareDialog } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
+import { isPublicShareLocalPreviewEnabled } from '@/lib/platformConfig';
 import { loadPublicBuyerProfile, trackPublicBuyerProfileView, type PublicBuyerProfilePayload } from '@/lib/publicShare';
 import { hasBuyerShareAccess } from '@/lib/workspaceAccess';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
@@ -22,7 +23,7 @@ export default function BuyerProfile() {
   const localOwnershipRecord = useXbarStore((state) => state.ownershipRecords.find((record) => record.horseId === id));
   const localSharedListing = useXbarStore((state) => state.sharedListings.find((listing) => listing.horseId === id && listing.state !== 'Archived'));
   const shareToken = searchParams.get('t')?.trim() ?? '';
-  const localPreviewAllowed = searchParams.get('preview') === 'local';
+  const localPreviewAllowed = isPublicShareLocalPreviewEnabled() && searchParams.get('preview') === 'local';
   const localAccessAllowed = hasBuyerShareAccess(localSharedListing, shareToken);
   const localPayload = useMemo(
     () =>
@@ -105,7 +106,7 @@ export default function BuyerProfile() {
   const documents = resolvedPayload?.documents ?? [];
   const ownershipRecord = resolvedPayload?.ownershipRecord;
   const sharedListing = resolvedPayload?.sharedListing;
-  const matchingHorses = remoteState.source === 'local' || !remoteState.payload ? localHorses : horse ? [horse] : [];
+  const matchingHorses = remoteState.source === 'local' || !remoteState.payload ? localHorses : [];
 
   if (!horse) {
     const title = remoteState.status === 'loading'
@@ -150,7 +151,7 @@ export default function BuyerProfile() {
   return (
     <main className="buyer-shell">
       <div className="buyer-shell__inner">
-        {localHorse ? (
+        {localPreviewAllowed && localHorse ? (
           <Link className="inline-link" to={`/horses/${horse.id}`}>
             Back to horse workspace
           </Link>
