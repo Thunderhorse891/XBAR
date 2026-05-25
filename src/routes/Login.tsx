@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { XbarMark } from '@/components/BrandMark';
 import { Pill } from '@/components/app-ui';
 import { isCloudAuthRequired, isLocalModeEnabled, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
@@ -59,8 +60,8 @@ export default function Login() {
           <div className="absolute inset-y-0 right-[-90px] w-[240px] rounded-full bg-[rgba(12,111,151,0.08)] blur-3xl" aria-hidden="true" />
           <div className="relative z-[1]">
             <div className="flex items-center gap-3">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[#d8e1ea] bg-white p-1.5 shadow-sm">
-                <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" className="h-full w-full object-contain" />
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[#d8e1ea] bg-[#050910] p-1.5 shadow-[0_16px_34px_rgba(47,141,255,0.18)]">
+                <XbarMark title="XBAR logo" className="h-full w-full" />
               </div>
               <div>
                 <div className="text-lg font-extrabold uppercase tracking-[0.14em]">XBAR</div>
@@ -116,8 +117,8 @@ export default function Login() {
           <div className="mx-auto w-full max-w-[460px]">
             <div className="lg:hidden">
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#dbe4ed] bg-[#f7fafc] p-1.5 shadow-sm">
-                  <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" className="h-full w-full object-contain" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#dbe4ed] bg-[#050910] p-1.5 shadow-[0_12px_28px_rgba(47,141,255,0.16)]">
+                  <XbarMark title="XBAR logo" className="h-full w-full" />
                 </div>
                 <div>
                   <div className="text-base font-extrabold uppercase tracking-[0.14em] text-[#1e242b]">XBAR</div>
