@@ -73,7 +73,7 @@ function RouteTelemetry() {
                   : path === '/login'
                     ? 'XBAR | Login'
                     : path === '/'
-                      ? 'XBAR | Ranch Desk'
+                      ? 'XBAR | Today'
                       : `XBAR | ${path.split('/').filter(Boolean).map((part) => part[0].toUpperCase() + part.slice(1)).join(' ') || 'Workspace'}`;
     document.title = title;
   }, [location.pathname]);
