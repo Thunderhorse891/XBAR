@@ -1,0 +1,320 @@
+.premium-auth-shell,
+.premium-setup-shell {
+  --spotlight-x: 50%;
+  --spotlight-y: 42%;
+  position: relative;
+  min-height: 100vh;
+  overflow-x: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 18% 16%, rgba(47, 141, 255, 0.22), transparent 30rem),
+    radial-gradient(circle at 86% 72%, rgba(120, 96, 62, 0.18), transparent 28rem),
+    linear-gradient(135deg, #020409 0%, #07101c 48%, #020409 100%);
+  color: #f8fbff;
+}
+
+.premium-auth-shell::before,
+.premium-setup-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(580px circle at var(--spotlight-x) var(--spotlight-y), rgba(142, 220, 255, 0.18), transparent 56%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 28%);
+  opacity: 0.86;
+}
+
+.premium-auth-grid {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 82px 82px;
+  mask-image: radial-gradient(circle at 50% 30%, black, transparent 70%);
+  opacity: 0.28;
+}
+
+.premium-auth-orb {
+  position: absolute;
+  z-index: 0;
+  width: 34rem;
+  height: 34rem;
+  pointer-events: none;
+  border-radius: 999px;
+  filter: blur(68px);
+  opacity: 0.28;
+  transform: translate3d(0, 0, 0);
+  animation: premium-auth-float 12s ease-in-out infinite;
+}
+
+.premium-auth-orb--one {
+  top: -11rem;
+  right: 8%;
+  background: rgba(47, 141, 255, 0.54);
+}
+
+.premium-auth-orb--two {
+  bottom: -15rem;
+  left: 0;
+  background: rgba(193, 148, 92, 0.3);
+  animation-duration: 15s;
+  animation-delay: -4s;
+}
+
+.premium-auth-cinematic {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(5, 8, 13, 0.04), rgba(5, 8, 13, 0.84)),
+    radial-gradient(circle at 63% 18%, rgba(142, 220, 255, 0.2), transparent 22rem),
+    linear-gradient(115deg, rgba(255, 255, 255, 0.1) 0 1px, transparent 1px 38%),
+    linear-gradient(155deg, transparent 0 56%, rgba(255, 255, 255, 0.09) 56.2%, transparent 56.6%),
+    linear-gradient(180deg, #07101c, #03060b);
+}
+
+.premium-auth-cinematic::before {
+  content: "";
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: 34%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(216, 244, 255, 0.68), transparent);
+  box-shadow: 0 0 32px rgba(47, 141, 255, 0.35);
+}
+
+.premium-auth-cinematic::after {
+  content: "";
+  position: absolute;
+  right: 8%;
+  bottom: 18%;
+  width: 52%;
+  height: 34%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 28px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.1), transparent 42%),
+    rgba(255, 255, 255, 0.035);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 28px 70px rgba(0, 0, 0, 0.26);
+  transform: perspective(900px) rotateX(62deg) rotateZ(-9deg);
+}
+
+.premium-brand-mark {
+  display: flex;
+  width: 4.1rem;
+  height: 4.1rem;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.025));
+  padding: 0.42rem;
+  box-shadow: 0 18px 44px rgba(47, 141, 255, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.premium-brand-mark--mobile {
+  width: 3.45rem;
+  height: 3.45rem;
+  border-radius: 16px;
+}
+
+.premium-auth-reveal {
+  animation: premium-auth-fade-up 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.premium-product-preview,
+.premium-auth-card,
+.premium-setup-card,
+.premium-setup-form {
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.045));
+  box-shadow: 0 26px 76px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(18px);
+}
+
+.premium-product-preview {
+  border-radius: 24px;
+  padding: 1.35rem;
+}
+
+.premium-auth-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 30px;
+  padding: clamp(1.35rem, 4vw, 2.35rem);
+}
+
+.premium-auth-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.08) 42%, transparent 68%);
+  transform: translateX(-110%);
+  animation: premium-auth-sheen 7s ease-in-out infinite;
+}
+
+.premium-lane-card {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 1rem;
+  animation: premium-auth-fade-up 440ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.premium-auth-input {
+  height: 52px;
+  border-color: rgba(255, 255, 255, 0.12);
+  border-radius: 15px;
+  background: rgba(2, 4, 9, 0.36);
+  color: #f8fbff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.premium-auth-input::placeholder {
+  color: rgba(203, 213, 225, 0.48);
+}
+
+.premium-auth-input:focus {
+  border-color: rgba(142, 220, 255, 0.58);
+  background: rgba(2, 4, 9, 0.54);
+  box-shadow: 0 0 0 4px rgba(47, 141, 255, 0.14);
+  outline: none;
+}
+
+.premium-auth-button {
+  display: inline-flex;
+  min-height: 52px;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  border-radius: 16px;
+  padding: 0.8rem 1rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease, border-color 180ms ease, background-color 180ms ease, color 180ms ease;
+  transform: translate3d(0, 0, 0);
+}
+
+.premium-auth-button:hover {
+  transform: translate3d(0, -2px, 0);
+}
+
+.premium-auth-button--primary {
+  color: #06101d;
+  background: linear-gradient(135deg, #f8fbff 0%, #d9f4ff 42%, #8edcff 100%);
+  box-shadow: 0 18px 40px rgba(47, 141, 255, 0.26);
+}
+
+.premium-auth-button--ghost {
+  color: #e2e8f0;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.premium-auth-button--ghost:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.075);
+}
+
+.premium-auth-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.54;
+  transform: none;
+  box-shadow: none;
+}
+
+.premium-auth-button:focus-visible {
+  outline: 2px solid #8edcff;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px rgba(47, 141, 255, 0.18);
+}
+
+.premium-setup-shell {
+  background:
+    radial-gradient(circle at 16% 20%, rgba(47, 141, 255, 0.2), transparent 30rem),
+    radial-gradient(circle at 76% 8%, rgba(255, 255, 255, 0.08), transparent 30rem),
+    linear-gradient(145deg, #020409 0%, #07101c 54%, #05080d 100%);
+}
+
+.premium-setup-card {
+  align-self: stretch;
+  border-radius: 30px;
+  padding: clamp(1rem, 2.5vw, 1.5rem);
+}
+
+.premium-setup-form {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1.35rem;
+  border-radius: 24px;
+  padding: clamp(1.2rem, 3vw, 1.75rem);
+}
+
+@keyframes premium-auth-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(1.5rem, -1rem, 0) scale(1.05);
+  }
+}
+
+@keyframes premium-auth-fade-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes premium-auth-sheen {
+  0%,
+  42% {
+    transform: translateX(-115%);
+  }
+  62%,
+  100% {
+    transform: translateX(115%);
+  }
+}
+
+@media (max-width: 720px) {
+  .premium-auth-card,
+  .premium-setup-card,
+  .premium-setup-form {
+    border-radius: 22px;
+  }
+
+  .premium-auth-orb {
+    width: 22rem;
+    height: 22rem;
+    filter: blur(54px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .premium-auth-shell *,
+  .premium-auth-shell *::before,
+  .premium-auth-shell *::after,
+  .premium-setup-shell *,
+  .premium-setup-shell *::before,
+  .premium-setup-shell *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
