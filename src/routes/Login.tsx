@@ -1,9 +1,29 @@
-import { useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Pill } from '@/components/app-ui';
+import { XbarMark } from '@/components/BrandMark';
 import { isCloudAuthRequired, isLocalModeEnabled, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
+import './authExperience.css';
+
+type AuthMode = 'signin' | 'signup';
+type BusyState = 'password' | 'magic' | 'facebook' | 'reset' | '';
+
+const loginBrandAssetSrc = `${import.meta.env.BASE_URL}brand/xbar-app-icon.svg`;
+
+const featureProof = [
+  'Horse profiles',
+  'Health and Coggins tracking',
+  'Breeding and sale records',
+  'Expenses and documents',
+  'Built for ranches, breeders, and serious horse owners',
+];
+
+const operatingProof = [
+  { label: 'Care', value: 'Coggins due dates, vaccines, vet files' },
+  { label: 'Records', value: 'Registration, ownership, photos, documents' },
+  { label: 'Sales', value: 'Buyer rooms, sale files, transfer packets' },
+];
 
 export default function Login() {
   const navigate = useNavigate();
@@ -12,17 +32,24 @@ export default function Login() {
   const status = useCloudStore((state) => state.status);
   const session = useCloudStore((state) => state.session);
   const sendMagicLink = useCloudStore((state) => state.sendMagicLink);
+  const signInWithPassword = useCloudStore((state) => state.signInWithPassword);
+  const signUpWithPassword = useCloudStore((state) => state.signUpWithPassword);
+  const sendPasswordReset = useCloudStore((state) => state.sendPasswordReset);
   const signInWithFacebook = useCloudStore((state) => state.signInWithFacebook);
+  const shellRef = useRef<HTMLDivElement | null>(null);
   const [email, setEmail] = useState('');
-  const [busy, setBusy] = useState<'magic' | 'facebook' | ''>('');
+  const [password, setPassword] = useState('');
+  const [authMode, setAuthMode] = useState<AuthMode>('signin');
+  const [busy, setBusy] = useState<BusyState>('');
   const redirectTarget = useMemo(() => {
     const next = (location.state as { from?: string } | null)?.from;
     return next || '/';
   }, [location.state]);
   const cloudRequired = isCloudAuthRequired();
   const allowLocalMode = isLocalModeEnabled();
-  const authLabel = isSupabaseConfigured() ? 'Cloud live' : allowLocalMode ? 'Browser access' : 'Cloud required';
-  const syncLabel = isSupabaseConfigured() ? 'Cloud autosave' : 'Browser storage';
+  const supabaseReady = isSupabaseConfigured();
+  const accessLabel = supabaseReady ? 'Cloud workspace' : cloudRequired ? 'Cloud required' : allowLocalMode ? 'Browser preview' : 'Cloud required';
+  const passwordActionLabel = authMode === 'signin' ? 'Sign in' : 'Create account';
 
   useEffect(() => {
     if (session && status === 'signed-in') {
@@ -30,11 +57,48 @@ export default function Login() {
     }
   }, [navigate, redirectTarget, session, status]);
 
+  const handlePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const shell = shellRef.current;
+    if (!shell) {
+      return;
+    }
+
+    const bounds = shell.getBoundingClientRect();
+    shell.style.setProperty('--spotlight-x', `${event.clientX - bounds.left}px`);
+    shell.style.setProperty('--spotlight-y', `${event.clientY - bounds.top}px`);
+  }, []);
+
+  const handlePasswordAuth = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy('password');
+    const result =
+      authMode === 'signin'
+        ? await signInWithPassword(email, password)
+        : await signUpWithPassword(email, password);
+    pushToast({
+      title: result.ok ? (authMode === 'signin' ? 'Signed in' : 'Account created') : authMode === 'signin' ? 'Sign-in blocked' : 'Signup blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
+    setBusy('');
+  };
+
   const handleMagicLink = async () => {
     setBusy('magic');
     const result = await sendMagicLink(email);
     pushToast({
-      title: result.ok ? 'Magic link sent' : 'Sign-in blocked',
+      title: result.ok ? 'Secure link sent' : 'Secure link blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
+    setBusy('');
+  };
+
+  const handlePasswordReset = async () => {
+    setBusy('reset');
+    const result = await sendPasswordReset(email);
+    pushToast({
+      title: result.ok ? 'Reset email sent' : 'Reset blocked',
       message: result.message,
       tone: result.ok ? 'success' : 'error',
     });
@@ -53,158 +117,151 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f7fafc_0%,#eef3f8_100%)] px-5 py-6 lg:px-8">
-      <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-[1280px] items-stretch overflow-hidden rounded-[28px] border border-[#dbe4ed] bg-white shadow-[0_40px_80px_rgba(15,23,42,0.08)]">
-        <section className="relative hidden w-[52%] overflow-hidden border-r border-[#e4ebf2] bg-[radial-gradient(circle_at_top_right,rgba(12,111,151,0.16),transparent_28%),linear-gradient(180deg,#fbfdff_0%,#eff5f9_100%)] p-12 lg:flex lg:flex-col lg:justify-between">
-          <div className="absolute inset-y-0 right-[-90px] w-[240px] rounded-full bg-[rgba(12,111,151,0.08)] blur-3xl" aria-hidden="true" />
-          <div className="relative z-[1]">
-            <div className="flex items-center gap-3">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[#d8e1ea] bg-white p-1.5 shadow-sm">
-                <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" className="h-full w-full object-contain" />
-              </div>
-              <div>
-                <div className="text-lg font-extrabold uppercase tracking-[0.14em]">XBAR</div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7e8891]">Private ranch software</div>
-              </div>
+    <main ref={shellRef} className="xbar-login-shell" onPointerMove={handlePointerMove}>
+      <div className="xbar-login-noise" aria-hidden="true" />
+      <div className="xbar-login-grid">
+        <section className="xbar-login-brand-panel" aria-labelledby="xbar-login-headline">
+          <div className="xbar-login-brand-top">
+            <div className="xbar-login-mark">
+              <XbarMark title="XBAR logo" className="h-full w-full" />
             </div>
-
-            <div className="mt-14 max-w-[34rem]">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7e8891]">Login</div>
-              <h1 className="mt-4 text-[clamp(2.8rem,4vw,4.5rem)] font-extrabold leading-[0.95] tracking-[-0.08em] text-[#1e242b]">
-                Private ranch software for horses, paperwork, and buyers.
-              </h1>
-              <p className="mt-5 max-w-[28rem] text-[15px] leading-7 text-[#586673]">
-                Built for ranches, breeders, and sale teams that need clean records, clean packet flow, and clear access.
-              </p>
+            <div>
+              <div className="xbar-login-wordmark">XBAR</div>
+              <div className="xbar-login-system-label">Ranch operations software</div>
             </div>
           </div>
 
-          <div className="relative z-[1] max-w-[34rem] border-t border-[#e4ebf2] pt-8">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between gap-4 border-b border-[#edf2f7] pb-4">
-                <span className="text-sm font-semibold text-[#1e242b]">Horse desk</span>
-                <span className="text-sm text-[#5f6c79]">Sale, care, title</span>
-              </div>
-              <div className="flex items-center justify-between gap-4 border-b border-[#edf2f7] pb-4">
-                <span className="text-sm font-semibold text-[#1e242b]">Document intake</span>
-                <span className="text-sm text-[#5f6c79]">Packet, trust, review</span>
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-sm font-semibold text-[#1e242b]">Ranch desk</span>
-                <span className="text-sm text-[#5f6c79]">Weather, care, budget</span>
-              </div>
-            </div>
+          <div className="xbar-login-value">
+            <h1 id="xbar-login-headline">The operating system for modern horse operations.</h1>
+            <p>
+              Horse records, Coggins, vaccines, expenses, breeding notes, sale files, and ranch documents organized in one clean system.
+            </p>
+          </div>
 
-            <div className="mt-8 flex flex-wrap gap-2">
-              <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#dbe4ed] bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#4f6070]">
-                {authLabel}
-              </span>
-              <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#dbe4ed] bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#4f6070]">
-                Role aware
-              </span>
-              <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#dbe4ed] bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#4f6070]">
-                {syncLabel}
-              </span>
+          <div className="xbar-login-feature-list" aria-label="XBAR product coverage">
+            {featureProof.map((item) => (
+              <div key={item} className="xbar-login-feature-item">
+                <span aria-hidden="true" />
+                <strong>{item}</strong>
+              </div>
+            ))}
+          </div>
+
+          <div className="xbar-login-media-card">
+            <div className="xbar-login-brand-preview" aria-hidden="true">
+              <img src={loginBrandAssetSrc} alt="" />
             </div>
-            <div className="mt-4 max-w-[30rem] text-[12px] leading-6 text-[#7b8894]">
-              Subscription workspace for ranch, breeding, and sale operations. Terms, privacy, and billing apply to account use.
+            <div className="xbar-login-video-copy">
+              <span>Built for the paper trail</span>
+              <strong>Every record. Every horse. One place.</strong>
             </div>
           </div>
         </section>
 
-        <section className="flex flex-1 items-center bg-white px-6 py-8 lg:px-12">
-          <div className="mx-auto w-full max-w-[460px]">
-            <div className="lg:hidden">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#dbe4ed] bg-[#f7fafc] p-1.5 shadow-sm">
-                  <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" className="h-full w-full object-contain" />
-                </div>
-                <div>
-                  <div className="text-base font-extrabold uppercase tracking-[0.14em] text-[#1e242b]">XBAR</div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7e8891]">Private ranch software</div>
-                </div>
-              </div>
+        <section className="xbar-login-auth-panel" aria-label="Workspace access">
+          <div className="xbar-login-mobile-brand">
+            <div className="xbar-login-mark xbar-login-mark--small">
+              <XbarMark title="XBAR logo" className="h-full w-full" />
+            </div>
+            <div>
+              <div className="xbar-login-wordmark">XBAR</div>
+              <div className="xbar-login-system-label">Ranch operations software</div>
+            </div>
+          </div>
+
+          <div className="xbar-login-card">
+            <div className="xbar-login-card-top">
+              <span>{accessLabel}</span>
+              <small>Private workspace</small>
             </div>
 
-            <div className="mt-8 lg:mt-0">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7e8891]">Workspace access</div>
-                  <h2 className="mt-2 text-[1.95rem] font-extrabold tracking-[-0.06em] text-[#1e242b]">Enter XBAR</h2>
-                </div>
-                <Pill tone={isSupabaseConfigured() ? 'blue' : cloudRequired ? 'rose' : 'slate'}>
-                  {isSupabaseConfigured() ? 'Secure login' : cloudRequired ? 'Cloud required' : 'Browser access'}
-                </Pill>
-              </div>
-              <p className="mt-3 max-w-[28rem] text-sm leading-7 text-[#5f6c79]">
-                Sign in to sync the workspace, or open browser access when cloud auth is not enabled yet.
+            <div className="xbar-login-card-copy">
+              <h2>{authMode === 'signin' ? 'Sign in to XBAR.' : 'Create your XBAR account.'}</h2>
+              <p>
+                Less chaos. Better operations. Your ranch records stay organized behind your workspace access.
               </p>
             </div>
 
-            {isSupabaseConfigured() ? (
-              <div className="mt-8 rounded-[24px] border border-[#dbe4ed] bg-[#fbfdff] p-6 shadow-sm">
-                <label className="field-stack">
-                  <span className="field-label">Email</span>
+            <div className="xbar-login-tabs" role="tablist" aria-label="Authentication mode">
+              <button type="button" role="tab" aria-selected={authMode === 'signin'} data-active={authMode === 'signin'} onClick={() => setAuthMode('signin')}>
+                Sign in
+              </button>
+              <button type="button" role="tab" aria-selected={authMode === 'signup'} data-active={authMode === 'signup'} onClick={() => setAuthMode('signup')}>
+                Sign up
+              </button>
+            </div>
+
+            {supabaseReady ? (
+              <form className="xbar-login-form" onSubmit={handlePasswordAuth}>
+                <label className="xbar-login-field">
+                  <span>Email</span>
                   <input
-                    className="field-input"
                     type="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
                     placeholder="owner@xbar.com"
+                    autoComplete="email"
+                  />
+                </label>
+                <label className="xbar-login-field">
+                  <span>Password</span>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder={authMode === 'signin' ? 'Enter your password' : 'Use at least 8 characters'}
+                    autoComplete={authMode === 'signin' ? 'current-password' : 'new-password'}
                   />
                 </label>
 
-                <div className="mt-5 flex flex-col gap-3">
-                  <button
-                    className="button button--primary"
-                    type="button"
-                    onClick={handleMagicLink}
-                    disabled={busy !== '' || !email.trim()}
-                  >
-                    {busy === 'magic' ? 'Sending...' : 'Send magic link'}
+                <button className="xbar-login-primary" type="submit" disabled={busy !== '' || !email.trim() || !password}>
+                  {busy === 'password' ? 'Checking access...' : passwordActionLabel}
+                </button>
+
+                <div className="xbar-login-secondary-row">
+                  <button type="button" onClick={handleMagicLink} disabled={busy !== '' || !email.trim()}>
+                    {busy === 'magic' ? 'Sending...' : 'Email secure link'}
                   </button>
-                  <button
-                    className="button button--ghost"
-                    type="button"
-                    onClick={handleFacebook}
-                    disabled={busy !== ''}
-                  >
-                    {busy === 'facebook' ? 'Connecting...' : 'Continue with Facebook'}
-                  </button>
+                  {authMode === 'signin' ? (
+                    <button type="button" onClick={handlePasswordReset} disabled={busy !== '' || !email.trim()}>
+                      {busy === 'reset' ? 'Sending...' : 'Forgot password'}
+                    </button>
+                  ) : null}
                 </div>
 
-                <div className="mt-5 rounded-[18px] border border-[#e3ebf2] bg-white px-4 py-4 text-sm leading-6 text-[#50606d]">
-                  Email sends a secure login link. Facebook is available when that workspace connector is enabled.
-                </div>
-                <div className="mt-4 text-xs leading-6 text-[#7a8794]">
-                  By continuing, you agree to the workspace terms, privacy notice, and subscription billing terms that govern this account.
-                </div>
-              </div>
+                <button className="xbar-login-facebook" type="button" onClick={handleFacebook} disabled={busy !== ''}>
+                  {busy === 'facebook' ? 'Connecting...' : 'Continue with Facebook'}
+                </button>
+              </form>
             ) : !allowLocalMode ? (
-              <div className="mt-8 rounded-[24px] border border-[#e5c7c7] bg-[#fff4f4] px-5 py-5 text-sm leading-7 text-[#7b3a3a] shadow-sm">
-                Cloud auth is required for this production build. Add <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> before opening the workspace.
+              <div className="xbar-login-auth-note xbar-login-auth-note--blocked">
+                Cloud auth is required for this build. Add Supabase URL and anon key before opening the workspace.
               </div>
             ) : (
-              <div className="mt-8 rounded-[24px] border border-[#dbe4ed] bg-[#fbfdff] p-6 shadow-sm">
-                <div className="rounded-[18px] border border-[#e3ebf2] bg-white px-4 py-4 text-sm leading-7 text-[#50606d]">
-                  Browser access is available right now, so you can open the workspace without waiting on cloud auth.
+              <div className="xbar-login-local-mode">
+                <div className="xbar-login-auth-note">
+                  Browser preview is enabled. You can review the workspace locally before cloud auth is connected.
                 </div>
-                <div className="mt-5 flex flex-col gap-3">
-                  <button className="button button--primary" type="button" onClick={() => navigate('/setup', { replace: true })}>
-                    Open browser workspace
-                  </button>
-                  <div className="text-sm leading-6 text-[#647281]">
-                    Add <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> when you want real user login.
-                  </div>
-                </div>
-                <div className="mt-4 text-xs leading-6 text-[#7a8794]">
-                  Browser access is for workspace setup and preview. Production use should run behind configured account, privacy, and billing terms.
-                </div>
+                <button className="xbar-login-primary" type="button" onClick={() => navigate('/setup', { replace: true })}>
+                  Open browser workspace
+                </button>
+                <button className="xbar-login-facebook" type="button" onClick={() => navigate('/setup', { replace: true })}>
+                  Preview onboarding
+                </button>
               </div>
             )}
+
+            <div className="xbar-login-proof-grid" aria-label="Workspace proof points">
+              {operatingProof.map((item) => (
+                <div key={item.label}>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
       </div>
-    </div>
+    </main>
   );
 }
