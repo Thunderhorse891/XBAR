@@ -31,7 +31,7 @@ type NavItem = {
 };
 
 const operations: NavItem[] = [
-  { label: 'Ranch Desk', path: '/', icon: DashboardIcon },
+  { label: 'Today', path: '/', icon: DashboardIcon },
   { label: 'Horse Ledger', path: '/horses', icon: HorsesIcon },
   { label: 'Document Vault', path: '/documents', icon: DocumentsIcon },
   { label: 'Weather', path: '/weather', icon: WeatherIcon },
@@ -52,7 +52,7 @@ const platform: NavItem[] = [
 ];
 
 const routeLabels: Record<string, string> = {
-  '/': 'Ranch Desk',
+  '/': 'Today',
   '/horses': 'Horse Ledger',
   '/documents': 'Document Vault',
   '/weather': 'Weather',
@@ -67,9 +67,9 @@ const routeLabels: Record<string, string> = {
 };
 
 const routeHelp: Record<string, HelpSection[]> = {
-  'Ranch Desk': [
+  Today: [
     { label: 'Focus', text: 'Start with blockers and queue risk.' },
-    { label: 'Actions', text: 'Open cards or right-click records for shortcuts.' },
+    { label: 'Actions', text: 'Open cards for the record that needs attention.' },
   ],
   'Horse Ledger': [
     { label: 'Browse', text: 'Cards and rows open the full horse record.' },
@@ -186,8 +186,8 @@ export default function MainLayout() {
   const mobileMoreItems = [...operations, ...programs, ...platformItems].filter((item) => !mobilePrimaryPaths.has(item.path));
 
   const pendingReview = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched').length;
-  const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse Profile' : routeLabels[location.pathname] ?? 'Dashboard';
-  const helpSections = routeHelp[currentLabel] ?? routeHelp.Dashboard;
+  const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse Profile' : routeLabels[location.pathname] ?? 'Today';
+  const helpSections = routeHelp[currentLabel] ?? routeHelp.Today;
   const accountLabel = cloudSession?.user?.email ?? currentRole;
 
   useEffect(() => {
@@ -418,7 +418,7 @@ export default function MainLayout() {
             }
           >
             <DashboardIcon className="h-[18px] w-[18px]" />
-            <span>Home</span>
+            <span>Today</span>
           </NavLink>
           <NavLink
             to="/horses"
