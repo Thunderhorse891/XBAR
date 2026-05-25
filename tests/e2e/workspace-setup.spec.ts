@@ -26,7 +26,7 @@ test('creates a fresh workspace and lands on the operations dashboard', async ({
 
   await page.goto('/setup');
 
-  const setupHeading = page.getByRole('heading', { name: 'Create your ranch workspace' });
+  const setupHeading = page.getByRole('heading', { name: 'Build the ranch workspace around real records.' });
   const openBrowserWorkspace = page.getByRole('button', { name: 'Open browser workspace' });
   const setupVisible = await setupHeading.isVisible({ timeout: 5_000 }).catch(() => false);
   if (!setupVisible) {
