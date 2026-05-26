@@ -7,6 +7,7 @@ import { ToastViewport } from './components/ToastViewport';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
 import { useCloudStore } from './store/useCloudStore';
 import './routes/operationsHierarchy.css';
+import './routes/productSystem.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Breeding = lazy(() => import('./routes/Breeding'));
