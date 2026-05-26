@@ -26,6 +26,9 @@ type CloudStore = {
   setLastSyncAt: (value: string) => void;
   setSyncState: (state: CloudSyncState, message?: string) => void;
   sendMagicLink: (email: string) => Promise<CloudActionResult>;
+  signInWithPassword: (email: string, password: string) => Promise<CloudActionResult>;
+  signUpWithPassword: (email: string, password: string) => Promise<CloudActionResult>;
+  sendPasswordReset: (email: string) => Promise<CloudActionResult>;
   signInWithFacebook: () => Promise<CloudActionResult>;
   signOut: () => Promise<CloudActionResult>;
 };
@@ -111,6 +114,82 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     }
 
     return { ok: true, message: 'Magic link sent. Check your inbox to finish sign-in.' };
+  },
+  signInWithPassword: async (email, password) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      return { ok: false, message: 'Enter an email address first.' };
+    }
+    if (!password) {
+      return { ok: false, message: 'Enter your password.' };
+    }
+
+    const { error } = await client.auth.signInWithPassword({
+      email: trimmedEmail,
+      password,
+    });
+
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    return { ok: true, message: 'Signed in. Opening your workspace.' };
+  },
+  signUpWithPassword: async (email, password) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      return { ok: false, message: 'Enter an email address first.' };
+    }
+    if (password.length < 8) {
+      return { ok: false, message: 'Use at least 8 characters for the password.' };
+    }
+
+    const emailRedirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    const { error } = await client.auth.signUp({
+      email: trimmedEmail,
+      password,
+      options: {
+        emailRedirectTo,
+      },
+    });
+
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    return { ok: true, message: 'Account created. Check your inbox if email confirmation is required.' };
+  },
+  sendPasswordReset: async (email) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      return { ok: false, message: 'Enter the email address for this workspace.' };
+    }
+
+    const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    const { error } = await client.auth.resetPasswordForEmail(trimmedEmail, {
+      redirectTo,
+    });
+
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    return { ok: true, message: 'Password reset email sent.' };
   },
   signInWithFacebook: async () => {
     const client = getSupabaseClient();
