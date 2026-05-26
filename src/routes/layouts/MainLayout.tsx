@@ -33,6 +33,9 @@ type NavItem = {
   requires?: 'billing' | 'settings';
 };
 
+const brandVideoSrc = `${import.meta.env.BASE_URL}brand/xbar-documents-hero.mp4`;
+const brandFallbackSrc = `${import.meta.env.BASE_URL}brand/xbar-app-icon.svg`;
+
 const navItems: NavItem[] = [
   { label: 'Command Center', path: '/', icon: DashboardIcon, section: 'Command' },
   { label: 'Horses', path: '/horses', icon: HorsesIcon, section: 'Command' },
@@ -136,29 +139,35 @@ function classNames(...parts: Array<string | false | null | undefined>) {
 
 function NavSection({ title, items }: { title: string; items: NavItem[] }) {
   return (
-    <div className="flex flex-col gap-2">
-      <div className="px-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-[#49657f]">{title}</div>
-      <div className="flex flex-col gap-1">
+    <div className="xbar-nav-section">
+      <div className="xbar-section-label">{title}</div>
+      <div className="xbar-nav-list">
         {items.map(({ label, path, icon: Icon }) => (
           <NavLink
             key={label}
             to={path}
             end={path === '/'}
-            className={({ isActive }) =>
-              classNames(
-                'group flex items-center gap-3 border-l-[3px] px-3 py-2.5 text-sm font-medium transition-all duration-150 ease-[ease]',
-                isActive
-                  ? 'border-[#62a8ff] bg-[#0e2248] text-white shadow-[0_8px_20px_rgba(34,102,238,0.18)]'
-                  : 'border-transparent text-[#87a2bd] hover:border-[#284766] hover:bg-[#0d1f38] hover:text-white',
-              )
-            }
+            className={({ isActive }) => classNames('xbar-nav-link', isActive && 'xbar-nav-link--active')}
           >
-            <Icon className="h-[18px] w-[18px] shrink-0" />
+            <Icon aria-hidden="true" />
             <span>{label}</span>
           </NavLink>
         ))}
       </div>
     </div>
+  );
+}
+
+function MobileNavLink({ label, path, icon: Icon }: { label: string; path: string; icon: NavItem['icon'] }) {
+  return (
+    <NavLink
+      to={path}
+      end={path === '/'}
+      className={({ isActive }) => classNames('xbar-mobile-link', isActive && 'xbar-mobile-link--active')}
+    >
+      <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
+      <span>{label}</span>
+    </NavLink>
   );
 }
 
@@ -168,6 +177,7 @@ export default function MainLayout() {
   const [search, setSearch] = useState('');
   const [helpOpen, setHelpOpen] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const [showBrandVideo, setShowBrandVideo] = useState(true);
   const currentRole = useXbarStore((state) => state.currentRole);
   const subscription = useXbarStore((state) => state.subscription);
   const documents = useXbarStore((state) => state.documents);
@@ -203,6 +213,7 @@ export default function MainLayout() {
   const pendingReview = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched').length;
   const pendingTransfers = ownershipRecords.filter((record) => record.transferStatus !== 'Clear').length;
   const activeSales = salesLeads.filter((lead) => lead.stage !== 'Closed').length;
+  const openWorkCount = pendingReview + pendingTransfers;
   const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse Profile' : routeLabels[location.pathname] ?? 'Workspace';
   const helpSections = routeHelp[currentLabel] ?? routeHelp['Command Center'];
   const accountLabel = cloudSession?.user?.email ?? currentRole;
@@ -231,31 +242,47 @@ export default function MainLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-[#eef3f8] lg:grid lg:grid-cols-[254px,1fr]">
-      <aside className="hidden min-h-screen flex-col gap-6 border-r border-[#0e1e32] bg-[#050b14] px-5 py-6 text-[#c2d4e8] lg:flex">
-        <div className="flex items-center gap-3">
-          <div className="flex h-[52px] w-[52px] items-center justify-center rounded-lg border border-[#1a2e46] bg-[#050910] p-1.5 shadow-[0_14px_32px_rgba(47,141,255,0.18)]">
+    <div className="xbar-shell">
+      <div className="xbar-shell__atmosphere" aria-hidden="true">
+        {showBrandVideo ? (
+          <video
+            className="xbar-shell__video"
+            src={brandVideoSrc}
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            onError={() => setShowBrandVideo(false)}
+          />
+        ) : null}
+        <img className="xbar-shell__mark-fallback" src={brandFallbackSrc} alt="" />
+      </div>
+
+      <aside className="xbar-sidebar" aria-label="Primary navigation">
+        <div className="xbar-brand">
+          <div className="xbar-brand__mark">
             <XbarMark title="XBAR logo" className="h-full w-full" />
           </div>
           <div className="min-w-0">
-            <div className="truncate text-[1.04rem] font-extrabold uppercase tracking-[0.14em] text-white">{workspaceProfile.businessName || 'XBAR'}</div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#52708d]">Operations OS</div>
+            <div className="xbar-brand__name">{workspaceProfile.businessName || 'XBAR'}</div>
+            <div className="xbar-brand__meta">Operations OS</div>
           </div>
         </div>
 
-        <div className="rounded-[16px] border border-[#162436] bg-[#0b1728] p-4 shadow-[0_12px_24px_rgba(0,0,0,0.3)]">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#52708d]">Workspace</div>
-          <div className="mt-2 text-[1rem] font-bold text-[#ddeaf8]">{workspaceProfile.ranchName || workspaceProfile.businessName || 'Primary ranch'}</div>
-          <div className="mt-1 text-sm text-[#7d98b3]">{roleWorkspace.label}</div>
-          <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[#8eabc5]">
-            <span className="rounded-md border border-[#1a2e46] bg-[#0a1628] px-2 py-2">{horses.length} horses</span>
-            <span className="rounded-md border border-[#1a2e46] bg-[#0a1628] px-2 py-2">{pendingTransfers} transfers</span>
-            <span className="rounded-md border border-[#1a2e46] bg-[#0a1628] px-2 py-2">{pendingReview} docs</span>
-            <span className="rounded-md border border-[#1a2e46] bg-[#0a1628] px-2 py-2">{activeSales} buyers</span>
+        <div className="xbar-status-card">
+          <div className="xbar-status-label">Workspace</div>
+          <div className="xbar-status-title">{workspaceProfile.ranchName || workspaceProfile.businessName || 'Primary ranch'}</div>
+          <div className="xbar-status-subtitle">{roleWorkspace.label}</div>
+          <div className="xbar-status-grid">
+            <span className="xbar-status-stat">{horses.length} horses</span>
+            <span className="xbar-status-stat">{pendingTransfers} transfers</span>
+            <span className="xbar-status-stat">{pendingReview} docs</span>
+            <span className="xbar-status-stat">{activeSales} buyers</span>
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#1a2e46] bg-[#0a1628] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.13em] text-[#7a9ab8]">{subscription.tier}</span>
-            <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#1a3a6a] bg-[#0e213e] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.13em] text-[#64a6ff]">{cloudStatus === 'signed-in' ? 'Cloud sync' : 'Browser access'}</span>
+          <div className="xbar-status-row">
+            <span className="xbar-status-pill">{subscription.tier}</span>
+            <span className="xbar-status-pill">{cloudStatus === 'signed-in' ? 'Cloud sync' : 'Browser access'}</span>
           </div>
         </div>
 
@@ -263,87 +290,101 @@ export default function MainLayout() {
         <NavSection title="Operations" items={sections.Operations} />
         <NavSection title="Platform" items={sections.Platform} />
 
-        <div className="mt-auto border-t border-[#0e1e32] pt-4 text-xs text-[#5d7690]">
-          <div className="font-semibold text-[#86a1bc]">The operating system for modern horse operations.</div>
-          <div className="mt-1">{expenseReceipts.length} receipts | {documents.length} files</div>
+        <div className="xbar-sidebar-footer">
+          <strong>The operating system for modern horse operations.</strong>
+          <span>{expenseReceipts.length} receipts | {documents.length} files</span>
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-col bg-[#eef3f8]">
-        <header className="sticky top-0 z-10 border-b border-[#d7e0ea] bg-[#fbfdff]/90 backdrop-blur">
-          <div className="flex min-h-[58px] flex-wrap items-center justify-between gap-4 px-5 py-3">
-            <div className="flex items-center gap-3">
-              <div className="text-[0.96rem] font-extrabold tracking-[0.01em] text-[#16202b]">{currentLabel}</div>
-              <span className={classNames('inline-flex min-h-[24px] items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]', pendingReview || pendingTransfers ? 'border-[#dbe4ed] bg-[#f4f8fb] text-[#627181]' : 'border-[#d7e8ef] bg-[#eaeffd] text-[#1155dd]')}>
-                {pendingReview || pendingTransfers ? `${pendingReview + pendingTransfers} open` : 'Ready'}
+      <div className="xbar-main">
+        <header className="xbar-topbar">
+          <div className="xbar-topbar__inner">
+            <div className="xbar-topbar__title">
+              <div className="xbar-route-title">{currentLabel}</div>
+              <span className={classNames('xbar-route-status', openWorkCount > 0 && 'xbar-route-status--open')}>
+                {openWorkCount ? `${openWorkCount} open` : 'Ready'}
               </span>
             </div>
 
-            <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
-              <label className="relative min-w-[220px] max-w-[420px] flex-1">
-                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[#7d8389]" />
+            <div className="xbar-topbar__actions">
+              <label className="xbar-search">
+                <SearchIcon aria-hidden="true" />
                 <input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   onKeyDown={handleSearch}
                   placeholder="Search horses"
-                  className="h-10 w-full rounded-md border border-[#dde5ee] bg-white pl-10 pr-4 text-sm text-[#16202b] transition-all duration-150 ease-[ease] placeholder:text-[#8f959c] focus:border-[#1155dd] focus:outline-none"
                 />
               </label>
 
-              <div className="hidden h-10 items-center gap-3 rounded-md border border-[#dde5ee] bg-white px-3 text-sm font-semibold text-[#16202b] md:inline-flex">
-                <span className="max-w-[190px] truncate">{accountLabel}</span>
-                <span className="inline-flex rounded-sm border border-[#d8e1ea] bg-[#eef3f8] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#607384]">{cloudSession ? currentRole : 'Browser'}</span>
+              <div className="xbar-account-chip">
+                <span>{accountLabel}</span>
+                <span>{cloudSession ? currentRole : 'Browser'}</span>
               </div>
 
-              <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb]" type="button" onClick={() => setHelpOpen(true)}>
+              <button className="xbar-ghost-button" type="button" onClick={() => setHelpOpen(true)}>
                 Help
               </button>
 
               {cloudSession && canSyncCloud ? (
-                <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb]" type="button" onClick={() => void handleCloudSignOut()}>
+                <button className="xbar-ghost-button" type="button" onClick={() => void handleCloudSignOut()}>
                   Sign out
                 </button>
               ) : null}
 
-              <button className="relative inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb]" type="button" onClick={() => navigate('/reminders')} aria-label="Open reminders">
+              <button className="xbar-icon-button" type="button" onClick={() => navigate('/reminders')} aria-label="Open reminders">
                 <BellIcon className="h-[18px] w-[18px]" />
-                {pendingReview + pendingTransfers ? <span className="absolute right-0.5 top-0.5 min-w-[18px] rounded-full bg-[#CC3333] px-1.5 py-0.5 text-[10px] font-bold text-white">{pendingReview + pendingTransfers}</span> : null}
+                {openWorkCount ? <span className="xbar-alert-dot">{openWorkCount}</span> : null}
               </button>
 
-              <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={() => navigate('/documents?upload=1')} disabled={!canUploadDocuments}>
+              <button className="xbar-ghost-button" type="button" onClick={() => navigate('/documents?upload=1')} disabled={!canUploadDocuments}>
                 Intake
               </button>
 
-              <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#1155dd] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#0d44b0] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={() => navigate('/horses?new=1')} disabled={!canCreateHorse}>
-                <AddIcon className="h-[16px] w-[16px]" />
+              <button className="xbar-primary-button" type="button" onClick={() => navigate('/horses?new=1')} disabled={!canCreateHorse}>
+                <AddIcon className="h-[16px] w-[16px]" aria-hidden="true" />
                 New
               </button>
             </div>
           </div>
         </header>
 
-        <main className="flex flex-col gap-[20px] px-6 py-5 pb-28 lg:pb-5">
+        <main className="xbar-content">
           <Outlet />
         </main>
 
         {mobileMoreOpen ? (
           <>
-            <button className="fixed inset-0 z-30 bg-[#061426]/30 lg:hidden" type="button" aria-label="Close mobile menu" onClick={() => setMobileMoreOpen(false)} />
-            <div id="mobile-more-menu" className="fixed bottom-[94px] left-3 right-3 z-50 rounded-lg border border-[#d8e1ea] bg-[#fbfdff] p-3 text-[#16202b] shadow-xl lg:hidden">
+            <button className="xbar-mobile-scrim" type="button" aria-label="Close mobile menu" onClick={() => setMobileMoreOpen(false)} />
+            <div id="mobile-more-menu" className="xbar-mobile-more-panel">
               {canCreateHorse ? (
-                <button className="mb-2 flex min-h-[50px] w-full items-center gap-3 rounded-md bg-[#1155dd] px-3 text-left text-sm font-semibold text-white" type="button" onClick={() => { setMobileMoreOpen(false); navigate('/horses?new=1'); }}>
-                  <AddIcon className="h-[18px] w-[18px] shrink-0" />
+                <button
+                  className="xbar-mobile-primary"
+                  type="button"
+                  onClick={() => {
+                    setMobileMoreOpen(false);
+                    navigate('/horses?new=1');
+                  }}
+                >
+                  <AddIcon className="h-[18px] w-[18px]" aria-hidden="true" />
                   <span>New horse</span>
                 </button>
               ) : null}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="xbar-mobile-more-grid">
                 {mobileMoreItems.map(({ label, path, icon: Icon }) => {
                   const isActive = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
                   return (
-                    <button key={label} className={classNames('flex min-h-[54px] items-center gap-3 rounded-md border px-3 text-left text-sm font-semibold transition-all duration-150 ease-[ease]', isActive ? 'border-[#c8d7ff] bg-[#eaeffd] text-[#1155dd]' : 'border-[#e3e9f0] bg-white text-[#33475c] hover:border-[#1155dd] hover:bg-[#eef6fb]')} type="button" onClick={() => { setMobileMoreOpen(false); navigate(path); }}>
-                      <Icon className="h-[18px] w-[18px] shrink-0" />
-                      <span className="min-w-0 truncate">{label}</span>
+                    <button
+                      key={label}
+                      className={classNames('xbar-mobile-more-item', isActive && 'xbar-mobile-more-item--active')}
+                      type="button"
+                      onClick={() => {
+                        setMobileMoreOpen(false);
+                        navigate(path);
+                      }}
+                    >
+                      <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
+                      <span>{label}</span>
                     </button>
                   );
                 })}
@@ -352,20 +393,22 @@ export default function MainLayout() {
           </>
         ) : null}
 
-        <nav className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-2 rounded-lg border border-[#dde5ee] bg-[#fbfdff] p-2 text-[#16202b] shadow-lg lg:hidden" aria-label="Mobile quick navigation">
-          {[
-            { label: 'Home', path: '/', icon: DashboardIcon },
-            { label: 'Horses', path: '/horses', icon: HorsesIcon },
-            { label: 'Docs', path: '/documents', icon: DocumentsIcon },
-            { label: 'Sales', path: '/sales', icon: SalesIcon },
-          ].map(({ label, path, icon: Icon }) => (
-            <NavLink key={label} to={path} end={path === '/'} className={({ isActive }) => classNames('flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]', isActive ? 'bg-[#eaeffd] text-[#1155dd]' : 'text-[#798088] hover:bg-white hover:text-[#16202b]')}>
-              <Icon className="h-[18px] w-[18px]" />
-              <span>{label}</span>
-            </NavLink>
-          ))}
-          <button className={classNames('flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]', mobileMoreOpen || mobileMoreItems.some((item) => location.pathname.startsWith(item.path) && item.path !== '/') ? 'bg-[#eaeffd] text-[#1155dd]' : 'text-[#798088] hover:bg-white hover:text-[#16202b]')} type="button" onClick={() => setMobileMoreOpen((current) => !current)} aria-expanded={mobileMoreOpen} aria-controls="mobile-more-menu">
-            <DotsIcon className="h-[18px] w-[18px]" />
+        <nav className="xbar-mobile-nav" aria-label="Mobile quick navigation">
+          <MobileNavLink label="Home" path="/" icon={DashboardIcon} />
+          <MobileNavLink label="Horses" path="/horses" icon={HorsesIcon} />
+          <MobileNavLink label="Docs" path="/documents" icon={DocumentsIcon} />
+          <MobileNavLink label="Sales" path="/sales" icon={SalesIcon} />
+          <button
+            className={classNames(
+              'xbar-mobile-more-button',
+              (mobileMoreOpen || mobileMoreItems.some((item) => location.pathname.startsWith(item.path) && item.path !== '/')) && 'xbar-mobile-more-button--active',
+            )}
+            type="button"
+            onClick={() => setMobileMoreOpen((current) => !current)}
+            aria-expanded={mobileMoreOpen}
+            aria-controls="mobile-more-menu"
+          >
+            <DotsIcon className="h-[18px] w-[18px]" aria-hidden="true" />
             <span>More</span>
           </button>
         </nav>
