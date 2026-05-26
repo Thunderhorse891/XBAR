@@ -1,6 +1,7 @@
 import type { ComponentType, KeyboardEvent, SVGProps } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { XbarMark } from '@/components/BrandMark';
 import { WorkspaceHelp, type HelpSection } from '@/components/WorkspaceHelp';
 import {
   AddIcon,
@@ -13,10 +14,10 @@ import {
   HorsesIcon,
   MedicalIcon,
   OwnershipIcon,
-  SharedAccessIcon,
   SalesIcon,
   SearchIcon,
   SettingsIcon,
+  SharedAccessIcon,
   SubscriptionIcon,
   WeatherIcon,
 } from '@/components/icons';
@@ -28,96 +29,104 @@ type NavItem = {
   label: string;
   path: string;
   icon: ComponentType<SVGProps<SVGSVGElement>>;
+  section: 'Command' | 'Operations' | 'Platform';
+  requires?: 'billing' | 'settings';
 };
 
-const operations: NavItem[] = [
-  { label: 'Ranch Desk', path: '/', icon: DashboardIcon },
-  { label: 'Horse Ledger', path: '/horses', icon: HorsesIcon },
-  { label: 'Document Vault', path: '/documents', icon: DocumentsIcon },
-  { label: 'Weather', path: '/weather', icon: WeatherIcon },
-  { label: 'Title & Transfer', path: '/ownership', icon: OwnershipIcon },
-];
-
-const programs: NavItem[] = [
-  { label: 'Care Records', path: '/medical', icon: MedicalIcon },
-  { label: 'Breeding', path: '/breeding', icon: BreedingIcon },
-  { label: 'Sale Board', path: '/sales', icon: SalesIcon },
-];
-
-const platform: NavItem[] = [
-  { label: 'Ranch Ops', path: '/assets', icon: AssetsIcon },
-  { label: 'Subscriptions', path: '/subscriptions', icon: SubscriptionIcon },
-  { label: 'Buyer Rooms', path: '/shared-access', icon: SharedAccessIcon },
-  { label: 'Settings', path: '/settings', icon: SettingsIcon },
+const navItems: NavItem[] = [
+  { label: 'Command Center', path: '/', icon: DashboardIcon, section: 'Command' },
+  { label: 'Horses', path: '/horses', icon: HorsesIcon, section: 'Command' },
+  { label: 'Ownership', path: '/ownership', icon: OwnershipIcon, section: 'Command' },
+  { label: 'Documents', path: '/documents', icon: DocumentsIcon, section: 'Command' },
+  { label: 'Health', path: '/medical', icon: MedicalIcon, section: 'Operations' },
+  { label: 'Breeding', path: '/breeding', icon: BreedingIcon, section: 'Operations' },
+  { label: 'Sales', path: '/sales', icon: SalesIcon, section: 'Operations' },
+  { label: 'Expenses', path: '/expenses', icon: SubscriptionIcon, section: 'Operations' },
+  { label: 'Reminders', path: '/reminders', icon: BellIcon, section: 'Operations' },
+  { label: 'Ranch Operations', path: '/assets', icon: AssetsIcon, section: 'Operations' },
+  { label: 'Weather', path: '/weather', icon: WeatherIcon, section: 'Operations' },
+  { label: 'Buyer Rooms', path: '/shared-access', icon: SharedAccessIcon, section: 'Platform' },
+  { label: 'Subscriptions', path: '/subscriptions', icon: SubscriptionIcon, section: 'Platform', requires: 'billing' },
+  { label: 'Settings', path: '/settings', icon: SettingsIcon, section: 'Platform', requires: 'settings' },
 ];
 
 const routeLabels: Record<string, string> = {
-  '/': 'Ranch Desk',
-  '/horses': 'Horse Ledger',
-  '/documents': 'Document Vault',
-  '/weather': 'Weather',
-  '/ownership': 'Title & Transfer',
-  '/medical': 'Care Records',
+  '/': 'Command Center',
+  '/horses': 'Horses',
+  '/documents': 'Documents',
+  '/ownership': 'Ownership',
+  '/medical': 'Health',
   '/breeding': 'Breeding',
-  '/sales': 'Sale Board',
-  '/assets': 'Ranch Ops',
+  '/sales': 'Sales',
+  '/expenses': 'Expenses',
+  '/reminders': 'Reminders',
+  '/assets': 'Ranch Operations',
+  '/weather': 'Weather',
   '/subscriptions': 'Subscriptions',
   '/shared-access': 'Buyer Rooms',
   '/settings': 'Settings',
 };
 
 const routeHelp: Record<string, HelpSection[]> = {
-  'Ranch Desk': [
-    { label: 'Focus', text: 'Start with blockers and queue risk.' },
-    { label: 'Actions', text: 'Open cards or right-click records for shortcuts.' },
+  'Command Center': [
+    { label: 'Start here', text: 'Watch care, ownership, documents, sales, weather, and spending in one place.' },
+    { label: 'Next move', text: 'Open the highest-risk card first. XBAR should tell you what needs a human decision.' },
   ],
-  'Horse Ledger': [
-    { label: 'Browse', text: 'Cards and rows open the full horse record.' },
-    { label: 'Create', text: 'Use New for intake and save only confirmed data.' },
+  Horses: [
+    { label: 'Profile', text: 'Each horse should become a complete command file.' },
+    { label: 'Create', text: 'New horse intake should save confirmed data only.' },
   ],
-  'Document Vault': [
-    { label: 'Intake', text: 'Upload first. Attach only when the match is clear.' },
-    { label: 'Review', text: 'Approve, discard, or open files from the queue.' },
+  Ownership: [
+    { label: 'Proof', text: 'Use this area for owners, percentages, documents, transfers, and history.' },
+    { label: 'Control', text: 'No sale or transfer should move without source records.' },
   ],
-  Weather: [
-    { label: 'Forecast', text: 'Use ranch weather to plan turnout, hauling, and handling windows.' },
-    { label: 'Actions', text: 'Search any location or use current position for a live forecast.' },
+  Documents: [
+    { label: 'Vault', text: 'Upload first. Assign, approve, and keep the document chain clean.' },
+    { label: 'Privacy', text: 'Only approved buyer-safe files should reach shared rooms.' },
   ],
-  'Title & Transfer': [
-    { label: 'Transfer', text: 'Clear blockers and move transfers forward here.' },
-    { label: 'Records', text: 'Right-click rows for transfer actions and jumps.' },
-  ],
-  'Care Records': [
-    { label: 'Care', text: 'Track treatment, alerts, and visit cadence.' },
-    { label: 'Actions', text: 'Right-click watch items for fast care actions.' },
+  Health: [
+    { label: 'Care', text: 'Coggins, vaccines, dental, wormer, and treatment records belong here.' },
+    { label: 'Dates', text: 'Do not guess due dates. Use records users can verify.' },
   ],
   Breeding: [
-    { label: 'Program', text: 'Manage pairings, milestones, and foaling work.' },
-    { label: 'Actions', text: 'Right-click entries to jump or update quickly.' },
+    { label: 'Program', text: 'Track pairings, milestones, contracts, and foaling work.' },
+    { label: 'Proof', text: 'Breeding decisions should connect back to files and history.' },
   ],
-  'Sale Board': [
-    { label: 'Pipeline', text: 'Track leads, stages, and listing posture.' },
-    { label: 'Actions', text: 'Right-click horses or leads for next-step actions.' },
+  Sales: [
+    { label: 'Pipeline', text: 'Keep buyer movement, packet readiness, and follow-ups visible.' },
+    { label: 'Buyer rooms', text: 'Share only when the horse and documents are ready.' },
   ],
-  'Ranch Ops': [
-    { label: 'Assets', text: 'Keep equipment, kits, and service work in one place.' },
-    { label: 'Actions', text: 'Right-click rows to update status or jump out.' },
+  Expenses: [
+    { label: 'Ledger', text: 'Log costs while the context is still fresh.' },
+    { label: 'Connect', text: 'Receipts should connect to horses, care, and documents.' },
+  ],
+  Reminders: [
+    { label: 'Queue', text: 'This is the work list for due care, papers, docs, and buyer follow-ups.' },
+    { label: 'Confidence', text: 'A reminder should always show the source of the work.' },
+  ],
+  'Ranch Operations': [
+    { label: 'Assets', text: 'Track equipment, kits, feed supply, transport, and service work.' },
+    { label: 'Field use', text: 'Keep mobile actions short and readable.' },
+  ],
+  Weather: [
+    { label: 'Forecast', text: 'Use weather for turnout, hauling, and handling windows.' },
+    { label: 'Location', text: 'Set the ranch location in Settings for better daily context.' },
   ],
   Subscriptions: [
-    { label: 'Billing', text: 'Track contract, billing path, and plan state.' },
-    { label: 'Limits', text: 'Watch seats, storage, and access limits.' },
+    { label: 'Billing', text: 'Show plan state clearly. Do not imply Stripe billing unless it is configured.' },
+    { label: 'Limits', text: 'Storage, seats, buyer rooms, and documents should be easy to understand.' },
   ],
   'Buyer Rooms': [
-    { label: 'Shares', text: 'Stage the share list and monitor buyer-safe records.' },
-    { label: 'Actions', text: 'Right-click saved horses for link shortcuts.' },
+    { label: 'Shares', text: 'Buyer-facing links need approved, sanitized records only.' },
+    { label: 'Proof', text: 'Preview before making any horse public.' },
   ],
   Settings: [
-    { label: 'Profile', text: 'Manage defaults, sync, and backup here.' },
-    { label: 'Recovery', text: 'Use backup controls before large changes.' },
+    { label: 'Workspace', text: 'Manage defaults, members, sync, and backups.' },
+    { label: 'Recovery', text: 'Use backups before large imports or cloud changes.' },
   ],
   'Horse Profile': [
-    { label: 'Top row', text: 'Media, readiness, and share status sit up top.' },
-    { label: 'Sections', text: 'Use the tabs below for docs, ops, and activity.' },
+    { label: 'Command file', text: 'Identity, care, ownership, documents, sales, and history should read as one record.' },
+    { label: 'Missing data', text: 'Unknown should stay unknown until the user verifies it.' },
   ],
 };
 
@@ -128,7 +137,7 @@ function classNames(...parts: Array<string | false | null | undefined>) {
 function NavSection({ title, items }: { title: string; items: NavItem[] }) {
   return (
     <div className="flex flex-col gap-2">
-      <div className="px-3 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#3a5570]">{title}</div>
+      <div className="px-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-[#49657f]">{title}</div>
       <div className="flex flex-col gap-1">
         {items.map(({ label, path, icon: Icon }) => (
           <NavLink
@@ -139,8 +148,8 @@ function NavSection({ title, items }: { title: string; items: NavItem[] }) {
               classNames(
                 'group flex items-center gap-3 border-l-[3px] px-3 py-2.5 text-sm font-medium transition-all duration-150 ease-[ease]',
                 isActive
-                  ? 'border-[#2266ee] bg-[#0e2248] text-white shadow-[0_8px_20px_rgba(34,102,238,0.18)]'
-                  : 'border-transparent text-[#7a98b4] hover:border-[#1a3050] hover:bg-[#0d1f38] hover:text-white',
+                  ? 'border-[#62a8ff] bg-[#0e2248] text-white shadow-[0_8px_20px_rgba(34,102,238,0.18)]'
+                  : 'border-transparent text-[#87a2bd] hover:border-[#284766] hover:bg-[#0d1f38] hover:text-white',
               )
             }
           >
@@ -162,6 +171,10 @@ export default function MainLayout() {
   const currentRole = useXbarStore((state) => state.currentRole);
   const subscription = useXbarStore((state) => state.subscription);
   const documents = useXbarStore((state) => state.documents);
+  const horses = useXbarStore((state) => state.horses);
+  const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
+  const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
+  const salesLeads = useXbarStore((state) => state.salesLeads);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const cloudStatus = useCloudStore((state) => state.status);
   const cloudSession = useCloudStore((state) => state.session);
@@ -173,21 +186,25 @@ export default function MainLayout() {
   const canManageBilling = useCurrentRoleCapability('manageBilling');
   const canManageSettings = useCurrentRoleCapability('manageSettings');
   const canSyncCloud = useCurrentRoleCapability('syncCloud');
-  const platformItems = platform.filter((item) => {
-    if (item.path === '/subscriptions') {
-      return canManageBilling;
-    }
-    if (item.path === '/settings') {
-      return canManageSettings;
-    }
-    return true;
-  });
-  const mobilePrimaryPaths = new Set(['/', '/horses', '/documents', '/sales']);
-  const mobileMoreItems = [...operations, ...programs, ...platformItems].filter((item) => !mobilePrimaryPaths.has(item.path));
 
+  const visibleNavItems = useMemo(() => navItems.filter((item) => {
+    if (item.requires === 'billing') return canManageBilling;
+    if (item.requires === 'settings') return canManageSettings;
+    return true;
+  }), [canManageBilling, canManageSettings]);
+
+  const sections = {
+    Command: visibleNavItems.filter((item) => item.section === 'Command'),
+    Operations: visibleNavItems.filter((item) => item.section === 'Operations'),
+    Platform: visibleNavItems.filter((item) => item.section === 'Platform'),
+  };
+  const mobilePrimaryPaths = new Set(['/', '/horses', '/documents', '/sales']);
+  const mobileMoreItems = visibleNavItems.filter((item) => !mobilePrimaryPaths.has(item.path));
   const pendingReview = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched').length;
-  const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse Profile' : routeLabels[location.pathname] ?? 'Dashboard';
-  const helpSections = routeHelp[currentLabel] ?? routeHelp.Dashboard;
+  const pendingTransfers = ownershipRecords.filter((record) => record.transferStatus !== 'Clear').length;
+  const activeSales = salesLeads.filter((lead) => lead.stage !== 'Closed').length;
+  const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse Profile' : routeLabels[location.pathname] ?? 'Workspace';
+  const helpSections = routeHelp[currentLabel] ?? routeHelp['Command Center'];
   const accountLabel = cloudSession?.user?.email ?? currentRole;
 
   useEffect(() => {
@@ -214,62 +231,51 @@ export default function MainLayout() {
   };
 
   return (
-      <div className="min-h-screen bg-[#f6f8fb] lg:grid lg:grid-cols-[236px,1fr]">
-      <aside className="hidden min-h-screen flex-col gap-6 border-r border-[#0e1e32] bg-[#060d1a] px-5 py-6 text-[#c2d4e8] lg:flex">
+    <div className="min-h-screen bg-[#eef3f8] lg:grid lg:grid-cols-[254px,1fr]">
+      <aside className="hidden min-h-screen flex-col gap-6 border-r border-[#0e1e32] bg-[#050b14] px-5 py-6 text-[#c2d4e8] lg:flex">
         <div className="flex items-center gap-3">
-          <div className="flex h-[52px] w-[52px] items-center justify-center rounded-lg border border-[#1a2e46] bg-[#080f1e] p-1.5 shadow-[0_12px_28px_rgba(0,0,0,0.5)]">
-            <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" className="h-full w-full object-contain" />
+          <div className="flex h-[52px] w-[52px] items-center justify-center rounded-lg border border-[#1a2e46] bg-[#050910] p-1.5 shadow-[0_14px_32px_rgba(47,141,255,0.18)]">
+            <XbarMark title="XBAR logo" className="h-full w-full" />
           </div>
           <div className="min-w-0">
             <div className="truncate text-[1.04rem] font-extrabold uppercase tracking-[0.14em] text-white">{workspaceProfile.businessName || 'XBAR'}</div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#3d5c78]">{workspaceProfile.ranchName || 'Horse Ledger'}</div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#52708d]">Operations OS</div>
           </div>
         </div>
 
-        <div className="rounded-[18px] border border-[#162436] bg-[#0c1a2e] p-4 shadow-[0_12px_24px_rgba(0,0,0,0.3)]">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#3a5570]">Workspace</div>
-          <div className="mt-2 text-[1rem] font-bold tracking-[-0.03em] text-[#ddeaf8]">
-            {workspaceProfile.ranchName || workspaceProfile.businessName || 'Primary ranch'}
+        <div className="rounded-[16px] border border-[#162436] bg-[#0b1728] p-4 shadow-[0_12px_24px_rgba(0,0,0,0.3)]">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#52708d]">Workspace</div>
+          <div className="mt-2 text-[1rem] font-bold text-[#ddeaf8]">{workspaceProfile.ranchName || workspaceProfile.businessName || 'Primary ranch'}</div>
+          <div className="mt-1 text-sm text-[#7d98b3]">{roleWorkspace.label}</div>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[#8eabc5]">
+            <span className="rounded-md border border-[#1a2e46] bg-[#0a1628] px-2 py-2">{horses.length} horses</span>
+            <span className="rounded-md border border-[#1a2e46] bg-[#0a1628] px-2 py-2">{pendingTransfers} transfers</span>
+            <span className="rounded-md border border-[#1a2e46] bg-[#0a1628] px-2 py-2">{pendingReview} docs</span>
+            <span className="rounded-md border border-[#1a2e46] bg-[#0a1628] px-2 py-2">{activeSales} buyers</span>
           </div>
-          <div className="mt-1 text-sm text-[#6080a0]">{roleWorkspace.label}</div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#1a2e46] bg-[#0a1628] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#7a9ab8]">
-              {subscription.tier}
-            </span>
-            <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#1a3a6a] bg-[#0e213e] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#4488dd]">
-              {cloudStatus === 'signed-in' ? 'Cloud sync' : 'Browser access'}
-            </span>
-            {pendingReview ? (
-              <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#1a2e46] bg-[#0a1628] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#6a8aaa]">
-                {pendingReview} review
-              </span>
-            ) : null}
+            <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#1a2e46] bg-[#0a1628] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.13em] text-[#7a9ab8]">{subscription.tier}</span>
+            <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#1a3a6a] bg-[#0e213e] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.13em] text-[#64a6ff]">{cloudStatus === 'signed-in' ? 'Cloud sync' : 'Browser access'}</span>
           </div>
-          <div className="mt-4 text-xs leading-6 text-[#304a60]">Use the navigation below for every workspace route. Settings and shared access stay in the Platform section.</div>
         </div>
 
-        <NavSection title="Operations" items={operations} />
-        <NavSection title="Programs" items={programs} />
-        <NavSection title="Platform" items={platformItems} />
+        <NavSection title="Command" items={sections.Command} />
+        <NavSection title="Operations" items={sections.Operations} />
+        <NavSection title="Platform" items={sections.Platform} />
 
-        <div className="mt-auto border-t border-[#0e1e32] pt-4 text-xs text-[#3a5268]">
-          <div className="font-semibold text-[#5a7a98]">{workspaceProfile.businessName || 'XBAR'}</div>
-          <div className="mt-1">{subscription.tier} plan</div>
+        <div className="mt-auto border-t border-[#0e1e32] pt-4 text-xs text-[#5d7690]">
+          <div className="font-semibold text-[#86a1bc]">The operating system for modern horse operations.</div>
+          <div className="mt-1">{expenseReceipts.length} receipts | {documents.length} files</div>
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-col bg-[#f6f8fb]">
-        <header className="sticky top-0 z-10 border-b border-[#dde5ee] bg-[#fbfdff]/90 backdrop-blur">
-          <div className="flex min-h-[56px] flex-wrap items-center justify-between gap-4 px-5 py-3">
+      <div className="flex min-w-0 flex-col bg-[#eef3f8]">
+        <header className="sticky top-0 z-10 border-b border-[#d7e0ea] bg-[#fbfdff]/90 backdrop-blur">
+          <div className="flex min-h-[58px] flex-wrap items-center justify-between gap-4 px-5 py-3">
             <div className="flex items-center gap-3">
               <div className="text-[0.96rem] font-extrabold tracking-[0.01em] text-[#16202b]">{currentLabel}</div>
-              <span
-                className={classNames(
-                  'inline-flex min-h-[24px] items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]',
-                  pendingReview ? 'border-[#dbe4ed] bg-[#f4f8fb] text-[#627181]' : 'border-[#d7e8ef] bg-[#eaeffd] text-[#1155dd]',
-                )}
-              >
-                {pendingReview ? `${pendingReview} review` : 'Ready'}
+              <span className={classNames('inline-flex min-h-[24px] items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]', pendingReview || pendingTransfers ? 'border-[#dbe4ed] bg-[#f4f8fb] text-[#627181]' : 'border-[#d7e8ef] bg-[#eaeffd] text-[#1155dd]')}>
+                {pendingReview || pendingTransfers ? `${pendingReview + pendingTransfers} open` : 'Ready'}
               </span>
             </div>
 
@@ -280,71 +286,36 @@ export default function MainLayout() {
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   onKeyDown={handleSearch}
-                  placeholder="Search"
-                className="h-10 w-full rounded-md border border-[#dde5ee] bg-white pl-10 pr-4 text-sm text-[#16202b] transition-all duration-150 ease-[ease] placeholder:text-[#8f959c] focus:border-[#1155dd] focus:outline-none"
+                  placeholder="Search horses"
+                  className="h-10 w-full rounded-md border border-[#dde5ee] bg-white pl-10 pr-4 text-sm text-[#16202b] transition-all duration-150 ease-[ease] placeholder:text-[#8f959c] focus:border-[#1155dd] focus:outline-none"
                 />
               </label>
 
-              <div className="inline-flex h-10 items-center gap-3 rounded-md border border-[#dde5ee] bg-white px-3 text-sm font-semibold text-[#16202b]">
+              <div className="hidden h-10 items-center gap-3 rounded-md border border-[#dde5ee] bg-white px-3 text-sm font-semibold text-[#16202b] md:inline-flex">
                 <span className="max-w-[190px] truncate">{accountLabel}</span>
-                <span className={classNames('inline-flex rounded-sm border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]',
-                  cloudStatus === 'signed-in'
-                    ? 'border-[#d7e8ef] bg-[#eaeffd] text-[#1155dd]'
-                    : cloudStatus === 'unavailable'
-                      ? 'border-[#d8e1ea] bg-[#eef3f8] text-[#607384]'
-                      : 'border-[#d8e1ea] bg-[#eef3f8] text-[#607384]',
-                )}>
-                  {cloudSession ? currentRole : 'Browser'}
-                </span>
+                <span className="inline-flex rounded-sm border border-[#d8e1ea] bg-[#eef3f8] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#607384]">{cloudSession ? currentRole : 'Browser'}</span>
               </div>
 
-              <button
-                className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb]"
-                type="button"
-                onClick={() => setHelpOpen(true)}
-              >
+              <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb]" type="button" onClick={() => setHelpOpen(true)}>
                 Help
               </button>
 
               {cloudSession && canSyncCloud ? (
-                <button
-                  className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb]"
-                  type="button"
-                  onClick={() => void handleCloudSignOut()}
-                >
+                <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb]" type="button" onClick={() => void handleCloudSignOut()}>
                   Sign out
                 </button>
               ) : null}
 
-              <button
-                className="relative inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb] disabled:cursor-not-allowed disabled:opacity-50"
-                type="button"
-                onClick={() => navigate('/documents')}
-                aria-label="Open document review"
-              >
+              <button className="relative inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb]" type="button" onClick={() => navigate('/reminders')} aria-label="Open reminders">
                 <BellIcon className="h-[18px] w-[18px]" />
-                {pendingReview ? (
-                  <span className="absolute right-0.5 top-0.5 min-w-[18px] rounded-full bg-[#CC3333] px-1.5 py-0.5 text-[10px] font-bold text-white">
-                    {pendingReview}
-                  </span>
-                ) : null}
+                {pendingReview + pendingTransfers ? <span className="absolute right-0.5 top-0.5 min-w-[18px] rounded-full bg-[#CC3333] px-1.5 py-0.5 text-[10px] font-bold text-white">{pendingReview + pendingTransfers}</span> : null}
               </button>
 
-              <button
-                className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb] disabled:cursor-not-allowed disabled:opacity-50"
-                type="button"
-                onClick={() => navigate('/documents?upload=1')}
-                disabled={!canUploadDocuments}
-              >
+              <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={() => navigate('/documents?upload=1')} disabled={!canUploadDocuments}>
                 Intake
               </button>
 
-              <button
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#1155dd] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#0d44b0] disabled:cursor-not-allowed disabled:opacity-50"
-                type="button"
-                onClick={() => navigate('/horses?new=1')}
-                disabled={!canCreateHorse}
-              >
+              <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#1155dd] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#0d44b0] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={() => navigate('/horses?new=1')} disabled={!canCreateHorse}>
                 <AddIcon className="h-[16px] w-[16px]" />
                 New
               </button>
@@ -352,28 +323,16 @@ export default function MainLayout() {
           </div>
         </header>
 
-        <main className="flex flex-col gap-[20px] px-6 py-5">
+        <main className="flex flex-col gap-[20px] px-6 py-5 pb-28 lg:pb-5">
           <Outlet />
         </main>
 
         {mobileMoreOpen ? (
           <>
-            <button
-              className="fixed inset-0 z-30 bg-[#061426]/30 lg:hidden"
-              type="button"
-              aria-label="Close mobile menu"
-              onClick={() => setMobileMoreOpen(false)}
-            />
+            <button className="fixed inset-0 z-30 bg-[#061426]/30 lg:hidden" type="button" aria-label="Close mobile menu" onClick={() => setMobileMoreOpen(false)} />
             <div id="mobile-more-menu" className="fixed bottom-[94px] left-3 right-3 z-50 rounded-lg border border-[#d8e1ea] bg-[#fbfdff] p-3 text-[#16202b] shadow-xl lg:hidden">
               {canCreateHorse ? (
-                <button
-                  className="mb-2 flex min-h-[50px] w-full items-center gap-3 rounded-md bg-[#1155dd] px-3 text-left text-sm font-semibold text-white transition-all duration-150 ease-[ease] hover:bg-[#0d44b0]"
-                  type="button"
-                  onClick={() => {
-                    setMobileMoreOpen(false);
-                    navigate('/horses?new=1');
-                  }}
-                >
+                <button className="mb-2 flex min-h-[50px] w-full items-center gap-3 rounded-md bg-[#1155dd] px-3 text-left text-sm font-semibold text-white" type="button" onClick={() => { setMobileMoreOpen(false); navigate('/horses?new=1'); }}>
                   <AddIcon className="h-[18px] w-[18px] shrink-0" />
                   <span>New horse</span>
                 </button>
@@ -382,20 +341,7 @@ export default function MainLayout() {
                 {mobileMoreItems.map(({ label, path, icon: Icon }) => {
                   const isActive = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
                   return (
-                    <button
-                      key={label}
-                      className={classNames(
-                        'flex min-h-[54px] items-center gap-3 rounded-md border px-3 text-left text-sm font-semibold transition-all duration-150 ease-[ease]',
-                        isActive
-                          ? 'border-[#c8d7ff] bg-[#eaeffd] text-[#1155dd]'
-                          : 'border-[#e3e9f0] bg-white text-[#33475c] hover:border-[#1155dd] hover:bg-[#eef6fb]',
-                      )}
-                      type="button"
-                      onClick={() => {
-                        setMobileMoreOpen(false);
-                        navigate(path);
-                      }}
-                    >
+                    <button key={label} className={classNames('flex min-h-[54px] items-center gap-3 rounded-md border px-3 text-left text-sm font-semibold transition-all duration-150 ease-[ease]', isActive ? 'border-[#c8d7ff] bg-[#eaeffd] text-[#1155dd]' : 'border-[#e3e9f0] bg-white text-[#33475c] hover:border-[#1155dd] hover:bg-[#eef6fb]')} type="button" onClick={() => { setMobileMoreOpen(false); navigate(path); }}>
                       <Icon className="h-[18px] w-[18px] shrink-0" />
                       <span className="min-w-0 truncate">{label}</span>
                     </button>
@@ -407,67 +353,18 @@ export default function MainLayout() {
         ) : null}
 
         <nav className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-2 rounded-lg border border-[#dde5ee] bg-[#fbfdff] p-2 text-[#16202b] shadow-lg lg:hidden" aria-label="Mobile quick navigation">
-          <NavLink
-            to="/"
-            end
-            className={({ isActive }) =>
-              classNames(
-                'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]',
-                isActive ? 'bg-[#eaeffd] text-[#1155dd]' : 'text-[#798088] hover:bg-white hover:text-[#16202b]',
-              )
-            }
-          >
-            <DashboardIcon className="h-[18px] w-[18px]" />
-            <span>Home</span>
-          </NavLink>
-          <NavLink
-            to="/horses"
-            className={({ isActive }) =>
-              classNames(
-                'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]',
-                isActive ? 'bg-[#eaeffd] text-[#1155dd]' : 'text-[#798088] hover:bg-white hover:text-[#16202b]',
-              )
-            }
-          >
-            <HorsesIcon className="h-[18px] w-[18px]" />
-            <span>Horses</span>
-          </NavLink>
-          <NavLink
-            to="/documents"
-            className={({ isActive }) =>
-              classNames(
-                'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]',
-                isActive ? 'bg-[#eaeffd] text-[#1155dd]' : 'text-[#798088] hover:bg-white hover:text-[#16202b]',
-              )
-            }
-          >
-            <DocumentsIcon className="h-[18px] w-[18px]" />
-            <span>Docs</span>
-          </NavLink>
-          <NavLink
-            to="/sales"
-            className={({ isActive }) =>
-              classNames(
-                'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]',
-                isActive ? 'bg-[#eaeffd] text-[#1155dd]' : 'text-[#798088] hover:bg-white hover:text-[#16202b]',
-              )
-            }
-          >
-            <SalesIcon className="h-[18px] w-[18px]" />
-            <span>Sales</span>
-          </NavLink>
-          <button
-            className={classNames(
-              'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]',
-              mobileMoreOpen || mobileMoreItems.some((item) => location.pathname.startsWith(item.path) && item.path !== '/')
-                ? 'bg-[#eaeffd] text-[#1155dd]'
-                : 'text-[#798088] hover:bg-white hover:text-[#16202b]',
-            )}
-            type="button"
-            onClick={() => setMobileMoreOpen((current) => !current)}
-            aria-expanded={mobileMoreOpen}
-            aria-controls="mobile-more-menu"
-          >
+          {[
+            { label: 'Home', path: '/', icon: DashboardIcon },
+            { label: 'Horses', path: '/horses', icon: HorsesIcon },
+            { label: 'Docs', path: '/documents', icon: DocumentsIcon },
+            { label: 'Sales', path: '/sales', icon: SalesIcon },
+          ].map(({ label, path, icon: Icon }) => (
+            <NavLink key={label} to={path} end={path === '/'} className={({ isActive }) => classNames('flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]', isActive ? 'bg-[#eaeffd] text-[#1155dd]' : 'text-[#798088] hover:bg-white hover:text-[#16202b]')}>
+              <Icon className="h-[18px] w-[18px]" />
+              <span>{label}</span>
+            </NavLink>
+          ))}
+          <button className={classNames('flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]', mobileMoreOpen || mobileMoreItems.some((item) => location.pathname.startsWith(item.path) && item.path !== '/') ? 'bg-[#eaeffd] text-[#1155dd]' : 'text-[#798088] hover:bg-white hover:text-[#16202b]')} type="button" onClick={() => setMobileMoreOpen((current) => !current)} aria-expanded={mobileMoreOpen} aria-controls="mobile-more-menu">
             <DotsIcon className="h-[18px] w-[18px]" />
             <span>More</span>
           </button>
