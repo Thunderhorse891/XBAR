@@ -131,6 +131,7 @@ type XbarStore = {
   addOwnershipAuditEntry: (recordId: string, entry: string) => ActionResult;
   addOwnershipStake: (horseId: string, stake: Omit<OwnershipStake, 'id'>) => ActionResult;
   removeOwnershipStake: (horseId: string, stakeId: string) => ActionResult;
+  ensureOwnershipRecord: (horseId: string) => ActionResult & { recordId?: string };
   exportWorkspaceBackup: () => WorkspaceBackup;
   importWorkspaceBackup: (backup: unknown) => ActionResult;
 };
@@ -2035,8 +2036,8 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: deniedMessage };
         }
 
-        if (!stake.name.trim() || !stake.contact.trim() || !Number.isFinite(stake.share) || stake.share <= 0) {
-          return { ok: false, message: 'Co-owner name, share, and contact are required.' };
+        if (!stake.name.trim() || !Number.isFinite(stake.share) || stake.share <= 0) {
+          return { ok: false, message: 'Co-owner name and share percentage are required.' };
         }
 
         const targetHorse = get().horses.find((horse) => horse.id === horseId);
@@ -2121,6 +2122,23 @@ export const useXbarStore = create<XbarStore>()(
         }));
 
         return { ok: true, message: `${stake.name} removed from the ownership split.` };
+      },
+      ensureOwnershipRecord: (horseId) => {
+        const existing = get().ownershipRecords.find((r) => r.horseId === horseId);
+        if (existing) {
+          return { ok: true, message: 'Ownership record already exists.', recordId: existing.id };
+        }
+
+        const horse = get().horses.find((h) => h.id === horseId);
+        if (!horse) {
+          return { ok: false, message: 'Horse record not found.' };
+        }
+
+        const newRecord = createOwnershipRecord(horse);
+        set((state) => ({
+          ownershipRecords: [newRecord, ...state.ownershipRecords],
+        }));
+        return { ok: true, message: `Ownership record created for ${horse.name}.`, recordId: newRecord.id };
       },
       exportWorkspaceBackup: () => ({
         app: 'XBAR',

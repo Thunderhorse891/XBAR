@@ -90,6 +90,7 @@ export default function Ownership() {
   const addOwnershipAuditEntry = useXbarStore((state) => state.addOwnershipAuditEntry);
   const addOwnershipStake = useXbarStore((state) => state.addOwnershipStake);
   const removeOwnershipStake = useXbarStore((state) => state.removeOwnershipStake);
+  const ensureOwnershipRecord = useXbarStore((state) => state.ensureOwnershipRecord);
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageOwnership = useCurrentRoleCapability('manageOwnership');
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
@@ -654,6 +655,15 @@ export default function Ownership() {
                   if (row.record) {
                     setSelectedRecordId(row.record.id);
                     setFormError('');
+                  } else {
+                    const result = ensureOwnershipRecord(row.horse.id);
+                    if (result.ok && result.recordId) {
+                      setSelectedRecordId(result.recordId);
+                      setFormError('');
+                      pushToast({ title: 'Ownership record created', message: result.message, tone: 'success' });
+                    } else if (!result.ok) {
+                      pushToast({ title: 'Could not create record', message: result.message, tone: 'error' });
+                    }
                   }
                 }}
                 onContextMenu={(event) => {
@@ -666,7 +676,7 @@ export default function Ownership() {
               >
                 <span>
                   <strong>{row.horse.name}</strong>
-                  <small>{row.horse.barnName || row.horse.segment}</small>
+                  {row.horse.barnName ? <small>{row.horse.barnName}</small> : null}
                 </span>
                 <span>
                   <strong>{row.currentOwner}</strong>
@@ -678,7 +688,7 @@ export default function Ownership() {
                 </span>
                 <span>
                   <Pill tone={transferTone(row.status)}>{row.status}</Pill>
-                  <small>Due {formatDateLabel(row.deadline)}</small>
+                  {row.deadline ? <small>Due {formatDateLabel(row.deadline)}</small> : null}
                 </span>
                 <span>
                   <strong>{row.billOfSaleCount + row.registrationCount + row.transferDocCount} files</strong>
