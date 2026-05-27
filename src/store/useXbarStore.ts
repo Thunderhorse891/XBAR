@@ -130,6 +130,7 @@ type XbarStore = {
   ) => ActionResult;
   addOwnershipAuditEntry: (recordId: string, entry: string) => ActionResult;
   addOwnershipStake: (horseId: string, stake: Omit<OwnershipStake, 'id'>) => ActionResult;
+  removeOwnershipStake: (horseId: string, stakeId: string) => ActionResult;
   exportWorkspaceBackup: () => WorkspaceBackup;
   importWorkspaceBackup: (backup: unknown) => ActionResult;
 };
@@ -533,18 +534,18 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
     id,
     name,
     barnName,
-    summary: `${barnName} is a new XBAR horse record awaiting verified intake details.`,
+    summary: '',
     segment: input.segment,
     status: input.status,
-    breed: 'Pending verification',
-    registry: input.aqhaNumber?.trim() ? 'AQHA' : 'Pending',
+    breed: '',
+    registry: input.aqhaNumber?.trim() ? 'AQHA' : '',
     aqhaNumber: input.aqhaNumber?.trim() || '',
     registrationNumber: input.registrationNumber?.trim() || '',
     registered: Boolean(input.aqhaNumber || input.registrationNumber),
     age: 0,
     foaledOn: '',
     sex: input.sex,
-    color: 'Pending verification',
+    color: '',
     markings: '',
     microchipId: '',
     owner: input.owner.trim(),
@@ -1854,8 +1855,7 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Horse record not found for this medical event.' };
         }
 
-        const reviewEventTypes: MedicalEventType[] = ['Vet visit', 'Injury', 'Treatment'];
-        const shouldOpenMedicalReview = reviewEventTypes.includes(event.type);
+        const shouldOpenMedicalReview = event.type === 'Injury';
         const nextEvent = createTimelineEvent({
           title: event.title,
           summary: event.body,
@@ -2082,6 +2082,45 @@ export const useXbarStore = create<XbarStore>()(
         }));
 
         return { ok: true, message: `${nextStake.name} added to the ownership split.`, id: nextStake.id };
+      },
+      removeOwnershipStake: (horseId, stakeId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageOwnership');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
+        const horse = get().horses.find((h) => h.id === horseId);
+        if (!horse) {
+          return { ok: false, message: 'Horse record not found.' };
+        }
+
+        const stake = horse.ownership.find((s) => s.id === stakeId);
+        if (!stake) {
+          return { ok: false, message: 'Ownership stake not found.' };
+        }
+
+        set((state) => ({
+          horses: state.horses.map((h) =>
+            h.id === horseId
+              ? {
+                  ...h,
+                  ownership: h.ownership.filter((s) => s.id !== stakeId),
+                  activity: [
+                    createTimelineEvent({
+                      title: 'Ownership updated',
+                      summary: `${stake.name} removed from ownership split.`,
+                      owner: 'Ownership Desk',
+                      date: todayStamp(),
+                      category: 'Ownership',
+                    }),
+                    ...h.activity,
+                  ],
+                }
+              : h,
+          ),
+        }));
+
+        return { ok: true, message: `${stake.name} removed from the ownership split.` };
       },
       exportWorkspaceBackup: () => ({
         app: 'XBAR',

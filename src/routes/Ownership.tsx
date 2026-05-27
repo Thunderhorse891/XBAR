@@ -89,6 +89,7 @@ export default function Ownership() {
   const updateOwnershipRecord = useXbarStore((state) => state.updateOwnershipRecord);
   const addOwnershipAuditEntry = useXbarStore((state) => state.addOwnershipAuditEntry);
   const addOwnershipStake = useXbarStore((state) => state.addOwnershipStake);
+  const removeOwnershipStake = useXbarStore((state) => state.removeOwnershipStake);
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageOwnership = useCurrentRoleCapability('manageOwnership');
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
@@ -561,31 +562,64 @@ export default function Ownership() {
 
           {selectedHorse ? (
             <>
-              <div className="form-grid form-grid--tight">
-                <label className="field-stack field-stack--wide">
-                  <span className="field-label">Owner name</span>
-                  <input className="field-input" value={coOwner.name} onChange={(event) => setCoOwner((current) => ({ ...current, name: event.target.value }))} disabled={!canManageOwnership} />
-                </label>
-                <label className="field-stack">
-                  <span className="field-label">Share — {selectedHorseTotalShare}% allocated · {remainingShare}% remaining</span>
-                  <input className="field-input" type="number" min="1" max={remainingShare} value={coOwner.share} onChange={(event) => setCoOwner((current) => ({ ...current, share: event.target.value }))} disabled={!canManageOwnership || remainingShare === 0} />
-                </label>
-                <label className="field-stack">
-                  <span className="field-label">Role</span>
-                  <select className="field-input" value={coOwner.role} onChange={(event) => setCoOwner((current) => ({ ...current, role: event.target.value as OwnershipStake['role'] }))} disabled={!canManageOwnership}>
-                    {ownershipRoles.map((role) => (
-                      <option key={role} value={role}>{role}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field-stack field-stack--wide">
-                  <span className="field-label">Contact</span>
-                  <input className="field-input" value={coOwner.contact} onChange={(event) => setCoOwner((current) => ({ ...current, contact: event.target.value }))} disabled={!canManageOwnership} />
-                </label>
-              </div>
-              <button className="button button--primary ownership-full-button" type="button" onClick={addCoOwner} disabled={!canManageOwnership}>
-                Add owner to horse
-              </button>
+              {selectedHorse.ownership.length > 0 && (
+                <div className="ownership-stake-list">
+                  <span className="field-label">{selectedHorseTotalShare}% allocated · {remainingShare}% remaining</span>
+                  {selectedHorse.ownership.map((stake) => (
+                    <div key={stake.id} className="ownership-stake-row">
+                      <div className="ownership-stake-row__info">
+                        <strong>{stake.name}</strong>
+                        <span>{stake.share}% · {stake.role}</span>
+                        {stake.contact ? <small>{stake.contact}</small> : null}
+                      </div>
+                      {canManageOwnership ? (
+                        <button
+                          className="button button--ghost button--compact"
+                          type="button"
+                          onClick={() => {
+                            const result = removeOwnershipStake(selectedHorse.id, stake.id);
+                            pushToast({ title: result.ok ? 'Owner removed' : 'Remove blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                          }}
+                        >
+                          Remove
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {remainingShare > 0 ? (
+                <>
+                  <div className="form-grid form-grid--tight">
+                    <label className="field-stack field-stack--wide">
+                      <span className="field-label">Owner name</span>
+                      <input className="field-input" value={coOwner.name} onChange={(event) => setCoOwner((current) => ({ ...current, name: event.target.value }))} disabled={!canManageOwnership} />
+                    </label>
+                    <label className="field-stack">
+                      <span className="field-label">Share (max {remainingShare}%)</span>
+                      <input className="field-input" type="number" min="1" max={remainingShare} value={coOwner.share} onChange={(event) => setCoOwner((current) => ({ ...current, share: event.target.value }))} disabled={!canManageOwnership} />
+                    </label>
+                    <label className="field-stack">
+                      <span className="field-label">Role</span>
+                      <select className="field-input" value={coOwner.role} onChange={(event) => setCoOwner((current) => ({ ...current, role: event.target.value as OwnershipStake['role'] }))} disabled={!canManageOwnership}>
+                        {ownershipRoles.map((role) => (
+                          <option key={role} value={role}>{role}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field-stack field-stack--wide">
+                      <span className="field-label">Contact</span>
+                      <input className="field-input" value={coOwner.contact} onChange={(event) => setCoOwner((current) => ({ ...current, contact: event.target.value }))} disabled={!canManageOwnership} />
+                    </label>
+                  </div>
+                  <button className="button button--primary ownership-full-button" type="button" onClick={addCoOwner} disabled={!canManageOwnership}>
+                    Add owner to horse
+                  </button>
+                </>
+              ) : (
+                <p className="ownership-full-note">All shares allocated. Remove an owner above to reallocate.</p>
+              )}
             </>
           ) : (
             <EmptyState compact title="No horse selected" description="Select an ownership row before adding contact details." />
