@@ -137,7 +137,9 @@ export default function BuyerProfile() {
 
   // Build packet completeness from the sanitized horse shape.
   // Cast to satisfy the helper signature — only uses the fields present in PublicHorseDTO.
-  const packet = buildHorsePacketCompleteness(horse as unknown as Parameters<typeof buildHorsePacketCompleteness>[0], documents as Parameters<typeof buildHorsePacketCompleteness>[1], undefined);
+  // Inject empty alerts — PublicHorseDTO omits them intentionally; the packet
+  // scorer needs the field but buyers must never see internal alert data.
+  const packet = buildHorsePacketCompleteness({ ...horse, alerts: [] } as unknown as Parameters<typeof buildHorsePacketCompleteness>[0], documents as Parameters<typeof buildHorsePacketCompleteness>[1], undefined);
   const publicShareToken = sharedListing?.accessMode === 'Private Token' ? sharedListing.shareToken : undefined;
   const publicShareUrl = buildPublicShareUrl(packet.sharePath, publicShareToken);
   const visibleDocuments = documents
