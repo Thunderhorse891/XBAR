@@ -24,6 +24,7 @@ export default defineConfig({
       VITE_ROUTER_MODE: 'browser',
       VITE_SUPABASE_RELATIONAL_SYNC: 'false',
       VITE_SUPABASE_SNAPSHOT_FALLBACK: 'false',
+      VITE_STATIC_TARGET: 'web',
     },
   },
 });
