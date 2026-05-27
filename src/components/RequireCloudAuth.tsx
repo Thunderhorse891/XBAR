@@ -3,10 +3,19 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { isCloudAuthRequired, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 
+function hasCommandCenterEntry() {
+  if (typeof window === 'undefined') return false;
+  return window.localStorage.getItem('xbar-command-center-entry') === 'true';
+}
+
 export function RequireCloudAuth({ children }: { children: ReactNode }) {
   const location = useLocation();
   const status = useCloudStore((state) => state.status);
   const session = useCloudStore((state) => state.session);
+
+  if (hasCommandCenterEntry()) {
+    return <>{children}</>;
+  }
 
   if (isCloudAuthRequired()) {
     return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}`, reason: 'cloud-required' }} />;
