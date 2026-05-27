@@ -32,6 +32,8 @@ type CloudStore = {
   signUpWithPassword: (email: string, password: string) => Promise<CloudActionResult>;
   sendPasswordReset: (email: string) => Promise<CloudActionResult>;
   signInWithFacebook: () => Promise<CloudActionResult>;
+  signInWithGoogle: () => Promise<CloudActionResult>;
+  signInWithApple: () => Promise<CloudActionResult>;
   signOut: () => Promise<CloudActionResult>;
 };
 
@@ -214,6 +216,42 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     }
 
     return { ok: true, message: 'Facebook sign-in started.' };
+  },
+  signInWithGoogle: async () => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+
+    const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    const { error } = await client.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo },
+    });
+
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    return { ok: true, message: 'Google sign-in started.' };
+  },
+  signInWithApple: async () => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+
+    const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    const { error } = await client.auth.signInWithOAuth({
+      provider: 'apple',
+      options: { redirectTo },
+    });
+
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    return { ok: true, message: 'Apple sign-in started.' };
   },
   signOut: async () => {
     const client = getSupabaseClient();

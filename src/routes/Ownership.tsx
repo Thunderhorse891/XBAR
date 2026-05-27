@@ -149,6 +149,8 @@ export default function Ownership() {
   const selectedRecord = ownershipRecords.find((record) => record.id === selectedRecordId) ?? ownershipRecords[0];
   const selectedHorse = horses.find((horse) => horse.id === selectedRecord?.horseId);
   const selectedRelationship = selectedHorse ? relationshipRows.find((row) => row.horse.id === selectedHorse.id) : undefined;
+  const selectedHorseTotalShare = selectedHorse ? selectedHorse.ownership.reduce((sum, s) => sum + s.share, 0) : 0;
+  const remainingShare = Math.max(0, 100 - selectedHorseTotalShare);
 
   useEffect(() => {
     if (!ownershipRecords.length) {
@@ -565,8 +567,8 @@ export default function Ownership() {
                   <input className="field-input" value={coOwner.name} onChange={(event) => setCoOwner((current) => ({ ...current, name: event.target.value }))} disabled={!canManageOwnership} />
                 </label>
                 <label className="field-stack">
-                  <span className="field-label">Share</span>
-                  <input className="field-input" type="number" min="1" max="100" value={coOwner.share} onChange={(event) => setCoOwner((current) => ({ ...current, share: event.target.value }))} disabled={!canManageOwnership} />
+                  <span className="field-label">Share — {selectedHorseTotalShare}% allocated · {remainingShare}% remaining</span>
+                  <input className="field-input" type="number" min="1" max={remainingShare} value={coOwner.share} onChange={(event) => setCoOwner((current) => ({ ...current, share: event.target.value }))} disabled={!canManageOwnership || remainingShare === 0} />
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Role</span>
