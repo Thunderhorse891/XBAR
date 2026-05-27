@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
@@ -80,6 +80,21 @@ export default function Horses() {
   );
 
   const createOpen = searchParams.get('new') === '1';
+  const activeSharedHorseIds = new Set(sharedListings.filter((listing) => listing.state !== 'Archived').map((listing) => listing.horseId));
+
+  useEffect(() => {
+    setSearch(searchParams.get('search') ?? '');
+  }, [searchParams]);
+
+  const setNewHorseParam = (open: boolean) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (open) {
+      nextParams.set('new', '1');
+    } else {
+      nextParams.delete('new');
+    }
+    setSearchParams(nextParams);
+  };
 
   const filtered = horses.filter((horse) => {
     const matchesSearch =
@@ -94,6 +109,7 @@ export default function Horses() {
 
   const saleReady = filtered.filter((horse) => horse.readiness.score >= 80);
   const transferRisk = filtered.filter((horse) => ownershipRecords.find((record) => record.horseId === horse.id)?.transferStatus !== 'Clear');
+  const sharedCount = filtered.filter((horse) => activeSharedHorseIds.has(horse.id)).length;
   const buyerReady = filtered.filter((horse) =>
     buildHorsePacketCompleteness(
       horse,
@@ -137,16 +153,20 @@ export default function Horses() {
           label: 'Open record',
           onSelect: () => navigate(`/horses/${menuHorse.id}`),
         },
-        {
-          id: 'open-share-view',
-          label: 'Open buyer link',
-          onSelect: async () => {
-            await recordSharedChannel(menuHorse.id, 'Direct Link');
-            if (typeof window !== 'undefined') {
-              window.open(menuShareUrl, '_blank', 'noopener,noreferrer');
-            }
-          },
-        },
+        ...(menuSaved
+          ? [
+              {
+                id: 'open-share-view',
+                label: 'Open live buyer link',
+                onSelect: async () => {
+                  await recordSharedChannel(menuHorse.id, 'Direct Link');
+                  if (typeof window !== 'undefined') {
+                    window.open(menuShareUrl, '_blank', 'noopener,noreferrer');
+                  }
+                },
+              },
+            ]
+          : []),
         ...(canManageSharedAccess
           ? [
               {
@@ -193,7 +213,7 @@ export default function Horses() {
           defaultPasture: workspaceProfile.defaultPasture,
         }),
       );
-      setSearchParams((prev) => { const next = new URLSearchParams(prev); next.delete('new'); return next; });
+      setNewHorseParam(false);
       navigate(`/horses/${result.id}`);
     }
   };
@@ -207,7 +227,7 @@ export default function Horses() {
             <Link to="/documents?upload=1" className="button button--ghost button--compact">
               Batch intake
             </Link>
-            <button className="button button--primary button--compact" type="button" onClick={() => setSearchParams((prev) => { const next = new URLSearchParams(prev); next.set('new', '1'); return next; })} disabled={!canCreateHorse}>
+            <button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>
               New horse
             </button>
           </>
@@ -221,7 +241,7 @@ export default function Horses() {
                 <div className="panel__eyebrow">Horse intake</div>
                 <h2 className="panel__title">Add horse</h2>
               </div>
-              <button className="button button--ghost button--compact" type="button" onClick={() => setSearchParams((prev) => { const next = new URLSearchParams(prev); next.delete('new'); return next; })}>
+              <button className="button button--ghost button--compact" type="button" onClick={() => setNewHorseParam(false)}>
                 Close
               </button>
           </div>
@@ -358,8 +378,8 @@ export default function Horses() {
             <strong>{saleReady.length}</strong>
           </div>
           <div className="portfolio-stage__stat">
-            <span>Buyer Ready</span>
-            <strong>{buyerReady.length}</strong>
+            <span>Shared</span>
+            <strong>{sharedCount}</strong>
           </div>
           <div className="portfolio-stage__stat">
             <span>Issues</span>
@@ -549,7 +569,7 @@ export default function Horses() {
             title="No horses match this view"
             description="Adjust filters, clear search, or add a horse."
             action={
-              <button className="button button--primary button--compact" type="button" onClick={() => setSearchParams({ new: '1' })} disabled={!canCreateHorse}>
+              <button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>
                 Add horse
               </button>
             }
@@ -605,7 +625,7 @@ export default function Horses() {
           title="No horses match this registry view"
           description="Adjust filters, clear search, or add a horse."
           action={
-              <button className="button button--primary button--compact" type="button" onClick={() => setSearchParams({ new: '1' })} disabled={!canCreateHorse}>
+              <button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>
                 Add horse
               </button>
           }

@@ -1177,7 +1177,24 @@ begin
     return null;
   end if;
 
-  select payload::jsonb into horse_payload
+  select
+    (payload::jsonb
+      - 'medicalNotes'
+      - 'lastVetVisit'
+      - 'ownership'
+      - 'documentFacts'
+      - 'alerts'
+      - 'notes'
+    )
+    || jsonb_build_object(
+      'medicalNotes', '',
+      'lastVetVisit', '',
+      'ownership', '[]'::jsonb,
+      'documentFacts', '[]'::jsonb,
+      'alerts', '[]'::jsonb,
+      'notes', '[]'::jsonb
+    )
+  into horse_payload
   from public.horses
   where workspace_id = listing_row.workspace_id
     and horse_id = listing_row.horse_id
@@ -1187,18 +1204,50 @@ begin
     return null;
   end if;
 
-  select payload::jsonb into ownership_payload
+  select jsonb_build_object(
+    'id', ownership_record_id,
+    'horseId', horse_id,
+    'legalOwner', '',
+    'transferStatus', coalesce(nullif(transfer_status, ''), payload::jsonb ->> 'transferStatus', 'Pending Signatures'),
+    'pendingDocuments', '[]'::jsonb,
+    'complianceDeadline', coalesce(nullif(compliance_deadline, ''), payload::jsonb ->> 'complianceDeadline', ''),
+    'confidence', coalesce((payload::jsonb ->> 'confidence')::numeric, 0),
+    'auditTrail', '[]'::jsonb
+  ) into ownership_payload
   from public.ownership_records
   where workspace_id = listing_row.workspace_id
     and horse_id = listing_row.horse_id
   order by updated_at desc
   limit 1;
 
-  select coalesce(jsonb_agg(payload order by updated_at desc), '[]'::jsonb) into document_payloads
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', document_id,
+        'title', coalesce(nullif(title, ''), payload::jsonb ->> 'title', ''),
+        'type', coalesce(nullif(document_type, ''), payload::jsonb ->> 'type', 'Media Kit'),
+        'horseId', horse_id,
+        'uploadedBy', '',
+        'uploadedAt', coalesce(payload::jsonb ->> 'uploadedAt', ''),
+        'source', coalesce(nullif(source, ''), payload::jsonb ->> 'source', 'Manual Upload'),
+        'state', coalesce(nullif(state, ''), payload::jsonb ->> 'state', 'Ready'),
+        'confidence', confidence,
+        'duplicateRisk', coalesce(nullif(duplicate_risk, ''), payload::jsonb ->> 'duplicateRisk', 'Low'),
+        'extractedTextPreview', '',
+        'summary', coalesce(payload::jsonb ->> 'summary', ''),
+        'entities', coalesce(payload::jsonb -> 'entities', '{}'::jsonb),
+        'fileName', payload::jsonb ->> 'fileName',
+        'mimeType', payload::jsonb ->> 'mimeType',
+        'fileSizeBytes', payload::jsonb -> 'fileSizeBytes'
+      )
+      order by updated_at desc
+    ),
+    '[]'::jsonb
+  ) into document_payloads
   from public.documents
   where workspace_id = listing_row.workspace_id
     and horse_id = listing_row.horse_id
-    and state <> 'Archived';
+    and state = 'Ready';
 
   return jsonb_build_object(
     'horse', horse_payload,
@@ -1211,7 +1260,7 @@ begin
         'horseId', listing_row.horse_id,
         'sharePath', listing_row.share_path,
         'accessMode', listing_row.access_mode,
-        'shareToken', listing_row.share_token,
+        'shareToken', case when listing_row.access_mode = 'Private Token' then listing_row.share_token else '' end,
         'state', listing_row.state
       )
   );

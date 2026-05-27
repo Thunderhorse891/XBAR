@@ -6,11 +6,13 @@ import { RequireWorkspaceSetup } from './components/RequireWorkspaceSetup';
 import { ToastViewport } from './components/ToastViewport';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
 import { useCloudStore } from './store/useCloudStore';
+import './routes/operationsHierarchy.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Breeding = lazy(() => import('./routes/Breeding'));
 const BuyerProfile = lazy(() => import('./routes/BuyerProfile'));
 const Documents = lazy(() => import('./routes/Documents'));
+const Expenses = lazy(() => import('./routes/Expenses'));
 const HorseDetail = lazy(() => import('./routes/HorseDetail'));
 const Horses = lazy(() => import('./routes/Horses'));
 const Login = lazy(() => import('./routes/Login'));
@@ -19,6 +21,7 @@ const Medical = lazy(() => import('./routes/Medical'));
 const NotFound = lazy(() => import('./routes/NotFound'));
 const Ownership = lazy(() => import('./routes/Ownership'));
 const RanchAssets = lazy(() => import('./routes/RanchAssets'));
+const Reminders = lazy(() => import('./routes/Reminders'));
 const Sales = lazy(() => import('./routes/Sales'));
 const Settings = lazy(() => import('./routes/Settings'));
 const SetupWorkspace = lazy(() => import('./routes/SetupWorkspace'));
@@ -31,7 +34,37 @@ function useHashRouting() {
     return false;
   }
 
+  if (import.meta.env.MODE === 'e2e') {
+    return false;
+  }
+
   return import.meta.env.VITE_ROUTER_MODE === 'hash' || window.location.hostname.endsWith('github.io');
+}
+
+function routeTitle(path: string) {
+  if (path.startsWith('/profiles/')) return 'XBAR | Buyer Room';
+  if (path.startsWith('/horses/')) return 'XBAR | Horse Record';
+
+  const labels: Record<string, string> = {
+    '/': 'Command Center',
+    '/horses': 'Horses',
+    '/documents': 'Document Vault',
+    '/ownership': 'Ownership',
+    '/medical': 'Health',
+    '/breeding': 'Breeding',
+    '/sales': 'Sales',
+    '/expenses': 'Expenses',
+    '/reminders': 'Reminders',
+    '/assets': 'Ranch Operations',
+    '/weather': 'Weather',
+    '/shared-access': 'Buyer Rooms',
+    '/subscriptions': 'Subscriptions',
+    '/settings': 'Settings',
+    '/setup': 'Setup',
+    '/login': 'Login',
+  };
+
+  return `XBAR | ${labels[path] ?? 'Workspace'}`;
 }
 
 function RouteTelemetry() {
@@ -49,6 +82,10 @@ function RouteTelemetry() {
       },
     });
   }, [location.pathname, location.search, workspaceId]);
+
+  useEffect(() => {
+    document.title = routeTitle(location.pathname);
+  }, [location.pathname]);
 
   return null;
 }
@@ -76,6 +113,8 @@ export default function App() {
               <Route path="medical" element={<Medical />} />
               <Route path="breeding" element={<Breeding />} />
               <Route path="sales" element={<Sales />} />
+              <Route path="expenses" element={<Expenses />} />
+              <Route path="reminders" element={<Reminders />} />
               <Route path="assets" element={<RanchAssets />} />
               <Route path="subscriptions" element={<Subscriptions />} />
               <Route path="shared-access" element={<SharedAccess />} />

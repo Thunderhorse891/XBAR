@@ -75,5 +75,9 @@ export async function trackRuntimeEvent(event: RuntimeEventInput) {
     // Ignore direct telemetry failures and fall back to the API path.
   }
 
+  if (!monitoringConfig.apiFallbackEnabled) {
+    return;
+  }
+
   await postRuntimeEventToApi(event);
 }

@@ -20,7 +20,6 @@ import {
   estimateStorageGb,
   guessGalleryKind,
   nowStamp,
-  readFileAsDataUrl,
   todayStamp,
 } from '@/lib/xbarRuntime';
 import { countReservedSharedAccessSeats, countReservedWorkspaceSeats, normalizeWorkspaceEmail, validateWorkspaceInvitation } from '@/lib/workspaceAccess';
@@ -52,6 +51,7 @@ import type {
   HorseNote,
   HorseRecord,
   IntakeBatch,
+  MedicalEventType,
   OwnershipStake,
   RoleCapability,
   SalesLead,
@@ -118,7 +118,10 @@ type XbarStore = {
   ) => ActionResult;
   updateAsset: (assetId: string, patch: AssetPatch) => ActionResult;
   addHorseNote: (horseId: string, note: Pick<HorseNote, 'title' | 'body' | 'author' | 'tone'>) => ActionResult;
-  addMedicalEvent: (horseId: string, event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string; triggersReview?: boolean }) => ActionResult;
+  addMedicalEvent: (
+    horseId: string,
+    event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string; type: MedicalEventType },
+  ) => ActionResult;
   addBreedingEvent: (horseId: string, event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string }) => ActionResult;
   updateHorseLocation: (horseId: string, patch: LocationPatch) => ActionResult;
   updateOwnershipRecord: (
@@ -530,25 +533,25 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
     id,
     name,
     barnName,
-    summary: '',
+    summary: `${barnName} is a new XBAR horse record awaiting verified intake details.`,
     segment: input.segment,
     status: input.status,
-    breed: '',
-    registry: '',
+    breed: 'Pending verification',
+    registry: input.aqhaNumber?.trim() ? 'AQHA' : 'Pending',
     aqhaNumber: input.aqhaNumber?.trim() || '',
     registrationNumber: input.registrationNumber?.trim() || '',
-    registered: Boolean(input.aqhaNumber?.trim() || input.registrationNumber?.trim()),
+    registered: Boolean(input.aqhaNumber || input.registrationNumber),
     age: 0,
     foaledOn: '',
     sex: input.sex,
-    color: '',
+    color: 'Pending verification',
     markings: '',
     microchipId: '',
     owner: input.owner.trim(),
     ownerEntity: input.ownerEntity.trim(),
     insuredValue: 0,
     profileImage: '',
-    tags: ['new-intake', 'media-needed'],
+    tags: ['intake-pending'],
     bloodline: {
       sire: '',
       dam: '',
@@ -586,8 +589,8 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
     },
     readiness: {
       score: 0,
-      blockers: ['Hero image missing', 'Ownership packet not uploaded', 'Medical summary not reviewed'],
-      packetStatus: 'Needs Photos',
+      blockers: ['Registration not verified', 'Ownership packet not uploaded', 'Medical summary not reviewed', 'Sale photos missing'],
+      packetStatus: 'Needs Transfer Docs',
     },
     medicalNotes: '',
     lastVetVisit: '',
@@ -609,7 +612,7 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
       {
         id: createId('alert'),
         title: 'Finish intake packet',
-        summary: 'Media, registration, and initial ownership documents still need to be uploaded.',
+        summary: 'Registration, media, medical, and ownership details must be verified before this record is buyer-ready.',
         severity: 'medium',
         module: 'Documents',
       },
@@ -760,6 +763,8 @@ function createTimelineEvent(params: {
   owner: string;
   date: string;
   category: 'Medical' | 'Breeding' | 'Ownership' | 'Sales' | 'Operations';
+  status?: string;
+  severity?: 'low' | 'medium' | 'high';
 }) {
   return {
     id: createId('event'),
@@ -768,6 +773,8 @@ function createTimelineEvent(params: {
     owner: params.owner.trim(),
     date: params.date,
     category: params.category,
+    status: params.status,
+    severity: params.severity,
   } as const;
 }
 
@@ -1293,7 +1300,7 @@ export const useXbarStore = create<XbarStore>()(
                 horses: get().horses,
                 existingDocuments: get().documents,
               });
-              const localFileUrl = uploadedAsset?.storagePath ? undefined : await readFileAsDataUrl(file);
+              const localFileUrl = undefined;
               return {
                 ...document,
                 batchId,
@@ -1350,7 +1357,7 @@ export const useXbarStore = create<XbarStore>()(
             );
             documents = documents.map((document) => createdDocumentMap.get(document.id) ?? document);
           }
-          const localDocumentCount = documents.filter((document) => document.fileUrl && !document.storagePath).length;
+          const localDocumentCount = documents.filter((document) => !document.storagePath).length;
           const createdHorses = createdHorseBundles.map((bundle) => bundle.horse);
           const createdOwnershipRecords = createdHorseBundles.map((bundle) => bundle.ownershipRecord);
 
@@ -1394,7 +1401,7 @@ export const useXbarStore = create<XbarStore>()(
 
           return {
             ok: true,
-            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the intake batch.` : ''}${localDocumentCount ? ` ${localDocumentCount} stored locally until cloud sync is available.` : ''}`,
+            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the intake batch.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only because cloud file storage is not available.` : ''}`,
             id: batch.id,
           };
         } catch (error) {
@@ -1517,7 +1524,7 @@ export const useXbarStore = create<XbarStore>()(
                 id: createId('media'),
                 label: file.name.replace(/\.[^.]+$/, ''),
                 kind: kind ?? guessGalleryKind(file.name),
-                url: uploadedAsset?.publicUrl ?? await readFileAsDataUrl(file),
+                url: uploadedAsset?.publicUrl ?? '',
                 storagePath: uploadedAsset?.storagePath,
                 status: 'Approved' as const,
               };
@@ -1567,7 +1574,7 @@ export const useXbarStore = create<XbarStore>()(
 
           return {
             ok: true,
-            message: `${assets.length} media asset${assets.length === 1 ? '' : 's'} uploaded.${localAssetCount ? ` ${localAssetCount} stored locally until cloud sync is available.` : ''}`,
+            message: `${assets.length} media asset${assets.length === 1 ? '' : 's'} uploaded.${localAssetCount ? ` ${localAssetCount} kept as metadata only because cloud media storage is not available.` : ''}`,
             id: horseId,
           };
         } catch (error) {
@@ -1610,7 +1617,7 @@ export const useXbarStore = create<XbarStore>()(
             }
           }
 
-          const localFileUrl = input.file && !uploadedAsset?.storagePath ? await readFileAsDataUrl(input.file) : undefined;
+          const localFileUrl = undefined;
           const receipt = createExpenseReceiptRecord(input, {
             fileUrl: localFileUrl,
             storagePath: uploadedAsset?.storagePath,
@@ -1650,7 +1657,7 @@ export const useXbarStore = create<XbarStore>()(
 
           return {
             ok: true,
-            message: `${receipt.category} receipt logged.${input.file && !uploadedAsset?.storagePath ? ' Receipt file is stored locally until cloud sync is available.' : ''}`,
+            message: `${receipt.category} receipt logged.${input.file && !uploadedAsset?.storagePath ? ' Receipt file metadata was saved, but the file itself requires cloud storage.' : ''}`,
             id: receipt.id,
           };
         } catch (error) {
@@ -1839,20 +1846,24 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: deniedMessage };
         }
 
-        if (!event.title.trim() || !event.body.trim() || !event.author.trim() || !event.date.trim()) {
-          return { ok: false, message: 'Medical events need a title, note, owner, and date.' };
+        if (!event.title.trim() || !event.body.trim() || !event.author.trim() || !event.date.trim() || !event.type.trim()) {
+          return { ok: false, message: 'Medical events need a type, title, note, owner, and date.' };
         }
 
         if (!get().horses.some((horse) => horse.id === horseId)) {
           return { ok: false, message: 'Horse record not found for this medical event.' };
         }
 
+        const reviewEventTypes: MedicalEventType[] = ['Vet visit', 'Injury', 'Treatment'];
+        const shouldOpenMedicalReview = reviewEventTypes.includes(event.type);
         const nextEvent = createTimelineEvent({
           title: event.title,
           summary: event.body,
           owner: event.author,
           date: event.date,
           category: 'Medical',
+          status: event.type,
+          severity: event.type === 'Injury' ? 'high' : event.type === 'Treatment' ? 'medium' : undefined,
         });
 
         set((state) => ({
@@ -1860,9 +1871,9 @@ export const useXbarStore = create<XbarStore>()(
             horse.id === horseId
               ? {
                   ...horse,
-                  ...(event.triggersReview ? { status: 'Medical Review' as const } : {}),
-                  lastVetVisit: event.date,
-                  medicalNotes: event.body,
+                  status: shouldOpenMedicalReview ? 'Medical Review' : horse.status,
+                  lastVetVisit: event.type === 'Vet visit' ? event.date : horse.lastVetVisit,
+                  medicalNotes: shouldOpenMedicalReview ? event.body : horse.medicalNotes,
                   medicalTimeline: [nextEvent, ...horse.medicalTimeline],
                   activity: [nextEvent, ...horse.activity],
                 }
@@ -2033,11 +2044,12 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Horse record not found for this ownership update.' };
         }
 
-        const currentTotal = targetHorse.ownership.reduce((sum, s) => sum + s.share, 0);
-        if (currentTotal + stake.share > 100) {
+        const horse = get().horses.find((item) => item.id === horseId);
+        const currentShareTotal = horse?.ownership.reduce((total, item) => total + item.share, 0) ?? 0;
+        if (currentShareTotal + stake.share > 100) {
           return {
             ok: false,
-            message: `Total ownership would reach ${currentTotal + stake.share}%. Adjust existing stakes so the total stays at or below 100%.`,
+            message: `Ownership split cannot exceed 100%. Current split is ${currentShareTotal}%.`,
           };
         }
 

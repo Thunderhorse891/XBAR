@@ -12,9 +12,18 @@ export default defineConfig({
     video: 'retain-on-failure',
   },
   webServer: {
-    command: 'node ./node_modules/vite/bin/vite.js --mode e2e --host 127.0.0.1 --port 4174',
-    url: 'http://127.0.0.1:4174/setup',
+    command: 'node ./node_modules/vite/bin/vite.js --mode e2e --host 0.0.0.0 --port 4174',
+    url: 'http://127.0.0.1:4174',
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    timeout: 240_000,
+    env: {
+      VITE_SUPABASE_URL: '',
+      VITE_SUPABASE_ANON_KEY: '',
+      VITE_ALLOW_LOCAL_MODE: 'true',
+      VITE_RUNTIME_MONITORING_ENABLED: 'false',
+      VITE_ROUTER_MODE: 'browser',
+      VITE_SUPABASE_RELATIONAL_SYNC: 'false',
+      VITE_SUPABASE_SNAPSHOT_FALLBACK: 'false',
+    },
   },
 });

@@ -6,14 +6,8 @@ import { SalePacketSlots } from '@/components/SalePacketSlots';
 import { KeyValue, MetricCard, Panel, Pill } from '@/components/app-ui';
 import { buildPublicShareUrl, openFacebookShareDialog } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
-import {
-  loadPublicBuyerProfile,
-  sanitizeDocumentForBuyerView,
-  sanitizeHorseForBuyerView,
-  sanitizeSharedListingForBuyerView,
-  trackPublicBuyerProfileView,
-  type PublicBuyerProfilePayload,
-} from '@/lib/publicShare';
+import { isPublicShareLocalPreviewEnabled } from '@/lib/platformConfig';
+import { loadPublicBuyerProfile, sanitizeDocumentForBuyerView, sanitizeHorseForBuyerView, sanitizeSharedListingForBuyerView, trackPublicBuyerProfileView, type PublicBuyerProfilePayload } from '@/lib/publicShare';
 import { hasBuyerShareAccess } from '@/lib/workspaceAccess';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
@@ -27,19 +21,20 @@ export default function BuyerProfile() {
   const localDocuments = useXbarStore((state) => state.documents.filter((document) => document.horseId === id));
   const localSharedListing = useXbarStore((state) => state.sharedListings.find((listing) => listing.horseId === id && listing.state !== 'Archived'));
   const shareToken = searchParams.get('t')?.trim() ?? '';
+  const localPreviewAllowed = isPublicShareLocalPreviewEnabled() && searchParams.get('preview') === 'local';
   const localAccessAllowed = hasBuyerShareAccess(localSharedListing, shareToken);
 
   // Sanitized local preview payload — only buyer-safe fields, never raw internal records.
   const localPayload = useMemo(
     () =>
-      localHorse && localAccessAllowed
+      localPreviewAllowed && localHorse && localAccessAllowed
         ? {
             horse: sanitizeHorseForBuyerView(localHorse),
             documents: localDocuments.map(sanitizeDocumentForBuyerView),
             sharedListing: localSharedListing ? sanitizeSharedListingForBuyerView(localSharedListing) : undefined,
           }
         : undefined,
-    [localAccessAllowed, localDocuments, localHorse, localSharedListing],
+    [localAccessAllowed, localDocuments, localHorse, localPreviewAllowed, localSharedListing],
   );
 
   const [remoteState, setRemoteState] = useState<{
@@ -116,12 +111,12 @@ export default function BuyerProfile() {
   if (!horse) {
     const title = remoteState.status === 'loading'
       ? 'Loading buyer room'
-      : localHorse && localSharedListing
+      : localPreviewAllowed && localHorse && localSharedListing
         ? 'Share link locked'
         : 'Buyer profile unavailable';
     const description = remoteState.status === 'loading'
       ? 'Loading listing and packet data.'
-      : localHorse && localSharedListing && !localAccessAllowed
+      : localPreviewAllowed && localHorse && localSharedListing && !localAccessAllowed
         ? 'This buyer room requires a valid access link from the workspace.'
         : remoteState.message ?? 'Record not found in this workspace.';
 
@@ -129,7 +124,7 @@ export default function BuyerProfile() {
       <main className="buyer-shell">
         <div className="buyer-shell__inner">
           <Panel title={title} description={description}>
-            {localHorse ? (
+            {localPreviewAllowed && localHorse ? (
               <Link className="button button--ghost" to="/horses">
                 Back to horses
               </Link>
@@ -142,7 +137,7 @@ export default function BuyerProfile() {
 
   // Build packet completeness from the sanitized horse shape.
   // Cast to satisfy the helper signature — only uses the fields present in PublicHorseDTO.
-  const packet = buildHorsePacketCompleteness(horse as Parameters<typeof buildHorsePacketCompleteness>[0], documents as Parameters<typeof buildHorsePacketCompleteness>[1], undefined);
+  const packet = buildHorsePacketCompleteness(horse as unknown as Parameters<typeof buildHorsePacketCompleteness>[0], documents as Parameters<typeof buildHorsePacketCompleteness>[1], undefined);
   const publicShareToken = sharedListing?.accessMode === 'Private Token' ? sharedListing.shareToken : undefined;
   const publicShareUrl = buildPublicShareUrl(packet.sharePath, publicShareToken);
   const visibleDocuments = documents
@@ -158,7 +153,7 @@ export default function BuyerProfile() {
   return (
     <main className="buyer-shell">
       <div className="buyer-shell__inner">
-        {localHorse ? (
+        {localPreviewAllowed && localHorse ? (
           <Link className="inline-link" to={`/horses/${horse.id}`}>
             Back to horse workspace
           </Link>

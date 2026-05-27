@@ -1,106 +1,62 @@
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
-import type { DocumentRecord, GalleryAsset, HorseRecord, SharedListingRecord } from '@/types/xbar';
+import type { DocumentRecord, HorseRecord, OwnershipRecord, SharedListingRecord } from '@/types/xbar';
 
-// Buyer-safe subsets — only these fields leave the private workspace.
-export type PublicHorseDTO = {
-  id: string;
-  name: string;
-  barnName: string;
-  breed: string;
-  registry: string;
-  aqhaNumber: string;
-  registrationNumber: string;
-  registered: boolean;
-  age: number;
-  foaledOn: string;
-  sex: string;
-  color: string;
-  markings: string;
-  profileImage: string;
-  bloodline: { sire: string; dam: string; family: string };
-  gallery: Pick<GalleryAsset, 'id' | 'url' | 'kind' | 'label' | 'status'>[];
-  sale: { listingState: string; askPrice: number };
-  readiness: { packetStatus: string };
-};
+// insuredValue, summary, segment, status, ownership, medicalNotes, and full alerts are
+// intentionally omitted — they are internal fields that must not reach the public buyer view.
+export type PublicHorseDTO = Pick<
+  HorseRecord,
+  | 'id'
+  | 'name'
+  | 'barnName'
+  | 'breed'
+  | 'registry'
+  | 'aqhaNumber'
+  | 'registrationNumber'
+  | 'registered'
+  | 'age'
+  | 'foaledOn'
+  | 'sex'
+  | 'color'
+  | 'markings'
+  | 'profileImage'
+  | 'bloodline'
+  | 'gallery'
+  | 'sale'
+  | 'readiness'
+>;
 
-export type PublicDocumentDTO = {
-  id: string;
-  title: string;
-  type: string;
-  summary: string;
-};
+export type PublicDocumentDTO = Pick<
+  DocumentRecord,
+  | 'id'
+  | 'title'
+  | 'type'
+  | 'horseId'
+  | 'uploadedAt'
+  | 'source'
+  | 'state'
+  | 'confidence'
+  | 'duplicateRisk'
+  | 'extractedTextPreview'
+  | 'summary'
+  | 'entities'
+  | 'fileName'
+  | 'mimeType'
+  | 'fileSizeBytes'
+>;
 
-export type PublicSharedListingDTO = {
-  id: string;
-  horseId: string;
-  sharePath: string;
-  accessMode: string;
-  shareToken: string;
-  state: string;
-  channels: string[];
+export type PublicOwnershipDTO = Pick<OwnershipRecord, 'id' | 'horseId' | 'transferStatus' | 'confidence'>;
+
+export type PublicSharedListingDTO = Pick<SharedListingRecord, 'id' | 'horseId' | 'sharePath' | 'accessMode' | 'state' | 'channels' | 'updatedAt'> & {
+  shareToken?: string;
 };
 
 export type PublicBuyerProfilePayload = {
   horse: PublicHorseDTO;
   documents: PublicDocumentDTO[];
+  ownershipRecord?: PublicOwnershipDTO;
   sharedListing?: PublicSharedListingDTO;
 };
-
-function sanitizeHorse(horse: HorseRecord): PublicHorseDTO {
-  return {
-    id: horse.id,
-    name: horse.name,
-    barnName: horse.barnName,
-    breed: horse.breed,
-    registry: horse.registry,
-    aqhaNumber: horse.aqhaNumber,
-    registrationNumber: horse.registrationNumber,
-    registered: horse.registered,
-    age: horse.age,
-    foaledOn: horse.foaledOn,
-    sex: horse.sex,
-    color: horse.color,
-    markings: horse.markings,
-    profileImage: horse.profileImage,
-    bloodline: {
-      sire: horse.bloodline.sire,
-      dam: horse.bloodline.dam,
-      family: horse.bloodline.family,
-    },
-    gallery: horse.gallery
-      .filter((a) => a.status === 'Approved')
-      .map(({ id, url, kind, label, status }) => ({ id, url, kind, label, status })),
-    sale: {
-      listingState: horse.sale.listingState,
-      askPrice: horse.sale.askPrice,
-    },
-    readiness: {
-      packetStatus: horse.readiness.packetStatus,
-    },
-  };
-}
-
-function sanitizeDocument(doc: DocumentRecord): PublicDocumentDTO {
-  return {
-    id: doc.id,
-    title: doc.title,
-    type: doc.type,
-    summary: doc.summary,
-  };
-}
-
-function sanitizeSharedListing(listing: SharedListingRecord): PublicSharedListingDTO {
-  return {
-    id: listing.id,
-    horseId: listing.horseId,
-    sharePath: listing.sharePath,
-    accessMode: listing.accessMode,
-    shareToken: listing.shareToken,
-    state: listing.state,
-    channels: listing.channels,
-  };
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -119,26 +75,138 @@ function parsePublicBuyerProfilePayload(value: unknown): PublicBuyerProfilePaylo
   // Sanitize RPC response — treat incoming data as untrusted HorseRecord shape
   // and strip any sensitive fields before use.
   return {
-    horse: sanitizeHorse(horse as unknown as HorseRecord),
-    documents: Array.isArray(value.documents)
-      ? (value.documents as DocumentRecord[]).map(sanitizeDocument)
-      : [],
-    sharedListing: isRecord(value.sharedListing)
-      ? sanitizeSharedListing(value.sharedListing as unknown as SharedListingRecord)
-      : undefined,
+    horse: sanitizePublicHorse(horse as unknown as HorseRecord),
+    documents: Array.isArray(value.documents) ? value.documents.map(sanitizePublicDocument).filter((document): document is PublicDocumentDTO => Boolean(document)) : [],
+    ownershipRecord: sanitizePublicOwnership(value.ownershipRecord),
+    sharedListing: sanitizePublicSharedListing(value.sharedListing),
+  };
+}
+
+function sanitizePublicHorse(horse: HorseRecord): PublicHorseDTO {
+  return {
+    id: horse.id,
+    name: horse.name,
+    barnName: horse.barnName,
+    breed: horse.breed,
+    registry: horse.registry,
+    aqhaNumber: horse.aqhaNumber,
+    registrationNumber: horse.registrationNumber,
+    registered: horse.registered,
+    age: horse.age,
+    foaledOn: horse.foaledOn,
+    sex: horse.sex,
+    color: horse.color,
+    markings: horse.markings,
+    profileImage: horse.profileImage,
+    bloodline: horse.bloodline,
+    gallery: horse.gallery.filter((asset) => asset.status === 'Approved'),
+    // Only expose the listing state and asking price — not internal confidence or inquiry counts.
+    sale: {
+      listingState: horse.sale.listingState,
+      askPrice: horse.sale.askPrice,
+      buyerConfidence: 0,
+      inquiryCount: 0,
+      watchlistCount: 0,
+      socialReady: horse.sale.socialReady,
+    },
+    readiness: {
+      ...horse.readiness,
+      blockers: [],
+    },
+  };
+}
+
+function sanitizePublicDocument(value: unknown): PublicDocumentDTO | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const document = value as unknown as DocumentRecord;
+  return {
+    id: document.id,
+    title: document.title,
+    type: document.type,
+    horseId: document.horseId,
+    uploadedAt: document.uploadedAt,
+    source: document.source,
+    state: document.state,
+    confidence: document.confidence,
+    duplicateRisk: document.duplicateRisk,
+    extractedTextPreview: '',
+    summary: document.summary,
+    entities: document.entities ?? {},
+    fileName: document.fileName,
+    mimeType: document.mimeType,
+    fileSizeBytes: document.fileSizeBytes,
+  };
+}
+
+function sanitizePublicOwnership(value: unknown): PublicOwnershipDTO | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const record = value as unknown as OwnershipRecord;
+  return {
+    id: record.id,
+    horseId: record.horseId,
+    transferStatus: record.transferStatus,
+    confidence: record.confidence,
+  };
+}
+
+function sanitizePublicSharedListing(value: unknown): PublicSharedListingDTO | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const listing = value as unknown as SharedListingRecord;
+  return {
+    id: listing.id,
+    horseId: listing.horseId,
+    sharePath: listing.sharePath,
+    accessMode: listing.accessMode,
+    state: listing.state,
+    channels: listing.channels,
+    updatedAt: listing.updatedAt,
+    shareToken: listing.accessMode === 'Private Token' ? listing.shareToken : undefined,
   };
 }
 
 export function sanitizeHorseForBuyerView(horse: HorseRecord): PublicHorseDTO {
-  return sanitizeHorse(horse);
+  return sanitizePublicHorse(horse);
 }
 
 export function sanitizeDocumentForBuyerView(doc: DocumentRecord): PublicDocumentDTO {
-  return sanitizeDocument(doc);
+  return sanitizePublicDocument(doc) ?? {
+    id: doc.id,
+    title: doc.title,
+    type: doc.type,
+    horseId: doc.horseId,
+    uploadedAt: doc.uploadedAt,
+    source: doc.source,
+    state: doc.state,
+    confidence: doc.confidence,
+    duplicateRisk: doc.duplicateRisk,
+    extractedTextPreview: '',
+    summary: doc.summary,
+    entities: doc.entities ?? {},
+    fileName: doc.fileName,
+    mimeType: doc.mimeType,
+    fileSizeBytes: doc.fileSizeBytes,
+  };
 }
 
 export function sanitizeSharedListingForBuyerView(listing: SharedListingRecord): PublicSharedListingDTO {
-  return sanitizeSharedListing(listing);
+  return sanitizePublicSharedListing(listing) ?? {
+    id: listing.id,
+    horseId: listing.horseId,
+    sharePath: listing.sharePath,
+    accessMode: listing.accessMode,
+    state: listing.state,
+    channels: listing.channels,
+    updatedAt: listing.updatedAt,
+  };
 }
 
 type PublicBuyerProfileResult =
