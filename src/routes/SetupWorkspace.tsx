@@ -54,7 +54,7 @@ export default function SetupWorkspace() {
 
   const accessLabel = useMemo(() => {
     if (!supabaseReady) {
-      return 'Browser preview';
+      return 'Browser entry';
     }
     return status === 'signed-in' ? 'Cloud ready' : 'Sign-in pending';
   }, [status, supabaseReady]);
@@ -100,8 +100,8 @@ export default function SetupWorkspace() {
     });
 
     pushToast({
-      title: result.ok ? 'Workspace ready' : 'Setup blocked',
-      message: result.ok ? 'Opening your workspace.' : result.message,
+      title: result.ok ? 'XBAR is ready' : 'Setup blocked',
+      message: result.ok ? 'Opening the command center.' : result.message,
       tone: result.ok ? 'success' : 'error',
     });
 
@@ -164,8 +164,8 @@ export default function SetupWorkspace() {
         <section className="premium-setup-card">
           <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
             <div className="rounded-[24px] border border-white/10 bg-black/20 p-5">
-              <div className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-sky-200/80">What unlocks next</div>
-              <div className="mt-3 text-2xl font-black tracking-[-0.06em] text-white">Operational clarity in one pass.</div>
+              <div className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-sky-200/80">What opens next</div>
+              <div className="mt-3 text-2xl font-black tracking-[-0.06em] text-white">Every horse. Every document. Every transfer.</div>
               <div className="mt-6 grid gap-3">
                 {workspacePreviews.map((item) => (
                   <div key={item.label} className="rounded-[16px] border border-white/10 bg-white/[0.035] px-4 py-3">
@@ -176,7 +176,7 @@ export default function SetupWorkspace() {
               </div>
               {canQuickStart ? (
                 <button className="premium-auth-button premium-auth-button--primary mt-6" type="button" onClick={handleQuickStart}>
-                  Quick start preview
+                  Enter XBAR
                 </button>
               ) : null}
             </div>
@@ -192,76 +192,35 @@ export default function SetupWorkspace() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="field-stack">
                   <span className="field-label text-slate-300">Business name</span>
-                  <input
-                    className="field-input premium-auth-input"
-                    value={form.businessName}
-                    onChange={(event) => setForm((current) => ({ ...current, businessName: event.target.value }))}
-                    placeholder="XBAR LLC"
-                  />
+                  <input className="field-input premium-auth-input" value={form.businessName} onChange={(event) => setForm((current) => ({ ...current, businessName: event.target.value }))} placeholder="XBAR LLC" />
                 </label>
                 <label className="field-stack">
                   <span className="field-label text-slate-300">Ranch name</span>
-                  <input
-                    className="field-input premium-auth-input"
-                    value={form.ranchName}
-                    onChange={(event) => setForm((current) => ({ ...current, ranchName: event.target.value }))}
-                    placeholder="Primary Ranch"
-                  />
+                  <input className="field-input premium-auth-input" value={form.ranchName} onChange={(event) => setForm((current) => ({ ...current, ranchName: event.target.value }))} placeholder="Primary Ranch" />
                 </label>
                 <label className="field-stack">
                   <span className="field-label text-slate-300">Ranch manager</span>
-                  <input
-                    className="field-input premium-auth-input"
-                    value={form.ranchManagerName}
-                    onChange={(event) => setForm((current) => ({ ...current, ranchManagerName: event.target.value }))}
-                    placeholder="Ranch manager"
-                  />
+                  <input className="field-input premium-auth-input" value={form.ranchManagerName} onChange={(event) => setForm((current) => ({ ...current, ranchManagerName: event.target.value }))} placeholder="Ranch manager" />
                 </label>
                 <label className="field-stack">
                   <span className="field-label text-slate-300">Ops email</span>
-                  <input
-                    className="field-input premium-auth-input"
-                    type="email"
-                    value={form.operationsEmail}
-                    onChange={(event) => setForm((current) => ({ ...current, operationsEmail: event.target.value }))}
-                    placeholder="ops@xbar.com"
-                  />
+                  <input className="field-input premium-auth-input" type="email" value={form.operationsEmail} onChange={(event) => setForm((current) => ({ ...current, operationsEmail: event.target.value }))} placeholder="ops@xbar.com" />
                 </label>
                 <label className="field-stack">
                   <span className="field-label text-slate-300">Default owner</span>
-                  <input
-                    className="field-input premium-auth-input"
-                    value={form.defaultOwnerName}
-                    onChange={(event) => setForm((current) => ({ ...current, defaultOwnerName: event.target.value }))}
-                    placeholder="Legal owner"
-                  />
+                  <input className="field-input premium-auth-input" value={form.defaultOwnerName} onChange={(event) => setForm((current) => ({ ...current, defaultOwnerName: event.target.value }))} placeholder="Legal owner" />
                 </label>
                 <label className="field-stack">
                   <span className="field-label text-slate-300">Owner entity</span>
-                  <input
-                    className="field-input premium-auth-input"
-                    value={form.defaultOwnerEntity}
-                    onChange={(event) => setForm((current) => ({ ...current, defaultOwnerEntity: event.target.value }))}
-                    placeholder="Owner entity"
-                  />
+                  <input className="field-input premium-auth-input" value={form.defaultOwnerEntity} onChange={(event) => setForm((current) => ({ ...current, defaultOwnerEntity: event.target.value }))} placeholder="Owner entity" />
                 </label>
                 <label className="field-stack">
                   <span className="field-label text-slate-300">Default barn</span>
-                  <input
-                    className="field-input premium-auth-input"
-                    value={form.defaultBarn}
-                    onChange={(event) => setForm((current) => ({ ...current, defaultBarn: event.target.value }))}
-                    placeholder="Barn A"
-                  />
+                  <input className="field-input premium-auth-input" value={form.defaultBarn} onChange={(event) => setForm((current) => ({ ...current, defaultBarn: event.target.value }))} placeholder="Barn A" />
                 </label>
                 <label className="field-stack">
                   <span className="field-label text-slate-300">Default pasture</span>
-                  <input
-                    className="field-input premium-auth-input"
-                    value={form.defaultPasture}
-                    onChange={(event) => setForm((current) => ({ ...current, defaultPasture: event.target.value }))}
-                    placeholder="Pasture 1"
-                  />
+                  <input className="field-input premium-auth-input" value={form.defaultPasture} onChange={(event) => setForm((current) => ({ ...current, defaultPasture: event.target.value }))} placeholder="Pasture 1" />
                 </label>
               </div>
 
@@ -273,7 +232,7 @@ export default function SetupWorkspace() {
                 </button>
                 {canQuickStart ? (
                   <button className="premium-auth-button premium-auth-button--ghost" type="button" onClick={handleQuickStart}>
-                    Use clean preview defaults
+                    Use starter ranch details
                   </button>
                 ) : null}
               </div>
