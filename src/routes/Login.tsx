@@ -7,7 +7,26 @@ import { useUiStore } from '@/store/useUiStore';
 import './authExperience.css';
 
 type AuthMode = 'signin' | 'signup';
-type BusyState = 'password' | 'magic' | 'facebook' | 'reset' | '';
+type BusyState = 'password' | 'magic' | 'facebook' | 'google' | 'apple' | 'reset' | '';
+
+function GoogleIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path d="M19.6 10.227c0-.709-.064-1.39-.182-2.045H10v3.868h5.382a4.6 4.6 0 01-1.996 3.018v2.51h3.232c1.891-1.742 2.982-4.305 2.982-7.35z" fill="#4285F4" />
+      <path d="M10 20c2.7 0 4.964-.895 6.618-2.423l-3.232-2.509c-.895.6-2.04.955-3.386.955-2.605 0-4.81-1.759-5.595-4.123H1.064v2.59A9.996 9.996 0 0010 20z" fill="#34A853" />
+      <path d="M4.405 11.9A6.01 6.01 0 014.09 10c0-.663.114-1.305.314-1.9V5.51H1.064A9.996 9.996 0 000 10c0 1.614.386 3.14 1.064 4.49L4.405 11.9z" fill="#FBBC05" />
+      <path d="M10 3.977c1.468 0 2.786.505 3.823 1.496l2.868-2.868C14.959.99 12.695 0 10 0A9.996 9.996 0 001.064 5.51l3.34 2.59C5.192 5.736 7.396 3.977 10 3.977z" fill="#EA4335" />
+    </svg>
+  );
+}
+
+function AppleIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path d="M14.52 0c.077.975-.283 1.942-.847 2.663-.565.737-1.46 1.303-2.37 1.236-.096-.916.32-1.874.848-2.502C12.72.686 13.669.12 14.52 0zM17.84 13.3c-.404.916-.598 1.325-1.12 2.133-.727 1.107-1.751 2.487-3.02 2.5-.978.012-1.302-.637-2.712-.628-1.41.008-1.76.644-2.74.632-1.27-.013-2.243-1.258-2.97-2.365-2.032-3.097-2.246-6.73-.993-8.667.893-1.38 2.302-2.188 3.631-2.188 1.35 0 2.2.64 3.32.64 1.087 0 1.75-.643 3.318-.643 1.188 0 2.45.648 3.34 1.769-2.934 1.61-2.459 5.81.946 6.817z" />
+    </svg>
+  );
+}
 
 const loginReferenceStyles = `
 .xbar-login-shell--command{min-height:100vh;padding:clamp(18px,2.2vw,30px);background:radial-gradient(circle at 22% 18%,rgba(34,134,255,.28),transparent 25rem),radial-gradient(circle at 42% 70%,rgba(235,179,91,.12),transparent 24rem),linear-gradient(115deg,#020408 0%,#09111b 46%,#020305 100%)}
@@ -51,11 +70,11 @@ export default function Login() {
   const pushToast = useUiStore((state) => state.pushToast);
   const status = useCloudStore((state) => state.status);
   const session = useCloudStore((state) => state.session);
-  const sendMagicLink = useCloudStore((state) => state.sendMagicLink);
   const signInWithPassword = useCloudStore((state) => state.signInWithPassword);
   const signUpWithPassword = useCloudStore((state) => state.signUpWithPassword);
   const sendPasswordReset = useCloudStore((state) => state.sendPasswordReset);
-  const signInWithFacebook = useCloudStore((state) => state.signInWithFacebook);
+  const signInWithGoogle = useCloudStore((state) => state.signInWithGoogle);
+  const signInWithApple = useCloudStore((state) => state.signInWithApple);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -90,9 +109,9 @@ export default function Login() {
     pushToast({ title: result.ok ? (authMode === 'signin' ? 'Signed in' : 'Account created') : authMode === 'signin' ? 'Sign-in blocked' : 'Signup blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
     setBusy('');
   };
-  const handleMagicLink = async () => { setBusy('magic'); const result = await sendMagicLink(email); pushToast({ title: result.ok ? 'Secure link sent' : 'Secure link blocked', message: result.message, tone: result.ok ? 'success' : 'error' }); setBusy(''); };
   const handlePasswordReset = async () => { setBusy('reset'); const result = await sendPasswordReset(email); pushToast({ title: result.ok ? 'Reset email sent' : 'Reset blocked', message: result.message, tone: result.ok ? 'success' : 'error' }); setBusy(''); };
-  const handleFacebook = async () => { setBusy('facebook'); const result = await signInWithFacebook(); pushToast({ title: result.ok ? 'Facebook sign-in started' : 'Facebook sign-in failed', message: result.message, tone: result.ok ? 'success' : 'error' }); setBusy(''); };
+  const handleGoogle = async () => { setBusy('google'); const result = await signInWithGoogle(); pushToast({ title: result.ok ? 'Google sign-in started' : 'Google sign-in failed', message: result.message, tone: result.ok ? 'success' : 'error' }); setBusy(''); };
+  const handleApple = async () => { setBusy('apple'); const result = await signInWithApple(); pushToast({ title: result.ok ? 'Apple sign-in started' : 'Apple sign-in failed', message: result.message, tone: result.ok ? 'success' : 'error' }); setBusy(''); };
 
   return (
     <main ref={shellRef} className="xbar-login-shell xbar-login-shell--command" onPointerMove={handlePointerMove}>
@@ -104,7 +123,7 @@ export default function Login() {
           <div className="xbar-login-built-for"><FeatureIcon icon="shield" /><span>Built for ranches, breeders, and serious horse owners.</span></div>
         </section>
         <section className="xbar-login-auth-panel" aria-label="XBAR access"><div className="xbar-login-card"><div className="xbar-login-card-copy"><span className="xbar-login-welcome">Welcome Back</span><h2>{authMode === 'signin' ? 'Sign in to your account' : 'Create your XBAR account'}</h2><p>Access your ranch. Your horses. Your records.</p></div>
-          {supabaseReady ? <form className="xbar-login-form" onSubmit={handlePasswordAuth}><label className="xbar-login-field"><span>Email</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" autoComplete="email" /></label><label className="xbar-login-field"><span>Password</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="**********" autoComplete={authMode === 'signin' ? 'current-password' : 'new-password'} /></label><div className="xbar-login-options-row"><label className="xbar-login-remember"><input type="checkbox" /><span>Remember me</span></label>{authMode === 'signin' ? <button type="button" onClick={handlePasswordReset} disabled={busy !== '' || !email.trim()}>{busy === 'reset' ? 'Sending...' : 'Forgot password?'}</button> : null}</div><button className="xbar-login-primary" type="submit" disabled={busy !== '' || !email.trim() || !password}>{busy === 'password' ? 'Checking access...' : passwordActionLabel}</button><button className="xbar-login-enter" type="button" onClick={enterXbar}>Enter XBAR</button><div className="xbar-login-divider"><span>OR</span></div><button className="xbar-login-facebook" type="button" onClick={handleMagicLink} disabled={busy !== '' || !email.trim()}>{busy === 'magic' ? 'Sending secure link...' : 'Email secure link'}</button><button className="xbar-login-facebook" type="button" onClick={handleFacebook} disabled={busy !== ''}>{busy === 'facebook' ? 'Connecting...' : 'Continue with Facebook'}</button><div className="xbar-login-mode-switch"><span>{authMode === 'signin' ? "Don't have an account?" : 'Already have an account?'}</span><button type="button" onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}>{authMode === 'signin' ? 'Create one' : 'Sign in'}</button></div></form> : <div className="xbar-login-local-mode"><div className="xbar-login-auth-note xbar-login-auth-note--blocked">This deployment is not connected to cloud sign-in yet. You can still enter XBAR and review the command center.</div><button className="xbar-login-enter" type="button" onClick={enterXbar}>Enter XBAR</button>{allowLocalMode ? <button className="xbar-login-facebook" type="button" onClick={() => navigate('/setup', { replace: true })}>Set up this ranch</button> : null}</div>}
+          {supabaseReady ? <form className="xbar-login-form" onSubmit={handlePasswordAuth}><label className="xbar-login-field"><span>Email</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" autoComplete="email" /></label><label className="xbar-login-field"><span>Password</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="**********" autoComplete={authMode === 'signin' ? 'current-password' : 'new-password'} /></label><div className="xbar-login-options-row"><label className="xbar-login-remember"><input type="checkbox" /><span>Remember me</span></label>{authMode === 'signin' ? <button type="button" onClick={handlePasswordReset} disabled={busy !== '' || !email.trim()}>{busy === 'reset' ? 'Sending...' : 'Forgot password?'}</button> : null}</div><button className="xbar-login-primary" type="submit" disabled={busy !== '' || !email.trim() || !password}>{busy === 'password' ? 'Checking access...' : passwordActionLabel}</button><div className="xbar-login-divider"><span>OR</span></div><button className="xbar-login-facebook" type="button" onClick={handleGoogle} disabled={busy !== ''} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}><GoogleIcon />{busy === 'google' ? 'Connecting...' : 'Continue with Google'}</button><button className="xbar-login-facebook" type="button" onClick={handleApple} disabled={busy !== ''} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', color: '#fff' }}><AppleIcon />{busy === 'apple' ? 'Connecting...' : 'Continue with Apple'}</button><div className="xbar-login-mode-switch"><span>{authMode === 'signin' ? "Don't have an account?" : 'Already have an account?'}</span><button type="button" onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}>{authMode === 'signin' ? 'Create one' : 'Sign in'}</button></div></form> : <div className="xbar-login-local-mode"><div className="xbar-login-auth-note xbar-login-auth-note--blocked">This deployment is not connected to cloud sign-in yet. You can still enter XBAR and review the command center.</div><button className="xbar-login-enter" type="button" onClick={enterXbar}>Enter XBAR</button>{allowLocalMode ? <button className="xbar-login-facebook" type="button" onClick={() => navigate('/setup', { replace: true })}>Set up this ranch</button> : null}</div>}
         </div></section>
       </div>
     </main>

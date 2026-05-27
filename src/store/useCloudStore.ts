@@ -22,14 +22,18 @@ type CloudStore = {
   lastSyncAt: string;
   syncState: CloudSyncState;
   syncMessage: string;
+  autosaveReady: boolean;
   initialize: () => Promise<(() => void) | void>;
   setLastSyncAt: (value: string) => void;
   setSyncState: (state: CloudSyncState, message?: string) => void;
-  sendMagicLink: (email: string) => Promise<CloudActionResult>;
+  setAutosaveReady: (ready: boolean) => void;
   signInWithPassword: (email: string, password: string) => Promise<CloudActionResult>;
+  sendMagicLink: (email: string) => Promise<CloudActionResult>;
   signUpWithPassword: (email: string, password: string) => Promise<CloudActionResult>;
   sendPasswordReset: (email: string) => Promise<CloudActionResult>;
   signInWithFacebook: () => Promise<CloudActionResult>;
+  signInWithGoogle: () => Promise<CloudActionResult>;
+  signInWithApple: () => Promise<CloudActionResult>;
   signOut: () => Promise<CloudActionResult>;
 };
 
@@ -42,6 +46,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
   lastSyncAt: '',
   syncState: 'idle',
   syncMessage: '',
+  autosaveReady: !isSupabaseConfigured(),
   initialize: async () => {
     if (get().initialized) {
       return;
@@ -90,6 +95,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
   },
   setLastSyncAt: (value) => set({ lastSyncAt: value }),
   setSyncState: (state, message = '') => set({ syncState: state, syncMessage: message }),
+  setAutosaveReady: (ready) => set({ autosaveReady: ready }),
   sendMagicLink: async (email) => {
     const client = getSupabaseClient();
     if (!client) {
@@ -211,6 +217,42 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
 
     return { ok: true, message: 'Facebook sign-in started.' };
   },
+  signInWithGoogle: async () => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+
+    const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    const { error } = await client.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo },
+    });
+
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    return { ok: true, message: 'Google sign-in started.' };
+  },
+  signInWithApple: async () => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+
+    const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    const { error } = await client.auth.signInWithOAuth({
+      provider: 'apple',
+      options: { redirectTo },
+    });
+
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    return { ok: true, message: 'Apple sign-in started.' };
+  },
   signOut: async () => {
     const client = getSupabaseClient();
     if (!client) {
@@ -222,7 +264,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: error.message };
     }
 
-    set({ session: null, status: 'signed-out', workspaceId: '', workspaceRole: 'Owner', syncState: 'idle', syncMessage: '' });
+    set({ session: null, status: 'signed-out', workspaceId: '', workspaceRole: 'Owner', syncState: 'idle', syncMessage: '', autosaveReady: false });
     return { ok: true, message: 'Signed out of cloud sync.' };
   },
 }));

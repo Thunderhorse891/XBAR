@@ -83,8 +83,10 @@ export function CloudBootstrap() {
   const session = useCloudStore((state) => state.session);
   const workspaceId = useCloudStore((state) => state.workspaceId);
   const workspaceRole = useCloudStore((state) => state.workspaceRole);
+  const autosaveReady = useCloudStore((state) => state.autosaveReady);
   const setLastSyncAt = useCloudStore((state) => state.setLastSyncAt);
   const setSyncState = useCloudStore((state) => state.setSyncState);
+  const setAutosaveReady = useCloudStore((state) => state.setAutosaveReady);
   const setCurrentRole = useXbarStore((state) => state.setCurrentRole);
   const importWorkspaceBackup = useXbarStore((state) => state.importWorkspaceBackup);
   const exportWorkspaceBackup = useXbarStore((state) => state.exportWorkspaceBackup);
@@ -108,6 +110,8 @@ export function CloudBootstrap() {
     setCurrentRole(workspaceRole);
   }, [setCurrentRole, workspaceRole]);
 
+  // On sign-in: pull cloud data first, import it, then unlock autosave.
+  // This prevents stale/empty local state from overwriting good cloud data.
   useEffect(() => {
     if (cloudStatus !== 'signed-in' || !session?.user.id) {
       hydrationKeyRef.current = '';
@@ -213,6 +217,33 @@ export function CloudBootstrap() {
 
   useEffect(() => {
     if (cloudStatus !== 'signed-in') {
+      return;
+    }
+
+    let disposed = false;
+
+    void loadWorkspaceBackupFromCloud().then((result) => {
+      if (disposed) {
+        return;
+      }
+
+      if (result.ok) {
+        importWorkspaceBackup(result.backup);
+      }
+
+      // Unlock autosave regardless — if no cloud backup exists yet, that is fine.
+      setAutosaveReady(true);
+    });
+
+    return () => {
+      disposed = true;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cloudStatus]);
+
+  // Autosave — only runs after cloud pull has completed (autosaveReady === true).
+  useEffect(() => {
+    if (cloudStatus !== 'signed-in' || !autosaveReady) {
       setSyncState('idle');
       return;
     }

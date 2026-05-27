@@ -14,7 +14,7 @@ import './ownershipExperience.css';
 const ownershipHeroVideoSrc = `${import.meta.env.BASE_URL}brand/xbar-documents-hero.mp4`;
 const ownershipFallbackMarkSrc = `${import.meta.env.BASE_URL}brand/xbar-app-icon.svg`;
 
-const ownershipRoles: OwnershipStake['role'][] = ['Co-Owner', 'Managing Partner', 'Prospective Buyer'];
+const ownershipRoles: OwnershipStake['role'][] = ['Legal Owner', 'Co-Owner', 'Managing Partner', 'Prospective Buyer'];
 const transferStatuses: TransferStatus[] = ['Clear', 'Pending Signatures', 'AQHA Review', 'Attention Required'];
 const ownershipDocumentTypes: DocumentType[] = ['Bill of Sale', 'Registration', 'Transfer Packet', 'Ownership Memo'];
 
@@ -89,6 +89,8 @@ export default function Ownership() {
   const updateOwnershipRecord = useXbarStore((state) => state.updateOwnershipRecord);
   const addOwnershipAuditEntry = useXbarStore((state) => state.addOwnershipAuditEntry);
   const addOwnershipStake = useXbarStore((state) => state.addOwnershipStake);
+  const removeOwnershipStake = useXbarStore((state) => state.removeOwnershipStake);
+  const ensureOwnershipRecord = useXbarStore((state) => state.ensureOwnershipRecord);
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageOwnership = useCurrentRoleCapability('manageOwnership');
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
@@ -149,6 +151,8 @@ export default function Ownership() {
   const selectedRecord = ownershipRecords.find((record) => record.id === selectedRecordId) ?? ownershipRecords[0];
   const selectedHorse = horses.find((horse) => horse.id === selectedRecord?.horseId);
   const selectedRelationship = selectedHorse ? relationshipRows.find((row) => row.horse.id === selectedHorse.id) : undefined;
+  const selectedHorseTotalShare = selectedHorse ? selectedHorse.ownership.reduce((sum, s) => sum + s.share, 0) : 0;
+  const remainingShare = Math.max(0, 100 - selectedHorseTotalShare);
 
   useEffect(() => {
     if (!ownershipRecords.length) {
@@ -559,31 +563,64 @@ export default function Ownership() {
 
           {selectedHorse ? (
             <>
-              <div className="form-grid form-grid--tight">
-                <label className="field-stack field-stack--wide">
-                  <span className="field-label">Owner name</span>
-                  <input className="field-input" value={coOwner.name} onChange={(event) => setCoOwner((current) => ({ ...current, name: event.target.value }))} disabled={!canManageOwnership} />
-                </label>
-                <label className="field-stack">
-                  <span className="field-label">Share</span>
-                  <input className="field-input" type="number" min="1" max="100" value={coOwner.share} onChange={(event) => setCoOwner((current) => ({ ...current, share: event.target.value }))} disabled={!canManageOwnership} />
-                </label>
-                <label className="field-stack">
-                  <span className="field-label">Role</span>
-                  <select className="field-input" value={coOwner.role} onChange={(event) => setCoOwner((current) => ({ ...current, role: event.target.value as OwnershipStake['role'] }))} disabled={!canManageOwnership}>
-                    {ownershipRoles.map((role) => (
-                      <option key={role} value={role}>{role}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field-stack field-stack--wide">
-                  <span className="field-label">Contact</span>
-                  <input className="field-input" value={coOwner.contact} onChange={(event) => setCoOwner((current) => ({ ...current, contact: event.target.value }))} disabled={!canManageOwnership} />
-                </label>
-              </div>
-              <button className="button button--primary ownership-full-button" type="button" onClick={addCoOwner} disabled={!canManageOwnership}>
-                Add owner to horse
-              </button>
+              {selectedHorse.ownership.length > 0 && (
+                <div className="ownership-stake-list">
+                  <span className="field-label">{selectedHorseTotalShare}% allocated · {remainingShare}% remaining</span>
+                  {selectedHorse.ownership.map((stake) => (
+                    <div key={stake.id} className="ownership-stake-row">
+                      <div className="ownership-stake-row__info">
+                        <strong>{stake.name}</strong>
+                        <span>{stake.share}% · {stake.role}</span>
+                        {stake.contact ? <small>{stake.contact}</small> : null}
+                      </div>
+                      {canManageOwnership ? (
+                        <button
+                          className="button button--ghost button--compact"
+                          type="button"
+                          onClick={() => {
+                            const result = removeOwnershipStake(selectedHorse.id, stake.id);
+                            pushToast({ title: result.ok ? 'Owner removed' : 'Remove blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                          }}
+                        >
+                          Remove
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {remainingShare > 0 ? (
+                <>
+                  <div className="form-grid form-grid--tight">
+                    <label className="field-stack field-stack--wide">
+                      <span className="field-label">Owner name</span>
+                      <input className="field-input" value={coOwner.name} onChange={(event) => setCoOwner((current) => ({ ...current, name: event.target.value }))} disabled={!canManageOwnership} />
+                    </label>
+                    <label className="field-stack">
+                      <span className="field-label">Share (max {remainingShare}%)</span>
+                      <input className="field-input" type="number" min="1" max={remainingShare} value={coOwner.share} onChange={(event) => setCoOwner((current) => ({ ...current, share: event.target.value }))} disabled={!canManageOwnership} />
+                    </label>
+                    <label className="field-stack">
+                      <span className="field-label">Role</span>
+                      <select className="field-input" value={coOwner.role} onChange={(event) => setCoOwner((current) => ({ ...current, role: event.target.value as OwnershipStake['role'] }))} disabled={!canManageOwnership}>
+                        {ownershipRoles.map((role) => (
+                          <option key={role} value={role}>{role}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field-stack field-stack--wide">
+                      <span className="field-label">Contact</span>
+                      <input className="field-input" value={coOwner.contact} onChange={(event) => setCoOwner((current) => ({ ...current, contact: event.target.value }))} disabled={!canManageOwnership} />
+                    </label>
+                  </div>
+                  <button className="button button--primary ownership-full-button" type="button" onClick={addCoOwner} disabled={!canManageOwnership}>
+                    Add owner to horse
+                  </button>
+                </>
+              ) : (
+                <p className="ownership-full-note">All shares allocated. Remove an owner above to reallocate.</p>
+              )}
             </>
           ) : (
             <EmptyState compact title="No horse selected" description="Select an ownership row before adding contact details." />
@@ -618,6 +655,15 @@ export default function Ownership() {
                   if (row.record) {
                     setSelectedRecordId(row.record.id);
                     setFormError('');
+                  } else {
+                    const result = ensureOwnershipRecord(row.horse.id);
+                    if (result.ok && result.recordId) {
+                      setSelectedRecordId(result.recordId);
+                      setFormError('');
+                      pushToast({ title: 'Ownership record created', message: result.message, tone: 'success' });
+                    } else if (!result.ok) {
+                      pushToast({ title: 'Could not create record', message: result.message, tone: 'error' });
+                    }
                   }
                 }}
                 onContextMenu={(event) => {
@@ -630,7 +676,7 @@ export default function Ownership() {
               >
                 <span>
                   <strong>{row.horse.name}</strong>
-                  <small>{row.horse.barnName || row.horse.segment}</small>
+                  {row.horse.barnName ? <small>{row.horse.barnName}</small> : null}
                 </span>
                 <span>
                   <strong>{row.currentOwner}</strong>
@@ -642,7 +688,7 @@ export default function Ownership() {
                 </span>
                 <span>
                   <Pill tone={transferTone(row.status)}>{row.status}</Pill>
-                  <small>Due {formatDateLabel(row.deadline)}</small>
+                  {row.deadline ? <small>Due {formatDateLabel(row.deadline)}</small> : null}
                 </span>
                 <span>
                   <strong>{row.billOfSaleCount + row.registrationCount + row.transferDocCount} files</strong>
