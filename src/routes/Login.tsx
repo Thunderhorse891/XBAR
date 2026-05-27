@@ -21,8 +21,6 @@ export default function Login() {
   }, [location.state]);
   const cloudRequired = isCloudAuthRequired();
   const allowLocalMode = isLocalModeEnabled();
-  const authLabel = isSupabaseConfigured() ? 'Cloud live' : allowLocalMode ? 'Browser access' : 'Cloud required';
-  const syncLabel = isSupabaseConfigured() ? 'Cloud autosave' : 'Browser storage';
 
   useEffect(() => {
     if (session && status === 'signed-in') {
@@ -53,110 +51,108 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f7fafc_0%,#eef3f8_100%)] px-5 py-6 lg:px-8">
-      <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-[1280px] items-stretch overflow-hidden rounded-[28px] border border-[#dbe4ed] bg-white shadow-[0_40px_80px_rgba(15,23,42,0.08)]">
-        <section className="relative hidden w-[52%] overflow-hidden border-r border-[#e4ebf2] bg-[radial-gradient(circle_at_top_right,rgba(12,111,151,0.16),transparent_28%),linear-gradient(180deg,#fbfdff_0%,#eff5f9_100%)] p-12 lg:flex lg:flex-col lg:justify-between">
-          <div className="absolute inset-y-0 right-[-90px] w-[240px] rounded-full bg-[rgba(12,111,151,0.08)] blur-3xl" aria-hidden="true" />
-          <div className="relative z-[1]">
-            <div className="flex items-center gap-3">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[#d8e1ea] bg-white p-1.5 shadow-sm">
-                <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" className="h-full w-full object-contain" />
+    <div className="min-h-screen bg-[#060d1a]">
+      <div className="mx-auto flex min-h-screen max-w-[1400px] lg:grid lg:grid-cols-[1fr,480px]">
+
+        {/* Left — dark brand panel */}
+        <section className="relative hidden overflow-hidden bg-[#060d1a] p-14 lg:flex lg:flex-col lg:justify-between">
+          {/* Subtle blue glow top-right */}
+          <div className="pointer-events-none absolute right-0 top-0 h-[420px] w-[420px] rounded-full bg-[#1155dd] opacity-[0.07] blur-[120px]" />
+          <div className="pointer-events-none absolute bottom-0 left-0 h-[300px] w-[300px] rounded-full bg-[#1155dd] opacity-[0.05] blur-[100px]" />
+
+          <div className="relative z-10">
+            {/* Logo lockup */}
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[#1a2e46] bg-[#080f1e] p-1.5 shadow-[0_0_0_1px_rgba(17,85,221,0.15),0_8px_24px_rgba(0,0,0,0.4)]">
+                <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR" className="h-full w-full object-contain" />
               </div>
               <div>
-                <div className="text-lg font-extrabold uppercase tracking-[0.14em]">XBAR</div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7e8891]">Private ranch software</div>
+                <div className="text-lg font-extrabold uppercase tracking-[0.16em] text-white">XBAR</div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#3d5c78]">Private ranch software</div>
               </div>
             </div>
 
-            <div className="mt-14 max-w-[34rem]">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7e8891]">Login</div>
-              <h1 className="mt-4 text-[clamp(2.8rem,4vw,4.5rem)] font-extrabold leading-[0.95] tracking-[-0.08em] text-[#1e242b]">
-                Private ranch software for horses, paperwork, and buyers.
+            {/* Headline */}
+            <div className="mt-16 max-w-[520px]">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#3d5c78]">Built for ranches</div>
+              <h1 className="mt-5 text-[clamp(2.6rem,3.8vw,4.2rem)] font-extrabold leading-[0.94] tracking-[-0.07em] text-white">
+                Horses, paperwork,<br />and buyers.
               </h1>
-              <p className="mt-5 max-w-[28rem] text-[15px] leading-7 text-[#586673]">
-                Built for ranches, breeders, and sale teams that need clean records, clean packet flow, and clear access.
+              <p className="mt-6 max-w-[400px] text-[15px] leading-[1.75] text-[#6080a0]">
+                Clean records, trusted packets, and clear access — for ranches, breeders, and sale teams.
               </p>
             </div>
           </div>
 
-          <div className="relative z-[1] max-w-[34rem] border-t border-[#e4ebf2] pt-8">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between gap-4 border-b border-[#edf2f7] pb-4">
-                <span className="text-sm font-semibold text-[#1e242b]">Horse desk</span>
-                <span className="text-sm text-[#5f6c79]">Sale, care, title</span>
-              </div>
-              <div className="flex items-center justify-between gap-4 border-b border-[#edf2f7] pb-4">
-                <span className="text-sm font-semibold text-[#1e242b]">Document intake</span>
-                <span className="text-sm text-[#5f6c79]">Packet, trust, review</span>
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-sm font-semibold text-[#1e242b]">Ranch desk</span>
-                <span className="text-sm text-[#5f6c79]">Weather, care, budget</span>
-              </div>
+          {/* Feature list */}
+          <div className="relative z-10 max-w-[480px]">
+            <div className="mb-8 h-px bg-[linear-gradient(90deg,#1a2e46,transparent)]" />
+            <div className="space-y-5">
+              {[
+                { label: 'Horse desk', detail: 'Sale, care, and title in one view' },
+                { label: 'Document intake', detail: 'Packet trust, bulk review, duplicate flags' },
+                { label: 'Ranch desk', detail: 'Weather, care cadence, and budget' },
+              ].map(({ label, detail }) => (
+                <div key={label} className="flex items-center justify-between gap-6">
+                  <span className="text-sm font-semibold text-[#c2d4e8]">{label}</span>
+                  <span className="text-sm text-[#3d5c78]">{detail}</span>
+                </div>
+              ))}
             </div>
-
             <div className="mt-8 flex flex-wrap gap-2">
-              <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#dbe4ed] bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#4f6070]">
-                {authLabel}
-              </span>
-              <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#dbe4ed] bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#4f6070]">
-                Role aware
-              </span>
-              <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#dbe4ed] bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#4f6070]">
-                {syncLabel}
-              </span>
-            </div>
-            <div className="mt-4 max-w-[30rem] text-[12px] leading-6 text-[#7b8894]">
-              Subscription workspace for ranch, breeding, and sale operations. Terms, privacy, and billing apply to account use.
+              {['Role aware', 'Buyer safe', 'AQHA ready'].map((tag) => (
+                <span key={tag} className="inline-flex min-h-[26px] items-center rounded-full border border-[#162436] bg-[#0c1a2e] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#4a6880]">
+                  {tag}
+                </span>
+              ))}
             </div>
           </div>
         </section>
 
-        <section className="flex flex-1 items-center bg-white px-6 py-8 lg:px-12">
-          <div className="mx-auto w-full max-w-[460px]">
-            <div className="lg:hidden">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#dbe4ed] bg-[#f7fafc] p-1.5 shadow-sm">
-                  <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR logo" className="h-full w-full object-contain" />
-                </div>
-                <div>
-                  <div className="text-base font-extrabold uppercase tracking-[0.14em] text-[#1e242b]">XBAR</div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7e8891]">Private ranch software</div>
-                </div>
-              </div>
+        {/* Right — entry panel */}
+        <section className="flex min-h-screen flex-col justify-center bg-white px-8 py-12 lg:px-12">
+          {/* Mobile logo */}
+          <div className="mb-10 flex items-center gap-3 lg:hidden">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#1a2e46] bg-[#060d1a] p-1.5">
+              <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="XBAR" className="h-full w-full object-contain" />
             </div>
+            <div className="text-base font-extrabold uppercase tracking-[0.14em] text-[#1e242b]">XBAR</div>
+          </div>
 
-            <div className="mt-8 lg:mt-0">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7e8891]">Workspace access</div>
-                  <h2 className="mt-2 text-[1.95rem] font-extrabold tracking-[-0.06em] text-[#1e242b]">Enter XBAR</h2>
-                </div>
-                <Pill tone={isSupabaseConfigured() ? 'blue' : cloudRequired ? 'rose' : 'slate'}>
-                  {isSupabaseConfigured() ? 'Secure login' : cloudRequired ? 'Cloud required' : 'Browser access'}
-                </Pill>
+          <div className="w-full max-w-[400px] lg:mx-auto">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#7e8891]">Workspace access</div>
+                <h2 className="mt-2 text-[2rem] font-extrabold tracking-[-0.06em] text-[#1e242b]">Enter XBAR</h2>
               </div>
-              <p className="mt-3 max-w-[28rem] text-sm leading-7 text-[#5f6c79]">
-                Sign in to sync the workspace, or open browser access when cloud auth is not enabled yet.
-              </p>
+              <Pill tone={isSupabaseConfigured() ? 'blue' : cloudRequired ? 'rose' : 'slate'}>
+                {isSupabaseConfigured() ? 'Secure login' : cloudRequired ? 'Cloud required' : 'Browser access'}
+              </Pill>
             </div>
+            <p className="mt-3 text-sm leading-7 text-[#5f6c79]">
+              {isSupabaseConfigured()
+                ? 'Sign in with your email or connected account.'
+                : allowLocalMode
+                  ? 'Open the workspace in your browser — no account needed yet.'
+                  : 'Cloud auth is required. Configure Supabase to unlock the workspace.'}
+            </p>
 
-            {isSupabaseConfigured() ? (
-              <div className="mt-8 rounded-[24px] border border-[#dbe4ed] bg-[#fbfdff] p-6 shadow-sm">
-                <label className="field-stack">
-                  <span className="field-label">Email</span>
-                  <input
-                    className="field-input"
-                    type="email"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    placeholder="owner@xbar.com"
-                  />
-                </label>
-
-                <div className="mt-5 flex flex-col gap-3">
+            <div className="mt-8">
+              {isSupabaseConfigured() ? (
+                <div className="space-y-4">
+                  <label className="field-stack">
+                    <span className="field-label">Email</span>
+                    <input
+                      className="field-input"
+                      type="email"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      placeholder="owner@xbar.com"
+                      autoFocus
+                    />
+                  </label>
                   <button
-                    className="button button--primary"
+                    className="button button--primary w-full"
                     type="button"
                     onClick={handleMagicLink}
                     disabled={busy !== '' || !email.trim()}
@@ -164,7 +160,7 @@ export default function Login() {
                     {busy === 'magic' ? 'Sending...' : 'Send magic link'}
                   </button>
                   <button
-                    className="button button--ghost"
+                    className="button button--ghost w-full"
                     type="button"
                     onClick={handleFacebook}
                     disabled={busy !== ''}
@@ -172,38 +168,32 @@ export default function Login() {
                     {busy === 'facebook' ? 'Connecting...' : 'Continue with Facebook'}
                   </button>
                 </div>
-
-                <div className="mt-5 rounded-[18px] border border-[#e3ebf2] bg-white px-4 py-4 text-sm leading-6 text-[#50606d]">
-                  Email sends a secure login link. Facebook is available when that workspace connector is enabled.
-                </div>
-                <div className="mt-4 text-xs leading-6 text-[#7a8794]">
-                  By continuing, you agree to the workspace terms, privacy notice, and subscription billing terms that govern this account.
-                </div>
-              </div>
-            ) : !allowLocalMode ? (
-              <div className="mt-8 rounded-[24px] border border-[#e5c7c7] bg-[#fff4f4] px-5 py-5 text-sm leading-7 text-[#7b3a3a] shadow-sm">
-                Cloud auth is required for this production build. Add <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> before opening the workspace.
-              </div>
-            ) : (
-              <div className="mt-8 rounded-[24px] border border-[#dbe4ed] bg-[#fbfdff] p-6 shadow-sm">
-                <div className="rounded-[18px] border border-[#e3ebf2] bg-white px-4 py-4 text-sm leading-7 text-[#50606d]">
-                  Browser access is available right now, so you can open the workspace without waiting on cloud auth.
-                </div>
-                <div className="mt-5 flex flex-col gap-3">
-                  <button className="button button--primary" type="button" onClick={() => navigate('/setup', { replace: true })}>
+              ) : allowLocalMode ? (
+                <div className="space-y-4">
+                  <button
+                    className="button button--primary w-full"
+                    type="button"
+                    onClick={() => navigate('/setup', { replace: true })}
+                  >
                     Open browser workspace
                   </button>
-                  <div className="text-sm leading-6 text-[#647281]">
-                    Add <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> when you want real user login.
-                  </div>
+                  <p className="text-xs leading-6 text-[#8a96a4]">
+                    Add <code className="rounded bg-[#f4f7fb] px-1.5 py-0.5 text-[#3a5c80]">VITE_SUPABASE_URL</code> and <code className="rounded bg-[#f4f7fb] px-1.5 py-0.5 text-[#3a5c80]">VITE_SUPABASE_ANON_KEY</code> when you want real user login.
+                  </p>
                 </div>
-                <div className="mt-4 text-xs leading-6 text-[#7a8794]">
-                  Browser access is for workspace setup and preview. Production use should run behind configured account, privacy, and billing terms.
+              ) : (
+                <div className="rounded-2xl border border-[#f0d0d0] bg-[#fff6f6] px-5 py-5 text-sm leading-7 text-[#7b3a3a]">
+                  Cloud auth is required. Add <code className="rounded bg-[#fde8e8] px-1.5 py-0.5">VITE_SUPABASE_URL</code> and <code className="rounded bg-[#fde8e8] px-1.5 py-0.5">VITE_SUPABASE_ANON_KEY</code> to your environment, then redeploy.
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+
+            <div className="mt-10 border-t border-[#edf2f7] pt-6 text-[11px] leading-6 text-[#9aa4ae]">
+              Subscription workspace for ranch, breeding, and sale operations. Terms and billing apply.
+            </div>
           </div>
         </section>
+
       </div>
     </div>
   );
