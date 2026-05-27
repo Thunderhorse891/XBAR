@@ -8,7 +8,7 @@ import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { OwnershipStake, TransferStatus } from '@/types/xbar';
 
-const ownershipRoles: OwnershipStake['role'][] = ['Co-Owner', 'Managing Partner', 'Prospective Buyer'];
+const ownershipRoles: OwnershipStake['role'][] = ['Legal Owner', 'Co-Owner', 'Managing Partner', 'Prospective Buyer'];
 const transferStatuses: TransferStatus[] = ['Clear', 'Pending Signatures', 'AQHA Review', 'Attention Required'];
 
 export default function Ownership() {
@@ -35,6 +35,10 @@ export default function Ownership() {
   const [pendingDocuments, setPendingDocuments] = useState(selectedRecord?.pendingDocuments.join(', ') ?? '');
   const [auditNote, setAuditNote] = useState('');
   const [coOwner, setCoOwner] = useState({ name: '', share: '25', role: 'Co-Owner' as OwnershipStake['role'], contact: '' });
+  const selectedHorseTotalShare = selectedHorse
+    ? selectedHorse.ownership.reduce((sum, s) => sum + s.share, 0)
+    : 0;
+  const remainingShare = Math.max(0, 100 - selectedHorseTotalShare);
   const [formError, setFormError] = useState('');
   const [menuState, setMenuState] = useState<{ recordId: string; x: number; y: number } | null>(null);
 
@@ -141,18 +145,26 @@ export default function Ownership() {
         <Panel eyebrow="Share structure" title="Splits">
           {withCoOwners.length ? (
             <div className="stack-list">
-              {withCoOwners.map((horse) => (
-                <div key={horse.id} className="stack-item">
-                  <div className="stack-item__title">{horse.name}</div>
-                  <div className="token-row">
-                    {horse.ownership.map((stake) => (
-                      <Pill key={stake.id} tone={stake.role === 'Legal Owner' ? 'blue' : 'slate'}>
-                        {stake.name} {stake.share}%
+              {withCoOwners.map((horse) => {
+                const total = horse.ownership.reduce((sum, s) => sum + s.share, 0);
+                return (
+                  <div key={horse.id} className="stack-item">
+                    <div className="stack-item__top">
+                      <div className="stack-item__title">{horse.name}</div>
+                      <Pill tone={total > 100 ? 'rose' : total === 100 ? 'emerald' : 'amber'}>
+                        {total}% allocated
                       </Pill>
-                    ))}
+                    </div>
+                    <div className="token-row">
+                      {horse.ownership.map((stake) => (
+                        <Pill key={stake.id} tone={stake.role === 'Legal Owner' ? 'blue' : 'slate'}>
+                          {stake.name} {stake.share}%
+                        </Pill>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <EmptyState compact title="No co-owner splits yet" description="Add a co-owner below." />
@@ -228,14 +240,22 @@ export default function Ownership() {
         <Panel eyebrow="Co-owner editor" title="Add split">
           {selectedHorse ? (
             <>
+              {selectedHorseTotalShare > 0 ? (
+                <div className="inline-metrics mb-3">
+                  <span>Total allocated: <strong>{selectedHorseTotalShare}%</strong></span>
+                  <Pill tone={remainingShare === 0 ? 'rose' : remainingShare < 25 ? 'amber' : 'emerald'}>
+                    {remainingShare}% remaining
+                  </Pill>
+                </div>
+              ) : null}
               <div className="form-grid form-grid--tight">
                 <label className="field-stack">
                   <span className="field-label">Name</span>
                   <input className="field-input" value={coOwner.name} onChange={(event) => setCoOwner((current) => ({ ...current, name: event.target.value }))} disabled={!canManageOwnership} />
                 </label>
                 <label className="field-stack">
-                  <span className="field-label">Share</span>
-                  <input className="field-input" type="number" min="1" max="100" value={coOwner.share} onChange={(event) => setCoOwner((current) => ({ ...current, share: event.target.value }))} disabled={!canManageOwnership} />
+                  <span className="field-label">Share % {remainingShare < 100 ? `(max ${remainingShare}%)` : ''}</span>
+                  <input className="field-input" type="number" min="1" max={remainingShare} value={coOwner.share} onChange={(event) => setCoOwner((current) => ({ ...current, share: event.target.value }))} disabled={!canManageOwnership || remainingShare === 0} />
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Role</span>

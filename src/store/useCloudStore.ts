@@ -27,7 +27,11 @@ type CloudStore = {
   setLastSyncAt: (value: string) => void;
   setSyncState: (state: CloudSyncState, message?: string) => void;
   setAutosaveReady: (ready: boolean) => void;
+  signInWithPassword: (email: string, password: string) => Promise<CloudActionResult>;
   sendMagicLink: (email: string) => Promise<CloudActionResult>;
+  resetPassword: (email: string) => Promise<CloudActionResult>;
+  signInWithGoogle: () => Promise<CloudActionResult>;
+  signInWithApple: () => Promise<CloudActionResult>;
   signInWithFacebook: () => Promise<CloudActionResult>;
   signOut: () => Promise<CloudActionResult>;
 };
@@ -91,6 +95,19 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
   setLastSyncAt: (value) => set({ lastSyncAt: value }),
   setSyncState: (state, message = '') => set({ syncState: state, syncMessage: message }),
   setAutosaveReady: (ready) => set({ autosaveReady: ready }),
+  signInWithPassword: async (email, password) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+
+    const { error } = await client.auth.signInWithPassword({ email: email.trim(), password });
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    return { ok: true, message: 'Signed in successfully.' };
+  },
   sendMagicLink: async (email) => {
     const client = getSupabaseClient();
     if (!client) {
@@ -115,6 +132,53 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     }
 
     return { ok: true, message: 'Magic link sent. Check your inbox to finish sign-in.' };
+  },
+  resetPassword: async (email) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      return { ok: false, message: 'Enter your email address first.' };
+    }
+
+    const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}/reset-password` : undefined;
+    const { error } = await client.auth.resetPasswordForEmail(trimmedEmail, { redirectTo });
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    return { ok: true, message: 'Password reset email sent. Check your inbox.' };
+  },
+  signInWithGoogle: async () => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+
+    const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    const { error } = await client.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } });
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    return { ok: true, message: 'Google sign-in started.' };
+  },
+  signInWithApple: async () => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+
+    const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    const { error } = await client.auth.signInWithOAuth({ provider: 'apple', options: { redirectTo } });
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    return { ok: true, message: 'Apple sign-in started.' };
   },
   signInWithFacebook: async () => {
     const client = getSupabaseClient();
