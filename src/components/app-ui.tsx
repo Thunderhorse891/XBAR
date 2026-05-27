@@ -1,6 +1,131 @@
-import type { KeyboardEvent, MouseEventHandler, ReactNode } from 'react';
+import type {
+  ButtonHTMLAttributes,
+  InputHTMLAttributes,
+  KeyboardEvent,
+  MouseEventHandler,
+  ReactNode,
+  SelectHTMLAttributes,
+  TableHTMLAttributes,
+} from 'react';
 
 type Tone = 'blue' | 'slate' | 'emerald' | 'amber' | 'rose';
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+
+function joinClasses(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(' ');
+}
+
+export function Button({
+  children,
+  variant = 'secondary',
+  loading = false,
+  className = '',
+  disabled,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: ButtonVariant;
+  loading?: boolean;
+}) {
+  return (
+    <button
+      {...props}
+      className={joinClasses('button', `button--${variant}`, loading && 'button--loading', className)}
+      disabled={disabled || loading}
+    >
+      {loading ? <span className="button__spinner" aria-hidden="true" /> : null}
+      <span>{children}</span>
+    </button>
+  );
+}
+
+export function Card({
+  children,
+  className = '',
+  interactive = false,
+}: {
+  children: ReactNode;
+  className?: string;
+  interactive?: boolean;
+}) {
+  return <section className={joinClasses('card', interactive && 'card--interactive', className)}>{children}</section>;
+}
+
+export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
+  return <input {...props} className={joinClasses('field-input', className)} />;
+}
+
+export function Select({ className = '', children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select {...props} className={joinClasses('field-input field-select', className)}>
+      {children}
+    </select>
+  );
+}
+
+export function Badge({
+  children,
+  tone = 'slate',
+}: {
+  children: ReactNode;
+  tone?: Tone;
+}) {
+  return <span className={`badge badge--${tone}`}>{children}</span>;
+}
+
+export function MotionPanel({
+  children,
+  className = '',
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return <div className={joinClasses('motion-panel', className)}>{children}</div>;
+}
+
+export function Modal({
+  title,
+  description,
+  open,
+  onClose,
+  children,
+}: {
+  title: string;
+  description?: string;
+  open: boolean;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="modal-panel__header">
+          <div>
+            <h2 id="modal-title" className="modal-panel__title">{title}</h2>
+            {description ? <p className="modal-panel__description">{description}</p> : null}
+          </div>
+          <Button type="button" variant="ghost" onClick={onClose}>Close</Button>
+        </div>
+        {children}
+      </section>
+    </div>
+  );
+}
+
+export function DataTable({
+  children,
+  className = '',
+  ...props
+}: TableHTMLAttributes<HTMLTableElement>) {
+  return (
+    <div className="table-shell">
+      <table {...props} className={joinClasses('data-table', className)}>
+        {children}
+      </table>
+    </div>
+  );
+}
 
 export function PageHeader({
   eyebrow,
@@ -16,7 +141,7 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <header className="page-header">
+    <header className="page-header motion-panel">
       <div className="page-header__copy">
         {eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}
         <h1 className="page-title">{title}</h1>
@@ -49,7 +174,7 @@ export function Panel({
   onContextMenu?: MouseEventHandler<HTMLElement>;
 }) {
   return (
-    <section className={`panel ${className}`.trim()} onContextMenu={onContextMenu}>
+    <section className={`panel motion-panel ${className}`.trim()} onContextMenu={onContextMenu}>
       <div className="panel__header">
         <div>
           {eyebrow ? <div className="panel__eyebrow">{eyebrow}</div> : null}
@@ -89,7 +214,7 @@ export function MetricCard({
 }) {
   return (
     <div
-      className={`metric-card metric-card--${tone}${onClick || onContextMenu ? ' metric-card--interactive' : ''} ${className}`.trim()}
+      className={`metric-card motion-panel metric-card--${tone}${onClick || onContextMenu ? ' metric-card--interactive' : ''} ${className}`.trim()}
       title={title}
       onClick={onClick}
       onContextMenu={onContextMenu}
