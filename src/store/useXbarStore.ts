@@ -15,7 +15,6 @@ import {
   buildDocumentRecord,
   buildSharePath,
   createId,
-  createNumericToken,
   createShareAccessToken,
   deriveSharedAccessSnapshot,
   estimateStorageGb,
@@ -119,7 +118,7 @@ type XbarStore = {
   ) => ActionResult;
   updateAsset: (assetId: string, patch: AssetPatch) => ActionResult;
   addHorseNote: (horseId: string, note: Pick<HorseNote, 'title' | 'body' | 'author' | 'tone'>) => ActionResult;
-  addMedicalEvent: (horseId: string, event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string }) => ActionResult;
+  addMedicalEvent: (horseId: string, event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string; triggersReview?: boolean }) => ActionResult;
   addBreedingEvent: (horseId: string, event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string }) => ActionResult;
   updateHorseLocation: (horseId: string, patch: LocationPatch) => ActionResult;
   updateOwnershipRecord: (
@@ -531,29 +530,29 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
     id,
     name,
     barnName,
-    summary: `${barnName} is a new XBAR horse record ready for intake, media, ownership, and care workflows.`,
+    summary: '',
     segment: input.segment,
     status: input.status,
-    breed: 'Quarter Horse',
-    registry: 'AQHA',
-    aqhaNumber: input.aqhaNumber?.trim() || `AQHA-${Date.now().toString().slice(-6)}`,
-    registrationNumber: input.registrationNumber?.trim() || `${barnName.toUpperCase().replace(/\s+/g, '-')}-${new Date().getFullYear()}`,
-    registered: Boolean(input.aqhaNumber || input.registrationNumber),
-    age: 4,
-    foaledOn: `${new Date().getFullYear() - 4}-03-01`,
+    breed: '',
+    registry: '',
+    aqhaNumber: input.aqhaNumber?.trim() || '',
+    registrationNumber: input.registrationNumber?.trim() || '',
+    registered: Boolean(input.aqhaNumber?.trim() || input.registrationNumber?.trim()),
+    age: 0,
+    foaledOn: '',
     sex: input.sex,
-    color: 'To be confirmed',
-    markings: 'Intake photos pending',
-    microchipId: `9810${createNumericToken(10)}`,
+    color: '',
+    markings: '',
+    microchipId: '',
     owner: input.owner.trim(),
     ownerEntity: input.ownerEntity.trim(),
-    insuredValue: 65000,
+    insuredValue: 0,
     profileImage: '',
     tags: ['new-intake', 'media-needed'],
     bloodline: {
-      sire: 'Pending intake',
-      dam: 'Pending intake',
-      family: 'Pending pedigree review',
+      sire: '',
+      dam: '',
+      family: '',
     },
     location: {
       ranch: ranchName,
@@ -580,18 +579,18 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
     sale: {
       listingState: 'Hold',
       askPrice: 0,
-      buyerConfidence: 50,
+      buyerConfidence: 0,
       inquiryCount: 0,
       watchlistCount: 0,
       socialReady: false,
     },
     readiness: {
-      score: 42,
+      score: 0,
       blockers: ['Hero image missing', 'Ownership packet not uploaded', 'Medical summary not reviewed'],
       packetStatus: 'Needs Photos',
     },
-    medicalNotes: 'Initial intake complete. Clinical review pending.',
-    lastVetVisit: todayStamp(),
+    medicalNotes: '',
+    lastVetVisit: '',
     documents: [],
     medicalTimeline: [],
     breedingTimeline: [],
@@ -1861,7 +1860,7 @@ export const useXbarStore = create<XbarStore>()(
             horse.id === horseId
               ? {
                   ...horse,
-                  status: 'Medical Review',
+                  ...(event.triggersReview ? { status: 'Medical Review' as const } : {}),
                   lastVetVisit: event.date,
                   medicalNotes: event.body,
                   medicalTimeline: [nextEvent, ...horse.medicalTimeline],
@@ -2029,8 +2028,17 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Co-owner name, share, and contact are required.' };
         }
 
-        if (!get().horses.some((horse) => horse.id === horseId)) {
+        const targetHorse = get().horses.find((horse) => horse.id === horseId);
+        if (!targetHorse) {
           return { ok: false, message: 'Horse record not found for this ownership update.' };
+        }
+
+        const currentTotal = targetHorse.ownership.reduce((sum, s) => sum + s.share, 0);
+        if (currentTotal + stake.share > 100) {
+          return {
+            ok: false,
+            message: `Total ownership would reach ${currentTotal + stake.share}%. Adjust existing stakes so the total stays at or below 100%.`,
+          };
         }
 
         const nextStake: OwnershipStake = {

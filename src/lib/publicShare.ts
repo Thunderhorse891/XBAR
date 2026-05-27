@@ -1,24 +1,106 @@
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
-import type { DocumentRecord, HorseRecord, OwnershipRecord, SharedListingRecord } from '@/types/xbar';
+import type { DocumentRecord, GalleryAsset, HorseRecord, SharedListingRecord } from '@/types/xbar';
 
-export type PublicBuyerProfilePayload = {
-  horse: HorseRecord;
-  documents: DocumentRecord[];
-  ownershipRecord?: OwnershipRecord;
-  sharedListing?: SharedListingRecord;
+// Buyer-safe subsets — only these fields leave the private workspace.
+export type PublicHorseDTO = {
+  id: string;
+  name: string;
+  barnName: string;
+  breed: string;
+  registry: string;
+  aqhaNumber: string;
+  registrationNumber: string;
+  registered: boolean;
+  age: number;
+  foaledOn: string;
+  sex: string;
+  color: string;
+  markings: string;
+  profileImage: string;
+  bloodline: { sire: string; dam: string; family: string };
+  gallery: Pick<GalleryAsset, 'id' | 'url' | 'kind' | 'label' | 'status'>[];
+  sale: { listingState: string; askPrice: number };
+  readiness: { packetStatus: string };
 };
 
-type PublicBuyerProfileResult =
-  | {
-      ok: true;
-      payload: PublicBuyerProfilePayload;
-      source: 'rpc';
-    }
-  | {
-      ok: false;
-      message: string;
-    };
+export type PublicDocumentDTO = {
+  id: string;
+  title: string;
+  type: string;
+  summary: string;
+};
+
+export type PublicSharedListingDTO = {
+  id: string;
+  horseId: string;
+  sharePath: string;
+  accessMode: string;
+  shareToken: string;
+  state: string;
+  channels: string[];
+};
+
+export type PublicBuyerProfilePayload = {
+  horse: PublicHorseDTO;
+  documents: PublicDocumentDTO[];
+  sharedListing?: PublicSharedListingDTO;
+};
+
+function sanitizeHorse(horse: HorseRecord): PublicHorseDTO {
+  return {
+    id: horse.id,
+    name: horse.name,
+    barnName: horse.barnName,
+    breed: horse.breed,
+    registry: horse.registry,
+    aqhaNumber: horse.aqhaNumber,
+    registrationNumber: horse.registrationNumber,
+    registered: horse.registered,
+    age: horse.age,
+    foaledOn: horse.foaledOn,
+    sex: horse.sex,
+    color: horse.color,
+    markings: horse.markings,
+    profileImage: horse.profileImage,
+    bloodline: {
+      sire: horse.bloodline.sire,
+      dam: horse.bloodline.dam,
+      family: horse.bloodline.family,
+    },
+    gallery: horse.gallery
+      .filter((a) => a.status === 'Approved')
+      .map(({ id, url, kind, label, status }) => ({ id, url, kind, label, status })),
+    sale: {
+      listingState: horse.sale.listingState,
+      askPrice: horse.sale.askPrice,
+    },
+    readiness: {
+      packetStatus: horse.readiness.packetStatus,
+    },
+  };
+}
+
+function sanitizeDocument(doc: DocumentRecord): PublicDocumentDTO {
+  return {
+    id: doc.id,
+    title: doc.title,
+    type: doc.type,
+    summary: doc.summary,
+  };
+}
+
+function sanitizeSharedListing(listing: SharedListingRecord): PublicSharedListingDTO {
+  return {
+    id: listing.id,
+    horseId: listing.horseId,
+    sharePath: listing.sharePath,
+    accessMode: listing.accessMode,
+    shareToken: listing.shareToken,
+    state: listing.state,
+    channels: listing.channels,
+  };
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -34,13 +116,41 @@ function parsePublicBuyerProfilePayload(value: unknown): PublicBuyerProfilePaylo
     return null;
   }
 
+  // Sanitize RPC response — treat incoming data as untrusted HorseRecord shape
+  // and strip any sensitive fields before use.
   return {
-    horse: horse as unknown as HorseRecord,
-    documents: Array.isArray(value.documents) ? (value.documents as DocumentRecord[]) : [],
-    ownershipRecord: isRecord(value.ownershipRecord) ? (value.ownershipRecord as unknown as OwnershipRecord) : undefined,
-    sharedListing: isRecord(value.sharedListing) ? (value.sharedListing as unknown as SharedListingRecord) : undefined,
+    horse: sanitizeHorse(horse as unknown as HorseRecord),
+    documents: Array.isArray(value.documents)
+      ? (value.documents as DocumentRecord[]).map(sanitizeDocument)
+      : [],
+    sharedListing: isRecord(value.sharedListing)
+      ? sanitizeSharedListing(value.sharedListing as unknown as SharedListingRecord)
+      : undefined,
   };
 }
+
+export function sanitizeHorseForBuyerView(horse: HorseRecord): PublicHorseDTO {
+  return sanitizeHorse(horse);
+}
+
+export function sanitizeDocumentForBuyerView(doc: DocumentRecord): PublicDocumentDTO {
+  return sanitizeDocument(doc);
+}
+
+export function sanitizeSharedListingForBuyerView(listing: SharedListingRecord): PublicSharedListingDTO {
+  return sanitizeSharedListing(listing);
+}
+
+type PublicBuyerProfileResult =
+  | {
+      ok: true;
+      payload: PublicBuyerProfilePayload;
+      source: 'rpc';
+    }
+  | {
+      ok: false;
+      message: string;
+    };
 
 export async function loadPublicBuyerProfile(params: {
   sharePath: string;

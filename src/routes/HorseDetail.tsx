@@ -413,15 +413,17 @@ export default function HorseDetail() {
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <a
-              className="inline-flex h-11 items-center justify-center rounded-md bg-[#0c6f97] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#095a7a]"
-              href={publicShareUrl}
-              target="_blank"
-              rel="noreferrer"
-              onClick={() => void recordSharedChannel(horse.id, 'Direct Link')}
-            >
-              Open buyer link
-            </a>
+            {activeSharedListing?.state === 'Live' ? (
+              <a
+                className="inline-flex h-11 items-center justify-center rounded-md bg-[#0c6f97] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#095a7a]"
+                href={publicShareUrl}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => void recordSharedChannel(horse.id, 'Direct Link')}
+              >
+                Open buyer link
+              </a>
+            ) : null}
             <button
               className="inline-flex h-11 items-center justify-center rounded-md border border-[#d8e1ea] bg-white px-5 text-sm font-semibold text-[#445162] transition-all duration-150 ease-[ease] hover:border-[#0c6f97]/30 hover:bg-[#eef3f8] disabled:cursor-not-allowed disabled:opacity-50"
               type="button"

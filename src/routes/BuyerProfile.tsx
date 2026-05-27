@@ -6,7 +6,14 @@ import { SalePacketSlots } from '@/components/SalePacketSlots';
 import { KeyValue, MetricCard, Panel, Pill } from '@/components/app-ui';
 import { buildPublicShareUrl, openFacebookShareDialog } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
-import { loadPublicBuyerProfile, trackPublicBuyerProfileView, type PublicBuyerProfilePayload } from '@/lib/publicShare';
+import {
+  loadPublicBuyerProfile,
+  sanitizeDocumentForBuyerView,
+  sanitizeHorseForBuyerView,
+  sanitizeSharedListingForBuyerView,
+  trackPublicBuyerProfileView,
+  type PublicBuyerProfilePayload,
+} from '@/lib/publicShare';
 import { hasBuyerShareAccess } from '@/lib/workspaceAccess';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
@@ -17,24 +24,24 @@ export default function BuyerProfile() {
   const [searchParams] = useSearchParams();
   const localHorse = useHorseRecord(id);
   const pushToast = useUiStore((state) => state.pushToast);
-  const localHorses = useXbarStore((state) => state.horses);
   const localDocuments = useXbarStore((state) => state.documents.filter((document) => document.horseId === id));
-  const localOwnershipRecord = useXbarStore((state) => state.ownershipRecords.find((record) => record.horseId === id));
   const localSharedListing = useXbarStore((state) => state.sharedListings.find((listing) => listing.horseId === id && listing.state !== 'Archived'));
   const shareToken = searchParams.get('t')?.trim() ?? '';
   const localAccessAllowed = hasBuyerShareAccess(localSharedListing, shareToken);
+
+  // Sanitized local preview payload — only buyer-safe fields, never raw internal records.
   const localPayload = useMemo(
     () =>
       localHorse && localAccessAllowed
         ? {
-            horse: localHorse,
-            documents: localDocuments,
-            ownershipRecord: localOwnershipRecord,
-            sharedListing: localSharedListing,
+            horse: sanitizeHorseForBuyerView(localHorse),
+            documents: localDocuments.map(sanitizeDocumentForBuyerView),
+            sharedListing: localSharedListing ? sanitizeSharedListingForBuyerView(localSharedListing) : undefined,
           }
         : undefined,
-    [localAccessAllowed, localDocuments, localHorse, localOwnershipRecord, localSharedListing],
+    [localAccessAllowed, localDocuments, localHorse, localSharedListing],
   );
+
   const [remoteState, setRemoteState] = useState<{
     status: 'idle' | 'loading' | 'loaded' | 'error';
     payload?: PublicBuyerProfilePayload;
@@ -71,12 +78,14 @@ export default function BuyerProfile() {
         setRemoteState({
           status: 'loaded',
           payload: result.payload,
-          source: result.source,
+          source: 'rpc',
         });
         void trackPublicBuyerProfileView({ sharePath, shareToken });
         return;
       }
 
+      // Fall back to local preview only when the user is an internal workspace member
+      // viewing their own horse (localPayload is always sanitized).
       if (localPayload) {
         setRemoteState({
           status: 'loaded',
@@ -102,9 +111,7 @@ export default function BuyerProfile() {
 
   const horse = resolvedPayload?.horse;
   const documents = resolvedPayload?.documents ?? [];
-  const ownershipRecord = resolvedPayload?.ownershipRecord;
   const sharedListing = resolvedPayload?.sharedListing;
-  const matchingHorses = remoteState.source === 'local' || !remoteState.payload ? localHorses : horse ? [horse] : [];
 
   if (!horse) {
     const title = remoteState.status === 'loading'
@@ -133,13 +140,15 @@ export default function BuyerProfile() {
     );
   }
 
-  const packet = buildHorsePacketCompleteness(horse, documents, ownershipRecord);
+  // Build packet completeness from the sanitized horse shape.
+  // Cast to satisfy the helper signature — only uses the fields present in PublicHorseDTO.
+  const packet = buildHorsePacketCompleteness(horse as Parameters<typeof buildHorsePacketCompleteness>[0], documents as Parameters<typeof buildHorsePacketCompleteness>[1], undefined);
   const publicShareToken = sharedListing?.accessMode === 'Private Token' ? sharedListing.shareToken : undefined;
   const publicShareUrl = buildPublicShareUrl(packet.sharePath, publicShareToken);
   const visibleDocuments = documents
     .map((document) => ({
       document,
-      trust: buildDocumentTrustProfile(document, matchingHorses),
+      trust: buildDocumentTrustProfile(document as Parameters<typeof buildDocumentTrustProfile>[0], horse ? [horse as Parameters<typeof buildDocumentTrustProfile>[1][0]] : []),
     }))
     .filter(({ trust }) => trust.readyForProfile);
   const salePhotoAssets = horse.gallery.filter(
@@ -206,9 +215,9 @@ export default function BuyerProfile() {
           <MetricCard label="Packet trust" value={formatPercent(packet.score)} detail={packet.trustSummary} tone={packet.tone} />
           <MetricCard
             label="Buyer confidence"
-            value={formatPercent(horse.sale.buyerConfidence)}
-            detail="Sales posture"
-            tone="blue"
+            value="—"
+            detail="Buyer posture not disclosed"
+            tone="slate"
           />
           <MetricCard
             label="Verified documents"
@@ -217,9 +226,9 @@ export default function BuyerProfile() {
             tone="emerald"
           />
           <MetricCard
-            label="Target price"
-            value={formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)}
-            detail={`${horse.sale.watchlistCount} watchers and ${horse.sale.inquiryCount} inquiries`}
+            label="Asking price"
+            value={horse.sale.askPrice ? formatCompactCurrency(horse.sale.askPrice) : 'Contact seller'}
+            detail="Contact ranch for financing options"
             tone="slate"
           />
         </div>
@@ -231,14 +240,17 @@ export default function BuyerProfile() {
 
           <Panel eyebrow="Horse profile" title="Profile">
             <div className="key-grid key-grid--wide">
-              <KeyValue label="Registry" value={`${horse.registry} · ${horse.registrationNumber}`} />
-              <KeyValue label="Breed / sex" value={`${horse.breed} · ${horse.sex}`} />
-              <KeyValue label="Age" value={`${horse.age}`} />
-              <KeyValue label="Color" value={horse.color} />
-              <KeyValue label="Bloodline" value={`${horse.bloodline.sire} / ${horse.bloodline.dam}`} />
-              <KeyValue label="Family" value={horse.bloodline.family} />
+              {horse.registry || horse.registrationNumber ? (
+                <KeyValue label="Registry" value={`${horse.registry}${horse.registrationNumber ? ` · ${horse.registrationNumber}` : ''}`} />
+              ) : null}
+              <KeyValue label="Breed / sex" value={[horse.breed, horse.sex].filter(Boolean).join(' · ') || '—'} />
+              {horse.age > 0 ? <KeyValue label="Age" value={`${horse.age}`} /> : null}
+              {horse.color ? <KeyValue label="Color" value={horse.color} /> : null}
+              {(horse.bloodline.sire || horse.bloodline.dam) ? (
+                <KeyValue label="Bloodline" value={`${horse.bloodline.sire || '—'} / ${horse.bloodline.dam || '—'}`} />
+              ) : null}
+              {horse.bloodline.family ? <KeyValue label="Family" value={horse.bloodline.family} /> : null}
             </div>
-
           </Panel>
         </div>
 

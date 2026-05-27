@@ -193,7 +193,7 @@ export default function Horses() {
           defaultPasture: workspaceProfile.defaultPasture,
         }),
       );
-      setSearchParams({});
+      setSearchParams((prev) => { const next = new URLSearchParams(prev); next.delete('new'); return next; });
       navigate(`/horses/${result.id}`);
     }
   };
@@ -207,7 +207,7 @@ export default function Horses() {
             <Link to="/documents?upload=1" className="button button--ghost button--compact">
               Batch intake
             </Link>
-            <button className="button button--primary button--compact" type="button" onClick={() => setSearchParams({ new: '1' })} disabled={!canCreateHorse}>
+            <button className="button button--primary button--compact" type="button" onClick={() => setSearchParams((prev) => { const next = new URLSearchParams(prev); next.set('new', '1'); return next; })} disabled={!canCreateHorse}>
               New horse
             </button>
           </>
@@ -221,7 +221,7 @@ export default function Horses() {
                 <div className="panel__eyebrow">Horse intake</div>
                 <h2 className="panel__title">Add horse</h2>
               </div>
-              <button className="button button--ghost button--compact" type="button" onClick={() => setSearchParams({})}>
+              <button className="button button--ghost button--compact" type="button" onClick={() => setSearchParams((prev) => { const next = new URLSearchParams(prev); next.delete('new'); return next; })}>
                 Close
               </button>
           </div>
@@ -358,7 +358,7 @@ export default function Horses() {
             <strong>{saleReady.length}</strong>
           </div>
           <div className="portfolio-stage__stat">
-            <span>Shared</span>
+            <span>Buyer Ready</span>
             <strong>{buyerReady.length}</strong>
           </div>
           <div className="portfolio-stage__stat">
