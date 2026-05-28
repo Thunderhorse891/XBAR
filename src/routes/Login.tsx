@@ -4,6 +4,7 @@ import { XbarMark } from '@/components/BrandMark';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
+import { useXbarStore } from '@/store/useXbarStore';
 import './authExperience.css';
 
 type AuthMode = 'signin' | 'signup';
@@ -75,6 +76,7 @@ export default function Login() {
   const sendPasswordReset = useCloudStore((state) => state.sendPasswordReset);
   const signInWithGoogle = useCloudStore((state) => state.signInWithGoogle);
   const signInWithApple = useCloudStore((state) => state.signInWithApple);
+  const initializeWorkspace = useXbarStore((state) => state.initializeWorkspace);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -98,7 +100,8 @@ export default function Login() {
 
   const enterXbar = () => {
     window.localStorage.setItem('xbar-command-center-entry', 'true');
-    navigate('/setup', { replace: true });
+    initializeWorkspace({ businessName: 'XBAR Ranch', ranchName: 'XBAR Ranch' });
+    navigate('/', { replace: true });
   };
 
   const handlePasswordAuth = async (event: FormEvent<HTMLFormElement>) => {
