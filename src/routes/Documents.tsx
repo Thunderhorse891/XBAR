@@ -10,9 +10,8 @@ import { buildDocumentTrustProfile } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { DocumentRecord, DocumentSource } from '@/types/xbar';
-
-const sources: DocumentSource[] = ['Manual Upload', 'Bulk Intake', 'Shared Upload', 'Sales Packet'];
-type DocumentsView = 'Review' | 'Intake' | 'Batches' | 'Flags';
+import { documentSources } from '@/features/documents/constants';
+import type { DocumentsView } from '@/features/documents/types';
 
 export default function Documents() {
   const navigate = useNavigate();
@@ -393,7 +392,7 @@ export default function Documents() {
             <label className="field-stack">
               <span className="field-label">Source</span>
               <select className="field-input" value={source} onChange={(event) => setSource(event.target.value as DocumentSource)} disabled={!canUploadDocuments}>
-                {sources.map((item) => (
+                {documentSources.map((item) => (
                   <option key={item} value={item}>
                     {item}
                   </option>

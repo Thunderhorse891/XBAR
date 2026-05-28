@@ -9,20 +9,8 @@ import { resolveWeatherByQuery, type WeatherForecast } from '@/lib/weather';
 import { useCurrentRoleCapability, useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
 import { useUiStore } from '@/store/useUiStore';
 import type { ExpenseCategory } from '@/types/xbar';
-
-type DashboardMenuState =
-  | { type: 'horse'; id: string; x: number; y: number }
-  | { type: 'record'; id: string; x: number; y: number }
-  | { type: 'lead'; id: string; x: number; y: number }
-  | { type: 'expense'; id: string; x: number; y: number };
-
-const expenseCategories: ExpenseCategory[] = ['Feed', 'Wormer', 'Dental Float', 'Farrier', 'Vet Care', 'Supplements', 'Bedding', 'Travel'];
-
-const careSignalTone: Record<'due' | 'watch' | 'clear', 'rose' | 'amber' | 'emerald'> = {
-  due: 'rose',
-  watch: 'amber',
-  clear: 'emerald',
-};
+import { CARE_SIGNAL_TONE, EXPENSE_CATEGORIES } from '@/features/dashboard/constants';
+import type { DashboardMenuState } from '@/features/dashboard/types';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -378,11 +366,16 @@ export default function Dashboard() {
             </span>
             <span className="ops-briefing-stat__detail">{reviewQueue.length ? 'waiting review' : 'queue clear'}</span>
           </button>
-          <div className="ops-briefing-stat">
+          <button
+            type="button"
+            className="ops-briefing-stat ops-briefing-stat--clickable"
+            onClick={() => navigate('/expenses')}
+            title="Open expense ledger"
+          >
             <span className="ops-briefing-stat__label">Month spend</span>
             <span className="ops-briefing-stat__value">{formatCompactCurrency(budgetSummary.total)}</span>
             <span className="ops-briefing-stat__detail">{qualifiedBuyerCount} active buyer{qualifiedBuyerCount !== 1 ? 's' : ''}</span>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -406,8 +399,8 @@ export default function Dashboard() {
             label="This month"
             value={formatCompactCurrency(budgetSummary.total)}
             tone="blue"
-            onClick={() => navigate('/')}
-            title="Current month operating spend"
+            onClick={() => navigate('/expenses')}
+            title="Open expense ledger"
           />
         </div>
 
@@ -561,7 +554,7 @@ export default function Dashboard() {
                     </div>
                     <div className="dashboard-chip-row">
                       {row.signals.map((signal) => (
-                        <Pill key={signal.key} tone={careSignalTone[signal.status]}>
+                        <Pill key={signal.key} tone={CARE_SIGNAL_TONE[signal.status]}>
                           {signal.label} {signal.status === 'clear' ? 'ok' : signal.status}
                         </Pill>
                       ))}
@@ -679,7 +672,7 @@ export default function Dashboard() {
                   onChange={(event) => setReceiptDraft((current) => ({ ...current, category: event.target.value as ExpenseCategory }))}
                   disabled={!canManageBudget || savingReceipt}
                 >
-                  {expenseCategories.map((category) => (
+                  {EXPENSE_CATEGORIES.map((category) => (
                     <option key={category} value={category}>
                       {category}
                     </option>

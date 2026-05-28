@@ -7,34 +7,8 @@ import { formatDateLabel } from '@/lib/format';
 import { useXbarStore } from '@/store/useXbarStore';
 import './operationsExperience.css';
 
-type ReminderKind = 'Care' | 'Ownership' | 'Documents' | 'Sales';
-type ReminderUrgency = 'Due' | 'Watch' | 'Clear';
-type ReminderItem = {
-  id: string;
-  kind: ReminderKind;
-  urgency: ReminderUrgency;
-  title: string;
-  horseId?: string;
-  horseName?: string;
-  dueDate?: string;
-  detail: string;
-  route: string;
-};
-
-type ReminderFilter = ReminderKind | 'All';
-
-function urgencyTone(urgency: ReminderUrgency) {
-  if (urgency === 'Due') return 'rose';
-  if (urgency === 'Watch') return 'amber';
-  return 'emerald';
-}
-
-function kindCopy(kind: ReminderKind) {
-  if (kind === 'Care') return 'Health, Coggins, dental, wormer, and care work.';
-  if (kind === 'Ownership') return 'Transfer papers, owner records, and legal gaps.';
-  if (kind === 'Documents') return 'Files waiting on match, review, or approval.';
-  return 'Buyer follow-ups and sale movement.';
-}
+import { kindCopy, urgencyTone } from '@/features/reminders/helpers';
+import type { ReminderFilter, ReminderItem, ReminderKind, ReminderUrgency } from '@/features/reminders/types';
 
 export default function Reminders() {
   const navigate = useNavigate();

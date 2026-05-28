@@ -7,17 +7,7 @@ import { formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { MedicalEventType } from '@/types/xbar';
-
-const medicalEventTypes: MedicalEventType[] = [
-  'Vet visit',
-  'Vaccine',
-  'Coggins',
-  'Injury',
-  'Dental',
-  'Deworming',
-  'Treatment',
-  'Historical note',
-];
+import { medicalEventTypes } from '@/features/health/constants';
 
 export default function Medical() {
   const navigate = useNavigate();

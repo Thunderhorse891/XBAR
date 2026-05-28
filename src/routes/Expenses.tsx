@@ -7,17 +7,10 @@ import { formatCompactCurrency, formatCurrency, formatDateLabel } from '@/lib/fo
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
 import type { ExpenseCategory } from '@/types/xbar';
+import { EXPENSE_CATEGORIES } from '@/features/expenses/constants';
+import { matchesSearch } from '@/features/expenses/helpers';
+import type { ExpenseFilter } from '@/features/expenses/types';
 import './operationsExperience.css';
-
-const expenseCategories: ExpenseCategory[] = ['Feed', 'Wormer', 'Dental Float', 'Farrier', 'Vet Care', 'Supplements', 'Bedding', 'Travel'];
-
-type ExpenseFilter = ExpenseCategory | 'All';
-
-function matchesSearch(values: Array<string | undefined>, query: string) {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) return true;
-  return values.filter(Boolean).join(' ').toLowerCase().includes(normalized);
-}
 
 export default function Expenses() {
   const navigate = useNavigate();
@@ -87,36 +80,49 @@ export default function Expenses() {
 
   return (
     <div className="ops-experience">
-      <section className="ops-hero ops-hero--expenses" aria-labelledby="expenses-title">
-        <div>
-          <div className="ops-kicker">XBAR Expenses</div>
-          <h1 id="expenses-title">Know what the operation costs.</h1>
-          <p>Feed, vet care, farrier work, hauling, bedding, supplements, and horse-specific receipts in one clean ledger.</p>
-          <div className="ops-hero__actions">
-            <button className="button button--primary" type="button" onClick={() => document.getElementById('expense-intake')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
-              Log receipt
-            </button>
-            <button className="button button--ghost" type="button" onClick={() => navigate('/documents?upload=1')}>
-              Upload expense file
-            </button>
+      <div className="surface-hero surface-hero--dark">
+        <div className="surface-hero__top">
+          <div>
+            <span className="surface-hero__eyebrow">Budget & Expenses</span>
+            <h1 className="surface-hero__title">Know what the operation costs.</h1>
+            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
+              Feed, vet care, farrier work, hauling, bedding, supplements, and horse-specific receipts in one clean ledger.
+            </p>
+            <div className="surface-hero__actions" style={{ marginTop: '16px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <button className="button button--primary" type="button" onClick={() => document.getElementById('expense-intake')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+                Log receipt
+              </button>
+              <button className="button button--ghost" type="button" onClick={() => navigate('/documents?upload=1')}>
+                Upload expense file
+              </button>
+            </div>
+          </div>
+          <div className="surface-hero__stats">
+            <div className="surface-hero__stat">
+              <span>This month</span>
+              <strong>{formatCompactCurrency(budgetSummary.total)}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Receipts</span>
+              <strong>{budgetSummary.receiptCount}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Feed</span>
+              <strong>{formatCompactCurrency(budgetSummary.feed)}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Health</span>
+              <strong>{formatCompactCurrency(budgetSummary.health)}</strong>
+            </div>
           </div>
         </div>
-        <div className="ops-hero__ledger" aria-label="Expense summary">
-          <span>This month</span>
-          <strong>{formatCompactCurrency(budgetSummary.total)}</strong>
-          <small>{budgetSummary.receiptCount} receipts logged</small>
-          <div className="ops-hero__mini-grid">
-            <div><span>Feed</span><b>{formatCompactCurrency(budgetSummary.feed)}</b></div>
-            <div><span>Health</span><b>{formatCompactCurrency(budgetSummary.health)}</b></div>
-          </div>
-        </div>
-      </section>
+      </div>
 
-      <div className="ops-metric-grid">
-        <MetricCard label="Month" value={formatCompactCurrency(budgetSummary.total)} detail="Current operating spend" tone="blue" className="ops-metric-card" />
-        <MetricCard label="Horse linked" value={String(horseLinkedCount)} detail="Receipts tied to horse profiles" tone="emerald" className="ops-metric-card" />
-        <MetricCard label="Ranch-wide" value={String(ranchWideCount)} detail="Feed room, travel, and shared costs" tone="slate" className="ops-metric-card" />
-        <MetricCard label="Largest" value={largestReceipt ? formatCompactCurrency(largestReceipt.amount) : '$0'} detail={largestReceipt?.title ?? 'No receipts yet'} tone="amber" className="ops-metric-card" />
+      <div className="metric-grid">
+        <MetricCard label="Month" value={formatCompactCurrency(budgetSummary.total)} detail="Current operating spend" tone="blue" />
+        <MetricCard label="Horse linked" value={String(horseLinkedCount)} detail="Receipts tied to horse profiles" tone="emerald" />
+        <MetricCard label="Ranch-wide" value={String(ranchWideCount)} detail="Feed room, travel, and shared costs" tone="slate" />
+        <MetricCard label="Largest" value={largestReceipt ? formatCompactCurrency(largestReceipt.amount) : '$0'} detail={largestReceipt?.title ?? 'No receipts yet'} tone="amber" />
       </div>
 
       <div className="ops-workspace ops-workspace--split">
@@ -136,7 +142,7 @@ export default function Expenses() {
             </label>
             <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value as ExpenseFilter)} aria-label="Filter expense category">
               <option value="All">All categories</option>
-              {expenseCategories.map((category) => <option key={category} value={category}>{category}</option>)}
+              {EXPENSE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
             </select>
           </div>
 
@@ -183,7 +189,7 @@ export default function Expenses() {
             <label className="field-stack">
               <span className="field-label">Category</span>
               <select className="field-input" value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value as ExpenseCategory }))} disabled={!canManageBudget || savingReceipt}>
-                {expenseCategories.map((category) => <option key={category} value={category}>{category}</option>)}
+                {EXPENSE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
               </select>
             </label>
             <label className="field-stack">

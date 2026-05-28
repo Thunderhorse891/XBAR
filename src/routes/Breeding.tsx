@@ -21,6 +21,7 @@ export default function Breeding() {
   const [eventBody, setEventBody] = useState('');
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
   const [eventError, setEventError] = useState('');
+  const [milestoneQuery, setMilestoneQuery] = useState('');
   const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
   const menuHorse = breedingHorses.find((horse) => horse.id === menuState?.horseId);
   const menuItems = menuHorse
@@ -119,24 +120,48 @@ export default function Breeding() {
         </Panel>
 
         <Panel eyebrow="Milestones" title="Milestones">
-          {breedingHorses.some((horse) => horse.breedingTimeline.length) ? (
-            <div className="stack-list">
-              {breedingHorses.flatMap((horse) =>
-                horse.breedingTimeline.map((event) => (
-                  <div key={event.id} className="stack-item">
-                    <div className="stack-item__top">
-                      <div>
-                        <div className="stack-item__title">{horse.name}</div>
-                        <div className="stack-item__copy">{event.title}</div>
+          {breedingHorses.some((horse) => horse.breedingTimeline.length) ? (() => {
+            const allMilestones = breedingHorses.flatMap((horse) =>
+              horse.breedingTimeline.map((event) => ({ horse, event })),
+            );
+            const filtered = milestoneQuery.trim()
+              ? allMilestones.filter(({ horse, event }) =>
+                  horse.name.toLowerCase().includes(milestoneQuery.toLowerCase()) ||
+                  event.title.toLowerCase().includes(milestoneQuery.toLowerCase()),
+                )
+              : allMilestones;
+            return (
+              <>
+                <div style={{ marginBottom: '14px' }}>
+                  <input
+                    className="field-input"
+                    placeholder="Search horse or milestone..."
+                    value={milestoneQuery}
+                    onChange={(e) => setMilestoneQuery(e.target.value)}
+                    style={{ maxWidth: '320px' }}
+                  />
+                </div>
+                {filtered.length ? (
+                  <div className="stack-list">
+                    {filtered.map(({ horse, event }) => (
+                      <div key={event.id} className="stack-item">
+                        <div className="stack-item__top">
+                          <div>
+                            <div className="stack-item__title">{horse.name}</div>
+                            <div className="stack-item__copy">{event.title}</div>
+                          </div>
+                          <Pill tone="slate">{formatDateLabel(event.date)}</Pill>
+                        </div>
+                        <div className="stack-item__copy">{event.summary}</div>
                       </div>
-                      <Pill tone="slate">{formatDateLabel(event.date)}</Pill>
-                    </div>
-                    <div className="stack-item__copy">{event.summary}</div>
+                    ))}
                   </div>
-                )),
-              )}
-            </div>
-          ) : (
+                ) : (
+                  <p style={{ color: 'var(--muted)', fontSize: '14px' }}>No milestones match "{milestoneQuery}".</p>
+                )}
+              </>
+            );
+          })() : (
             <EmptyState compact title="No breeding milestones yet" description="Log breeding events to track contracts, foaling, and program timing." />
           )}
         </Panel>
