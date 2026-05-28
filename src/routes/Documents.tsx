@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
-import { MetricCard, PageHeader, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
+import { MetricCard, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
 import { EmptyState } from '@/components/EmptyState';
 import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { formatDateTimeLabel } from '@/lib/format';
@@ -52,14 +52,6 @@ export default function Documents() {
   const [activeView, setActiveView] = useState<DocumentsView>(uploadOpen ? 'Intake' : 'Review');
   const menuDocument = menuState?.type === 'document' ? documents.find((document) => document.id === menuState.documentId) : undefined;
   const menuHorseId = menuDocument ? reviewAssignments[menuDocument.id] ?? menuDocument.horseId : undefined;
-  const accessModeLabel =
-    canUploadDocuments && !canReviewDocuments
-      ? 'Upload only'
-      : !canUploadDocuments && canReviewDocuments
-        ? 'Review only'
-        : !canUploadDocuments && !canReviewDocuments
-          ? 'Read only'
-          : 'Full access';
 
   useEffect(() => {
     if (uploadOpen) {
@@ -305,15 +297,29 @@ export default function Documents() {
 
   return (
     <>
-      <PageHeader
-        title="Documents"
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Pill tone="slate">Manual</Pill>
-            <Pill tone="blue">{accessModeLabel}</Pill>
+      <div className="surface-hero surface-hero--dark">
+        <div className="surface-hero__top">
+          <div>
+            <span className="surface-hero__eyebrow">Document Vault</span>
+            <h1 className="surface-hero__title">Records, proof, and intake.</h1>
+            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
+              Registration papers, vet records, Coggins, bills of sale, and intake files. Every document must be linked, reviewed, and ready before a horse can transfer or go to market.
+            </p>
           </div>
-        }
-      />
+          <div className="surface-hero__stats">
+            <div className="surface-hero__stat"><span>Total files</span><strong>{documents.length}</strong></div>
+            <div className="surface-hero__stat">
+              <span>Review queue</span>
+              <strong style={{ color: reviewQueue.length ? 'var(--amber)' : 'var(--emerald)' }}>{reviewQueue.length}</strong>
+            </div>
+            <div className="surface-hero__stat"><span>Buyer-safe</span><strong style={{ color: 'var(--emerald)' }}>{buyerSafeDocuments.length}</strong></div>
+            <div className="surface-hero__stat">
+              <span>Duplicates</span>
+              <strong style={{ color: duplicates.length ? 'var(--amber)' : 'var(--emerald)' }}>{duplicates.length}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="metric-grid">
         <MetricCard

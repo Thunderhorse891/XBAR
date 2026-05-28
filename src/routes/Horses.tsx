@@ -4,7 +4,7 @@ import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
 import { SalePacketSlots } from '@/components/SalePacketSlots';
-import { PageHeader, Pill, ProgressBar, SurfaceTabs } from '@/components/app-ui';
+import { Pill, ProgressBar, SurfaceTabs } from '@/components/app-ui';
 import { DotsIcon } from '@/components/icons';
 import { buildPublicShareUrl } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
@@ -220,19 +220,27 @@ export default function Horses() {
 
   return (
     <>
-      <PageHeader
-        title="Horses"
-        actions={
-          <>
-            <Link to="/documents?upload=1" className="button button--ghost button--compact">
-              Batch intake
-            </Link>
-            <button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>
-              New horse
-            </button>
-          </>
-        }
-      />
+      <div className="surface-hero surface-hero--dark">
+        <div className="surface-hero__top">
+          <div>
+            <span className="surface-hero__eyebrow">Horse Operations</span>
+            <h1 className="surface-hero__title">Profiles, records, and readiness.</h1>
+            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
+              Every horse in the operation. Health records, ownership proof, documents, and transfer readiness — all in one place.
+            </p>
+          </div>
+          <div className="surface-hero__stats">
+            <div className="surface-hero__stat"><span>Total horses</span><strong>{horses.length}</strong></div>
+            <div className="surface-hero__stat"><span>Medical watch</span><strong style={{ color: horses.filter((h) => h.status === 'Medical Review').length ? 'var(--rose)' : 'var(--emerald)' }}>{horses.filter((h) => h.status === 'Medical Review').length}</strong></div>
+            <div className="surface-hero__stat"><span>Sale prep</span><strong>{horses.filter((h) => h.status === 'Sale Prep').length}</strong></div>
+            <div className="surface-hero__stat"><span>Packet ready</span><strong style={{ color: 'var(--emerald)' }}>{horses.filter((h) => h.readiness.packetStatus === 'Ready').length}</strong></div>
+          </div>
+          <div className="inline-actions" style={{ marginTop: '16px' }}>
+            <Link to="/documents?upload=1" className="button button--ghost button--compact">Batch intake</Link>
+            <button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>New horse</button>
+          </div>
+        </div>
+      </div>
 
       {createOpen ? (
         <section className="panel">

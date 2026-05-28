@@ -43,6 +43,7 @@ export default function Medical() {
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
   const [eventType, setEventType] = useState<MedicalEventType>('Vet visit');
   const [eventError, setEventError] = useState('');
+  const [timelineQuery, setTimelineQuery] = useState('');
   const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
   const menuHorse = horses.find((horse) => horse.id === menuState?.horseId);
   const menuItems = menuHorse
@@ -270,30 +271,51 @@ export default function Medical() {
       </div>
 
       <Panel eyebrow="Timeline" title="Timeline">
-        {medicalEvents.length ? (
-          <div className="table-shell">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Horse</th>
-                  <th>Event</th>
-                  <th>Owner</th>
-                  <th>Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {medicalEvents.map((event) => (
-                  <tr key={event.id}>
-                    <td>{event.horseName}</td>
-                    <td>{event.title}</td>
-                    <td>{event.veterinarian}</td>
-                    <td>{formatDateLabel(event.date)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {medicalEvents.length > 0 && (
+          <div style={{ marginBottom: '14px' }}>
+            <input
+              className="field-input"
+              placeholder="Search by horse name or event title…"
+              value={timelineQuery}
+              onChange={(e) => setTimelineQuery(e.target.value)}
+              style={{ maxWidth: '380px' }}
+            />
           </div>
-        ) : (
+        )}
+        {medicalEvents.length ? (() => {
+          const filtered = timelineQuery.trim()
+            ? medicalEvents.filter((ev) =>
+                ev.horseName.toLowerCase().includes(timelineQuery.toLowerCase()) ||
+                ev.title.toLowerCase().includes(timelineQuery.toLowerCase()),
+              )
+            : medicalEvents;
+          return filtered.length ? (
+            <div className="table-shell">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Horse</th>
+                    <th>Event</th>
+                    <th>Vet</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((event) => (
+                    <tr key={event.id}>
+                      <td>{event.horseName}</td>
+                      <td>{event.title}</td>
+                      <td>{event.veterinarian}</td>
+                      <td>{formatDateLabel(event.date)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p style={{ color: 'var(--muted)', fontSize: '14px' }}>No events match "{timelineQuery}".</p>
+          );
+        })() : (
           <EmptyState title="No medical timeline yet" description="Create a care event to start the timeline." />
         )}
       </Panel>

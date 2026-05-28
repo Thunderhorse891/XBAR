@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
-import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
+import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { buildPublicShareUrl } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
@@ -47,6 +47,7 @@ export default function Sales() {
   const [leadOutcome, setLeadOutcome] = useState(selectedLead?.outcome ?? 'Won');
   const [leadError, setLeadError] = useState('');
   const [menuState, setMenuState] = useState<{ type: 'lead' | 'horse'; id: string; x: number; y: number } | null>(null);
+  const [listingQuery, setListingQuery] = useState('');
   const menuLead = menuState?.type === 'lead' ? salesLeads.find((lead) => lead.id === menuState.id) : undefined;
   const menuHorse = menuState?.type === 'horse' ? saleHorses.find((horse) => horse.id === menuState.id) : undefined;
   const menuListing = menuHorse ? sharedListings.find((listing) => listing.horseId === menuHorse.id && listing.state !== 'Archived') : undefined;
@@ -104,10 +105,31 @@ export default function Sales() {
 
   return (
     <>
-      <PageHeader
-        eyebrow="Sales"
-        title="Sales"
-      />
+      <div className="surface-hero surface-hero--dark">
+        <div className="surface-hero__top">
+          <div>
+            <span className="surface-hero__eyebrow">Sales & Transfers</span>
+            <h1 className="surface-hero__title">Listings, buyers, and transfer readiness.</h1>
+            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
+              Every horse with an asking price or active buyer. Track sale status, follow-ups due, and what is blocking transfer completion.
+            </p>
+          </div>
+          <div className="surface-hero__stats">
+            <div className="surface-hero__stat"><span>Listings</span><strong>{saleHorses.length}</strong></div>
+            <div className="surface-hero__stat"><span>Open leads</span><strong>{salesLeads.filter((lead) => lead.stage !== 'Closed').length}</strong></div>
+            <div className="surface-hero__stat">
+              <span>Follow-ups due</span>
+              <strong style={{ color: followUpsDue ? 'var(--rose)' : 'var(--emerald)' }}>{followUpsDue}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Blockers</span>
+              <strong style={{ color: saleHorses.filter((h) => h.readiness.packetStatus === 'Needs Transfer Docs').length ? 'var(--amber)' : 'var(--emerald)' }}>
+                {saleHorses.filter((h) => h.readiness.packetStatus === 'Needs Transfer Docs').length}
+              </strong>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="metric-grid">
         <MetricCard label="Sale horses" value={`${saleHorses.length}`} detail="Active pricing or buyer review" />
@@ -118,9 +140,20 @@ export default function Sales() {
 
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel eyebrow="Listings" title="Listings">
+          {saleHorses.length > 0 && (
+            <div className="inline-search" style={{ marginBottom: '16px' }}>
+              <input
+                className="field-input"
+                placeholder="Search by name, segment, status…"
+                value={listingQuery}
+                onChange={(e) => setListingQuery(e.target.value)}
+                style={{ maxWidth: '360px' }}
+              />
+            </div>
+          )}
           {saleHorses.length ? (
             <div className="horse-grid">
-              {saleHorses.map((horse) => (
+              {saleHorses.filter((h) => !listingQuery.trim() || h.name.toLowerCase().includes(listingQuery.toLowerCase()) || h.segment.toLowerCase().includes(listingQuery.toLowerCase())).map((horse) => (
                 <div
                   key={horse.id}
                   className="horse-card horse-card--interactive"

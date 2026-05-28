@@ -20,6 +20,7 @@ export default function RanchAssets() {
   const assigned = ranchAssets.filter((asset) => asset.status === 'Assigned');
   const serviceSoon = ranchAssets.filter((asset) => asset.condition !== 'Excellent');
   const [selectedAssetId, setSelectedAssetId] = useState(ranchAssets[0]?.id ?? '');
+  const [assetQuery, setAssetQuery] = useState('');
   const [menuState, setMenuState] = useState<{ assetId: string; x: number; y: number } | null>(null);
 
   const selectedAsset = ranchAssets.find((asset) => asset.id === selectedAssetId) ?? ranchAssets[0];
@@ -133,6 +134,17 @@ export default function RanchAssets() {
 
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel eyebrow="Inventory" title="Register">
+          {ranchAssets.length > 0 && (
+            <div style={{ marginBottom: '14px' }}>
+              <input
+                className="field-input"
+                placeholder="Search by name, category, or assignment…"
+                value={assetQuery}
+                onChange={(e) => setAssetQuery(e.target.value)}
+                style={{ maxWidth: '380px' }}
+              />
+            </div>
+          )}
           {ranchAssets.length ? (
             <div className="table-shell">
               <table className="data-table">
@@ -147,7 +159,7 @@ export default function RanchAssets() {
                   </tr>
                 </thead>
                 <tbody>
-                  {ranchAssets.map((asset) => (
+                  {ranchAssets.filter((a) => !assetQuery.trim() || a.name.toLowerCase().includes(assetQuery.toLowerCase()) || a.category.toLowerCase().includes(assetQuery.toLowerCase()) || a.assignedTo.toLowerCase().includes(assetQuery.toLowerCase())).map((asset) => (
                     <tr
                       key={asset.id}
                       onClick={() => handleAssetSelection(asset.id)}
