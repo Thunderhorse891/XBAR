@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
-import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
+import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
@@ -40,10 +40,37 @@ export default function Breeding() {
 
   return (
     <>
-      <PageHeader
-        eyebrow="Breeding"
-        title="Breeding"
-      />
+      <div className="surface-hero surface-hero--dark">
+        <div className="surface-hero__top">
+          <div>
+            <span className="surface-hero__eyebrow">Breeding Program</span>
+            <h1 className="surface-hero__title">Pairings, milestones, and contracts.</h1>
+            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
+              Track mares, studs, and foaling work through a single program timeline. Every pairing should connect back to documents and verified records.
+            </p>
+          </div>
+          <div className="surface-hero__stats">
+            <div className="surface-hero__stat">
+              <span>Program horses</span>
+              <strong>{breedingHorses.length}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Contracts</span>
+              <strong>{breedingDocs.length}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Milestones</span>
+              <strong>{breedingHorses.reduce((sum, horse) => sum + horse.breedingTimeline.length, 0)}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Blockers</span>
+              <strong style={{ color: breedingHorses.filter((horse) => horse.readiness.packetStatus !== 'Ready').length ? 'var(--amber)' : 'var(--emerald)' }}>
+                {breedingHorses.filter((horse) => horse.readiness.packetStatus !== 'Ready').length}
+              </strong>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="metric-grid">
         <MetricCard label="Program horses" value={`${breedingHorses.length}`} detail="Mares and studs tracked in active breeding context" />

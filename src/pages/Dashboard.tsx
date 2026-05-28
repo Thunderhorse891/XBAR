@@ -2,7 +2,7 @@ import { type FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
-import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
+import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { buildBudgetSummary, buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
 import { formatCompactCurrency, formatCurrency, formatDateLabel } from '@/lib/format';
 import { resolveWeatherByQuery, type WeatherForecast } from '@/lib/weather';
@@ -185,22 +185,47 @@ export default function Dashboard() {
   if (!hasWorkspaceData) {
     return (
       <>
-        <PageHeader
-          title="Ranch desk"
-          actions={
-            <>
-              <Link to="/horses?new=1" className="button button--primary button--compact">
-                New horse
-              </Link>
-              <Link to="/weather" className="button button--ghost button--compact">
-                Weather
-              </Link>
-              <Link to="/documents?upload=1" className="button button--ghost button--compact">
-                Upload docs
-              </Link>
-            </>
-          }
-        />
+        <div className="ops-briefing-header">
+          <div className="ops-briefing-header__top">
+            <div className="ops-briefing-header__left">
+              <div className="ops-briefing-header__ranch">{workspaceProfile.ranchName || workspaceProfile.businessName || 'Ranch Operations'}</div>
+              <h1 className="ops-briefing-header__title">Build the command center.</h1>
+              <div className="ops-briefing-header__chips">
+                <span className="ops-briefing-chip">First horse</span>
+                <span className="ops-briefing-chip">Document vault</span>
+                <span className="ops-briefing-chip">Budget ledger</span>
+                <span className="ops-briefing-chip">Weather watch</span>
+              </div>
+            </div>
+            <div className="ops-briefing-header__actions">
+              <Link to="/horses?new=1" className="ops-briefing-action ops-briefing-action--primary">New horse</Link>
+              <Link to="/documents?upload=1" className="ops-briefing-action">Batch intake</Link>
+              <Link to="/settings" className="ops-briefing-action">Settings</Link>
+            </div>
+          </div>
+          <div className="ops-briefing-stat-row">
+            <div className="ops-briefing-stat">
+              <span className="ops-briefing-stat__label">Horses</span>
+              <span className="ops-briefing-stat__value ops-briefing-stat__value--clear">0</span>
+              <span className="ops-briefing-stat__detail">No records yet</span>
+            </div>
+            <div className="ops-briefing-stat">
+              <span className="ops-briefing-stat__label">Documents</span>
+              <span className="ops-briefing-stat__value">0</span>
+              <span className="ops-briefing-stat__detail">Vault is empty</span>
+            </div>
+            <div className="ops-briefing-stat">
+              <span className="ops-briefing-stat__label">Transfers</span>
+              <span className="ops-briefing-stat__value ops-briefing-stat__value--clear">0</span>
+              <span className="ops-briefing-stat__detail">None pending</span>
+            </div>
+            <div className="ops-briefing-stat">
+              <span className="ops-briefing-stat__label">Buyers</span>
+              <span className="ops-briefing-stat__value">0</span>
+              <span className="ops-briefing-stat__detail">No active leads</span>
+            </div>
+          </div>
+        </div>
 
         <div className="dashboard-grid dashboard-grid--primary">
           <Panel eyebrow="Workspace" title="Start the ranch desk">
@@ -226,23 +251,23 @@ export default function Dashboard() {
             />
           </Panel>
 
-          <Panel eyebrow="Quick start" title="Start here">
+          <Panel eyebrow="First steps" title="What to build first">
             <div className="stack-list">
               <div className="stack-item">
                 <div className="stack-item__title">Horse record</div>
-                <div className="stack-item__copy">Add one horse or let intake build it from the packet.</div>
+                <div className="stack-item__copy">One horse gives the system something to organize around. Add the name, breed, barn, and owner.</div>
               </div>
               <div className="stack-item">
-                <div className="stack-item__title">Documents</div>
-                <div className="stack-item__copy">Upload the first packet so trust and ownership have source files.</div>
+                <div className="stack-item__title">Document vault</div>
+                <div className="stack-item__copy">Upload the first packet. Coggins, registration, and health papers establish the chain of record.</div>
               </div>
               <div className="stack-item">
-                <div className="stack-item__title">Budget</div>
-                <div className="stack-item__copy">Log feed, wormer, dental float, and vet receipts.</div>
+                <div className="stack-item__title">Spend ledger</div>
+                <div className="stack-item__copy">Log feed, wormer, dental, and vet costs. The budget builds itself once receipts come in.</div>
               </div>
               <div className="stack-item">
-                <div className="stack-item__title">Weather</div>
-                <div className="stack-item__copy">Load the ranch forecast for turnout, hauling, and breeding windows.</div>
+                <div className="stack-item__title">Weather watch</div>
+                <div className="stack-item__copy">Set the ranch location and get turnout, hauling, and breeding windows tied to the forecast.</div>
               </div>
             </div>
           </Panel>
@@ -284,51 +309,84 @@ export default function Dashboard() {
     setSavingReceipt(false);
   }
 
+  const urgencyCount = transferGaps.length + careDueCount;
+
   return (
     <>
-      <PageHeader
-        title="Ranch desk"
-        actions={
-          <>
-            <Link to="/weather" className="button button--ghost button--compact">
-              Weather
-            </Link>
-            <Link to="/documents" className="button button--ghost button--compact">
-              Review docs
-            </Link>
-            <Link to="/horses?new=1" className="button button--primary button--compact">
-              New horse
-            </Link>
-          </>
-        }
-      />
-
-      <section className="command-stage">
-        <div className="command-stage__lead">
-          <div className="command-stage__eyebrow">{workspaceProfile.ranchName || 'Daily operations'}</div>
-          <h2 className="command-stage__title">What needs attention today.</h2>
-          <div className="command-stage__chips">
-            <Pill tone="blue">{roleWorkspace.label}</Pill>
-            <Pill tone={transferGaps.length ? 'rose' : 'emerald'}>{transferGaps.length} transfer gaps</Pill>
-            <Pill tone={careDueCount ? 'amber' : 'emerald'}>{careDueCount} care due</Pill>
-            {weather ? <Pill tone="slate">{weather.current.temperatureF}°F</Pill> : null}
+      <div className="ops-briefing-header">
+        <div className="ops-briefing-header__top">
+          <div className="ops-briefing-header__left">
+            <div className="ops-briefing-header__ranch">{workspaceProfile.ranchName || workspaceProfile.businessName || 'Ranch Operations'}</div>
+            <h1 className="ops-briefing-header__title">
+              {urgencyCount > 0
+                ? `${urgencyCount} item${urgencyCount > 1 ? 's' : ''} need${urgencyCount === 1 ? 's' : ''} attention.`
+                : 'Ranch desk is clear.'}
+            </h1>
+            <div className="ops-briefing-header__chips">
+              <span className="ops-briefing-chip">{roleWorkspace.label}</span>
+              <span className={transferGaps.length ? 'ops-briefing-chip ops-briefing-chip--urgent' : 'ops-briefing-chip ops-briefing-chip--success'}>
+                {transferGaps.length} transfer{transferGaps.length !== 1 ? 's' : ''} pending
+              </span>
+              <span className={careDueCount ? 'ops-briefing-chip ops-briefing-chip--warning' : 'ops-briefing-chip ops-briefing-chip--success'}>
+                {careDueCount} care due
+              </span>
+              {weather ? (
+                <span className="ops-briefing-chip">{weather.current.temperatureF}°F · {weather.current.weatherLabel}</span>
+              ) : null}
+            </div>
           </div>
-          <div className="command-stage__ledger">
-            <div className="command-stage__ledger-item">
-              <span>Month</span>
-              <strong>{formatCompactCurrency(budgetSummary.total)}</strong>
-            </div>
-            <div className="command-stage__ledger-item">
-              <span>Buyers</span>
-              <strong>{qualifiedBuyerCount}</strong>
-            </div>
-            <div className="command-stage__ledger-item">
-              <span>Queue</span>
-              <strong>{reviewQueue.length}</strong>
-            </div>
+          <div className="ops-briefing-header__actions">
+            <Link to="/horses?new=1" className="ops-briefing-action ops-briefing-action--primary">New horse</Link>
+            <Link to="/documents" className="ops-briefing-action">Review docs</Link>
+            <Link to="/weather" className="ops-briefing-action">Weather</Link>
           </div>
         </div>
+        <div className="ops-briefing-stat-row">
+          <button
+            type="button"
+            className="ops-briefing-stat ops-briefing-stat--clickable"
+            onClick={() => navigate('/ownership')}
+            title="Open ownership records"
+          >
+            <span className="ops-briefing-stat__label">Transfers</span>
+            <span className={`ops-briefing-stat__value${transferGaps.length ? ' ops-briefing-stat__value--urgent' : ' ops-briefing-stat__value--clear'}`}>
+              {transferGaps.length}
+            </span>
+            <span className="ops-briefing-stat__detail">{transferGaps.length ? 'need resolution' : 'all clear'}</span>
+          </button>
+          <button
+            type="button"
+            className="ops-briefing-stat ops-briefing-stat--clickable"
+            onClick={() => navigate('/medical')}
+            title="Open care board"
+          >
+            <span className="ops-briefing-stat__label">Care due</span>
+            <span className={`ops-briefing-stat__value${careDueCount ? ' ops-briefing-stat__value--warning' : ' ops-briefing-stat__value--clear'}`}>
+              {careDueCount}
+            </span>
+            <span className="ops-briefing-stat__detail">{careDueCount ? 'horses overdue' : 'care current'}</span>
+          </button>
+          <button
+            type="button"
+            className="ops-briefing-stat ops-briefing-stat--clickable"
+            onClick={() => navigate('/documents')}
+            title="Documents waiting on review"
+          >
+            <span className="ops-briefing-stat__label">Doc queue</span>
+            <span className={`ops-briefing-stat__value${reviewQueue.length ? ' ops-briefing-stat__value--warning' : ''}`}>
+              {reviewQueue.length}
+            </span>
+            <span className="ops-briefing-stat__detail">{reviewQueue.length ? 'waiting review' : 'queue clear'}</span>
+          </button>
+          <div className="ops-briefing-stat">
+            <span className="ops-briefing-stat__label">Month spend</span>
+            <span className="ops-briefing-stat__value">{formatCompactCurrency(budgetSummary.total)}</span>
+            <span className="ops-briefing-stat__detail">{qualifiedBuyerCount} active buyer{qualifiedBuyerCount !== 1 ? 's' : ''}</span>
+          </div>
+        </div>
+      </div>
 
+      <section className="command-stage command-stage--two-col">
         <div className="command-stage__rail">
           <MetricCard
             label="Transfer gaps"
@@ -375,7 +433,7 @@ export default function Dashboard() {
           <div className="command-stage__support-card">
             <div className="command-stage__support-label">Weather watch</div>
             <strong className="command-stage__support-title">
-              {weatherLoading ? 'Loading weather' : weather ? `${weather.current.temperatureF}°F · ${weather.current.weatherLabel}` : 'Forecast offline'}
+              {weatherLoading ? 'Loading...' : weather ? `${weather.current.temperatureF}°F · ${weather.current.weatherLabel}` : 'Forecast offline'}
             </strong>
             <div className="command-stage__support-copy">
               <span>

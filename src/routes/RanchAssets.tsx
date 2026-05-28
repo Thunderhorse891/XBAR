@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
-import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
+import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
@@ -94,10 +94,35 @@ export default function RanchAssets() {
 
   return (
     <>
-      <PageHeader
-        eyebrow="Ranch toolkit"
-        title="Ranch Toolkit"
-      />
+      <div className="surface-hero surface-hero--dark">
+        <div className="surface-hero__top">
+          <div>
+            <span className="surface-hero__eyebrow">Ranch Operations</span>
+            <h1 className="surface-hero__title">Equipment, kits, and field assets.</h1>
+            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
+              Track gear by status, condition, and assignment. Know what's available, what needs service, and what's tied to active operations.
+            </p>
+          </div>
+          <div className="surface-hero__stats">
+            <div className="surface-hero__stat">
+              <span>Assets</span>
+              <strong>{ranchAssets.length}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Assigned</span>
+              <strong>{assigned.length}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Service soon</span>
+              <strong style={{ color: serviceSoon.length ? 'var(--amber)' : 'var(--emerald)' }}>{serviceSoon.length}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Available</span>
+              <strong style={{ color: 'var(--emerald)' }}>{ranchAssets.length - assigned.length}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="metric-grid">
         <MetricCard label="Tracked assets" value={`${ranchAssets.length}`} detail="Tack, kits, stock" />

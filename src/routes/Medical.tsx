@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
-import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
+import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
@@ -62,10 +62,35 @@ export default function Medical() {
 
   return (
     <>
-      <PageHeader
-        eyebrow="Medical"
-        title="Medical"
-      />
+      <div className="surface-hero surface-hero--dark">
+        <div className="surface-hero__top">
+          <div>
+            <span className="surface-hero__eyebrow">Health & Care</span>
+            <h1 className="surface-hero__title">Coggins, vaccines, dental, and vet records.</h1>
+            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
+              Log every care event as it happens. Coggins expiration, dewormer cycles, dental float windows, and vet visits — kept in one verifiable timeline per horse.
+            </p>
+          </div>
+          <div className="surface-hero__stats">
+            <div className="surface-hero__stat">
+              <span>Watch</span>
+              <strong style={{ color: medicalWatch.length ? 'var(--rose)' : 'var(--emerald)' }}>{medicalWatch.length}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Timeline</span>
+              <strong>{medicalEvents.length}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Kits</span>
+              <strong>{kits.length}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Vet docs</span>
+              <strong>{documents.filter((document) => document.type === 'Vet Record' || document.type === 'Coggins').length}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="metric-grid">
         <MetricCard label="Watchlist" value={`${medicalWatch.length}`} detail="Horses needing care attention" tone="rose" />

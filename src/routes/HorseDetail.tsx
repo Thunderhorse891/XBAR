@@ -16,11 +16,6 @@ const mediaKinds: GalleryAsset['kind'][] = ['Hero', 'Conformation', 'Sale Still'
 const leadChannels: SalesLead['channel'][] = ['Facebook', 'Instagram', 'Referral', 'Site Inquiry'];
 const docSources: DocumentSource[] = ['Manual Upload', 'Bulk Intake', 'Shared Upload', 'Sales Packet'];
 type DetailTab = 'Overview' | 'Docs' | 'Ops' | 'Activity';
-const profileBadgeStyles = [
-  'border border-[#0c6f97]/15 bg-[#edf6fa] text-[#0c6f97]',
-  'border border-[#708194]/15 bg-[#f1f5f9] text-[#5f6f80]',
-  'border border-[#CC3333]/15 bg-[#fff4f4] text-[#CC3333]',
-] as const;
 
 function classNames(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(' ');
@@ -370,62 +365,103 @@ export default function HorseDetail() {
     <>
       <Link
         to="/horses"
-        className="inline-flex w-fit items-center gap-2 text-sm font-semibold text-[#0c6f97] transition-all duration-150 ease-[ease] hover:text-[#095a7a]"
+        className="inline-flex w-fit items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#6888a4] transition-all duration-150 ease-[ease] hover:text-[#98bcd8]"
       >
-        <ChevronLeftIcon className="h-4 w-4" />
-        Back to horses
+        <ChevronLeftIcon className="h-3.5 w-3.5" />
+        Horses
       </Link>
 
-      <section className="rounded-[10px] border border-[#d8e1ea] bg-[linear-gradient(180deg,#ffffff_0%,#f3f7fb_100%)] px-5 py-5 shadow-sm">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-          <div className="min-w-0">
+      {/* Horse Identity Hero — cinematic command file */}
+      <section className="relative overflow-hidden rounded-[18px] border border-[rgba(148,184,224,0.1)] bg-[linear-gradient(135deg,#030810_0%,#081626_55%,#091830_100%)] shadow-[0_40px_80px_rgba(0,0,0,0.18),0_12px_32px_rgba(0,0,0,0.10),inset_0_1px_0_rgba(255,255,255,0.04)]">
+        {/* Background radials */}
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_40%,rgba(34,102,238,0.14),transparent_26rem)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_15%,rgba(91,141,190,0.08),transparent_20rem)]" />
+        </div>
+
+        <div className="relative z-10 flex flex-col gap-5 p-6 xl:flex-row xl:items-end xl:justify-between xl:gap-8">
+          <div className="min-w-0 flex-1">
             <div className="mb-3 flex items-center gap-3">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8f8378]">{horse.ownerEntity}</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.26em] text-[rgba(120,170,220,0.65)]">{horse.ownerEntity}</span>
               {hasRestrictedActions ? (
                 <span
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#d8e1ea] bg-[#f4f7fb] text-[#667789] transition-all duration-150 ease-[ease] hover:border-[#0c6f97]/30 hover:text-[#0c6f97]"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.05)] text-[rgba(180,210,240,0.5)] transition-all duration-150 ease-[ease]"
                   title={`${currentRole} access limits some profile actions.`}
                 >
-                  <LockIcon className="h-4 w-4" />
+                  <LockIcon className="h-3.5 w-3.5" />
                 </span>
               ) : null}
             </div>
-            <h1 className="text-[clamp(2rem,4vw,3rem)] font-bold tracking-[-0.06em] text-[#201d1a]">{horse.name}</h1>
+
+            <h1 className="text-[clamp(2.2rem,5vw,3.8rem)] font-extrabold leading-[0.92] tracking-[-0.07em] text-[#f0f7ff]">
+              {horse.name}
+            </h1>
+
             <div className="mt-4 flex flex-wrap gap-2">
-              {[horse.segment, horse.status, horse.location.barn].map((label, index) => (
+              {[
+                { label: horse.segment, color: 'border-[rgba(12,111,151,0.3)] bg-[rgba(12,111,151,0.12)] text-[#7dcef0]' },
+                { label: horse.status, color: 'border-[rgba(112,129,148,0.3)] bg-[rgba(112,129,148,0.1)] text-[#a0b8cc]' },
+                { label: horse.location.barn, color: 'border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.05)] text-[rgba(200,220,244,0.75)]' },
+              ].map(({ label, color }) => (
                 <span
-                  key={`${label}-${index}`}
+                  key={label}
                   className={classNames(
-                    'inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold tracking-[0.02em]',
-                    profileBadgeStyles[index],
+                    'inline-flex items-center rounded-md border px-3 py-1.5 text-[11px] font-semibold tracking-[0.06em]',
+                    color,
                   )}
                 >
-                  <span
-                    className={classNames(
-                      'h-2.5 w-2.5 rounded-full',
-                      index === 0 ? 'bg-[#0c6f97]' : index === 1 ? 'bg-[#708194]' : 'bg-[#CC3333]',
-                    )}
-                  />
                   {label}
                 </span>
               ))}
             </div>
+
+            {/* Packet readiness + quick stats */}
+            <div className="mt-5 flex flex-wrap gap-3">
+              <div className="flex items-center gap-2 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.04)] px-3 py-2">
+                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Packet</span>
+                <span className={classNames(
+                  'text-[13px] font-bold tabular-nums',
+                  packet.score >= 75 ? 'text-[#5eead4]' : packet.score >= 50 ? 'text-[#fbbf24]' : 'text-[#ff8a8a]',
+                )}>{packet.score}%</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.04)] px-3 py-2">
+                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Docs</span>
+                <span className="text-[13px] font-bold tabular-nums text-[#e8f2ff]">{documents.length}</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.04)] px-3 py-2">
+                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Status</span>
+                <span className={classNames(
+                  'inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-bold',
+                  shareBadgeStyles,
+                )}>{packet.buyerProfileStatus}</span>
+              </div>
+              {ownershipRecord ? (
+                <div className="flex items-center gap-2 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.04)] px-3 py-2">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Ownership</span>
+                  <span className={classNames(
+                    'text-[13px] font-bold',
+                    ownershipRecord.transferStatus === 'Clear' ? 'text-[#5eead4]' : 'text-[#ff8a8a]',
+                  )}>{ownershipRecord.transferStatus}</span>
+                </div>
+              ) : null}
+            </div>
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="flex shrink-0 flex-wrap gap-2 xl:flex-col">
             {saved ? (
               <a
-                className="inline-flex h-11 items-center justify-center rounded-md bg-[#0c6f97] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#095a7a]"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[rgba(80,140,255,0.4)] bg-[rgba(17,85,221,0.78)] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[rgba(17,85,221,0.95)]"
                 href={publicShareUrl}
                 target="_blank"
                 rel="noreferrer"
                 onClick={() => void recordSharedChannel(horse.id, 'Direct Link')}
               >
-                Open live buyer link
+                <SharedAccessIcon className="h-4 w-4" />
+                Open buyer link
               </a>
             ) : (
               <button
-                className="inline-flex h-11 items-center justify-center rounded-md bg-[#0c6f97] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#095a7a] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[rgba(80,140,255,0.35)] bg-[rgba(17,85,221,0.7)] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[rgba(17,85,221,0.9)] disabled:cursor-not-allowed disabled:opacity-40"
                 type="button"
                 onClick={() => void handleSavedHorseToggle()}
                 disabled={!canManageSharedAccess}
@@ -434,7 +470,7 @@ export default function HorseDetail() {
               </button>
             )}
             <button
-              className="inline-flex h-11 items-center justify-center rounded-md border border-[#d8e1ea] bg-white px-5 text-sm font-semibold text-[#445162] transition-all duration-150 ease-[ease] hover:border-[#0c6f97]/30 hover:bg-[#eef3f8] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-[rgba(148,184,224,0.18)] bg-[rgba(255,255,255,0.06)] px-5 text-sm font-semibold text-[rgba(208,228,252,0.88)] transition-all duration-150 ease-[ease] hover:bg-[rgba(255,255,255,0.1)] disabled:cursor-not-allowed disabled:opacity-40"
               type="button"
               onClick={() => void handleSavedHorseToggle()}
               disabled={!canManageSharedAccess}
