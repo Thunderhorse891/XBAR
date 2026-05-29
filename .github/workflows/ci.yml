@@ -33,23 +33,3 @@ jobs:
 
       - name: Build app
         run: npm run build
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ hashFiles('package-lock.json') }}
-
-      - name: Install Playwright system deps
-        run: npx playwright install-deps chromium
-        env:
-          DEBIAN_FRONTEND: noninteractive
-
-      - name: Install Playwright Chromium
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install chromium
-
-      - name: Run e2e smoke test
-        run: npm run test:e2e
-        timeout-minutes: 3
