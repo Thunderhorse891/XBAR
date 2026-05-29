@@ -36,7 +36,7 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { label: 'Command Center', path: '/', icon: DashboardIcon, section: 'Command' },
+  { label: 'Dashboard', path: '/', icon: DashboardIcon, section: 'Command' },
   { label: 'Horses', path: '/horses', icon: HorsesIcon, section: 'Command' },
   { label: 'Ownership', path: '/ownership', icon: OwnershipIcon, section: 'Command', badgeKey: 'transfers' },
   { label: 'Documents', path: '/documents', icon: DocumentsIcon, section: 'Command', badgeKey: 'docs' },
@@ -47,13 +47,13 @@ const navItems: NavItem[] = [
   { label: 'Reminders', path: '/reminders', icon: BellIcon, section: 'Operations', badgeKey: 'reminders' },
   { label: 'Ranch Operations', path: '/assets', icon: AssetsIcon, section: 'Operations' },
   { label: 'Weather', path: '/weather', icon: WeatherIcon, section: 'Operations' },
-  { label: 'Buyer Rooms', path: '/shared-access', icon: SharedAccessIcon, section: 'Platform' },
+  { label: 'Buyer Links', path: '/shared-access', icon: SharedAccessIcon, section: 'Platform' },
   { label: 'Subscriptions', path: '/subscriptions', icon: SubscriptionIcon, section: 'Platform', requires: 'billing' },
   { label: 'Settings', path: '/settings', icon: SettingsIcon, section: 'Platform', requires: 'settings' },
 ];
 
 const routeLabels: Record<string, string> = {
-  '/': 'Command Center',
+  '/': 'Dashboard',
   '/horses': 'Horses',
   '/documents': 'Documents',
   '/ownership': 'Ownership',
@@ -65,12 +65,12 @@ const routeLabels: Record<string, string> = {
   '/assets': 'Ranch Operations',
   '/weather': 'Weather',
   '/subscriptions': 'Subscriptions',
-  '/shared-access': 'Buyer Rooms',
+  '/shared-access': 'Buyer Links',
   '/settings': 'Settings',
 };
 
 const routeHelp: Record<string, HelpSection[]> = {
-  'Command Center': [
+  'Dashboard': [
     { label: 'Start here', text: 'Watch care, ownership, documents, sales, weather, and spending in one place.' },
     { label: 'Next move', text: 'Open the highest-risk card first. XBAR should tell you what needs a human decision.' },
   ],
@@ -95,8 +95,8 @@ const routeHelp: Record<string, HelpSection[]> = {
     { label: 'Proof', text: 'Breeding decisions should connect back to files and history.' },
   ],
   Sales: [
-    { label: 'Pipeline', text: 'Keep buyer movement, packet readiness, and follow-ups visible.' },
-    { label: 'Buyer rooms', text: 'Share only when the horse and documents are ready.' },
+    { label: 'Pipeline', text: 'Keep buyer movement, record readiness, and follow-ups visible.' },
+    { label: 'Sale packets', text: 'Share only when the horse and documents are ready.' },
   ],
   Expenses: [
     { label: 'Ledger', text: 'Log costs while the context is still fresh.' },
@@ -116,14 +116,14 @@ const routeHelp: Record<string, HelpSection[]> = {
   ],
   Subscriptions: [
     { label: 'Billing', text: 'Show plan state clearly. Do not imply Stripe billing unless it is configured.' },
-    { label: 'Limits', text: 'Storage, seats, buyer rooms, and documents should be easy to understand.' },
+    { label: 'Limits', text: 'Storage, seats, buyer links, and documents should be easy to understand.' },
   ],
-  'Buyer Rooms': [
+  'Buyer Links': [
     { label: 'Shares', text: 'Buyer-facing links need approved, sanitized records only.' },
     { label: 'Proof', text: 'Preview before making any horse public.' },
   ],
   Settings: [
-    { label: 'Workspace', text: 'Manage defaults, members, sync, and backups.' },
+    { label: 'Ranch', text: 'Manage defaults, members, sync, and backups.' },
     { label: 'Recovery', text: 'Use backups before large imports or cloud changes.' },
   ],
   'Horse Profile': [
@@ -229,7 +229,7 @@ export default function MainLayout() {
   const opsUrgency = pendingTransfers > 0 ? 'urgent' : careDueCount > 0 ? 'warning' : 'clear';
 
   const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse Profile' : routeLabels[location.pathname] ?? 'Workspace';
-  const helpSections = routeHelp[currentLabel] ?? routeHelp['Command Center'];
+  const helpSections = routeHelp[currentLabel] ?? routeHelp['Dashboard'];
   const accountLabel = cloudSession?.user?.email ?? currentRole;
 
   useEffect(() => {

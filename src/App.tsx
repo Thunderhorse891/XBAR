@@ -42,11 +42,11 @@ function useHashRouting() {
 }
 
 function routeTitle(path: string) {
-  if (path.startsWith('/profiles/')) return 'XBAR | Buyer Room';
+  if (path.startsWith('/profiles/')) return 'XBAR | Sale Packet';
   if (path.startsWith('/horses/')) return 'XBAR | Horse Record';
 
   const labels: Record<string, string> = {
-    '/': 'Command Center',
+    '/': 'Dashboard',
     '/horses': 'Horses',
     '/documents': 'Document Vault',
     '/ownership': 'Ownership',
@@ -57,14 +57,14 @@ function routeTitle(path: string) {
     '/reminders': 'Reminders',
     '/assets': 'Ranch Operations',
     '/weather': 'Weather',
-    '/shared-access': 'Buyer Rooms',
+    '/shared-access': 'Buyer Links',
     '/subscriptions': 'Subscriptions',
     '/settings': 'Settings',
     '/setup': 'Setup',
     '/login': 'Login',
   };
 
-  return `XBAR | ${labels[path] ?? 'Workspace'}`;
+  return `XBAR | ${labels[path] ?? 'Ranch'}`;
 }
 
 function RouteTelemetry() {
@@ -98,7 +98,7 @@ export default function App() {
       <ErrorBoundary>
         <ToastViewport />
         <RouteTelemetry />
-        <Suspense fallback={<div className="app-loading-shell">Loading workspace...</div>}>
+        <Suspense fallback={<div className="app-loading-shell">Loading...</div>}>
           <Routes>
             <Route path="/profiles/:id" element={<BuyerProfile />} />
             <Route path="/login" element={<Login />} />

@@ -116,7 +116,7 @@ export default function Sales() {
           </div>
           <div className="surface-hero__stats">
             <div className="surface-hero__stat"><span>Listings</span><strong>{saleHorses.length}</strong></div>
-            <div className="surface-hero__stat"><span>Open leads</span><strong>{salesLeads.filter((lead) => lead.stage !== 'Closed').length}</strong></div>
+            <div className="surface-hero__stat"><span>Open prospects</span><strong>{salesLeads.filter((lead) => lead.stage !== 'Closed').length}</strong></div>
             <div className="surface-hero__stat">
               <span>Follow-ups due</span>
               <strong style={{ color: followUpsDue ? 'var(--rose)' : 'var(--emerald)' }}>{followUpsDue}</strong>
@@ -133,7 +133,7 @@ export default function Sales() {
 
       <div className="metric-grid">
         <MetricCard label="Sale horses" value={`${saleHorses.length}`} detail="Active pricing or buyer review" />
-        <MetricCard label="Buyer pipeline" value={`${salesLeads.filter((lead) => lead.stage !== 'Closed').length}`} detail="Open leads across all channels" tone="blue" />
+        <MetricCard label="Prospects" value={`${salesLeads.filter((lead) => lead.stage !== 'Closed').length}`} detail="Open inquiries across all channels" tone="blue" />
         <MetricCard label="Shared records" value={`${sharedAccess.savedHorses}`} detail="Listings open in shared access" tone="emerald" />
         <MetricCard label="Transfer blockers" value={`${saleHorses.filter((horse) => horse.readiness.packetStatus === 'Needs Transfer Docs').length}`} detail="Listings with ownership or paperwork friction" tone="amber" />
       </div>
@@ -192,7 +192,7 @@ export default function Sales() {
                           <div className="horse-card__subtitle">{horse.sale.listingState}</div>
                           <p className="horse-card__summary">{horse.summary}</p>
                           <div className="inline-metrics">
-                            <span>{packet.score}% packet trust</span>
+                            <span>{packet.score}% record complete</span>
                             <span>{packet.shareSlug}</span>
                           </div>
                           <div className="horse-card__footer">

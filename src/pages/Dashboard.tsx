@@ -177,7 +177,7 @@ export default function Dashboard() {
           <div className="ops-briefing-header__top">
             <div className="ops-briefing-header__left">
               <div className="ops-briefing-header__ranch">{workspaceProfile.ranchName || workspaceProfile.businessName || 'Ranch Operations'}</div>
-              <h1 className="ops-briefing-header__title">Build the command center.</h1>
+              <h1 className="ops-briefing-header__title">Build the dashboard.</h1>
               <div className="ops-briefing-header__chips">
                 <span className="ops-briefing-chip">First horse</span>
                 <span className="ops-briefing-chip">Document vault</span>

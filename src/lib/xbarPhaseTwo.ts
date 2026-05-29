@@ -401,7 +401,7 @@ export function buildHorsePacketCompleteness(
   if (activeListing) {
     requirements.push({
       key: 'buyer-packet',
-      label: 'Buyer packet trust',
+      label: 'Record completeness',
       status:
         mediaDocs.some(isDocumentReady) && horse.sale.socialReady && !hasHighAlert
           ? 'ready'
@@ -472,7 +472,7 @@ export function buildHorsePacketCompleteness(
           ? 'The buyer-facing profile is useful, but still carries unresolved trust checks.'
           : buyerProfileStatus === 'Blocked'
             ? 'Keep this link internal until the trust blockers clear.'
-            : 'Keep this buyer room private until outreach starts.',
+            : 'Keep this sale packet private until outreach starts.',
     shareSlug,
     sharePath,
     requirements: requirements.map((requirement) => ({

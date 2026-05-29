@@ -31,7 +31,7 @@ export default function Documents() {
   const [source, setSource] = useState<DocumentSource>('Bulk Intake');
   const [horseId, setHorseId] = useState('');
   const [uploadedBy, setUploadedBy] = useState('Ops Desk');
-  const [batchLabel, setBatchLabel] = useState('Live intake batch');
+  const [batchLabel, setBatchLabel] = useState('Live upload batch');
   const [createHorseFromBatch, setCreateHorseFromBatch] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formErrors, setFormErrors] = useState<{ uploadedBy?: string; files?: string }>({});
@@ -287,7 +287,7 @@ export default function Documents() {
     });
     if (result.ok) {
       setFiles([]);
-      setBatchLabel('Live intake batch');
+      setBatchLabel('Live upload batch');
       setCreateHorseFromBatch(false);
       setSearchParams({});
     }
@@ -368,7 +368,7 @@ export default function Documents() {
           />
           <div className="flex flex-wrap gap-2">
             <Pill tone="slate">{reviewQueue.length} review</Pill>
-            <Pill tone="blue">{intakeBatches.length} batches</Pill>
+            <Pill tone="blue">{intakeBatches.length} uploads</Pill>
             <Pill tone="emerald">{buyerSafeDocuments.length} clear</Pill>
           </div>
         </div>
@@ -641,7 +641,7 @@ export default function Documents() {
               ))}
             </div>
           ) : (
-            <EmptyState compact title="No intake batches" description="Upload a batch to start the queue." />
+            <EmptyState compact title="No document uploads" description="Upload files to start the queue." />
           )}
         </Panel>
       ) : null}

@@ -113,7 +113,7 @@ export function buildCommandCenter(params: {
     },
     {
       id: 'throughput',
-      title: slowBatches.length ? `${slowBatches.length} intake batches live` : 'Intake caught up',
+      title: slowBatches.length ? `${slowBatches.length} uploads in progress` : 'Uploads caught up',
       summary: 'Keep intake moving without spillover.',
       module: 'Documents',
       href: '/documents',

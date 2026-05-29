@@ -215,7 +215,7 @@ export default function Medical() {
                 const result = addMedicalEvent(selectedHorseId, {
                   title: eventTitle,
                   body: eventBody,
-                  author: 'Medical Desk',
+                  author: 'Vet Records',
                   date: eventDate,
                   type: eventType,
                 });

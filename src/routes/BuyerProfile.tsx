@@ -110,14 +110,14 @@ export default function BuyerProfile() {
 
   if (!horse) {
     const title = remoteState.status === 'loading'
-      ? 'Loading buyer room'
+      ? 'Loading sale packet'
       : localPreviewAllowed && localHorse && localSharedListing
         ? 'Share link locked'
         : 'Buyer profile unavailable';
     const description = remoteState.status === 'loading'
       ? 'Loading listing and packet data.'
       : localPreviewAllowed && localHorse && localSharedListing && !localAccessAllowed
-        ? 'This buyer room requires a valid access link from the workspace.'
+        ? 'This sale packet requires a valid access link from the ranch.'
         : remoteState.message ?? 'Record not found in this workspace.';
 
     return (
@@ -176,7 +176,7 @@ export default function BuyerProfile() {
             <h1 className="page-title">{horse.name}</h1>
             <div className="status-inline">
               <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
-              <Pill tone={packet.tone}>{formatPercent(packet.score)} packet trust</Pill>
+              <Pill tone={packet.tone}>{formatPercent(packet.score)} record complete</Pill>
               <Pill tone="blue">{horse.sale.listingState}</Pill>
               <Pill tone={sharedListing?.accessMode === 'Public Link' ? 'emerald' : 'slate'}>
                 {sharedListing?.accessMode ?? 'Private Token'}
@@ -262,7 +262,7 @@ export default function BuyerProfile() {
                         <div className="stack-item__title">{document.title}</div>
                         <div className="stack-item__copy">{document.type}</div>
                       </div>
-                      <Pill tone={trust.tone}>{formatPercent(trust.trustScore)} trust</Pill>
+                      <Pill tone={trust.tone}>{formatPercent(trust.trustScore)} complete</Pill>
                     </div>
                     <div className="stack-item__copy">{document.summary}</div>
                   </div>

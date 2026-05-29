@@ -405,7 +405,7 @@ export default function HorseDetail() {
                 onClick={() => void handleSavedHorseToggle()}
                 disabled={!canManageSharedAccess}
               >
-                Enable buyer room
+                Enable sale packet
               </button>
             )}
             <button
@@ -675,7 +675,7 @@ export default function HorseDetail() {
                   <div className="stack-item__copy">{document.summary}</div>
                   <div className="inline-metrics">
                     <span>Confidence {formatPercent(document.confidence * 100)}</span>
-                    <span>Trust {formatPercent(buildDocumentTrustProfile(document, [horse]).trustScore)}</span>
+                    <span>Complete {formatPercent(buildDocumentTrustProfile(document, [horse]).trustScore)}</span>
                     <span>{document.duplicateRisk}</span>
                     <span>{formatDateLabel(document.uploadedAt)}</span>
                   </div>
@@ -694,7 +694,7 @@ export default function HorseDetail() {
                 </div>
               ))
             ) : (
-              <EmptyState compact title="No documents linked" description="Upload docs to build packet trust." />
+              <EmptyState compact title="No documents linked" description="Upload docs to build the record." />
             )}
             {!!horse.documentFacts.length && (
               <div className="token-row">
