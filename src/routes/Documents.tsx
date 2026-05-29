@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
-import { MetricCard, PageHeader, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
+import { MetricCard, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
 import { EmptyState } from '@/components/EmptyState';
 import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { formatDateTimeLabel } from '@/lib/format';
@@ -10,9 +10,8 @@ import { buildDocumentTrustProfile } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { DocumentRecord, DocumentSource } from '@/types/xbar';
-
-const sources: DocumentSource[] = ['Manual Upload', 'Bulk Intake', 'Shared Upload', 'Sales Packet'];
-type DocumentsView = 'Review' | 'Intake' | 'Batches' | 'Flags';
+import { documentSources } from '@/features/documents/constants';
+import type { DocumentsView } from '@/features/documents/types';
 
 export default function Documents() {
   const navigate = useNavigate();
@@ -32,7 +31,7 @@ export default function Documents() {
   const [source, setSource] = useState<DocumentSource>('Bulk Intake');
   const [horseId, setHorseId] = useState('');
   const [uploadedBy, setUploadedBy] = useState('Ops Desk');
-  const [batchLabel, setBatchLabel] = useState('Live intake batch');
+  const [batchLabel, setBatchLabel] = useState('Live upload batch');
   const [createHorseFromBatch, setCreateHorseFromBatch] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formErrors, setFormErrors] = useState<{ uploadedBy?: string; files?: string }>({});
@@ -52,14 +51,6 @@ export default function Documents() {
   const [activeView, setActiveView] = useState<DocumentsView>(uploadOpen ? 'Intake' : 'Review');
   const menuDocument = menuState?.type === 'document' ? documents.find((document) => document.id === menuState.documentId) : undefined;
   const menuHorseId = menuDocument ? reviewAssignments[menuDocument.id] ?? menuDocument.horseId : undefined;
-  const accessModeLabel =
-    canUploadDocuments && !canReviewDocuments
-      ? 'Upload only'
-      : !canUploadDocuments && canReviewDocuments
-        ? 'Review only'
-        : !canUploadDocuments && !canReviewDocuments
-          ? 'Read only'
-          : 'Full access';
 
   useEffect(() => {
     if (uploadOpen) {
@@ -296,7 +287,7 @@ export default function Documents() {
     });
     if (result.ok) {
       setFiles([]);
-      setBatchLabel('Live intake batch');
+      setBatchLabel('Live upload batch');
       setCreateHorseFromBatch(false);
       setSearchParams({});
     }
@@ -305,15 +296,29 @@ export default function Documents() {
 
   return (
     <>
-      <PageHeader
-        title="Documents"
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Pill tone="slate">Manual</Pill>
-            <Pill tone="blue">{accessModeLabel}</Pill>
+      <div className="surface-hero surface-hero--dark">
+        <div className="surface-hero__top">
+          <div>
+            <span className="surface-hero__eyebrow">Document Vault</span>
+            <h1 className="surface-hero__title">Records, proof, and intake.</h1>
+            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
+              Registration papers, vet records, Coggins, bills of sale, and intake files. Every document must be linked, reviewed, and ready before a horse can transfer or go to market.
+            </p>
           </div>
-        }
-      />
+          <div className="surface-hero__stats">
+            <div className="surface-hero__stat"><span>Total files</span><strong>{documents.length}</strong></div>
+            <div className="surface-hero__stat">
+              <span>Review queue</span>
+              <strong style={{ color: reviewQueue.length ? 'var(--amber)' : 'var(--emerald)' }}>{reviewQueue.length}</strong>
+            </div>
+            <div className="surface-hero__stat"><span>Buyer-safe</span><strong style={{ color: 'var(--emerald)' }}>{buyerSafeDocuments.length}</strong></div>
+            <div className="surface-hero__stat">
+              <span>Duplicates</span>
+              <strong style={{ color: duplicates.length ? 'var(--amber)' : 'var(--emerald)' }}>{duplicates.length}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="metric-grid">
         <MetricCard
@@ -363,7 +368,7 @@ export default function Documents() {
           />
           <div className="flex flex-wrap gap-2">
             <Pill tone="slate">{reviewQueue.length} review</Pill>
-            <Pill tone="blue">{intakeBatches.length} batches</Pill>
+            <Pill tone="blue">{intakeBatches.length} uploads</Pill>
             <Pill tone="emerald">{buyerSafeDocuments.length} clear</Pill>
           </div>
         </div>
@@ -387,7 +392,7 @@ export default function Documents() {
             <label className="field-stack">
               <span className="field-label">Source</span>
               <select className="field-input" value={source} onChange={(event) => setSource(event.target.value as DocumentSource)} disabled={!canUploadDocuments}>
-                {sources.map((item) => (
+                {documentSources.map((item) => (
                   <option key={item} value={item}>
                     {item}
                   </option>
@@ -636,7 +641,7 @@ export default function Documents() {
               ))}
             </div>
           ) : (
-            <EmptyState compact title="No intake batches" description="Upload a batch to start the queue." />
+            <EmptyState compact title="No document uploads" description="Upload files to start the queue." />
           )}
         </Panel>
       ) : null}

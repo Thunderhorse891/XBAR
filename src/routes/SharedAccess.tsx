@@ -84,7 +84,7 @@ export default function SharedAccess() {
       [
         `Make ${horseName} public?`,
         '',
-        'Anyone with the link can view the buyer room without a token.',
+        'Anyone with the link can view the sale packet without a token.',
         'Buyer-safe fields include horse identity, approved sale photos, sale readiness, and approved packet documents only.',
         '',
         `Current packet status: ${packet.buyerProfileStatus}.`,
@@ -174,12 +174,12 @@ export default function SharedAccess() {
   return (
     <>
       <PageHeader
-        eyebrow="Buyer rooms"
-        title="Buyer Rooms"
+        eyebrow="Sale Packets"
+        title="Buyer Links"
       />
 
       <div className="metric-grid">
-        <MetricCard label="Buyer rooms" value={`${activeSharedListings.length}`} detail="Active links" tone="blue" />
+        <MetricCard label="Sale packets" value={`${activeSharedListings.length}`} detail="Active links" tone="blue" />
         <MetricCard label="Live links" value={`${liveSharedListings.length}`} detail="Open to buyers" tone="emerald" />
         <MetricCard label="Facebook posts" value={`${facebookSharedListings.length}`} detail="Sent through Facebook" tone="slate" />
         <MetricCard label="Open inquiries" value={`${openSharedLeads.length}`} detail="Leads tied to shared horses" tone="amber" />
@@ -327,7 +327,7 @@ export default function SharedAccess() {
               })}
             </div>
           ) : (
-            <EmptyState compact title="No buyer rooms" description="Add a horse to buyer rooms from the horse ledger or profile." />
+            <EmptyState compact title="No sale packets" description="Add a horse to sale packets from the horse ledger or profile." />
           )}
         </Panel>
       </div>

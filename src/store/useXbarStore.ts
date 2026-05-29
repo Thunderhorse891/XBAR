@@ -58,6 +58,7 @@ import type {
   SharedListingRecord,
   SharedAccessSnapshot,
   SharedChannel,
+  TimelineEvent,
   UserRole,
   WorkspaceProfile,
   WorkspaceInvitationRecord,
@@ -77,6 +78,8 @@ type ActionResult = {
   message: string;
   id?: string;
 };
+
+type HorsePatch = Partial<Pick<HorseRecord, 'name' | 'breed' | 'color' | 'sex' | 'registrationNumber' | 'registry' | 'aqhaNumber' | 'owner' | 'ownerEntity' | 'segment' | 'status'>> & { askPrice?: number };
 
 type XbarStore = {
   currentRole: UserRole;
@@ -124,6 +127,10 @@ type XbarStore = {
   ) => ActionResult;
   addBreedingEvent: (horseId: string, event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string }) => ActionResult;
   updateHorseLocation: (horseId: string, patch: LocationPatch) => ActionResult;
+  updateHorse: (horseId: string, patch: HorsePatch) => ActionResult;
+  deleteHorse: (horseId: string) => ActionResult;
+  updateMedicalEvent: (horseId: string, eventId: string, patch: Partial<Pick<TimelineEvent, 'title' | 'summary' | 'date' | 'status'>>) => ActionResult;
+  deleteMedicalEvent: (horseId: string, eventId: string) => ActionResult;
   updateOwnershipRecord: (
     recordId: string,
     patch: Partial<Pick<OwnershipRecord, 'legalOwner' | 'transferStatus' | 'complianceDeadline' | 'pendingDocuments'>>,
@@ -1961,6 +1968,75 @@ export const useXbarStore = create<XbarStore>()(
         }));
 
         return { ok: true, message: 'Horse location updated.', id: horseId };
+      },
+      updateHorse: (horseId, patch) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+        if (!get().horses.some((h) => h.id === horseId)) return { ok: false, message: 'Horse not found.' };
+        set((state) => ({
+          horses: state.horses.map((h) =>
+            h.id === horseId
+              ? {
+                  ...h,
+                  name: patch.name?.trim() ?? h.name,
+                  breed: patch.breed?.trim() ?? h.breed,
+                  color: patch.color?.trim() ?? h.color,
+                  sex: patch.sex ?? h.sex,
+                  registrationNumber: patch.registrationNumber?.trim() ?? h.registrationNumber,
+                  registry: patch.registry?.trim() ?? h.registry,
+                  aqhaNumber: patch.aqhaNumber?.trim() ?? h.aqhaNumber,
+                  owner: patch.owner?.trim() ?? h.owner,
+                  ownerEntity: patch.ownerEntity?.trim() ?? h.ownerEntity,
+                  segment: patch.segment ?? h.segment,
+                  status: patch.status ?? h.status,
+                  sale: patch.askPrice !== undefined ? { ...h.sale, askPrice: patch.askPrice } : h.sale,
+                }
+              : h,
+          ),
+        }));
+        return { ok: true, message: 'Horse record updated.', id: horseId };
+      },
+      deleteHorse: (horseId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+        set((state) => ({ horses: state.horses.filter((h) => h.id !== horseId) }));
+        return { ok: true, message: 'Horse removed from records.', id: horseId };
+      },
+      updateMedicalEvent: (horseId, eventId, patch) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+        set((state) => ({
+          horses: state.horses.map((h) =>
+            h.id === horseId
+              ? {
+                  ...h,
+                  medicalTimeline: h.medicalTimeline.map((ev) =>
+                    ev.id === eventId ? { ...ev, ...patch } : ev,
+                  ),
+                  activity: h.activity.map((ev) =>
+                    ev.id === eventId ? { ...ev, ...patch } : ev,
+                  ),
+                }
+              : h,
+          ),
+        }));
+        return { ok: true, message: 'Medical event updated.', id: eventId };
+      },
+      deleteMedicalEvent: (horseId, eventId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+        set((state) => ({
+          horses: state.horses.map((h) =>
+            h.id === horseId
+              ? {
+                  ...h,
+                  medicalTimeline: h.medicalTimeline.filter((ev) => ev.id !== eventId),
+                  activity: h.activity.filter((ev) => ev.id !== eventId || ev.category !== 'Medical'),
+                }
+              : h,
+          ),
+        }));
+        return { ok: true, message: 'Medical event removed.', id: eventId };
       },
       updateOwnershipRecord: (recordId, patch) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageOwnership');

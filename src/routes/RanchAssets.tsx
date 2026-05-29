@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
-import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
+import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
@@ -20,6 +20,7 @@ export default function RanchAssets() {
   const assigned = ranchAssets.filter((asset) => asset.status === 'Assigned');
   const serviceSoon = ranchAssets.filter((asset) => asset.condition !== 'Excellent');
   const [selectedAssetId, setSelectedAssetId] = useState(ranchAssets[0]?.id ?? '');
+  const [assetQuery, setAssetQuery] = useState('');
   const [menuState, setMenuState] = useState<{ assetId: string; x: number; y: number } | null>(null);
 
   const selectedAsset = ranchAssets.find((asset) => asset.id === selectedAssetId) ?? ranchAssets[0];
@@ -94,10 +95,35 @@ export default function RanchAssets() {
 
   return (
     <>
-      <PageHeader
-        eyebrow="Ranch toolkit"
-        title="Ranch Toolkit"
-      />
+      <div className="surface-hero surface-hero--dark">
+        <div className="surface-hero__top">
+          <div>
+            <span className="surface-hero__eyebrow">Ranch Operations</span>
+            <h1 className="surface-hero__title">Equipment, kits, and field assets.</h1>
+            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
+              Track gear by status, condition, and assignment. Know what's available, what needs service, and what's tied to active operations.
+            </p>
+          </div>
+          <div className="surface-hero__stats">
+            <div className="surface-hero__stat">
+              <span>Assets</span>
+              <strong>{ranchAssets.length}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Assigned</span>
+              <strong>{assigned.length}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Service soon</span>
+              <strong style={{ color: serviceSoon.length ? 'var(--amber)' : 'var(--emerald)' }}>{serviceSoon.length}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Available</span>
+              <strong style={{ color: 'var(--emerald)' }}>{ranchAssets.length - assigned.length}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="metric-grid">
         <MetricCard label="Tracked assets" value={`${ranchAssets.length}`} detail="Tack, kits, stock" />
@@ -108,6 +134,17 @@ export default function RanchAssets() {
 
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel eyebrow="Inventory" title="Register">
+          {ranchAssets.length > 0 && (
+            <div style={{ marginBottom: '14px' }}>
+              <input
+                className="field-input"
+                placeholder="Search by name, category, or assignment…"
+                value={assetQuery}
+                onChange={(e) => setAssetQuery(e.target.value)}
+                style={{ maxWidth: '380px' }}
+              />
+            </div>
+          )}
           {ranchAssets.length ? (
             <div className="table-shell">
               <table className="data-table">
@@ -122,7 +159,7 @@ export default function RanchAssets() {
                   </tr>
                 </thead>
                 <tbody>
-                  {ranchAssets.map((asset) => (
+                  {ranchAssets.filter((a) => !assetQuery.trim() || a.name.toLowerCase().includes(assetQuery.toLowerCase()) || a.category.toLowerCase().includes(assetQuery.toLowerCase()) || a.assignedTo.toLowerCase().includes(assetQuery.toLowerCase())).map((asset) => (
                     <tr
                       key={asset.id}
                       onClick={() => handleAssetSelection(asset.id)}

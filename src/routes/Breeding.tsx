@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
-import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
+import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
@@ -21,6 +21,7 @@ export default function Breeding() {
   const [eventBody, setEventBody] = useState('');
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
   const [eventError, setEventError] = useState('');
+  const [milestoneQuery, setMilestoneQuery] = useState('');
   const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
   const menuHorse = breedingHorses.find((horse) => horse.id === menuState?.horseId);
   const menuItems = menuHorse
@@ -40,10 +41,37 @@ export default function Breeding() {
 
   return (
     <>
-      <PageHeader
-        eyebrow="Breeding"
-        title="Breeding"
-      />
+      <div className="surface-hero surface-hero--dark">
+        <div className="surface-hero__top">
+          <div>
+            <span className="surface-hero__eyebrow">Breeding Program</span>
+            <h1 className="surface-hero__title">Pairings, milestones, and contracts.</h1>
+            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
+              Track mares, studs, and foaling work through a single program timeline. Every pairing should connect back to documents and verified records.
+            </p>
+          </div>
+          <div className="surface-hero__stats">
+            <div className="surface-hero__stat">
+              <span>Program horses</span>
+              <strong>{breedingHorses.length}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Contracts</span>
+              <strong>{breedingDocs.length}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Milestones</span>
+              <strong>{breedingHorses.reduce((sum, horse) => sum + horse.breedingTimeline.length, 0)}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Blockers</span>
+              <strong style={{ color: breedingHorses.filter((horse) => horse.readiness.packetStatus !== 'Ready').length ? 'var(--amber)' : 'var(--emerald)' }}>
+                {breedingHorses.filter((horse) => horse.readiness.packetStatus !== 'Ready').length}
+              </strong>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="metric-grid">
         <MetricCard label="Program horses" value={`${breedingHorses.length}`} detail="Mares and studs tracked in active breeding context" />
@@ -92,24 +120,48 @@ export default function Breeding() {
         </Panel>
 
         <Panel eyebrow="Milestones" title="Milestones">
-          {breedingHorses.some((horse) => horse.breedingTimeline.length) ? (
-            <div className="stack-list">
-              {breedingHorses.flatMap((horse) =>
-                horse.breedingTimeline.map((event) => (
-                  <div key={event.id} className="stack-item">
-                    <div className="stack-item__top">
-                      <div>
-                        <div className="stack-item__title">{horse.name}</div>
-                        <div className="stack-item__copy">{event.title}</div>
+          {breedingHorses.some((horse) => horse.breedingTimeline.length) ? (() => {
+            const allMilestones = breedingHorses.flatMap((horse) =>
+              horse.breedingTimeline.map((event) => ({ horse, event })),
+            );
+            const filtered = milestoneQuery.trim()
+              ? allMilestones.filter(({ horse, event }) =>
+                  horse.name.toLowerCase().includes(milestoneQuery.toLowerCase()) ||
+                  event.title.toLowerCase().includes(milestoneQuery.toLowerCase()),
+                )
+              : allMilestones;
+            return (
+              <>
+                <div style={{ marginBottom: '14px' }}>
+                  <input
+                    className="field-input"
+                    placeholder="Search horse or milestone..."
+                    value={milestoneQuery}
+                    onChange={(e) => setMilestoneQuery(e.target.value)}
+                    style={{ maxWidth: '320px' }}
+                  />
+                </div>
+                {filtered.length ? (
+                  <div className="stack-list">
+                    {filtered.map(({ horse, event }) => (
+                      <div key={event.id} className="stack-item">
+                        <div className="stack-item__top">
+                          <div>
+                            <div className="stack-item__title">{horse.name}</div>
+                            <div className="stack-item__copy">{event.title}</div>
+                          </div>
+                          <Pill tone="slate">{formatDateLabel(event.date)}</Pill>
+                        </div>
+                        <div className="stack-item__copy">{event.summary}</div>
                       </div>
-                      <Pill tone="slate">{formatDateLabel(event.date)}</Pill>
-                    </div>
-                    <div className="stack-item__copy">{event.summary}</div>
+                    ))}
                   </div>
-                )),
-              )}
-            </div>
-          ) : (
+                ) : (
+                  <p style={{ color: 'var(--muted)', fontSize: '14px' }}>No milestones match "{milestoneQuery}".</p>
+                )}
+              </>
+            );
+          })() : (
             <EmptyState compact title="No breeding milestones yet" description="Log breeding events to track contracts, foaling, and program timing." />
           )}
         </Panel>

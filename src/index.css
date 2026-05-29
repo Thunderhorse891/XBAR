@@ -2217,6 +2217,293 @@ a:focus-visible,
   font-size: 0.88rem;
 }
 
+/* ─── Ops Briefing Header (Dashboard dark hero) ─────────────────────── */
+
+.ops-briefing-header {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 28px 28px 24px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #030810 0%, #081626 55%, #091830 100%);
+  border: 1px solid rgba(148, 184, 224, 0.09);
+  box-shadow:
+    0 40px 80px rgba(0, 0, 0, 0.18),
+    0 12px 32px rgba(0, 0, 0, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  color: #e8f2ff;
+  position: relative;
+  overflow: hidden;
+}
+
+.ops-briefing-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 40%, rgba(34, 102, 238, 0.18), transparent 26rem),
+    radial-gradient(circle at 82% 20%, rgba(91, 141, 190, 0.1), transparent 20rem);
+}
+
+.ops-briefing-header__top {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.ops-briefing-header__left {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ops-briefing-header__ranch {
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(120, 170, 220, 0.72);
+}
+
+.ops-briefing-header__title {
+  margin: 0;
+  font-size: clamp(1.6rem, 2.4vw, 2.4rem);
+  line-height: 0.95;
+  letter-spacing: -0.06em;
+  font-weight: 800;
+  color: #f0f7ff;
+}
+
+.ops-briefing-header__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 4px;
+}
+
+.ops-briefing-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 4px;
+  font-size: 0.69rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(200, 220, 244, 0.85);
+}
+
+.ops-briefing-chip--urgent {
+  background: rgba(191, 64, 64, 0.18);
+  border-color: rgba(191, 64, 64, 0.28);
+  color: #ffa0a0;
+}
+
+.ops-briefing-chip--warning {
+  background: rgba(217, 119, 6, 0.18);
+  border-color: rgba(217, 119, 6, 0.28);
+  color: #fbbf24;
+}
+
+.ops-briefing-chip--success {
+  background: rgba(5, 150, 105, 0.16);
+  border-color: rgba(5, 150, 105, 0.24);
+  color: #6ee7b7;
+}
+
+.ops-briefing-header__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  padding-top: 2px;
+}
+
+.ops-briefing-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid rgba(148, 184, 224, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(208, 228, 252, 0.88);
+  text-decoration: none;
+  transition: background-color 150ms ease, border-color 150ms ease;
+  white-space: nowrap;
+}
+
+.ops-briefing-action:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(148, 184, 224, 0.32);
+}
+
+.ops-briefing-action--primary {
+  background: rgba(17, 85, 221, 0.78);
+  border-color: rgba(80, 140, 255, 0.38);
+  color: #ffffff;
+}
+
+.ops-briefing-action--primary:hover {
+  background: rgba(17, 85, 221, 0.95);
+}
+
+.ops-briefing-stat-row {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ops-briefing-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.04);
+  transition: background-color 150ms ease;
+}
+
+.ops-briefing-stat--clickable {
+  cursor: pointer;
+}
+
+.ops-briefing-stat--clickable:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.ops-briefing-stat__label {
+  font-size: 0.63rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(120, 160, 200, 0.65);
+}
+
+.ops-briefing-stat__value {
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+  color: #f0f7ff;
+  line-height: 1;
+}
+
+.ops-briefing-stat__value--urgent {
+  color: #ff8a8a;
+}
+
+.ops-briefing-stat__value--warning {
+  color: #fbbf24;
+}
+
+.ops-briefing-stat__value--clear {
+  color: #5eead4;
+}
+
+.ops-briefing-stat__detail {
+  font-size: 0.72rem;
+  color: rgba(148, 180, 214, 0.55);
+}
+
+/* ─── Command stage 2-col variant ───────────────────────────────────── */
+
+.command-stage--two-col {
+  grid-template-columns: 1fr 1.1fr;
+}
+
+/* ─── Nav badge (sidebar urgency count) ────────────────────────────── */
+
+.nav-badge {
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 800;
+  background: rgba(191, 64, 64, 0.75);
+  color: #fff;
+}
+
+.nav-badge--amber {
+  background: rgba(217, 119, 6, 0.7);
+}
+
+.nav-badge--blue {
+  background: rgba(17, 85, 221, 0.65);
+}
+
+/* ─── Ops pulse indicator ───────────────────────────────────────────── */
+
+.ops-pulse {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ops-pulse__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.25);
+}
+
+.ops-pulse__dot--urgent {
+  background: #f87171;
+  box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.25);
+  animation: pulse-urgent 2s ease infinite;
+}
+
+.ops-pulse__dot--warning {
+  background: #fbbf24;
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.25);
+}
+
+@keyframes pulse-urgent {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+@media (max-width: 1300px) {
+  .command-stage--two-col {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-briefing-stat-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .ops-briefing-header__top {
+    flex-direction: column;
+  }
+
+  .ops-briefing-stat-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @keyframes toast-in {
   from {
     opacity: 0;

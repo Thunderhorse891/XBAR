@@ -1,5 +1,5 @@
 import { useId, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState } from '@/components/EmptyState';
 import { SalePacketSlots } from '@/components/SalePacketSlots';
 import { KeyValue, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
@@ -7,79 +7,14 @@ import { ChevronLeftIcon, SharedAccessIcon } from '@/components/icons';
 import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { buildPublicShareUrl } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatDateLabel, formatPercent } from '@/lib/format';
+import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useCurrentRoleCapability, useHorseRecord, useXbarStore } from '@/store/useXbarStore';
-import type { DocumentRecord, DocumentSource, GalleryAsset, SalesLead } from '@/types/xbar';
-
-const mediaKinds: GalleryAsset['kind'][] = ['Hero', 'Conformation', 'Sale Still', 'Pedigree', 'Document Cover'];
-const leadChannels: SalesLead['channel'][] = ['Facebook', 'Instagram', 'Referral', 'Site Inquiry'];
-const docSources: DocumentSource[] = ['Manual Upload', 'Bulk Intake', 'Shared Upload', 'Sales Packet'];
-type DetailTab = 'Overview' | 'Docs' | 'Ops' | 'Activity';
-const profileBadgeStyles = [
-  'border border-[#0c6f97]/15 bg-[#edf6fa] text-[#0c6f97]',
-  'border border-[#708194]/15 bg-[#f1f5f9] text-[#5f6f80]',
-  'border border-[#CC3333]/15 bg-[#fff4f4] text-[#CC3333]',
-] as const;
-
-function classNames(...parts: Array<string | false | null | undefined>) {
-  return parts.filter(Boolean).join(' ');
-}
-
-function LockIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
-      <rect x="5" y="11" width="14" height="10" rx="2" />
-      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
-    </svg>
-  );
-}
-
-function PhotoIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <circle cx="9" cy="10" r="1.6" />
-      <path d="m21 15-4.5-4.5L8 19" />
-    </svg>
-  );
-}
-
-function DollarIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
-      <path d="M12 3v18" />
-      <path d="M16.5 7.2C15.5 6.1 14 5.5 12.4 5.5h-.8C9.3 5.5 7.5 7 7.5 8.9c0 2.2 2 3.1 4.3 3.6l1.4.3c2.4.5 3.8 1.4 3.8 3.4 0 2.1-1.9 3.8-4.6 3.8h-.9c-1.8 0-3.5-.7-4.7-1.9" />
-    </svg>
-  );
-}
-
-function EyeIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
-      <path d="M2.5 12s3.6-6 9.5-6 9.5 6 9.5 6-3.6 6-9.5 6-9.5-6-9.5-6Z" />
-      <circle cx="12" cy="12" r="2.6" />
-    </svg>
-  );
-}
-
-function MessageIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
-      <path d="M5 5.5h14a2 2 0 0 1 2 2V16a2 2 0 0 1-2 2H9l-4 3v-3H5a2 2 0 0 1-2-2V7.5a2 2 0 0 1 2-2Z" />
-    </svg>
-  );
-}
-
-function LinkIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
-      <path d="M10 14 8 16a3 3 0 1 1-4.2-4.2l3-3A3 3 0 0 1 11 8" />
-      <path d="m14 10 2-2a3 3 0 1 1 4.2 4.2l-3 3A3 3 0 0 1 13 16" />
-      <path d="M8 12h8" />
-    </svg>
-  );
-}
+import type { DocumentRecord, DocumentSource, GalleryAsset, HorseSex, SalesLead } from '@/types/xbar';
+import { classNames, docSources, leadChannels, mediaKinds } from '@/features/horses/constants';
+import type { DetailTab } from '@/features/horses/types';
+import { DollarIcon, LinkIcon, LockIcon, PhotoIcon } from '@/features/horses/icons';
 
 function ReadinessGauge({ value }: { value: number }) {
   const normalized = Math.max(0, Math.min(100, value));
@@ -148,8 +83,13 @@ export default function HorseDetail() {
   const addHorseNote = useXbarStore((state) => state.addHorseNote);
   const updateHorseLocation = useXbarStore((state) => state.updateHorseLocation);
   const createSalesLead = useXbarStore((state) => state.createSalesLead);
+  const updateHorse = useXbarStore((state) => state.updateHorse);
+  const deleteHorse = useXbarStore((state) => state.deleteHorse);
   const currentRole = useXbarStore((state) => state.currentRole);
+  const session = useCloudStore((state) => state.session);
+  const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || 'Field Ops';
   const pushToast = useUiStore((state) => state.pushToast);
+  const navigate = useNavigate();
   const canManageSharedAccess = useCurrentRoleCapability('manageSharedAccess');
   const canUploadMedia = useCurrentRoleCapability('uploadMedia');
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
@@ -172,6 +112,8 @@ export default function HorseDetail() {
   const [leadError, setLeadError] = useState('');
   const [locationError, setLocationError] = useState('');
   const [activeTab, setActiveTab] = useState<DetailTab>('Overview');
+  const [editingCore, setEditingCore] = useState(false);
+  const [coreForm, setCoreForm] = useState({ name: '', breed: '', color: '', sex: 'Mare' as HorseSex, registrationNumber: '', owner: '', ownerEntity: '', askPrice: '' });
   const [location, setLocation] = useState({
     barn: horse?.location.barn ?? '',
     pasture: horse?.location.pasture ?? '',
@@ -311,7 +253,7 @@ export default function HorseDetail() {
     const result = addHorseNote(horse.id, {
       title: noteTitle,
       body: noteBody,
-      author: 'Field Ops',
+      author: currentUserName,
       tone: 'info',
     });
     pushToast({
@@ -370,77 +312,129 @@ export default function HorseDetail() {
     <>
       <Link
         to="/horses"
-        className="inline-flex w-fit items-center gap-2 text-sm font-semibold text-[#0c6f97] transition-all duration-150 ease-[ease] hover:text-[#095a7a]"
+        className="inline-flex w-fit items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#6888a4] transition-all duration-150 ease-[ease] hover:text-[#98bcd8]"
       >
-        <ChevronLeftIcon className="h-4 w-4" />
-        Back to horses
+        <ChevronLeftIcon className="h-3.5 w-3.5" />
+        Horses
       </Link>
 
-      <section className="rounded-[10px] border border-[#d8e1ea] bg-[linear-gradient(180deg,#ffffff_0%,#f3f7fb_100%)] px-5 py-5 shadow-sm">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-          <div className="min-w-0">
+      {/* Horse Identity Hero — cinematic command file */}
+      <section className="relative overflow-hidden rounded-[18px] border border-[rgba(148,184,224,0.1)] bg-[linear-gradient(135deg,#030810_0%,#081626_55%,#091830_100%)] shadow-[0_40px_80px_rgba(0,0,0,0.18),0_12px_32px_rgba(0,0,0,0.10),inset_0_1px_0_rgba(255,255,255,0.04)]">
+        {/* Background radials */}
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_40%,rgba(34,102,238,0.14),transparent_26rem)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_15%,rgba(91,141,190,0.08),transparent_20rem)]" />
+        </div>
+
+        <div className="relative z-10 flex flex-col gap-5 p-6 xl:flex-row xl:items-end xl:justify-between xl:gap-8">
+          <div className="min-w-0 flex-1">
             <div className="mb-3 flex items-center gap-3">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8f8378]">{horse.ownerEntity}</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.26em] text-[rgba(120,170,220,0.65)]">{horse.ownerEntity}</span>
               {hasRestrictedActions ? (
                 <span
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#d8e1ea] bg-[#f4f7fb] text-[#667789] transition-all duration-150 ease-[ease] hover:border-[#0c6f97]/30 hover:text-[#0c6f97]"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.05)] text-[rgba(180,210,240,0.5)] transition-all duration-150 ease-[ease]"
                   title={`${currentRole} access limits some profile actions.`}
                 >
-                  <LockIcon className="h-4 w-4" />
+                  <LockIcon className="h-3.5 w-3.5" />
                 </span>
               ) : null}
             </div>
-            <h1 className="text-[clamp(2rem,4vw,3rem)] font-bold tracking-[-0.06em] text-[#201d1a]">{horse.name}</h1>
+
+            <h1 className="text-[clamp(2.2rem,5vw,3.8rem)] font-extrabold leading-[0.92] tracking-[-0.07em] text-[#f0f7ff]">
+              {horse.name}
+            </h1>
+
             <div className="mt-4 flex flex-wrap gap-2">
-              {[horse.segment, horse.status, horse.location.barn].map((label, index) => (
+              {[
+                { label: horse.segment, color: 'border-[rgba(12,111,151,0.3)] bg-[rgba(12,111,151,0.12)] text-[#7dcef0]' },
+                { label: horse.status, color: 'border-[rgba(112,129,148,0.3)] bg-[rgba(112,129,148,0.1)] text-[#a0b8cc]' },
+                { label: horse.location.barn, color: 'border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.05)] text-[rgba(200,220,244,0.75)]' },
+              ].map(({ label, color }) => (
                 <span
-                  key={`${label}-${index}`}
+                  key={label}
                   className={classNames(
-                    'inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold tracking-[0.02em]',
-                    profileBadgeStyles[index],
+                    'inline-flex items-center rounded-md border px-3 py-1.5 text-[11px] font-semibold tracking-[0.06em]',
+                    color,
                   )}
                 >
-                  <span
-                    className={classNames(
-                      'h-2.5 w-2.5 rounded-full',
-                      index === 0 ? 'bg-[#0c6f97]' : index === 1 ? 'bg-[#708194]' : 'bg-[#CC3333]',
-                    )}
-                  />
                   {label}
                 </span>
               ))}
             </div>
+
+            {/* Packet readiness + quick stats */}
+            <div className="mt-5 flex flex-wrap gap-3">
+              <div className="flex items-center gap-2 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.04)] px-3 py-2">
+                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Packet</span>
+                <span className={classNames(
+                  'text-[13px] font-bold tabular-nums',
+                  packet.score >= 75 ? 'text-[#5eead4]' : packet.score >= 50 ? 'text-[#fbbf24]' : 'text-[#ff8a8a]',
+                )}>{packet.score}%</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.04)] px-3 py-2">
+                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Docs</span>
+                <span className="text-[13px] font-bold tabular-nums text-[#e8f2ff]">{documents.length}</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.04)] px-3 py-2">
+                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Status</span>
+                <span className={classNames(
+                  'inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-bold',
+                  shareBadgeStyles,
+                )}>{packet.buyerProfileStatus}</span>
+              </div>
+              {ownershipRecord ? (
+                <div className="flex items-center gap-2 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.04)] px-3 py-2">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Ownership</span>
+                  <span className={classNames(
+                    'text-[13px] font-bold',
+                    ownershipRecord.transferStatus === 'Clear' ? 'text-[#5eead4]' : 'text-[#ff8a8a]',
+                  )}>{ownershipRecord.transferStatus}</span>
+                </div>
+              ) : null}
+            </div>
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="flex shrink-0 flex-wrap gap-2 xl:flex-col">
             {saved ? (
               <a
-                className="inline-flex h-11 items-center justify-center rounded-md bg-[#0c6f97] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#095a7a]"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[rgba(80,140,255,0.4)] bg-[rgba(17,85,221,0.78)] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[rgba(17,85,221,0.95)]"
                 href={publicShareUrl}
                 target="_blank"
                 rel="noreferrer"
                 onClick={() => void recordSharedChannel(horse.id, 'Direct Link')}
               >
-                Open live buyer link
+                <SharedAccessIcon className="h-4 w-4" />
+                Open buyer link
               </a>
             ) : (
               <button
-                className="inline-flex h-11 items-center justify-center rounded-md bg-[#0c6f97] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#095a7a] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[rgba(80,140,255,0.35)] bg-[rgba(17,85,221,0.7)] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[rgba(17,85,221,0.9)] disabled:cursor-not-allowed disabled:opacity-40"
                 type="button"
                 onClick={() => void handleSavedHorseToggle()}
                 disabled={!canManageSharedAccess}
               >
-                Enable buyer room
+                Enable sale packet
               </button>
             )}
-            <button
-              className="inline-flex h-11 items-center justify-center rounded-md border border-[#d8e1ea] bg-white px-5 text-sm font-semibold text-[#445162] transition-all duration-150 ease-[ease] hover:border-[#0c6f97]/30 hover:bg-[#eef3f8] disabled:cursor-not-allowed disabled:opacity-50"
-              type="button"
-              onClick={() => void handleSavedHorseToggle()}
-              disabled={!canManageSharedAccess}
-            >
-              {saved ? 'Unshare' : 'Share'}
-            </button>
+            {saved && (
+              <button
+                className="inline-flex h-10 items-center justify-center rounded-lg border border-[rgba(148,184,224,0.18)] bg-[rgba(255,255,255,0.06)] px-5 text-sm font-semibold text-[rgba(208,228,252,0.88)] transition-all duration-150 ease-[ease] hover:bg-[rgba(255,255,255,0.1)] disabled:cursor-not-allowed disabled:opacity-40"
+                type="button"
+                onClick={() => void handleSavedHorseToggle()}
+                disabled={!canManageSharedAccess}
+              >
+                Unshare
+              </button>
+            )}
+            {canEditHorse && (
+              <button
+                className="inline-flex h-10 items-center justify-center rounded-lg border border-[rgba(255,80,80,0.3)] bg-transparent px-4 text-sm font-semibold text-[rgba(255,140,140,0.8)] transition-all duration-150 ease-[ease] hover:bg-[rgba(255,80,80,0.1)] disabled:cursor-not-allowed disabled:opacity-40"
+                type="button"
+                onClick={() => { if (window.confirm('Remove this horse from records? This cannot be undone.')) { deleteHorse(horse.id); navigate('/horses'); } }}
+              >
+                Remove horse
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -572,8 +566,6 @@ export default function HorseDetail() {
 
           <div className="mt-5 flex flex-wrap gap-3">
             <StatPill icon={<DollarIcon className="h-4 w-4" />} value={formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)} label="Ask" />
-            <StatPill icon={<EyeIcon className="h-4 w-4" />} value={String(horse.sale.watchlistCount)} label="Watchers" />
-            <StatPill icon={<MessageIcon className="h-4 w-4" />} value={String(horse.sale.inquiryCount)} label="Inquiries" />
           </div>
 
           <div className="mt-5">
@@ -603,16 +595,48 @@ export default function HorseDetail() {
       {activeTab === 'Overview' ? (
       <div className="detail-grid">
         <Panel eyebrow="Identity" title="Registry">
-          <div className="key-grid key-grid--wide">
-            <KeyValue label="Registry" value={`${horse.registry} · ${horse.aqhaNumber}`} />
-            <KeyValue label="Registration" value={horse.registrationNumber} />
-            <KeyValue label="Color / marks" value={`${horse.color} · ${horse.markings}`} />
-            <KeyValue label="Sex / age" value={`${horse.sex} · ${horse.age}`} />
-            <KeyValue label="Foaled" value={formatDateLabel(horse.foaledOn)} />
-            <KeyValue label="Microchip" value={horse.microchipId} />
-            <KeyValue label="Sire / dam" value={`${horse.bloodline.sire} / ${horse.bloodline.dam}`} />
-            <KeyValue label="Family" value={horse.bloodline.family} />
-          </div>
+          {editingCore ? (
+            <div className="form-grid form-grid--tight">
+              {(['name', 'breed', 'color', 'registrationNumber', 'owner', 'ownerEntity'] as const).map((field) => (
+                <label key={field} className="field-stack">
+                  <span className="field-label">{field === 'registrationNumber' ? 'Registration #' : field === 'ownerEntity' ? 'Owner entity' : field.charAt(0).toUpperCase() + field.slice(1)}</span>
+                  <input className="field-input" value={coreForm[field]} onChange={(e) => setCoreForm((f) => ({ ...f, [field]: e.target.value }))} />
+                </label>
+              ))}
+              <label className="field-stack">
+                <span className="field-label">Sex</span>
+                <select className="field-input" value={coreForm.sex} onChange={(e) => setCoreForm((f) => ({ ...f, sex: e.target.value as HorseSex }))}>
+                  {(['Mare', 'Gelding', 'Stallion', 'Filly', 'Colt'] as HorseSex[]).map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </label>
+              <label className="field-stack">
+                <span className="field-label">Asking price</span>
+                <input className="field-input" type="number" min="0" value={coreForm.askPrice} onChange={(e) => setCoreForm((f) => ({ ...f, askPrice: e.target.value }))} placeholder="0" />
+              </label>
+              <div className="inline-actions" style={{ gridColumn: '1/-1' }}>
+                <button className="button button--primary button--compact" type="button" onClick={() => { updateHorse(horse.id, { name: coreForm.name || horse.name, breed: coreForm.breed, color: coreForm.color, sex: coreForm.sex, registrationNumber: coreForm.registrationNumber, owner: coreForm.owner, ownerEntity: coreForm.ownerEntity, askPrice: coreForm.askPrice ? Number(coreForm.askPrice) : undefined }); setEditingCore(false); }}>Save</button>
+                <button className="button button--ghost button--compact" type="button" onClick={() => setEditingCore(false)}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="key-grid key-grid--wide">
+                <KeyValue label="Registry" value={`${horse.registry} · ${horse.aqhaNumber}`} />
+                <KeyValue label="Registration" value={horse.registrationNumber} />
+                <KeyValue label="Color / marks" value={`${horse.color} · ${horse.markings}`} />
+                <KeyValue label="Sex / age" value={`${horse.sex} · ${horse.age}`} />
+                <KeyValue label="Foaled" value={formatDateLabel(horse.foaledOn)} />
+                <KeyValue label="Microchip" value={horse.microchipId} />
+                <KeyValue label="Sire / dam" value={`${horse.bloodline.sire} / ${horse.bloodline.dam}`} />
+                <KeyValue label="Family" value={horse.bloodline.family} />
+              </div>
+              {canEditHorse && (
+                <div className="inline-actions" style={{ marginTop: '12px' }}>
+                  <button className="button button--ghost button--compact" type="button" onClick={() => { setCoreForm({ name: horse.name, breed: horse.breed, color: horse.color, sex: horse.sex, registrationNumber: horse.registrationNumber, owner: horse.owner, ownerEntity: horse.ownerEntity, askPrice: horse.sale.askPrice ? String(horse.sale.askPrice) : '' }); setEditingCore(true); }}>Edit identity</button>
+                </div>
+              )}
+            </>
+          )}
         </Panel>
 
         <Panel eyebrow="Assignments" title="Assignments">
@@ -700,7 +724,7 @@ export default function HorseDetail() {
                   <div className="stack-item__copy">{document.summary}</div>
                   <div className="inline-metrics">
                     <span>Confidence {formatPercent(document.confidence * 100)}</span>
-                    <span>Trust {formatPercent(buildDocumentTrustProfile(document, [horse]).trustScore)}</span>
+                    <span>Complete {formatPercent(buildDocumentTrustProfile(document, [horse]).trustScore)}</span>
                     <span>{document.duplicateRisk}</span>
                     <span>{formatDateLabel(document.uploadedAt)}</span>
                   </div>
@@ -719,7 +743,7 @@ export default function HorseDetail() {
                 </div>
               ))
             ) : (
-              <EmptyState compact title="No documents linked" description="Upload docs to build packet trust." />
+              <EmptyState compact title="No documents linked" description="Upload docs to build the record." />
             )}
             {!!horse.documentFacts.length && (
               <div className="token-row">

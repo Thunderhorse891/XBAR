@@ -17,8 +17,8 @@ const foundationSteps = [
     body: 'Start with an empty ledger so every horse, document, and owner field is verified.',
   },
   {
-    title: 'Open the command layer',
-    body: 'Move into horse profiles, care dates, buyer rooms, expenses, weather, and transfer work.',
+    title: 'Open the dashboard',
+    body: 'Move into horse profiles, care dates, sale packets, expenses, weather, and transfer work.',
   },
 ];
 
@@ -139,7 +139,7 @@ export default function SetupWorkspace() {
                 Build the ranch workspace around real records.
               </h1>
               <p className="mt-6 text-base leading-8 text-slate-300">
-                No fake horses. No invented documents. Start with a clean command center and let the operation become organized from the first entry.
+                No fake horses. No invented documents. Start with a clean dashboard and let the operation become organized from the first entry.
               </p>
             </div>
           </div>

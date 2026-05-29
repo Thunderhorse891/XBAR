@@ -7,34 +7,8 @@ import { formatDateLabel } from '@/lib/format';
 import { useXbarStore } from '@/store/useXbarStore';
 import './operationsExperience.css';
 
-type ReminderKind = 'Care' | 'Ownership' | 'Documents' | 'Sales';
-type ReminderUrgency = 'Due' | 'Watch' | 'Clear';
-type ReminderItem = {
-  id: string;
-  kind: ReminderKind;
-  urgency: ReminderUrgency;
-  title: string;
-  horseId?: string;
-  horseName?: string;
-  dueDate?: string;
-  detail: string;
-  route: string;
-};
-
-type ReminderFilter = ReminderKind | 'All';
-
-function urgencyTone(urgency: ReminderUrgency) {
-  if (urgency === 'Due') return 'rose';
-  if (urgency === 'Watch') return 'amber';
-  return 'emerald';
-}
-
-function kindCopy(kind: ReminderKind) {
-  if (kind === 'Care') return 'Health, Coggins, dental, wormer, and care work.';
-  if (kind === 'Ownership') return 'Transfer papers, owner records, and legal gaps.';
-  if (kind === 'Documents') return 'Files waiting on match, review, or approval.';
-  return 'Buyer follow-ups and sale movement.';
-}
+import { kindCopy, urgencyTone } from '@/features/reminders/helpers';
+import type { ReminderFilter, ReminderItem, ReminderKind, ReminderUrgency } from '@/features/reminders/types';
 
 export default function Reminders() {
   const navigate = useNavigate();
@@ -128,9 +102,9 @@ export default function Reminders() {
     <div className="ops-experience">
       <section className="ops-hero ops-hero--reminders" aria-labelledby="reminders-title">
         <div>
-          <div className="ops-kicker">XBAR Reminders</div>
-          <h1 id="reminders-title">Know what matters before it becomes a problem.</h1>
-          <p>Coggins, vaccines, dental, wormer, transfer papers, document review, and buyer follow-ups organized into one work queue.</p>
+          <div className="ops-kicker">Work Queue</div>
+          <h1 id="reminders-title">What needs attention right now.</h1>
+          <p>Coggins expiring, vaccines due, transfer papers missing, documents waiting review, and buyer follow-ups — all in one place.</p>
           <div className="ops-hero__actions">
             <button className="button button--primary" type="button" onClick={() => navigate('/medical')}>Open health</button>
             <button className="button button--ghost" type="button" onClick={() => navigate('/ownership')}>Open ownership</button>
@@ -158,7 +132,7 @@ export default function Reminders() {
         <div className="ops-section-heading">
           <div>
             <span className="section-eyebrow">Work queue</span>
-            <h2>One list for the records that need a human decision.</h2>
+            <h2>Work queue</h2>
           </div>
           <Pill tone="blue">{filteredReminders.length} shown</Pill>
         </div>
@@ -176,9 +150,9 @@ export default function Reminders() {
         {filteredReminders.length ? (
           <div className="ops-timeline-list">
             {filteredReminders.map((reminder) => (
-              <button key={reminder.id} className="ops-timeline-item" type="button" onClick={() => navigate(reminder.route)}>
+              <div key={reminder.id} className="ops-timeline-item" style={{ cursor: 'default' }}>
                 <span className={`ops-timeline-dot ops-timeline-dot--${reminder.urgency.toLowerCase()}`} />
-                <div>
+                <div style={{ flex: 1 }}>
                   <div className="ops-timeline-item__top">
                     <strong>{reminder.title}</strong>
                     <Pill tone={urgencyTone(reminder.urgency)}>{reminder.urgency}</Pill>
@@ -189,8 +163,25 @@ export default function Reminders() {
                     <span>{reminder.horseName ?? 'Workspace'}</span>
                     <span>{reminder.dueDate ? formatDateLabel(reminder.dueDate) : 'No date'}</span>
                   </div>
+                  <div className="inline-actions" style={{ marginTop: '10px' }}>
+                    {reminder.kind === 'Care' && reminder.horseId && (
+                      <button className="button button--primary button--compact" type="button" onClick={() => navigate(`/medical`)}>Log care event</button>
+                    )}
+                    {reminder.kind === 'Ownership' && (
+                      <button className="button button--primary button--compact" type="button" onClick={() => navigate('/ownership')}>Review transfer</button>
+                    )}
+                    {reminder.kind === 'Documents' && (
+                      <button className="button button--primary button--compact" type="button" onClick={() => navigate('/documents')}>Review document</button>
+                    )}
+                    {reminder.kind === 'Sales' && (
+                      <button className="button button--primary button--compact" type="button" onClick={() => navigate('/sales')}>Open lead</button>
+                    )}
+                    {reminder.horseId && (
+                      <button className="button button--ghost button--compact" type="button" onClick={() => navigate(`/horses/${reminder.horseId}`)}>View horse</button>
+                    )}
+                  </div>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         ) : reminders.length ? (

@@ -2,22 +2,13 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
-import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
+import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
+import { useCloudStore } from '@/store/useCloudStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { MedicalEventType } from '@/types/xbar';
-
-const medicalEventTypes: MedicalEventType[] = [
-  'Vet visit',
-  'Vaccine',
-  'Coggins',
-  'Injury',
-  'Dental',
-  'Deworming',
-  'Treatment',
-  'Historical note',
-];
+import { medicalEventTypes } from '@/features/health/constants';
 
 export default function Medical() {
   const navigate = useNavigate();
@@ -25,6 +16,10 @@ export default function Medical() {
   const documents = useXbarStore((state) => state.documents);
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
   const addMedicalEvent = useXbarStore((state) => state.addMedicalEvent);
+  const updateMedicalEvent = useXbarStore((state) => state.updateMedicalEvent);
+  const deleteMedicalEvent = useXbarStore((state) => state.deleteMedicalEvent);
+  const session = useCloudStore((state) => state.session);
+  const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || 'Vet Records';
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageMedical = useCurrentRoleCapability('manageMedical');
   const medicalWatch = horses.filter((horse) => horse.status === 'Medical Review');
@@ -43,6 +38,9 @@ export default function Medical() {
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
   const [eventType, setEventType] = useState<MedicalEventType>('Vet visit');
   const [eventError, setEventError] = useState('');
+  const [timelineQuery, setTimelineQuery] = useState('');
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ title: '', body: '', date: '' });
   const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
   const menuHorse = horses.find((horse) => horse.id === menuState?.horseId);
   const menuItems = menuHorse
@@ -62,10 +60,35 @@ export default function Medical() {
 
   return (
     <>
-      <PageHeader
-        eyebrow="Medical"
-        title="Medical"
-      />
+      <div className="surface-hero surface-hero--dark">
+        <div className="surface-hero__top">
+          <div>
+            <span className="surface-hero__eyebrow">Health & Care</span>
+            <h1 className="surface-hero__title">Coggins, vaccines, dental, and vet records.</h1>
+            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
+              Log every care event as it happens. Coggins expiration, dewormer cycles, dental float windows, and vet visits — kept in one verifiable timeline per horse.
+            </p>
+          </div>
+          <div className="surface-hero__stats">
+            <div className="surface-hero__stat">
+              <span>Watch</span>
+              <strong style={{ color: medicalWatch.length ? 'var(--rose)' : 'var(--emerald)' }}>{medicalWatch.length}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Timeline</span>
+              <strong>{medicalEvents.length}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Kits</span>
+              <strong>{kits.length}</strong>
+            </div>
+            <div className="surface-hero__stat">
+              <span>Vet docs</span>
+              <strong>{documents.filter((document) => document.type === 'Vet Record' || document.type === 'Coggins').length}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="metric-grid">
         <MetricCard label="Watchlist" value={`${medicalWatch.length}`} detail="Horses needing care attention" tone="rose" />
@@ -199,7 +222,7 @@ export default function Medical() {
                 const result = addMedicalEvent(selectedHorseId, {
                   title: eventTitle,
                   body: eventBody,
-                  author: 'Medical Desk',
+                  author: currentUserName,
                   date: eventDate,
                   type: eventType,
                 });
@@ -227,14 +250,32 @@ export default function Medical() {
             <div className="stack-list">
               {medicalEvents.slice(0, 5).map((event) => (
                 <div key={event.id} className="stack-item">
-                  <div className="stack-item__top">
-                    <div>
-                      <div className="stack-item__title">{event.horseName}</div>
-                      <div className="stack-item__copy">{event.title}</div>
+                  {editingEventId === event.id ? (
+                    <div className="stack-item__top" style={{ flexDirection: 'column', gap: '8px' }}>
+                      <input className="field-input" value={editForm.title} onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))} placeholder="Title" />
+                      <input className="field-input" value={editForm.body} onChange={(e) => setEditForm((f) => ({ ...f, body: e.target.value }))} placeholder="Notes" />
+                      <input className="field-input" type="date" value={editForm.date} onChange={(e) => setEditForm((f) => ({ ...f, date: e.target.value }))} />
+                      <div className="inline-actions">
+                        <button className="button button--primary button--compact" type="button" onClick={() => { updateMedicalEvent(event.horseId, event.id, { title: editForm.title, summary: editForm.body, date: editForm.date }); setEditingEventId(null); }}>Save</button>
+                        <button className="button button--ghost button--compact" type="button" onClick={() => setEditingEventId(null)}>Cancel</button>
+                      </div>
                     </div>
-                    <Pill tone="blue">{formatDateLabel(event.date)}</Pill>
-                  </div>
-                  <div className="stack-item__copy">{event.summary}</div>
+                  ) : (
+                    <>
+                      <div className="stack-item__top">
+                        <div>
+                          <div className="stack-item__title">{event.horseName}</div>
+                          <div className="stack-item__copy">{event.title}</div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Pill tone="blue">{formatDateLabel(event.date)}</Pill>
+                          <button className="button button--ghost button--compact" style={{ fontSize: '11px' }} type="button" onClick={() => { setEditForm({ title: event.title, body: event.summary, date: event.date }); setEditingEventId(event.id); }}>Edit</button>
+                          <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={() => { if (window.confirm('Remove this medical event?')) deleteMedicalEvent(event.horseId, event.id); }}>Delete</button>
+                        </div>
+                      </div>
+                      <div className="stack-item__copy">{event.summary}</div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
@@ -245,30 +286,51 @@ export default function Medical() {
       </div>
 
       <Panel eyebrow="Timeline" title="Timeline">
-        {medicalEvents.length ? (
-          <div className="table-shell">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Horse</th>
-                  <th>Event</th>
-                  <th>Owner</th>
-                  <th>Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {medicalEvents.map((event) => (
-                  <tr key={event.id}>
-                    <td>{event.horseName}</td>
-                    <td>{event.title}</td>
-                    <td>{event.veterinarian}</td>
-                    <td>{formatDateLabel(event.date)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {medicalEvents.length > 0 && (
+          <div style={{ marginBottom: '14px' }}>
+            <input
+              className="field-input"
+              placeholder="Search by horse name or event title…"
+              value={timelineQuery}
+              onChange={(e) => setTimelineQuery(e.target.value)}
+              style={{ maxWidth: '380px' }}
+            />
           </div>
-        ) : (
+        )}
+        {medicalEvents.length ? (() => {
+          const filtered = timelineQuery.trim()
+            ? medicalEvents.filter((ev) =>
+                ev.horseName.toLowerCase().includes(timelineQuery.toLowerCase()) ||
+                ev.title.toLowerCase().includes(timelineQuery.toLowerCase()),
+              )
+            : medicalEvents;
+          return filtered.length ? (
+            <div className="table-shell">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Horse</th>
+                    <th>Event</th>
+                    <th>Vet</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((event) => (
+                    <tr key={event.id}>
+                      <td>{event.horseName}</td>
+                      <td>{event.title}</td>
+                      <td>{event.veterinarian}</td>
+                      <td>{formatDateLabel(event.date)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p style={{ color: 'var(--muted)', fontSize: '14px' }}>No events match "{timelineQuery}".</p>
+          );
+        })() : (
           <EmptyState title="No medical timeline yet" description="Create a care event to start the timeline." />
         )}
       </Panel>

@@ -21,6 +21,7 @@ import {
   SubscriptionIcon,
   WeatherIcon,
 } from '@/components/icons';
+import { buildCareBoardRows } from '@/lib/dashboardOps';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
@@ -31,27 +32,28 @@ type NavItem = {
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   section: 'Command' | 'Operations' | 'Platform';
   requires?: 'billing' | 'settings';
+  badgeKey?: 'transfers' | 'care' | 'docs' | 'reminders';
 };
 
 const navItems: NavItem[] = [
-  { label: 'Command Center', path: '/', icon: DashboardIcon, section: 'Command' },
+  { label: 'Dashboard', path: '/', icon: DashboardIcon, section: 'Command' },
   { label: 'Horses', path: '/horses', icon: HorsesIcon, section: 'Command' },
-  { label: 'Ownership', path: '/ownership', icon: OwnershipIcon, section: 'Command' },
-  { label: 'Documents', path: '/documents', icon: DocumentsIcon, section: 'Command' },
-  { label: 'Health', path: '/medical', icon: MedicalIcon, section: 'Operations' },
+  { label: 'Ownership', path: '/ownership', icon: OwnershipIcon, section: 'Command', badgeKey: 'transfers' },
+  { label: 'Documents', path: '/documents', icon: DocumentsIcon, section: 'Command', badgeKey: 'docs' },
+  { label: 'Health', path: '/medical', icon: MedicalIcon, section: 'Operations', badgeKey: 'care' },
   { label: 'Breeding', path: '/breeding', icon: BreedingIcon, section: 'Operations' },
   { label: 'Sales', path: '/sales', icon: SalesIcon, section: 'Operations' },
   { label: 'Expenses', path: '/expenses', icon: SubscriptionIcon, section: 'Operations' },
-  { label: 'Reminders', path: '/reminders', icon: BellIcon, section: 'Operations' },
+  { label: 'Reminders', path: '/reminders', icon: BellIcon, section: 'Operations', badgeKey: 'reminders' },
   { label: 'Ranch Operations', path: '/assets', icon: AssetsIcon, section: 'Operations' },
   { label: 'Weather', path: '/weather', icon: WeatherIcon, section: 'Operations' },
-  { label: 'Buyer Rooms', path: '/shared-access', icon: SharedAccessIcon, section: 'Platform' },
+  { label: 'Buyer Links', path: '/shared-access', icon: SharedAccessIcon, section: 'Platform' },
   { label: 'Subscriptions', path: '/subscriptions', icon: SubscriptionIcon, section: 'Platform', requires: 'billing' },
   { label: 'Settings', path: '/settings', icon: SettingsIcon, section: 'Platform', requires: 'settings' },
 ];
 
 const routeLabels: Record<string, string> = {
-  '/': 'Command Center',
+  '/': 'Dashboard',
   '/horses': 'Horses',
   '/documents': 'Documents',
   '/ownership': 'Ownership',
@@ -63,12 +65,12 @@ const routeLabels: Record<string, string> = {
   '/assets': 'Ranch Operations',
   '/weather': 'Weather',
   '/subscriptions': 'Subscriptions',
-  '/shared-access': 'Buyer Rooms',
+  '/shared-access': 'Buyer Links',
   '/settings': 'Settings',
 };
 
 const routeHelp: Record<string, HelpSection[]> = {
-  'Command Center': [
+  'Dashboard': [
     { label: 'Start here', text: 'Watch care, ownership, documents, sales, weather, and spending in one place.' },
     { label: 'Next move', text: 'Open the highest-risk card first. XBAR should tell you what needs a human decision.' },
   ],
@@ -93,8 +95,8 @@ const routeHelp: Record<string, HelpSection[]> = {
     { label: 'Proof', text: 'Breeding decisions should connect back to files and history.' },
   ],
   Sales: [
-    { label: 'Pipeline', text: 'Keep buyer movement, packet readiness, and follow-ups visible.' },
-    { label: 'Buyer rooms', text: 'Share only when the horse and documents are ready.' },
+    { label: 'Pipeline', text: 'Keep buyer movement, record readiness, and follow-ups visible.' },
+    { label: 'Sale packets', text: 'Share only when the horse and documents are ready.' },
   ],
   Expenses: [
     { label: 'Ledger', text: 'Log costs while the context is still fresh.' },
@@ -114,14 +116,14 @@ const routeHelp: Record<string, HelpSection[]> = {
   ],
   Subscriptions: [
     { label: 'Billing', text: 'Show plan state clearly. Do not imply Stripe billing unless it is configured.' },
-    { label: 'Limits', text: 'Storage, seats, buyer rooms, and documents should be easy to understand.' },
+    { label: 'Limits', text: 'Storage, seats, buyer links, and documents should be easy to understand.' },
   ],
-  'Buyer Rooms': [
+  'Buyer Links': [
     { label: 'Shares', text: 'Buyer-facing links need approved, sanitized records only.' },
     { label: 'Proof', text: 'Preview before making any horse public.' },
   ],
   Settings: [
-    { label: 'Workspace', text: 'Manage defaults, members, sync, and backups.' },
+    { label: 'Ranch', text: 'Manage defaults, members, sync, and backups.' },
     { label: 'Recovery', text: 'Use backups before large imports or cloud changes.' },
   ],
   'Horse Profile': [
@@ -134,29 +136,37 @@ function classNames(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(' ');
 }
 
-function NavSection({ title, items }: { title: string; items: NavItem[] }) {
+function NavSection({ title, items, badges }: { title: string; items: NavItem[]; badges: Record<string, number> }) {
   return (
     <div className="flex flex-col gap-2">
-      <div className="px-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-[#49657f]">{title}</div>
-      <div className="flex flex-col gap-1">
-        {items.map(({ label, path, icon: Icon }) => (
-          <NavLink
-            key={label}
-            to={path}
-            end={path === '/'}
-            className={({ isActive }) =>
-              classNames(
-                'group flex items-center gap-3 border-l-[3px] px-3 py-2.5 text-sm font-medium transition-all duration-150 ease-[ease]',
-                isActive
-                  ? 'border-[#62a8ff] bg-[#0e2248] text-white shadow-[0_8px_20px_rgba(34,102,238,0.18)]'
-                  : 'border-transparent text-[#87a2bd] hover:border-[#284766] hover:bg-[#0d1f38] hover:text-white',
-              )
-            }
-          >
-            <Icon className="h-[18px] w-[18px] shrink-0" />
-            <span>{label}</span>
-          </NavLink>
-        ))}
+      <div className="px-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-[#3d5870]">{title}</div>
+      <div className="flex flex-col gap-[1px]">
+        {items.map(({ label, path, icon: Icon, badgeKey }) => {
+          const badge = badgeKey ? (badges[badgeKey] ?? 0) : 0;
+          return (
+            <NavLink
+              key={label}
+              to={path}
+              end={path === '/'}
+              className={({ isActive }) =>
+                classNames(
+                  'group flex items-center gap-3 border-l-[3px] px-3 py-[9px] text-[13px] font-medium transition-all duration-150 ease-[ease]',
+                  isActive
+                    ? 'border-[#4d94ff] bg-[#0d2040] text-white shadow-[0_6px_18px_rgba(34,102,238,0.2)]'
+                    : 'border-transparent text-[#7a9ab4] hover:border-[#1e3a56] hover:bg-[#0b1c30] hover:text-[#c8ddf0]',
+                )
+              }
+            >
+              <Icon className="h-[17px] w-[17px] shrink-0" />
+              <span className="flex-1">{label}</span>
+              {badge > 0 ? (
+                <span className={classNames('nav-badge', badge <= 3 ? 'nav-badge--blue' : '')}>
+                  {badge}
+                </span>
+              ) : null}
+            </NavLink>
+          );
+        })}
       </div>
     </div>
   );
@@ -203,8 +213,23 @@ export default function MainLayout() {
   const pendingReview = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched').length;
   const pendingTransfers = ownershipRecords.filter((record) => record.transferStatus !== 'Clear').length;
   const activeSales = salesLeads.filter((lead) => lead.stage !== 'Closed').length;
+
+  const careDueCount = useMemo(() => {
+    const board = buildCareBoardRows(horses, documents, expenseReceipts);
+    return board.filter((row) => row.signals.some((signal) => signal.status === 'due')).length;
+  }, [horses, documents, expenseReceipts]);
+
+  const navBadges = useMemo<Record<string, number>>(() => ({
+    transfers: pendingTransfers,
+    care: careDueCount,
+    docs: pendingReview,
+    reminders: pendingTransfers + careDueCount + pendingReview,
+  }), [pendingTransfers, careDueCount, pendingReview]);
+
+  const opsUrgency = pendingTransfers > 0 ? 'urgent' : careDueCount > 0 ? 'warning' : 'clear';
+
   const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse Profile' : routeLabels[location.pathname] ?? 'Workspace';
-  const helpSections = routeHelp[currentLabel] ?? routeHelp['Command Center'];
+  const helpSections = routeHelp[currentLabel] ?? routeHelp['Dashboard'];
   const accountLabel = cloudSession?.user?.email ?? currentRole;
 
   useEffect(() => {
@@ -243,29 +268,44 @@ export default function MainLayout() {
           </div>
         </div>
 
-        <div className="rounded-[16px] border border-[#162436] bg-[#0b1728] p-4 shadow-[0_12px_24px_rgba(0,0,0,0.3)]">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#52708d]">Workspace</div>
-          <div className="mt-2 text-[1rem] font-bold text-[#ddeaf8]">{workspaceProfile.ranchName || workspaceProfile.businessName || 'Primary ranch'}</div>
-          <div className="mt-1 text-sm text-[#7d98b3]">{roleWorkspace.label}</div>
-          <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[#8eabc5]">
-            <span className="rounded-md border border-[#1a2e46] bg-[#0a1628] px-2 py-2">{horses.length} horses</span>
-            <span className="rounded-md border border-[#1a2e46] bg-[#0a1628] px-2 py-2">{pendingTransfers} transfers</span>
-            <span className="rounded-md border border-[#1a2e46] bg-[#0a1628] px-2 py-2">{pendingReview} docs</span>
-            <span className="rounded-md border border-[#1a2e46] bg-[#0a1628] px-2 py-2">{activeSales} buyers</span>
+        <div className="rounded-[14px] border border-[#162436] bg-[#080f1c] p-4 shadow-[0_12px_28px_rgba(0,0,0,0.36)]">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#3d5870]">Workspace</div>
+            <span className={classNames('ops-pulse', opsUrgency !== 'clear' ? '' : '')}>
+              <span className={classNames('ops-pulse__dot', opsUrgency === 'urgent' ? 'ops-pulse__dot--urgent' : opsUrgency === 'warning' ? 'ops-pulse__dot--warning' : '')} />
+            </span>
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#1a2e46] bg-[#0a1628] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.13em] text-[#7a9ab8]">{subscription.tier}</span>
-            <span className="inline-flex min-h-[28px] items-center rounded-full border border-[#1a3a6a] bg-[#0e213e] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.13em] text-[#64a6ff]">{cloudStatus === 'signed-in' ? 'Cloud sync' : 'Browser access'}</span>
+          <div className="mt-2 text-[0.96rem] font-bold leading-tight text-[#ddeaf8]">{workspaceProfile.ranchName || workspaceProfile.businessName || 'Primary ranch'}</div>
+          <div className="mt-0.5 text-xs text-[#526d85]">{roleWorkspace.label}</div>
+          <div className="mt-3 grid grid-cols-2 gap-1.5 text-xs">
+            <span className="rounded border border-[#142030] bg-[#08111d] px-2 py-1.5 text-[#6e8da6]">{horses.length} horses</span>
+            <span className={classNames(
+              'rounded border px-2 py-1.5',
+              pendingTransfers > 0
+                ? 'border-[#5a1a1a] bg-[#1a0808] text-[#ff8a8a]'
+                : 'border-[#142030] bg-[#08111d] text-[#6e8da6]',
+            )}>{pendingTransfers} transfers</span>
+            <span className={classNames(
+              'rounded border px-2 py-1.5',
+              pendingReview > 0
+                ? 'border-[#4a3800] bg-[#191000] text-[#fbbf24]'
+                : 'border-[#142030] bg-[#08111d] text-[#6e8da6]',
+            )}>{pendingReview} docs</span>
+            <span className="rounded border border-[#142030] bg-[#08111d] px-2 py-1.5 text-[#6e8da6]">{activeSales} buyers</span>
+          </div>
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            <span className="inline-flex min-h-[24px] items-center rounded-full border border-[#1a2e46] bg-[#0a1628] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#5a7a94]">{subscription.tier}</span>
+            <span className="inline-flex min-h-[24px] items-center rounded-full border border-[#1a3a6a] bg-[#0c1e3c] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#4d88cc]">{cloudStatus === 'signed-in' ? 'Cloud sync' : 'Browser'}</span>
           </div>
         </div>
 
-        <NavSection title="Command" items={sections.Command} />
-        <NavSection title="Operations" items={sections.Operations} />
-        <NavSection title="Platform" items={sections.Platform} />
+        <NavSection title="Command" items={sections.Command} badges={navBadges} />
+        <NavSection title="Operations" items={sections.Operations} badges={navBadges} />
+        <NavSection title="Platform" items={sections.Platform} badges={navBadges} />
 
-        <div className="mt-auto border-t border-[#0e1e32] pt-4 text-xs text-[#5d7690]">
-          <div className="font-semibold text-[#86a1bc]">The operating system for modern horse operations.</div>
-          <div className="mt-1">{expenseReceipts.length} receipts | {documents.length} files</div>
+        <div className="mt-auto border-t border-[#0a1624] pt-4 text-xs text-[#3d5870]">
+          <div className="font-semibold uppercase tracking-[0.12em] text-[#4a6880]">Modern ranch infrastructure</div>
+          <div className="mt-1 text-[#2e4560]">{expenseReceipts.length} receipts · {documents.length} files · {horses.length} horses</div>
         </div>
       </aside>
 
@@ -353,20 +393,22 @@ export default function MainLayout() {
         ) : null}
 
         <nav className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-2 rounded-lg border border-[#dde5ee] bg-[#fbfdff] p-2 text-[#16202b] shadow-lg lg:hidden" aria-label="Mobile quick navigation">
-          {[
-            { label: 'Home', path: '/', icon: DashboardIcon },
-            { label: 'Horses', path: '/horses', icon: HorsesIcon },
-            { label: 'Docs', path: '/documents', icon: DocumentsIcon },
-            { label: 'Sales', path: '/sales', icon: SalesIcon },
-          ].map(({ label, path, icon: Icon }) => (
-            <NavLink key={label} to={path} end={path === '/'} className={({ isActive }) => classNames('flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]', isActive ? 'bg-[#eaeffd] text-[#1155dd]' : 'text-[#798088] hover:bg-white hover:text-[#16202b]')}>
+          {([
+            { label: 'Home', path: '/', icon: DashboardIcon, badge: pendingTransfers + careDueCount },
+            { label: 'Horses', path: '/horses', icon: HorsesIcon, badge: 0 },
+            { label: 'Docs', path: '/documents', icon: DocumentsIcon, badge: pendingReview },
+            { label: 'Sales', path: '/sales', icon: SalesIcon, badge: 0 },
+          ] as const).map(({ label, path, icon: Icon, badge }) => (
+            <NavLink key={label} to={path} end={path === '/'} className={({ isActive }) => classNames('relative flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]', isActive ? 'bg-[#eaeffd] text-[#1155dd]' : 'text-[#798088] hover:bg-white hover:text-[#16202b]')}>
               <Icon className="h-[18px] w-[18px]" />
               <span>{label}</span>
+              {badge > 0 ? <span className="absolute right-2 top-2 min-w-[16px] rounded-full bg-[#CC3333] px-1 py-px text-center text-[9px] font-bold text-white">{badge}</span> : null}
             </NavLink>
           ))}
-          <button className={classNames('flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]', mobileMoreOpen || mobileMoreItems.some((item) => location.pathname.startsWith(item.path) && item.path !== '/') ? 'bg-[#eaeffd] text-[#1155dd]' : 'text-[#798088] hover:bg-white hover:text-[#16202b]')} type="button" onClick={() => setMobileMoreOpen((current) => !current)} aria-expanded={mobileMoreOpen} aria-controls="mobile-more-menu">
+          <button className={classNames('relative flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]', mobileMoreOpen || mobileMoreItems.some((item) => location.pathname.startsWith(item.path) && item.path !== '/') ? 'bg-[#eaeffd] text-[#1155dd]' : 'text-[#798088] hover:bg-white hover:text-[#16202b]')} type="button" onClick={() => setMobileMoreOpen((current) => !current)} aria-expanded={mobileMoreOpen} aria-controls="mobile-more-menu">
             <DotsIcon className="h-[18px] w-[18px]" />
             <span>More</span>
+            {pendingTransfers + careDueCount > 0 ? <span className="absolute right-2 top-2 min-w-[16px] rounded-full bg-[#CC3333] px-1 py-px text-center text-[9px] font-bold text-white">{pendingTransfers + careDueCount}</span> : null}
           </button>
         </nav>
 

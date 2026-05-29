@@ -4,88 +4,28 @@ import { useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Pill } from '@/components/app-ui';
-import { xbarOwnershipHeroVideoDataUri } from '@/assets/xbarOwnershipHeroVideoData';
 import { formatDateLabel, formatDateTimeLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
-import type { DocumentRecord, DocumentType, HorseRecord, OwnershipRecord, OwnershipStake, TransferStatus } from '@/types/xbar';
+import type { DocumentType, OwnershipStake, TransferStatus } from '@/types/xbar';
+import { ownershipDocumentTypes, ownershipRoles, transferStatuses } from '@/features/ownership/constants';
+import type { SortMode } from '@/features/ownership/constants';
+import { documentTone, ownershipDocsForHorse, scrollToSection, transferTone } from '@/features/ownership/helpers';
+import { createOwnerRegistry, createRelationshipRows, filterAndSortRelationshipRows, getMissingDocumentRows, getHorsesWithOwnership, getLatestOwnershipDocuments, getPendingTransfers } from '@/features/ownership/selectors';
+import type { OwnerRegistryRow, RelationshipRow } from '@/features/ownership/types';
 import './ownershipExperience.css';
 
-const ownershipHeroVideoSrc = `${import.meta.env.BASE_URL}brand/xbar-documents-hero.mp4`;
-const ownershipFallbackMarkSrc = `${import.meta.env.BASE_URL}brand/xbar-app-icon.svg`;
-
-const ownershipRoles: OwnershipStake['role'][] = ['Legal Owner', 'Co-Owner', 'Managing Partner', 'Prospective Buyer'];
-const transferStatuses: TransferStatus[] = ['Clear', 'Pending Signatures', 'AQHA Review', 'Attention Required'];
-const ownershipDocumentTypes: DocumentType[] = ['Bill of Sale', 'Registration', 'Transfer Packet', 'Ownership Memo'];
-
-type SortMode = 'Deadline' | 'Horse' | 'Status' | 'Confidence';
 
 type MenuState =
   | { type: 'record'; recordId: string; x: number; y: number }
   | { type: 'section'; sectionId: 'registry' | 'relationships' | 'timeline' | 'documents'; x: number; y: number }
   | null;
 
-type OwnerRegistryRow = {
-  name: string;
-  contact: string;
-  horses: string[];
-  roles: string[];
-  shares: number[];
-  statuses: TransferStatus[];
-};
-
-type RelationshipRow = {
-  horse: HorseRecord;
-  record?: OwnershipRecord;
-  currentOwner: string;
-  totalShare: number;
-  acquisitionDate: string;
-  status: TransferStatus;
-  deadline: string;
-  pendingDocuments: string[];
-  billOfSaleCount: number;
-  registrationCount: number;
-  transferDocCount: number;
-};
-
-function transferTone(status: TransferStatus) {
-  if (status === 'Clear') return 'emerald';
-  if (status === 'AQHA Review') return 'blue';
-  if (status === 'Pending Signatures') return 'amber';
-  return 'rose';
-}
-
-function documentTone(document: DocumentRecord) {
-  if (document.state === 'Ready') return 'emerald';
-  if (document.state === 'Matched') return 'blue';
-  if (document.state === 'Needs Review') return 'amber';
-  return 'slate';
-}
-
-function normalize(value: string) {
-  return value.trim().toLowerCase();
-}
-
-function scrollToSection(sectionId: string) {
-  document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function ownershipDocsForHorse(documents: DocumentRecord[], horseId: string) {
-  return documents.filter((document) => document.horseId === horseId && ownershipDocumentTypes.includes(document.type));
-}
-
-function firstAuditDate(record?: RelationshipRow['record']) {
-  const firstEntry = record?.auditTrail[0];
-  const match = firstEntry?.match(/^(\d{4}-\d{2}-\d{2})/);
-  return match?.[1] ?? '';
-}
-
 export default function Ownership() {
   const navigate = useNavigate();
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
-  const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const updateOwnershipRecord = useXbarStore((state) => state.updateOwnershipRecord);
   const addOwnershipAuditEntry = useXbarStore((state) => state.addOwnershipAuditEntry);
   const addOwnershipStake = useXbarStore((state) => state.addOwnershipStake);
@@ -107,46 +47,15 @@ export default function Ownership() {
   const [coOwner, setCoOwner] = useState({ name: '', share: '25', role: 'Co-Owner' as OwnershipStake['role'], contact: '' });
   const [formError, setFormError] = useState('');
   const [menuState, setMenuState] = useState<MenuState>(null);
-  const [heroVideoSrc, setHeroVideoSrc] = useState(ownershipHeroVideoSrc);
-
   const ownershipDocuments = useMemo(
     () => documents.filter((document) => ownershipDocumentTypes.includes(document.type)),
     [documents],
   );
 
-  const relationshipRows = useMemo<RelationshipRow[]>(() => {
-    return horses.map((horse) => {
-      const record = ownershipRecords.find((item) => item.horseId === horse.id);
-      const horseDocs = ownershipDocsForHorse(documents, horse.id);
-      const totalShare = horse.ownership.reduce((sum, stake) => sum + stake.share, 0);
-      const legalStake = horse.ownership.find((stake) => stake.role === 'Legal Owner');
-      const pending = [...(record?.pendingDocuments ?? [])];
-
-      if (!record) {
-        pending.unshift('Ownership record missing');
-      }
-      if (!horseDocs.some((document) => document.type === 'Bill of Sale' && document.state === 'Ready')) {
-        pending.unshift('Bill of sale missing');
-      }
-      if (!horseDocs.some((document) => document.type === 'Registration' && document.state === 'Ready')) {
-        pending.unshift('Registration missing');
-      }
-
-      return {
-        horse,
-        record,
-        currentOwner: record?.legalOwner || legalStake?.name || horse.owner || 'Unknown owner',
-        totalShare,
-        acquisitionDate: firstAuditDate(record),
-        status: record?.transferStatus ?? 'Attention Required',
-        deadline: record?.complianceDeadline ?? '',
-        pendingDocuments: Array.from(new Set(pending)),
-        billOfSaleCount: horseDocs.filter((document) => document.type === 'Bill of Sale').length,
-        registrationCount: horseDocs.filter((document) => document.type === 'Registration').length,
-        transferDocCount: horseDocs.filter((document) => document.type === 'Transfer Packet' || document.type === 'Ownership Memo').length,
-      };
-    });
-  }, [documents, horses, ownershipRecords]);
+  const relationshipRows = useMemo<RelationshipRow[]>(
+    () => createRelationshipRows(horses, ownershipRecords, documents),
+    [documents, horses, ownershipRecords],
+  );
 
   const selectedRecord = ownershipRecords.find((record) => record.id === selectedRecordId) ?? ownershipRecords[0];
   const selectedHorse = horses.find((horse) => horse.id === selectedRecord?.horseId);
@@ -180,118 +89,23 @@ export default function Ownership() {
     setPendingDocuments(selectedRecord.pendingDocuments.join(', '));
   }, [selectedRecord]);
 
-  const ownerRegistry = useMemo<OwnerRegistryRow[]>(() => {
-    const rows = new Map<string, OwnerRegistryRow>();
+  const ownerRegistry = useMemo<OwnerRegistryRow[]>(
+    () => createOwnerRegistry(relationshipRows),
+    [relationshipRows],
+  );
 
-    const upsertOwner = (params: {
-      name: string;
-      contact?: string;
-      horseName?: string;
-      role?: string;
-      share?: number;
-      status?: TransferStatus;
-    }) => {
-      const key = normalize(params.name);
-      if (!key) {
-        return;
-      }
-
-      const existing =
-        rows.get(key) ??
-        ({
-          name: params.name.trim(),
-          contact: params.contact?.trim() ?? '',
-          horses: [],
-          roles: [],
-          shares: [],
-          statuses: [],
-        } satisfies OwnerRegistryRow);
-
-      if (!existing.contact && params.contact?.trim()) {
-        existing.contact = params.contact.trim();
-      }
-      if (params.horseName && !existing.horses.includes(params.horseName)) {
-        existing.horses.push(params.horseName);
-      }
-      if (params.role && !existing.roles.includes(params.role)) {
-        existing.roles.push(params.role);
-      }
-      if (typeof params.share === 'number') {
-        existing.shares.push(params.share);
-      }
-      if (params.status && !existing.statuses.includes(params.status)) {
-        existing.statuses.push(params.status);
-      }
-
-      rows.set(key, existing);
-    };
-
-    relationshipRows.forEach((row) => {
-      upsertOwner({
-        name: row.currentOwner,
-        horseName: row.horse.name,
-        role: 'Legal Owner',
-        share: row.horse.ownership.find((stake) => normalize(stake.name) === normalize(row.currentOwner))?.share,
-        status: row.status,
-      });
-
-      row.horse.ownership.forEach((stake) => {
-        upsertOwner({
-          name: stake.name,
-          contact: stake.contact,
-          horseName: row.horse.name,
-          role: stake.role,
-          share: stake.share,
-          status: row.status,
-        });
-      });
-    });
-
-    return Array.from(rows.values()).sort((left, right) => left.name.localeCompare(right.name));
-  }, [relationshipRows]);
-
-  const filteredRows = useMemo(() => {
-    const normalizedQuery = normalize(query);
-    const matches = relationshipRows.filter((row) => {
-      const haystack = [
-        row.horse.name,
-        row.horse.barnName,
-        row.currentOwner,
-        row.status,
-        row.pendingDocuments.join(' '),
-        row.horse.ownership.map((stake) => `${stake.name} ${stake.contact} ${stake.role}`).join(' '),
-      ]
-        .join(' ')
-        .toLowerCase();
-
-      return (!normalizedQuery || haystack.includes(normalizedQuery)) && (statusFilter === 'All' || row.status === statusFilter);
-    });
-
-    return [...matches].sort((left, right) => {
-      if (sortMode === 'Horse') {
-        return left.horse.name.localeCompare(right.horse.name);
-      }
-      if (sortMode === 'Status') {
-        return left.status.localeCompare(right.status) || left.horse.name.localeCompare(right.horse.name);
-      }
-      if (sortMode === 'Confidence') {
-        return (right.record?.confidence ?? 0) - (left.record?.confidence ?? 0);
-      }
-
-      return Date.parse(left.deadline || '9999-12-31') - Date.parse(right.deadline || '9999-12-31');
-    });
-  }, [query, relationshipRows, sortMode, statusFilter]);
+  const filteredRows = useMemo(
+    () => filterAndSortRelationshipRows(relationshipRows, query, statusFilter, sortMode),
+    [query, relationshipRows, sortMode, statusFilter],
+  );
 
   const selectedHorseDocuments = selectedHorse ? ownershipDocsForHorse(documents, selectedHorse.id) : [];
-  const pendingTransfers = ownershipRecords.filter((record) => record.transferStatus !== 'Clear');
-  const missingDocumentRows = relationshipRows.filter((row) => row.pendingDocuments.length > 0);
-  const horsesWithOwnership = relationshipRows.filter((row) => row.record).length;
+  const pendingTransfers = getPendingTransfers(ownershipRecords);
+  const missingDocumentRows = getMissingDocumentRows(relationshipRows);
+  const horsesWithOwnership = getHorsesWithOwnership(relationshipRows);
   const menuRecord = menuState?.type === 'record' ? ownershipRecords.find((record) => record.id === menuState.recordId) : undefined;
   const menuHorse = horses.find((horse) => horse.id === menuRecord?.horseId);
-  const latestOwnershipDocuments = ownershipDocuments
-    .slice()
-    .sort((left, right) => Date.parse(right.uploadedAt) - Date.parse(left.uploadedAt))
-    .slice(0, 6);
+  const latestOwnershipDocuments = getLatestOwnershipDocuments(documents, ownershipDocumentTypes);
 
   const menuItems =
     menuRecord
@@ -418,17 +232,13 @@ export default function Ownership() {
 
   return (
     <div className="ownership-ops">
-      <section className="ownership-hero" aria-labelledby="ownership-title">
-        <div className="ownership-hero__copy">
-          <div className="ownership-brand-row">
-            <span className="ownership-brand-mark" aria-hidden="true">XB</span>
-            <span>{workspaceProfile.businessName || 'XBAR'} Ownership Operations</span>
+      <div className="surface-hero surface-hero--dark">
+        <div className="surface-hero__top">
+          <div>
+            <span className="surface-hero__eyebrow">Ownership</span>
+            <h1 className="surface-hero__title">Transfer records</h1>
           </div>
-          <h1 id="ownership-title">Know who owns what.</h1>
-          <p>
-            Track ownership, transfers, sale files, and registration records in one place. Built for ranches, breeders, and serious horse operations.
-          </p>
-          <div className="ownership-hero__actions">
+          <div className="surface-hero__actions">
             <button className="button button--primary" type="button" onClick={() => scrollToSection('ownership-owner-editor')} disabled={!canManageOwnership}>
               Add owner
             </button>
@@ -439,38 +249,8 @@ export default function Ownership() {
               Upload document
             </button>
           </div>
-          <div className="ownership-hero__proof">
-            <span>Every horse. Every owner. Every transfer.</span>
-            <span>Stop losing ownership history in texts, paper files, and screenshots.</span>
-          </div>
         </div>
-
-        <div className="ownership-hero__media" aria-label="XBAR brand motion preview">
-          <img className="ownership-hero__fallback" src={ownershipFallbackMarkSrc} alt="" />
-          <video
-            className="ownership-hero__video"
-            src={heroVideoSrc}
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="metadata"
-            poster={ownershipFallbackMarkSrc}
-            onError={(event) => {
-              if (heroVideoSrc !== xbarOwnershipHeroVideoDataUri) {
-                setHeroVideoSrc(xbarOwnershipHeroVideoDataUri);
-                return;
-              }
-
-              event.currentTarget.style.display = 'none';
-            }}
-          />
-          <div className="ownership-hero__glass">
-            <span>Ownership desk</span>
-            <strong>{pendingTransfers.length ? `${pendingTransfers.length} transfers open` : 'Transfers clear'}</strong>
-          </div>
-        </div>
-      </section>
+      </div>
 
       <div className="ownership-metric-grid">
         <MetricCard label="Owners" value={`${ownerRegistry.length}`} detail="People and entities on file" tone="slate" className="ownership-metric-card" onClick={() => scrollToSection('ownership-registry')} />

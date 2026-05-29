@@ -4,7 +4,7 @@ import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
 import { SalePacketSlots } from '@/components/SalePacketSlots';
-import { PageHeader, Pill, ProgressBar, SurfaceTabs } from '@/components/app-ui';
+import { Pill, ProgressBar, SurfaceTabs } from '@/components/app-ui';
 import { DotsIcon } from '@/components/icons';
 import { buildPublicShareUrl } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
@@ -46,7 +46,7 @@ const statusTone: Record<HorseStatus, 'blue' | 'slate' | 'amber' | 'rose' | 'eme
   Retired: 'slate',
 };
 
-const segments: SegmentFilter[] = ['All', 'Sale Prospect', 'Stud', 'Show String', 'Retired'];
+const segments: SegmentFilter[] = ['All', 'Sale Prospect', 'Broodmare', 'Stud', 'Show String', 'Retired'];
 const horseSegments: HorseSegment[] = ['Broodmare', 'Stud', 'Show String', 'Sale Prospect', 'Young Stock', 'Retired'];
 const horseStatuses: HorseStatus[] = ['In Training', 'Broodmare Program', 'Sale Prep', 'Medical Review', 'Pasture', 'Retired'];
 const horseSexes: HorseSex[] = ['Mare', 'Stud', 'Gelding', 'Filly', 'Colt'];
@@ -187,11 +187,11 @@ export default function Horses() {
   const handleCreateHorse = () => {
     const nextErrors: Partial<Record<'name' | 'barnName' | 'owner' | 'ownerEntity' | 'barn' | 'pasture', string>> = {};
     if (form.name.trim().length < 3) nextErrors.name = 'Registered name is required.';
-    if (form.barnName.trim().length < 2) nextErrors.barnName = 'Barn name is required.';
+    if (!form.barnName.trim()) nextErrors.barnName = 'Barn name is required.';
     if (form.owner.trim().length < 2) nextErrors.owner = 'Owner is required.';
     if (form.ownerEntity.trim().length < 2) nextErrors.ownerEntity = 'Owner entity is required.';
-    if (form.barn.trim().length < 2) nextErrors.barn = 'Barn is required.';
-    if (form.pasture.trim().length < 2) nextErrors.pasture = 'Pasture is required.';
+    if (!form.barn.trim()) nextErrors.barn = 'Barn is required.';
+    if (!form.pasture.trim()) nextErrors.pasture = 'Pasture is required.';
 
     setFormErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
@@ -220,19 +220,27 @@ export default function Horses() {
 
   return (
     <>
-      <PageHeader
-        title="Horses"
-        actions={
-          <>
-            <Link to="/documents?upload=1" className="button button--ghost button--compact">
-              Batch intake
-            </Link>
-            <button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>
-              New horse
-            </button>
-          </>
-        }
-      />
+      <div className="surface-hero surface-hero--dark">
+        <div className="surface-hero__top">
+          <div>
+            <span className="surface-hero__eyebrow">Horse Operations</span>
+            <h1 className="surface-hero__title">Profiles, records, and readiness.</h1>
+            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
+              Every horse in the operation. Health records, ownership proof, documents, and transfer readiness — all in one place.
+            </p>
+          </div>
+          <div className="surface-hero__stats">
+            <div className="surface-hero__stat"><span>Total horses</span><strong>{horses.length}</strong></div>
+            <div className="surface-hero__stat"><span>Medical watch</span><strong style={{ color: horses.filter((h) => h.status === 'Medical Review').length ? 'var(--rose)' : 'var(--emerald)' }}>{horses.filter((h) => h.status === 'Medical Review').length}</strong></div>
+            <div className="surface-hero__stat"><span>Sale prep</span><strong>{horses.filter((h) => h.status === 'Sale Prep').length}</strong></div>
+            <div className="surface-hero__stat"><span>Packet ready</span><strong style={{ color: 'var(--emerald)' }}>{horses.filter((h) => h.readiness.packetStatus === 'Ready').length}</strong></div>
+          </div>
+          <div className="inline-actions" style={{ marginTop: '16px' }}>
+            <Link to="/documents?upload=1" className="button button--ghost button--compact">Upload docs</Link>
+            <button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>New horse</button>
+          </div>
+        </div>
+      </div>
 
       {createOpen ? (
         <section className="panel">

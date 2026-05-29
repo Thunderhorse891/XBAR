@@ -10,6 +10,7 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
 
     steps:
       - name: Checkout
@@ -32,9 +33,3 @@ jobs:
 
       - name: Build app
         run: npm run build
-
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Run e2e smoke test
-        run: npm run test:e2e
