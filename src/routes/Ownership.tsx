@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Pill } from '@/components/app-ui';
-import { xbarOwnershipHeroVideoDataUri } from '@/assets/xbarOwnershipHeroVideoData';
 import { formatDateLabel, formatDateTimeLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
@@ -16,8 +15,6 @@ import { createOwnerRegistry, createRelationshipRows, filterAndSortRelationshipR
 import type { OwnerRegistryRow, RelationshipRow } from '@/features/ownership/types';
 import './ownershipExperience.css';
 
-const ownershipHeroVideoSrc = `${import.meta.env.BASE_URL}brand/xbar-documents-hero.mp4`;
-const ownershipFallbackMarkSrc = `${import.meta.env.BASE_URL}brand/xbar-app-icon.svg`;
 
 type MenuState =
   | { type: 'record'; recordId: string; x: number; y: number }
@@ -29,7 +26,6 @@ export default function Ownership() {
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
-  const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const updateOwnershipRecord = useXbarStore((state) => state.updateOwnershipRecord);
   const addOwnershipAuditEntry = useXbarStore((state) => state.addOwnershipAuditEntry);
   const addOwnershipStake = useXbarStore((state) => state.addOwnershipStake);
@@ -51,8 +47,6 @@ export default function Ownership() {
   const [coOwner, setCoOwner] = useState({ name: '', share: '25', role: 'Co-Owner' as OwnershipStake['role'], contact: '' });
   const [formError, setFormError] = useState('');
   const [menuState, setMenuState] = useState<MenuState>(null);
-  const [heroVideoSrc, setHeroVideoSrc] = useState(ownershipHeroVideoSrc);
-
   const ownershipDocuments = useMemo(
     () => documents.filter((document) => ownershipDocumentTypes.includes(document.type)),
     [documents],
@@ -238,17 +232,13 @@ export default function Ownership() {
 
   return (
     <div className="ownership-ops">
-      <section className="ownership-hero" aria-labelledby="ownership-title">
-        <div className="ownership-hero__copy">
-          <div className="ownership-brand-row">
-            <span className="ownership-brand-mark" aria-hidden="true">XB</span>
-            <span>{workspaceProfile.businessName || 'XBAR'} Ownership Operations</span>
+      <div className="surface-hero surface-hero--dark">
+        <div className="surface-hero__top">
+          <div>
+            <span className="surface-hero__eyebrow">Ownership</span>
+            <h1 className="surface-hero__title">Transfer records</h1>
           </div>
-          <h1 id="ownership-title">Know who owns what.</h1>
-          <p>
-            Track ownership, transfers, sale files, and registration records in one place. Built for ranches, breeders, and serious horse operations.
-          </p>
-          <div className="ownership-hero__actions">
+          <div className="surface-hero__actions">
             <button className="button button--primary" type="button" onClick={() => scrollToSection('ownership-owner-editor')} disabled={!canManageOwnership}>
               Add owner
             </button>
@@ -259,38 +249,8 @@ export default function Ownership() {
               Upload document
             </button>
           </div>
-          <div className="ownership-hero__proof">
-            <span>Every horse. Every owner. Every transfer.</span>
-            <span>Stop losing ownership history in texts, paper files, and screenshots.</span>
-          </div>
         </div>
-
-        <div className="ownership-hero__media" aria-label="XBAR brand motion preview">
-          <img className="ownership-hero__fallback" src={ownershipFallbackMarkSrc} alt="" />
-          <video
-            className="ownership-hero__video"
-            src={heroVideoSrc}
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="metadata"
-            poster={ownershipFallbackMarkSrc}
-            onError={(event) => {
-              if (heroVideoSrc !== xbarOwnershipHeroVideoDataUri) {
-                setHeroVideoSrc(xbarOwnershipHeroVideoDataUri);
-                return;
-              }
-
-              event.currentTarget.style.display = 'none';
-            }}
-          />
-          <div className="ownership-hero__glass">
-            <span>Ownership desk</span>
-            <strong>{pendingTransfers.length ? `${pendingTransfers.length} transfers open` : 'Transfers clear'}</strong>
-          </div>
-        </div>
-      </section>
+      </div>
 
       <div className="ownership-metric-grid">
         <MetricCard label="Owners" value={`${ownerRegistry.length}`} detail="People and entities on file" tone="slate" className="ownership-metric-card" onClick={() => scrollToSection('ownership-registry')} />

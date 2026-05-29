@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter, HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Route, Routes, useLocation } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import { RequireCloudAuth } from './components/RequireCloudAuth';
 import { RequireWorkspaceSetup } from './components/RequireWorkspaceSetup';
@@ -118,8 +118,7 @@ export default function App() {
               <Route path="assets" element={<RanchAssets />} />
               <Route path="subscriptions" element={<Subscriptions />} />
               <Route path="shared-access" element={<SharedAccess />} />
-              <Route path="portal" element={<Navigate to="/shared-access" replace />} />
-              <Route path="settings" element={<Settings />} />
+<Route path="settings" element={<Settings />} />
               <Route path="*" element={<NotFound />} />
             </Route>
             <Route path="*" element={<NotFound />} />

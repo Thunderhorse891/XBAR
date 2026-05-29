@@ -1,5 +1,5 @@
 import { useId, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState } from '@/components/EmptyState';
 import { SalePacketSlots } from '@/components/SalePacketSlots';
 import { KeyValue, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
@@ -7,13 +7,14 @@ import { ChevronLeftIcon, SharedAccessIcon } from '@/components/icons';
 import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { buildPublicShareUrl } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatDateLabel, formatPercent } from '@/lib/format';
+import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useCurrentRoleCapability, useHorseRecord, useXbarStore } from '@/store/useXbarStore';
-import type { DocumentRecord, DocumentSource, GalleryAsset, SalesLead } from '@/types/xbar';
+import type { DocumentRecord, DocumentSource, GalleryAsset, HorseSex, SalesLead } from '@/types/xbar';
 import { classNames, docSources, leadChannels, mediaKinds } from '@/features/horses/constants';
 import type { DetailTab } from '@/features/horses/types';
-import { DollarIcon, EyeIcon, LinkIcon, LockIcon, MessageIcon, PhotoIcon } from '@/features/horses/icons';
+import { DollarIcon, LinkIcon, LockIcon, PhotoIcon } from '@/features/horses/icons';
 
 function ReadinessGauge({ value }: { value: number }) {
   const normalized = Math.max(0, Math.min(100, value));
@@ -82,8 +83,13 @@ export default function HorseDetail() {
   const addHorseNote = useXbarStore((state) => state.addHorseNote);
   const updateHorseLocation = useXbarStore((state) => state.updateHorseLocation);
   const createSalesLead = useXbarStore((state) => state.createSalesLead);
+  const updateHorse = useXbarStore((state) => state.updateHorse);
+  const deleteHorse = useXbarStore((state) => state.deleteHorse);
   const currentRole = useXbarStore((state) => state.currentRole);
+  const session = useCloudStore((state) => state.session);
+  const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || 'Field Ops';
   const pushToast = useUiStore((state) => state.pushToast);
+  const navigate = useNavigate();
   const canManageSharedAccess = useCurrentRoleCapability('manageSharedAccess');
   const canUploadMedia = useCurrentRoleCapability('uploadMedia');
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
@@ -106,6 +112,8 @@ export default function HorseDetail() {
   const [leadError, setLeadError] = useState('');
   const [locationError, setLocationError] = useState('');
   const [activeTab, setActiveTab] = useState<DetailTab>('Overview');
+  const [editingCore, setEditingCore] = useState(false);
+  const [coreForm, setCoreForm] = useState({ name: '', breed: '', color: '', sex: 'Mare' as HorseSex, registrationNumber: '', owner: '', ownerEntity: '', askPrice: '' });
   const [location, setLocation] = useState({
     barn: horse?.location.barn ?? '',
     pasture: horse?.location.pasture ?? '',
@@ -245,7 +253,7 @@ export default function HorseDetail() {
     const result = addHorseNote(horse.id, {
       title: noteTitle,
       body: noteBody,
-      author: 'Field Ops',
+      author: currentUserName,
       tone: 'info',
     });
     pushToast({
@@ -408,14 +416,25 @@ export default function HorseDetail() {
                 Enable sale packet
               </button>
             )}
-            <button
-              className="inline-flex h-10 items-center justify-center rounded-lg border border-[rgba(148,184,224,0.18)] bg-[rgba(255,255,255,0.06)] px-5 text-sm font-semibold text-[rgba(208,228,252,0.88)] transition-all duration-150 ease-[ease] hover:bg-[rgba(255,255,255,0.1)] disabled:cursor-not-allowed disabled:opacity-40"
-              type="button"
-              onClick={() => void handleSavedHorseToggle()}
-              disabled={!canManageSharedAccess}
-            >
-              {saved ? 'Unshare' : 'Share'}
-            </button>
+            {saved && (
+              <button
+                className="inline-flex h-10 items-center justify-center rounded-lg border border-[rgba(148,184,224,0.18)] bg-[rgba(255,255,255,0.06)] px-5 text-sm font-semibold text-[rgba(208,228,252,0.88)] transition-all duration-150 ease-[ease] hover:bg-[rgba(255,255,255,0.1)] disabled:cursor-not-allowed disabled:opacity-40"
+                type="button"
+                onClick={() => void handleSavedHorseToggle()}
+                disabled={!canManageSharedAccess}
+              >
+                Unshare
+              </button>
+            )}
+            {canEditHorse && (
+              <button
+                className="inline-flex h-10 items-center justify-center rounded-lg border border-[rgba(255,80,80,0.3)] bg-transparent px-4 text-sm font-semibold text-[rgba(255,140,140,0.8)] transition-all duration-150 ease-[ease] hover:bg-[rgba(255,80,80,0.1)] disabled:cursor-not-allowed disabled:opacity-40"
+                type="button"
+                onClick={() => { if (window.confirm('Remove this horse from records? This cannot be undone.')) { deleteHorse(horse.id); navigate('/horses'); } }}
+              >
+                Remove horse
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -547,8 +566,6 @@ export default function HorseDetail() {
 
           <div className="mt-5 flex flex-wrap gap-3">
             <StatPill icon={<DollarIcon className="h-4 w-4" />} value={formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)} label="Ask" />
-            <StatPill icon={<EyeIcon className="h-4 w-4" />} value={String(horse.sale.watchlistCount)} label="Watchers" />
-            <StatPill icon={<MessageIcon className="h-4 w-4" />} value={String(horse.sale.inquiryCount)} label="Inquiries" />
           </div>
 
           <div className="mt-5">
@@ -578,16 +595,48 @@ export default function HorseDetail() {
       {activeTab === 'Overview' ? (
       <div className="detail-grid">
         <Panel eyebrow="Identity" title="Registry">
-          <div className="key-grid key-grid--wide">
-            <KeyValue label="Registry" value={`${horse.registry} · ${horse.aqhaNumber}`} />
-            <KeyValue label="Registration" value={horse.registrationNumber} />
-            <KeyValue label="Color / marks" value={`${horse.color} · ${horse.markings}`} />
-            <KeyValue label="Sex / age" value={`${horse.sex} · ${horse.age}`} />
-            <KeyValue label="Foaled" value={formatDateLabel(horse.foaledOn)} />
-            <KeyValue label="Microchip" value={horse.microchipId} />
-            <KeyValue label="Sire / dam" value={`${horse.bloodline.sire} / ${horse.bloodline.dam}`} />
-            <KeyValue label="Family" value={horse.bloodline.family} />
-          </div>
+          {editingCore ? (
+            <div className="form-grid form-grid--tight">
+              {(['name', 'breed', 'color', 'registrationNumber', 'owner', 'ownerEntity'] as const).map((field) => (
+                <label key={field} className="field-stack">
+                  <span className="field-label">{field === 'registrationNumber' ? 'Registration #' : field === 'ownerEntity' ? 'Owner entity' : field.charAt(0).toUpperCase() + field.slice(1)}</span>
+                  <input className="field-input" value={coreForm[field]} onChange={(e) => setCoreForm((f) => ({ ...f, [field]: e.target.value }))} />
+                </label>
+              ))}
+              <label className="field-stack">
+                <span className="field-label">Sex</span>
+                <select className="field-input" value={coreForm.sex} onChange={(e) => setCoreForm((f) => ({ ...f, sex: e.target.value as HorseSex }))}>
+                  {(['Mare', 'Gelding', 'Stallion', 'Filly', 'Colt'] as HorseSex[]).map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </label>
+              <label className="field-stack">
+                <span className="field-label">Asking price</span>
+                <input className="field-input" type="number" min="0" value={coreForm.askPrice} onChange={(e) => setCoreForm((f) => ({ ...f, askPrice: e.target.value }))} placeholder="0" />
+              </label>
+              <div className="inline-actions" style={{ gridColumn: '1/-1' }}>
+                <button className="button button--primary button--compact" type="button" onClick={() => { updateHorse(horse.id, { name: coreForm.name || horse.name, breed: coreForm.breed, color: coreForm.color, sex: coreForm.sex, registrationNumber: coreForm.registrationNumber, owner: coreForm.owner, ownerEntity: coreForm.ownerEntity, askPrice: coreForm.askPrice ? Number(coreForm.askPrice) : undefined }); setEditingCore(false); }}>Save</button>
+                <button className="button button--ghost button--compact" type="button" onClick={() => setEditingCore(false)}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="key-grid key-grid--wide">
+                <KeyValue label="Registry" value={`${horse.registry} · ${horse.aqhaNumber}`} />
+                <KeyValue label="Registration" value={horse.registrationNumber} />
+                <KeyValue label="Color / marks" value={`${horse.color} · ${horse.markings}`} />
+                <KeyValue label="Sex / age" value={`${horse.sex} · ${horse.age}`} />
+                <KeyValue label="Foaled" value={formatDateLabel(horse.foaledOn)} />
+                <KeyValue label="Microchip" value={horse.microchipId} />
+                <KeyValue label="Sire / dam" value={`${horse.bloodline.sire} / ${horse.bloodline.dam}`} />
+                <KeyValue label="Family" value={horse.bloodline.family} />
+              </div>
+              {canEditHorse && (
+                <div className="inline-actions" style={{ marginTop: '12px' }}>
+                  <button className="button button--ghost button--compact" type="button" onClick={() => { setCoreForm({ name: horse.name, breed: horse.breed, color: horse.color, sex: horse.sex, registrationNumber: horse.registrationNumber, owner: horse.owner, ownerEntity: horse.ownerEntity, askPrice: horse.sale.askPrice ? String(horse.sale.askPrice) : '' }); setEditingCore(true); }}>Edit identity</button>
+                </div>
+              )}
+            </>
+          )}
         </Panel>
 
         <Panel eyebrow="Assignments" title="Assignments">

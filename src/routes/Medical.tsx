@@ -5,6 +5,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
+import { useCloudStore } from '@/store/useCloudStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { MedicalEventType } from '@/types/xbar';
 import { medicalEventTypes } from '@/features/health/constants';
@@ -15,6 +16,10 @@ export default function Medical() {
   const documents = useXbarStore((state) => state.documents);
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
   const addMedicalEvent = useXbarStore((state) => state.addMedicalEvent);
+  const updateMedicalEvent = useXbarStore((state) => state.updateMedicalEvent);
+  const deleteMedicalEvent = useXbarStore((state) => state.deleteMedicalEvent);
+  const session = useCloudStore((state) => state.session);
+  const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || 'Vet Records';
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageMedical = useCurrentRoleCapability('manageMedical');
   const medicalWatch = horses.filter((horse) => horse.status === 'Medical Review');
@@ -34,6 +39,8 @@ export default function Medical() {
   const [eventType, setEventType] = useState<MedicalEventType>('Vet visit');
   const [eventError, setEventError] = useState('');
   const [timelineQuery, setTimelineQuery] = useState('');
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ title: '', body: '', date: '' });
   const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
   const menuHorse = horses.find((horse) => horse.id === menuState?.horseId);
   const menuItems = menuHorse
@@ -215,7 +222,7 @@ export default function Medical() {
                 const result = addMedicalEvent(selectedHorseId, {
                   title: eventTitle,
                   body: eventBody,
-                  author: 'Vet Records',
+                  author: currentUserName,
                   date: eventDate,
                   type: eventType,
                 });
@@ -243,14 +250,32 @@ export default function Medical() {
             <div className="stack-list">
               {medicalEvents.slice(0, 5).map((event) => (
                 <div key={event.id} className="stack-item">
-                  <div className="stack-item__top">
-                    <div>
-                      <div className="stack-item__title">{event.horseName}</div>
-                      <div className="stack-item__copy">{event.title}</div>
+                  {editingEventId === event.id ? (
+                    <div className="stack-item__top" style={{ flexDirection: 'column', gap: '8px' }}>
+                      <input className="field-input" value={editForm.title} onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))} placeholder="Title" />
+                      <input className="field-input" value={editForm.body} onChange={(e) => setEditForm((f) => ({ ...f, body: e.target.value }))} placeholder="Notes" />
+                      <input className="field-input" type="date" value={editForm.date} onChange={(e) => setEditForm((f) => ({ ...f, date: e.target.value }))} />
+                      <div className="inline-actions">
+                        <button className="button button--primary button--compact" type="button" onClick={() => { updateMedicalEvent(event.horseId, event.id, { title: editForm.title, summary: editForm.body, date: editForm.date }); setEditingEventId(null); }}>Save</button>
+                        <button className="button button--ghost button--compact" type="button" onClick={() => setEditingEventId(null)}>Cancel</button>
+                      </div>
                     </div>
-                    <Pill tone="blue">{formatDateLabel(event.date)}</Pill>
-                  </div>
-                  <div className="stack-item__copy">{event.summary}</div>
+                  ) : (
+                    <>
+                      <div className="stack-item__top">
+                        <div>
+                          <div className="stack-item__title">{event.horseName}</div>
+                          <div className="stack-item__copy">{event.title}</div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Pill tone="blue">{formatDateLabel(event.date)}</Pill>
+                          <button className="button button--ghost button--compact" style={{ fontSize: '11px' }} type="button" onClick={() => { setEditForm({ title: event.title, body: event.summary, date: event.date }); setEditingEventId(event.id); }}>Edit</button>
+                          <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={() => { if (window.confirm('Remove this medical event?')) deleteMedicalEvent(event.horseId, event.id); }}>Delete</button>
+                        </div>
+                      </div>
+                      <div className="stack-item__copy">{event.summary}</div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
