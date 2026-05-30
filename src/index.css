@@ -412,6 +412,19 @@ a:focus-visible,
   background: #f1f5f9;
 }
 
+.button:active {
+  transform: scale(0.97);
+  box-shadow: none;
+}
+
+.button--primary:active {
+  background: #044d6a;
+}
+
+.button--ghost:active {
+  background: #e2e8f0;
+}
+
 .button__icon,
 .inline-link__icon {
   width: 17px;
