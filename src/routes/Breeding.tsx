@@ -4,6 +4,7 @@ import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
+import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 
@@ -13,6 +14,8 @@ export default function Breeding() {
   const documents = useXbarStore((state) => state.documents);
   const addBreedingEvent = useXbarStore((state) => state.addBreedingEvent);
   const pushToast = useUiStore((state) => state.pushToast);
+  const session = useCloudStore((state) => state.session);
+  const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || 'Breeding';
   const canManageBreeding = useCurrentRoleCapability('manageBreeding');
   const breedingHorses = horses.filter((horse) => horse.segment === 'Stud' || horse.sex === 'Mare');
   const breedingDocs = documents.filter((document) => document.type === 'Breeding Contract');
@@ -214,7 +217,7 @@ export default function Breeding() {
                 const result = addBreedingEvent(selectedHorseId, {
                   title: eventTitle,
                   body: eventBody,
-                  author: 'Breeding Desk',
+                  author: currentUserName,
                   date: eventDate,
                 });
 
