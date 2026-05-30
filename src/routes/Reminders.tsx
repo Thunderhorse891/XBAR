@@ -165,7 +165,7 @@ export default function Reminders() {
                   </div>
                   <div className="inline-actions" style={{ marginTop: '10px' }}>
                     {reminder.kind === 'Care' && reminder.horseId && (
-                      <button className="button button--primary button--compact" type="button" onClick={() => navigate(`/medical`)}>Log care event</button>
+                      <button className="button button--primary button--compact" type="button" onClick={() => navigate(`/medical?horse=${reminder.horseId}`)}>Log care event</button>
                     )}
                     {reminder.kind === 'Ownership' && (
                       <button className="button button--primary button--compact" type="button" onClick={() => navigate('/ownership')}>Review transfer</button>

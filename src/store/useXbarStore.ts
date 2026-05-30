@@ -119,6 +119,7 @@ type XbarStore = {
     leadId: string,
     patch: Partial<Pick<SalesLead, 'stage' | 'lastTouch' | 'nextFollowUp' | 'notes' | 'offerAmount' | 'savedListing' | 'shareReady' | 'outcome'>>,
   ) => ActionResult;
+  addRanchAsset: (asset: Pick<RanchAsset, 'name' | 'category' | 'location'>) => ActionResult;
   updateAsset: (assetId: string, patch: AssetPatch) => ActionResult;
   addHorseNote: (horseId: string, note: Pick<HorseNote, 'title' | 'body' | 'author' | 'tone'>) => ActionResult;
   addMedicalEvent: (
@@ -1781,6 +1782,27 @@ export const useXbarStore = create<XbarStore>()(
 
         return { ok: true, message: `${lead.name} updated.`, id: leadId };
       },
+      addRanchAsset: (asset) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageAssets');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+        if (!asset.name.trim()) return { ok: false, message: 'Asset name is required.' };
+        const id = crypto.randomUUID();
+        set((state) => ({
+          ranchAssets: [...state.ranchAssets, {
+            id,
+            name: asset.name.trim(),
+            category: asset.category,
+            status: 'Available' as const,
+            condition: 'Excellent' as const,
+            assignedTo: '',
+            location: asset.location.trim(),
+            nextService: '',
+            notes: '',
+          }],
+        }));
+        return { ok: true, message: 'Asset added.', id };
+      },
+
       updateAsset: (assetId, patch) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageAssets');
         if (deniedMessage) {

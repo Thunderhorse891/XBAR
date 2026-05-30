@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
@@ -12,6 +12,7 @@ import { medicalEventTypes } from '@/features/health/constants';
 
 export default function Medical() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
@@ -32,7 +33,11 @@ export default function Medical() {
     })),
   );
   const kits = ranchAssets.filter((asset) => asset.category === 'Medical Kit');
-  const [selectedHorseId, setSelectedHorseId] = useState(medicalWatch[0]?.id ?? horses[0]?.id ?? '');
+  const [selectedHorseId, setSelectedHorseId] = useState(() => {
+    const fromRoute = searchParams.get('horse');
+    if (fromRoute && horses.some((h) => h.id === fromRoute)) return fromRoute;
+    return medicalWatch[0]?.id ?? horses[0]?.id ?? '';
+  });
   const [eventTitle, setEventTitle] = useState('Vet follow-up');
   const [eventBody, setEventBody] = useState('');
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));

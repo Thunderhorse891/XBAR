@@ -6,14 +6,16 @@ import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
-import type { AssetCondition, AssetStatus } from '@/types/xbar';
+import type { AssetCategory, AssetCondition, AssetStatus } from '@/types/xbar';
 
 const statuses: AssetStatus[] = ['Available', 'Assigned', 'In Service'];
 const conditions: AssetCondition[] = ['Excellent', 'Service Soon', 'Attention Required'];
+const assetCategories: AssetCategory[] = ['Tack', 'Equipment', 'Medical Kit', 'Feed & Supply', 'Transport'];
 
 export default function RanchAssets() {
   const navigate = useNavigate();
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
+  const addRanchAsset = useXbarStore((state) => state.addRanchAsset);
   const updateAsset = useXbarStore((state) => state.updateAsset);
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageAssets = useCurrentRoleCapability('manageAssets');
@@ -21,6 +23,8 @@ export default function RanchAssets() {
   const serviceSoon = ranchAssets.filter((asset) => asset.condition !== 'Excellent');
   const [selectedAssetId, setSelectedAssetId] = useState(ranchAssets[0]?.id ?? '');
   const [assetQuery, setAssetQuery] = useState('');
+  const [newAsset, setNewAsset] = useState({ name: '', category: 'Equipment' as AssetCategory, location: '' });
+  const [newAssetError, setNewAssetError] = useState('');
   const [menuState, setMenuState] = useState<{ assetId: string; x: number; y: number } | null>(null);
 
   const selectedAsset = ranchAssets.find((asset) => asset.id === selectedAssetId) ?? ranchAssets[0];
@@ -246,6 +250,45 @@ export default function RanchAssets() {
           </div>
         </Panel>
       </div>
+
+      <Panel eyebrow="Add to inventory" title="New asset">
+        <div className="form-grid form-grid--tight">
+          <label className="field-stack field-stack--wide">
+            <span className="field-label">Asset name</span>
+            <input className="field-input" value={newAsset.name} onChange={(e) => { setNewAsset((f) => ({ ...f, name: e.target.value })); setNewAssetError(''); }} placeholder="e.g. Western Saddle #3" disabled={!canManageAssets} />
+          </label>
+          <label className="field-stack">
+            <span className="field-label">Category</span>
+            <select className="field-select" value={newAsset.category} onChange={(e) => setNewAsset((f) => ({ ...f, category: e.target.value as AssetCategory }))} disabled={!canManageAssets}>
+              {assetCategories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+            </select>
+          </label>
+          <label className="field-stack">
+            <span className="field-label">Location</span>
+            <input className="field-input" value={newAsset.location} onChange={(e) => setNewAsset((f) => ({ ...f, location: e.target.value }))} placeholder="e.g. Tack room" disabled={!canManageAssets} />
+          </label>
+        </div>
+        {newAssetError ? <div className="field-error">{newAssetError}</div> : null}
+        <div className="inline-actions">
+          <button
+            className="button button--primary button--compact"
+            type="button"
+            disabled={!canManageAssets}
+            onClick={() => {
+              if (!newAsset.name.trim()) { setNewAssetError('Asset name is required.'); return; }
+              const result = addRanchAsset(newAsset);
+              pushToast({ title: result.ok ? 'Asset added' : 'Add blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+              if (result.ok) {
+                setNewAsset({ name: '', category: 'Equipment', location: '' });
+                setNewAssetError('');
+                if (result.id) setSelectedAssetId(result.id);
+              }
+            }}
+          >
+            Add asset
+          </button>
+        </div>
+      </Panel>
 
       <ContextMenu open={Boolean(menuAsset)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
     </>

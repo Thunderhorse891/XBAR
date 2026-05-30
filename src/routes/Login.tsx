@@ -112,7 +112,8 @@ export default function Login() {
   const signInWithFacebook = useCloudStore((state) => state.signInWithFacebook);
   const initializeWorkspace = useXbarStore((state) => state.initializeWorkspace);
   const shellRef = useRef<HTMLDivElement | null>(null);
-  const [email, setEmail] = useState('');
+  const [rememberMe, setRememberMe] = useState(() => localStorage.getItem('xbar-remember-me') === 'true');
+  const [email, setEmail] = useState(() => (localStorage.getItem('xbar-remember-me') === 'true' ? localStorage.getItem('xbar-remembered-email') ?? '' : ''));
   const [password, setPassword] = useState('');
   const [authMode, setAuthMode] = useState<AuthMode>('signin');
   const [busy, setBusy] = useState<BusyState>('');
@@ -144,6 +145,13 @@ export default function Login() {
     const result = authMode === 'signin'
       ? await signInWithPassword(email, password)
       : await signUpWithPassword(email, password);
+    if (rememberMe) {
+      localStorage.setItem('xbar-remember-me', 'true');
+      localStorage.setItem('xbar-remembered-email', email);
+    } else {
+      localStorage.removeItem('xbar-remember-me');
+      localStorage.removeItem('xbar-remembered-email');
+    }
     pushToast({
       title: result.ok ? (authMode === 'signin' ? 'Signed in' : 'Account created') : (authMode === 'signin' ? 'Sign-in blocked' : 'Signup blocked'),
       message: result.message,
@@ -274,7 +282,7 @@ export default function Login() {
                 {/* Options row */}
                 <div className="lp-options">
                   <label className="lp-remember">
-                    <input type="checkbox" />
+                    <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
                     <span>Remember me</span>
                   </label>
                   {authMode === 'signin' && (
