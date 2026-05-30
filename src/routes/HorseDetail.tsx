@@ -86,8 +86,9 @@ export default function HorseDetail() {
   const updateHorse = useXbarStore((state) => state.updateHorse);
   const deleteHorse = useXbarStore((state) => state.deleteHorse);
   const currentRole = useXbarStore((state) => state.currentRole);
+  const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const session = useCloudStore((state) => state.session);
-  const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || 'Field Ops';
+  const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName || 'Field Ops';
   const pushToast = useUiStore((state) => state.pushToast);
   const navigate = useNavigate();
   const canManageSharedAccess = useCurrentRoleCapability('manageSharedAccess');

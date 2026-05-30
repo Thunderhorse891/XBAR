@@ -436,7 +436,21 @@ export default function Settings() {
                       </div>
                       <Pill tone={invite.role === 'Owner' ? 'emerald' : 'blue'}>{roleLabel(invite.role)}</Pill>
                     </div>
+                    <div className="stack-item__copy" style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--muted)', wordBreak: 'break-all' }}>
+                      Invite code: {invite.id}
+                    </div>
                     <div className="inline-actions">
+                      <button
+                        className="button button--ghost button--compact"
+                        type="button"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(invite.id).then(() => {
+                            pushToast({ title: 'Invite code copied', message: 'Share this code with the invitee so they can join the workspace.', tone: 'success' });
+                          });
+                        }}
+                      >
+                        Copy code
+                      </button>
                       {!isSupabaseConfigured() ? (
                         <button
                           className="button button--ghost button--compact"

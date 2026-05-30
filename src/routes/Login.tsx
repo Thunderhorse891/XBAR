@@ -279,6 +279,23 @@ export default function Login() {
                   </div>
                 </label>
 
+                {/* Password strength — signup only */}
+                {authMode === 'signup' && password.length > 0 && (() => {
+                  const len = password.length;
+                  const complex = /[A-Z]/.test(password) && /[0-9]/.test(password) && /[^A-Za-z0-9]/.test(password);
+                  const level = len >= 12 && complex ? 'strong' : len >= 8 ? 'fair' : 'weak';
+                  const colors: Record<string, string> = { weak: 'var(--rose)', fair: 'var(--amber)', strong: 'var(--emerald)' };
+                  const widths: Record<string, string> = { weak: '33%', fair: '66%', strong: '100%' };
+                  return (
+                    <div style={{ marginTop: '-4px', marginBottom: '4px' }}>
+                      <div style={{ height: '4px', background: 'var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: widths[level], background: colors[level], borderRadius: '2px', transition: 'width 0.2s, background 0.2s' }} />
+                      </div>
+                      <span style={{ fontSize: '12px', color: colors[level], marginTop: '3px', display: 'inline-block', textTransform: 'capitalize' }}>{level} password</span>
+                    </div>
+                  );
+                })()}
+
                 {/* Options row */}
                 <div className="lp-options">
                   <label className="lp-remember">

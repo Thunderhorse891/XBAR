@@ -105,6 +105,38 @@ export default function BuyerProfile() {
   const resolvedPayload = remoteState.payload ?? localPayload;
 
   const horse = resolvedPayload?.horse;
+
+  // Inject OG meta tags so social previews and link unfurls show horse info.
+  useEffect(() => {
+    if (!horse) return;
+    const title = `${horse.name} — XBAR Horse Profile`;
+    const description = [horse.breed, horse.sex, horse.age > 0 ? `${horse.age} yrs` : null, horse.color].filter(Boolean).join(' · ');
+    const image = horse.profileImage || horse.gallery?.[0]?.url || '';
+
+    const setMeta = (property: string, content: string) => {
+      let el = document.querySelector<HTMLMetaElement>(`meta[property="${property}"]`);
+      if (!el) { el = document.createElement('meta'); el.setAttribute('property', property); document.head.appendChild(el); }
+      el.setAttribute('content', content);
+    };
+    const setNameMeta = (name: string, content: string) => {
+      let el = document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`);
+      if (!el) { el = document.createElement('meta'); el.setAttribute('name', name); document.head.appendChild(el); }
+      el.setAttribute('content', content);
+    };
+
+    document.title = title;
+    setMeta('og:title', title);
+    setMeta('og:description', description);
+    setMeta('og:type', 'website');
+    if (image) setMeta('og:image', image);
+    setNameMeta('description', description);
+    setNameMeta('twitter:card', 'summary_large_image');
+    setNameMeta('twitter:title', title);
+    setNameMeta('twitter:description', description);
+    if (image) setNameMeta('twitter:image', image);
+
+    return () => { document.title = 'XBAR'; };
+  }, [horse]);
   const documents = resolvedPayload?.documents ?? [];
   const sharedListing = resolvedPayload?.sharedListing;
 

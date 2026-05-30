@@ -19,8 +19,9 @@ export default function Medical() {
   const addMedicalEvent = useXbarStore((state) => state.addMedicalEvent);
   const updateMedicalEvent = useXbarStore((state) => state.updateMedicalEvent);
   const deleteMedicalEvent = useXbarStore((state) => state.deleteMedicalEvent);
+  const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const session = useCloudStore((state) => state.session);
-  const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || 'Vet Records';
+  const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName || 'Vet Records';
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageMedical = useCurrentRoleCapability('manageMedical');
   const medicalWatch = horses.filter((horse) => horse.status === 'Medical Review');

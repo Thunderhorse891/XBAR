@@ -14,8 +14,9 @@ export default function Breeding() {
   const documents = useXbarStore((state) => state.documents);
   const addBreedingEvent = useXbarStore((state) => state.addBreedingEvent);
   const pushToast = useUiStore((state) => state.pushToast);
+  const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const session = useCloudStore((state) => state.session);
-  const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || 'Breeding';
+  const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName || 'Breeding';
   const canManageBreeding = useCurrentRoleCapability('manageBreeding');
   const breedingHorses = horses.filter((horse) => horse.segment === 'Stud' || horse.sex === 'Mare');
   const breedingDocs = documents.filter((document) => document.type === 'Breeding Contract');
