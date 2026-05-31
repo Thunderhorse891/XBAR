@@ -103,10 +103,6 @@ export default function RanchAssets() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Ranch Operations</span>
-            <h1 className="surface-hero__title">Equipment, kits, and field assets.</h1>
-            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
-              Track gear by status, condition, and assignment. Know what's available, what needs service, and what's tied to active operations.
-            </p>
           </div>
           <div className="surface-hero__stats">
             <div className="surface-hero__stat">
@@ -259,7 +255,7 @@ export default function RanchAssets() {
           </label>
           <label className="field-stack">
             <span className="field-label">Category</span>
-            <select className="field-select" value={newAsset.category} onChange={(e) => setNewAsset((f) => ({ ...f, category: e.target.value as AssetCategory }))} disabled={!canManageAssets}>
+            <select className="field-input" value={newAsset.category} onChange={(e) => setNewAsset((f) => ({ ...f, category: e.target.value as AssetCategory }))} disabled={!canManageAssets}>
               {assetCategories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
             </select>
           </label>

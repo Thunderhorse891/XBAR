@@ -896,7 +896,7 @@ export default function HorseDetail() {
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__top">
-                <div className="stack-item__title">Packet trust</div>
+                <div className="stack-item__title">Record Complete</div>
                 <Pill tone="blue">{packet.buyerProfileStatus}</Pill>
               </div>
               <div className="inline-metrics">

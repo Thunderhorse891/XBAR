@@ -84,10 +84,6 @@ export default function Expenses() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Budget & Expenses</span>
-            <h1 className="surface-hero__title">Know what the operation costs.</h1>
-            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
-              Feed, vet care, farrier work, hauling, bedding, supplements, and horse-specific receipts in one clean ledger.
-            </p>
             <div className="surface-hero__actions" style={{ marginTop: '16px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <button className="button button--primary" type="button" onClick={() => document.getElementById('expense-intake')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
                 Log receipt

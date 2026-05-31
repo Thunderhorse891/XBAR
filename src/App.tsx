@@ -9,6 +9,7 @@ import { useCloudStore } from './store/useCloudStore';
 import './routes/operationsHierarchy.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Landing = lazy(() => import('./routes/Landing'));
 const Breeding = lazy(() => import('./routes/Breeding'));
 const BuyerProfile = lazy(() => import('./routes/BuyerProfile'));
 const Documents = lazy(() => import('./routes/Documents'));
@@ -101,6 +102,7 @@ export default function App() {
         <Suspense fallback={<div className="app-loading-shell">Loading...</div>}>
           <Routes>
             <Route path="/profiles/:id" element={<BuyerProfile />} />
+            <Route path="/landing" element={<Landing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/setup" element={<RequireCloudAuth><SetupWorkspace /></RequireCloudAuth>} />
             <Route path="/" element={<RequireCloudAuth><RequireWorkspaceSetup><MainLayout /></RequireWorkspaceSetup></RequireCloudAuth>}>

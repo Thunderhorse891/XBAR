@@ -70,10 +70,6 @@ export default function Medical() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Health & Care</span>
-            <h1 className="surface-hero__title">Coggins, vaccines, dental, and vet records.</h1>
-            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
-              Log every care event as it happens. Coggins expiration, dewormer cycles, dental float windows, and vet visits — kept in one verifiable timeline per horse.
-            </p>
           </div>
           <div className="surface-hero__stats">
             <div className="surface-hero__stat">

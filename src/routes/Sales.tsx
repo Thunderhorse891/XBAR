@@ -109,10 +109,6 @@ export default function Sales() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Sales & Transfers</span>
-            <h1 className="surface-hero__title">Listings, buyers, and transfer readiness.</h1>
-            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
-              Every horse with an asking price or active buyer. Track sale status, follow-ups due, and what is blocking transfer completion.
-            </p>
           </div>
           <div className="surface-hero__stats">
             <div className="surface-hero__stat"><span>Listings</span><strong>{saleHorses.length}</strong></div>

@@ -49,10 +49,6 @@ export default function Breeding() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Breeding Program</span>
-            <h1 className="surface-hero__title">Pairings, milestones, and contracts.</h1>
-            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
-              Track mares, studs, and foaling work through a single program timeline. Every pairing should connect back to documents and verified records.
-            </p>
           </div>
           <div className="surface-hero__stats">
             <div className="surface-hero__stat">

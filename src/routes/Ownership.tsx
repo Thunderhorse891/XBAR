@@ -236,7 +236,6 @@ export default function Ownership() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Ownership</span>
-            <h1 className="surface-hero__title">Transfer records</h1>
           </div>
           <div className="surface-hero__actions">
             <button className="button button--primary" type="button" onClick={() => scrollToSection('ownership-owner-editor')} disabled={!canManageOwnership}>

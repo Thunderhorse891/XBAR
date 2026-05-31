@@ -237,11 +237,22 @@ export default function BuyerProfile() {
                 Post to Facebook
               </button>
             </div>
+
+            {/* Contact / inquiry CTA — visible to buyers on the public profile */}
+            <div style={{ marginTop: '4px' }}>
+              <a
+                className="button button--primary"
+                style={{ width: '100%', justifyContent: 'center' }}
+                href={`mailto:?subject=Inquiry: ${encodeURIComponent(horse.name)}&body=${encodeURIComponent(`Hi,\n\nI am interested in ${horse.name}. Please contact me to discuss availability and pricing.\n\nProfile: ${publicShareUrl}`)}`}
+              >
+                Contact seller about {horse.name}
+              </a>
+            </div>
           </div>
         </section>
 
         <div className="metric-grid">
-          <MetricCard label="Packet trust" value={formatPercent(packet.score)} detail={packet.trustSummary} tone={packet.tone} />
+          <MetricCard label="Record Complete" value={formatPercent(packet.score)} detail={packet.trustSummary} tone={packet.tone} />
           <MetricCard
             label="Buyer confidence"
             value="—"

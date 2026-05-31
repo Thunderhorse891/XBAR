@@ -23,7 +23,8 @@ import {
   todayStamp,
 } from '@/lib/xbarRuntime';
 import { countReservedSharedAccessSeats, countReservedWorkspaceSeats, normalizeWorkspaceEmail, validateWorkspaceInvitation } from '@/lib/workspaceAccess';
-import { isSupabaseConfigured } from '@/lib/platformConfig';
+import { apiConfig, isSupabaseConfigured } from '@/lib/platformConfig';
+import { useCloudStore } from '@/store/useCloudStore';
 import { getCapabilityDeniedMessage, hasRoleCapability } from '@/lib/permissions';
 import {
   createWorkspaceInvitationInCloud,
@@ -1083,6 +1084,18 @@ export const useXbarStore = create<XbarStore>()(
           if (!cloudResult.ok) {
             return { ok: false, message: cloudResult.message };
           }
+
+          // Fire invite email via API (best-effort — don't block on failure)
+          try {
+            const session = useCloudStore.getState().session;
+            const accessToken = session?.access_token ?? '';
+            const apiBase = apiConfig.baseUrl || (typeof window !== 'undefined' ? window.location.origin : '');
+            await fetch(`${apiBase}/api/invite`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+              body: JSON.stringify({ email: invite.email, role: invite.role, workspaceId: useCloudStore.getState().workspaceId, invitationId: invite.id }),
+            });
+          } catch { /* non-critical */ }
         }
 
         const workspaceInvitations = [invite, ...state.workspaceInvitations];
