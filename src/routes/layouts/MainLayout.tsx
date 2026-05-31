@@ -47,7 +47,7 @@ const navItems: NavItem[] = [
   { label: 'Reminders', path: '/reminders', icon: BellIcon, section: 'Operations', badgeKey: 'reminders' },
   { label: 'Ranch Operations', path: '/assets', icon: AssetsIcon, section: 'Operations' },
   { label: 'Weather', path: '/weather', icon: WeatherIcon, section: 'Operations' },
-  { label: 'Buyer Links', path: '/shared-access', icon: SharedAccessIcon, section: 'Platform' },
+  { label: 'Sale Listings', path: '/shared-access', icon: SharedAccessIcon, section: 'Platform' },
   { label: 'Subscriptions', path: '/subscriptions', icon: SubscriptionIcon, section: 'Platform', requires: 'billing' },
   { label: 'Settings', path: '/settings', icon: SettingsIcon, section: 'Platform', requires: 'settings' },
 ];
@@ -65,7 +65,7 @@ const routeLabels: Record<string, string> = {
   '/assets': 'Ranch Operations',
   '/weather': 'Weather',
   '/subscriptions': 'Subscriptions',
-  '/shared-access': 'Buyer Links',
+  '/shared-access': 'Sale Listings',
   '/settings': 'Settings',
 };
 
@@ -116,10 +116,10 @@ const routeHelp: Record<string, HelpSection[]> = {
   ],
   Subscriptions: [
     { label: 'Billing', text: 'Show plan state clearly. Do not imply Stripe billing unless it is configured.' },
-    { label: 'Limits', text: 'Storage, seats, buyer links, and documents should be easy to understand.' },
+    { label: 'Limits', text: 'Storage, seats, listings, and documents should be easy to understand.' },
   ],
-  'Buyer Links': [
-    { label: 'Shares', text: 'Buyer-facing links need approved, sanitized records only.' },
+  'Sale Listings': [
+    { label: 'Listings', text: 'Buyer-facing links need approved, sanitized records only.' },
     { label: 'Proof', text: 'Preview before making any horse public.' },
   ],
   Settings: [

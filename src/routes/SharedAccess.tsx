@@ -175,7 +175,7 @@ export default function SharedAccess() {
     <>
       <PageHeader
         eyebrow="Sale Packets"
-        title="Buyer Links"
+        title="Sale Listings"
       />
 
       <div className="metric-grid">
@@ -213,7 +213,7 @@ export default function SharedAccess() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Listings" title="Buyer rooms">
+        <Panel eyebrow="Listings" title="Listings">
           {sharedHorses.length ? (
             <div className="stack-list">
               {sharedHorses.map((horse) => {

@@ -58,7 +58,7 @@ export default function Medical() {
         },
         {
           id: 'prepare-event',
-          label: 'Log care event',
+          label: 'Add care event',
           onSelect: () => setSelectedHorseId(menuHorse.id),
         },
       ]
@@ -100,7 +100,7 @@ export default function Medical() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Care watch" title="Watch">
+        <Panel eyebrow="On watch" title="Watch">
           {medicalWatch.length ? (
             <div className="stack-list">
               {medicalWatch.map((horse) => (
@@ -136,7 +136,7 @@ export default function Medical() {
           )}
         </Panel>
 
-        <Panel eyebrow="Kit readiness" title="Kits">
+        <Panel eyebrow="Medical kits" title="Kits">
           {kits.length ? (
             <div className="stack-list">
               {kits.map((asset) => (
@@ -161,7 +161,7 @@ export default function Medical() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Care action" title="Log care">
+        <Panel eyebrow="Care action" title="Add care event">
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
               <span className="field-label">Horse</span>

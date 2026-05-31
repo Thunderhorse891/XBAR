@@ -774,7 +774,7 @@ export default function HorseDetail() {
           </div>
           <div className="inline-actions">
             <button className="button button--ghost button--compact" type="button" onClick={handleDocumentUpload} disabled={!canUploadDocuments || isDocumentUploading || !docFiles.length}>
-              {isDocumentUploading ? 'Uploading...' : 'Add intake'}
+              {isDocumentUploading ? 'Uploading...' : 'Upload documents'}
             </button>
           </div>
         </Panel>

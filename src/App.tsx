@@ -58,7 +58,7 @@ function routeTitle(path: string) {
     '/reminders': 'Reminders',
     '/assets': 'Ranch Operations',
     '/weather': 'Weather',
-    '/shared-access': 'Buyer Links',
+    '/shared-access': 'Sale Listings',
     '/subscriptions': 'Subscriptions',
     '/settings': 'Settings',
     '/setup': 'Setup',
