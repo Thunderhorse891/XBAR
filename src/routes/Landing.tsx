@@ -206,10 +206,10 @@ export default function Landing() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '16px' }}>
             {[
-              { name: 'Starter', price: '$390', period: '/mo', seats: '2 seats', docs: '250 documents', storage: '25 GB', highlight: false, cta: 'Get started' },
-              { name: 'Professional', price: '$1,290', period: '/mo', seats: '8 seats', docs: '1,800 documents', storage: '200 GB', highlight: true, cta: 'Start free trial' },
-              { name: 'Ranch Ops', price: '$2,490', period: '/mo', seats: '20 seats', docs: '6,000 documents', storage: '750 GB', highlight: false, cta: 'Get started' },
-              { name: 'Enterprise', price: '$4,990', period: '/mo', seats: '60 seats', docs: '20,000 documents', storage: '2.5 TB', highlight: false, cta: 'Contact us' },
+              { name: 'Starter', price: '$29', period: '/mo', seats: '1 seat', docs: '250 documents', storage: '25 GB', highlight: false, cta: 'Get started' },
+              { name: 'Professional', price: '$79', period: '/mo', seats: '5 seats', docs: '1,000 documents', storage: '100 GB', highlight: true, cta: 'Start free trial' },
+              { name: 'Ranch Ops', price: '$199', period: '/mo', seats: '20 seats', docs: '5,000 documents', storage: '500 GB', highlight: false, cta: 'Get started' },
+              { name: 'Enterprise', price: '$499', period: '/mo', seats: '60 seats', docs: '20,000 documents', storage: '2.5 TB', highlight: false, cta: 'Contact us' },
             ].map((plan) => (
               <div key={plan.name} style={{
                 padding: '28px 24px',
