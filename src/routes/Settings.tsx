@@ -240,7 +240,7 @@ export default function Settings() {
                       </div>
                     </div>
                     <div className="inline-metrics">
-                      <span>{workspaceId ? `Workspace ${workspaceId.slice(0, 8)}` : `User ${cloudSession.user.id.slice(0, 8)}`}</span>
+                      <span>{workspaceId ? `Ranch ${workspaceId.slice(0, 8)}` : `User ${cloudSession.user.id.slice(0, 8)}`}</span>
                       <span>{lastCloudSyncAt ? `Last sync ${formatDateLabel(lastCloudSyncAt)}` : 'No cloud sync yet'}</span>
                       <span>{cloudSyncState === 'syncing' ? 'Saving relational records' : cloudSyncState === 'error' ? 'Needs retry' : 'Watching workspace changes'}</span>
                     </div>

@@ -44,7 +44,7 @@ export default function Subscriptions() {
         <MetricCard
           label="Storage"
           value={`${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB`}
-          detail="Workspace files"
+          detail="Ranch files"
           tone="blue"
         />
       </div>
@@ -87,7 +87,7 @@ export default function Subscriptions() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Usage" title="Workspace">
+        <Panel eyebrow="Usage" title="Ranch">
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__top">
