@@ -64,14 +64,14 @@ export default function Settings() {
       URL.revokeObjectURL(url);
       pushToast({
         title: 'Backup exported',
-        message: 'Workspace backup downloaded successfully.',
+        message: 'Ranch backup downloaded successfully.',
         tone: 'success',
       });
     } catch (error) {
       console.error('Backup export failed', error);
       pushToast({
         title: 'Backup failed',
-        message: 'The workspace backup could not be exported.',
+        message: 'The ranch backup could not be exported.',
         tone: 'error',
       });
     }
@@ -276,12 +276,12 @@ export default function Settings() {
           ) : (
             <div className="bullet-list">
               <div className="bullet-list__item">Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to turn on cloud auth and sync.</div>
-              <div className="bullet-list__item">Until then, this workspace stays local to this browser.</div>
+              <div className="bullet-list__item">Until then, this ranch data stays local to this browser.</div>
             </div>
           )}
         </Panel>
 
-        <Panel eyebrow="Workspace profile" title="Profile">
+        <Panel eyebrow="Ranch profile" title="Profile">
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
               <span className="field-label">Business name</span>
@@ -323,7 +323,7 @@ export default function Settings() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Workspace access" title="Access">
+        <Panel eyebrow="Ranch access" title="Access">
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__top">
@@ -383,7 +383,7 @@ export default function Settings() {
                       <div>
                         <div className="stack-item__title">{member.email}</div>
                         <div className="stack-item__copy">
-                          {roleLabel(member.role)} · {member.source === 'Owner' ? 'Workspace owner' : `Joined ${formatDateLabel(member.joinedAt)}`}
+                          {roleLabel(member.role)} · {member.source === 'Owner' ? 'Ranch owner' : `Joined ${formatDateLabel(member.joinedAt)}`}
                         </div>
                       </div>
                       <div className="status-inline">
@@ -547,7 +547,7 @@ export default function Settings() {
         </Panel>
       </div>
 
-      <Panel eyebrow="Workspace backup" title="Backups">
+      <Panel eyebrow="Ranch backup" title="Backups">
         <input
           ref={importRef}
           type="file"

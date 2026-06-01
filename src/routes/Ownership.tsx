@@ -262,7 +262,7 @@ export default function Ownership() {
       <section className="ownership-command-panel" aria-label="Ownership search and filters">
         <div>
           <span className="section-eyebrow">Ownership control</span>
-          <h2>Find the record, verify the owner, move the transfer.</h2>
+          <h2>Find the record, verify the owner, move the transfer</h2>
         </div>
         <div className="ownership-toolbar">
           <label className="ownership-search">

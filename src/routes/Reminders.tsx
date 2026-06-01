@@ -102,8 +102,8 @@ export default function Reminders() {
     <div className="ops-experience">
       <section className="ops-hero ops-hero--reminders" aria-labelledby="reminders-title">
         <div>
-          <div className="ops-kicker">Work Queue</div>
-          <h1 id="reminders-title">What needs attention right now.</h1>
+          <div className="ops-kicker">Action needed</div>
+          <h1 id="reminders-title">What needs attention right now</h1>
           <p>Coggins expiring, vaccines due, transfer papers missing, documents waiting review, and buyer follow-ups — all in one place.</p>
           <div className="ops-hero__actions">
             <button className="button button--primary" type="button" onClick={() => navigate('/medical')}>Open health</button>

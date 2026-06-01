@@ -19,7 +19,8 @@ export default function Medical() {
   const updateMedicalEvent = useXbarStore((state) => state.updateMedicalEvent);
   const deleteMedicalEvent = useXbarStore((state) => state.deleteMedicalEvent);
   const session = useCloudStore((state) => state.session);
-  const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || 'Vet Records';
+  const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
+  const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName || 'Ranch Staff';
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageMedical = useCurrentRoleCapability('manageMedical');
   const medicalWatch = horses.filter((horse) => horse.status === 'Medical Review');
@@ -98,7 +99,7 @@ export default function Medical() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Care watch" title="Watch">
+        <Panel eyebrow="On Watch" title="Watch">
           {medicalWatch.length ? (
             <div className="stack-list">
               {medicalWatch.map((horse) => (
@@ -134,7 +135,7 @@ export default function Medical() {
           )}
         </Panel>
 
-        <Panel eyebrow="Kit readiness" title="Kits">
+        <Panel eyebrow="Medical Kits" title="Kits">
           {kits.length ? (
             <div className="stack-list">
               {kits.map((asset) => (
@@ -159,7 +160,7 @@ export default function Medical() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Care action" title="Log care">
+        <Panel eyebrow="Care action" title="Add care event">
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
               <span className="field-label">Horse</span>
