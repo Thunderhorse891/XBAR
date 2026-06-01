@@ -203,10 +203,10 @@ export default function HorseDetail() {
       horseId: horse.id,
       source: docSource,
       uploadedBy: 'Horse Profile',
-      label: `${horse.barnName} profile intake`,
+      label: `${horse.barnName} profile upload`,
     });
     pushToast({
-      title: result.ok ? 'Document intake updated' : 'Document upload blocked',
+      title: result.ok ? 'Document upload updated' : 'Document upload blocked',
       message: result.message,
       tone: result.ok ? 'success' : 'error',
     });

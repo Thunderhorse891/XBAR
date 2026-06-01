@@ -145,7 +145,7 @@ export default function BuyerProfile() {
       ? 'Loading sale packet'
       : localPreviewAllowed && localHorse && localSharedListing
         ? 'Share link locked'
-        : 'Buyer profile unavailable';
+        : 'Sale profile unavailable';
     const description = remoteState.status === 'loading'
       ? 'Loading listing and packet data.'
       : localPreviewAllowed && localHorse && localSharedListing && !localAccessAllowed

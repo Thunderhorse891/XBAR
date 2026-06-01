@@ -233,7 +233,7 @@ export default function Horses() {
         <section className="panel">
             <div className="panel__header">
               <div>
-                <div className="panel__eyebrow">Horse intake</div>
+                <div className="panel__eyebrow">New horse</div>
                 <h2 className="panel__title">Add horse</h2>
               </div>
               <button className="button button--ghost button--compact" type="button" onClick={() => setNewHorseParam(false)}>
@@ -413,7 +413,7 @@ export default function Horses() {
                   />
                   <div className="horse-card__media-top">
                     <div className="status-inline">
-                      <Pill tone={statusTone[horse.status]}>{horse.status}</Pill>
+                      <Pill tone={statusTone[horse.status]}>{horse.status === 'Sale Prep' ? 'For Sale' : horse.status}</Pill>
                       <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
                     </div>
                     <button
@@ -481,7 +481,7 @@ export default function Horses() {
                     <div className="horse-card__readiness horse-card__readiness--meta">
                       <div className="horse-card__readiness-head">
                         <span>Care status</span>
-                        <strong>{horse.status}</strong>
+                        <strong>{horse.status === 'Sale Prep' ? 'For Sale' : horse.status}</strong>
                       </div>
                       <div className="inline-metrics">
                         <span>{horse.gallery.length} assets</span>
@@ -579,7 +579,7 @@ export default function Horses() {
                   <td>{horse.documents.length}</td>
                   <td>{formatPercent(horse.readiness.score)}</td>
                   <td>
-                    <Pill tone={statusTone[horse.status]}>{horse.status}</Pill>
+                    <Pill tone={statusTone[horse.status]}>{horse.status === 'Sale Prep' ? 'For Sale' : horse.status}</Pill>
                   </td>
                 </tr>
               ))}

@@ -1,1 +1,1 @@
-export type DocumentsView = 'Review' | 'Intake' | 'Batches' | 'Flags';
+export type DocumentsView = 'Review' | 'Upload' | 'Batches' | 'Flags';

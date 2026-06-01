@@ -52,13 +52,13 @@ export default function Documents() {
   const duplicates = documents.filter((document) => document.duplicateRisk === 'Possible Duplicate');
   const buyerSafeDocuments = documents.filter((document) => buildDocumentTrustProfile(document, horses).readyForProfile);
   const uploadOpen = searchParams.get('upload') === '1';
-  const [activeView, setActiveView] = useState<DocumentsView>(uploadOpen ? 'Intake' : 'Review');
+  const [activeView, setActiveView] = useState<DocumentsView>(uploadOpen ? 'Upload' : 'Review');
   const menuDocument = menuState?.type === 'document' ? documents.find((document) => document.id === menuState.documentId) : undefined;
   const menuHorseId = menuDocument ? reviewAssignments[menuDocument.id] ?? menuDocument.horseId : undefined;
 
   useEffect(() => {
     if (uploadOpen) {
-      setActiveView('Intake');
+      setActiveView('Upload');
     }
   }, [uploadOpen]);
   const scrollToSection = (sectionId: string) => {
@@ -157,8 +157,8 @@ export default function Documents() {
           ...(menuState.surfaceId === 'vault'
             ? [
                 {
-                  id: 'jump-intake',
-                  label: 'Jump to intake',
+                  id: 'jump-upload',
+                  label: 'Jump to upload',
                   onSelect: () => scrollToSection('documents-intake'),
                 },
                 {
@@ -223,8 +223,8 @@ export default function Documents() {
                     ]
                   : []),
                 {
-                  id: 'focus-intake',
-                  label: 'Focus intake',
+                  id: 'focus-upload',
+                  label: 'Focus upload',
                   onSelect: () => scrollToSection('documents-intake'),
                 },
               ]
@@ -285,7 +285,7 @@ export default function Documents() {
     });
 
     pushToast({
-      title: result.ok ? 'Document intake updated' : 'Document intake blocked',
+      title: result.ok ? 'Document upload updated' : 'Document upload blocked',
       message: result.message,
       tone: result.ok ? 'success' : 'error',
     });
@@ -362,7 +362,7 @@ export default function Documents() {
       <section className="surface-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <SurfaceTabs
-            items={['Review', 'Intake', 'Batches', 'Flags']}
+            items={['Review', 'Upload', 'Batches', 'Flags']}
             active={activeView}
             onChange={(view) => setActiveView(view as DocumentsView)}
           />
@@ -374,10 +374,10 @@ export default function Documents() {
         </div>
       </section>
 
-      {activeView === 'Intake' ? (
+      {activeView === 'Upload' ? (
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel
-          title="Intake"
+          title="Upload"
           action={
             <Pill tone={uploadOpen ? 'blue' : 'slate'}>{uploadOpen ? 'Top-bar launch' : `${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB used`}</Pill>
           }

@@ -414,7 +414,7 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="command-stage__support-card">
-            <div className="command-stage__support-label">Intake</div>
+            <div className="command-stage__support-label">Upload</div>
             <strong className="command-stage__support-title">
               {recentBatches[0]?.label ?? 'No batch yet'}
             </strong>
@@ -659,7 +659,7 @@ export default function Dashboard() {
 
       <div className="dashboard-board dashboard-board--lower">
         <Panel
-          title="Receipt intake"
+          title="Log receipt"
           meta={<Pill tone={canManageBudget ? 'blue' : 'slate'}>{canManageBudget ? 'Enabled' : 'Read only'}</Pill>}
         >
           <form id="dashboard-receipt-form" className="dashboard-receipt-form" onSubmit={handleReceiptSubmit}>

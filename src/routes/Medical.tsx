@@ -100,11 +100,7 @@ export default function Medical() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-<<<<<<< HEAD
-        <Panel eyebrow="On watch" title="Watch">
-=======
         <Panel eyebrow="On Watch" title="Watch">
->>>>>>> 4255c70 (language, terminology, font, and grammar consistency pass)
           {medicalWatch.length ? (
             <div className="stack-list">
               {medicalWatch.map((horse) => (
@@ -140,11 +136,7 @@ export default function Medical() {
           )}
         </Panel>
 
-<<<<<<< HEAD
-        <Panel eyebrow="Medical kits" title="Kits">
-=======
         <Panel eyebrow="Medical Kits" title="Kits">
->>>>>>> 4255c70 (language, terminology, font, and grammar consistency pass)
           {kits.length ? (
             <div className="stack-list">
               {kits.map((asset) => (

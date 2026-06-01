@@ -76,7 +76,7 @@ const routeHelp: Record<string, HelpSection[]> = {
   ],
   Horses: [
     { label: 'Profile', text: 'Each horse should become a complete command file.' },
-    { label: 'Create', text: 'New horse intake should save confirmed data only.' },
+    { label: 'Create', text: 'New horse record should save confirmed data only.' },
   ],
   Ownership: [
     { label: 'Proof', text: 'Use this area for owners, percentages, documents, transfers, and history.' },

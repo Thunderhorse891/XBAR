@@ -175,7 +175,7 @@ export default function Expenses() {
         <aside id="expense-intake" className="ops-panel ops-panel--form">
           <div className="ops-section-heading ops-section-heading--compact">
             <div>
-              <span className="section-eyebrow">Receipt intake</span>
+              <span className="section-eyebrow">Log receipt</span>
               <h2>Add the cost while it is still fresh.</h2>
             </div>
             <Pill tone={canManageBudget ? 'blue' : 'slate'}>{canManageBudget ? 'Enabled' : 'Read only'}</Pill>
