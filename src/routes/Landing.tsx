@@ -9,7 +9,7 @@ const features = [
   { label: 'Health & Care', icon: '💉' },
   { label: 'Document Vault', icon: '📄' },
   { label: 'Ownership & Title', icon: '📋' },
-  { label: 'Buyer Profiles', icon: '🔗' },
+  { label: 'Sale Listings', icon: '🔗' },
   { label: 'Budget Ledger', icon: '💰' },
 ];
 
@@ -102,7 +102,7 @@ export default function Landing() {
           maxWidth: '52ch',
           lineHeight: 1.65,
         }}>
-          XBAR tracks ownership, health, documents, and buyer packets for every horse in your operation. When a buyer asks for proof, you're already ready.
+          XBAR tracks ownership, health, documents, and sale packets for every horse in your operation. When a prospect asks for proof, you're already ready.
         </p>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
           <Link to="/login?mode=signup" style={{

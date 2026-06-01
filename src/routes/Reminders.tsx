@@ -104,7 +104,7 @@ export default function Reminders() {
         <div>
           <div className="ops-kicker">Action needed</div>
           <h1 id="reminders-title">What needs attention right now</h1>
-          <p>Coggins expiring, vaccines due, transfer papers missing, documents waiting review, and buyer follow-ups — all in one place.</p>
+          <p>Coggins expiring, vaccines due, transfer papers missing, documents waiting review, and sale follow-ups — all in one place.</p>
           <div className="ops-hero__actions">
             <button className="button button--primary" type="button" onClick={() => navigate('/medical')}>Open health</button>
             <button className="button button--ghost" type="button" onClick={() => navigate('/ownership')}>Open ownership</button>
@@ -140,7 +140,7 @@ export default function Reminders() {
         <div className="ops-toolbar ops-toolbar--wide">
           <label className="ops-search">
             <span className="sr-only">Search reminders</span>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search horse, document, transfer, buyer..." />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search horse, document, transfer, sale lead..." />
           </label>
           <select value={filter} onChange={(event) => setFilter(event.target.value as ReminderFilter)} aria-label="Filter reminder type">
             {filters.map((item) => <option key={item} value={item}>{item}</option>)}
@@ -160,7 +160,7 @@ export default function Reminders() {
                   <p>{reminder.detail}</p>
                   <div className="ops-record-meta">
                     <span>{reminder.kind}</span>
-                    <span>{reminder.horseName ?? 'Workspace'}</span>
+                    <span>{reminder.horseName ?? 'Ranch-wide'}</span>
                     <span>{reminder.dueDate ? formatDateLabel(reminder.dueDate) : 'No date'}</span>
                   </div>
                   <div className="inline-actions" style={{ marginTop: '10px' }}>

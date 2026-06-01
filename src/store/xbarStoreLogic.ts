@@ -97,7 +97,7 @@ export function createOwnershipRecord(horse: HorseRecord): OwnershipRecord {
     complianceDeadline: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
     confidence: 35,
     auditTrail: [
-      `${todayStamp()} Ownership record created from horse intake`,
+      `${todayStamp()} Ownership record created from horse record`,
       `${todayStamp()} Supporting ownership documents still need upload`,
     ],
   };

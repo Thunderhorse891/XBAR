@@ -528,7 +528,7 @@ export default function Settings() {
                 </div>
               </div>
               <div className="inline-metrics">
-                <span>Buyer share links can open in Facebook</span>
+                <span>Sale listing links can open in Facebook</span>
                 <span>Post flow uses Facebook&apos;s own share window</span>
               </div>
             </div>

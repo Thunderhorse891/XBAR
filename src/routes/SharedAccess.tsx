@@ -85,7 +85,7 @@ export default function SharedAccess() {
         `Make ${horseName} public?`,
         '',
         'Anyone with the link can view the sale packet without a token.',
-        'Buyer-safe fields include horse identity, approved sale photos, sale readiness, and approved packet documents only.',
+        'Shared fields include horse identity, approved sale photos, sale readiness, and approved packet documents only.',
         '',
         `Current packet status: ${packet.buyerProfileStatus}.`,
       ].join('\n'),

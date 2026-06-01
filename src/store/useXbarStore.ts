@@ -622,8 +622,8 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
     alerts: [
       {
         id: createId('alert'),
-        title: 'Finish intake packet',
-        summary: 'Registration, media, medical, and ownership details must be verified before this record is buyer-ready.',
+        title: 'Complete horse record',
+        summary: 'Registration, media, medical, and ownership details must be verified before this record is ready to share.',
         severity: 'medium',
         module: 'Documents',
       },
@@ -671,7 +671,7 @@ function buildHorseInputFromDocuments(documents: DocumentRecord[], workspaceProf
     ownerEntity: ownerEntity || 'Pending Entity',
     aqhaNumber: registrationNumber.startsWith('AQHA') ? registrationNumber : '',
     registrationNumber,
-    barn: workspaceProfile.defaultBarn.trim() || 'Intake Barn',
+    barn: workspaceProfile.defaultBarn.trim() || 'Main Barn',
     pasture: workspaceProfile.defaultPasture.trim() || 'Pending Pasture',
   };
 }
@@ -1046,7 +1046,7 @@ export const useXbarStore = create<XbarStore>()(
 
         return {
           ok: true,
-          message: accessMode === 'Public Link' ? 'Buyer link is now public.' : 'Buyer link now requires a token.',
+          message: accessMode === 'Public Link' ? 'Sale link is now public.' : 'Sale link now requires a token.',
           id: horseId,
         };
       },
@@ -1288,11 +1288,11 @@ export const useXbarStore = create<XbarStore>()(
 
         const fileList = files.filter(Boolean);
         if (!fileList.length) {
-          return { ok: false, message: 'Select at least one file for intake.' };
+          return { ok: false, message: 'Select at least one file to upload.' };
         }
 
         if (!uploadedBy.trim()) {
-          return { ok: false, message: 'Uploaded by is required before starting intake.' };
+          return { ok: false, message: 'Uploaded by is required before uploading.' };
         }
 
         const state = get();
@@ -1386,7 +1386,7 @@ export const useXbarStore = create<XbarStore>()(
 
           const batch: IntakeBatch = {
             id: batchId,
-            label: label?.trim() || `${source} intake`,
+            label: label?.trim() || `${source} upload`,
             receivedAt: nowStamp(),
             source,
             fileCount: documents.length,
@@ -1424,12 +1424,12 @@ export const useXbarStore = create<XbarStore>()(
 
           return {
             ok: true,
-            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the intake batch.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only because cloud file storage is not available.` : ''}`,
+            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the upload batch.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only because cloud file storage is not available.` : ''}`,
             id: batch.id,
           };
         } catch (error) {
-          console.error('Document intake failed', error);
-          return { ok: false, message: 'Document intake failed. Check the selected files and try again.' };
+          console.error('Document upload failed', error);
+          return { ok: false, message: 'Document upload failed. Check the selected files and try again.' };
         }
       },
       reviewDocument: (documentId, horseId) => {
@@ -1730,9 +1730,9 @@ export const useXbarStore = create<XbarStore>()(
                     {
                       id: createId('activity'),
                       date: todayStamp(),
-                      title: 'Buyer inquiry captured',
+                      title: 'Sale inquiry captured',
                       summary: `${lead.name} entered the pipeline from ${lead.channel}.`,
-                      owner: 'Sales Desk',
+                      owner: 'Ranch Staff',
                       category: 'Sales' as const,
                     },
                     ...horse.activity,

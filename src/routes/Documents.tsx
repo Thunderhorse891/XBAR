@@ -311,7 +311,7 @@ export default function Documents() {
               <span>Review queue</span>
               <strong style={{ color: reviewQueue.length ? 'var(--amber)' : 'var(--emerald)' }}>{reviewQueue.length}</strong>
             </div>
-            <div className="surface-hero__stat"><span>Buyer-safe</span><strong style={{ color: 'var(--emerald)' }}>{buyerSafeDocuments.length}</strong></div>
+            <div className="surface-hero__stat"><span>Ready to share</span><strong style={{ color: 'var(--emerald)' }}>{buyerSafeDocuments.length}</strong></div>
             <div className="surface-hero__stat">
               <span>Duplicates</span>
               <strong style={{ color: duplicates.length ? 'var(--amber)' : 'var(--emerald)' }}>{duplicates.length}</strong>
@@ -340,10 +340,10 @@ export default function Documents() {
           onContextMenu={(event) => openSurfaceMenu('review', event)}
         />
         <MetricCard
-          label="Buyer docs"
+          label="Ready docs"
           value={`${buyerSafeDocuments.length}`}
           tone="emerald"
-          title="Approved documents cleared for buyer-facing packet surfaces"
+          title="Approved documents cleared for sale packet surfaces"
           className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#3D6B4F]/12 hover:bg-[#faf5ee]"
           onClick={() => navigate('/shared-access')}
           onContextMenu={(event) => openSurfaceMenu('buyer', event)}
@@ -352,7 +352,7 @@ export default function Documents() {
           label="Storage"
           value={`${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB`}
           tone="slate"
-          title="Workspace file storage against the current contract"
+          title="Ranch file storage against the current contract"
           className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#3D6B4F]/12 hover:bg-[#faf5ee]"
           onClick={() => navigate('/subscriptions')}
           onContextMenu={(event) => openSurfaceMenu('storage', event)}

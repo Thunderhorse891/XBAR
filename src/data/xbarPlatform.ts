@@ -31,7 +31,7 @@ export const subscriptionSeed: SubscriptionProfile = {
   brandedListings: false,
   featureFlags: [
     'First-run workspace setup',
-    'Manual document intake',
+    'Manual document upload',
     'Receipt logging',
     'Horse ledger',
   ],
@@ -72,7 +72,7 @@ export const roleSeed: RoleWorkspace[] = [
   {
     role: 'Medical Lead',
     label: 'Medical Lead',
-    summary: 'Care cadence, treatment history, kit readiness, and review.',
+    summary: 'Care cadence, treatment history, medical kits, and review.',
     primaryModules: ['Medical', 'Documents'],
     permissions: ['Vet note review', 'Care protocol updates', 'Travel hold approvals'],
   },

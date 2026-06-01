@@ -45,7 +45,7 @@ export const subscriptionTierConfig: Record<
       'Everything in Starter',
       'Team roles',
       'Sale listings',
-      'Buyer profiles',
+      'Sale profiles',
       'Document sharing',
     ],
     limits: {
@@ -365,7 +365,7 @@ export async function buildDocumentRecord(params: {
     horses,
   });
   const candidateMatches = selectedHorse
-    ? [{ horse: selectedHorse, confidence: 0.99, reason: 'Document was manually attached during intake' }]
+    ? [{ horse: selectedHorse, confidence: 0.99, reason: 'Document was manually attached during upload' }]
     : rankHorseMatches(horses, `${file.name} ${previewText}`, extractedEntities);
 
   const matchedHorse = candidateMatches[0]?.horse;
@@ -406,7 +406,7 @@ export async function buildDocumentRecord(params: {
     state = 'Matched';
   }
 
-  const matchReason = candidateMatches[0]?.reason?.toLowerCase() ?? 'the intake engine found a weak candidate match';
+  const matchReason = candidateMatches[0]?.reason?.toLowerCase() ?? 'the upload engine found a weak candidate match';
   const trustLabel = `${Math.round(confidence * 100)}% match`;
 
   return {
@@ -423,7 +423,7 @@ export async function buildDocumentRecord(params: {
     extractedTextPreview: previewText,
     summary: matchedHorse
       ? `${inferredType} matched to ${matchedHorse.name} with ${trustLabel} based on ${matchReason}.`
-      : `${inferredType} added to intake and needs manual assignment before it can be attached to a horse profile.`,
+      : `${inferredType} added to the queue and needs manual assignment before it can be attached to a horse profile.`,
     entities,
   } satisfies DocumentRecord;
 }

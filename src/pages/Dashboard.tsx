@@ -216,7 +216,7 @@ export default function Dashboard() {
         </div>
 
         <div className="dashboard-grid dashboard-grid--primary">
-          <Panel eyebrow="Workspace" title="Start the ranch desk">
+          <Panel eyebrow="Ranch" title="Start the ranch desk">
             <EmptyState
               title="No records yet"
               description="Create the first horse, upload a packet, or load the ranch forecast to start working."
@@ -374,7 +374,7 @@ export default function Dashboard() {
           >
             <span className="ops-briefing-stat__label">Month spend</span>
             <span className="ops-briefing-stat__value">{formatCompactCurrency(budgetSummary.total)}</span>
-            <span className="ops-briefing-stat__detail">{qualifiedBuyerCount} active buyer{qualifiedBuyerCount !== 1 ? 's' : ''}</span>
+            <span className="ops-briefing-stat__detail">{qualifiedBuyerCount} active lead{qualifiedBuyerCount !== 1 ? 's' : ''}</span>
           </button>
         </div>
       </div>
