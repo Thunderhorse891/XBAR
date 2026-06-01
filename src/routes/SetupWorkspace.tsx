@@ -136,7 +136,7 @@ export default function SetupWorkspace() {
 
             <div className="mt-14 max-w-[36rem]">
               <h1 className="text-[clamp(2.6rem,7vw,5.25rem)] font-black leading-[0.88] tracking-[-0.08em] text-white">
-                Build the ranch workspace around real records.
+                Build the ranch workspace around real records
               </h1>
               <p className="mt-6 text-base leading-8 text-slate-300">
                 No fake horses. No invented documents. Start with a clean dashboard and let the operation become organized from the first entry.
@@ -183,7 +183,7 @@ export default function SetupWorkspace() {
 
             <form className="premium-setup-form" onSubmit={handleSubmit}>
               <div>
-                <div className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Workspace profile</div>
+                <div className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Ranch profile</div>
                 <h2 className="mt-2 text-[clamp(2rem,4vw,3.1rem)] font-black leading-[0.95] tracking-[-0.075em] text-white">
                   Set the identity your team will trust.
                 </h2>

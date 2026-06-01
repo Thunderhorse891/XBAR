@@ -204,7 +204,7 @@ export default function BuyerProfile() {
             />
           </div>
           <div className="buyer-hero__copy">
-            <div className="eyebrow">Buyer profile</div>
+            <div className="eyebrow">Sale profile</div>
             <h1 className="page-title">{horse.name}</h1>
             <div className="status-inline">
               <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
@@ -213,10 +213,6 @@ export default function BuyerProfile() {
               <Pill tone={sharedListing?.accessMode === 'Public Link' ? 'emerald' : 'slate'}>
                 {sharedListing?.accessMode ?? 'Private Token'}
               </Pill>
-            </div>
-            <div className="buyer-share">
-              <span>Share path</span>
-              <strong>{packet.sharePath}</strong>
             </div>
             <div className="inline-actions">
               <a className="button button--ghost button--compact" href={publicShareUrl} target="_blank" rel="noreferrer">
@@ -254,7 +250,7 @@ export default function BuyerProfile() {
         <div className="metric-grid">
           <MetricCard label="Record Complete" value={formatPercent(packet.score)} detail={packet.trustSummary} tone={packet.tone} />
           <MetricCard
-            label="Buyer confidence"
+            label="Inquiry count"
             value="—"
             detail="Buyer posture not disclosed"
             tone="slate"

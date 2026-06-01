@@ -148,7 +148,7 @@ export default function Horses() {
           ? [
               {
                 id: 'open-share-view',
-                label: 'Open live buyer link',
+                label: 'Open listing',
                 onSelect: async () => {
                   await recordSharedChannel(menuHorse.id, 'Direct Link');
                   if (typeof window !== 'undefined') {
@@ -219,7 +219,7 @@ export default function Horses() {
           <div className="surface-hero__stats">
             <div className="surface-hero__stat"><span>Total horses</span><strong>{horses.length}</strong></div>
             <div className="surface-hero__stat"><span>Medical watch</span><strong style={{ color: horses.filter((h) => h.status === 'Medical Review').length ? 'var(--rose)' : 'var(--emerald)' }}>{horses.filter((h) => h.status === 'Medical Review').length}</strong></div>
-            <div className="surface-hero__stat"><span>Sale prep</span><strong>{horses.filter((h) => h.status === 'Sale Prep').length}</strong></div>
+            <div className="surface-hero__stat"><span>For sale</span><strong>{horses.filter((h) => h.status === 'Sale Prep').length}</strong></div>
             <div className="surface-hero__stat"><span>Packet ready</span><strong style={{ color: 'var(--emerald)' }}>{horses.filter((h) => h.readiness.packetStatus === 'Ready').length}</strong></div>
           </div>
           <div className="inline-actions" style={{ marginTop: '16px' }}>
@@ -351,6 +351,8 @@ export default function Horses() {
           </div>
         </section>
       ) : null}
+
+
 
       <section className="portfolio-toolbar">
         <div className="portfolio-toolbar__controls">
@@ -512,7 +514,7 @@ export default function Horses() {
                         }}
                         disabled={!canManageSharedAccess}
                       >
-                        {saved ? 'Unshare' : 'Share room'}
+                        {saved ? 'Remove listing' : 'List for sale'}
                       </button>
                       <Link
                         to={`/horses/${horse.id}`}

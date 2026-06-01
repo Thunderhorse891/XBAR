@@ -203,8 +203,8 @@ export default function Login() {
           />
 
           <div className="lp-tagline">
-            <strong id="lp-headline">The operating system</strong>
-            <span>for modern horse operations</span>
+            <strong id="lp-headline">Horse Management.</strong>
+            <span>Reimagined.</span>
           </div>
 
           <div className="lp-features" aria-label="XBAR product coverage">

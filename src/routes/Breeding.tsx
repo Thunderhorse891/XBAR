@@ -16,7 +16,7 @@ export default function Breeding() {
   const pushToast = useUiStore((state) => state.pushToast);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const session = useCloudStore((state) => state.session);
-  const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName || 'Breeding';
+  const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName || 'Ranch Staff';
   const canManageBreeding = useCurrentRoleCapability('manageBreeding');
   const breedingHorses = horses.filter((horse) => horse.segment === 'Stud' || horse.sex === 'Mare');
   const breedingDocs = documents.filter((document) => document.type === 'Breeding Contract');
@@ -77,11 +77,11 @@ export default function Breeding() {
         <MetricCard label="Program horses" value={`${breedingHorses.length}`} detail="Mares and studs tracked in active breeding context" />
         <MetricCard label="Contract docs" value={`${breedingDocs.length}`} detail="Breeding-specific paperwork linked into the record model" tone="blue" />
         <MetricCard label="Live milestones" value={`${breedingHorses.reduce((sum, horse) => sum + horse.breedingTimeline.length, 0)}`} detail="Timeline entries currently supporting the program" tone="emerald" />
-        <MetricCard label="Packet blockers" value={`${breedingHorses.filter((horse) => horse.readiness.packetStatus !== 'Ready').length}`} detail="Horses still missing packet elements or imagery" tone="amber" />
+        <MetricCard label="Missing records" value={`${breedingHorses.filter((horse) => horse.readiness.packetStatus !== 'Ready').length}`} detail="Horses still missing packet elements or imagery" tone="amber" />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Program board" title="Board">
+        <Panel eyebrow="Breeding Board" title="Board">
           {breedingHorses.length ? (
             <div className="stack-list">
               {breedingHorses.map((horse) => (
@@ -115,7 +115,7 @@ export default function Breeding() {
               ))}
             </div>
           ) : (
-            <EmptyState compact title="No breeding horses in program" description="Move a mare or stud into the breeding lane to start tracking milestones." />
+            <EmptyState compact title="No horses in the breeding program" description="Move a mare or stud into the breeding lane to start tracking milestones." />
           )}
         </Panel>
 
@@ -193,7 +193,7 @@ export default function Breeding() {
               }} disabled={!canManageBreeding} />
             </label>
             <label className="field-stack field-stack--wide">
-              <span className="field-label">Program note</span>
+              <span className="field-label">Breeding note</span>
               <textarea className="field-textarea" rows={4} value={eventBody} onChange={(event) => {
                 setEventBody(event.target.value);
                 setEventError('');

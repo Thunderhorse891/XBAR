@@ -88,7 +88,7 @@ export default function HorseDetail() {
   const currentRole = useXbarStore((state) => state.currentRole);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const session = useCloudStore((state) => state.session);
-  const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName || 'Field Ops';
+  const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName || 'Ranch Staff';
   const pushToast = useUiStore((state) => state.pushToast);
   const navigate = useNavigate();
   const canManageSharedAccess = useCurrentRoleCapability('manageSharedAccess');
@@ -414,7 +414,7 @@ export default function HorseDetail() {
                 onClick={() => void handleSavedHorseToggle()}
                 disabled={!canManageSharedAccess}
               >
-                Enable sale packet
+                Create listing
               </button>
             )}
             {saved && (
@@ -424,7 +424,7 @@ export default function HorseDetail() {
                 onClick={() => void handleSavedHorseToggle()}
                 disabled={!canManageSharedAccess}
               >
-                Unshare
+                Remove listing
               </button>
             )}
             {canEditHorse && (
@@ -694,7 +694,7 @@ export default function HorseDetail() {
               <div className="inline-metrics">
                 <span>{horse.documents.length} docs</span>
                 <span>{horse.gallery.length} assets</span>
-                <span>{buyerReadyDocuments.length} buyer-safe</span>
+                <span>{buyerReadyDocuments.length} ready-to-share</span>
                 <span>{packet.shareSlug}</span>
               </div>
             </div>
@@ -906,7 +906,7 @@ export default function HorseDetail() {
               </div>
             </div>
             <div className="stack-item">
-              <div className="stack-item__title">Buyer-safe docs</div>
+              <div className="stack-item__title">Ready-to-share docs</div>
               <div className="inline-metrics">
                 <span>{buyerReadyDocuments.length} ready</span>
                 <span>{documents.length} linked</span>

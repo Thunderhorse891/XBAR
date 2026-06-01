@@ -8,6 +8,7 @@ import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { formatDateTimeLabel } from '@/lib/format';
 import { buildDocumentTrustProfile } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
+import { useCloudStore } from '@/store/useCloudStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { DocumentRecord, DocumentSource } from '@/types/xbar';
 import { documentSources } from '@/features/documents/constants';
@@ -26,11 +27,14 @@ export default function Documents() {
   const pushToast = useUiStore((state) => state.pushToast);
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
   const canReviewDocuments = useCurrentRoleCapability('reviewDocuments');
+  const session = useCloudStore((state) => state.session);
+  const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
+  const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName || 'Ranch Staff';
 
   const [files, setFiles] = useState<File[]>([]);
   const [source, setSource] = useState<DocumentSource>('Bulk Intake');
   const [horseId, setHorseId] = useState('');
-  const [uploadedBy, setUploadedBy] = useState('Ops Desk');
+  const [uploadedBy, setUploadedBy] = useState(currentUserName);
   const [batchLabel, setBatchLabel] = useState('Live upload batch');
   const [createHorseFromBatch, setCreateHorseFromBatch] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);

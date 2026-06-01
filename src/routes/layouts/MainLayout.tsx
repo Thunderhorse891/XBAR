@@ -45,7 +45,7 @@ const navItems: NavItem[] = [
   { label: 'Sales', path: '/sales', icon: SalesIcon, section: 'Operations' },
   { label: 'Expenses', path: '/expenses', icon: SubscriptionIcon, section: 'Operations' },
   { label: 'Reminders', path: '/reminders', icon: BellIcon, section: 'Operations', badgeKey: 'reminders' },
-  { label: 'Ranch Operations', path: '/assets', icon: AssetsIcon, section: 'Operations' },
+  { label: 'Equipment', path: '/assets', icon: AssetsIcon, section: 'Operations' },
   { label: 'Weather', path: '/weather', icon: WeatherIcon, section: 'Operations' },
   { label: 'Sale Listings', path: '/shared-access', icon: SharedAccessIcon, section: 'Platform' },
   { label: 'Subscriptions', path: '/subscriptions', icon: SubscriptionIcon, section: 'Platform', requires: 'billing' },
@@ -62,7 +62,7 @@ const routeLabels: Record<string, string> = {
   '/sales': 'Sales',
   '/expenses': 'Expenses',
   '/reminders': 'Reminders',
-  '/assets': 'Ranch Operations',
+  '/assets': 'Equipment',
   '/weather': 'Weather',
   '/subscriptions': 'Subscriptions',
   '/shared-access': 'Sale Listings',
@@ -84,7 +84,7 @@ const routeHelp: Record<string, HelpSection[]> = {
   ],
   Documents: [
     { label: 'Vault', text: 'Upload first. Assign, approve, and keep the document chain clean.' },
-    { label: 'Privacy', text: 'Only approved buyer-safe files should reach shared rooms.' },
+    { label: 'Privacy', text: 'Only approved ready-to-share files should reach shared listings.' },
   ],
   Health: [
     { label: 'Care', text: 'Coggins, vaccines, dental, wormer, and treatment records belong here.' },
@@ -106,7 +106,7 @@ const routeHelp: Record<string, HelpSection[]> = {
     { label: 'Queue', text: 'This is the work list for due care, papers, docs, and buyer follow-ups.' },
     { label: 'Confidence', text: 'A reminder should always show the source of the work.' },
   ],
-  'Ranch Operations': [
+  'Equipment': [
     { label: 'Assets', text: 'Track equipment, kits, feed supply, transport, and service work.' },
     { label: 'Field use', text: 'Keep mobile actions short and readable.' },
   ],
@@ -264,7 +264,7 @@ export default function MainLayout() {
           </div>
           <div className="min-w-0">
             <div className="truncate text-[1.04rem] font-extrabold uppercase tracking-[0.14em] text-white">{workspaceProfile.businessName || 'XBAR'}</div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#52708d]">Operations OS</div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#52708d]">Horse Management. Reimagined.</div>
           </div>
         </div>
 
@@ -304,7 +304,7 @@ export default function MainLayout() {
         <NavSection title="Platform" items={sections.Platform} badges={navBadges} />
 
         <div className="mt-auto border-t border-[#0a1624] pt-4 text-xs text-[#3d5870]">
-          <div className="font-semibold uppercase tracking-[0.12em] text-[#4a6880]">Modern ranch infrastructure</div>
+          <div className="font-semibold uppercase tracking-[0.12em] text-[#4a6880]">Horse Management. Reimagined.</div>
           <div className="mt-1 text-[#2e4560]">{expenseReceipts.length} receipts · {documents.length} files · {horses.length} horses</div>
         </div>
       </aside>
@@ -352,7 +352,7 @@ export default function MainLayout() {
               </button>
 
               <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={() => navigate('/documents?upload=1')} disabled={!canUploadDocuments}>
-                Intake
+                Upload
               </button>
 
               <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#1155dd] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#0d44b0] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={() => navigate('/horses?new=1')} disabled={!canCreateHorse}>
