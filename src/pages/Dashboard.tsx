@@ -104,7 +104,7 @@ export default function Dashboard() {
         },
         {
           id: 'open-profile',
-          label: 'Open buyer profile',
+          label: 'Open sale profile',
           onSelect: () => navigate(`/profiles/${menuHorse.id}`),
         },
       ]
@@ -187,7 +187,7 @@ export default function Dashboard() {
             </div>
             <div className="ops-briefing-header__actions">
               <Link to="/horses?new=1" className="ops-briefing-action ops-briefing-action--primary">New horse</Link>
-              <Link to="/documents?upload=1" className="ops-briefing-action">Batch intake</Link>
+              <Link to="/documents?upload=1" className="ops-briefing-action">Bulk upload</Link>
               <Link to="/settings" className="ops-briefing-action">Settings</Link>
             </div>
           </div>
@@ -226,7 +226,7 @@ export default function Dashboard() {
                     Create horse
                   </Link>
                   <Link to="/documents?upload=1" className="button button--ghost button--compact">
-                    Batch intake
+                    Bulk upload
                   </Link>
                   <Link to="/settings" className="button button--ghost button--compact">
                     Settings
@@ -382,7 +382,7 @@ export default function Dashboard() {
       <section className="command-stage command-stage--two-col">
         <div className="command-stage__rail">
           <MetricCard
-            label="Transfer gaps"
+            label="Transfer issues"
             value={String(transferGaps.length)}
             tone={transferGaps.length ? 'rose' : 'emerald'}
             onClick={() => navigate('/ownership')}
@@ -474,7 +474,7 @@ export default function Dashboard() {
       <div className="dashboard-board">
         <div className="dashboard-board__main">
           <Panel
-            title="Transfer gaps"
+            title="Transfer issues"
             meta={<Pill tone={transferGaps.length ? 'rose' : 'emerald'}>{transferGaps.length ? 'Needs action' : 'Clear'}</Pill>}
             action={
               <Link to="/ownership" className="button button--ghost button--compact">

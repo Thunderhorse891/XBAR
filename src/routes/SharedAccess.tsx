@@ -61,15 +61,15 @@ export default function SharedAccess() {
     try {
       await navigator.clipboard.writeText(url);
       pushToast({
-        title: 'Buyer link copied',
-        message: 'The protected buyer link is ready to paste.',
+        title: 'Listing link copied',
+        message: 'The protected listing link is ready to paste.',
         tone: 'success',
       });
     } catch (error) {
       console.error('Copy share link failed', error);
       pushToast({
         title: 'Copy failed',
-        message: 'The buyer link could not be copied.',
+        message: 'The listing link could not be copied.',
         tone: 'error',
       });
     }
@@ -101,7 +101,7 @@ export default function SharedAccess() {
         },
         {
           id: 'open-share',
-          label: 'Open buyer link',
+          label: 'Open listing',
           onSelect: async () => {
             await recordSharedChannel(menuHorse.id, 'Direct Link');
             if (typeof window !== 'undefined') {
@@ -111,7 +111,7 @@ export default function SharedAccess() {
         },
         {
           id: 'copy-link',
-          label: 'Copy buyer link',
+          label: 'Copy listing link',
           onSelect: () => {
             void copyShareLink(menuPacket.sharePath, menuListing);
           },
@@ -175,7 +175,7 @@ export default function SharedAccess() {
     <>
       <PageHeader
         eyebrow="Sale Packets"
-        title="Buyer Links"
+        title="Sale Listings"
       />
 
       <div className="metric-grid">
@@ -213,7 +213,7 @@ export default function SharedAccess() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Listings" title="Buyer rooms">
+        <Panel eyebrow="Listings" title="Active listings">
           {sharedHorses.length ? (
             <div className="stack-list">
               {sharedHorses.map((horse) => {
@@ -269,7 +269,7 @@ export default function SharedAccess() {
                           await recordSharedChannel(horse.id, 'Direct Link');
                         }}
                       >
-                        Open buyer link
+                        Open listing
                       </a>
                       <button
                         className="button button--ghost button--compact"
