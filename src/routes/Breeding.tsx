@@ -4,8 +4,8 @@ import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
-import { useUiStore } from '@/store/useUiStore';
 import { useCloudStore } from '@/store/useCloudStore';
+import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 
 export default function Breeding() {
@@ -49,10 +49,6 @@ export default function Breeding() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Breeding Program</span>
-            <h1 className="surface-hero__title">Pairings, milestones, and contracts.</h1>
-            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
-              Track mares, studs, and foaling work through a single program timeline. Every pairing should connect back to documents and verified records.
-            </p>
           </div>
           <div className="surface-hero__stats">
             <div className="surface-hero__stat">

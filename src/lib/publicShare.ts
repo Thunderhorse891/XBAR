@@ -255,7 +255,7 @@ export async function loadPublicBuyerProfile(params: {
   if (!payload) {
     return {
       ok: false,
-      message: 'Buyer share data is unavailable for this link.',
+      message: 'Sale listing data is unavailable for this link.',
     };
   }
 

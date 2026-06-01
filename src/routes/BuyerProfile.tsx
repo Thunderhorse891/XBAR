@@ -105,6 +105,38 @@ export default function BuyerProfile() {
   const resolvedPayload = remoteState.payload ?? localPayload;
 
   const horse = resolvedPayload?.horse;
+
+  // Inject OG meta tags so social previews and link unfurls show horse info.
+  useEffect(() => {
+    if (!horse) return;
+    const title = `${horse.name} — XBAR Horse Profile`;
+    const description = [horse.breed, horse.sex, horse.age > 0 ? `${horse.age} yrs` : null, horse.color].filter(Boolean).join(' · ');
+    const image = horse.profileImage || horse.gallery?.[0]?.url || '';
+
+    const setMeta = (property: string, content: string) => {
+      let el = document.querySelector<HTMLMetaElement>(`meta[property="${property}"]`);
+      if (!el) { el = document.createElement('meta'); el.setAttribute('property', property); document.head.appendChild(el); }
+      el.setAttribute('content', content);
+    };
+    const setNameMeta = (name: string, content: string) => {
+      let el = document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`);
+      if (!el) { el = document.createElement('meta'); el.setAttribute('name', name); document.head.appendChild(el); }
+      el.setAttribute('content', content);
+    };
+
+    document.title = title;
+    setMeta('og:title', title);
+    setMeta('og:description', description);
+    setMeta('og:type', 'website');
+    if (image) setMeta('og:image', image);
+    setNameMeta('description', description);
+    setNameMeta('twitter:card', 'summary_large_image');
+    setNameMeta('twitter:title', title);
+    setNameMeta('twitter:description', description);
+    if (image) setNameMeta('twitter:image', image);
+
+    return () => { document.title = 'XBAR'; };
+  }, [horse]);
   const documents = resolvedPayload?.documents ?? [];
   const sharedListing = resolvedPayload?.sharedListing;
 
@@ -113,7 +145,7 @@ export default function BuyerProfile() {
       ? 'Loading sale packet'
       : localPreviewAllowed && localHorse && localSharedListing
         ? 'Share link locked'
-        : 'Buyer profile unavailable';
+        : 'Sale profile unavailable';
     const description = remoteState.status === 'loading'
       ? 'Loading listing and packet data.'
       : localPreviewAllowed && localHorse && localSharedListing && !localAccessAllowed
@@ -201,11 +233,22 @@ export default function BuyerProfile() {
                 Post to Facebook
               </button>
             </div>
+
+            {/* Contact / inquiry CTA — visible to buyers on the public profile */}
+            <div style={{ marginTop: '4px' }}>
+              <a
+                className="button button--primary"
+                style={{ width: '100%', justifyContent: 'center' }}
+                href={`mailto:?subject=Inquiry: ${encodeURIComponent(horse.name)}&body=${encodeURIComponent(`Hi,\n\nI am interested in ${horse.name}. Please contact me to discuss availability and pricing.\n\nProfile: ${publicShareUrl}`)}`}
+              >
+                Contact seller about {horse.name}
+              </a>
+            </div>
           </div>
         </section>
 
         <div className="metric-grid">
-          <MetricCard label="Packet trust" value={formatPercent(packet.score)} detail={packet.trustSummary} tone={packet.tone} />
+          <MetricCard label="Record Complete" value={formatPercent(packet.score)} detail={packet.trustSummary} tone={packet.tone} />
           <MetricCard
             label="Inquiry count"
             value="—"

@@ -81,6 +81,7 @@ export default function Horses() {
 
   const createOpen = searchParams.get('new') === '1';
   const activeSharedHorseIds = new Set(sharedListings.filter((listing) => listing.state !== 'Archived').map((listing) => listing.horseId));
+  void activeSharedHorseIds;
 
   useEffect(() => {
     setSearch(searchParams.get('search') ?? '');
@@ -107,16 +108,6 @@ export default function Horses() {
     return matchesSearch && matchesSegment;
   });
 
-  const saleReady = filtered.filter((horse) => horse.readiness.score >= 80);
-  const transferRisk = filtered.filter((horse) => ownershipRecords.find((record) => record.horseId === horse.id)?.transferStatus !== 'Clear');
-  const sharedCount = filtered.filter((horse) => activeSharedHorseIds.has(horse.id)).length;
-  const buyerReady = filtered.filter((horse) =>
-    buildHorsePacketCompleteness(
-      horse,
-      documents.filter((document) => document.horseId === horse.id),
-      ownershipRecords.find((record) => record.horseId === horse.id),
-    ).buyerSafe,
-  );
 
   const handleSavedHorseToggle = async (horseId: string) => {
     const horse = horses.find((item) => item.id === horseId);
@@ -224,10 +215,6 @@ export default function Horses() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Horse Operations</span>
-            <h1 className="surface-hero__title">Profiles, records, and readiness.</h1>
-            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
-              Every horse in the operation. Health records, ownership proof, documents, and transfer readiness — all in one place.
-            </p>
           </div>
           <div className="surface-hero__stats">
             <div className="surface-hero__stat"><span>Total horses</span><strong>{horses.length}</strong></div>
@@ -246,7 +233,7 @@ export default function Horses() {
         <section className="panel">
             <div className="panel__header">
               <div>
-                <div className="panel__eyebrow">Horse intake</div>
+                <div className="panel__eyebrow">New horse</div>
                 <h2 className="panel__title">Add horse</h2>
               </div>
               <button className="button button--ghost button--compact" type="button" onClick={() => setNewHorseParam(false)}>
@@ -365,36 +352,7 @@ export default function Horses() {
         </section>
       ) : null}
 
-      <section className="portfolio-stage">
-        <div className="portfolio-stage__lead">
-          <div className="portfolio-stage__eyebrow">Horse desk</div>
-          <h2 className="portfolio-stage__title">Sale, care, and title at a glance</h2>
-          <div className="portfolio-stage__notes">
-            <Pill tone="blue">{viewMode}</Pill>
-            <Pill tone={buyerReady.length ? 'emerald' : 'slate'}>{buyerReady.length} buyer ready</Pill>
-            <Pill tone={transferRisk.length ? 'rose' : 'emerald'}>{transferRisk.length} title risk</Pill>
-          </div>
-        </div>
 
-        <div className="portfolio-stage__stats">
-          <div className="portfolio-stage__stat">
-            <span>Records</span>
-            <strong>{filtered.length}</strong>
-          </div>
-          <div className="portfolio-stage__stat">
-            <span>Ready</span>
-            <strong>{saleReady.length}</strong>
-          </div>
-          <div className="portfolio-stage__stat">
-            <span>Shared</span>
-            <strong>{sharedCount}</strong>
-          </div>
-          <div className="portfolio-stage__stat">
-            <span>Issues</span>
-            <strong>{transferRisk.length}</strong>
-          </div>
-        </div>
-      </section>
 
       <section className="portfolio-toolbar">
         <div className="portfolio-toolbar__controls">
@@ -455,7 +413,7 @@ export default function Horses() {
                   />
                   <div className="horse-card__media-top">
                     <div className="status-inline">
-                      <Pill tone={statusTone[horse.status]}>{horse.status}</Pill>
+                      <Pill tone={statusTone[horse.status]}>{horse.status === 'Sale Prep' ? 'For Sale' : horse.status}</Pill>
                       <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
                     </div>
                     <button
@@ -523,7 +481,7 @@ export default function Horses() {
                     <div className="horse-card__readiness horse-card__readiness--meta">
                       <div className="horse-card__readiness-head">
                         <span>Care status</span>
-                        <strong>{horse.status}</strong>
+                        <strong>{horse.status === 'Sale Prep' ? 'For Sale' : horse.status}</strong>
                       </div>
                       <div className="inline-metrics">
                         <span>{horse.gallery.length} assets</span>
@@ -621,7 +579,7 @@ export default function Horses() {
                   <td>{horse.documents.length}</td>
                   <td>{formatPercent(horse.readiness.score)}</td>
                   <td>
-                    <Pill tone={statusTone[horse.status]}>{horse.status}</Pill>
+                    <Pill tone={statusTone[horse.status]}>{horse.status === 'Sale Prep' ? 'For Sale' : horse.status}</Pill>
                   </td>
                 </tr>
               ))}

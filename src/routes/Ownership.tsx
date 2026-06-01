@@ -236,7 +236,6 @@ export default function Ownership() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Ownership</span>
-            <h1 className="surface-hero__title">Transfer records</h1>
           </div>
           <div className="surface-hero__actions">
             <button className="button button--primary" type="button" onClick={() => scrollToSection('ownership-owner-editor')} disabled={!canManageOwnership}>
@@ -291,7 +290,7 @@ export default function Ownership() {
           <div className="ownership-section-heading">
             <div>
               <span className="section-eyebrow">Owner registry</span>
-              <h2>People and entities tied to horses.</h2>
+              <h2>People and entities tied to horses</h2>
             </div>
             <Pill tone="blue">{ownerRegistry.length} records</Pill>
           </div>
@@ -336,7 +335,7 @@ export default function Ownership() {
           <div className="ownership-section-heading ownership-section-heading--compact">
             <div>
               <span className="section-eyebrow">Contact details</span>
-              <h2>Add an owner to the selected horse.</h2>
+              <h2>Add an owner to the selected horse</h2>
             </div>
             {selectedHorse ? <Pill tone="blue">{selectedHorse.name}</Pill> : null}
           </div>
@@ -412,7 +411,7 @@ export default function Ownership() {
         <div className="ownership-section-heading">
           <div>
             <span className="section-eyebrow">Horse to owner relationships</span>
-            <h2>Current owner, percentage split, transfer status, and proof.</h2>
+            <h2>Current owner, percentage split, transfer status, and proof</h2>
           </div>
           <Pill tone={filteredRows.length ? 'blue' : 'slate'}>{filteredRows.length} shown</Pill>
         </div>
@@ -537,7 +536,7 @@ export default function Ownership() {
           <div className="ownership-section-heading ownership-section-heading--compact">
             <div>
               <span className="section-eyebrow">Transfer history</span>
-              <h2>Current owner, previous owner, notes, and audit trail.</h2>
+              <h2>Current owner, previous owner, notes, and audit trail</h2>
             </div>
             {selectedRelationship ? <Pill tone={transferTone(selectedRelationship.status)}>{selectedRelationship.status}</Pill> : null}
           </div>
@@ -596,7 +595,7 @@ export default function Ownership() {
         <div className="ownership-section-heading">
           <div>
             <span className="section-eyebrow">Document proof</span>
-            <h2>Bills of sale, registrations, transfer agreements, and ownership files.</h2>
+            <h2>Bills of sale, registrations, transfer agreements, and ownership files</h2>
           </div>
           <button className="button button--primary button--compact" type="button" onClick={() => navigate('/documents?upload=1')} disabled={!canUploadDocuments}>
             Upload proof

@@ -97,7 +97,7 @@ export function createOwnershipRecord(horse: HorseRecord): OwnershipRecord {
     complianceDeadline: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
     confidence: 35,
     auditTrail: [
-      `${todayStamp()} Ownership record created from horse intake`,
+      `${todayStamp()} Ownership record created from horse record`,
       `${todayStamp()} Supporting ownership documents still need upload`,
     ],
   };
@@ -108,9 +108,7 @@ export function validateNewHorseInput(input: NewHorseInput) {
     requireValue(input.name, 'Registered name', 3) ??
     requireValue(input.barnName, 'Barn name', 2) ??
     requireValue(input.owner, 'Owner', 2) ??
-    requireValue(input.ownerEntity, 'Owner entity', 2) ??
-    requireValue(input.barn, 'Barn', 2) ??
-    requireValue(input.pasture, 'Pasture', 2)
+    requireValue(input.ownerEntity, 'Owner entity', 2)
   );
 }
 
@@ -122,11 +120,7 @@ export function validateHorseNoteInput(note: Pick<HorseNote, 'title' | 'body' | 
   return requireValue(note.title, 'Note title', 2) ?? requireValue(note.body, 'Note body', 4) ?? requireValue(note.author, 'Author', 2);
 }
 
-export function validateLocationPatch(patch: LocationPatch) {
-  if (!patch.barn?.trim() && !patch.pasture?.trim() && !patch.stall?.trim()) {
-    return 'Enter at least one location field before saving.';
-  }
-
+export function validateLocationPatch(_patch: LocationPatch) {
   return null;
 }
 

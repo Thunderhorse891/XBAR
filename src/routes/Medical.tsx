@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
@@ -12,14 +12,15 @@ import { medicalEventTypes } from '@/features/health/constants';
 
 export default function Medical() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
   const addMedicalEvent = useXbarStore((state) => state.addMedicalEvent);
   const updateMedicalEvent = useXbarStore((state) => state.updateMedicalEvent);
   const deleteMedicalEvent = useXbarStore((state) => state.deleteMedicalEvent);
-  const session = useCloudStore((state) => state.session);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
+  const session = useCloudStore((state) => state.session);
   const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName || 'Ranch Staff';
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageMedical = useCurrentRoleCapability('manageMedical');
@@ -33,7 +34,11 @@ export default function Medical() {
     })),
   );
   const kits = ranchAssets.filter((asset) => asset.category === 'Medical Kit');
-  const [selectedHorseId, setSelectedHorseId] = useState(medicalWatch[0]?.id ?? horses[0]?.id ?? '');
+  const [selectedHorseId, setSelectedHorseId] = useState(() => {
+    const fromRoute = searchParams.get('horse');
+    if (fromRoute && horses.some((h) => h.id === fromRoute)) return fromRoute;
+    return medicalWatch[0]?.id ?? horses[0]?.id ?? '';
+  });
   const [eventTitle, setEventTitle] = useState('Vet follow-up');
   const [eventBody, setEventBody] = useState('');
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
@@ -53,7 +58,7 @@ export default function Medical() {
         },
         {
           id: 'prepare-event',
-          label: 'Log care event',
+          label: 'Add care event',
           onSelect: () => setSelectedHorseId(menuHorse.id),
         },
       ]
@@ -65,10 +70,6 @@ export default function Medical() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Health & Care</span>
-            <h1 className="surface-hero__title">Coggins, vaccines, dental, and vet records.</h1>
-            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
-              Log every care event as it happens. Coggins expiration, dewormer cycles, dental float windows, and vet visits — kept in one verifiable timeline per horse.
-            </p>
           </div>
           <div className="surface-hero__stats">
             <div className="surface-hero__stat">
