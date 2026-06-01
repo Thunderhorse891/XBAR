@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -17,8 +17,8 @@
   --muted-strong: #3f4b5c;
   --border: #d9e2eb;
   --border-strong: #c9d4df;
-  --blue: #1155dd;
-  --blue-soft: rgba(17, 85, 221, 0.09);
+  --blue: #2D6FFF;
+  --blue-soft: rgba(45, 111, 255, 0.09);
   --slate: #6f8296;
   --slate-soft: rgba(111, 130, 150, 0.12);
   --emerald: #059669;
@@ -34,6 +34,12 @@
   --radius-md: 5px;
   --radius-sm: 4px;
   --sidebar-width: 276px;
+  --brand-blue: #2D6FFF;
+  --brand-electric: #3D8EFF;
+  --brand-silver: #C8D0DA;
+  --brand-gunmetal: #2C3038;
+  --brand-charcoal: #1A1D22;
+  --brand-dark: #0D0F12;
 }
 
 * {
@@ -48,7 +54,7 @@ body,
 
 body {
   margin: 0;
-  font-family: Inter, "Segoe UI Variable Text", "Aptos", "Segoe UI", sans-serif;
+  font-family: 'Outfit', 'Avenir Next', 'Futura PT', 'Segoe UI Variable Text', sans-serif;
   background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
@@ -1408,7 +1414,7 @@ a:focus-visible,
   color: var(--muted);
   font-size: 0.82rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
