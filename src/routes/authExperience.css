@@ -45,8 +45,9 @@
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  padding: clamp(28px, 4vw, 48px);
+  padding: 0 0 clamp(28px, 4vw, 48px);
   gap: 24px;
+  min-height: 100vh;
 }
 
 /* The full-bleed cinematic image */
@@ -82,6 +83,8 @@
 .lp-trust {
   position: relative;
   z-index: 2;
+  margin-left: clamp(20px, 4vw, 48px);
+  margin-right: clamp(20px, 4vw, 48px);
 }
 
 /* Tagline */

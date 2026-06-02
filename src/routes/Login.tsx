@@ -112,7 +112,8 @@ export default function Login() {
   const signInWithFacebook = useCloudStore((state) => state.signInWithFacebook);
   const initializeWorkspace = useXbarStore((state) => state.initializeWorkspace);
   const shellRef = useRef<HTMLDivElement | null>(null);
-  const [email, setEmail] = useState('');
+  const [rememberMe, setRememberMe] = useState(() => localStorage.getItem('xbar-remember-me') === 'true');
+  const [email, setEmail] = useState(() => (localStorage.getItem('xbar-remember-me') === 'true' ? localStorage.getItem('xbar-remembered-email') ?? '' : ''));
   const [password, setPassword] = useState('');
   const [authMode, setAuthMode] = useState<AuthMode>('signin');
   const [busy, setBusy] = useState<BusyState>('');
@@ -144,6 +145,13 @@ export default function Login() {
     const result = authMode === 'signin'
       ? await signInWithPassword(email, password)
       : await signUpWithPassword(email, password);
+    if (rememberMe) {
+      localStorage.setItem('xbar-remember-me', 'true');
+      localStorage.setItem('xbar-remembered-email', email);
+    } else {
+      localStorage.removeItem('xbar-remember-me');
+      localStorage.removeItem('xbar-remembered-email');
+    }
     pushToast({
       title: result.ok ? (authMode === 'signin' ? 'Signed in' : 'Account created') : (authMode === 'signin' ? 'Sign-in blocked' : 'Signup blocked'),
       message: result.message,
@@ -189,7 +197,7 @@ export default function Login() {
         {/* ── Left: brand panel ── */}
         <section className="lp-brand" aria-labelledby="lp-headline">
           <img
-            src="/xbar-logo.png"
+            src={`${import.meta.env.BASE_URL}xbar-logo.png`}
             alt="XBAR — Horse Management Reimagined"
             className="lp-hero-logo"
           />
@@ -271,10 +279,27 @@ export default function Login() {
                   </div>
                 </label>
 
+                {/* Password strength — signup only */}
+                {authMode === 'signup' && password.length > 0 && (() => {
+                  const len = password.length;
+                  const complex = /[A-Z]/.test(password) && /[0-9]/.test(password) && /[^A-Za-z0-9]/.test(password);
+                  const level = len >= 12 && complex ? 'strong' : len >= 8 ? 'fair' : 'weak';
+                  const colors: Record<string, string> = { weak: 'var(--rose)', fair: 'var(--amber)', strong: 'var(--emerald)' };
+                  const widths: Record<string, string> = { weak: '33%', fair: '66%', strong: '100%' };
+                  return (
+                    <div style={{ marginTop: '-4px', marginBottom: '4px' }}>
+                      <div style={{ height: '4px', background: 'var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: widths[level], background: colors[level], borderRadius: '2px', transition: 'width 0.2s, background 0.2s' }} />
+                      </div>
+                      <span style={{ fontSize: '12px', color: colors[level], marginTop: '3px', display: 'inline-block', textTransform: 'capitalize' }}>{level} password</span>
+                    </div>
+                  );
+                })()}
+
                 {/* Options row */}
                 <div className="lp-options">
                   <label className="lp-remember">
-                    <input type="checkbox" />
+                    <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
                     <span>Remember me</span>
                   </label>
                   {authMode === 'signin' && (
