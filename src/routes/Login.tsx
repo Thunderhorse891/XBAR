@@ -197,7 +197,7 @@ export default function Login() {
         {/* ── Left: brand panel ── */}
         <section className="lp-brand" aria-labelledby="lp-headline">
           <img
-            src="/xbar-logo.png"
+            src={`${import.meta.env.BASE_URL}xbar-logo.png`}
             alt="XBAR — Horse Management Reimagined"
             className="lp-hero-logo"
           />
