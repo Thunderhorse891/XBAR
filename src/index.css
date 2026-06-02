@@ -388,15 +388,15 @@ a:focus-visible,
   font-weight: 700;
   letter-spacing: 0.01em;
   cursor: pointer;
-  transition: box-shadow 150ms ease, background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+  transition: transform 100ms ease, box-shadow 150ms ease, background-color 150ms ease, border-color 150ms ease, color 150ms ease, opacity 100ms ease;
   white-space: nowrap;
 }
 
 .button--primary {
-  background: linear-gradient(180deg, #1c69e8 0%, #1155dd 100%);
+  background: linear-gradient(180deg, #4880ff 0%, #2D6FFF 100%);
   color: #ffffff;
-  box-shadow: 0 2px 8px rgba(17, 85, 221, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  border: 1px solid rgba(17, 85, 221, 0.75);
+  box-shadow: 0 2px 8px rgba(45, 111, 255, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(45, 111, 255, 0.8);
 }
 
 .button--ghost {
@@ -415,8 +415,8 @@ a:focus-visible,
 }
 
 .button--primary:hover {
-  background: linear-gradient(180deg, #2474f0 0%, #1562e8 100%);
-  box-shadow: 0 4px 14px rgba(17, 85, 221, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  background: linear-gradient(180deg, #5a8eff 0%, #3d7cff 100%);
+  box-shadow: 0 4px 14px rgba(45, 111, 255, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
 .button--ghost:hover {
@@ -425,15 +425,18 @@ a:focus-visible,
 
 .button:active {
   transform: scale(0.97);
+  opacity: 0.9;
+  transition: none;
   box-shadow: none;
 }
 
 .button--primary:active {
-  background: #044d6a;
+  background: #1a57e8;
+  box-shadow: none;
 }
 
 .button--ghost:active {
-  background: #e2e8f0;
+  background: #e8edf2;
 }
 
 .button__icon,
@@ -1025,7 +1028,7 @@ a:focus-visible,
   position: absolute;
   inset: auto 0 0 0;
   height: 3px;
-  background: linear-gradient(90deg, rgba(17, 85, 221, 0.35) 0%, rgba(17, 85, 221, 0.12) 100%);
+  background: linear-gradient(90deg, rgba(45, 111, 255, 0.35) 0%, rgba(45, 111, 255, 0.12) 100%);
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
@@ -2402,13 +2405,13 @@ a:focus-visible,
 }
 
 .ops-briefing-action--primary {
-  background: rgba(17, 85, 221, 0.78);
+  background: rgba(45, 111, 255, 0.78);
   border-color: rgba(80, 140, 255, 0.38);
   color: #ffffff;
 }
 
 .ops-briefing-action--primary:hover {
-  background: rgba(17, 85, 221, 0.95);
+  background: rgba(45, 111, 255, 0.95);
 }
 
 .ops-briefing-stat-row {
@@ -2500,7 +2503,7 @@ a:focus-visible,
 }
 
 .nav-badge--blue {
-  background: rgba(17, 85, 221, 0.65);
+  background: rgba(45, 111, 255, 0.65);
 }
 
 /* ─── Ops pulse indicator ───────────────────────────────────────────── */

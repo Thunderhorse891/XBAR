@@ -441,7 +441,7 @@ export default function Horses() {
                 <div className="horse-card__body">
                   <div className="horse-card__metric-band">
                     <div className="horse-card__metric">
-                      <span>Trust</span>
+                      <span>Record</span>
                       <strong>{formatPercent(packet.score)}</strong>
                     </div>
                     <div className="horse-card__metric">
