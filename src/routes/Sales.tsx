@@ -92,7 +92,7 @@ export default function Sales() {
           },
           {
             id: 'open-profile',
-            label: 'Open buyer link',
+            label: 'Open sale listing',
             onSelect: async () => {
               await recordSharedChannel(menuHorse.id, 'Direct Link');
               if (typeof window !== 'undefined') {
@@ -109,10 +109,6 @@ export default function Sales() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Sales & Transfers</span>
-            <h1 className="surface-hero__title">Listings, buyers, and transfer readiness.</h1>
-            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
-              Every horse with an asking price or active buyer. Track sale status, follow-ups due, and what is blocking transfer completion.
-            </p>
           </div>
           <div className="surface-hero__stats">
             <div className="surface-hero__stat"><span>Listings</span><strong>{saleHorses.length}</strong></div>
@@ -132,7 +128,7 @@ export default function Sales() {
       </div>
 
       <div className="metric-grid">
-        <MetricCard label="Sale horses" value={`${saleHorses.length}`} detail="Active pricing or buyer review" />
+        <MetricCard label="Sale horses" value={`${saleHorses.length}`} detail="Active pricing or pending review" />
         <MetricCard label="Prospects" value={`${salesLeads.filter((lead) => lead.stage !== 'Closed').length}`} detail="Open inquiries across all channels" tone="blue" />
         <MetricCard label="Shared records" value={`${sharedAccess.savedHorses}`} detail="Listings open in shared access" tone="emerald" />
         <MetricCard label="Transfer blockers" value={`${saleHorses.filter((horse) => horse.readiness.packetStatus === 'Needs Transfer Docs').length}`} detail="Listings with ownership or paperwork friction" tone="amber" />
@@ -210,7 +206,7 @@ export default function Sales() {
                                 await recordSharedChannel(horse.id, 'Direct Link');
                               }}
                             >
-                              Open buyer link
+                              Open sale listing
                             </a>
                           </div>
                         </div>
@@ -221,7 +217,7 @@ export default function Sales() {
               ))}
             </div>
           ) : (
-            <EmptyState compact title="No sale horses yet" description="Move a horse into buyer review or market ready to populate the sales board." />
+            <EmptyState compact title="No sale horses yet" description="Move a horse into review or market ready to populate the sales board." />
           )}
         </Panel>
 
@@ -263,7 +259,7 @@ export default function Sales() {
                     </div>
                     <div className="inline-metrics">
                       <span>{lead.savedListing ? 'Saved listing' : 'Not saved yet'}</span>
-                      <span>{lead.shareReady ? 'Buyer link live' : 'Buyer link private'}</span>
+                      <span>{lead.shareReady ? 'Sale link live' : 'Sale link private'}</span>
                       <span>Last touch {formatDateLabel(lead.lastTouch)}</span>
                     </div>
                   </button>

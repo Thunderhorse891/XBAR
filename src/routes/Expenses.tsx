@@ -84,10 +84,6 @@ export default function Expenses() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Budget & Expenses</span>
-            <h1 className="surface-hero__title">Know what the operation costs.</h1>
-            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
-              Feed, vet care, farrier work, hauling, bedding, supplements, and horse-specific receipts in one clean ledger.
-            </p>
             <div className="surface-hero__actions" style={{ marginTop: '16px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <button className="button button--primary" type="button" onClick={() => document.getElementById('expense-intake')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
                 Log receipt
@@ -130,7 +126,7 @@ export default function Expenses() {
           <div className="ops-section-heading">
             <div>
               <span className="section-eyebrow">Expense ledger</span>
-              <h2>Ranch costs with the horse context attached.</h2>
+              <h2>Ranch costs with the horse context attached</h2>
             </div>
             <Pill tone="blue">{filteredReceipts.length} shown</Pill>
           </div>
@@ -179,8 +175,8 @@ export default function Expenses() {
         <aside id="expense-intake" className="ops-panel ops-panel--form">
           <div className="ops-section-heading ops-section-heading--compact">
             <div>
-              <span className="section-eyebrow">Receipt intake</span>
-              <h2>Add the cost while it is still fresh.</h2>
+              <span className="section-eyebrow">Log receipt</span>
+              <h2>Add the cost while it is still fresh</h2>
             </div>
             <Pill tone={canManageBudget ? 'blue' : 'slate'}>{canManageBudget ? 'Enabled' : 'Read only'}</Pill>
           </div>

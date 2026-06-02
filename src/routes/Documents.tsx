@@ -52,13 +52,13 @@ export default function Documents() {
   const duplicates = documents.filter((document) => document.duplicateRisk === 'Possible Duplicate');
   const buyerSafeDocuments = documents.filter((document) => buildDocumentTrustProfile(document, horses).readyForProfile);
   const uploadOpen = searchParams.get('upload') === '1';
-  const [activeView, setActiveView] = useState<DocumentsView>(uploadOpen ? 'Intake' : 'Review');
+  const [activeView, setActiveView] = useState<DocumentsView>(uploadOpen ? 'Upload' : 'Review');
   const menuDocument = menuState?.type === 'document' ? documents.find((document) => document.id === menuState.documentId) : undefined;
   const menuHorseId = menuDocument ? reviewAssignments[menuDocument.id] ?? menuDocument.horseId : undefined;
 
   useEffect(() => {
     if (uploadOpen) {
-      setActiveView('Intake');
+      setActiveView('Upload');
     }
   }, [uploadOpen]);
   const scrollToSection = (sectionId: string) => {
@@ -157,8 +157,8 @@ export default function Documents() {
           ...(menuState.surfaceId === 'vault'
             ? [
                 {
-                  id: 'jump-intake',
-                  label: 'Jump to intake',
+                  id: 'jump-upload',
+                  label: 'Jump to upload',
                   onSelect: () => scrollToSection('documents-intake'),
                 },
                 {
@@ -223,8 +223,8 @@ export default function Documents() {
                     ]
                   : []),
                 {
-                  id: 'focus-intake',
-                  label: 'Focus intake',
+                  id: 'focus-upload',
+                  label: 'Focus upload',
                   onSelect: () => scrollToSection('documents-intake'),
                 },
               ]
@@ -285,7 +285,7 @@ export default function Documents() {
     });
 
     pushToast({
-      title: result.ok ? 'Document intake updated' : 'Document intake blocked',
+      title: result.ok ? 'Document upload updated' : 'Document upload blocked',
       message: result.message,
       tone: result.ok ? 'success' : 'error',
     });
@@ -304,10 +304,6 @@ export default function Documents() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Document Vault</span>
-            <h1 className="surface-hero__title">Records, proof, and intake.</h1>
-            <p className="page-description" style={{ marginTop: '10px', color: 'var(--muted)' }}>
-              Registration papers, vet records, Coggins, bills of sale, and intake files. Every document must be linked, reviewed, and ready before a horse can transfer or go to market.
-            </p>
           </div>
           <div className="surface-hero__stats">
             <div className="surface-hero__stat"><span>Total files</span><strong>{documents.length}</strong></div>
@@ -315,7 +311,7 @@ export default function Documents() {
               <span>Review queue</span>
               <strong style={{ color: reviewQueue.length ? 'var(--amber)' : 'var(--emerald)' }}>{reviewQueue.length}</strong>
             </div>
-            <div className="surface-hero__stat"><span>Buyer-safe</span><strong style={{ color: 'var(--emerald)' }}>{buyerSafeDocuments.length}</strong></div>
+            <div className="surface-hero__stat"><span>Ready to share</span><strong style={{ color: 'var(--emerald)' }}>{buyerSafeDocuments.length}</strong></div>
             <div className="surface-hero__stat">
               <span>Duplicates</span>
               <strong style={{ color: duplicates.length ? 'var(--amber)' : 'var(--emerald)' }}>{duplicates.length}</strong>
@@ -344,10 +340,10 @@ export default function Documents() {
           onContextMenu={(event) => openSurfaceMenu('review', event)}
         />
         <MetricCard
-          label="Buyer docs"
+          label="Ready docs"
           value={`${buyerSafeDocuments.length}`}
           tone="emerald"
-          title="Approved documents cleared for buyer-facing packet surfaces"
+          title="Approved documents cleared for sale packet surfaces"
           className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#3D6B4F]/12 hover:bg-[#faf5ee]"
           onClick={() => navigate('/shared-access')}
           onContextMenu={(event) => openSurfaceMenu('buyer', event)}
@@ -356,7 +352,7 @@ export default function Documents() {
           label="Storage"
           value={`${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB`}
           tone="slate"
-          title="Workspace file storage against the current contract"
+          title="Ranch file storage against the current contract"
           className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#3D6B4F]/12 hover:bg-[#faf5ee]"
           onClick={() => navigate('/subscriptions')}
           onContextMenu={(event) => openSurfaceMenu('storage', event)}
@@ -366,7 +362,7 @@ export default function Documents() {
       <section className="surface-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <SurfaceTabs
-            items={['Review', 'Intake', 'Batches', 'Flags']}
+            items={['Review', 'Upload', 'Batches', 'Flags']}
             active={activeView}
             onChange={(view) => setActiveView(view as DocumentsView)}
           />
@@ -378,10 +374,10 @@ export default function Documents() {
         </div>
       </section>
 
-      {activeView === 'Intake' ? (
+      {activeView === 'Upload' ? (
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel
-          title="Intake"
+          title="Upload"
           action={
             <Pill tone={uploadOpen ? 'blue' : 'slate'}>{uploadOpen ? 'Top-bar launch' : `${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB used`}</Pill>
           }

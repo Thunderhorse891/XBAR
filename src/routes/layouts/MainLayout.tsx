@@ -76,7 +76,7 @@ const routeHelp: Record<string, HelpSection[]> = {
   ],
   Horses: [
     { label: 'Profile', text: 'Each horse should become a complete command file.' },
-    { label: 'Create', text: 'New horse intake should save confirmed data only.' },
+    { label: 'Create', text: 'New horse record should save confirmed data only.' },
   ],
   Ownership: [
     { label: 'Proof', text: 'Use this area for owners, percentages, documents, transfers, and history.' },
@@ -95,7 +95,7 @@ const routeHelp: Record<string, HelpSection[]> = {
     { label: 'Proof', text: 'Breeding decisions should connect back to files and history.' },
   ],
   Sales: [
-    { label: 'Pipeline', text: 'Keep buyer movement, record readiness, and follow-ups visible.' },
+    { label: 'Pipeline', text: 'Keep lead movement, record readiness, and follow-ups visible.' },
     { label: 'Sale packets', text: 'Share only when the horse and documents are ready.' },
   ],
   Expenses: [
@@ -103,7 +103,7 @@ const routeHelp: Record<string, HelpSection[]> = {
     { label: 'Connect', text: 'Receipts should connect to horses, care, and documents.' },
   ],
   Reminders: [
-    { label: 'Queue', text: 'This is the work list for due care, papers, docs, and buyer follow-ups.' },
+    { label: 'Queue', text: 'This is the work list for due care, papers, docs, and sale follow-ups.' },
     { label: 'Confidence', text: 'A reminder should always show the source of the work.' },
   ],
   'Equipment': [
@@ -116,10 +116,10 @@ const routeHelp: Record<string, HelpSection[]> = {
   ],
   Subscriptions: [
     { label: 'Billing', text: 'Show plan state clearly. Do not imply Stripe billing unless it is configured.' },
-    { label: 'Limits', text: 'Storage, seats, buyer links, and documents should be easy to understand.' },
+    { label: 'Limits', text: 'Storage, seats, listings, and documents should be easy to understand.' },
   ],
   'Sale Listings': [
-    { label: 'Listings', text: 'Buyer-facing links need approved, sanitized records only.' },
+    { label: 'Listings', text: 'Sale listing links need approved, sanitized records only.' },
     { label: 'Proof', text: 'Preview before making any horse public.' },
   ],
   Settings: [
@@ -228,7 +228,7 @@ export default function MainLayout() {
 
   const opsUrgency = pendingTransfers > 0 ? 'urgent' : careDueCount > 0 ? 'warning' : 'clear';
 
-  const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse Profile' : routeLabels[location.pathname] ?? 'Workspace';
+  const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse Profile' : routeLabels[location.pathname] ?? 'Ranch';
   const helpSections = routeHelp[currentLabel] ?? routeHelp['Dashboard'];
   const accountLabel = cloudSession?.user?.email ?? currentRole;
 
@@ -270,7 +270,7 @@ export default function MainLayout() {
 
         <div className="rounded-[14px] border border-[#162436] bg-[#080f1c] p-4 shadow-[0_12px_28px_rgba(0,0,0,0.36)]">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#3d5870]">Workspace</div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#3d5870]">Ranch</div>
             <span className={classNames('ops-pulse', opsUrgency !== 'clear' ? '' : '')}>
               <span className={classNames('ops-pulse__dot', opsUrgency === 'urgent' ? 'ops-pulse__dot--urgent' : opsUrgency === 'warning' ? 'ops-pulse__dot--warning' : '')} />
             </span>

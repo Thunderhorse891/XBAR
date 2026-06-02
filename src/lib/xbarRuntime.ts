@@ -26,64 +26,63 @@ export const subscriptionTierConfig: Record<
   }
 > = {
   Starter: {
-    monthlyRate: 390,
+    monthlyRate: 29,
     sharedAccessEnabled: false,
     brandedListings: false,
-    featureFlags: ['Horse records', 'Basic listings', 'Local document vault'],
+    featureFlags: ['Horse records', 'Care tracking', 'Document vault', 'Weather'],
     limits: {
-      seatLimit: 2,
+      seatLimit: 1,
       documentLimit: 250,
       storageLimitGb: 25,
       sharedAccessSeatLimit: 0,
     },
   },
   Professional: {
-    monthlyRate: 1290,
+    monthlyRate: 79,
     sharedAccessEnabled: true,
     brandedListings: true,
     featureFlags: [
-      'Role-aware dashboards',
-      'Shared access links',
-      'Branded sale packets',
-      'Manual document review',
-      'Operations workspace',
+      'Everything in Starter',
+      'Team roles',
+      'Sale listings',
+      'Sale profiles',
+      'Document sharing',
     ],
     limits: {
-      seatLimit: 8,
-      documentLimit: 1800,
-      storageLimitGb: 200,
+      seatLimit: 5,
+      documentLimit: 1000,
+      storageLimitGb: 100,
       sharedAccessSeatLimit: 10,
     },
   },
   'Ranch Ops': {
-    monthlyRate: 2490,
+    monthlyRate: 199,
     sharedAccessEnabled: true,
     brandedListings: true,
     featureFlags: [
-      'Expanded document intake',
-      'Branded sale packets',
-      'Role-aware dashboards',
-      'Shared access links',
-      'Ranch asset operations',
-      'Lead intelligence',
+      'Everything in Professional',
+      'Unlimited horses',
+      'Ranch assets',
+      'Breeding program',
+      'Expenses ledger',
+      'Reminders',
     ],
     limits: {
       seatLimit: 20,
-      documentLimit: 6000,
-      storageLimitGb: 750,
+      documentLimit: 5000,
+      storageLimitGb: 500,
       sharedAccessSeatLimit: 40,
     },
   },
   Enterprise: {
-    monthlyRate: 4990,
+    monthlyRate: 499,
     sharedAccessEnabled: true,
     brandedListings: true,
     featureFlags: [
-      'Custom shared access',
-      'Expanded document intake',
-      'Dedicated access branding',
-      'Priority operations support',
+      'Everything in Ranch Ops',
+      'Unlimited users',
       'Custom integrations',
+      'Priority support',
       'Advanced audit controls',
     ],
     limits: {
@@ -366,7 +365,7 @@ export async function buildDocumentRecord(params: {
     horses,
   });
   const candidateMatches = selectedHorse
-    ? [{ horse: selectedHorse, confidence: 0.99, reason: 'Document was manually attached during intake' }]
+    ? [{ horse: selectedHorse, confidence: 0.99, reason: 'Document was manually attached during upload' }]
     : rankHorseMatches(horses, `${file.name} ${previewText}`, extractedEntities);
 
   const matchedHorse = candidateMatches[0]?.horse;
@@ -407,7 +406,7 @@ export async function buildDocumentRecord(params: {
     state = 'Matched';
   }
 
-  const matchReason = candidateMatches[0]?.reason?.toLowerCase() ?? 'the intake engine found a weak candidate match';
+  const matchReason = candidateMatches[0]?.reason?.toLowerCase() ?? 'the upload engine found a weak candidate match';
   const trustLabel = `${Math.round(confidence * 100)}% match`;
 
   return {
@@ -424,7 +423,7 @@ export async function buildDocumentRecord(params: {
     extractedTextPreview: previewText,
     summary: matchedHorse
       ? `${inferredType} matched to ${matchedHorse.name} with ${trustLabel} based on ${matchReason}.`
-      : `${inferredType} added to intake and needs manual assignment before it can be attached to a horse profile.`,
+      : `${inferredType} added to the queue and needs manual assignment before it can be attached to a horse profile.`,
     entities,
   } satisfies DocumentRecord;
 }

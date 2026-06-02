@@ -18,7 +18,7 @@ module.exports = {
         },
       },
       fontFamily: {
-        sans: ["Inter", "\"Segoe UI Variable Text\"", "\"Aptos\"", "\"Segoe UI\"", "sans-serif"],
+        sans: ["Outfit", "\"Avenir Next\"", "\"Futura PT\"", "\"Segoe UI Variable Text\"", "sans-serif"],
       },
       boxShadow: {
         xbar: "0 20px 40px rgba(31, 26, 22, 0.08), 0 4px 14px rgba(31, 26, 22, 0.05)",

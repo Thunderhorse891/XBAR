@@ -240,7 +240,7 @@ export default function Settings() {
                       </div>
                     </div>
                     <div className="inline-metrics">
-                      <span>{workspaceId ? `Workspace ${workspaceId.slice(0, 8)}` : `User ${cloudSession.user.id.slice(0, 8)}`}</span>
+                      <span>{workspaceId ? `Ranch ${workspaceId.slice(0, 8)}` : `User ${cloudSession.user.id.slice(0, 8)}`}</span>
                       <span>{lastCloudSyncAt ? `Last sync ${formatDateLabel(lastCloudSyncAt)}` : 'No cloud sync yet'}</span>
                       <span>{cloudSyncState === 'syncing' ? 'Saving relational records' : cloudSyncState === 'error' ? 'Needs retry' : 'Watching workspace changes'}</span>
                     </div>
@@ -436,7 +436,21 @@ export default function Settings() {
                       </div>
                       <Pill tone={invite.role === 'Owner' ? 'emerald' : 'blue'}>{roleLabel(invite.role)}</Pill>
                     </div>
+                    <div className="stack-item__copy" style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--muted)', wordBreak: 'break-all' }}>
+                      Invite code: {invite.id}
+                    </div>
                     <div className="inline-actions">
+                      <button
+                        className="button button--ghost button--compact"
+                        type="button"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(invite.id).then(() => {
+                            pushToast({ title: 'Invite code copied', message: 'Share this code with the invitee so they can join the workspace.', tone: 'success' });
+                          });
+                        }}
+                      >
+                        Copy code
+                      </button>
                       {!isSupabaseConfigured() ? (
                         <button
                           className="button button--ghost button--compact"
@@ -514,7 +528,7 @@ export default function Settings() {
                 </div>
               </div>
               <div className="inline-metrics">
-                <span>Buyer share links can open in Facebook</span>
+                <span>Sale listing links can open in Facebook</span>
                 <span>Post flow uses Facebook&apos;s own share window</span>
               </div>
             </div>
