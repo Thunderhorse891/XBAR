@@ -6,7 +6,7 @@ import { SalePacketSlots } from '@/components/SalePacketSlots';
 import { KeyValue, MetricCard, Panel, Pill } from '@/components/app-ui';
 import { buildPublicShareUrl, openFacebookShareDialog } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
-import { isPublicShareLocalPreviewEnabled } from '@/lib/platformConfig';
+import { isFacebookSharingConfigured, isPublicShareLocalPreviewEnabled } from '@/lib/platformConfig';
 import { loadPublicBuyerProfile, sanitizeDocumentForBuyerView, sanitizeHorseForBuyerView, sanitizeSharedListingForBuyerView, trackPublicBuyerProfileView, type PublicBuyerProfilePayload } from '@/lib/publicShare';
 import { hasBuyerShareAccess } from '@/lib/workspaceAccess';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
@@ -221,6 +221,8 @@ export default function BuyerProfile() {
               <button
                 className="button button--primary button--compact"
                 type="button"
+                disabled={!isFacebookSharingConfigured()}
+                title={isFacebookSharingConfigured() ? undefined : 'Set VITE_FACEBOOK_APP_ID to enable Facebook sharing'}
                 onClick={() => {
                   const result = openFacebookShareDialog(packet.sharePath, publicShareToken);
                   pushToast({

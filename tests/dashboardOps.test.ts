@@ -127,7 +127,7 @@ test('buildCareBoardRows flags overdue care tasks', () => {
 
   assert.equal(rows.length, 1);
   assert.equal(rows[0]?.signals.find((signal) => signal.key === 'wormer')?.status, 'due');
-  assert.equal(rows[0]?.signals.find((signal) => signal.key === 'dental')?.status, 'due');
+  assert.equal(rows[0]?.signals.find((signal) => signal.key === 'dental')?.status, 'watch');
   assert.equal(rows[0]?.signals.find((signal) => signal.key === 'coggins')?.status, 'due');
 });
 

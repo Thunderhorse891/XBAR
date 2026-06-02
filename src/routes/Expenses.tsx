@@ -20,7 +20,7 @@ export default function Expenses() {
   const addExpenseReceipt = useXbarStore((state) => state.addExpenseReceipt);
   const roleWorkspace = useCurrentRoleWorkspace();
   const canManageBudget = useCurrentRoleCapability('manageAssets');
-  const budgetSummary = buildBudgetSummary(expenseReceipts);
+  const budgetSummary = useMemo(() => buildBudgetSummary(expenseReceipts), [expenseReceipts]);
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<ExpenseFilter>('All');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);

@@ -2093,6 +2093,11 @@ a:focus-visible,
   color: #ffb1b1;
 }
 
+.context-menu__item--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .callout {
   padding: 12px 14px;
   border: 1px solid var(--border);

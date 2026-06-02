@@ -8,6 +8,7 @@ export type ContextMenuItem = {
   label: string;
   onSelect: () => void;
   tone?: MenuTone;
+  disabled?: boolean;
 };
 
 export function ContextMenu({
@@ -64,9 +65,11 @@ export function ContextMenu({
       {items.map((item) => (
         <button
           key={item.id}
-          className={`context-menu__item${item.tone === 'danger' ? ' context-menu__item--danger' : ''}`}
+          className={`context-menu__item${item.tone === 'danger' ? ' context-menu__item--danger' : ''}${item.disabled ? ' context-menu__item--disabled' : ''}`}
           type="button"
+          disabled={item.disabled}
           onClick={() => {
+            if (item.disabled) return;
             item.onSelect();
             onClose();
           }}

@@ -4,6 +4,7 @@ import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { buildPublicShareUrl, openFacebookShareDialog } from '@/lib/facebookSharing';
+import { isFacebookSharingConfigured } from '@/lib/platformConfig';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -155,7 +156,8 @@ export default function SharedAccess() {
           : []),
         {
           id: 'post-facebook',
-          label: 'Post to Facebook',
+          label: isFacebookSharingConfigured() ? 'Post to Facebook' : 'Post to Facebook (not configured)',
+          disabled: !isFacebookSharingConfigured(),
           onSelect: async () => {
             const result = openFacebookShareDialog(menuPacket.sharePath, getShareToken(menuListing));
             if (result.ok) {
@@ -284,6 +286,8 @@ export default function SharedAccess() {
                       <button
                         className="button button--primary button--compact"
                         type="button"
+                        disabled={!isFacebookSharingConfigured()}
+                        title={isFacebookSharingConfigured() ? undefined : 'Set VITE_FACEBOOK_APP_ID to enable Facebook sharing'}
                         onClick={async (event) => {
                           event.stopPropagation();
                           const result = openFacebookShareDialog(packet.sharePath, getShareToken(sharedListing));
