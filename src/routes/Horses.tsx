@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
@@ -80,8 +80,21 @@ export default function Horses() {
   );
 
   const createOpen = searchParams.get('new') === '1';
-  const activeSharedHorseIds = new Set(sharedListings.filter((listing) => listing.state !== 'Archived').map((listing) => listing.horseId));
-  void activeSharedHorseIds;
+
+  const packetByHorseId = useMemo(
+    () =>
+      Object.fromEntries(
+        horses.map((horse) => [
+          horse.id,
+          buildHorsePacketCompleteness(
+            horse,
+            documents.filter((doc) => doc.horseId === horse.id),
+            ownershipRecords.find((rec) => rec.horseId === horse.id),
+          ),
+        ]),
+      ),
+    [horses, documents, ownershipRecords],
+  );
 
   useEffect(() => {
     setSearch(searchParams.get('search') ?? '');
@@ -97,16 +110,19 @@ export default function Horses() {
     setSearchParams(nextParams);
   };
 
-  const filtered = horses.filter((horse) => {
-    const matchesSearch =
-      !search.trim() ||
-      [horse.name, horse.barnName, horse.owner, horse.ownerEntity, horse.aqhaNumber, horse.location.barn]
-        .join(' ')
-        .toLowerCase()
-        .includes(search.trim().toLowerCase());
-    const matchesSegment = segmentFilter === 'All' || horse.segment === segmentFilter;
-    return matchesSearch && matchesSegment;
-  });
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return horses.filter((horse) => {
+      const matchesSearch =
+        !term ||
+        [horse.name, horse.barnName, horse.owner, horse.ownerEntity, horse.aqhaNumber, horse.location.barn]
+          .join(' ')
+          .toLowerCase()
+          .includes(term);
+      const matchesSegment = segmentFilter === 'All' || horse.segment === segmentFilter;
+      return matchesSearch && matchesSegment;
+    });
+  }, [horses, search, segmentFilter]);
 
 
   const handleSavedHorseToggle = async (horseId: string) => {
@@ -126,13 +142,7 @@ export default function Horses() {
 
   const menuHorse = filtered.find((horse) => horse.id === menuState?.horseId) ?? horses.find((horse) => horse.id === menuState?.horseId);
   const menuSaved = menuHorse ? sharedListings.some((listing) => listing.horseId === menuHorse.id && listing.state !== 'Archived') : false;
-  const menuPacket = menuHorse
-    ? buildHorsePacketCompleteness(
-        menuHorse,
-        documents.filter((document) => document.horseId === menuHorse.id),
-        ownershipRecords.find((record) => record.horseId === menuHorse.id),
-      )
-    : undefined;
+  const menuPacket = menuHorse ? packetByHorseId[menuHorse.id] : undefined;
   const menuListing = menuHorse ? sharedListings.find((listing) => listing.horseId === menuHorse.id && listing.state !== 'Archived') : undefined;
   const menuShareUrl = menuPacket
     ? buildPublicShareUrl(menuPacket.sharePath, menuListing?.accessMode === 'Private Token' ? menuListing.shareToken : undefined)
@@ -383,11 +393,7 @@ export default function Horses() {
         <div className="horse-grid">
           {filtered.map((horse) => {
             const saved = sharedListings.some((listing) => listing.horseId === horse.id && listing.state !== 'Archived');
-            const packet = buildHorsePacketCompleteness(
-              horse,
-              documents.filter((document) => document.horseId === horse.id),
-              ownershipRecords.find((record) => record.horseId === horse.id),
-            );
+            const packet = packetByHorseId[horse.id];
             const valueLabel = horse.segment === 'Sale Prospect' && horse.sale.askPrice ? 'Ask' : 'Insured';
             const accessLabel = saved ? 'Shared' : 'Private';
             const showSaleSignals = horse.segment === 'Sale Prospect' || horse.status === 'Sale Prep';

@@ -1,6 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#050910"/>
-  <path d="M10 11h12l10 13 10-13h12L39 32l15 21H42L32 40 22 53H10l15-21L10 11Z" fill="#f8fbff"/>
-  <path d="M32 24 42 11h12L39 32l15 21H42L32 40V24Z" fill="#2f8dff"/>
-  <path d="M20 30h24" stroke="#050910" stroke-linecap="round" stroke-width="3"/>
+  <!-- Dark field -->
+  <rect width="64" height="64" rx="13" fill="#060c18"/>
+  <!-- Right half Electric Blue accent -->
+  <clipPath id="rh"><rect x="32" y="0" width="32" height="64" rx="0"/></clipPath>
+  <rect width="64" height="64" rx="13" fill="#2D6FFF" clip-path="url(#rh)" opacity="0.18"/>
+  <!-- X mark — clean geometric, slightly bolder -->
+  <path d="M13 12h11l8 11 8-11h11L37 33l14 19H40L32 41l-8 11H13l14-19L13 12Z" fill="#eef2ff"/>
+  <!-- Right half of X tinted blue -->
+  <path d="M32 22.5L43 12h8L37 33l14 19H40L32 41V22.5Z" fill="#7aaaff"/>
+  <!-- Center crossbar notch for readability -->
+  <rect x="19" y="31" width="26" height="3" rx="1.5" fill="#060c18"/>
 </svg>

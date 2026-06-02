@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
@@ -24,14 +24,18 @@ export default function Medical() {
   const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName || 'Ranch Staff';
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageMedical = useCurrentRoleCapability('manageMedical');
-  const medicalWatch = horses.filter((horse) => horse.status === 'Medical Review');
-  const medicalEvents = horses.flatMap((horse) =>
-    horse.medicalTimeline.map((event) => ({
-      horseName: horse.name,
-      veterinarian: horse.assignments.veterinarian,
-      horseId: horse.id,
-      ...event,
-    })),
+  const medicalWatch = useMemo(() => horses.filter((horse) => horse.status === 'Medical Review'), [horses]);
+  const medicalEvents = useMemo(
+    () =>
+      horses.flatMap((horse) =>
+        horse.medicalTimeline.map((event) => ({
+          horseName: horse.name,
+          veterinarian: horse.assignments.veterinarian,
+          horseId: horse.id,
+          ...event,
+        })),
+      ),
+    [horses],
   );
   const kits = ranchAssets.filter((asset) => asset.category === 'Medical Kit');
   const [selectedHorseId, setSelectedHorseId] = useState(() => {

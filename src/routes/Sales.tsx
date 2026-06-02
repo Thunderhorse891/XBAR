@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
@@ -22,18 +22,23 @@ export default function Sales() {
   const recordSharedChannel = useXbarStore((state) => state.recordSharedChannel);
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageSales = useCurrentRoleCapability('manageSales');
-  const saleHorses = horses.filter(
-    (horse) => horse.sale.askPrice > 0 || horse.sale.listingState === 'Buyer Review' || horse.sale.listingState === 'Market Ready',
+  const saleHorses = useMemo(
+    () => horses.filter((horse) => horse.sale.askPrice > 0 || horse.sale.listingState === 'Buyer Review' || horse.sale.listingState === 'Market Ready'),
+    [horses],
   );
-  const packetByHorseId = Object.fromEntries(
-    saleHorses.map((horse) => [
-      horse.id,
-      buildHorsePacketCompleteness(
-        horse,
-        documents.filter((document) => document.horseId === horse.id),
-        ownershipRecords.find((record) => record.horseId === horse.id),
+  const packetByHorseId = useMemo(
+    () =>
+      Object.fromEntries(
+        saleHorses.map((horse) => [
+          horse.id,
+          buildHorsePacketCompleteness(
+            horse,
+            documents.filter((document) => document.horseId === horse.id),
+            ownershipRecords.find((record) => record.horseId === horse.id),
+          ),
+        ]),
       ),
-    ]),
+    [saleHorses, documents, ownershipRecords],
   );
   const liveShareCount = saleHorses.filter((horse) => packetByHorseId[horse.id]?.buyerSafe).length;
   const followUpsDue = salesLeads.filter((lead) => lead.nextFollowUp && lead.nextFollowUp <= new Date().toISOString().slice(0, 10)).length;
