@@ -17,6 +17,7 @@ import {
   SalesIcon,
   SearchIcon,
   SettingsIcon,
+  MarketplaceIcon,
   SharedAccessIcon,
   SubscriptionIcon,
   WeatherIcon,
@@ -47,6 +48,7 @@ const navItems: NavItem[] = [
   { label: 'Reminders', path: '/reminders', icon: BellIcon, section: 'Operations', badgeKey: 'reminders' },
   { label: 'Equipment', path: '/assets', icon: AssetsIcon, section: 'Operations' },
   { label: 'Weather', path: '/weather', icon: WeatherIcon, section: 'Operations' },
+  { label: 'Marketplace', path: '/marketplace', icon: MarketplaceIcon, section: 'Platform' },
   { label: 'Sale Listings', path: '/shared-access', icon: SharedAccessIcon, section: 'Platform' },
   { label: 'Subscriptions', path: '/subscriptions', icon: SubscriptionIcon, section: 'Platform', requires: 'billing' },
   { label: 'Settings', path: '/settings', icon: SettingsIcon, section: 'Platform', requires: 'settings' },
@@ -65,6 +67,7 @@ const routeLabels: Record<string, string> = {
   '/assets': 'Equipment',
   '/weather': 'Weather',
   '/subscriptions': 'Subscriptions',
+  '/marketplace': 'Marketplace',
   '/shared-access': 'Sale Listings',
   '/settings': 'Settings',
 };
@@ -117,6 +120,10 @@ const routeHelp: Record<string, HelpSection[]> = {
   Subscriptions: [
     { label: 'Billing', text: 'Show plan state clearly. Do not imply Stripe billing unless it is configured.' },
     { label: 'Limits', text: 'Storage, seats, listings, and documents should be easy to understand.' },
+  ],
+  Marketplace: [
+    { label: 'Board', text: 'Only Market Ready horses show here. Update listing state on the horse profile.' },
+    { label: 'Leads', text: 'Captured inquiries feed directly into the Sales pipeline.' },
   ],
   'Sale Listings': [
     { label: 'Listings', text: 'Sale listing links need approved, sanitized records only.' },

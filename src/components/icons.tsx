@@ -200,3 +200,16 @@ export function ChevronLeftIcon(props: IconProps) {
     </IconBase>
   );
 }
+
+export function MarketplaceIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M3 9l1-6h16l1 6" />
+      <path d="M3 9a2 2 0 0 0 4 0 2 2 0 0 0 4 0 2 2 0 0 0 4 0 2 2 0 0 0 4 0" />
+      <path d="M5 21V9" />
+      <path d="M19 21V9" />
+      <rect x="9" y="14" width="6" height="7" rx="1" />
+    </IconBase>
+  );
+}
+

@@ -29,6 +29,7 @@ const SetupWorkspace = lazy(() => import('./routes/SetupWorkspace'));
 const SharedAccess = lazy(() => import('./routes/SharedAccess'));
 const Subscriptions = lazy(() => import('./routes/Subscriptions'));
 const Weather = lazy(() => import('./routes/Weather'));
+const Marketplace = lazy(() => import('./routes/Marketplace'));
 
 function useHashRouting() {
   if (typeof window === 'undefined') {
@@ -120,6 +121,7 @@ export default function App() {
               <Route path="assets" element={<RanchAssets />} />
               <Route path="subscriptions" element={<Subscriptions />} />
               <Route path="shared-access" element={<SharedAccess />} />
+              <Route path="marketplace" element={<Marketplace />} />
 <Route path="settings" element={<Settings />} />
               <Route path="*" element={<NotFound />} />
             </Route>

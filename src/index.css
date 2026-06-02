@@ -2745,3 +2745,132 @@ a:focus-visible,
     scroll-behavior: auto !important;
   }
 }
+
+/* ─── Marketplace ────────────────────────────────────────────────────── */
+
+.marketplace-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.marketplace-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 150ms ease, border-color 150ms ease;
+}
+
+.marketplace-card:hover {
+  box-shadow: var(--shadow-soft);
+  border-color: var(--border-strong);
+}
+
+.marketplace-card__media {
+  height: 180px;
+  background: var(--bg-deep);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.marketplace-card__media > * {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.marketplace-card__body {
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.marketplace-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.marketplace-card__name {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.marketplace-card__sub {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.marketplace-card__price {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--blue);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.marketplace-card__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 0.75rem;
+  color: var(--muted-strong);
+  margin-bottom: 10px;
+}
+
+.marketplace-card__readiness {
+  margin-bottom: 10px;
+}
+
+.marketplace-card__readiness-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.marketplace-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.marketplace-card__media-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.marketplace-card__media-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-deep);
+  color: var(--muted);
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.marketplace-card__inquiry {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+}
+
