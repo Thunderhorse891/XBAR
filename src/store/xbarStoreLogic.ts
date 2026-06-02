@@ -120,7 +120,10 @@ export function validateHorseNoteInput(note: Pick<HorseNote, 'title' | 'body' | 
   return requireValue(note.title, 'Note title', 2) ?? requireValue(note.body, 'Note body', 4) ?? requireValue(note.author, 'Author', 2);
 }
 
-export function validateLocationPatch(_patch: LocationPatch) {
+export function validateLocationPatch(patch: LocationPatch) {
+  if (!patch.barn?.trim() && !patch.pasture?.trim() && !patch.stall?.trim()) {
+    return 'Enter at least one location field before saving.';
+  }
   return null;
 }
 

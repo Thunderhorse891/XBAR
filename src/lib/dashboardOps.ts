@@ -91,7 +91,7 @@ function createTimedSignal(params: {
     return {
       key: params.key,
       label: params.label,
-      status: 'watch',
+      status: 'due',
       detail: `No ${params.label.toLowerCase()} on record yet`,
     };
   }
