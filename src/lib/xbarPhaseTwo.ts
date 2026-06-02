@@ -195,8 +195,8 @@ export function buildDocumentTrustProfile(document: DocumentTrustInput, horses: 
   const reviewReasons: string[] = [];
   if (document.state === 'Needs Review') reviewReasons.push('Human review still required before packet use');
   if (document.duplicateRisk !== 'Low') reviewReasons.push(describeDuplicateRisk(document));
-  if (entityCount < 2) reviewReasons.push('Entity coverage is thin for a buyer-trust surface');
-  if (document.confidence < 0.9) reviewReasons.push('Document confidence is still below the preferred buyer threshold');
+  if (entityCount < 2) reviewReasons.push('Entity coverage is thin for a sale packet surface');
+  if (document.confidence < 0.9) reviewReasons.push('Document confidence is still below the preferred sale threshold');
   if (!document.horseId) reviewReasons.push('The document is not attached to a horse profile yet');
 
   const duplicatePenalty = document.duplicateRisk === 'Possible Duplicate' ? 18 : document.duplicateRisk === 'Review' ? 8 : 0;
@@ -292,8 +292,8 @@ export function buildHorsePacketCompleteness(
       review: cogginsDocs.some(isDocumentResolved),
       readyDetail: 'Current coggins is approved for travel and sale.',
       reviewDetail: hasResolvedDocumentMissingCurrentDate(cogginsDocs, CURRENT_COGGINS_DAYS)
-        ? 'Coggins is attached but needs a current exam date before buyer use.'
-        : 'Coggins is attached but still needs buyer-safe review.',
+        ? 'Coggins is attached but needs a current exam date before use.'
+        : 'Coggins is attached but still needs final review.',
       missingDetail: 'No coggins is attached yet.',
     }),
     buildSalePacketSlot({
@@ -306,7 +306,7 @@ export function buildHorsePacketCompleteness(
         horse.status === 'Medical Review'
           ? 'Medical review is still open on the horse profile.'
           : hasResolvedDocumentMissingCurrentDate(vetDocs, CURRENT_HEALTH_SUPPORT_DAYS)
-            ? 'Health support is attached but needs a current exam date before buyer use.'
+            ? 'Health support is attached but needs a current exam date before use.'
           : 'Health support is attached but still needs final review.',
       missingDetail: 'No health certification is attached yet.',
     }),
@@ -371,10 +371,10 @@ export function buildHorsePacketCompleteness(
           : horse.status === 'Medical Review'
             ? 'A medical review is still open on the horse profile.'
             : hasResolvedDocumentMissingCurrentDate(medicalDocs, CURRENT_HEALTH_SUPPORT_DAYS)
-              ? 'Medical support exists but needs a current exam date before buyer use.'
+              ? 'Medical support exists but needs a current exam date before use.'
             : medicalDocs.length
-              ? 'Medical support exists, but it is not fully buyer-ready.'
-              : 'No buyer-safe medical support is attached yet.',
+              ? 'Medical support exists, but it is not fully ready to share.'
+              : 'No approved medical support is attached yet.',
       weight: 20,
       tone: 'slate',
     },
@@ -389,10 +389,10 @@ export function buildHorsePacketCompleteness(
             : 'missing',
       detail:
         hasApprovedHero && (hasApprovedSaleStill || mediaDocs.some(isDocumentReady))
-        ? 'Hero imagery and packet media are approved for buyer presentation.'
+        ? 'Hero imagery and packet media are approved for sale presentation.'
           : horse.gallery.length || mediaDocs.length
             ? 'Visual assets exist, but the packet still needs stronger coverage.'
-            : 'No buyer-facing media packet is attached yet.',
+            : 'No media packet is attached yet.',
       weight: 18,
       tone: 'slate',
     },
@@ -410,10 +410,10 @@ export function buildHorsePacketCompleteness(
             : 'missing',
       detail:
         mediaDocs.some(isDocumentReady) && horse.sale.socialReady && !hasHighAlert
-          ? 'Buyer-safe packet is approved for live sharing.'
+          ? 'Sale packet is approved for live sharing.'
           : hasHighAlert
-            ? 'A high-severity alert is still blocking a buyer-safe release.'
-            : 'Buyer packet is present but still needs trust review.',
+            ? 'A high-severity alert is still blocking release.'
+            : 'Sale packet is present but still needs trust review.',
       weight: 20,
       tone: 'slate',
     });
@@ -467,9 +467,9 @@ export function buildHorsePacketCompleteness(
             : 'blue',
     buyerProfileNote:
       buyerProfileStatus === 'Live'
-        ? 'This profile is safe to present as a buyer-safe share link.'
+        ? 'This profile is safe to present as a sale listing link.'
         : buyerProfileStatus === 'Needs Review'
-          ? 'The buyer-facing profile is useful, but still carries unresolved trust checks.'
+          ? 'The sale profile is useful, but still carries unresolved trust checks.'
           : buyerProfileStatus === 'Blocked'
             ? 'Keep this link internal until the trust blockers clear.'
             : 'Keep this sale packet private until outreach starts.',

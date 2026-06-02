@@ -203,10 +203,10 @@ export default function HorseDetail() {
       horseId: horse.id,
       source: docSource,
       uploadedBy: 'Horse Profile',
-      label: `${horse.barnName} profile intake`,
+      label: `${horse.barnName} profile upload`,
     });
     pushToast({
-      title: result.ok ? 'Document intake updated' : 'Document upload blocked',
+      title: result.ok ? 'Document upload updated' : 'Document upload blocked',
       message: result.message,
       tone: result.ok ? 'success' : 'error',
     });
@@ -405,7 +405,7 @@ export default function HorseDetail() {
                 onClick={() => void recordSharedChannel(horse.id, 'Direct Link')}
               >
                 <SharedAccessIcon className="h-4 w-4" />
-                Open buyer link
+                Open sale listing
               </a>
             ) : (
               <button
@@ -699,7 +699,7 @@ export default function HorseDetail() {
               </div>
             </div>
             <div className="stack-item">
-              <div className="stack-item__title">Buyer view</div>
+              <div className="stack-item__title">Sale view</div>
               <div className="inline-metrics">
                 <span>{packet.buyerProfileStatus}</span>
                 <span>{packet.trustSummary}</span>
@@ -857,7 +857,7 @@ export default function HorseDetail() {
                 </div>
               </div>
             ) : (
-              <EmptyState compact title="No buyer leads" description="Add a lead to track movement." />
+              <EmptyState compact title="No sale leads" description="Add a lead to track movement." />
             )}
           </div>
           <div className="form-grid form-grid--tight">
@@ -896,7 +896,7 @@ export default function HorseDetail() {
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__top">
-                <div className="stack-item__title">Packet trust</div>
+                <div className="stack-item__title">Record Complete</div>
                 <Pill tone="blue">{packet.buyerProfileStatus}</Pill>
               </div>
               <div className="inline-metrics">

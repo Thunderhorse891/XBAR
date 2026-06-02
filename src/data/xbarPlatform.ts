@@ -31,7 +31,7 @@ export const subscriptionSeed: SubscriptionProfile = {
   brandedListings: false,
   featureFlags: [
     'First-run workspace setup',
-    'Manual document intake',
+    'Manual document upload',
     'Receipt logging',
     'Horse ledger',
   ],
@@ -66,13 +66,13 @@ export const roleSeed: RoleWorkspace[] = [
     role: 'Owner',
     label: 'Horse Owner / Client',
     summary: 'Read-only horse records, documents, and sale packets.',
-    primaryModules: ['Buyer Links', 'Documents', 'Title & Transfer'],
+    primaryModules: ['Sale Listings', 'Documents', 'Title & Transfer'],
     permissions: ['Packet viewing', 'Client document upload', 'Saved listing access'],
   },
   {
     role: 'Medical Lead',
     label: 'Medical Lead',
-    summary: 'Care cadence, treatment history, kit readiness, and review.',
+    summary: 'Care cadence, treatment history, medical kits, and review.',
     primaryModules: ['Medical', 'Documents'],
     permissions: ['Vet note review', 'Care protocol updates', 'Travel hold approvals'],
   },
@@ -80,7 +80,7 @@ export const roleSeed: RoleWorkspace[] = [
     role: 'Sales Lead',
     label: 'Sales Lead',
     summary: 'Listing quality, record completeness, and transfer blockers.',
-    primaryModules: ['Sales', 'Horses', 'Buyer Links'],
+    primaryModules: ['Sales', 'Horses', 'Sale Listings'],
     permissions: ['Listing packet edits', 'Lead tracking', 'Shareable presentation controls'],
   },
 ];

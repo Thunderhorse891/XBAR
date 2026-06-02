@@ -177,7 +177,7 @@ export default function Dashboard() {
           <div className="ops-briefing-header__top">
             <div className="ops-briefing-header__left">
               <div className="ops-briefing-header__ranch">{workspaceProfile.ranchName || workspaceProfile.businessName || 'Ranch Operations'}</div>
-              <h1 className="ops-briefing-header__title">Build the dashboard.</h1>
+              <h1 className="ops-briefing-header__title">Build the dashboard</h1>
               <div className="ops-briefing-header__chips">
                 <span className="ops-briefing-chip">First horse</span>
                 <span className="ops-briefing-chip">Document vault</span>
@@ -216,7 +216,7 @@ export default function Dashboard() {
         </div>
 
         <div className="dashboard-grid dashboard-grid--primary">
-          <Panel eyebrow="Workspace" title="Start the ranch desk">
+          <Panel eyebrow="Ranch" title="Start the ranch desk">
             <EmptyState
               title="No records yet"
               description="Create the first horse, upload a packet, or load the ranch forecast to start working."
@@ -374,7 +374,7 @@ export default function Dashboard() {
           >
             <span className="ops-briefing-stat__label">Month spend</span>
             <span className="ops-briefing-stat__value">{formatCompactCurrency(budgetSummary.total)}</span>
-            <span className="ops-briefing-stat__detail">{qualifiedBuyerCount} active buyer{qualifiedBuyerCount !== 1 ? 's' : ''}</span>
+            <span className="ops-briefing-stat__detail">{qualifiedBuyerCount} active lead{qualifiedBuyerCount !== 1 ? 's' : ''}</span>
           </button>
         </div>
       </div>
@@ -414,7 +414,7 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="command-stage__support-card">
-            <div className="command-stage__support-label">Intake</div>
+            <div className="command-stage__support-label">Upload</div>
             <strong className="command-stage__support-title">
               {recentBatches[0]?.label ?? 'No batch yet'}
             </strong>
@@ -659,7 +659,7 @@ export default function Dashboard() {
 
       <div className="dashboard-board dashboard-board--lower">
         <Panel
-          title="Receipt intake"
+          title="Log receipt"
           meta={<Pill tone={canManageBudget ? 'blue' : 'slate'}>{canManageBudget ? 'Enabled' : 'Read only'}</Pill>}
         >
           <form id="dashboard-receipt-form" className="dashboard-receipt-form" onSubmit={handleReceiptSubmit}>

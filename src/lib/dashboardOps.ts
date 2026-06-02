@@ -92,7 +92,7 @@ function createTimedSignal(params: {
       key: params.key,
       label: params.label,
       status: 'due',
-      detail: params.missingDetail,
+      detail: `No ${params.label.toLowerCase()} on record yet`,
     };
   }
 
@@ -228,7 +228,7 @@ export function buildCareBoardRows(horses: HorseRecord[], documents: DocumentRec
 export function buildBudgetSummary(receipts: ExpenseReceipt[], now = new Date()): BudgetSummary {
   const monthKey = buildMonthKey(now);
   const monthReceipts = receipts
-    .filter((receipt) => buildMonthKey(parseDate(receipt.receiptDate) ?? now) === monthKey)
+    .filter((receipt) => { const d = parseDate(receipt.receiptDate); return d !== null && buildMonthKey(d) === monthKey; })
     .sort((left, right) => Date.parse(right.receiptDate) - Date.parse(left.receiptDate));
 
   const categories = monthReceipts.reduce<Map<ExpenseCategory, number>>((totals, receipt) => {

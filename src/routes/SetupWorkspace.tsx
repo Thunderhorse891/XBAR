@@ -69,7 +69,7 @@ export default function SetupWorkspace() {
 
     const result = initializeWorkspace(form);
     pushToast({
-      title: result.ok ? 'Workspace created' : 'Setup blocked',
+      title: result.ok ? 'Ranch created' : 'Setup blocked',
       message: result.message,
       tone: result.ok ? 'success' : 'error',
     });
@@ -100,8 +100,8 @@ export default function SetupWorkspace() {
     });
 
     pushToast({
-      title: result.ok ? 'Workspace ready' : 'Setup blocked',
-      message: result.ok ? 'Opening your workspace.' : result.message,
+      title: result.ok ? 'Ranch ready' : 'Setup blocked',
+      message: result.ok ? 'Opening your ranch.' : result.message,
       tone: result.ok ? 'success' : 'error',
     });
 
@@ -126,7 +126,7 @@ export default function SetupWorkspace() {
                 </div>
                 <div>
                   <div className="text-[1rem] font-extrabold uppercase tracking-[0.22em] text-white">XBAR</div>
-                  <div className="mt-1 text-[0.62rem] font-bold uppercase tracking-[0.3em] text-slate-400">Workspace foundation</div>
+                  <div className="mt-1 text-[0.62rem] font-bold uppercase tracking-[0.3em] text-slate-400">Ranch setup</div>
                 </div>
               </div>
               <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[0.66rem] font-bold uppercase tracking-[0.18em] text-slate-300">

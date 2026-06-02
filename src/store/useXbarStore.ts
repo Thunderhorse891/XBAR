@@ -23,7 +23,8 @@ import {
   todayStamp,
 } from '@/lib/xbarRuntime';
 import { countReservedSharedAccessSeats, countReservedWorkspaceSeats, normalizeWorkspaceEmail, validateWorkspaceInvitation } from '@/lib/workspaceAccess';
-import { isSupabaseConfigured } from '@/lib/platformConfig';
+import { apiConfig, isSupabaseConfigured } from '@/lib/platformConfig';
+import { useCloudStore } from '@/store/useCloudStore';
 import { getCapabilityDeniedMessage, hasRoleCapability } from '@/lib/permissions';
 import {
   createWorkspaceInvitationInCloud,
@@ -119,6 +120,7 @@ type XbarStore = {
     leadId: string,
     patch: Partial<Pick<SalesLead, 'stage' | 'lastTouch' | 'nextFollowUp' | 'notes' | 'offerAmount' | 'savedListing' | 'shareReady' | 'outcome'>>,
   ) => ActionResult;
+  addRanchAsset: (asset: Pick<RanchAsset, 'name' | 'category' | 'location'>) => ActionResult;
   updateAsset: (assetId: string, patch: AssetPatch) => ActionResult;
   addHorseNote: (horseId: string, note: Pick<HorseNote, 'title' | 'body' | 'author' | 'tone'>) => ActionResult;
   addMedicalEvent: (
@@ -612,7 +614,7 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
         date: todayStamp(),
         title: 'Horse record created',
         summary: 'Initial horse profile created inside the live XBAR workspace.',
-        owner: 'Ops Desk',
+        owner: 'Ranch Staff',
         category: 'Operations',
       },
     ],
@@ -620,8 +622,8 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
     alerts: [
       {
         id: createId('alert'),
-        title: 'Finish intake packet',
-        summary: 'Registration, media, medical, and ownership details must be verified before this record is buyer-ready.',
+        title: 'Complete horse record',
+        summary: 'Registration, media, medical, and ownership details must be verified before this record is ready to share.',
         severity: 'medium',
         module: 'Documents',
       },
@@ -669,7 +671,7 @@ function buildHorseInputFromDocuments(documents: DocumentRecord[], workspaceProf
     ownerEntity: ownerEntity || 'Pending Entity',
     aqhaNumber: registrationNumber.startsWith('AQHA') ? registrationNumber : '',
     registrationNumber,
-    barn: workspaceProfile.defaultBarn.trim() || 'Intake Barn',
+    barn: workspaceProfile.defaultBarn.trim() || 'Main Barn',
     pasture: workspaceProfile.defaultPasture.trim() || 'Pending Pasture',
   };
 }
@@ -1044,7 +1046,7 @@ export const useXbarStore = create<XbarStore>()(
 
         return {
           ok: true,
-          message: accessMode === 'Public Link' ? 'Buyer link is now public.' : 'Buyer link now requires a token.',
+          message: accessMode === 'Public Link' ? 'Sale link is now public.' : 'Sale link now requires a token.',
           id: horseId,
         };
       },
@@ -1082,6 +1084,18 @@ export const useXbarStore = create<XbarStore>()(
           if (!cloudResult.ok) {
             return { ok: false, message: cloudResult.message };
           }
+
+          // Fire invite email via API (best-effort — don't block on failure)
+          try {
+            const session = useCloudStore.getState().session;
+            const accessToken = session?.access_token ?? '';
+            const apiBase = apiConfig.baseUrl || (typeof window !== 'undefined' ? window.location.origin : '');
+            await fetch(`${apiBase}/api/invite`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+              body: JSON.stringify({ email: invite.email, role: invite.role, workspaceId: useCloudStore.getState().workspaceId, invitationId: invite.id }),
+            });
+          } catch { /* non-critical */ }
         }
 
         const workspaceInvitations = [invite, ...state.workspaceInvitations];
@@ -1274,11 +1288,11 @@ export const useXbarStore = create<XbarStore>()(
 
         const fileList = files.filter(Boolean);
         if (!fileList.length) {
-          return { ok: false, message: 'Select at least one file for intake.' };
+          return { ok: false, message: 'Select at least one file to upload.' };
         }
 
         if (!uploadedBy.trim()) {
-          return { ok: false, message: 'Uploaded by is required before starting intake.' };
+          return { ok: false, message: 'Uploaded by is required before uploading.' };
         }
 
         const state = get();
@@ -1372,7 +1386,7 @@ export const useXbarStore = create<XbarStore>()(
 
           const batch: IntakeBatch = {
             id: batchId,
-            label: label?.trim() || `${source} intake`,
+            label: label?.trim() || `${source} upload`,
             receivedAt: nowStamp(),
             source,
             fileCount: documents.length,
@@ -1410,12 +1424,12 @@ export const useXbarStore = create<XbarStore>()(
 
           return {
             ok: true,
-            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the intake batch.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only because cloud file storage is not available.` : ''}`,
+            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the upload batch.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only because cloud file storage is not available.` : ''}`,
             id: batch.id,
           };
         } catch (error) {
-          console.error('Document intake failed', error);
-          return { ok: false, message: 'Document intake failed. Check the selected files and try again.' };
+          console.error('Document upload failed', error);
+          return { ok: false, message: 'Document upload failed. Check the selected files and try again.' };
         }
       },
       reviewDocument: (documentId, horseId) => {
@@ -1716,9 +1730,9 @@ export const useXbarStore = create<XbarStore>()(
                     {
                       id: createId('activity'),
                       date: todayStamp(),
-                      title: 'Buyer inquiry captured',
+                      title: 'Sale inquiry captured',
                       summary: `${lead.name} entered the pipeline from ${lead.channel}.`,
-                      owner: 'Sales Desk',
+                      owner: 'Ranch Staff',
                       category: 'Sales' as const,
                     },
                     ...horse.activity,
@@ -1781,6 +1795,27 @@ export const useXbarStore = create<XbarStore>()(
 
         return { ok: true, message: `${lead.name} updated.`, id: leadId };
       },
+      addRanchAsset: (asset) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageAssets');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+        if (!asset.name.trim()) return { ok: false, message: 'Asset name is required.' };
+        const id = crypto.randomUUID();
+        set((state) => ({
+          ranchAssets: [...state.ranchAssets, {
+            id,
+            name: asset.name.trim(),
+            category: asset.category,
+            status: 'Available' as const,
+            condition: 'Excellent' as const,
+            assignedTo: '',
+            location: asset.location.trim(),
+            nextService: '',
+            notes: '',
+          }],
+        }));
+        return { ok: true, message: 'Asset added.', id };
+      },
+
       updateAsset: (assetId, patch) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageAssets');
         if (deniedMessage) {
@@ -1957,7 +1992,7 @@ export const useXbarStore = create<XbarStore>()(
                       date: todayStamp(),
                       title: 'Location updated',
                       summary: `Horse location updated to ${patch.barn ?? horse.location.barn} / ${patch.pasture ?? horse.location.pasture}.`,
-                      owner: 'Field Ops',
+                      owner: 'Ranch Staff',
                       category: 'Operations' as const,
                     },
                     ...horse.activity,
