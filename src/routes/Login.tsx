@@ -111,8 +111,10 @@ export default function Login() {
   const signInWithApple = useCloudStore((state) => state.signInWithApple);
   const signInWithFacebook = useCloudStore((state) => state.signInWithFacebook);
   const initializeWorkspace = useXbarStore((state) => state.initializeWorkspace);
+  const activateWorkspaceInvitation = useXbarStore((state) => state.activateWorkspaceInvitation);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const [rememberMe, setRememberMe] = useState(() => localStorage.getItem('xbar-remember-me') === 'true');
+  const inviteId = useMemo(() => new URLSearchParams(location.search).get('invite'), [location.search]);
   const [email, setEmail] = useState(() => (localStorage.getItem('xbar-remember-me') === 'true' ? localStorage.getItem('xbar-remembered-email') ?? '' : ''));
   const [password, setPassword] = useState('');
   const [authMode, setAuthMode] = useState<AuthMode>('signin');
@@ -129,8 +131,13 @@ export default function Login() {
   }, [location.search]);
 
   useEffect(() => {
-    if (session && status === 'signed-in') navigate(redirectTarget, { replace: true });
-  }, [navigate, redirectTarget, session, status]);
+    if (session && status === 'signed-in') {
+      if (inviteId) {
+        activateWorkspaceInvitation(inviteId);
+      }
+      navigate(redirectTarget, { replace: true });
+    }
+  }, [navigate, redirectTarget, session, status, inviteId, activateWorkspaceInvitation]);
 
   const handlePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const shell = shellRef.current;
@@ -235,10 +242,17 @@ export default function Login() {
         <section className="lp-auth" aria-label="Sign in to XBAR">
           <div className="lp-card">
 
+            {/* Invite banner */}
+            {inviteId && (
+              <div style={{ marginBottom: '16px', padding: '10px 14px', background: 'rgba(45,111,255,0.10)', border: '1px solid rgba(45,111,255,0.25)', borderRadius: '8px', fontSize: '13px', color: 'rgba(160,200,255,0.9)' }}>
+                You were invited to join a workspace. Sign in or create an account to accept.
+              </div>
+            )}
+
             {/* Card header */}
-            <p className="lp-card-label">{authMode === 'signup' ? 'Create your account' : 'Welcome Back'}</p>
+            <p className="lp-card-label">{inviteId ? 'Workspace invite' : authMode === 'signup' ? 'Create your account' : 'Welcome Back'}</p>
             <h1 className="lp-card-title">
-              {authMode === 'signin' ? 'Sign in to your account' : 'Create your XBAR account'}
+              {inviteId ? 'Accept your invitation' : authMode === 'signin' ? 'Sign in to your account' : 'Create your XBAR account'}
             </h1>
             <p className="lp-card-sub">Access your ranch. Your horses. Your records.</p>
 

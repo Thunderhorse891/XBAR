@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
@@ -43,15 +43,15 @@ export default function Dashboard() {
     uploadedBy: roleWorkspace.label,
   });
 
-  const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched');
-  const transferGaps = buildTransferGapRows(horses, ownershipRecords, documents);
-  const careBoard = buildCareBoardRows(horses, documents, expenseReceipts);
-  const budgetSummary = buildBudgetSummary(expenseReceipts);
-  const careDueCount = careBoard.filter((row) => row.signals.some((signal) => signal.status === 'due')).length;
-  const cogginsWatchCount = careBoard.filter((row) => row.signals.some((signal) => signal.key === 'coggins' && signal.status !== 'clear')).length;
-  const qualifiedBuyerCount = salesLeads.filter((lead) => lead.stage === 'Qualified' || lead.stage === 'Offer').length;
-  const feedReserveAsset = ranchAssets.find((asset) => asset.category === 'Feed & Supply');
-  const recentBatches = intakeBatches.slice(0, 4);
+  const reviewQueue = useMemo(() => documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched'), [documents]);
+  const transferGaps = useMemo(() => buildTransferGapRows(horses, ownershipRecords, documents), [horses, ownershipRecords, documents]);
+  const careBoard = useMemo(() => buildCareBoardRows(horses, documents, expenseReceipts), [horses, documents, expenseReceipts]);
+  const budgetSummary = useMemo(() => buildBudgetSummary(expenseReceipts), [expenseReceipts]);
+  const careDueCount = useMemo(() => careBoard.filter((row) => row.signals.some((signal) => signal.status === 'due')).length, [careBoard]);
+  const cogginsWatchCount = useMemo(() => careBoard.filter((row) => row.signals.some((signal) => signal.key === 'coggins' && signal.status !== 'clear')).length, [careBoard]);
+  const qualifiedBuyerCount = useMemo(() => salesLeads.filter((lead) => lead.stage === 'Qualified' || lead.stage === 'Offer').length, [salesLeads]);
+  const feedReserveAsset = useMemo(() => ranchAssets.find((asset) => asset.category === 'Feed & Supply'), [ranchAssets]);
+  const recentBatches = useMemo(() => intakeBatches.slice(0, 4), [intakeBatches]);
 
   useEffect(() => {
     const ranchQuery = workspaceProfile.ranchName.trim();

@@ -1,4 +1,3 @@
-import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
 import { startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency, formatDateLabel } from '@/lib/format';
@@ -129,73 +128,69 @@ export default function Subscriptions() {
       </div>
 
       <Panel eyebrow="Checkout" title="Plans">
-        {billingConfigured ? (
-          <div className="detail-grid">
-            {tiers.map((tier) => {
-              const config = subscriptionTierConfig[tier];
-              const current = tier === subscription.tier;
-              const paymentLink = getStripePaymentLink(tier);
-
-              return (
-                <div key={tier} className="stack-item">
-                  <div className="stack-item__top">
-                    <div className="stack-item__title">{tier}</div>
-                    <Pill tone={current ? 'blue' : 'slate'}>{current ? 'Current' : 'Available'}</Pill>
-                  </div>
-                  <div className="inline-metrics">
-                    <span>{formatCurrency(config.monthlyRate)}/mo</span>
-                    <span>{config.limits.seatLimit} seats</span>
-                    <span>{config.limits.storageLimitGb} GB</span>
-                    <span>{config.limits.sharedAccessSeatLimit} shared</span>
-                  </div>
-                  <div className="token-row">
-                    {config.featureFlags.map((flag) => (
-                      <Pill key={flag} tone="blue">
-                        {flag}
-                      </Pill>
-                    ))}
-                  </div>
-                    <div className="inline-actions">
-                      {!current && paymentLink && canManageBilling ? (
-                        <button
-                          className="button button--primary button--compact"
-                          type="button"
-                          onClick={async () => {
-                            const managedCheckout = await startManagedCheckout({
-                              tier,
-                              workspaceId,
-                              accessToken: session?.access_token ?? '',
-                            });
-
-                            if (managedCheckout.ok) {
-                              window.location.href = managedCheckout.url;
-                              return;
-                            }
-
-                            pushToast({
-                              title: 'Managed checkout unavailable',
-                              message: managedCheckout.message,
-                              tone: 'error',
-                            });
-
-                            window.open(paymentLink, '_blank', 'noopener,noreferrer');
-                          }}
-                        >
-                          Open checkout
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-              );
-            })}
+        {!billingConfigured && (
+          <div style={{ marginBottom: '16px', padding: '10px 14px', background: 'rgba(200,160,0,0.08)', border: '1px solid rgba(200,160,0,0.2)', borderRadius: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+            Self-serve checkout is not yet active — Stripe payment links have not been configured for this deployment. Contact your administrator to upgrade your plan.
           </div>
-        ) : (
-          <EmptyState
-            compact
-            title="Stripe not configured"
-            description="Add Stripe payment links to enable self-serve checkout in this build."
-          />
         )}
+        <div className="detail-grid">
+          {tiers.map((tier) => {
+            const config = subscriptionTierConfig[tier];
+            const current = tier === subscription.tier;
+            const paymentLink = getStripePaymentLink(tier);
+
+            return (
+              <div key={tier} className="stack-item">
+                <div className="stack-item__top">
+                  <div className="stack-item__title">{tier}</div>
+                  <Pill tone={current ? 'blue' : 'slate'}>{current ? 'Current' : 'Available'}</Pill>
+                </div>
+                <div className="inline-metrics">
+                  <span>{formatCurrency(config.monthlyRate)}/mo</span>
+                  <span>{config.limits.seatLimit} seats</span>
+                  <span>{config.limits.storageLimitGb} GB</span>
+                  <span>{config.limits.sharedAccessSeatLimit} shared</span>
+                </div>
+                <div className="token-row">
+                  {config.featureFlags.map((flag) => (
+                    <Pill key={flag} tone="blue">
+                      {flag}
+                    </Pill>
+                  ))}
+                </div>
+                <div className="inline-actions">
+                  {!current && canManageBilling ? (
+                    billingConfigured && paymentLink ? (
+                      <button
+                        className="button button--primary button--compact"
+                        type="button"
+                        onClick={async () => {
+                          const managedCheckout = await startManagedCheckout({
+                            tier,
+                            workspaceId,
+                            accessToken: session?.access_token ?? '',
+                          });
+                          if (managedCheckout.ok) {
+                            window.location.href = managedCheckout.url;
+                            return;
+                          }
+                          pushToast({ title: 'Managed checkout unavailable', message: managedCheckout.message, tone: 'error' });
+                          window.open(paymentLink, '_blank', 'noopener,noreferrer');
+                        }}
+                      >
+                        Open checkout
+                      </button>
+                    ) : (
+                      <button className="button button--ghost button--compact" type="button" disabled title="Stripe not configured">
+                        Checkout unavailable
+                      </button>
+                    )
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </Panel>
     </>
   );
