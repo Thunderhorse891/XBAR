@@ -128,6 +128,8 @@ type XbarStore = {
     event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string; type: MedicalEventType },
   ) => ActionResult;
   addBreedingEvent: (horseId: string, event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string }) => ActionResult;
+  updateBreedingEvent: (horseId: string, eventId: string, patch: Partial<Pick<TimelineEvent, 'title' | 'summary' | 'date'>>) => ActionResult;
+  deleteBreedingEvent: (horseId: string, eventId: string) => ActionResult;
   updateHorseLocation: (horseId: string, patch: LocationPatch) => ActionResult;
   updateHorse: (horseId: string, patch: HorsePatch) => ActionResult;
   deleteHorse: (horseId: string) => ActionResult;
@@ -1973,6 +1975,42 @@ export const useXbarStore = create<XbarStore>()(
         }));
 
         return { ok: true, message: 'Breeding event added.', id: nextEvent.id };
+      },
+      updateBreedingEvent: (horseId, eventId, patch) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageBreeding');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+        set((state) => ({
+          horses: state.horses.map((h) =>
+            h.id === horseId
+              ? {
+                  ...h,
+                  breedingTimeline: h.breedingTimeline.map((ev) =>
+                    ev.id === eventId ? { ...ev, ...patch } : ev,
+                  ),
+                  activity: h.activity.map((ev) =>
+                    ev.id === eventId ? { ...ev, ...patch } : ev,
+                  ),
+                }
+              : h,
+          ),
+        }));
+        return { ok: true, message: 'Breeding event updated.', id: eventId };
+      },
+      deleteBreedingEvent: (horseId, eventId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageBreeding');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+        set((state) => ({
+          horses: state.horses.map((h) =>
+            h.id === horseId
+              ? {
+                  ...h,
+                  breedingTimeline: h.breedingTimeline.filter((ev) => ev.id !== eventId),
+                  activity: h.activity.filter((ev) => ev.id !== eventId || ev.category !== 'Breeding'),
+                }
+              : h,
+          ),
+        }));
+        return { ok: true, message: 'Breeding event removed.', id: eventId };
       },
       updateHorseLocation: (horseId, patch) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');

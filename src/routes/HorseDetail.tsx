@@ -86,6 +86,11 @@ export default function HorseDetail() {
   const createSalesLead = useXbarStore((state) => state.createSalesLead);
   const updateHorse = useXbarStore((state) => state.updateHorse);
   const deleteHorse = useXbarStore((state) => state.deleteHorse);
+  const updateMedicalEvent = useXbarStore((state) => state.updateMedicalEvent);
+  const deleteMedicalEvent = useXbarStore((state) => state.deleteMedicalEvent);
+  const addBreedingEvent = useXbarStore((state) => state.addBreedingEvent);
+  const updateBreedingEvent = useXbarStore((state) => state.updateBreedingEvent);
+  const deleteBreedingEvent = useXbarStore((state) => state.deleteBreedingEvent);
   const currentRole = useXbarStore((state) => state.currentRole);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const session = useCloudStore((state) => state.session);
@@ -115,6 +120,15 @@ export default function HorseDetail() {
   const [locationError, setLocationError] = useState('');
   const [activeTab, setActiveTab] = useState<DetailTab>('Overview');
   const [editingCore, setEditingCore] = useState(false);
+  const [editingMedicalId, setEditingMedicalId] = useState<string | null>(null);
+  const [medicalEditForm, setMedicalEditForm] = useState({ title: '', body: '', date: '' });
+  const [editingBreedingId, setEditingBreedingId] = useState<string | null>(null);
+  const [breedingEditForm, setBreedingEditForm] = useState({ title: '', body: '', date: '' });
+  const [breedingTitle, setBreedingTitle] = useState('');
+  const [breedingBody, setBreedingBody] = useState('');
+  const [breedingDate, setBreedingDate] = useState('');
+  const [breedingError, setBreedingError] = useState('');
+  const canManageBreeding = useCurrentRoleCapability('manageBreeding');
   const [coreForm, setCoreForm] = useState({ name: '', breed: '', color: '', sex: 'Mare' as HorseSex, registrationNumber: '', owner: '', ownerEntity: '', askPrice: '' });
   const [location, setLocation] = useState({
     barn: horse?.location.barn ?? '',
@@ -823,15 +837,35 @@ export default function HorseDetail() {
 
         <Panel eyebrow="Medical" title="Medical">
           {horse.medicalTimeline.length ? (
-            <div className="timeline">
+            <div className="stack-list">
               {horse.medicalTimeline.map((event) => (
-                <div key={event.id} className="timeline__item">
-                  <div className="timeline__date">{formatDateLabel(event.date)}</div>
-                  <div>
-                    <div className="timeline__title">{event.title}</div>
-                    <div className="timeline__copy">{event.summary}</div>
-                    <div className="timeline__meta">{event.owner}</div>
-                  </div>
+                <div key={event.id} className="stack-item">
+                  {editingMedicalId === event.id ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <input className="field-input" value={medicalEditForm.title} onChange={(e) => setMedicalEditForm((f) => ({ ...f, title: e.target.value }))} placeholder="Title" />
+                      <input className="field-input" value={medicalEditForm.body} onChange={(e) => setMedicalEditForm((f) => ({ ...f, body: e.target.value }))} placeholder="Notes" />
+                      <input className="field-input" type="date" value={medicalEditForm.date} onChange={(e) => setMedicalEditForm((f) => ({ ...f, date: e.target.value }))} />
+                      <div className="inline-actions">
+                        <button className="button button--primary button--compact" type="button" onClick={() => { updateMedicalEvent(horse.id, event.id, { title: medicalEditForm.title, summary: medicalEditForm.body, date: medicalEditForm.date }); setEditingMedicalId(null); }}>Save</button>
+                        <button className="button button--ghost button--compact" type="button" onClick={() => setEditingMedicalId(null)}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="stack-item__top">
+                        <div>
+                          <div className="stack-item__title">{event.title}</div>
+                          <div className="stack-item__copy">{event.summary}</div>
+                          <div className="timeline__meta">{event.owner}</div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Pill tone="blue">{formatDateLabel(event.date)}</Pill>
+                          {canEditHorse && <button className="button button--ghost button--compact" style={{ fontSize: '11px' }} type="button" onClick={() => { setMedicalEditForm({ title: event.title, body: event.summary, date: event.date }); setEditingMedicalId(event.id); }}>Edit</button>}
+                          {canEditHorse && <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={() => { if (window.confirm('Remove this medical event?')) deleteMedicalEvent(horse.id, event.id); }}>Delete</button>}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
@@ -855,13 +889,64 @@ export default function HorseDetail() {
             {horse.breedingTimeline.length ? (
               horse.breedingTimeline.map((event) => (
                 <div key={event.id} className="stack-item">
-                  <div className="stack-item__title">{event.title}</div>
-                  <div className="stack-item__copy">{event.summary}</div>
+                  {editingBreedingId === event.id ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <input className="field-input" value={breedingEditForm.title} onChange={(e) => setBreedingEditForm((f) => ({ ...f, title: e.target.value }))} placeholder="Title" />
+                      <input className="field-input" value={breedingEditForm.body} onChange={(e) => setBreedingEditForm((f) => ({ ...f, body: e.target.value }))} placeholder="Notes" />
+                      <input className="field-input" type="date" value={breedingEditForm.date} onChange={(e) => setBreedingEditForm((f) => ({ ...f, date: e.target.value }))} />
+                      <div className="inline-actions">
+                        <button className="button button--primary button--compact" type="button" onClick={() => { updateBreedingEvent(horse.id, event.id, { title: breedingEditForm.title, summary: breedingEditForm.body, date: breedingEditForm.date }); setEditingBreedingId(null); }}>Save</button>
+                        <button className="button button--ghost button--compact" type="button" onClick={() => setEditingBreedingId(null)}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="stack-item__top">
+                        <div>
+                          <div className="stack-item__title">{event.title}</div>
+                          <div className="stack-item__copy">{event.summary}</div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Pill tone="blue">{formatDateLabel(event.date)}</Pill>
+                          {canManageBreeding && <button className="button button--ghost button--compact" style={{ fontSize: '11px' }} type="button" onClick={() => { setBreedingEditForm({ title: event.title, body: event.summary, date: event.date }); setEditingBreedingId(event.id); }}>Edit</button>}
+                          {canManageBreeding && <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={() => { if (window.confirm('Remove this breeding event?')) deleteBreedingEvent(horse.id, event.id); }}>Delete</button>}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))
             ) : (
               <EmptyState compact title="No breeding program" description="Add milestones when the horse enters the program." />
             )}
+          </div>
+          {canManageBreeding && (
+            <div className="form-grid form-grid--tight" style={{ marginTop: '12px' }}>
+              <label className="field-stack">
+                <span className="field-label">Breeding milestone</span>
+                <input className="field-input" value={breedingTitle} onChange={(e) => { setBreedingTitle(e.target.value); setBreedingError(''); }} placeholder="e.g. Embryo flush, Foal born" disabled={!canManageBreeding} />
+              </label>
+              <label className="field-stack">
+                <span className="field-label">Date</span>
+                <input className="field-input" type="date" value={breedingDate} onChange={(e) => setBreedingDate(e.target.value)} disabled={!canManageBreeding} />
+              </label>
+              <label className="field-stack" style={{ gridColumn: '1 / -1' }}>
+                <span className="field-label">Notes</span>
+                <input className="field-input" value={breedingBody} onChange={(e) => setBreedingBody(e.target.value)} placeholder="Details" disabled={!canManageBreeding} />
+              </label>
+            </div>
+          )}
+          {breedingError ? <div className="field-error">{breedingError}</div> : null}
+          {canManageBreeding && (
+            <div className="inline-actions" style={{ marginTop: '8px' }}>
+              <button className="button button--primary button--compact" type="button" disabled={!breedingTitle.trim() || !breedingDate.trim()} onClick={() => {
+                const result = addBreedingEvent(horse.id, { title: breedingTitle, body: breedingBody, author: workspaceProfile.defaultOwnerName || 'Ranch', date: breedingDate });
+                if (result.ok) { setBreedingTitle(''); setBreedingBody(''); setBreedingDate(''); setBreedingError(''); }
+                else setBreedingError(result.message);
+              }}>Add breeding event</button>
+            </div>
+          )}
+          <div className="stack-list" style={{ marginTop: '16px' }}>
             {salesLeads.length ? (
               <div className="stack-item">
                 <div className="stack-item__title">Active leads</div>
