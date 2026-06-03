@@ -5,6 +5,7 @@ import { RequireCloudAuth } from './components/RequireCloudAuth';
 import { RequireWorkspaceSetup } from './components/RequireWorkspaceSetup';
 import { ToastViewport } from './components/ToastViewport';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
+import { isSupabaseConfigured } from './lib/platformConfig';
 import { useCloudStore } from './store/useCloudStore';
 import './routes/operationsHierarchy.css';
 
@@ -69,6 +70,30 @@ function routeTitle(path: string) {
   return `XBAR | ${labels[path] ?? 'Ranch'}`;
 }
 
+function hasCommandCenterEntry() {
+  if (typeof window === 'undefined') return false;
+  return window.localStorage.getItem('xbar-command-center-entry') === 'true';
+}
+
+function SmartRoot() {
+  const status = useCloudStore((state) => state.status);
+  const session = useCloudStore((state) => state.session);
+
+  if (!isSupabaseConfigured() || hasCommandCenterEntry()) {
+    return <RequireCloudAuth><RequireWorkspaceSetup><MainLayout /></RequireWorkspaceSetup></RequireCloudAuth>;
+  }
+
+  if (status === 'loading') {
+    return <div className="app-loading-shell">Checking access...</div>;
+  }
+
+  if (!session) {
+    return <Landing />;
+  }
+
+  return <RequireWorkspaceSetup><MainLayout /></RequireWorkspaceSetup>;
+}
+
 function RouteTelemetry() {
   const location = useLocation();
   const workspaceId = useCloudStore((state) => state.workspaceId);
@@ -103,10 +128,9 @@ export default function App() {
         <Suspense fallback={<div className="app-loading-shell">Loading...</div>}>
           <Routes>
             <Route path="/profiles/:id" element={<BuyerProfile />} />
-            <Route path="/landing" element={<Landing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/setup" element={<RequireCloudAuth><SetupWorkspace /></RequireCloudAuth>} />
-            <Route path="/" element={<RequireCloudAuth><RequireWorkspaceSetup><MainLayout /></RequireWorkspaceSetup></RequireCloudAuth>}>
+            <Route path="/" element={<SmartRoot />}>
               <Route index element={<Dashboard />} />
               <Route path="horses" element={<Horses />} />
               <Route path="horses/:id" element={<HorseDetail />} />

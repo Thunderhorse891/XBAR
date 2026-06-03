@@ -48,9 +48,18 @@ export default function Expenses() {
       .sort((left, right) => Date.parse(right.receiptDate) - Date.parse(left.receiptDate));
   }, [categoryFilter, expenseReceipts, horses, query]);
 
-  const ranchWideCount = expenseReceipts.filter((receipt) => !receipt.horseId).length;
-  const horseLinkedCount = expenseReceipts.length - ranchWideCount;
-  const largestReceipt = expenseReceipts.slice().sort((left, right) => right.amount - left.amount)[0];
+  const monthReceipts = useMemo(() => {
+    return expenseReceipts.filter((receipt) => {
+      if (!receipt.receiptDate) return false;
+      const d = new Date(receipt.receiptDate.includes('T') ? receipt.receiptDate : `${receipt.receiptDate}T12:00:00`);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      return key === budgetSummary.monthKey;
+    });
+  }, [expenseReceipts, budgetSummary.monthKey]);
+
+  const ranchWideCount = monthReceipts.filter((receipt) => !receipt.horseId).length;
+  const horseLinkedCount = monthReceipts.length - ranchWideCount;
+  const largestReceipt = monthReceipts.slice().sort((left, right) => right.amount - left.amount)[0];
 
   async function handleReceiptSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -115,10 +124,10 @@ export default function Expenses() {
       </div>
 
       <div className="metric-grid">
-        <MetricCard label="Month" value={formatCompactCurrency(budgetSummary.total)} detail="Current operating spend" tone="blue" />
-        <MetricCard label="Horse linked" value={String(horseLinkedCount)} detail="Receipts tied to horse profiles" tone="emerald" />
-        <MetricCard label="Ranch-wide" value={String(ranchWideCount)} detail="Feed room, travel, and shared costs" tone="slate" />
-        <MetricCard label="Largest" value={largestReceipt ? formatCompactCurrency(largestReceipt.amount) : '$0'} detail={largestReceipt?.title ?? 'No receipts yet'} tone="amber" />
+        <MetricCard label="This month" value={formatCompactCurrency(budgetSummary.total)} detail="Total operating spend" tone="blue" />
+        <MetricCard label="Horse linked" value={String(horseLinkedCount)} detail="Receipts tied to a horse this month" tone="emerald" />
+        <MetricCard label="Ranch-wide" value={String(ranchWideCount)} detail="Shared costs not tied to a horse" tone="slate" />
+        <MetricCard label="Largest" value={largestReceipt ? formatCompactCurrency(largestReceipt.amount) : '$0'} detail={largestReceipt?.title ?? 'No receipts this month'} tone="amber" />
       </div>
 
       <div className="ops-workspace ops-workspace--split">

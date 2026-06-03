@@ -122,6 +122,13 @@ export default function Login() {
   const supabaseReady = isSupabaseConfigured();
 
   useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('mode') === 'signup') {
+      setAuthMode('signup');
+    }
+  }, [location.search]);
+
+  useEffect(() => {
     if (session && status === 'signed-in') navigate(redirectTarget, { replace: true });
   }, [navigate, redirectTarget, session, status]);
 
@@ -229,7 +236,7 @@ export default function Login() {
           <div className="lp-card">
 
             {/* Card header */}
-            <p className="lp-card-label">Welcome Back</p>
+            <p className="lp-card-label">{authMode === 'signup' ? 'Create your account' : 'Welcome Back'}</p>
             <h1 className="lp-card-title">
               {authMode === 'signin' ? 'Sign in to your account' : 'Create your XBAR account'}
             </h1>

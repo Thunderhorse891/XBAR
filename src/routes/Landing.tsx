@@ -61,7 +61,7 @@ export default function Landing() {
           <Link to="/login?mode=signup" style={{
             padding: '8px 18px',
             borderRadius: '6px',
-            background: 'rgba(17,85,221,0.85)',
+            background: 'rgba(45,111,255,0.85)',
             color: '#fff',
             fontSize: '13px',
             fontWeight: 700,
@@ -111,13 +111,13 @@ export default function Landing() {
             height: '46px',
             padding: '0 28px',
             borderRadius: '8px',
-            background: 'linear-gradient(180deg, #1c69e8 0%, #1155dd 100%)',
+            background: 'linear-gradient(180deg, #4880ff 0%, #2D6FFF 100%)',
             color: '#fff',
             fontSize: '15px',
             fontWeight: 700,
             letterSpacing: '0.01em',
             border: '1px solid rgba(80,140,255,0.4)',
-            boxShadow: '0 4px 16px rgba(17,85,221,0.35)',
+            boxShadow: '0 4px 16px rgba(45,111,255,0.35)',
             textDecoration: 'none',
           }}>
             Start your 14-day trial
@@ -215,14 +215,14 @@ export default function Landing() {
                 padding: '28px 24px',
                 borderRadius: '12px',
                 border: plan.highlight ? '1px solid rgba(80,140,255,0.4)' : '1px solid rgba(255,255,255,0.07)',
-                background: plan.highlight ? 'rgba(17,85,221,0.12)' : 'rgba(255,255,255,0.025)',
+                background: plan.highlight ? 'rgba(45,111,255,0.12)' : 'rgba(255,255,255,0.025)',
                 position: 'relative',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '16px',
               }}>
                 {plan.highlight && (
-                  <div style={{ position: 'absolute', top: '-12px', left: '50%', transform: 'translateX(-50%)', background: '#1461e8', color: '#fff', fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', padding: '4px 12px', borderRadius: '20px' }}>
+                  <div style={{ position: 'absolute', top: '-12px', left: '50%', transform: 'translateX(-50%)', background: '#2D6FFF', color: '#fff', fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', padding: '4px 12px', borderRadius: '20px' }}>
                     Most popular
                   </div>
                 )}
@@ -246,7 +246,7 @@ export default function Landing() {
                   justifyContent: 'center',
                   height: '40px',
                   borderRadius: '7px',
-                  background: plan.highlight ? 'linear-gradient(180deg, #1c69e8 0%, #1155dd 100%)' : 'rgba(255,255,255,0.06)',
+                  background: plan.highlight ? 'linear-gradient(180deg, #4880ff 0%, #2D6FFF 100%)' : 'rgba(255,255,255,0.06)',
                   color: plan.highlight ? '#fff' : 'rgba(175,210,245,0.8)',
                   fontSize: '13px',
                   fontWeight: 700,
@@ -287,12 +287,12 @@ export default function Landing() {
           height: '46px',
           padding: '0 32px',
           borderRadius: '8px',
-          background: 'linear-gradient(180deg, #1c69e8 0%, #1155dd 100%)',
+          background: 'linear-gradient(180deg, #4880ff 0%, #2D6FFF 100%)',
           color: '#fff',
           fontSize: '15px',
           fontWeight: 700,
           border: '1px solid rgba(80,140,255,0.4)',
-          boxShadow: '0 4px 16px rgba(17,85,221,0.35)',
+          boxShadow: '0 4px 16px rgba(45,111,255,0.35)',
           textDecoration: 'none',
         }}>
           Start free trial

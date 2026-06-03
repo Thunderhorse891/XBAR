@@ -3,7 +3,7 @@ import type { MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
-import { MetricCard, Pill } from '@/components/app-ui';
+import { MetricCard, PageHeader, Pill } from '@/components/app-ui';
 import { formatDateLabel, formatDateTimeLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
@@ -232,12 +232,11 @@ export default function Ownership() {
 
   return (
     <div className="ownership-ops">
-      <div className="surface-hero surface-hero--dark">
-        <div className="surface-hero__top">
-          <div>
-            <span className="surface-hero__eyebrow">Ownership</span>
-          </div>
-          <div className="surface-hero__actions">
+      <PageHeader
+        eyebrow="Ownership"
+        title="Owner Records"
+        actions={
+          <>
             <button className="button button--primary" type="button" onClick={() => scrollToSection('ownership-owner-editor')} disabled={!canManageOwnership}>
               Add owner
             </button>
@@ -247,9 +246,9 @@ export default function Ownership() {
             <button className="button button--ghost" type="button" onClick={() => navigate('/documents?upload=1')} disabled={!canUploadDocuments}>
               Upload document
             </button>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <div className="ownership-metric-grid">
         <MetricCard label="Owners" value={`${ownerRegistry.length}`} detail="People and entities on file" tone="slate" className="ownership-metric-card" onClick={() => scrollToSection('ownership-registry')} />
