@@ -2966,3 +2966,105 @@ a:focus-visible,
 .reg-create-banner__field strong {
   color: var(--text);
 }
+
+/* ─── Legal pages ─────────────────────────────────────────────────── */
+.legal-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f8fbff;
+  color: #1a2236;
+  font-family: inherit;
+}
+.legal-page__header {
+  padding: 18px 32px;
+  border-bottom: 1px solid rgba(0,0,0,0.07);
+  background: #fff;
+}
+.legal-page__back {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2D6FFF;
+  text-decoration: none;
+}
+.legal-page__back:hover { text-decoration: underline; }
+.legal-page__body {
+  flex: 1;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 24px 64px;
+}
+.legal-page__body h1 {
+  font-size: 1.8rem;
+  font-weight: 800;
+  margin: 0 0 6px;
+  color: #0d1421;
+}
+.legal-page__body h2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 32px 0 8px;
+  color: #0d1421;
+}
+.legal-page__body h3 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 20px 0 6px;
+  color: #2a3a52;
+}
+.legal-page__body p, .legal-page__body li {
+  font-size: 0.9rem;
+  line-height: 1.65;
+  color: #3a4a62;
+  margin: 0 0 8px;
+}
+.legal-page__body ul {
+  margin: 0 0 12px;
+  padding-left: 22px;
+}
+.legal-page__body a { color: #2D6FFF; }
+.legal-page__effective {
+  font-size: 0.8rem;
+  color: #8a9ab8;
+  margin: 0 0 28px !important;
+}
+.legal-page__footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 18px 24px;
+  border-top: 1px solid rgba(0,0,0,0.07);
+  font-size: 12px;
+  color: #8a9ab8;
+  background: #f0f4fa;
+}
+.legal-page__footer a { color: #2D6FFF; text-decoration: none; }
+.legal-page__footer a:hover { text-decoration: underline; }
+
+/* ─── Buyer profile footer / disclaimer ───────────────────────────── */
+.buyer-footer {
+  border-top: 1px solid rgba(0,0,0,0.07);
+  padding: 24px clamp(16px,4vw,48px);
+  text-align: center;
+  background: #f8fbff;
+}
+.buyer-footer__disclaimer {
+  font-size: 11px;
+  color: #9aabb8;
+  max-width: 600px;
+  margin: 0 auto 12px;
+  line-height: 1.6;
+}
+.buyer-footer__legal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #aabacf;
+  flex-wrap: wrap;
+}
+.buyer-footer__legal a { color: #2D6FFF; text-decoration: none; }
+.buyer-footer__legal a:hover { text-decoration: underline; }

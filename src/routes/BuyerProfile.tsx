@@ -336,6 +336,20 @@ export default function BuyerProfile() {
           </Panel>
         </div>
       </div>
+      <footer className="buyer-footer">
+        <p className="buyer-footer__disclaimer">
+          Information on this page was provided by the seller. XBAR LLC does not independently verify
+          health records, registration data, ownership history, or valuations. Buyers are responsible
+          for their own independent due diligence before completing any purchase.
+        </p>
+        <div className="buyer-footer__legal">
+          <span>© {new Date().getFullYear()} XBAR LLC™ · All rights reserved</span>
+          <span>·</span>
+          <Link to="/terms">Terms of Service</Link>
+          <span>·</span>
+          <Link to="/privacy">Privacy Policy</Link>
+        </div>
+      </footer>
     </main>
   );
 }

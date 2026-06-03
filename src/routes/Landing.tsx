@@ -297,8 +297,12 @@ export default function Landing() {
         }}>
           Start free trial
         </Link>
-        <div style={{ marginTop: '28px', fontSize: '12px', color: 'rgba(100,140,180,0.4)' }}>
-          © {new Date().getFullYear()} XBAR Ranch Platform
+        <div style={{ marginTop: '28px', fontSize: '12px', color: 'rgba(100,140,180,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <span>© {new Date().getFullYear()} XBAR LLC™ · All rights reserved</span>
+          <span>·</span>
+          <Link to="/terms" style={{ color: 'rgba(100,160,255,0.55)', textDecoration: 'none' }}>Terms</Link>
+          <span>·</span>
+          <Link to="/privacy" style={{ color: 'rgba(100,160,255,0.55)', textDecoration: 'none' }}>Privacy</Link>
         </div>
       </section>
     </div>

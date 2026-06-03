@@ -21,7 +21,12 @@ export function normalize(value: string): string {
 }
 
 export function scrollToSection(sectionId: string): void {
-  document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const el = document.getElementById(sectionId);
+  if (!el) return;
+  const topbar = document.querySelector('.topbar') as HTMLElement | null;
+  const offset = (topbar?.offsetHeight ?? 58) + 16;
+  const y = el.getBoundingClientRect().top + window.scrollY - offset;
+  window.scrollTo({ top: y, behavior: 'smooth' });
 }
 
 export function ownershipDocsForHorse(documents: DocumentRecord[], horseId: string): DocumentRecord[] {

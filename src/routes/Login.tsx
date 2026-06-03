@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -366,6 +366,13 @@ export default function Login() {
         </section>
 
       </div>
+      <footer style={{ textAlign: 'center', padding: '16px', fontSize: '11px', color: 'rgba(100,130,170,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        <span>© {new Date().getFullYear()} XBAR LLC™</span>
+        <span>·</span>
+        <Link to="/terms" style={{ color: 'rgba(80,130,220,0.6)', textDecoration: 'none' }}>Terms</Link>
+        <span>·</span>
+        <Link to="/privacy" style={{ color: 'rgba(80,130,220,0.6)', textDecoration: 'none' }}>Privacy</Link>
+      </footer>
     </main>
   );
 }

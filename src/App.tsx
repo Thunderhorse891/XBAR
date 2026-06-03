@@ -31,6 +31,8 @@ const SharedAccess = lazy(() => import('./routes/SharedAccess'));
 const Subscriptions = lazy(() => import('./routes/Subscriptions'));
 const Weather = lazy(() => import('./routes/Weather'));
 const Marketplace = lazy(() => import('./routes/Marketplace'));
+const Terms = lazy(() => import('./routes/Terms'));
+const Privacy = lazy(() => import('./routes/Privacy'));
 
 function useHashRouting() {
   if (typeof window === 'undefined') {
@@ -129,6 +131,8 @@ export default function App() {
           <Routes>
             <Route path="/profiles/:id" element={<BuyerProfile />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/privacy" element={<Privacy />} />
             <Route path="/setup" element={<RequireCloudAuth><SetupWorkspace /></RequireCloudAuth>} />
             <Route path="/" element={<SmartRoot />}>
               <Route index element={<Dashboard />} />
