@@ -1,4 +1,5 @@
 import type { KeyboardEvent, MouseEventHandler, ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 
 type Tone = 'blue' | 'slate' | 'emerald' | 'amber' | 'rose';
 
@@ -74,6 +75,7 @@ export function MetricCard({
   tone = 'blue',
   className = '',
   title,
+  href,
   onClick,
   onContextMenu,
 }: {
@@ -84,22 +86,36 @@ export function MetricCard({
   tone?: Tone;
   className?: string;
   title?: string;
-  onClick?: MouseEventHandler<HTMLDivElement>;
-  onContextMenu?: MouseEventHandler<HTMLDivElement>;
+  href?: string;
+  onClick?: MouseEventHandler<HTMLElement>;
+  onContextMenu?: MouseEventHandler<HTMLElement>;
 }) {
-  return (
-    <div
-      className={`metric-card metric-card--${tone}${onClick || onContextMenu ? ' metric-card--interactive' : ''} ${className}`.trim()}
-      title={title}
-      onClick={onClick}
-      onContextMenu={onContextMenu}
-      role={onClick ? 'button' : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={onClick ? (e: KeyboardEvent<HTMLDivElement>) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(e as unknown as Parameters<MouseEventHandler<HTMLDivElement>>[0]); } } : undefined}
-    >
+  const cls = `metric-card metric-card--${tone}${href || onClick || onContextMenu ? ' metric-card--interactive' : ''} ${className}`.trim();
+  const inner = (
+    <>
       <div className="metric-card__label">{label}</div>
       <div className="metric-card__value">{value}</div>
       {showDetail && detail ? <div className="metric-card__detail">{detail}</div> : null}
+    </>
+  );
+  if (href) {
+    return (
+      <Link className={cls} to={href} title={title} onClick={onClick as MouseEventHandler<HTMLAnchorElement>} onContextMenu={onContextMenu as MouseEventHandler<HTMLAnchorElement>}>
+        {inner}
+      </Link>
+    );
+  }
+  return (
+    <div
+      className={cls}
+      title={title}
+      onClick={onClick as MouseEventHandler<HTMLDivElement>}
+      onContextMenu={onContextMenu as MouseEventHandler<HTMLDivElement>}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e: KeyboardEvent<HTMLDivElement>) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (onClick as MouseEventHandler<HTMLDivElement>)(e as unknown as Parameters<MouseEventHandler<HTMLDivElement>>[0]); } } : undefined}
+    >
+      {inner}
     </div>
   );
 }

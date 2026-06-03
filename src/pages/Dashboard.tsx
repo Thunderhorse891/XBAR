@@ -330,52 +330,32 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="ops-briefing-stat-row">
-          <button
-            type="button"
-            className="ops-briefing-stat ops-briefing-stat--clickable"
-            onClick={() => navigate('/ownership')}
-            title="Open ownership records"
-          >
+          <Link to="/ownership" className="ops-briefing-stat ops-briefing-stat--clickable" title="Open ownership records">
             <span className="ops-briefing-stat__label">Transfers</span>
             <span className={`ops-briefing-stat__value${transferGaps.length ? ' ops-briefing-stat__value--urgent' : ' ops-briefing-stat__value--clear'}`}>
               {transferGaps.length}
             </span>
             <span className="ops-briefing-stat__detail">{transferGaps.length ? 'need resolution' : 'all clear'}</span>
-          </button>
-          <button
-            type="button"
-            className="ops-briefing-stat ops-briefing-stat--clickable"
-            onClick={() => navigate('/medical')}
-            title="Open care board"
-          >
+          </Link>
+          <Link to="/medical" className="ops-briefing-stat ops-briefing-stat--clickable" title="Open care board">
             <span className="ops-briefing-stat__label">Care due</span>
             <span className={`ops-briefing-stat__value${careDueCount ? ' ops-briefing-stat__value--warning' : ' ops-briefing-stat__value--clear'}`}>
               {careDueCount}
             </span>
             <span className="ops-briefing-stat__detail">{careDueCount ? 'horses overdue' : 'care current'}</span>
-          </button>
-          <button
-            type="button"
-            className="ops-briefing-stat ops-briefing-stat--clickable"
-            onClick={() => navigate('/documents')}
-            title="Documents waiting on review"
-          >
+          </Link>
+          <Link to="/documents" className="ops-briefing-stat ops-briefing-stat--clickable" title="Documents waiting on review">
             <span className="ops-briefing-stat__label">Doc queue</span>
             <span className={`ops-briefing-stat__value${reviewQueue.length ? ' ops-briefing-stat__value--warning' : ''}`}>
               {reviewQueue.length}
             </span>
             <span className="ops-briefing-stat__detail">{reviewQueue.length ? 'waiting review' : 'queue clear'}</span>
-          </button>
-          <button
-            type="button"
-            className="ops-briefing-stat ops-briefing-stat--clickable"
-            onClick={() => navigate('/expenses')}
-            title="Open expense ledger"
-          >
+          </Link>
+          <Link to="/expenses" className="ops-briefing-stat ops-briefing-stat--clickable" title="Open expense ledger">
             <span className="ops-briefing-stat__label">Month spend</span>
             <span className="ops-briefing-stat__value">{formatCompactCurrency(budgetSummary.total)}</span>
             <span className="ops-briefing-stat__detail">{qualifiedBuyerCount} active lead{qualifiedBuyerCount !== 1 ? 's' : ''}</span>
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -385,21 +365,21 @@ export default function Dashboard() {
             label="Transfer issues"
             value={String(transferGaps.length)}
             tone={transferGaps.length ? 'rose' : 'emerald'}
-            onClick={() => navigate('/ownership')}
+            href="/ownership"
             title="Open ownership records"
           />
           <MetricCard
             label="Care due"
             value={String(careDueCount)}
             tone={careDueCount ? 'amber' : 'emerald'}
-            onClick={() => navigate('/medical')}
+            href="/medical"
             title="Open care board"
           />
           <MetricCard
             label="This month"
             value={formatCompactCurrency(budgetSummary.total)}
             tone="blue"
-            onClick={() => navigate('/expenses')}
+            href="/expenses"
             title="Open expense ledger"
           />
         </div>
@@ -445,28 +425,28 @@ export default function Dashboard() {
           label="Review queue"
           value={String(reviewQueue.length)}
           tone={reviewQueue.length ? 'blue' : 'slate'}
-          onClick={() => navigate('/documents')}
+          href="/documents"
           title="Documents waiting on review"
         />
         <MetricCard
           label="Coggins watch"
           value={String(cogginsWatchCount)}
           tone={cogginsWatchCount ? 'amber' : 'emerald'}
-          onClick={() => navigate('/medical')}
+          href="/medical"
           title="Horses missing or aging coggins"
         />
         <MetricCard
           label="Feed spend"
           value={formatCompactCurrency(budgetSummary.feed)}
           tone="blue"
-          onClick={() => navigate('/')}
+          href="/expenses"
           title="Feed, bedding, and supplement spend this month"
         />
         <MetricCard
           label="Health spend"
           value={formatCompactCurrency(budgetSummary.health)}
           tone="slate"
-          onClick={() => navigate('/')}
+          href="/expenses"
           title="Health-related spend this month"
         />
       </div>
@@ -485,11 +465,10 @@ export default function Dashboard() {
             {transferGaps.length ? (
               <div className="stack-list">
                 {transferGaps.slice(0, 6).map((gap) => (
-                  <button
+                  <Link
                     key={gap.horseId}
-                    type="button"
+                    to={`/horses/${gap.horseId}`}
                     className="stack-item stack-item--interactive"
-                    onClick={() => navigate(`/horses/${gap.horseId}`)}
                     onContextMenu={(event) => {
                       event.preventDefault();
                       const record = ownershipRecords.find((item) => item.horseId === gap.horseId);
@@ -513,7 +492,7 @@ export default function Dashboard() {
                       <span>{gap.pendingCount} blockers</span>
                       <span>{gap.dueDate ? `Due ${formatDateLabel(gap.dueDate)}` : 'No deadline'}</span>
                     </div>
-                  </button>
+                  </Link>
                 ))}
               </div>
             ) : (
@@ -538,11 +517,10 @@ export default function Dashboard() {
             {careBoard.length ? (
               <div className="stack-list">
                 {careBoard.slice(0, 6).map((row) => (
-                  <button
+                  <Link
                     key={row.horseId}
-                    type="button"
+                    to={`/horses/${row.horseId}`}
                     className="stack-item stack-item--interactive"
-                    onClick={() => navigate(`/horses/${row.horseId}`)}
                     onContextMenu={(event) => {
                       event.preventDefault();
                       setMenuState({ type: 'horse', id: row.horseId, x: event.clientX, y: event.clientY });
@@ -567,7 +545,7 @@ export default function Dashboard() {
                           <span key={signal.key}>{signal.detail}</span>
                         ))}
                     </div>
-                  </button>
+                  </Link>
                 ))}
               </div>
             ) : (
@@ -628,11 +606,10 @@ export default function Dashboard() {
             {budgetSummary.latestReceipts.length ? (
               <div className="stack-list">
                 {budgetSummary.latestReceipts.map((receipt) => (
-                  <button
+                  <Link
                     key={receipt.id}
-                    type="button"
+                    to={receipt.horseId ? `/horses/${receipt.horseId}` : '/expenses'}
                     className="stack-item stack-item--interactive"
-                    onClick={() => (receipt.horseId ? navigate(`/horses/${receipt.horseId}`) : navigate('/'))}
                     onContextMenu={(event) => {
                       event.preventDefault();
                       setMenuState({ type: 'expense', id: receipt.id, x: event.clientX, y: event.clientY });
@@ -647,7 +624,7 @@ export default function Dashboard() {
                       <span>{receipt.vendor}</span>
                       <span>{formatDateLabel(receipt.receiptDate)}</span>
                     </div>
-                  </button>
+                  </Link>
                 ))}
               </div>
             ) : (
@@ -810,11 +787,10 @@ export default function Dashboard() {
             {salesLeads.slice(0, 3).map((lead) => {
               const horse = horses.find((item) => item.id === lead.horseId);
               return (
-                <button
+                <Link
                   key={lead.id}
-                  type="button"
+                  to="/sales"
                   className="stack-item stack-item--interactive"
-                  onClick={() => navigate('/sales')}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     setMenuState({ type: 'lead', id: lead.id, x: event.clientX, y: event.clientY });
@@ -831,7 +807,7 @@ export default function Dashboard() {
                     <span>{lead.channel}</span>
                     <span>{formatDateLabel(lead.lastTouch)}</span>
                   </div>
-                </button>
+                </Link>
               );
             })}
           </div>

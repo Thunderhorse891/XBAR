@@ -1010,6 +1010,9 @@ a:focus-visible,
   overflow: hidden;
   box-shadow: none;
   background: linear-gradient(180deg, #ffffff 0%, #f8fafd 100%);
+  text-decoration: none;
+  color: inherit;
+  display: block;
 }
 
 .metric-card--interactive {

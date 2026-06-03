@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
 import { MetricCard, Panel, Pill, ProgressBar } from '@/components/app-ui';
@@ -13,7 +13,6 @@ type SortKey = 'price-asc' | 'price-desc' | 'age-asc' | 'name';
 type SexFilter = 'All' | 'Mare' | 'Stallion' | 'Gelding';
 
 export default function Marketplace() {
-  const navigate = useNavigate();
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const salesLeads = useXbarStore((state) => state.salesLeads);
@@ -230,13 +229,12 @@ export default function Marketplace() {
                         >
                           Log inquiry
                         </button>
-                        <button
+                        <Link
                           className="button button--ghost button--compact"
-                          type="button"
-                          onClick={() => navigate(`/horses/${horse.id}`)}
+                          to={`/horses/${horse.id}`}
                         >
                           View record
-                        </button>
+                        </Link>
                       </div>
                     )}
                   </div>
@@ -330,9 +328,9 @@ export default function Marketplace() {
             <EmptyState compact title="No leads yet" description="Inquiries captured here will appear in the pipeline." />
           )}
           <div className="inline-actions" style={{ marginTop: '12px' }}>
-            <button className="button button--ghost button--compact" type="button" onClick={() => navigate('/sales')}>
+            <Link className="button button--ghost button--compact" to="/sales">
               Open full pipeline
-            </button>
+            </Link>
           </div>
         </Panel>
       </div>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { MouseEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Pill } from '@/components/app-ui';
@@ -243,9 +243,11 @@ export default function Ownership() {
             <button className="button button--ghost" type="button" onClick={() => scrollToSection('ownership-transfer-editor')} disabled={!canManageOwnership || !selectedRecord}>
               Add transfer
             </button>
-            <button className="button button--ghost" type="button" onClick={() => navigate('/documents?upload=1')} disabled={!canUploadDocuments}>
-              Upload document
-            </button>
+            {canUploadDocuments ? (
+              <Link className="button button--ghost" to="/documents?upload=1">Upload document</Link>
+            ) : (
+              <button className="button button--ghost" type="button" disabled>Upload document</button>
+            )}
           </>
         }
       />
@@ -323,9 +325,7 @@ export default function Ownership() {
           ) : (
             <div className="ownership-empty-state">
               <EmptyState title="Start by adding an owner, linking a horse, and uploading the documents that prove the record." description="Owner names, shares, and transfer notes will appear here once the first horse record exists." />
-              <button className="button button--primary" type="button" onClick={() => navigate('/horses?new=1')}>
-                Add first horse
-              </button>
+              <Link className="button button--primary" to="/horses?new=1">Add first horse</Link>
             </div>
           )}
         </section>
@@ -480,9 +480,7 @@ export default function Ownership() {
         ) : (
           <div className="ownership-empty-state">
             <EmptyState title="Start by adding an owner, linking a horse, and uploading the documents that prove the record." description="The relationship table will show owner shares, sale files, and transfer status once horse records exist." />
-            <button className="button button--primary" type="button" onClick={() => navigate('/horses?new=1')}>
-              Add first horse
-            </button>
+            <Link className="button button--primary" to="/horses?new=1">Add first horse</Link>
           </div>
         )}
       </section>
@@ -596,9 +594,11 @@ export default function Ownership() {
             <span className="section-eyebrow">Document proof</span>
             <h2>Bills of sale, registrations, transfer agreements, and ownership files</h2>
           </div>
-          <button className="button button--primary button--compact" type="button" onClick={() => navigate('/documents?upload=1')} disabled={!canUploadDocuments}>
-            Upload proof
-          </button>
+          {canUploadDocuments ? (
+            <Link className="button button--primary button--compact" to="/documents?upload=1">Upload proof</Link>
+          ) : (
+            <button className="button button--primary button--compact" type="button" disabled>Upload proof</button>
+          )}
         </div>
 
         <div className="ownership-document-groups">
@@ -643,11 +643,11 @@ export default function Ownership() {
             {latestOwnershipDocuments.map((document) => {
               const horse = horses.find((item) => item.id === document.horseId);
               return (
-                <button key={document.id} className="ownership-latest-doc" type="button" onClick={() => navigate('/documents')}>
+                <Link key={document.id} className="ownership-latest-doc" to="/documents">
                   <span>{document.type}</span>
                   <strong>{document.title}</strong>
                   <small>{horse?.name ?? document.entities.horseName ?? 'Unassigned'}</small>
-                </button>
+                </Link>
               );
             })}
           </div>

@@ -346,7 +346,7 @@ export default function Documents() {
           tone="emerald"
           title="Approved documents cleared for sale packet surfaces"
           className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#3D6B4F]/12 hover:bg-[#faf5ee]"
-          onClick={() => navigate('/shared-access')}
+          href="/shared-access"
           onContextMenu={(event) => openSurfaceMenu('buyer', event)}
         />
         <MetricCard
@@ -355,7 +355,7 @@ export default function Documents() {
           tone="slate"
           title="Ranch file storage against the current contract"
           className="cursor-pointer transition-all duration-150 ease-[ease] hover:border-[#3D6B4F]/12 hover:bg-[#faf5ee]"
-          onClick={() => navigate('/subscriptions')}
+          href="/subscriptions"
           onContextMenu={(event) => openSurfaceMenu('storage', event)}
         />
       </div>

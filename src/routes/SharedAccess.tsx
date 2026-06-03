@@ -224,13 +224,10 @@ export default function SharedAccess() {
                 const publicShareUrl = buildPublicShareUrl(packet.sharePath, getShareToken(sharedListing));
 
                 return (
-                  <div
+                  <Link
                     key={horse.id}
+                    to={packet.sharePath}
                     className="stack-item stack-item--interactive"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => navigate(packet.sharePath)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(packet.sharePath); } }}
                     onContextMenu={(event) => {
                       event.preventDefault();
                       setMenuState({ horseId: horse.id, x: event.clientX, y: event.clientY });
@@ -326,7 +323,7 @@ export default function SharedAccess() {
                         </button>
                       ) : null}
                     </div>
-                  </div>
+                  </Link>
                 );
               })}
             </div>

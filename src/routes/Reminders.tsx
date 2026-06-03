@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
@@ -11,7 +11,7 @@ import { kindCopy, urgencyTone } from '@/features/reminders/helpers';
 import type { ReminderFilter, ReminderItem, ReminderKind, ReminderUrgency } from '@/features/reminders/types';
 
 export default function Reminders() {
-  const navigate = useNavigate();
+
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
@@ -106,8 +106,8 @@ export default function Reminders() {
           <h1 id="reminders-title">What needs attention right now</h1>
           <p>Coggins expiring, vaccines due, transfer papers missing, documents waiting review, and sale follow-ups — all in one place.</p>
           <div className="ops-hero__actions">
-            <button className="button button--primary" type="button" onClick={() => navigate('/medical')}>Open health</button>
-            <button className="button button--ghost" type="button" onClick={() => navigate('/ownership')}>Open ownership</button>
+            <Link className="button button--primary" to="/medical">Open health</Link>
+            <Link className="button button--ghost" to="/ownership">Open ownership</Link>
           </div>
         </div>
         <div className="ops-hero__ledger" aria-label="Reminder summary">
@@ -165,19 +165,19 @@ export default function Reminders() {
                   </div>
                   <div className="inline-actions" style={{ marginTop: '10px' }}>
                     {reminder.kind === 'Care' && reminder.horseId && (
-                      <button className="button button--primary button--compact" type="button" onClick={() => navigate(`/medical?horse=${reminder.horseId}`)}>Add care event</button>
+                      <Link className="button button--primary button--compact" to={`/medical?horse=${reminder.horseId}`}>Add care event</Link>
                     )}
                     {reminder.kind === 'Ownership' && (
-                      <button className="button button--primary button--compact" type="button" onClick={() => navigate('/ownership')}>Review transfer</button>
+                      <Link className="button button--primary button--compact" to="/ownership">Review transfer</Link>
                     )}
                     {reminder.kind === 'Documents' && (
-                      <button className="button button--primary button--compact" type="button" onClick={() => navigate('/documents')}>Review document</button>
+                      <Link className="button button--primary button--compact" to="/documents">Review document</Link>
                     )}
                     {reminder.kind === 'Sales' && (
-                      <button className="button button--primary button--compact" type="button" onClick={() => navigate('/sales')}>Open lead</button>
+                      <Link className="button button--primary button--compact" to="/sales">Open lead</Link>
                     )}
                     {reminder.horseId && (
-                      <button className="button button--ghost button--compact" type="button" onClick={() => navigate(`/horses/${reminder.horseId}`)}>View horse</button>
+                      <Link className="button button--ghost button--compact" to={`/horses/${reminder.horseId}`}>View horse</Link>
                     )}
                   </div>
                 </div>

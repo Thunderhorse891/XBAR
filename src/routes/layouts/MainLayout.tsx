@@ -1,6 +1,6 @@
 import type { ComponentType, KeyboardEvent, SVGProps } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { XbarMark } from '@/components/BrandMark';
 import { WorkspaceHelp, type HelpSection } from '@/components/WorkspaceHelp';
 import {
@@ -353,19 +353,32 @@ export default function MainLayout() {
                 </button>
               ) : null}
 
-              <button className="relative inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb]" type="button" onClick={() => navigate('/reminders')} aria-label="Open reminders">
+              <Link className="relative inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb]" to="/reminders" aria-label="Open reminders">
                 <BellIcon className="h-[18px] w-[18px]" />
                 {pendingReview + pendingTransfers ? <span className="absolute right-0.5 top-0.5 min-w-[18px] rounded-full bg-[#CC3333] px-1.5 py-0.5 text-[10px] font-bold text-white">{pendingReview + pendingTransfers}</span> : null}
-              </button>
+              </Link>
 
-              <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={() => navigate('/documents?upload=1')} disabled={!canUploadDocuments}>
-                Upload
-              </button>
+              {canUploadDocuments ? (
+                <Link className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb]" to="/documents?upload=1">
+                  Upload
+                </Link>
+              ) : (
+                <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] cursor-not-allowed opacity-50" type="button" disabled>
+                  Upload
+                </button>
+              )}
 
-              <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#1155dd] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#0d44b0] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={() => navigate('/horses?new=1')} disabled={!canCreateHorse}>
-                <AddIcon className="h-[16px] w-[16px]" />
-                New
-              </button>
+              {canCreateHorse ? (
+                <Link className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#1155dd] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#0d44b0]" to="/horses?new=1">
+                  <AddIcon className="h-[16px] w-[16px]" />
+                  New
+                </Link>
+              ) : (
+                <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#1155dd] px-4 text-sm font-semibold text-white shadow-sm cursor-not-allowed opacity-50" type="button" disabled>
+                  <AddIcon className="h-[16px] w-[16px]" />
+                  New
+                </button>
+              )}
             </div>
           </div>
         </header>
@@ -379,19 +392,19 @@ export default function MainLayout() {
             <button className="fixed inset-0 z-30 bg-[#061426]/30 lg:hidden" type="button" aria-label="Close mobile menu" onClick={() => setMobileMoreOpen(false)} />
             <div id="mobile-more-menu" className="fixed bottom-[94px] left-3 right-3 z-50 rounded-lg border border-[#d8e1ea] bg-[#fbfdff] p-3 text-[#16202b] shadow-xl lg:hidden">
               {canCreateHorse ? (
-                <button className="mb-2 flex min-h-[50px] w-full items-center gap-3 rounded-md bg-[#1155dd] px-3 text-left text-sm font-semibold text-white" type="button" onClick={() => { setMobileMoreOpen(false); navigate('/horses?new=1'); }}>
+                <Link className="mb-2 flex min-h-[50px] w-full items-center gap-3 rounded-md bg-[#1155dd] px-3 text-left text-sm font-semibold text-white" to="/horses?new=1" onClick={() => setMobileMoreOpen(false)}>
                   <AddIcon className="h-[18px] w-[18px] shrink-0" />
                   <span>New horse</span>
-                </button>
+                </Link>
               ) : null}
               <div className="grid grid-cols-2 gap-2">
                 {mobileMoreItems.map(({ label, path, icon: Icon }) => {
                   const isActive = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
                   return (
-                    <button key={label} className={classNames('flex min-h-[54px] items-center gap-3 rounded-md border px-3 text-left text-sm font-semibold transition-all duration-150 ease-[ease]', isActive ? 'border-[#c8d7ff] bg-[#eaeffd] text-[#1155dd]' : 'border-[#e3e9f0] bg-white text-[#33475c] hover:border-[#1155dd] hover:bg-[#eef6fb]')} type="button" onClick={() => { setMobileMoreOpen(false); navigate(path); }}>
+                    <Link key={label} className={classNames('flex min-h-[54px] items-center gap-3 rounded-md border px-3 text-left text-sm font-semibold transition-all duration-150 ease-[ease]', isActive ? 'border-[#c8d7ff] bg-[#eaeffd] text-[#1155dd]' : 'border-[#e3e9f0] bg-white text-[#33475c] hover:border-[#1155dd] hover:bg-[#eef6fb]')} to={path} onClick={() => setMobileMoreOpen(false)}>
                       <Icon className="h-[18px] w-[18px] shrink-0" />
                       <span className="min-w-0 truncate">{label}</span>
-                    </button>
+                    </Link>
                   );
                 })}
               </div>

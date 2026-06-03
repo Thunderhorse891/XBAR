@@ -1,5 +1,5 @@
 import { type FormEvent, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { buildBudgetSummary } from '@/lib/dashboardOps';
@@ -13,7 +13,6 @@ import type { ExpenseFilter } from '@/features/expenses/types';
 import './operationsExperience.css';
 
 export default function Expenses() {
-  const navigate = useNavigate();
   const pushToast = useUiStore((state) => state.pushToast);
   const horses = useXbarStore((state) => state.horses);
   const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
@@ -97,9 +96,7 @@ export default function Expenses() {
               <button className="button button--primary" type="button" onClick={() => document.getElementById('expense-intake')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
                 Log receipt
               </button>
-              <button className="button button--ghost" type="button" onClick={() => navigate('/documents?upload=1')}>
-                Upload expense file
-              </button>
+              <Link className="button button--ghost" to="/documents?upload=1">Upload expense file</Link>
             </div>
           </div>
           <div className="surface-hero__stats">
@@ -156,7 +153,7 @@ export default function Expenses() {
               {filteredReceipts.map((receipt) => {
                 const horse = horses.find((item) => item.id === receipt.horseId);
                 return (
-                  <button key={receipt.id} className="ops-record-card" type="button" onClick={() => receipt.horseId ? navigate(`/horses/${receipt.horseId}`) : undefined}>
+                  <Link key={receipt.id} className="ops-record-card" to={receipt.horseId ? `/horses/${receipt.horseId}` : '/expenses'}>
                     <div className="ops-record-card__top">
                       <div>
                         <span>{receipt.category}</span>
@@ -170,7 +167,7 @@ export default function Expenses() {
                       <span>{receipt.vendor || 'Vendor pending'}</span>
                       <span>{formatDateLabel(receipt.receiptDate)}</span>
                     </div>
-                  </button>
+                  </Link>
                 );
               })}
             </div>
@@ -259,9 +256,9 @@ export default function Expenses() {
         </Panel>
         <Panel title="Where this connects" meta={<Pill tone="slate">Operating system</Pill>}>
           <div className="ops-link-list">
-            <button type="button" onClick={() => navigate('/documents?upload=1')}>Upload receipt files to the Document Vault</button>
-            <button type="button" onClick={() => navigate('/medical')}>Review care costs beside health records</button>
-            <button type="button" onClick={() => navigate('/horses')}>Open the horse profiles tied to spending</button>
+            <Link to="/documents?upload=1">Upload receipt files to the Document Vault</Link>
+            <Link to="/medical">Review care costs beside health records</Link>
+            <Link to="/horses">Open the horse profiles tied to spending</Link>
           </div>
         </Panel>
       </div>
