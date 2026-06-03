@@ -547,15 +547,15 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
     summary: '',
     segment: input.segment,
     status: input.status,
-    breed: '',
+    breed: input.breed?.trim() || '',
     registry: input.aqhaNumber?.trim() ? 'AQHA' : '',
     aqhaNumber: input.aqhaNumber?.trim() || '',
     registrationNumber: input.registrationNumber?.trim() || '',
     registered: Boolean(input.aqhaNumber || input.registrationNumber),
     age: 0,
-    foaledOn: '',
+    foaledOn: input.foaledOn?.trim() || '',
     sex: input.sex,
-    color: '',
+    color: input.color?.trim() || '',
     markings: '',
     microchipId: '',
     owner: input.owner.trim(),
@@ -564,8 +564,8 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
     profileImage: '',
     tags: ['intake-pending'],
     bloodline: {
-      sire: '',
-      dam: '',
+      sire: input.sire?.trim() || '',
+      dam: input.dam?.trim() || '',
       family: '',
     },
     location: {
@@ -661,18 +661,30 @@ function buildHorseInputFromDocuments(documents: DocumentRecord[], workspaceProf
   const normalizedHorseName = (horseName || registrationNumber).trim().toUpperCase();
   const normalizedBarnName = normalizedHorseName.split(/\s+/).slice(0, 2).join(' ') || normalizedHorseName;
 
+  const breed = documents.map((d) => d.entities.breed?.trim()).find(Boolean);
+  const color = documents.map((d) => d.entities.color?.trim()).find(Boolean);
+  const foaledOn = documents.map((d) => d.entities.foaledOn?.trim()).find(Boolean);
+  const sire = documents.map((d) => d.entities.sire?.trim()).find(Boolean);
+  const dam = documents.map((d) => d.entities.dam?.trim()).find(Boolean);
+  const sexFromEntities = documents.map((d) => d.entities.sex?.trim()).find(Boolean) as NewHorseInput['sex'] | undefined;
+
   return {
     name: normalizedHorseName,
     barnName: normalizedBarnName,
     segment: 'Sale Prospect',
     status: 'Sale Prep',
-    sex: guessHorseSexFromDocuments(documents),
+    sex: sexFromEntities ?? guessHorseSexFromDocuments(documents),
     owner: ownerName || 'Pending Owner',
     ownerEntity: ownerEntity || 'Pending Entity',
     aqhaNumber: registrationNumber.startsWith('AQHA') ? registrationNumber : '',
     registrationNumber,
     barn: workspaceProfile.defaultBarn.trim() || 'Main Barn',
     pasture: workspaceProfile.defaultPasture.trim() || 'Pending Pasture',
+    breed,
+    color,
+    foaledOn,
+    sire,
+    dam,
   };
 }
 

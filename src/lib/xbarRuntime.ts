@@ -15,6 +15,7 @@ import type {
   SubscriptionTier,
 } from '../types/xbar.js';
 import { readDocumentText } from './documentIntelligence.js';
+import { parseRegistrationCertificate } from './registrationParser.js';
 
 const GIGABYTE = 1024 * 1024 * 1024;
 const BASE36_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -241,6 +242,8 @@ function extractFirstMatch(haystack: string, candidates: string[]) {
 }
 
 function extractRegistrationNumber(haystack: string) {
+  const aqha = haystack.match(/(?:AQHA[#\s]*|#)(\d{6,8})\b/i);
+  if (aqha) return aqha[1];
   return haystack.match(/\b[A-Z]{2,5}-[A-Z0-9-]{3,}\b/i)?.[0]?.toUpperCase();
 }
 
@@ -277,14 +280,32 @@ function extractDocumentEntities(params: {
   const { fileName, previewText, inferredType, horses } = params;
   const haystack = `${fileName} ${previewText}`;
 
-  return {
+  const base: DocumentEntities = {
     horseName: extractFirstMatch(haystack, horses.flatMap((horse) => [horse.name, horse.barnName])),
     registrationNumber: extractRegistrationNumber(haystack),
     ownerName: extractFirstMatch(haystack, buildKnownOwners(horses)),
     examDate: inferredType === 'Vet Record' || inferredType === 'Coggins' ? extractExamDate(haystack) : undefined,
     veterinarian: inferredType === 'Vet Record' || inferredType === 'Coggins' ? extractVeterinarian(haystack) : undefined,
     transferStatus: extractTransferStatus(haystack, inferredType),
-  } satisfies DocumentEntities;
+  };
+
+  if (inferredType === 'Registration') {
+    const parsed = parseRegistrationCertificate(previewText);
+    return {
+      ...base,
+      horseName: base.horseName ?? parsed.horseName,
+      registrationNumber: base.registrationNumber ?? parsed.aqhaNumber,
+      ownerName: base.ownerName ?? parsed.owner,
+      breed: parsed.breed,
+      color: parsed.color,
+      foaledOn: parsed.foaledOn,
+      sex: parsed.sex,
+      sire: parsed.sire,
+      dam: parsed.dam,
+    } satisfies DocumentEntities;
+  }
+
+  return base satisfies DocumentEntities;
 }
 
 export type HorseMatchResult = {

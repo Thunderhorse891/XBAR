@@ -1,6 +1,7 @@
 import { useId, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState } from '@/components/EmptyState';
+import { PedigreeChart } from '@/components/PedigreeChart';
 import { SalePacketSlots } from '@/components/SalePacketSlots';
 import { KeyValue, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
 import { ChevronLeftIcon, SharedAccessIcon } from '@/components/icons';
@@ -631,11 +632,27 @@ export default function HorseDetail() {
                 <KeyValue label="Sire / dam" value={`${horse.bloodline.sire} / ${horse.bloodline.dam}`} />
                 <KeyValue label="Family" value={horse.bloodline.family} />
               </div>
-              {canEditHorse && (
-                <div className="inline-actions" style={{ marginTop: '12px' }}>
-                  <button className="button button--ghost button--compact" type="button" onClick={() => { setCoreForm({ name: horse.name, breed: horse.breed, color: horse.color, sex: horse.sex, registrationNumber: horse.registrationNumber, owner: horse.owner, ownerEntity: horse.ownerEntity, askPrice: horse.sale.askPrice ? String(horse.sale.askPrice) : '' }); setEditingCore(true); }}>Edit identity</button>
+              {(horse.bloodline.sire || horse.bloodline.dam) && (
+                <div style={{ marginTop: '12px' }}>
+                  <PedigreeChart bloodline={horse.bloodline} horseName={horse.name} />
                 </div>
               )}
+              <div className="inline-actions" style={{ marginTop: '12px' }}>
+                {canEditHorse && (
+                  <button className="button button--ghost button--compact" type="button" onClick={() => { setCoreForm({ name: horse.name, breed: horse.breed, color: horse.color, sex: horse.sex, registrationNumber: horse.registrationNumber, owner: horse.owner, ownerEntity: horse.ownerEntity, askPrice: horse.sale.askPrice ? String(horse.sale.askPrice) : '' }); setEditingCore(true); }}>Edit identity</button>
+                )}
+                {horse.aqhaNumber && (
+                  <a
+                    className="button button--ghost button--compact"
+                    href={`https://www.aqha.com/horse-registration-lookup?q=${encodeURIComponent(horse.aqhaNumber)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={`Look up AQHA #${horse.aqhaNumber} on aqha.com`}
+                  >
+                    Verify on AQHA ↗
+                  </a>
+                )}
+              </div>
             </>
           )}
         </Panel>

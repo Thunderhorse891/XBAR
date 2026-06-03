@@ -27,6 +27,11 @@ export type NewHorseInput = {
   registrationNumber?: string;
   barn: string;
   pasture: string;
+  breed?: string;
+  color?: string;
+  foaledOn?: string;
+  sire?: string;
+  dam?: string;
 };
 
 export type DocumentIntakeInput = {

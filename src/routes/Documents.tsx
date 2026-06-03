@@ -24,6 +24,7 @@ export default function Documents() {
   const createDocumentIntake = useXbarStore((state) => state.createDocumentIntake);
   const reviewDocument = useXbarStore((state) => state.reviewDocument);
   const discardDocument = useXbarStore((state) => state.discardDocument);
+  const addHorse = useXbarStore((state) => state.addHorse);
   const pushToast = useUiStore((state) => state.pushToast);
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
   const canReviewDocuments = useCurrentRoleCapability('reviewDocuments');
@@ -545,6 +546,44 @@ export default function Documents() {
                               {openingDocumentId === document.id ? 'Opening...' : 'Open file'}
                             </button>
                           ) : null}
+                          {document.type === 'Registration' && !document.horseId && !reviewAssignments[document.id] && (document.entities.horseName || document.entities.registrationNumber) && (
+                            <button
+                              className="button button--primary button--compact"
+                              type="button"
+                              disabled={!canReviewDocuments}
+                              title="Create a horse record from the registration data extracted from this document"
+                              onClick={() => {
+                                const entities = document.entities;
+                                const horseName = (entities.horseName ?? entities.registrationNumber ?? 'New Horse').trim().toUpperCase();
+                                const result = addHorse({
+                                  name: horseName,
+                                  barnName: horseName.split(' ').slice(0, 2).join(' '),
+                                  segment: 'Sale Prospect',
+                                  status: 'Sale Prep',
+                                  sex: (entities.sex as import('@/types/xbar').HorseSex | undefined) ?? 'Mare',
+                                  owner: entities.ownerName ?? (workspaceProfile.defaultOwnerName || 'Pending Owner'),
+                                  ownerEntity: workspaceProfile.defaultOwnerEntity || workspaceProfile.businessName || '',
+                                  aqhaNumber: entities.registrationNumber ?? '',
+                                  registrationNumber: entities.registrationNumber ?? '',
+                                  barn: workspaceProfile.defaultBarn || 'Main Barn',
+                                  pasture: workspaceProfile.defaultPasture || 'Pending Pasture',
+                                  breed: entities.breed,
+                                  color: entities.color,
+                                  foaledOn: entities.foaledOn,
+                                  sire: entities.sire,
+                                  dam: entities.dam,
+                                });
+                                if (result.ok && result.id) {
+                                  reviewDocument(document.id, result.id);
+                                  pushToast({ title: 'Horse created', message: `${horseName} added from registration certificate.`, tone: 'success' });
+                                } else {
+                                  pushToast({ title: 'Creation blocked', message: result.message, tone: 'error' });
+                                }
+                              }}
+                            >
+                              Create horse
+                            </button>
+                          )}
                           <button
                             className="button button--ghost button--compact"
                             type="button"

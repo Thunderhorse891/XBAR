@@ -96,7 +96,11 @@ export interface GalleryAsset {
 
 export interface BloodlineProfile {
   sire: string;
+  sireSire?: string;
+  sireDam?: string;
   dam: string;
+  damSire?: string;
+  damDam?: string;
   family: string;
 }
 
@@ -221,6 +225,12 @@ export interface DocumentEntities {
   examDate?: string;
   veterinarian?: string;
   transferStatus?: string;
+  breed?: string;
+  color?: string;
+  foaledOn?: string;
+  sex?: string;
+  sire?: string;
+  dam?: string;
 }
 
 export interface DocumentRecord {
