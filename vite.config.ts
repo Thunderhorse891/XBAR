@@ -7,7 +7,7 @@ export default defineConfig(() => {
   const debugBuild = process.env.VITE_DEBUG_BUILD === 'true';
 
   return {
-    base: staticTarget === 'github-pages' ? '/xbar-horse-management-app/' : '/',
+    base: staticTarget === 'github-pages' ? '/XBAR/' : '/',
     plugins: [react()],
     resolve: {
       alias: {
