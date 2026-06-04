@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
@@ -89,13 +89,10 @@ export default function Breeding() {
           {breedingHorses.length ? (
             <div className="stack-list">
               {breedingHorses.map((horse) => (
-                <div
+                <Link
                   key={horse.id}
                   className="stack-item stack-item--interactive"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => navigate(`/horses/${horse.id}`)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/horses/${horse.id}`); } }}
+                  to={`/horses/${horse.id}`}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     setMenuState({ horseId: horse.id, x: event.clientX, y: event.clientY });
@@ -115,7 +112,7 @@ export default function Breeding() {
                     <span>{horse.location.barn}</span>
                     <span>{horse.breedingTimeline.length} milestones</span>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           ) : (

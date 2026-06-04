@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
@@ -108,13 +108,10 @@ export default function Medical() {
           {medicalWatch.length ? (
             <div className="stack-list">
               {medicalWatch.map((horse) => (
-                <div
+                <Link
                   key={horse.id}
                   className="stack-item stack-item--interactive"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => navigate(`/horses/${horse.id}`)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/horses/${horse.id}`); } }}
+                  to={`/horses/${horse.id}`}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     setMenuState({ horseId: horse.id, x: event.clientX, y: event.clientY });
@@ -132,7 +129,7 @@ export default function Medical() {
                     <span>Last visit {formatDateLabel(horse.lastVetVisit)}</span>
                     <span>{horse.documents.length} linked docs</span>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           ) : (

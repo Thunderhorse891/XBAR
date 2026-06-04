@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
@@ -155,13 +155,10 @@ export default function Sales() {
           {saleHorses.length ? (
             <div className="horse-grid">
               {saleHorses.filter((h) => !listingQuery.trim() || h.name.toLowerCase().includes(listingQuery.toLowerCase()) || h.segment.toLowerCase().includes(listingQuery.toLowerCase())).map((horse) => (
-                <div
+                <Link
                   key={horse.id}
                   className="horse-card horse-card--interactive"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => navigate(`/horses/${horse.id}`)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/horses/${horse.id}`); } }}
+                  to={`/horses/${horse.id}`}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     setMenuState({ type: 'horse', id: horse.id, x: event.clientX, y: event.clientY });
@@ -218,7 +215,7 @@ export default function Sales() {
                       </>
                     );
                   })()}
-                </div>
+                </Link>
               ))}
             </div>
           ) : (
