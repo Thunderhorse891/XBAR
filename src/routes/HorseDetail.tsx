@@ -176,6 +176,13 @@ export default function HorseDetail() {
           : 'border border-[#d8e1ea] bg-[#f4f7fb] text-[#667789]';
 
   const handleSavedHorseToggle = async () => {
+    if (!saved && packet.score < 40) {
+      const proceed = await confirm(
+        'Listing not packet-ready',
+        `This horse's sale packet is only ${packet.score}% complete. Buyers may see missing information. Proceed anyway?`,
+      );
+      if (!proceed) return;
+    }
     const result = await toggleSharedListing(horse.id);
     pushToast({
       title: result.ok ? (saved ? 'Removed from shared access' : 'Added to shared access') : 'Shared access blocked',
@@ -581,7 +588,15 @@ export default function HorseDetail() {
               <span>Sale packet</span>
               <span>{salePacketReadyCount}/{packet.saleSlots.length} ready</span>
             </div>
-            <SalePacketSlots slots={packet.saleSlots} />
+            <SalePacketSlots
+              slots={packet.saleSlots}
+              onFix={(key) => {
+                setActiveTab(key === 'aqha-photos' ? 'Overview' : 'Docs');
+                if (key !== 'aqha-photos') {
+                  setTimeout(() => document.querySelector('.surface-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+                }
+              }}
+            />
           </div>
 
           <div className="mt-5 flex flex-wrap gap-3">

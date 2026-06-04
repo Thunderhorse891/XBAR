@@ -1759,6 +1759,23 @@ a:focus-visible,
   line-height: 1.45;
 }
 
+.sale-packet-slot__fix {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-blue);
+  border: none;
+  cursor: pointer;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(45, 111, 255, 0.08);
+  transition: background 0.12s;
+}
+.sale-packet-slot__fix:hover {
+  background: rgba(45, 111, 255, 0.16);
+}
+
 .weather-hour-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
