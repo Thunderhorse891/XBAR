@@ -15,6 +15,7 @@ import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/x
 import { useCurrentRoleCapability, useHorseRecord, useXbarStore } from '@/store/useXbarStore';
 import type { DocumentRecord, DocumentSource, GalleryAsset, HorseSex, SalesLead } from '@/types/xbar';
 import { classNames, docSources, leadChannels, mediaKinds } from '@/features/horses/constants';
+import { medicalEventTypes } from '@/features/health/constants';
 import type { DetailTab } from '@/features/horses/types';
 import { DollarIcon, LinkIcon, LockIcon, PhotoIcon } from '@/features/horses/icons';
 
@@ -122,7 +123,7 @@ export default function HorseDetail() {
   const [activeTab, setActiveTab] = useState<DetailTab>('Overview');
   const [editingCore, setEditingCore] = useState(false);
   const [editingMedicalId, setEditingMedicalId] = useState<string | null>(null);
-  const [medicalEditForm, setMedicalEditForm] = useState({ title: '', body: '', date: '' });
+  const [medicalEditForm, setMedicalEditForm] = useState({ title: '', body: '', date: '', type: '' });
   const [editingBreedingId, setEditingBreedingId] = useState<string | null>(null);
   const [breedingEditForm, setBreedingEditForm] = useState({ title: '', body: '', date: '' });
   const [breedingTitle, setBreedingTitle] = useState('');
@@ -130,7 +131,7 @@ export default function HorseDetail() {
   const [breedingDate, setBreedingDate] = useState('');
   const [breedingError, setBreedingError] = useState('');
   const canManageBreeding = useCurrentRoleCapability('manageBreeding');
-  const [coreForm, setCoreForm] = useState({ name: '', breed: '', color: '', sex: 'Mare' as HorseSex, aqhaNumber: '', registrationNumber: '', owner: '', ownerEntity: '', askPrice: '' });
+  const [coreForm, setCoreForm] = useState({ name: '', breed: '', registry: '', color: '', sex: 'Mare' as HorseSex, aqhaNumber: '', registrationNumber: '', owner: '', ownerEntity: '', askPrice: '' });
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [location, setLocation] = useState({
     barn: horse?.location.barn ?? '',
@@ -616,7 +617,7 @@ export default function HorseDetail() {
         <Panel eyebrow="Identity" title="Registry">
           {editingCore ? (
             <div className="form-grid form-grid--tight">
-              {(['name', 'breed', 'color', 'aqhaNumber', 'registrationNumber', 'owner', 'ownerEntity'] as const).map((field) => (
+              {(['name', 'breed', 'registry', 'color', 'aqhaNumber', 'registrationNumber', 'owner', 'ownerEntity'] as const).map((field) => (
                 <label key={field} className="field-stack">
                   <span className="field-label">{field === 'aqhaNumber' ? 'AQHA #' : field === 'registrationNumber' ? 'Registration #' : field === 'ownerEntity' ? 'Owner entity' : field.charAt(0).toUpperCase() + field.slice(1)}</span>
                   <input className="field-input" value={coreForm[field]} onChange={(e) => setCoreForm((f) => ({ ...f, [field]: e.target.value }))} />
@@ -633,7 +634,7 @@ export default function HorseDetail() {
                 <input className="field-input" type="number" min="0" value={coreForm.askPrice} onChange={(e) => setCoreForm((f) => ({ ...f, askPrice: e.target.value }))} placeholder="0" />
               </label>
               <div className="inline-actions" style={{ gridColumn: '1/-1' }}>
-                <button className="button button--primary button--compact" type="button" onClick={() => { updateHorse(horse.id, { name: coreForm.name || horse.name, breed: coreForm.breed, color: coreForm.color, sex: coreForm.sex, aqhaNumber: coreForm.aqhaNumber, registrationNumber: coreForm.registrationNumber, owner: coreForm.owner, ownerEntity: coreForm.ownerEntity, askPrice: coreForm.askPrice ? Number(coreForm.askPrice) : undefined }); setEditingCore(false); }}>Save</button>
+                <button className="button button--primary button--compact" type="button" onClick={() => { const result = updateHorse(horse.id, { name: coreForm.name || horse.name, breed: coreForm.breed, registry: coreForm.registry, color: coreForm.color, sex: coreForm.sex, aqhaNumber: coreForm.aqhaNumber, registrationNumber: coreForm.registrationNumber, owner: coreForm.owner, ownerEntity: coreForm.ownerEntity, askPrice: coreForm.askPrice ? Number(coreForm.askPrice) : undefined }); if (result.ok) { setEditingCore(false); } else { pushToast({ title: 'Save blocked', message: result.message, tone: 'error' }); } }}>Save</button>
                 <button className="button button--ghost button--compact" type="button" onClick={() => setEditingCore(false)}>Cancel</button>
               </div>
             </div>
@@ -656,7 +657,7 @@ export default function HorseDetail() {
               )}
               <div className="inline-actions" style={{ marginTop: '12px' }}>
                 {canEditHorse && (
-                  <button className="button button--ghost button--compact" type="button" onClick={() => { setCoreForm({ name: horse.name, breed: horse.breed, color: horse.color, sex: horse.sex, aqhaNumber: horse.aqhaNumber, registrationNumber: horse.registrationNumber, owner: horse.owner, ownerEntity: horse.ownerEntity, askPrice: horse.sale.askPrice ? String(horse.sale.askPrice) : '' }); setEditingCore(true); }}>Edit identity</button>
+                  <button className="button button--ghost button--compact" type="button" onClick={() => { setCoreForm({ name: horse.name, breed: horse.breed, registry: horse.registry, color: horse.color, sex: horse.sex, aqhaNumber: horse.aqhaNumber, registrationNumber: horse.registrationNumber, owner: horse.owner, ownerEntity: horse.ownerEntity, askPrice: horse.sale.askPrice ? String(horse.sale.askPrice) : '' }); setEditingCore(true); }}>Edit identity</button>
                 )}
                 {horse.aqhaNumber && (
                   <a
@@ -848,8 +849,11 @@ export default function HorseDetail() {
                       <input className="field-input" value={medicalEditForm.title} onChange={(e) => setMedicalEditForm((f) => ({ ...f, title: e.target.value }))} placeholder="Title" />
                       <input className="field-input" value={medicalEditForm.body} onChange={(e) => setMedicalEditForm((f) => ({ ...f, body: e.target.value }))} placeholder="Notes" />
                       <input className="field-input" type="date" value={medicalEditForm.date} onChange={(e) => setMedicalEditForm((f) => ({ ...f, date: e.target.value }))} />
+                      <select className="field-select" value={medicalEditForm.type} onChange={(e) => setMedicalEditForm((f) => ({ ...f, type: e.target.value }))}>
+                        {medicalEventTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+                      </select>
                       <div className="inline-actions">
-                        <button className="button button--primary button--compact" type="button" onClick={() => { updateMedicalEvent(horse.id, event.id, { title: medicalEditForm.title, summary: medicalEditForm.body, date: medicalEditForm.date }); setEditingMedicalId(null); }}>Save</button>
+                        <button className="button button--primary button--compact" type="button" onClick={() => { updateMedicalEvent(horse.id, event.id, { title: medicalEditForm.title, summary: medicalEditForm.body, date: medicalEditForm.date, status: medicalEditForm.type }); setEditingMedicalId(null); }}>Save</button>
                         <button className="button button--ghost button--compact" type="button" onClick={() => setEditingMedicalId(null)}>Cancel</button>
                       </div>
                     </div>
@@ -863,7 +867,7 @@ export default function HorseDetail() {
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <Pill tone="blue">{formatDateLabel(event.date)}</Pill>
-                          {canEditHorse && <button className="button button--ghost button--compact" style={{ fontSize: '11px' }} type="button" onClick={() => { setMedicalEditForm({ title: event.title, body: event.summary, date: event.date }); setEditingMedicalId(event.id); }}>Edit</button>}
+                          {canEditHorse && <button className="button button--ghost button--compact" style={{ fontSize: '11px' }} type="button" onClick={() => { setMedicalEditForm({ title: event.title, body: event.summary, date: event.date, type: event.status ?? '' }); setEditingMedicalId(event.id); }}>Edit</button>}
                           {canEditHorse && <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={async () => { if (await confirm('Remove event?', 'Remove this medical event? This cannot be undone.')) deleteMedicalEvent(horse.id, event.id); }}>Delete</button>}
                         </div>
                       </div>
