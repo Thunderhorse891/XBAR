@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useConfirm } from '@/components/ConfirmDialog';
 import { PageHeader, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
@@ -37,6 +38,7 @@ export default function Settings() {
   const signOutCloud = useCloudStore((state) => state.signOut);
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageSettings = useCurrentRoleCapability('manageSettings');
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const canSyncCloud = useCurrentRoleCapability('syncCloud');
   const importRef = useRef<HTMLInputElement | null>(null);
   const [profileDraft, setProfileDraft] = useState(workspaceProfile);
@@ -218,6 +220,7 @@ export default function Settings() {
 
   return (
     <>
+      {confirmDialog}
       <PageHeader
         eyebrow="Settings"
         title="Settings"
@@ -396,6 +399,7 @@ export default function Settings() {
                         className="button button--ghost button--compact"
                         type="button"
                         onClick={async () => {
+                          if (!await confirm('Remove member', `Remove ${member.email} from the workspace? They will lose access immediately.`)) return;
                           const result = await removeWorkspaceMember(member.id);
                           pushToast({
                             title: result.ok ? 'Member removed' : 'Removal blocked',
@@ -472,6 +476,7 @@ export default function Settings() {
                         className="button button--ghost button--compact"
                         type="button"
                         onClick={async () => {
+                          if (!await confirm('Revoke invite', `Revoke the invitation for ${invite.email}? They will no longer be able to join using this invite.`)) return;
                           const result = await revokeWorkspaceInvitation(invite.id);
                           pushToast({
                             title: result.ok ? 'Invite revoked' : 'Revoke blocked',

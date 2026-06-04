@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useConfirm } from '@/components/ConfirmDialog';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Pill } from '@/components/app-ui';
@@ -33,6 +34,7 @@ export default function Ownership() {
   const ensureOwnershipRecord = useXbarStore((state) => state.ensureOwnershipRecord);
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageOwnership = useCurrentRoleCapability('manageOwnership');
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
 
   const [selectedRecordId, setSelectedRecordId] = useState(ownershipRecords[0]?.id ?? '');
@@ -231,7 +233,9 @@ export default function Ownership() {
   };
 
   return (
-    <div className="ownership-ops">
+    <>
+      {confirmDialog}
+      <div className="ownership-ops">
       <PageHeader
         eyebrow="Ownership"
         title="Owner Records"
@@ -355,7 +359,8 @@ export default function Ownership() {
                         <button
                           className="button button--ghost button--compact"
                           type="button"
-                          onClick={() => {
+                          onClick={async () => {
+                            if (!await confirm('Remove owner', `Remove ${stake.name} from this horse's ownership record? This cannot be undone.`)) return;
                             const result = removeOwnershipStake(selectedHorse.id, stake.id);
                             pushToast({ title: result.ok ? 'Owner removed' : 'Remove blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
                           }}
@@ -660,5 +665,6 @@ export default function Ownership() {
 
       <ContextMenu open={Boolean(menuItems.length)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
     </div>
+    </>
   );
 }
