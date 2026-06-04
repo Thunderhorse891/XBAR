@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useConfirm } from '@/components/ConfirmDialog';
 import { ContextMenu } from '@/components/ContextMenu';
 import { MetricCard, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
 import { EmptyState } from '@/components/EmptyState';
@@ -28,6 +29,7 @@ export default function Documents() {
   const pushToast = useUiStore((state) => state.pushToast);
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
   const canReviewDocuments = useCurrentRoleCapability('reviewDocuments');
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const session = useCloudStore((state) => state.session);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName || 'Ranch Staff';
@@ -131,7 +133,8 @@ export default function Documents() {
               {
                 id: 'discard',
                 label: 'Discard document',
-                onSelect: () => {
+                onSelect: async () => {
+                  if (!await confirm('Discard document', `Discard "${menuDocument.title}"? This marks the document as discarded and removes it from the active vault.`)) return;
                   const result = discardDocument(menuDocument.id);
                   pushToast({
                     title: result.ok ? 'Document discarded' : 'Discard blocked',
@@ -301,6 +304,7 @@ export default function Documents() {
 
   return (
     <>
+      {confirmDialog}
       <div className="surface-hero surface-hero--dark">
         <div className="surface-hero__top">
           <div>
@@ -602,7 +606,8 @@ export default function Documents() {
                           <button
                             className="button button--ghost button--compact"
                             type="button"
-                            onClick={() => {
+                            onClick={async () => {
+                              if (!await confirm('Discard document', `Discard "${document.title}"? This marks the document as discarded and removes it from the active vault.`)) return;
                               const result = discardDocument(document.id);
                               pushToast({
                                 title: result.ok ? 'Document discarded' : 'Discard blocked',
