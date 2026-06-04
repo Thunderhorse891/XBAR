@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useConfirm } from '@/components/ConfirmDialog';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
@@ -20,6 +21,7 @@ export default function RanchAssets() {
   const deleteRanchAsset = useXbarStore((state) => state.deleteRanchAsset);
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageAssets = useCurrentRoleCapability('manageAssets');
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const assigned = ranchAssets.filter((asset) => asset.status === 'Assigned');
   const serviceSoon = ranchAssets.filter((asset) => asset.condition !== 'Excellent');
   const [selectedAssetId, setSelectedAssetId] = useState(ranchAssets[0]?.id ?? '');
@@ -100,8 +102,8 @@ export default function RanchAssets() {
               {
                 id: 'delete-asset',
                 label: 'Delete asset',
-                onSelect: () => {
-                  if (!window.confirm(`Remove "${menuAsset.name}" from the register? This cannot be undone.`)) return;
+                onSelect: async () => {
+                  if (!await confirm('Delete asset', `Remove "${menuAsset.name}" from the register? This cannot be undone.`)) return;
                   const result = deleteRanchAsset(menuAsset.id);
                   pushToast({ title: result.ok ? 'Asset removed' : 'Remove blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
                   if (result.ok && selectedAssetId === menuAsset.id) setSelectedAssetId(ranchAssets.find((a) => a.id !== menuAsset.id)?.id ?? '');
@@ -114,6 +116,7 @@ export default function RanchAssets() {
 
   return (
     <>
+      {confirmDialog}
       <div className="surface-hero surface-hero--dark">
         <div className="surface-hero__top">
           <div>
@@ -262,8 +265,8 @@ export default function RanchAssets() {
               <button
                 className="button button--ghost button--compact"
                 type="button"
-                onClick={() => {
-                  if (!window.confirm(`Remove "${selectedAsset.name}" from the register? This cannot be undone.`)) return;
+                onClick={async () => {
+                  if (!await confirm('Delete asset', `Remove "${selectedAsset.name}" from the register? This cannot be undone.`)) return;
                   const result = deleteRanchAsset(selectedAsset.id);
                   pushToast({ title: result.ok ? 'Asset removed' : 'Remove blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
                   if (result.ok) setSelectedAssetId(ranchAssets.find((a) => a.id !== selectedAsset.id)?.id ?? '');

@@ -1,5 +1,6 @@
 import { useId, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useConfirm } from '@/components/ConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
 import { PedigreeChart } from '@/components/PedigreeChart';
 import { SalePacketSlots } from '@/components/SalePacketSlots';
@@ -129,7 +130,8 @@ export default function HorseDetail() {
   const [breedingDate, setBreedingDate] = useState('');
   const [breedingError, setBreedingError] = useState('');
   const canManageBreeding = useCurrentRoleCapability('manageBreeding');
-  const [coreForm, setCoreForm] = useState({ name: '', breed: '', color: '', sex: 'Mare' as HorseSex, registrationNumber: '', owner: '', ownerEntity: '', askPrice: '' });
+  const [coreForm, setCoreForm] = useState({ name: '', breed: '', color: '', sex: 'Mare' as HorseSex, aqhaNumber: '', registrationNumber: '', owner: '', ownerEntity: '', askPrice: '' });
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const [location, setLocation] = useState({
     barn: horse?.location.barn ?? '',
     pasture: horse?.location.pasture ?? '',
@@ -326,6 +328,7 @@ export default function HorseDetail() {
 
   return (
     <>
+      {confirmDialog}
       <Link
         to="/horses"
         className="inline-flex w-fit items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#6888a4] transition-all duration-150 ease-[ease] hover:text-[#98bcd8]"
@@ -446,7 +449,7 @@ export default function HorseDetail() {
               <button
                 className="inline-flex h-10 items-center justify-center rounded-lg border border-[rgba(255,80,80,0.3)] bg-transparent px-4 text-sm font-semibold text-[rgba(255,140,140,0.8)] transition-all duration-150 ease-[ease] hover:bg-[rgba(255,80,80,0.1)] disabled:cursor-not-allowed disabled:opacity-40"
                 type="button"
-                onClick={() => { if (window.confirm('Remove this horse from records? This cannot be undone.')) { deleteHorse(horse.id); navigate('/horses'); } }}
+                onClick={async () => { if (await confirm('Remove horse?', 'Remove this horse from all records? This cannot be undone.')) { deleteHorse(horse.id); navigate('/horses'); } }}
               >
                 Remove horse
               </button>
@@ -613,9 +616,9 @@ export default function HorseDetail() {
         <Panel eyebrow="Identity" title="Registry">
           {editingCore ? (
             <div className="form-grid form-grid--tight">
-              {(['name', 'breed', 'color', 'registrationNumber', 'owner', 'ownerEntity'] as const).map((field) => (
+              {(['name', 'breed', 'color', 'aqhaNumber', 'registrationNumber', 'owner', 'ownerEntity'] as const).map((field) => (
                 <label key={field} className="field-stack">
-                  <span className="field-label">{field === 'registrationNumber' ? 'Registration #' : field === 'ownerEntity' ? 'Owner entity' : field.charAt(0).toUpperCase() + field.slice(1)}</span>
+                  <span className="field-label">{field === 'aqhaNumber' ? 'AQHA #' : field === 'registrationNumber' ? 'Registration #' : field === 'ownerEntity' ? 'Owner entity' : field.charAt(0).toUpperCase() + field.slice(1)}</span>
                   <input className="field-input" value={coreForm[field]} onChange={(e) => setCoreForm((f) => ({ ...f, [field]: e.target.value }))} />
                 </label>
               ))}
@@ -630,7 +633,7 @@ export default function HorseDetail() {
                 <input className="field-input" type="number" min="0" value={coreForm.askPrice} onChange={(e) => setCoreForm((f) => ({ ...f, askPrice: e.target.value }))} placeholder="0" />
               </label>
               <div className="inline-actions" style={{ gridColumn: '1/-1' }}>
-                <button className="button button--primary button--compact" type="button" onClick={() => { updateHorse(horse.id, { name: coreForm.name || horse.name, breed: coreForm.breed, color: coreForm.color, sex: coreForm.sex, registrationNumber: coreForm.registrationNumber, owner: coreForm.owner, ownerEntity: coreForm.ownerEntity, askPrice: coreForm.askPrice ? Number(coreForm.askPrice) : undefined }); setEditingCore(false); }}>Save</button>
+                <button className="button button--primary button--compact" type="button" onClick={() => { updateHorse(horse.id, { name: coreForm.name || horse.name, breed: coreForm.breed, color: coreForm.color, sex: coreForm.sex, aqhaNumber: coreForm.aqhaNumber, registrationNumber: coreForm.registrationNumber, owner: coreForm.owner, ownerEntity: coreForm.ownerEntity, askPrice: coreForm.askPrice ? Number(coreForm.askPrice) : undefined }); setEditingCore(false); }}>Save</button>
                 <button className="button button--ghost button--compact" type="button" onClick={() => setEditingCore(false)}>Cancel</button>
               </div>
             </div>
@@ -653,7 +656,7 @@ export default function HorseDetail() {
               )}
               <div className="inline-actions" style={{ marginTop: '12px' }}>
                 {canEditHorse && (
-                  <button className="button button--ghost button--compact" type="button" onClick={() => { setCoreForm({ name: horse.name, breed: horse.breed, color: horse.color, sex: horse.sex, registrationNumber: horse.registrationNumber, owner: horse.owner, ownerEntity: horse.ownerEntity, askPrice: horse.sale.askPrice ? String(horse.sale.askPrice) : '' }); setEditingCore(true); }}>Edit identity</button>
+                  <button className="button button--ghost button--compact" type="button" onClick={() => { setCoreForm({ name: horse.name, breed: horse.breed, color: horse.color, sex: horse.sex, aqhaNumber: horse.aqhaNumber, registrationNumber: horse.registrationNumber, owner: horse.owner, ownerEntity: horse.ownerEntity, askPrice: horse.sale.askPrice ? String(horse.sale.askPrice) : '' }); setEditingCore(true); }}>Edit identity</button>
                 )}
                 {horse.aqhaNumber && (
                   <a
@@ -861,7 +864,7 @@ export default function HorseDetail() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <Pill tone="blue">{formatDateLabel(event.date)}</Pill>
                           {canEditHorse && <button className="button button--ghost button--compact" style={{ fontSize: '11px' }} type="button" onClick={() => { setMedicalEditForm({ title: event.title, body: event.summary, date: event.date }); setEditingMedicalId(event.id); }}>Edit</button>}
-                          {canEditHorse && <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={() => { if (window.confirm('Remove this medical event?')) deleteMedicalEvent(horse.id, event.id); }}>Delete</button>}
+                          {canEditHorse && <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={async () => { if (await confirm('Remove event?', 'Remove this medical event? This cannot be undone.')) deleteMedicalEvent(horse.id, event.id); }}>Delete</button>}
                         </div>
                       </div>
                     </>
@@ -909,7 +912,7 @@ export default function HorseDetail() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <Pill tone="blue">{formatDateLabel(event.date)}</Pill>
                           {canManageBreeding && <button className="button button--ghost button--compact" style={{ fontSize: '11px' }} type="button" onClick={() => { setBreedingEditForm({ title: event.title, body: event.summary, date: event.date }); setEditingBreedingId(event.id); }}>Edit</button>}
-                          {canManageBreeding && <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={() => { if (window.confirm('Remove this breeding event?')) deleteBreedingEvent(horse.id, event.id); }}>Delete</button>}
+                          {canManageBreeding && <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={async () => { if (await confirm('Remove event?', 'Remove this breeding event? This cannot be undone.')) deleteBreedingEvent(horse.id, event.id); }}>Delete</button>}
                         </div>
                       </div>
                     </>

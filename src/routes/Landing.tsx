@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCloudStore } from '@/store/useCloudStore';
-import { isLocalModeEnabled, isSupabaseConfigured } from '@/lib/platformConfig';
+import { isLocalModeEnabled } from '@/lib/platformConfig';
 import './authExperience.css';
 
 const features = [
@@ -28,11 +28,6 @@ export default function Landing() {
       navigate('/', { replace: true });
     }
   }, [session, navigate]);
-
-  if (!isSupabaseConfigured() && !isLocalModeEnabled()) {
-    navigate('/login', { replace: true });
-    return null;
-  }
 
   return (
     <div className="lp-shell" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 0 }}>

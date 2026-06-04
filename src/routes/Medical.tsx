@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useConfirm } from '@/components/ConfirmDialog';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
@@ -13,6 +14,7 @@ import { medicalEventTypes } from '@/features/health/constants';
 export default function Medical() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
@@ -70,6 +72,7 @@ export default function Medical() {
 
   return (
     <>
+      {confirmDialog}
       <div className="surface-hero surface-hero--dark">
         <div className="surface-hero__top">
           <div>
@@ -273,7 +276,7 @@ export default function Medical() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <Pill tone="blue">{formatDateLabel(event.date)}</Pill>
                           <button className="button button--ghost button--compact" style={{ fontSize: '11px' }} type="button" onClick={() => { setEditForm({ title: event.title, body: event.summary, date: event.date }); setEditingEventId(event.id); }}>Edit</button>
-                          <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={() => { if (window.confirm('Remove this medical event?')) deleteMedicalEvent(event.horseId, event.id); }}>Delete</button>
+                          <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={async () => { if (await confirm('Remove event?', 'Remove this medical event? This cannot be undone.')) deleteMedicalEvent(event.horseId, event.id); }}>Delete</button>
                         </div>
                       </div>
                       <div className="stack-item__copy">{event.summary}</div>

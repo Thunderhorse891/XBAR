@@ -8,7 +8,7 @@ export default function Terms() {
       </header>
       <main className="legal-page__body">
         <h1>Terms of Service</h1>
-        <p className="legal-page__effective">Effective date: June 1, 2025</p>
+        <p className="legal-page__effective">Effective date: June 1, 2026</p>
 
         <h2>1. Agreement</h2>
         <p>

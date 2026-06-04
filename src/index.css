@@ -3071,3 +3071,43 @@ a:focus-visible,
 }
 .buyer-footer__legal a { color: #2D6FFF; text-decoration: none; }
 .buyer-footer__legal a:hover { text-decoration: underline; }
+
+/* ConfirmDialog */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 16, 30, 0.55);
+  backdrop-filter: blur(3px);
+  padding: 16px;
+}
+.confirm-dialog {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
+  padding: 28px 28px 22px;
+  max-width: 420px;
+  width: 100%;
+}
+.confirm-dialog__title {
+  margin: 0 0 10px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.confirm-dialog__message {
+  margin: 0 0 22px;
+  font-size: 0.88rem;
+  color: var(--muted);
+  line-height: 1.6;
+  white-space: pre-line;
+}
+.confirm-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useConfirm } from '@/components/ConfirmDialog';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
@@ -20,6 +21,7 @@ export default function Breeding() {
   const session = useCloudStore((state) => state.session);
   const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName || 'Ranch Staff';
   const canManageBreeding = useCurrentRoleCapability('manageBreeding');
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const breedingHorses = horses.filter((horse) => horse.segment === 'Stud' || horse.sex === 'Mare');
   const breedingDocs = documents.filter((document) => document.type === 'Breeding Contract');
   const [selectedHorseId, setSelectedHorseId] = useState(breedingHorses[0]?.id ?? '');
@@ -49,6 +51,7 @@ export default function Breeding() {
 
   return (
     <>
+      {confirmDialog}
       <div className="surface-hero surface-hero--dark">
         <div className="surface-hero__top">
           <div>
@@ -167,7 +170,7 @@ export default function Breeding() {
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <Pill tone="slate">{formatDateLabel(event.date)}</Pill>
                                 {canManageBreeding && <button className="button button--ghost button--compact" style={{ fontSize: '11px' }} type="button" onClick={() => { setEditForm({ title: event.title, body: event.summary, date: event.date }); setEditingEventId(event.id); }}>Edit</button>}
-                                {canManageBreeding && <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={() => { if (window.confirm('Remove this breeding event?')) deleteBreedingEvent(horse.id, event.id); }}>Delete</button>}
+                                {canManageBreeding && <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={async () => { if (await confirm('Remove event?', 'Remove this breeding event? This cannot be undone.')) deleteBreedingEvent(horse.id, event.id); }}>Delete</button>}
                               </div>
                             </div>
                             <div className="stack-item__copy">{event.summary}</div>

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useConfirm } from '@/components/ConfirmDialog';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
@@ -21,6 +22,7 @@ export default function SharedAccess() {
   const rotateSharedListingToken = useXbarStore((state) => state.rotateSharedListingToken);
   const updateSharedListingAccessMode = useXbarStore((state) => state.updateSharedListingAccessMode);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
   const activeSharedListings = sharedListings.filter((listing) => listing.state !== 'Archived');
   const liveSharedListings = activeSharedListings.filter((listing) => listing.state === 'Live');
@@ -76,22 +78,11 @@ export default function SharedAccess() {
     }
   };
 
-  const confirmPublicLink = (horseName: string, packet: ReturnType<typeof buildHorsePacketCompleteness>) => {
-    if (typeof window === 'undefined') {
-      return false;
-    }
-
-    return window.confirm(
-      [
-        `Make ${horseName} public?`,
-        '',
-        'Anyone with the link can view the sale packet without a token.',
-        'Shared fields include horse identity, approved sale photos, sale readiness, and approved packet documents only.',
-        '',
-        `Current packet status: ${packet.buyerProfileStatus}.`,
-      ].join('\n'),
+  const confirmPublicLink = (horseName: string, packet: ReturnType<typeof buildHorsePacketCompleteness>) =>
+    confirm(
+      `Make ${horseName} public?`,
+      `Anyone with the link can view the sale packet without a token. Shared fields include horse identity, approved sale photos, sale readiness, and approved packet documents only. Current packet status: ${packet.buyerProfileStatus}.`,
     );
-  };
 
   const menuItems = menuHorse && menuPacket
     ? [
@@ -124,7 +115,7 @@ export default function SharedAccess() {
                 label: menuListing.accessMode === 'Private Token' ? 'Make public' : 'Require token',
                 onSelect: async () => {
                   const nextAccessMode = menuListing.accessMode === 'Private Token' ? 'Public Link' : 'Private Token';
-                  if (nextAccessMode === 'Public Link' && !confirmPublicLink(menuHorse.name, menuPacket)) {
+                  if (nextAccessMode === 'Public Link' && !await confirmPublicLink(menuHorse.name, menuPacket)) {
                     return;
                   }
 
@@ -175,6 +166,7 @@ export default function SharedAccess() {
 
   return (
     <>
+      {confirmDialog}
       <PageHeader
         eyebrow="Sale Packets"
         title="Sale Listings"
@@ -307,7 +299,7 @@ export default function SharedAccess() {
                           onClick={async (event) => {
                             event.stopPropagation();
                             const nextAccessMode = sharedListing.accessMode === 'Private Token' ? 'Public Link' : 'Private Token';
-                            if (nextAccessMode === 'Public Link' && !confirmPublicLink(horse.name, packet)) {
+                            if (nextAccessMode === 'Public Link' && !await confirmPublicLink(horse.name, packet)) {
                               return;
                             }
 

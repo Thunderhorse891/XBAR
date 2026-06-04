@@ -8,7 +8,7 @@ export default function Privacy() {
       </header>
       <main className="legal-page__body">
         <h1>Privacy Policy</h1>
-        <p className="legal-page__effective">Effective date: June 1, 2025</p>
+        <p className="legal-page__effective">Effective date: June 1, 2026</p>
 
         <h2>1. Who We Are</h2>
         <p>
