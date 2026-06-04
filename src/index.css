@@ -1764,7 +1764,7 @@ a:focus-visible,
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--accent-blue);
+  color: var(--blue);
   border: none;
   cursor: pointer;
   padding: 1px 5px;
