@@ -1,6 +1,6 @@
 export const subscriptionPlans = {
   Starter: {
-    monthlyRate: 390,
+    monthlyRate: 29,
     sharedAccessEnabled: false,
     brandedListings: false,
     featureFlags: ['Horse records', 'Basic listings', 'Local document vault'],
@@ -12,7 +12,7 @@ export const subscriptionPlans = {
     },
   },
   Professional: {
-    monthlyRate: 1290,
+    monthlyRate: 79,
     sharedAccessEnabled: true,
     brandedListings: true,
     featureFlags: ['Role-aware dashboards', 'Shared access links', 'Branded sale packets', 'Manual document review', 'Operations workspace'],
@@ -24,7 +24,7 @@ export const subscriptionPlans = {
     },
   },
   'Ranch Ops': {
-    monthlyRate: 2490,
+    monthlyRate: 199,
     sharedAccessEnabled: true,
     brandedListings: true,
     featureFlags: ['Expanded document intake', 'Branded sale packets', 'Role-aware dashboards', 'Shared access links', 'Ranch asset operations', 'Lead intelligence'],
@@ -36,7 +36,7 @@ export const subscriptionPlans = {
     },
   },
   Enterprise: {
-    monthlyRate: 4990,
+    monthlyRate: 499,
     sharedAccessEnabled: true,
     brandedListings: true,
     featureFlags: ['Custom shared access', 'Expanded document intake', 'Dedicated access branding', 'Priority operations support', 'Custom integrations', 'Advanced audit controls'],

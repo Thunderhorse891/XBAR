@@ -1,6 +1,6 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { isSupabaseConfigured } from '@/lib/platformConfig';
+import { isFacebookSharingConfigured, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -352,7 +352,14 @@ export default function Login() {
                   {busy === 'google' ? 'Connecting…' : 'Continue with Google'}
                 </button>
 
-                <button className="lp-btn-social" type="button" onClick={handleFacebook} disabled={busy !== ''}>
+                <button
+                  className="lp-btn-social"
+                  type="button"
+                  onClick={handleFacebook}
+                  disabled={busy !== '' || !isFacebookSharingConfigured()}
+                  title={!isFacebookSharingConfigured() ? 'Facebook sign-in is not configured' : undefined}
+                  style={!isFacebookSharingConfigured() ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+                >
                   <FacebookIcon />
                   {busy === 'facebook' ? 'Connecting…' : 'Continue with Facebook'}
                 </button>

@@ -17,6 +17,7 @@ export default function RanchAssets() {
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
   const addRanchAsset = useXbarStore((state) => state.addRanchAsset);
   const updateAsset = useXbarStore((state) => state.updateAsset);
+  const deleteRanchAsset = useXbarStore((state) => state.deleteRanchAsset);
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageAssets = useCurrentRoleCapability('manageAssets');
   const assigned = ranchAssets.filter((asset) => asset.status === 'Assigned');
@@ -91,6 +92,20 @@ export default function RanchAssets() {
                 id: 'open-medical',
                 label: 'Open medical workspace',
                 onSelect: () => navigate('/medical'),
+              },
+            ]
+          : []),
+        ...(canManageAssets
+          ? [
+              {
+                id: 'delete-asset',
+                label: 'Delete asset',
+                onSelect: () => {
+                  if (!window.confirm(`Remove "${menuAsset.name}" from the register? This cannot be undone.`)) return;
+                  const result = deleteRanchAsset(menuAsset.id);
+                  pushToast({ title: result.ok ? 'Asset removed' : 'Remove blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                  if (result.ok && selectedAssetId === menuAsset.id) setSelectedAssetId(ranchAssets.find((a) => a.id !== menuAsset.id)?.id ?? '');
+                },
               },
             ]
           : []),
@@ -243,6 +258,20 @@ export default function RanchAssets() {
             <button className="button button--primary button--compact" type="button" onClick={handleSave} disabled={!canManageAssets}>
               Save asset changes
             </button>
+            {selectedAsset && canManageAssets ? (
+              <button
+                className="button button--ghost button--compact"
+                type="button"
+                onClick={() => {
+                  if (!window.confirm(`Remove "${selectedAsset.name}" from the register? This cannot be undone.`)) return;
+                  const result = deleteRanchAsset(selectedAsset.id);
+                  pushToast({ title: result.ok ? 'Asset removed' : 'Remove blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                  if (result.ok) setSelectedAssetId(ranchAssets.find((a) => a.id !== selectedAsset.id)?.id ?? '');
+                }}
+              >
+                Delete asset
+              </button>
+            ) : null}
           </div>
         </Panel>
       </div>

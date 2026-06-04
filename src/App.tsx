@@ -81,8 +81,12 @@ function SmartRoot() {
   const status = useCloudStore((state) => state.status);
   const session = useCloudStore((state) => state.session);
 
-  if (!isSupabaseConfigured() || hasCommandCenterEntry()) {
-    return <RequireCloudAuth><RequireWorkspaceSetup><MainLayout /></RequireWorkspaceSetup></RequireCloudAuth>;
+  if (hasCommandCenterEntry()) {
+    return <RequireWorkspaceSetup><MainLayout /></RequireWorkspaceSetup>;
+  }
+
+  if (!isSupabaseConfigured()) {
+    return <Landing />;
   }
 
   if (status === 'loading') {

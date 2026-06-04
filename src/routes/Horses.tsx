@@ -68,7 +68,7 @@ export default function Horses() {
   const [viewMode, setViewMode] = useState<ViewMode>('Portfolio');
   const [segmentFilter, setSegmentFilter] = useState<SegmentFilter>('All');
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
-  const [formErrors, setFormErrors] = useState<Partial<Record<'name' | 'barnName' | 'owner' | 'ownerEntity' | 'barn' | 'pasture', string>>>({});
+  const [formErrors, setFormErrors] = useState<Partial<Record<'name' | 'owner', string>>>({});
   const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
   const [form, setForm] = useState(() =>
     createHorseFormDefaults({
@@ -186,13 +186,9 @@ export default function Horses() {
     : [];
 
   const handleCreateHorse = () => {
-    const nextErrors: Partial<Record<'name' | 'barnName' | 'owner' | 'ownerEntity' | 'barn' | 'pasture', string>> = {};
-    if (form.name.trim().length < 3) nextErrors.name = 'Registered name is required.';
-    if (!form.barnName.trim()) nextErrors.barnName = 'Barn name is required.';
+    const nextErrors: Partial<Record<'name' | 'owner', string>> = {};
+    if (form.name.trim().length < 3) nextErrors.name = 'Registered name is required (3+ characters).';
     if (form.owner.trim().length < 2) nextErrors.owner = 'Owner is required.';
-    if (form.ownerEntity.trim().length < 2) nextErrors.ownerEntity = 'Owner entity is required.';
-    if (!form.barn.trim()) nextErrors.barn = 'Barn is required.';
-    if (!form.pasture.trim()) nextErrors.pasture = 'Pasture is required.';
 
     setFormErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
@@ -265,7 +261,6 @@ export default function Horses() {
                 setForm((current) => ({ ...current, barnName: event.target.value }));
                 setFormErrors((current) => ({ ...current, barnName: undefined }));
               }} disabled={!canCreateHorse} />
-              {formErrors.barnName ? <span className="field-error">{formErrors.barnName}</span> : null}
             </label>
             <label className="field-stack">
               <span className="field-label">Segment</span>
@@ -311,7 +306,6 @@ export default function Horses() {
                 setForm((current) => ({ ...current, ownerEntity: event.target.value }));
                 setFormErrors((current) => ({ ...current, ownerEntity: undefined }));
               }} disabled={!canCreateHorse} />
-              {formErrors.ownerEntity ? <span className="field-error">{formErrors.ownerEntity}</span> : null}
             </label>
             <label className="field-stack">
               <span className="field-label">AQHA number</span>
@@ -327,7 +321,6 @@ export default function Horses() {
                 setForm((current) => ({ ...current, barn: event.target.value }));
                 setFormErrors((current) => ({ ...current, barn: undefined }));
               }} disabled={!canCreateHorse} />
-              {formErrors.barn ? <span className="field-error">{formErrors.barn}</span> : null}
             </label>
             <label className="field-stack">
               <span className="field-label">Pasture</span>
@@ -335,7 +328,6 @@ export default function Horses() {
                 setForm((current) => ({ ...current, pasture: event.target.value }));
                 setFormErrors((current) => ({ ...current, pasture: undefined }));
               }} disabled={!canCreateHorse} />
-              {formErrors.pasture ? <span className="field-error">{formErrors.pasture}</span> : null}
             </label>
           </div>
           <div className="inline-actions">

@@ -122,6 +122,7 @@ type XbarStore = {
   ) => ActionResult;
   addRanchAsset: (asset: Pick<RanchAsset, 'name' | 'category' | 'location'>) => ActionResult;
   updateAsset: (assetId: string, patch: AssetPatch) => ActionResult;
+  deleteRanchAsset: (assetId: string) => ActionResult;
   addHorseNote: (horseId: string, note: Pick<HorseNote, 'title' | 'body' | 'author' | 'tone'>) => ActionResult;
   addMedicalEvent: (
     horseId: string,
@@ -1849,6 +1850,15 @@ export const useXbarStore = create<XbarStore>()(
           ranchAssets: state.ranchAssets.map((asset) => (asset.id === assetId ? { ...asset, ...patch } : asset)),
         }));
         return { ok: true, message: 'Asset record updated.', id: assetId };
+      },
+      deleteRanchAsset: (assetId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageAssets');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+        if (!get().ranchAssets.some((asset) => asset.id === assetId)) {
+          return { ok: false, message: 'Asset not found.' };
+        }
+        set((state) => ({ ranchAssets: state.ranchAssets.filter((asset) => asset.id !== assetId) }));
+        return { ok: true, message: 'Asset removed.' };
       },
       addHorseNote: (horseId, note) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
