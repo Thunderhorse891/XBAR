@@ -2216,8 +2216,7 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Horse record not found for this ownership update.' };
         }
 
-        const horse = get().horses.find((item) => item.id === horseId);
-        const currentShareTotal = horse?.ownership.reduce((total, item) => total + item.share, 0) ?? 0;
+        const currentShareTotal = targetHorse.ownership.reduce((total, item) => total + item.share, 0);
         if (currentShareTotal + stake.share > 100) {
           return {
             ok: false,
