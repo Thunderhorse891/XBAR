@@ -1,202 +1,46 @@
-import { EmptyState } from '@/components/EmptyState';
-import { MetricCard, PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
+import { useState } from 'react';
+import { PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
 import { startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency, formatDateLabel } from '@/lib/format';
-import { getStripePaymentLink, isBillingConfigured, stripeConfig } from '@/lib/platformConfig';
+import { getStripePaymentLink, stripeConfig } from '@/lib/platformConfig';
 import { subscriptionTierConfig } from '@/lib/xbarRuntime';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { SubscriptionTier } from '@/types/xbar';
+import './subscriptionExperience.css';
 
 const tiers: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
+const tierFit: Record<SubscriptionTier, string> = { Starter: 'For an owner building a dependable digital record.', Professional: 'For programs coordinating horses, buyers, and a small team.', 'Ranch Ops': 'For working ranches managing care, assets, breeding, and spend.', Enterprise: 'For complex operations that need controls, scale, and support.' };
+
+function usagePercent(used: number, limit: number) { return limit > 0 ? Math.min(100, (used / limit) * 100) : 0; }
 
 export default function Subscriptions() {
   const subscription = useXbarStore((state) => state.subscription);
   const canManageBilling = useCurrentRoleCapability('manageBilling');
-  const billingConfigured = isBillingConfigured();
   const session = useCloudStore((state) => state.session);
   const workspaceId = useCloudStore((state) => state.workspaceId);
   const pushToast = useUiStore((state) => state.pushToast);
+  const [checkoutTier, setCheckoutTier] = useState<SubscriptionTier | null>(null);
 
-  return (
-    <>
-      <PageHeader
-        eyebrow="Subscriptions"
-        title="Billing"
-        actions={
-          <>
-            <Pill tone={billingConfigured ? 'emerald' : 'slate'}>{billingConfigured ? 'Stripe links live' : 'Manual billing'}</Pill>
-            <Pill tone="slate">{subscription.tier}</Pill>
-          </>
-        }
-      />
+  const beginCheckout = async (tier: SubscriptionTier) => {
+    setCheckoutTier(tier);
+    const managed = await startManagedCheckout({ tier, workspaceId, accessToken: session?.access_token ?? '' });
+    if (managed.ok) { window.location.assign(managed.url); return; }
+    const fallback = getStripePaymentLink(tier);
+    if (fallback) { window.location.assign(fallback); return; }
+    pushToast({ title: 'Checkout needs attention', message: `${managed.message} Your workspace and current plan were not changed.`, tone: 'error' });
+    setCheckoutTier(null);
+  };
 
-      <div className="metric-grid">
-        <MetricCard label="Tier" value={subscription.tier} detail="Current plan" tone="blue" />
-        <MetricCard label="Renews" value={formatDateLabel(subscription.renewalDate)} detail="Next billing date" tone="slate" />
-        <MetricCard
-          label="Seats"
-          value={`${subscription.usage.seatsUsed}/${subscription.usage.seatLimit}`}
-          detail="Licensed users"
-          tone="emerald"
-        />
-        <MetricCard
-          label="Storage"
-          value={`${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB`}
-          detail="Ranch files"
-          tone="blue"
-        />
-      </div>
+  const usage = [{ label: 'Team seats', used: subscription.usage.seatsUsed, limit: subscription.usage.seatLimit, suffix: '' }, { label: 'Documents', used: subscription.usage.documentsProcessed, limit: subscription.usage.documentLimit, suffix: '' }, { label: 'Storage', used: subscription.usage.storageUsedGb, limit: subscription.usage.storageLimitGb, suffix: ' GB' }, { label: 'Shared access', used: subscription.usage.sharedAccessSeatsUsed, limit: subscription.usage.sharedAccessSeatLimit, suffix: '' }];
 
-      <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="State" title="Billing">
-          <div className="stack-list">
-            <div className="stack-item">
-              <div className="stack-item__top">
-                <div className="stack-item__title">{formatCurrency(subscription.monthlyRate)}/mo</div>
-                <Pill tone="blue">{subscription.tier}</Pill>
-              </div>
-              <div className="inline-metrics">
-                <span>{subscription.billingState}</span>
-                <span>{subscription.sharedAccessEnabled ? 'Shared access on' : 'Shared access off'}</span>
-                <span>{subscription.brandedListings ? 'Branded links on' : 'Branded links off'}</span>
-              </div>
-            </div>
-            <div className="stack-item">
-              <div className="stack-item__top">
-                <div className="stack-item__title">Checkout</div>
-                <Pill tone={billingConfigured ? 'emerald' : 'slate'}>{billingConfigured ? 'Configured' : 'Not configured'}</Pill>
-              </div>
-            </div>
-            <div className="stack-item">
-              <div className="stack-item__top">
-                <div className="stack-item__title">Billing portal</div>
-                <Pill tone={stripeConfig.billingPortalUrl ? 'emerald' : 'slate'}>
-                  {stripeConfig.billingPortalUrl ? 'Available' : 'Unavailable'}
-                </Pill>
-              </div>
-            </div>
-          </div>
-          <div className="inline-actions">
-            {stripeConfig.billingPortalUrl && canManageBilling ? (
-              <a className="button button--ghost button--compact" href={stripeConfig.billingPortalUrl} target="_blank" rel="noreferrer">
-                Manage billing
-              </a>
-            ) : null}
-          </div>
-        </Panel>
+  return <>
+    <PageHeader eyebrow="Subscription" title="Plan & billing" actions={<><Pill tone="emerald">Secure checkout</Pill><Pill tone="blue">{subscription.tier}</Pill></>} />
+    <section className="subscription-hero"><div className="subscription-hero__main"><Pill tone="blue">Built to grow with the operation</Pill><h2 className="subscription-hero__title">Keep the ranch ready for the next decision.</h2><p className="subscription-hero__copy">Choose the operating capacity your team needs now. Every plan protects the core horse record; higher tiers unlock the collaboration, sale-readiness, and operating controls that save the most time.</p><div className="subscription-trust-row"><span>Secure Stripe checkout</span><span>Change plans as the operation grows</span><span>Your records stay intact</span></div></div><aside className="subscription-hero__side"><span className="field-label">Current plan</span><strong style={{ fontSize: 28 }}>{subscription.tier}</strong><span className="stack-item__copy">{formatCurrency(subscription.monthlyRate)}/month · renews {formatDateLabel(subscription.renewalDate)}</span>{stripeConfig.billingPortalUrl && canManageBilling ? <a className="button button--ghost" href={stripeConfig.billingPortalUrl} target="_blank" rel="noreferrer">Manage payment details</a> : <span className="stack-item__copy">Plan changes are available below.</span>}</aside></section>
 
-        <Panel eyebrow="Usage" title="Ranch">
-          <div className="stack-list">
-            <div className="stack-item">
-              <div className="stack-item__top">
-                <div className="stack-item__title">Seats</div>
-                <strong>{subscription.usage.seatsUsed}/{subscription.usage.seatLimit}</strong>
-              </div>
-              <ProgressBar value={(subscription.usage.seatsUsed / subscription.usage.seatLimit) * 100} />
-            </div>
-            <div className="stack-item">
-              <div className="stack-item__top">
-                <div className="stack-item__title">Storage</div>
-                <strong>{subscription.usage.storageUsedGb}/{subscription.usage.storageLimitGb} GB</strong>
-              </div>
-              <ProgressBar value={(subscription.usage.storageUsedGb / subscription.usage.storageLimitGb) * 100} tone="blue" />
-            </div>
-            <div className="stack-item">
-              <div className="stack-item__top">
-                <div className="stack-item__title">Documents</div>
-                <strong>{subscription.usage.documentsProcessed}/{subscription.usage.documentLimit}</strong>
-              </div>
-              <ProgressBar value={(subscription.usage.documentsProcessed / subscription.usage.documentLimit) * 100} tone="slate" />
-            </div>
-            <div className="stack-item">
-              <div className="stack-item__top">
-                <div className="stack-item__title">Shared seats</div>
-                <strong>{subscription.usage.sharedAccessSeatsUsed}/{subscription.usage.sharedAccessSeatLimit}</strong>
-              </div>
-              <ProgressBar
-                value={
-                  subscription.usage.sharedAccessSeatLimit
-                    ? (subscription.usage.sharedAccessSeatsUsed / subscription.usage.sharedAccessSeatLimit) * 100
-                    : 0
-                }
-                tone="emerald"
-              />
-            </div>
-          </div>
-        </Panel>
-      </div>
+    <Panel eyebrow="Capacity" title="Current usage"><div className="subscription-usage-grid">{usage.map((item) => <div className="subscription-usage-card" key={item.label}><div className="subscription-usage-card__top"><span>{item.label}</span><strong>{item.used}{item.suffix} / {item.limit}{item.suffix}</strong></div><ProgressBar value={usagePercent(item.used, item.limit)} tone={usagePercent(item.used, item.limit) >= 80 ? 'amber' : 'blue'} /></div>)}</div></Panel>
 
-      <Panel eyebrow="Checkout" title="Plans">
-        {billingConfigured ? (
-          <div className="detail-grid">
-            {tiers.map((tier) => {
-              const config = subscriptionTierConfig[tier];
-              const current = tier === subscription.tier;
-              const paymentLink = getStripePaymentLink(tier);
-
-              return (
-                <div key={tier} className="stack-item">
-                  <div className="stack-item__top">
-                    <div className="stack-item__title">{tier}</div>
-                    <Pill tone={current ? 'blue' : 'slate'}>{current ? 'Current' : 'Available'}</Pill>
-                  </div>
-                  <div className="inline-metrics">
-                    <span>{formatCurrency(config.monthlyRate)}/mo</span>
-                    <span>{config.limits.seatLimit} seats</span>
-                    <span>{config.limits.storageLimitGb} GB</span>
-                    <span>{config.limits.sharedAccessSeatLimit} shared</span>
-                  </div>
-                  <div className="token-row">
-                    {config.featureFlags.map((flag) => (
-                      <Pill key={flag} tone="blue">
-                        {flag}
-                      </Pill>
-                    ))}
-                  </div>
-                    <div className="inline-actions">
-                      {!current && paymentLink && canManageBilling ? (
-                        <button
-                          className="button button--primary button--compact"
-                          type="button"
-                          onClick={async () => {
-                            const managedCheckout = await startManagedCheckout({
-                              tier,
-                              workspaceId,
-                              accessToken: session?.access_token ?? '',
-                            });
-
-                            if (managedCheckout.ok) {
-                              window.location.href = managedCheckout.url;
-                              return;
-                            }
-
-                            pushToast({
-                              title: 'Managed checkout unavailable',
-                              message: managedCheckout.message,
-                              tone: 'error',
-                            });
-
-                            window.open(paymentLink, '_blank', 'noopener,noreferrer');
-                          }}
-                        >
-                          Open checkout
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-              );
-            })}
-          </div>
-        ) : (
-          <EmptyState
-            compact
-            title="Stripe not configured"
-            description="Add Stripe payment links to enable self-serve checkout in this build."
-          />
-        )}
-      </Panel>
-    </>
-  );
+    <Panel eyebrow="Choose your operating level" title="Plans"><div className="subscription-plan-grid">{tiers.map((tier) => { const config = subscriptionTierConfig[tier]; const current = tier === subscription.tier; const recommended = tier === 'Ranch Ops'; const busy = checkoutTier === tier; return <article className={`subscription-plan${recommended ? ' subscription-plan--recommended' : ''}`} key={tier}>{recommended && <span className="subscription-plan__badge">Best for working ranches</span>}<div className="subscription-plan__name">{tier}</div><div className="subscription-plan__fit">{tierFit[tier]}</div><div className="subscription-plan__price">{formatCurrency(config.monthlyRate)}<small>/month</small></div><div className="subscription-plan__limits"><span>{config.limits.seatLimit} team seats</span><span>{config.limits.documentLimit.toLocaleString()} documents · {config.limits.storageLimitGb.toLocaleString()} GB</span><span>{config.limits.sharedAccessSeatLimit} shared-access seats</span></div><ul className="subscription-plan__features">{config.featureFlags.map((feature) => <li key={feature}>{feature}</li>)}</ul>{current ? <button className="button button--ghost subscription-plan__action" type="button" disabled>Current plan</button> : <button className="button button--primary subscription-plan__action" type="button" disabled={!canManageBilling || checkoutTier !== null} onClick={() => void beginCheckout(tier)}>{busy ? 'Opening secure checkout...' : `Choose ${tier}`}</button>}<div className="subscription-checkout-note">{canManageBilling ? 'Your plan changes only after checkout is complete.' : 'Ask a workspace owner to change plans.'}</div></article>; })}</div></Panel>
+  </>;
 }
