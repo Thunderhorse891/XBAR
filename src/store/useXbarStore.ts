@@ -81,7 +81,11 @@ type ActionResult = {
   id?: string;
 };
 
-type HorsePatch = Partial<Pick<HorseRecord, 'name' | 'breed' | 'color' | 'sex' | 'registrationNumber' | 'registry' | 'aqhaNumber' | 'owner' | 'ownerEntity' | 'segment' | 'status'>> & { askPrice?: number };
+type HorsePatch = Partial<Pick<HorseRecord, 'name' | 'barnName' | 'summary' | 'breed' | 'color' | 'sex' | 'registrationNumber' | 'registry' | 'aqhaNumber' | 'owner' | 'ownerEntity' | 'segment' | 'status' | 'foaledOn' | 'microchipId' | 'markings' | 'medicalNotes' | 'lastVetVisit'>> & {
+  askPrice?: number;
+  assignments?: Partial<HorseRecord['assignments']>;
+  bloodline?: Partial<HorseRecord['bloodline']>;
+};
 
 type XbarStore = {
   currentRole: UserRole;
@@ -2132,9 +2136,18 @@ export const useXbarStore = create<XbarStore>()(
                   aqhaNumber: patch.aqhaNumber?.trim() ?? h.aqhaNumber,
                   owner: patch.owner?.trim() ?? h.owner,
                   ownerEntity: patch.ownerEntity?.trim() ?? h.ownerEntity,
+                  barnName: patch.barnName !== undefined ? patch.barnName.trim() || h.barnName : h.barnName,
+                  summary: patch.summary !== undefined ? patch.summary.trim() : h.summary,
                   segment: patch.segment ?? h.segment,
                   status: patch.status ?? h.status,
+                  foaledOn: patch.foaledOn !== undefined ? patch.foaledOn : h.foaledOn,
+                  microchipId: patch.microchipId !== undefined ? patch.microchipId.trim() : h.microchipId,
+                  markings: patch.markings !== undefined ? patch.markings.trim() : h.markings,
+                  medicalNotes: patch.medicalNotes !== undefined ? patch.medicalNotes.trim() : h.medicalNotes,
+                  lastVetVisit: patch.lastVetVisit !== undefined ? patch.lastVetVisit : h.lastVetVisit,
                   sale: patch.askPrice !== undefined ? { ...h.sale, askPrice: patch.askPrice } : h.sale,
+                  assignments: patch.assignments ? { ...h.assignments, ...patch.assignments } : h.assignments,
+                  bloodline: patch.bloodline ? { ...h.bloodline, ...patch.bloodline } : h.bloodline,
                 }
               : h,
           ),

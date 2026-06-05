@@ -13,7 +13,7 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useCurrentRoleCapability, useHorseRecord, useXbarStore } from '@/store/useXbarStore';
-import type { DocumentRecord, DocumentSource, GalleryAsset, HorseSex, SalesLead } from '@/types/xbar';
+import type { DocumentRecord, DocumentSource, GalleryAsset, HorseSegment, HorseSex, HorseStatus, SalesLead } from '@/types/xbar';
 import { classNames, docSources, leadChannels, mediaKinds } from '@/features/horses/constants';
 import { medicalEventTypes } from '@/features/health/constants';
 import type { DetailTab } from '@/features/horses/types';
@@ -132,14 +132,23 @@ export default function HorseDetail() {
   const [breedingBody, setBreedingBody] = useState('');
   const [breedingDate, setBreedingDate] = useState('');
   const [breedingError, setBreedingError] = useState('');
+  const canManageMedical = useCurrentRoleCapability('manageMedical');
   const canManageBreeding = useCurrentRoleCapability('manageBreeding');
-  const [coreForm, setCoreForm] = useState({ name: '', breed: '', registry: '', color: '', sex: 'Mare' as HorseSex, aqhaNumber: '', registrationNumber: '', owner: '', ownerEntity: '', askPrice: '' });
+  const [coreForm, setCoreForm] = useState({ name: '', barnName: '', summary: '', breed: '', registry: '', color: '', sex: 'Mare' as HorseSex, aqhaNumber: '', registrationNumber: '', owner: '', ownerEntity: '', askPrice: '', foaledOn: '', microchipId: '', markings: '', bloodlineSire: '', bloodlineDam: '', bloodlineFamily: '', segment: 'Sale Prospect' as HorseSegment, status: 'In Training' as HorseStatus });
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [location, setLocation] = useState({
     barn: horse?.location.barn ?? '',
     pasture: horse?.location.pasture ?? '',
     stall: horse?.location.stall ?? '',
   });
+  const [medicalNotesForm, setMedicalNotesForm] = useState({ notes: horse?.medicalNotes ?? '', lastVetVisit: horse?.lastVetVisit ?? '' });
+  const [assignmentsForm, setAssignmentsForm] = useState({
+    trainer: horse?.assignments.trainer ?? '',
+    veterinarian: horse?.assignments.veterinarian ?? '',
+    ranchManager: horse?.assignments.ranchManager ?? '',
+    farrier: horse?.assignments.farrier ?? '',
+  });
+  const [assignmentsError, setAssignmentsError] = useState('');
 
   const mediaInputId = useId();
   const mediaInputRef = useRef<HTMLInputElement | null>(null);
@@ -314,6 +323,16 @@ export default function HorseDetail() {
     if (result.ok) {
       setLocationError('');
     }
+  };
+
+  const handleAssignmentsUpdate = () => {
+    const result = updateHorse(horse.id, { assignments: assignmentsForm });
+    pushToast({
+      title: result.ok ? 'Assignments saved' : 'Assignments blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
+    if (result.ok) setAssignmentsError('');
   };
 
   const handleLeadCreate = () => {
@@ -666,24 +685,56 @@ export default function HorseDetail() {
         <Panel eyebrow="Identity" title="Registry">
           {editingCore ? (
             <div className="form-grid form-grid--tight">
-              {(['name', 'breed', 'registry', 'color', 'aqhaNumber', 'registrationNumber', 'owner', 'ownerEntity'] as const).map((field) => (
+              {(['name', 'barnName', 'breed', 'registry', 'color', 'aqhaNumber', 'registrationNumber', 'owner', 'ownerEntity', 'markings', 'microchipId'] as const).map((field) => (
                 <label key={field} className="field-stack">
-                  <span className="field-label">{field === 'aqhaNumber' ? 'AQHA #' : field === 'registrationNumber' ? 'Registration #' : field === 'ownerEntity' ? 'Owner entity' : field.charAt(0).toUpperCase() + field.slice(1)}</span>
+                  <span className="field-label">{field === 'aqhaNumber' ? 'AQHA #' : field === 'registrationNumber' ? 'Registration #' : field === 'ownerEntity' ? 'Owner entity' : field === 'microchipId' ? 'Microchip ID' : field === 'barnName' ? 'Barn name' : field.charAt(0).toUpperCase() + field.slice(1)}</span>
                   <input className="field-input" value={coreForm[field]} onChange={(e) => setCoreForm((f) => ({ ...f, [field]: e.target.value }))} />
                 </label>
               ))}
+              <label className="field-stack field-stack--wide">
+                <span className="field-label">Profile summary</span>
+                <textarea className="field-textarea" rows={3} value={coreForm.summary} onChange={(e) => setCoreForm((f) => ({ ...f, summary: e.target.value }))} />
+              </label>
               <label className="field-stack">
                 <span className="field-label">Sex</span>
                 <select className="field-input" value={coreForm.sex} onChange={(e) => setCoreForm((f) => ({ ...f, sex: e.target.value as HorseSex }))}>
-                  {(['Mare', 'Gelding', 'Stallion', 'Filly', 'Colt'] as HorseSex[]).map((s) => <option key={s}>{s}</option>)}
+                  {(['Mare', 'Stud', 'Gelding', 'Filly', 'Colt'] as HorseSex[]).map((s) => <option key={s}>{s}</option>)}
                 </select>
+              </label>
+              <label className="field-stack">
+                <span className="field-label">Foaled on</span>
+                <input className="field-input" type="date" value={coreForm.foaledOn} onChange={(e) => setCoreForm((f) => ({ ...f, foaledOn: e.target.value }))} />
+              </label>
+              <label className="field-stack">
+                <span className="field-label">Segment</span>
+                <select className="field-input" value={coreForm.segment} onChange={(e) => setCoreForm((f) => ({ ...f, segment: e.target.value as HorseSegment }))}>
+                  {(['Broodmare', 'Stud', 'Show String', 'Sale Prospect', 'Young Stock', 'Retired'] as HorseSegment[]).map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </label>
+              <label className="field-stack">
+                <span className="field-label">Status</span>
+                <select className="field-input" value={coreForm.status} onChange={(e) => setCoreForm((f) => ({ ...f, status: e.target.value as HorseStatus }))}>
+                  {(['In Training', 'Broodmare Program', 'Sale Prep', 'Medical Review', 'Pasture', 'Retired'] as HorseStatus[]).map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </label>
+              <label className="field-stack">
+                <span className="field-label">Sire</span>
+                <input className="field-input" value={coreForm.bloodlineSire} onChange={(e) => setCoreForm((f) => ({ ...f, bloodlineSire: e.target.value }))} />
+              </label>
+              <label className="field-stack">
+                <span className="field-label">Dam</span>
+                <input className="field-input" value={coreForm.bloodlineDam} onChange={(e) => setCoreForm((f) => ({ ...f, bloodlineDam: e.target.value }))} />
+              </label>
+              <label className="field-stack">
+                <span className="field-label">Bloodline family</span>
+                <input className="field-input" value={coreForm.bloodlineFamily} onChange={(e) => setCoreForm((f) => ({ ...f, bloodlineFamily: e.target.value }))} />
               </label>
               <label className="field-stack">
                 <span className="field-label">Asking price</span>
                 <input className="field-input" type="number" min="0" value={coreForm.askPrice} onChange={(e) => setCoreForm((f) => ({ ...f, askPrice: e.target.value }))} placeholder="0" />
               </label>
               <div className="inline-actions" style={{ gridColumn: '1/-1' }}>
-                <button className="button button--primary button--compact" type="button" onClick={() => { const result = updateHorse(horse.id, { name: coreForm.name || horse.name, breed: coreForm.breed, registry: coreForm.registry, color: coreForm.color, sex: coreForm.sex, aqhaNumber: coreForm.aqhaNumber, registrationNumber: coreForm.registrationNumber, owner: coreForm.owner, ownerEntity: coreForm.ownerEntity, askPrice: coreForm.askPrice ? Number(coreForm.askPrice) : undefined }); if (result.ok) { setEditingCore(false); } else { pushToast({ title: 'Save blocked', message: result.message, tone: 'error' }); } }}>Save</button>
+                <button className="button button--primary button--compact" type="button" onClick={() => { const result = updateHorse(horse.id, { name: coreForm.name || horse.name, barnName: coreForm.barnName, summary: coreForm.summary, breed: coreForm.breed, registry: coreForm.registry, color: coreForm.color, sex: coreForm.sex, aqhaNumber: coreForm.aqhaNumber, registrationNumber: coreForm.registrationNumber, owner: coreForm.owner, ownerEntity: coreForm.ownerEntity, askPrice: coreForm.askPrice ? Number(coreForm.askPrice) : undefined, foaledOn: coreForm.foaledOn || undefined, microchipId: coreForm.microchipId, markings: coreForm.markings, segment: coreForm.segment, status: coreForm.status, bloodline: { sire: coreForm.bloodlineSire, dam: coreForm.bloodlineDam, family: coreForm.bloodlineFamily } }); if (result.ok) { setEditingCore(false); } else { pushToast({ title: 'Save blocked', message: result.message, tone: 'error' }); } }}>Save</button>
                 <button className="button button--ghost button--compact" type="button" onClick={() => setEditingCore(false)}>Cancel</button>
               </div>
             </div>
@@ -706,7 +757,7 @@ export default function HorseDetail() {
               )}
               <div className="inline-actions" style={{ marginTop: '12px' }}>
                 {canEditHorse && (
-                  <button className="button button--ghost button--compact" type="button" onClick={() => { setCoreForm({ name: horse.name, breed: horse.breed, registry: horse.registry, color: horse.color, sex: horse.sex, aqhaNumber: horse.aqhaNumber, registrationNumber: horse.registrationNumber, owner: horse.owner, ownerEntity: horse.ownerEntity, askPrice: horse.sale.askPrice ? String(horse.sale.askPrice) : '' }); setEditingCore(true); }}>Edit identity</button>
+                  <button className="button button--ghost button--compact" type="button" onClick={() => { setCoreForm({ name: horse.name, barnName: horse.barnName, summary: horse.summary, breed: horse.breed, registry: horse.registry, color: horse.color, sex: horse.sex, aqhaNumber: horse.aqhaNumber, registrationNumber: horse.registrationNumber, owner: horse.owner, ownerEntity: horse.ownerEntity, askPrice: horse.sale.askPrice ? String(horse.sale.askPrice) : '', foaledOn: horse.foaledOn ?? '', microchipId: horse.microchipId, markings: horse.markings, bloodlineSire: horse.bloodline.sire, bloodlineDam: horse.bloodline.dam, bloodlineFamily: horse.bloodline.family, segment: horse.segment, status: horse.status }); setEditingCore(true); }}>Edit identity</button>
                 )}
                 {horse.aqhaNumber && (
                   <a
@@ -759,6 +810,37 @@ export default function HorseDetail() {
             >
               Save location
             </button>
+          </div>
+          <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+            <div className="form-grid form-grid--tight">
+              <label className="field-stack">
+                <span className="field-label">Trainer</span>
+                <input className="field-input" value={assignmentsForm.trainer} onChange={(e) => setAssignmentsForm((f) => ({ ...f, trainer: e.target.value }))} disabled={!canEditHorse} />
+              </label>
+              <label className="field-stack">
+                <span className="field-label">Veterinarian</span>
+                <input className="field-input" value={assignmentsForm.veterinarian} onChange={(e) => setAssignmentsForm((f) => ({ ...f, veterinarian: e.target.value }))} disabled={!canEditHorse} />
+              </label>
+              <label className="field-stack">
+                <span className="field-label">Ranch manager</span>
+                <input className="field-input" value={assignmentsForm.ranchManager} onChange={(e) => setAssignmentsForm((f) => ({ ...f, ranchManager: e.target.value }))} disabled={!canEditHorse} />
+              </label>
+              <label className="field-stack">
+                <span className="field-label">Farrier</span>
+                <input className="field-input" value={assignmentsForm.farrier} onChange={(e) => setAssignmentsForm((f) => ({ ...f, farrier: e.target.value }))} disabled={!canEditHorse} />
+              </label>
+            </div>
+            {assignmentsError ? <div className="field-error">{assignmentsError}</div> : null}
+            <div className="inline-actions">
+              <button
+                className="button button--ghost button--compact"
+                type="button"
+                onClick={handleAssignmentsUpdate}
+                disabled={!canEditHorse}
+              >
+                Save assignments
+              </button>
+            </div>
           </div>
         </Panel>
       </div>
@@ -927,6 +1009,25 @@ export default function HorseDetail() {
             </div>
           ) : (
             <EmptyState compact title="No medical timeline" description="Add a care event after the next exam." />
+          )}
+          {canManageMedical && (
+            <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid var(--border)' }}>
+              <div className="form-grid form-grid--tight">
+                <label className="field-stack">
+                  <span className="field-label">Last vet visit</span>
+                  <input className="field-input" type="date" value={medicalNotesForm.lastVetVisit} onChange={(e) => setMedicalNotesForm((f) => ({ ...f, lastVetVisit: e.target.value }))} />
+                </label>
+                <label className="field-stack field-stack--wide">
+                  <span className="field-label">Medical notes</span>
+                  <textarea className="field-textarea" rows={3} value={medicalNotesForm.notes} onChange={(e) => setMedicalNotesForm((f) => ({ ...f, notes: e.target.value }))} />
+                </label>
+              </div>
+              <div className="inline-actions">
+                <button className="button button--ghost button--compact" type="button" onClick={() => { const result = updateHorse(horse.id, { medicalNotes: medicalNotesForm.notes, lastVetVisit: medicalNotesForm.lastVetVisit || undefined }); pushToast({ title: result.ok ? 'Medical record saved' : 'Medical save blocked', message: result.message, tone: result.ok ? 'success' : 'error' }); }}>
+                  Save medical info
+                </button>
+              </div>
+            </div>
           )}
         </Panel>
       </div>
