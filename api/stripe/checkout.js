@@ -6,6 +6,32 @@ import { requireWorkspaceAccess } from '../_lib/supabase-admin.js';
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY || '';
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026-02-25.clover' }) : null;
 
+function getTrustedReturnUrl(requestedReturnUrl) {
+  const vercelOrigin = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '';
+  const configuredOrigins = [process.env.PUBLIC_APP_URL, process.env.VITE_PUBLIC_APP_URL, vercelOrigin]
+    .filter(Boolean)
+    .map((value) => {
+      try {
+        return new URL(value).origin;
+      } catch {
+        return '';
+      }
+    })
+    .filter(Boolean);
+
+  const fallbackOrigin = configuredOrigins[0] || 'https://xbar.app';
+  try {
+    const requestedUrl = new URL(requestedReturnUrl || fallbackOrigin);
+    if (configuredOrigins.includes(requestedUrl.origin)) {
+      return requestedUrl.toString();
+    }
+  } catch {
+    // Fall through to the trusted application origin.
+  }
+
+  return fallbackOrigin;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
@@ -19,8 +45,9 @@ export default async function handler(req, res) {
   const body = await readJsonBody(req);
   const tier = typeof body.tier === 'string' ? body.tier : '';
   const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId : '';
-  const returnUrl = typeof body.returnUrl === 'string' && body.returnUrl ? body.returnUrl : 'https://xbar.app';
-  const seatCount = Number(body.seatCount || 1);
+  const returnUrl = getTrustedReturnUrl(typeof body.returnUrl === 'string' ? body.returnUrl : '');
+  const requestedSeatCount = Number(body.seatCount || 1);
+  const seatCount = Number.isInteger(requestedSeatCount) ? Math.min(100, Math.max(1, requestedSeatCount)) : 1;
   const priceId = getStripePriceIdByTier(tier);
 
   if (!workspaceId || !priceId) {
@@ -30,6 +57,10 @@ export default async function handler(req, res) {
   const access = await requireWorkspaceAccess(accessToken, workspaceId);
   if (!access.ok) {
     return sendJson(res, access.status, { ok: false, message: access.message });
+  }
+
+  if (access.role !== 'Admin') {
+    return sendJson(res, 403, { ok: false, message: 'Only workspace admins can manage billing.' });
   }
 
   const { supabase, user } = access;
@@ -57,7 +88,7 @@ export default async function handler(req, res) {
     line_items: [
       {
         price: priceId,
-        quantity: Math.max(1, seatCount),
+        quantity: seatCount,
       },
     ],
     success_url: `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}checkout=success`,
@@ -80,7 +111,7 @@ export default async function handler(req, res) {
     stripe_customer_id: stripeCustomerId,
     stripe_subscription_id: '',
     stripe_price_id: priceId,
-    seat_count: Math.max(1, seatCount),
+    seat_count: seatCount,
     entitlement_payload: buildSubscriptionProfile({
       tier,
       billingStatus: 'incomplete',

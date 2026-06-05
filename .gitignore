@@ -10,3 +10,4 @@ output/playwright/
 .codex-test-dist/
 playwright-report/
 test-results/
+supabase/production-schema.generated.sql
