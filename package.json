@@ -8,7 +8,7 @@
     "dev:web": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "npm run supabase:prepare && tsc -p tsconfig.test.json && node .codex-test-dist/tests/xbarStoreLogic.test.js && node .codex-test-dist/tests/xbarPhaseTwo.test.js && node .codex-test-dist/tests/xbarGrowth.test.js && node .codex-test-dist/tests/permissions.test.js && node .codex-test-dist/tests/facebookSharing.test.js && node .codex-test-dist/tests/workspaceAccess.test.js && node .codex-test-dist/tests/dashboardOps.test.js && node .codex-test-dist/tests/connectionSecurity.test.js",
+    "test": "npm run supabase:prepare && tsc -p tsconfig.test.json && node .codex-test-dist/tests/xbarStoreLogic.test.js && node .codex-test-dist/tests/xbarPhaseTwo.test.js && node .codex-test-dist/tests/xbarGrowth.test.js && node .codex-test-dist/tests/permissions.test.js && node .codex-test-dist/tests/facebookSharing.test.js && node .codex-test-dist/tests/workspaceAccess.test.js && node .codex-test-dist/tests/dashboardOps.test.js && node .codex-test-dist/tests/activation.test.js && node .codex-test-dist/tests/connectionSecurity.test.js",
     "test:e2e": "playwright test",
     "test:store": "npm run test",
     "supabase:prepare": "node scripts/prepare-supabase-schema.mjs",
@@ -19,30 +19,6 @@
     "mobile:open:ios": "cap open ios",
     "mobile:open:android": "cap open android"
   },
-  "dependencies": {
-    "@capacitor/android": "8.3.0",
-    "@capacitor/cli": "8.3.0",
-    "@capacitor/core": "8.3.0",
-    "@capacitor/ios": "8.3.0",
-    "@supabase/supabase-js": "2.100.1",
-    "pdfjs-dist": "5.6.205",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "react-router-dom": "6.30.3",
-    "stripe": "21.0.1",
-    "tesseract.js": "7.0.0",
-    "zustand": "4.5.7"
-  },
-  "devDependencies": {
-    "@playwright/test": "1.58.2",
-    "@types/node": "20.19.37",
-    "@types/react": "18.3.28",
-    "@types/react-dom": "18.3.7",
-    "@vitejs/plugin-react": "4.7.0",
-    "autoprefixer": "10.4.27",
-    "postcss": "8.5.8",
-    "tailwindcss": "3.4.19",
-    "typescript": "5.9.3",
-    "vite": "5.4.21"
-  }
+  "dependencies": { "@capacitor/android": "8.3.0", "@capacitor/cli": "8.3.0", "@capacitor/core": "8.3.0", "@capacitor/ios": "8.3.0", "@supabase/supabase-js": "2.100.1", "pdfjs-dist": "5.6.205", "react": "18.3.1", "react-dom": "18.3.1", "react-router-dom": "6.30.3", "stripe": "21.0.1", "tesseract.js": "7.0.0", "zustand": "4.5.7" },
+  "devDependencies": { "@playwright/test": "1.58.2", "@types/node": "20.19.37", "@types/react": "18.3.28", "@types/react-dom": "18.3.7", "@vitejs/plugin-react": "4.7.0", "autoprefixer": "10.4.27", "postcss": "8.5.8", "tailwindcss": "3.4.19", "typescript": "5.9.3", "vite": "5.4.21" }
 }
