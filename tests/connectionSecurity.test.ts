@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import test from 'node:test';
 
-const checkoutSource = await readFile(new URL('../api/stripe/checkout.js', import.meta.url), 'utf8');
-const plansSource = await readFile(new URL('../api/_lib/subscription-plans.js', import.meta.url), 'utf8');
-const migrationSource = await readFile(new URL('../supabase/migrations/20260605_harden_workspace_rls.sql', import.meta.url), 'utf8');
-const prepareSchemaSource = await readFile(new URL('../scripts/prepare-supabase-schema.mjs', import.meta.url), 'utf8');
+const fromRoot = (filePath: string) => path.resolve(process.cwd(), filePath);
+const checkoutSource = await readFile(fromRoot('api/stripe/checkout.js'), 'utf8');
+const plansSource = await readFile(fromRoot('api/_lib/subscription-plans.js'), 'utf8');
+const migrationSource = await readFile(fromRoot('supabase/migrations/20260605_harden_workspace_rls.sql'), 'utf8');
+const prepareSchemaSource = await readFile(fromRoot('scripts/prepare-supabase-schema.mjs'), 'utf8');
 
 test('managed checkout is admin-only and validates return origins', () => {
   assert.match(checkoutSource, /access\.role !== 'Admin'/);
