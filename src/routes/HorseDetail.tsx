@@ -90,6 +90,8 @@ export default function HorseDetail() {
   const deleteHorse = useXbarStore((state) => state.deleteHorse);
   const updateMedicalEvent = useXbarStore((state) => state.updateMedicalEvent);
   const deleteMedicalEvent = useXbarStore((state) => state.deleteMedicalEvent);
+  const removeGalleryAsset = useXbarStore((state) => state.removeGalleryAsset);
+  const setGalleryAssetStatus = useXbarStore((state) => state.setGalleryAssetStatus);
   const addBreedingEvent = useXbarStore((state) => state.addBreedingEvent);
   const updateBreedingEvent = useXbarStore((state) => state.updateBreedingEvent);
   const deleteBreedingEvent = useXbarStore((state) => state.deleteBreedingEvent);
@@ -163,7 +165,10 @@ export default function HorseDetail() {
   const hasRestrictedActions = !canManageSharedAccess || !canUploadMedia || !canUploadDocuments || !canEditHorse || !canManageSales;
 
 
-  const gallerySlots = useMemo(() => Array.from({ length: 4 }, (_, index) => horse.gallery[index] ?? null), [horse.gallery]);
+  const gallerySlots = useMemo(() => {
+    const slotCount = Math.max(4, horse.gallery.length + (horse.gallery.length < 8 ? 1 : 0));
+    return Array.from({ length: slotCount }, (_, index) => horse.gallery[index] ?? null);
+  }, [horse.gallery]);
   const salePacketReadyCount = packet.saleSlots.filter((slot) => slot.status === 'ready').length;
 
   const shareBadgeStyles =
@@ -520,6 +525,35 @@ export default function HorseDetail() {
                     </div>
                     <span className="rounded-full bg-white/12 px-2.5 py-1 text-[11px] font-semibold backdrop-blur-sm">{asset.status}</span>
                   </div>
+                  {canUploadMedia && (
+                    <div className="absolute inset-x-0 top-0 flex items-center justify-end gap-1.5 p-2 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                      {asset.status !== 'Approved' && (
+                        <button
+                          type="button"
+                          title="Approve photo"
+                          className="inline-flex h-7 items-center gap-1 rounded-md bg-[#14532d]/80 px-2.5 text-[11px] font-semibold text-white backdrop-blur-sm hover:bg-[#14532d]"
+                          onClick={() => {
+                            const result = setGalleryAssetStatus(horse.id, asset.id, 'Approved');
+                            pushToast({ title: result.ok ? 'Photo approved' : 'Error', message: result.message, tone: result.ok ? 'success' : 'error' });
+                          }}
+                        >
+                          ✓ Approve
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        title="Remove photo"
+                        className="inline-flex h-7 items-center gap-1 rounded-md bg-[#7f1d1d]/80 px-2.5 text-[11px] font-semibold text-white backdrop-blur-sm hover:bg-[#7f1d1d]"
+                        onClick={async () => {
+                          if (!await confirm('Remove photo', `Remove "${asset.label}" from the gallery? This cannot be undone.`)) return;
+                          const result = removeGalleryAsset(horse.id, asset.id);
+                          pushToast({ title: result.ok ? 'Photo removed' : 'Error', message: result.message, tone: result.ok ? 'success' : 'error' });
+                        }}
+                      >
+                        ✕ Remove
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <label
@@ -868,7 +902,7 @@ export default function HorseDetail() {
                         {medicalEventTypes.map((t) => <option key={t} value={t}>{t}</option>)}
                       </select>
                       <div className="inline-actions">
-                        <button className="button button--primary button--compact" type="button" onClick={() => { updateMedicalEvent(horse.id, event.id, { title: medicalEditForm.title, summary: medicalEditForm.body, date: medicalEditForm.date, status: medicalEditForm.type }); setEditingMedicalId(null); }}>Save</button>
+                        <button className="button button--primary button--compact" type="button" disabled={!medicalEditForm.title.trim()} onClick={() => { const result = updateMedicalEvent(horse.id, event.id, { title: medicalEditForm.title, summary: medicalEditForm.body, date: medicalEditForm.date, status: medicalEditForm.type }); pushToast({ title: result.ok ? 'Event updated' : 'Update failed', message: result.message, tone: result.ok ? 'success' : 'error' }); if (result.ok) setEditingMedicalId(null); }}>Save</button>
                         <button className="button button--ghost button--compact" type="button" onClick={() => setEditingMedicalId(null)}>Cancel</button>
                       </div>
                     </div>
@@ -883,7 +917,7 @@ export default function HorseDetail() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <Pill tone="blue">{formatDateLabel(event.date)}</Pill>
                           {canEditHorse && <button className="button button--ghost button--compact" style={{ fontSize: '11px' }} type="button" onClick={() => { setMedicalEditForm({ title: event.title, body: event.summary, date: event.date, type: event.status ?? '' }); setEditingMedicalId(event.id); }}>Edit</button>}
-                          {canEditHorse && <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={async () => { if (await confirm('Remove event?', 'Remove this medical event? This cannot be undone.')) deleteMedicalEvent(horse.id, event.id); }}>Delete</button>}
+                          {canEditHorse && <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={async () => { if (await confirm('Remove event?', 'Remove this medical event? This cannot be undone.')) { const result = deleteMedicalEvent(horse.id, event.id); pushToast({ title: result.ok ? 'Event removed' : 'Remove failed', message: result.message, tone: result.ok ? 'success' : 'error' }); } }}>Delete</button>}
                         </div>
                       </div>
                     </>
@@ -917,7 +951,7 @@ export default function HorseDetail() {
                       <input className="field-input" value={breedingEditForm.body} onChange={(e) => setBreedingEditForm((f) => ({ ...f, body: e.target.value }))} placeholder="Notes" />
                       <input className="field-input" type="date" value={breedingEditForm.date} onChange={(e) => setBreedingEditForm((f) => ({ ...f, date: e.target.value }))} />
                       <div className="inline-actions">
-                        <button className="button button--primary button--compact" type="button" onClick={() => { updateBreedingEvent(horse.id, event.id, { title: breedingEditForm.title, summary: breedingEditForm.body, date: breedingEditForm.date }); setEditingBreedingId(null); }}>Save</button>
+                        <button className="button button--primary button--compact" type="button" disabled={!breedingEditForm.title.trim()} onClick={() => { const result = updateBreedingEvent(horse.id, event.id, { title: breedingEditForm.title, summary: breedingEditForm.body, date: breedingEditForm.date }); pushToast({ title: result.ok ? 'Event updated' : 'Update failed', message: result.message, tone: result.ok ? 'success' : 'error' }); if (result.ok) setEditingBreedingId(null); }}>Save</button>
                         <button className="button button--ghost button--compact" type="button" onClick={() => setEditingBreedingId(null)}>Cancel</button>
                       </div>
                     </div>
@@ -931,7 +965,7 @@ export default function HorseDetail() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <Pill tone="blue">{formatDateLabel(event.date)}</Pill>
                           {canManageBreeding && <button className="button button--ghost button--compact" style={{ fontSize: '11px' }} type="button" onClick={() => { setBreedingEditForm({ title: event.title, body: event.summary, date: event.date }); setEditingBreedingId(event.id); }}>Edit</button>}
-                          {canManageBreeding && <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={async () => { if (await confirm('Remove event?', 'Remove this breeding event? This cannot be undone.')) deleteBreedingEvent(horse.id, event.id); }}>Delete</button>}
+                          {canManageBreeding && <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={async () => { if (await confirm('Remove event?', 'Remove this breeding event? This cannot be undone.')) { const result = deleteBreedingEvent(horse.id, event.id); pushToast({ title: result.ok ? 'Event removed' : 'Remove failed', message: result.message, tone: result.ok ? 'success' : 'error' }); } }}>Delete</button>}
                         </div>
                       </div>
                     </>

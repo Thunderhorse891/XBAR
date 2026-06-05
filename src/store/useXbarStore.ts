@@ -49,6 +49,7 @@ import {
 import type {
   DocumentFact,
   ExpenseReceipt,
+  GalleryAsset,
   HorseNote,
   HorseRecord,
   IntakeBatch,
@@ -114,6 +115,8 @@ type XbarStore = {
   reviewDocument: (documentId: string, horseId?: string) => ActionResult;
   discardDocument: (documentId: string) => ActionResult;
   uploadHorseMedia: (input: MediaUploadInput) => Promise<ActionResult>;
+  removeGalleryAsset: (horseId: string, assetId: string) => ActionResult;
+  setGalleryAssetStatus: (horseId: string, assetId: string, status: GalleryAsset['status']) => ActionResult;
   addExpenseReceipt: (input: ExpenseReceiptInput) => Promise<ActionResult>;
   createSalesLead: (input: LeadInput) => ActionResult;
   updateSalesLead: (
@@ -1619,6 +1622,53 @@ export const useXbarStore = create<XbarStore>()(
           console.error('Media upload failed', error);
           return { ok: false, message: 'Media upload failed. Check the selected files and try again.' };
         }
+      },
+      removeGalleryAsset: (horseId, assetId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'uploadMedia');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+        const horse = get().horses.find((h) => h.id === horseId);
+        if (!horse) {
+          return { ok: false, message: 'Horse record not found.' };
+        }
+        const asset = horse.gallery.find((a) => a.id === assetId);
+        if (!asset) {
+          return { ok: false, message: 'Gallery asset not found.' };
+        }
+        set((current) => ({
+          horses: current.horses.map((h) =>
+            h.id === horseId
+              ? {
+                  ...h,
+                  gallery: h.gallery.filter((a) => a.id !== assetId),
+                  profileImage: h.profileImage === asset.url ? (h.gallery.find((a) => a.id !== assetId)?.url ?? '') : h.profileImage,
+                }
+              : h,
+          ),
+        }));
+        return { ok: true, message: 'Photo removed.', id: assetId };
+      },
+      setGalleryAssetStatus: (horseId, assetId, status) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'uploadMedia');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+        const horse = get().horses.find((h) => h.id === horseId);
+        if (!horse) {
+          return { ok: false, message: 'Horse record not found.' };
+        }
+        if (!horse.gallery.some((a) => a.id === assetId)) {
+          return { ok: false, message: 'Gallery asset not found.' };
+        }
+        set((current) => ({
+          horses: current.horses.map((h) =>
+            h.id === horseId
+              ? { ...h, gallery: h.gallery.map((a) => (a.id === assetId ? { ...a, status } : a)) }
+              : h,
+          ),
+        }));
+        return { ok: true, message: `Photo marked as ${status}.`, id: assetId };
       },
       addExpenseReceipt: async (input) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageAssets');

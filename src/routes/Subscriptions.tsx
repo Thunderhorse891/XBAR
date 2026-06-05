@@ -181,9 +181,14 @@ export default function Subscriptions() {
                         Open checkout
                       </button>
                     ) : (
-                      <button className="button button--ghost button--compact" type="button" disabled title="Stripe not configured">
-                        Checkout unavailable
-                      </button>
+                      <div>
+                        <button className="button button--ghost button--compact" type="button" disabled title="Stripe not configured">
+                          Checkout unavailable
+                        </button>
+                        <p style={{ marginTop: '6px', fontSize: '11px', color: 'var(--muted)', fontStyle: 'italic' }}>
+                          Contact your admin to configure billing.
+                        </p>
+                      </div>
                     )
                   ) : null}
                 </div>

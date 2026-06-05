@@ -156,7 +156,7 @@ export default function Breeding() {
                             <input className="field-input" value={editForm.body} onChange={(e) => setEditForm((f) => ({ ...f, body: e.target.value }))} placeholder="Notes" />
                             <input className="field-input" type="date" value={editForm.date} onChange={(e) => setEditForm((f) => ({ ...f, date: e.target.value }))} />
                             <div className="inline-actions">
-                              <button className="button button--primary button--compact" type="button" onClick={() => { updateBreedingEvent(horse.id, event.id, { title: editForm.title, summary: editForm.body, date: editForm.date }); setEditingEventId(null); }}>Save</button>
+                              <button className="button button--primary button--compact" type="button" disabled={!editForm.title.trim() || !editForm.body.trim()} onClick={() => { const result = updateBreedingEvent(horse.id, event.id, { title: editForm.title, summary: editForm.body, date: editForm.date }); pushToast({ title: result.ok ? 'Event updated' : 'Update failed', message: result.message, tone: result.ok ? 'success' : 'error' }); if (result.ok) setEditingEventId(null); }}>Save</button>
                               <button className="button button--ghost button--compact" type="button" onClick={() => setEditingEventId(null)}>Cancel</button>
                             </div>
                           </div>
@@ -170,7 +170,7 @@ export default function Breeding() {
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <Pill tone="slate">{formatDateLabel(event.date)}</Pill>
                                 {canManageBreeding && <button className="button button--ghost button--compact" style={{ fontSize: '11px' }} type="button" onClick={() => { setEditForm({ title: event.title, body: event.summary, date: event.date }); setEditingEventId(event.id); }}>Edit</button>}
-                                {canManageBreeding && <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={async () => { if (await confirm('Remove event?', 'Remove this breeding event? This cannot be undone.')) deleteBreedingEvent(horse.id, event.id); }}>Delete</button>}
+                                {canManageBreeding && <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={async () => { if (await confirm('Remove event?', 'Remove this breeding event? This cannot be undone.')) { const result = deleteBreedingEvent(horse.id, event.id); pushToast({ title: result.ok ? 'Event removed' : 'Remove failed', message: result.message, tone: result.ok ? 'success' : 'error' }); } }}>Delete</button>}
                               </div>
                             </div>
                             <div className="stack-item__copy">{event.summary}</div>

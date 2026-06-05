@@ -52,7 +52,7 @@ export default function Medical() {
   const [eventError, setEventError] = useState('');
   const [timelineQuery, setTimelineQuery] = useState('');
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ title: '', body: '', date: '' });
+  const [editForm, setEditForm] = useState({ title: '', body: '', date: '', type: '' });
   const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
   const menuHorse = horses.find((horse) => horse.id === menuState?.horseId);
   const menuItems = menuHorse
@@ -261,8 +261,11 @@ export default function Medical() {
                       <input className="field-input" value={editForm.title} onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))} placeholder="Title" />
                       <input className="field-input" value={editForm.body} onChange={(e) => setEditForm((f) => ({ ...f, body: e.target.value }))} placeholder="Notes" />
                       <input className="field-input" type="date" value={editForm.date} onChange={(e) => setEditForm((f) => ({ ...f, date: e.target.value }))} />
+                      <select className="field-select" value={editForm.type} onChange={(e) => setEditForm((f) => ({ ...f, type: e.target.value }))}>
+                        {medicalEventTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+                      </select>
                       <div className="inline-actions">
-                        <button className="button button--primary button--compact" type="button" onClick={() => { updateMedicalEvent(event.horseId, event.id, { title: editForm.title, summary: editForm.body, date: editForm.date }); setEditingEventId(null); }}>Save</button>
+                        <button className="button button--primary button--compact" type="button" disabled={!editForm.title.trim()} onClick={() => { const result = updateMedicalEvent(event.horseId, event.id, { title: editForm.title, summary: editForm.body, date: editForm.date, status: editForm.type }); pushToast({ title: result.ok ? 'Event updated' : 'Update failed', message: result.message, tone: result.ok ? 'success' : 'error' }); if (result.ok) setEditingEventId(null); }}>Save</button>
                         <button className="button button--ghost button--compact" type="button" onClick={() => setEditingEventId(null)}>Cancel</button>
                       </div>
                     </div>
@@ -275,8 +278,8 @@ export default function Medical() {
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <Pill tone="blue">{formatDateLabel(event.date)}</Pill>
-                          <button className="button button--ghost button--compact" style={{ fontSize: '11px' }} type="button" onClick={() => { setEditForm({ title: event.title, body: event.summary, date: event.date }); setEditingEventId(event.id); }}>Edit</button>
-                          <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={async () => { if (await confirm('Remove event?', 'Remove this medical event? This cannot be undone.')) deleteMedicalEvent(event.horseId, event.id); }}>Delete</button>
+                          <button className="button button--ghost button--compact" style={{ fontSize: '11px' }} type="button" onClick={() => { setEditForm({ title: event.title, body: event.summary, date: event.date, type: event.status ?? '' }); setEditingEventId(event.id); }}>Edit</button>
+                          <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={async () => { if (await confirm('Remove event?', 'Remove this medical event? This cannot be undone.')) { const result = deleteMedicalEvent(event.horseId, event.id); pushToast({ title: result.ok ? 'Event removed' : 'Remove failed', message: result.message, tone: result.ok ? 'success' : 'error' }); } }}>Delete</button>
                         </div>
                       </div>
                       <div className="stack-item__copy">{event.summary}</div>

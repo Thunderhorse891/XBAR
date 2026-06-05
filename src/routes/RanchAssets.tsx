@@ -212,7 +212,7 @@ export default function RanchAssets() {
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
               <span className="field-label">Asset</span>
-              <select className="field-input" value={selectedAssetId} onChange={(event) => handleAssetSelection(event.target.value)} disabled={!canManageAssets}>
+              <select className="field-input" value={selectedAssetId} onChange={(event) => handleAssetSelection(event.target.value)} disabled={!canManageAssets || !ranchAssets.length}>
                 {ranchAssets.map((asset) => (
                   <option key={asset.id} value={asset.id}>
                     {asset.name}
@@ -258,7 +258,7 @@ export default function RanchAssets() {
             </label>
           </div>
           <div className="inline-actions">
-            <button className="button button--primary button--compact" type="button" onClick={handleSave} disabled={!canManageAssets}>
+            <button className="button button--primary button--compact" type="button" onClick={handleSave} disabled={!canManageAssets || !selectedAsset}>
               Save asset changes
             </button>
             {selectedAsset && canManageAssets ? (
@@ -301,7 +301,7 @@ export default function RanchAssets() {
           <button
             className="button button--primary button--compact"
             type="button"
-            disabled={!canManageAssets}
+            disabled={!canManageAssets || !newAsset.name.trim()}
             onClick={() => {
               if (!newAsset.name.trim()) { setNewAssetError('Asset name is required.'); return; }
               const result = addRanchAsset(newAsset);
