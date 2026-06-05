@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import path from 'node:path';
+import * as path from 'node:path';
 import test from 'node:test';
 
 const fromRoot = (filePath: string) => path.resolve(process.cwd(), filePath);
