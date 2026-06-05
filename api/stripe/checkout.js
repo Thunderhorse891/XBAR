@@ -6,8 +6,9 @@ import { requireWorkspaceAccess } from '../_lib/supabase-admin.js';
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY || '';
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026-02-25.clover' }) : null;
 
-function getTrustedReturnUrl(req, requestedReturnUrl) {
-  const configuredOrigins = [process.env.PUBLIC_APP_URL, process.env.VITE_PUBLIC_APP_URL]
+function getTrustedReturnUrl(requestedReturnUrl) {
+  const vercelOrigin = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '';
+  const configuredOrigins = [process.env.PUBLIC_APP_URL, process.env.VITE_PUBLIC_APP_URL, vercelOrigin]
     .filter(Boolean)
     .map((value) => {
       try {
@@ -17,14 +18,6 @@ function getTrustedReturnUrl(req, requestedReturnUrl) {
       }
     })
     .filter(Boolean);
-
-  const forwardedHost = req.headers['x-forwarded-host'];
-  const requestHost = Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost || req.headers.host;
-  const forwardedProto = req.headers['x-forwarded-proto'];
-  const requestProto = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto || 'https';
-  if (requestHost) {
-    configuredOrigins.push(`${requestProto}://${requestHost}`);
-  }
 
   const fallbackOrigin = configuredOrigins[0] || 'https://xbar.app';
   try {
@@ -52,8 +45,9 @@ export default async function handler(req, res) {
   const body = await readJsonBody(req);
   const tier = typeof body.tier === 'string' ? body.tier : '';
   const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId : '';
-  const returnUrl = getTrustedReturnUrl(req, typeof body.returnUrl === 'string' ? body.returnUrl : '');
-  const seatCount = Number(body.seatCount || 1);
+  const returnUrl = getTrustedReturnUrl(typeof body.returnUrl === 'string' ? body.returnUrl : '');
+  const requestedSeatCount = Number(body.seatCount || 1);
+  const seatCount = Number.isInteger(requestedSeatCount) ? Math.min(100, Math.max(1, requestedSeatCount)) : 1;
   const priceId = getStripePriceIdByTier(tier);
 
   if (!workspaceId || !priceId) {
@@ -94,7 +88,7 @@ export default async function handler(req, res) {
     line_items: [
       {
         price: priceId,
-        quantity: Math.max(1, seatCount),
+        quantity: seatCount,
       },
     ],
     success_url: `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}checkout=success`,
@@ -117,7 +111,7 @@ export default async function handler(req, res) {
     stripe_customer_id: stripeCustomerId,
     stripe_subscription_id: '',
     stripe_price_id: priceId,
-    seat_count: Math.max(1, seatCount),
+    seat_count: seatCount,
     entitlement_payload: buildSubscriptionProfile({
       tier,
       billingStatus: 'incomplete',
