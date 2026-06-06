@@ -2,28 +2,87 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-:where(a, button, [role='button']):not(:disabled) { cursor: pointer; }
-:where(button, [role='button']):disabled { cursor: not-allowed; opacity: .52; }
+:where(a, button, [role='button']):not(:disabled):not([aria-disabled='true']) { cursor: pointer; }
+:where(button, [role='button']):disabled,
+:where(button, [role='button'])[aria-disabled='true'] { cursor: not-allowed; opacity: .48; filter: saturate(.42); }
 
-:where(a, button, [role='button'], input, select, textarea):focus-visible {
-  outline: 2px solid #67a7ff;
+:where(a, button, [role='button'], input, select, textarea):focus-visible,
+.table-row--interactive:focus-visible,
+.horse-card--interactive:focus-visible,
+.stack-item--interactive:focus-visible,
+.ops-record-card:focus-visible,
+.ownership-row:focus-visible,
+.priority-card:focus-visible {
+  outline: 2px solid #78b2ff;
   outline-offset: 3px;
-  box-shadow: 0 0 0 5px rgba(49, 126, 255, .18);
+  box-shadow: 0 0 0 5px rgba(49, 126, 255, .2), 0 18px 46px rgba(0, 35, 90, .3);
 }
 
-:where(.button, .icon-button, .surface-tab, .context-menu__item, .xbar-action) {
-  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+:where(.button, .icon-button, .surface-tab, .context-menu__item, .xbar-action, .table-row--interactive, .horse-card--interactive, .stack-item--interactive, .ops-record-card, .ownership-row, .priority-card) {
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, color 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
 }
 
-:where(.button, .icon-button, .surface-tab, .context-menu__item, .xbar-action):not(:disabled):hover {
+:where(.button, .icon-button, .surface-tab, .context-menu__item, .xbar-action):not(:disabled):not([aria-disabled='true']):hover {
   transform: translateY(-1px);
   border-color: rgba(103, 167, 255, .62);
   box-shadow: 0 10px 28px rgba(0, 26, 68, .28);
 }
 
-:where(.button, .icon-button, .surface-tab, .context-menu__item, .xbar-action):not(:disabled):active {
+:where(.button, .icon-button, .surface-tab, .context-menu__item, .xbar-action):not(:disabled):not([aria-disabled='true']):active,
+:where(.table-row--interactive, .horse-card--interactive, .stack-item--interactive, .ops-record-card, .ownership-row, .priority-card):active {
   transform: translateY(0) scale(.985);
 }
+
+/* Real record targets advertise interaction. Static panels remain visually quiet. */
+:where(.table-row--interactive, .horse-card--interactive, .stack-item--interactive, .ops-record-card, .ownership-row, .priority-card) { cursor: pointer; }
+:where(.table-row--interactive, .horse-card--interactive, .stack-item--interactive, .ops-record-card, .ownership-row, .priority-card):hover {
+  border-color: rgba(103, 167, 255, .42) !important;
+  box-shadow: 0 18px 42px rgba(0, 30, 78, .25), inset 3px 0 rgba(103, 167, 255, .9);
+}
+.panel--contextual { cursor: context-menu; }
+.panel--contextual::after {
+  content: 'Right-click for actions';
+  position: absolute;
+  right: 18px;
+  bottom: 11px;
+  color: rgba(153, 181, 213, .38);
+  font-size: .58rem;
+  font-weight: 750;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.interactive-cue {
+  position: absolute;
+  right: 15px;
+  bottom: 12px;
+  color: rgba(126, 176, 246, .56);
+  font-size: .6rem;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+.metric-card--interactive:hover .interactive-cue,
+.metric-card--interactive:focus-visible .interactive-cue { opacity: 1; transform: translateY(0); }
+
+.action-menu-button { position: relative; flex: 0 0 auto; }
+.action-menu-button::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+}
+.action-menu-button:hover::after,
+.action-menu-button:focus-visible::after { border-color: rgba(103,167,255,.25); }
+
+.locked-action { position: relative; display: inline-flex; flex-direction: column; align-items: flex-start; gap: 5px; }
+.locked-action__reason { color: #9aa9ba; font-size: .7rem; line-height: 1.35; }
+:where(button, [role='button']):disabled[title] { position: relative; }
 
 .xbar-wordmark { display: inline-flex; align-items: center; gap: 10px; color: #f2f7ff; text-decoration: none; }
 .xbar-wordmark__mark { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid rgba(99,168,255,.5); border-radius: 10px; background: linear-gradient(145deg,#143a77,#071326); box-shadow: inset 0 1px rgba(255,255,255,.14),0 12px 28px rgba(0,45,110,.34); font-weight: 900; letter-spacing: -.16em; padding-right: 3px; }
@@ -44,6 +103,11 @@
 .brand-canvas__bar { margin-top: 20px; font-size: clamp(1.25rem,3vw,2rem); font-weight: 850; letter-spacing: .48em; padding-left: .48em; }
 .brand-canvas__rule { width: 128px; height: 1px; margin-top: 18px; background: linear-gradient(90deg,transparent,#67a7ff,transparent); }
 
-.context-menu { animation: context-in 120ms ease-out; transform-origin: top left; }
+.context-menu { animation: context-in 120ms ease-out; transform-origin: top left; padding-top: 5px; }
+.context-menu__hint { display: flex; justify-content: space-between; gap: 14px; padding: 7px 10px 8px; color: rgba(151,180,215,.55); font-size: .61rem; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; border-bottom: 1px solid rgba(151,180,215,.1); margin-bottom: 4px; }
+.context-menu__hint span { font-weight: 600; letter-spacing: .04em; text-transform: none; }
+.context-menu__item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.context-menu__item small { color: #8796a8; font-size: .68rem; line-height: 1.3; }
+.context-menu__item:disabled { background: rgba(255,255,255,.018); }
 @keyframes context-in { from { opacity: 0; transform: scale(.97) translateY(-3px); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; } }
