@@ -6,6 +6,7 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useWorkspaceReady, useXbarStore } from '@/store/useXbarStore';
 import './authExperience.css';
+import './setupExperience.css';
 
 const proofTiles = [
   {
