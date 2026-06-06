@@ -438,6 +438,7 @@ function restorePersistedState(raw: unknown): PersistedXbarState {
   const horses = Array.isArray(state.horses)
     ? (state.horses as HorseRecord[]).map((horse) => ({
         ...horse,
+        age: horse.foaledOn ? calculateAgeFromFoaledOn(horse.foaledOn) : (horse.age ?? 0),
         documentFacts: Array.isArray((horse as HorseRecord & { documentFacts?: DocumentFact[] }).documentFacts)
           ? (horse as HorseRecord & { documentFacts?: DocumentFact[] }).documentFacts ?? []
           : Array.isArray((horse as HorseRecord & { ocrFacts?: DocumentFact[] }).ocrFacts)
@@ -545,6 +546,18 @@ function restorePersistedState(raw: unknown): PersistedXbarState {
   };
 }
 
+function calculateAgeFromFoaledOn(foaledOn: string): number {
+  if (!foaledOn?.trim()) return 0;
+  const foaled = new Date(foaledOn.includes('T') ? foaledOn : `${foaledOn}T12:00:00`);
+  if (Number.isNaN(foaled.getTime())) return 0;
+  const today = new Date();
+  const years = today.getFullYear() - foaled.getFullYear();
+  const pastBirthday =
+    today.getMonth() > foaled.getMonth() ||
+    (today.getMonth() === foaled.getMonth() && today.getDate() >= foaled.getDate());
+  return Math.max(0, pastBirthday ? years : years - 1);
+}
+
 function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProfile): HorseRecord {
   const id = createId('horse');
   const name = input.name.trim().toUpperCase();
@@ -552,6 +565,7 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
   const ranchName = workspaceProfile.ranchName.trim() || 'Primary Ranch';
   const ranchManagerName = workspaceProfile.ranchManagerName.trim() || 'Unassigned';
   const operationsEmail = workspaceProfile.operationsEmail.trim();
+  const foaledOn = input.foaledOn?.trim() || '';
   return {
     id,
     name,
@@ -564,8 +578,8 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
     aqhaNumber: input.aqhaNumber?.trim() || '',
     registrationNumber: input.registrationNumber?.trim() || '',
     registered: Boolean(input.aqhaNumber || input.registrationNumber),
-    age: 0,
-    foaledOn: input.foaledOn?.trim() || '',
+    age: calculateAgeFromFoaledOn(foaledOn),
+    foaledOn,
     sex: input.sex,
     color: input.color?.trim() || '',
     markings: '',
@@ -2158,6 +2172,7 @@ export const useXbarStore = create<XbarStore>()(
                   segment: patch.segment ?? h.segment,
                   status: patch.status ?? h.status,
                   foaledOn: patch.foaledOn !== undefined ? patch.foaledOn : h.foaledOn,
+                  age: patch.foaledOn !== undefined ? calculateAgeFromFoaledOn(patch.foaledOn) : h.age,
                   microchipId: patch.microchipId !== undefined ? patch.microchipId.trim() : h.microchipId,
                   markings: patch.markings !== undefined ? patch.markings.trim() : h.markings,
                   medicalNotes: patch.medicalNotes !== undefined ? patch.medicalNotes.trim() : h.medicalNotes,
