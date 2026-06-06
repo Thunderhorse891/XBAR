@@ -1,0 +1,18 @@
+.buyer-momentum { display: grid; grid-template-columns: minmax(0,1.1fr) minmax(320px,.9fr); gap: 14px; padding: clamp(17px,2.3vw,26px); border: 1px solid #cbd9e6; border-radius: 10px; background: linear-gradient(135deg,#f8fbff,#edf4fa); box-shadow: 0 16px 38px rgba(20,42,64,.09); }
+.buyer-momentum__summary { display: grid; align-content: start; gap: 15px; }
+.buyer-momentum__eyebrow { color: #28557c; font-size: .72rem; font-weight: 900; letter-spacing: .13em; text-transform: uppercase; }
+.buyer-momentum h2 { margin: 7px 0 0; color: #101923; font-size: clamp(1.4rem,2.4vw,2.3rem); line-height: 1.05; }
+.buyer-momentum p { max-width: 650px; margin: 9px 0 0; color: #526173; line-height: 1.5; }
+.buyer-momentum__summary > .button { justify-self: start; }
+.buyer-momentum__stats { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+.buyer-momentum__stats div { padding: 11px; border: 1px solid #d9e4ee; border-radius: 7px; background: rgba(255,255,255,.8); }
+.buyer-momentum__stats span { display: block; color: #667588; font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.buyer-momentum__stats strong { display: block; margin-top: 4px; color: #14202d; font-size: 1.05rem; }
+.buyer-momentum__rail { display: grid; gap: 8px; }
+.buyer-momentum__lead { display: flex; justify-content: space-between; gap: 12px; padding: 13px; border: 1px solid #d9e4ee; border-radius: 8px; background: #fff; color: #14202d; text-decoration: none; transition: transform 160ms ease,border-color 160ms ease,box-shadow 160ms ease; }
+.buyer-momentum__lead:hover,.buyer-momentum__lead:focus-visible { transform: translateY(-2px); border-color: #78a2ca; box-shadow: 0 12px 24px rgba(20,42,64,.1); }
+.buyer-momentum__lead > span { display: grid; gap: 5px; }
+.buyer-momentum__lead > span:last-child { justify-items: end; }
+.buyer-momentum__lead small { color: #667588; }
+@media (max-width: 1050px) { .buyer-momentum { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .buyer-momentum__stats { grid-template-columns: 1fr; } .buyer-momentum__lead { flex-direction: column; } .buyer-momentum__lead > span:last-child { justify-items: start; } }
