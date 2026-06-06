@@ -1,0 +1,24 @@
+{
+  "name": "XBAR",
+  "short_name": "XBAR",
+  "description": "The operating system for modern horse operations.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#050811",
+  "theme_color": "#0A66FF",
+  "icons": [
+    {
+      "src": "/brand/xbar-app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/brand/xbar-app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
