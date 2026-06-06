@@ -1,0 +1,28 @@
+/* Post-login XBAR sidebar brand mark.
+   Replaces the generated SVG beside the ranch/business name with Erin's uploaded X icon. */
+@media (min-width: 1024px) {
+  aside > div:first-child > div:first-child {
+    position: relative;
+    overflow: hidden;
+    border-color: rgba(77, 148, 255, 0.36) !important;
+    background:
+      radial-gradient(circle at 50% 0%, rgba(77, 148, 255, 0.20), transparent 64%),
+      #050910 !important;
+    padding: 0 !important;
+  }
+
+  aside > div:first-child > div:first-child > svg {
+    opacity: 0;
+  }
+
+  aside > div:first-child > div:first-child::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url('/brand/xbar_public_assets/public/brand/xbar-website-icon.png');
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 82%;
+    filter: drop-shadow(0 0 12px rgba(77, 148, 255, 0.24));
+  }
+}
