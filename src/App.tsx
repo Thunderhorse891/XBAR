@@ -12,7 +12,7 @@ import { trackRuntimeEvent } from './lib/runtimeEvents';
 import { useCloudStore } from './store/useCloudStore';
 import './routes/operationsHierarchy.css';
 import './routes/interactionSystem.css';
-
+import './routes/xbarCommandSystem.css';
 const Dashboard = lazy(() => import('./pages/Dashboard')); const Landing = lazy(() => import('./routes/Landing')); const Breeding = lazy(() => import('./routes/Breeding')); const BuyerProfile = lazy(() => import('./routes/BuyerProfile')); const Documents = lazy(() => import('./routes/Documents')); const Expenses = lazy(() => import('./routes/Expenses')); const FollowUps = lazy(() => import('./routes/FollowUps')); const HorseDetail = lazy(() => import('./routes/HorseDetail')); const Horses = lazy(() => import('./routes/Horses')); const Login = lazy(() => import('./routes/Login')); const MainLayout = lazy(() => import('./routes/layouts/MainLayout')); const Medical = lazy(() => import('./routes/Medical')); const NotFound = lazy(() => import('./routes/NotFound')); const Ownership = lazy(() => import('./routes/Ownership')); const RanchAssets = lazy(() => import('./routes/RanchAssets')); const Reminders = lazy(() => import('./routes/Reminders')); const Sales = lazy(() => import('./routes/Sales')); const Settings = lazy(() => import('./routes/Settings')); const SetupWorkspace = lazy(() => import('./routes/SetupWorkspace')); const SharedAccess = lazy(() => import('./routes/SharedAccess')); const Subscriptions = lazy(() => import('./routes/Subscriptions')); const Weather = lazy(() => import('./routes/Weather'));
 const Terms = lazy(() => import('./routes/Terms'));
 const Privacy = lazy(() => import('./routes/Privacy'));
