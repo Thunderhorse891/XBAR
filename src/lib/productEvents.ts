@@ -1,6 +1,7 @@
 export const productEventNames = {
   activationAction: 'activation.action_clicked',
   activationCollapsed: 'activation.guide_collapsed',
+  activationFirstValueReached: 'activation.first_value_reached',
   checkoutStarted: 'billing.checkout_started',
   checkoutRedirected: 'billing.checkout_redirected',
   checkoutFailed: 'billing.checkout_failed',
