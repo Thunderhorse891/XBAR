@@ -10,7 +10,7 @@ import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 
 type SortKey = 'price-asc' | 'price-desc' | 'age-asc' | 'name';
-type SexFilter = 'All' | 'Mare' | 'Stallion' | 'Gelding';
+type SexFilter = 'All' | 'Mare' | 'Stud' | 'Gelding' | 'Filly' | 'Colt';
 
 export default function Marketplace() {
   const horses = useXbarStore((state) => state.horses);
@@ -47,7 +47,7 @@ export default function Marketplace() {
     (lead) => marketHorses.some((h) => h.id === lead.horseId) && lead.stage !== 'Closed',
   ).length;
 
-  const sexFilters: SexFilter[] = ['All', 'Mare', 'Stallion', 'Gelding'];
+  const sexFilters: SexFilter[] = ['All', 'Mare', 'Stud', 'Gelding', 'Filly', 'Colt'];
 
   function submitInquiry() {
     if (!inquiryHorseId) return;

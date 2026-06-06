@@ -68,7 +68,7 @@ export default function Horses() {
   const [viewMode, setViewMode] = useState<ViewMode>('Portfolio');
   const [segmentFilter, setSegmentFilter] = useState<SegmentFilter>('All');
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
-  const [formErrors, setFormErrors] = useState<Partial<Record<'name' | 'barnName' | 'owner' | 'ownerEntity', string>>>({});
+  const [formErrors, setFormErrors] = useState<Partial<Record<'name' | 'owner', string>>>({});
   const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
   const [form, setForm] = useState(() =>
     createHorseFormDefaults({
@@ -186,11 +186,9 @@ export default function Horses() {
     : [];
 
   const handleCreateHorse = () => {
-    const nextErrors: Partial<Record<'name' | 'barnName' | 'owner' | 'ownerEntity', string>> = {};
+    const nextErrors: Partial<Record<'name' | 'owner', string>> = {};
     if (form.name.trim().length < 3) nextErrors.name = 'Registered name is required (3+ characters).';
-    if (form.barnName.trim().length < 2) nextErrors.barnName = 'Barn name is required (2+ characters).';
     if (form.owner.trim().length < 2) nextErrors.owner = 'Owner is required.';
-    if (form.ownerEntity.trim().length < 2) nextErrors.ownerEntity = 'Owner entity is required.';
 
     setFormErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
@@ -263,7 +261,6 @@ export default function Horses() {
                 setForm((current) => ({ ...current, barnName: event.target.value }));
                 setFormErrors((current) => ({ ...current, barnName: undefined }));
               }} disabled={!canCreateHorse} />
-              {formErrors.barnName ? <span className="field-error">{formErrors.barnName}</span> : null}
             </label>
             <label className="field-stack">
               <span className="field-label">Segment</span>
@@ -309,7 +306,6 @@ export default function Horses() {
                 setForm((current) => ({ ...current, ownerEntity: event.target.value }));
                 setFormErrors((current) => ({ ...current, ownerEntity: undefined }));
               }} disabled={!canCreateHorse} />
-              {formErrors.ownerEntity ? <span className="field-error">{formErrors.ownerEntity}</span> : null}
             </label>
             <label className="field-stack">
               <span className="field-label">AQHA number</span>
@@ -351,7 +347,7 @@ export default function Horses() {
             >
               Use defaults
             </button>
-            <button className="button button--primary" type="button" onClick={handleCreateHorse} disabled={!canCreateHorse || !form.name.trim() || !form.barnName.trim() || !form.owner.trim() || !form.ownerEntity.trim()}>
+            <button className="button button--primary" type="button" onClick={handleCreateHorse} disabled={!canCreateHorse || !form.name.trim() || !form.owner.trim()}>
               Create horse
             </button>
           </div>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { ContextMenu } from '@/components/ContextMenu';
@@ -6,7 +6,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { buildPublicShareUrl } from '@/lib/facebookSharing';
-import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
+import { formatCompactCurrency, formatCurrency, formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
@@ -22,6 +22,7 @@ export default function Sales() {
   const updateSalesLead = useXbarStore((state) => state.updateSalesLead);
   const deleteSalesLead = useXbarStore((state) => state.deleteSalesLead);
   const recordSharedChannel = useXbarStore((state) => state.recordSharedChannel);
+  const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageSales = useCurrentRoleCapability('manageSales');
   const { confirm, dialog: confirmDialog } = useConfirm();
@@ -56,6 +57,8 @@ export default function Sales() {
   const [leadError, setLeadError] = useState('');
   const [menuState, setMenuState] = useState<{ type: 'lead' | 'horse'; id: string; x: number; y: number } | null>(null);
   const [listingQuery, setListingQuery] = useState('');
+  const [showBillOfSale, setShowBillOfSale] = useState(false);
+  const billOfSaleRef = useRef<HTMLDivElement>(null);
   const menuLead = menuState?.type === 'lead' ? salesLeads.find((lead) => lead.id === menuState.id) : undefined;
   const menuHorse = menuState?.type === 'horse' ? saleHorses.find((horse) => horse.id === menuState.id) : undefined;
   const menuListing = menuHorse ? sharedListings.find((listing) => listing.horseId === menuHorse.id && listing.state !== 'Archived') : undefined;
@@ -364,6 +367,13 @@ export default function Sales() {
                 >
                   Save lead changes
                 </button>
+                <button
+                  className="button button--ghost button--compact"
+                  type="button"
+                  onClick={() => setShowBillOfSale(true)}
+                >
+                  Bill of Sale
+                </button>
                 {canManageSales && (
                   <button
                     className="button button--ghost button--compact"
@@ -411,6 +421,120 @@ export default function Sales() {
       </div>
 
       <ContextMenu open={Boolean(menuState)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
+
+      {showBillOfSale && selectedLead && (() => {
+        const bsHorse = horses.find((h) => h.id === selectedLead.horseId);
+        const saleDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+        const salePrice = leadOfferAmount ? Number(leadOfferAmount) : bsHorse?.sale.askPrice ?? 0;
+        const sellerName = bsHorse?.owner || workspaceProfile.defaultOwnerName || workspaceProfile.businessName || 'Seller';
+        const sellerEntity = bsHorse?.ownerEntity || workspaceProfile.defaultOwnerEntity || workspaceProfile.businessName || '';
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 200, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px', overflowY: 'auto' }}>
+            <div style={{ background: '#fff', color: '#111', maxWidth: '680px', width: '100%', borderRadius: '8px', boxShadow: '0 4px 32px rgba(0,0,0,0.4)' }}>
+              <div style={{ padding: '16px 24px', borderBottom: '1px solid #e0e0e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8f8f8', borderRadius: '8px 8px 0 0' }}>
+                <strong style={{ fontSize: '15px', color: '#111' }}>Bill of Sale</strong>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    style={{ padding: '6px 14px', borderRadius: '6px', background: '#1a56db', color: '#fff', border: 'none', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+                    onClick={() => {
+                      const content = billOfSaleRef.current?.innerHTML ?? '';
+                      const win = window.open('', '_blank');
+                      if (!win) return;
+                      win.document.write(`<!DOCTYPE html><html><head><title>Bill of Sale — ${bsHorse?.name ?? selectedLead.name}</title><style>body{font-family:Georgia,serif;max-width:680px;margin:40px auto;padding:0 32px;color:#111;line-height:1.6}h1{font-size:22px;text-align:center;margin-bottom:4px}h2{font-size:15px;font-weight:600;margin:24px 0 6px;border-bottom:1px solid #ccc;padding-bottom:4px}p{margin:4px 0}table{width:100%;border-collapse:collapse;margin-top:6px}td{padding:4px 8px;border:1px solid #ddd;font-size:13px}.sig-block{display:flex;gap:40px;margin-top:32px}.sig-line{flex:1;border-top:1px solid #333;padding-top:6px;font-size:12px}.disclaimer{font-size:11px;color:#666;margin-top:24px;border-top:1px solid #e0e0e0;padding-top:12px}@media print{body{margin:0}}</style></head><body>${content}</body></html>`);
+                      win.document.close();
+                      win.print();
+                    }}
+                  >
+                    Print / Save PDF
+                  </button>
+                  <button
+                    type="button"
+                    style={{ padding: '6px 14px', borderRadius: '6px', background: '#f0f0f0', color: '#333', border: '1px solid #ccc', fontSize: '13px', cursor: 'pointer' }}
+                    onClick={() => setShowBillOfSale(false)}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+              <div ref={billOfSaleRef} style={{ padding: '32px', fontFamily: 'Georgia, serif', fontSize: '14px', lineHeight: '1.7', color: '#111' }}>
+                <h1 style={{ textAlign: 'center', fontSize: '22px', margin: '0 0 4px', letterSpacing: '0.02em' }}>BILL OF SALE</h1>
+                <p style={{ textAlign: 'center', fontSize: '13px', color: '#555', marginBottom: '24px' }}>Horse sale agreement — {saleDate}</p>
+
+                <h2 style={{ fontSize: '14px', fontWeight: 700, borderBottom: '1px solid #bbb', paddingBottom: '4px', margin: '20px 0 8px' }}>Horse Description</h2>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <tbody>
+                    <tr><td style={{ padding: '4px 8px', border: '1px solid #ddd', width: '40%', background: '#f8f8f8', fontWeight: 600 }}>Registered Name</td><td style={{ padding: '4px 8px', border: '1px solid #ddd' }}>{bsHorse?.name ?? '—'}</td></tr>
+                    {bsHorse?.barnName && <tr><td style={{ padding: '4px 8px', border: '1px solid #ddd', background: '#f8f8f8', fontWeight: 600 }}>Barn Name</td><td style={{ padding: '4px 8px', border: '1px solid #ddd' }}>{bsHorse.barnName}</td></tr>}
+                    <tr><td style={{ padding: '4px 8px', border: '1px solid #ddd', background: '#f8f8f8', fontWeight: 600 }}>Breed</td><td style={{ padding: '4px 8px', border: '1px solid #ddd' }}>{bsHorse?.breed ?? '—'}</td></tr>
+                    <tr><td style={{ padding: '4px 8px', border: '1px solid #ddd', background: '#f8f8f8', fontWeight: 600 }}>Sex</td><td style={{ padding: '4px 8px', border: '1px solid #ddd' }}>{bsHorse?.sex ?? '—'}</td></tr>
+                    <tr><td style={{ padding: '4px 8px', border: '1px solid #ddd', background: '#f8f8f8', fontWeight: 600 }}>Color</td><td style={{ padding: '4px 8px', border: '1px solid #ddd' }}>{bsHorse?.color ?? '—'}</td></tr>
+                    <tr><td style={{ padding: '4px 8px', border: '1px solid #ddd', background: '#f8f8f8', fontWeight: 600 }}>Age</td><td style={{ padding: '4px 8px', border: '1px solid #ddd' }}>{bsHorse?.age ? `${bsHorse.age} years` : '—'}</td></tr>
+                    {bsHorse?.registrationNumber && <tr><td style={{ padding: '4px 8px', border: '1px solid #ddd', background: '#f8f8f8', fontWeight: 600 }}>Registration #</td><td style={{ padding: '4px 8px', border: '1px solid #ddd' }}>{bsHorse.registrationNumber}</td></tr>}
+                    {bsHorse?.registry && <tr><td style={{ padding: '4px 8px', border: '1px solid #ddd', background: '#f8f8f8', fontWeight: 600 }}>Registry</td><td style={{ padding: '4px 8px', border: '1px solid #ddd' }}>{bsHorse.registry}</td></tr>}
+                    {bsHorse?.microchipId && <tr><td style={{ padding: '4px 8px', border: '1px solid #ddd', background: '#f8f8f8', fontWeight: 600 }}>Microchip / Brand</td><td style={{ padding: '4px 8px', border: '1px solid #ddd' }}>{bsHorse.microchipId}</td></tr>}
+                    {bsHorse?.markings && <tr><td style={{ padding: '4px 8px', border: '1px solid #ddd', background: '#f8f8f8', fontWeight: 600 }}>Markings</td><td style={{ padding: '4px 8px', border: '1px solid #ddd' }}>{bsHorse.markings}</td></tr>}
+                  </tbody>
+                </table>
+
+                <h2 style={{ fontSize: '14px', fontWeight: 700, borderBottom: '1px solid #bbb', paddingBottom: '4px', margin: '20px 0 8px' }}>Sale Terms</h2>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <tbody>
+                    <tr><td style={{ padding: '4px 8px', border: '1px solid #ddd', width: '40%', background: '#f8f8f8', fontWeight: 600 }}>Sale Price</td><td style={{ padding: '4px 8px', border: '1px solid #ddd' }}>{salePrice ? formatCurrency(salePrice) : 'Agreed upon consideration'}</td></tr>
+                    <tr><td style={{ padding: '4px 8px', border: '1px solid #ddd', background: '#f8f8f8', fontWeight: 600 }}>Sale Date</td><td style={{ padding: '4px 8px', border: '1px solid #ddd' }}>{saleDate}</td></tr>
+                    <tr><td style={{ padding: '4px 8px', border: '1px solid #ddd', background: '#f8f8f8', fontWeight: 600 }}>Transfer of Title</td><td style={{ padding: '4px 8px', border: '1px solid #ddd' }}>Upon receipt of full payment</td></tr>
+                  </tbody>
+                </table>
+
+                <h2 style={{ fontSize: '14px', fontWeight: 700, borderBottom: '1px solid #bbb', paddingBottom: '4px', margin: '20px 0 8px' }}>Seller</h2>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <tbody>
+                    <tr><td style={{ padding: '4px 8px', border: '1px solid #ddd', width: '40%', background: '#f8f8f8', fontWeight: 600 }}>Name</td><td style={{ padding: '4px 8px', border: '1px solid #ddd' }}>{sellerName}</td></tr>
+                    {sellerEntity && <tr><td style={{ padding: '4px 8px', border: '1px solid #ddd', background: '#f8f8f8', fontWeight: 600 }}>Entity</td><td style={{ padding: '4px 8px', border: '1px solid #ddd' }}>{sellerEntity}</td></tr>}
+                    {workspaceProfile.ranchName && <tr><td style={{ padding: '4px 8px', border: '1px solid #ddd', background: '#f8f8f8', fontWeight: 600 }}>Ranch</td><td style={{ padding: '4px 8px', border: '1px solid #ddd' }}>{workspaceProfile.ranchName}</td></tr>}
+                  </tbody>
+                </table>
+
+                <h2 style={{ fontSize: '14px', fontWeight: 700, borderBottom: '1px solid #bbb', paddingBottom: '4px', margin: '20px 0 8px' }}>Buyer</h2>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <tbody>
+                    <tr><td style={{ padding: '4px 8px', border: '1px solid #ddd', width: '40%', background: '#f8f8f8', fontWeight: 600 }}>Name</td><td style={{ padding: '4px 8px', border: '1px solid #ddd' }}>{selectedLead.name}</td></tr>
+                    <tr><td style={{ padding: '4px 8px', border: '1px solid #ddd', background: '#f8f8f8', fontWeight: 600 }}>Source</td><td style={{ padding: '4px 8px', border: '1px solid #ddd' }}>{selectedLead.channel}</td></tr>
+                  </tbody>
+                </table>
+
+                <p style={{ marginTop: '24px', fontSize: '13px' }}>
+                  Seller warrants that they have clear title to the above-described horse and the right to sell the same.
+                  The horse is sold in its present condition, and the buyer acknowledges having had the opportunity to inspect
+                  the horse prior to the sale. This sale is final. No warranties, express or implied, are made regarding
+                  the horse's health, soundness, or fitness for any particular purpose unless separately stated in writing.
+                </p>
+
+                <div style={{ display: 'flex', gap: '40px', marginTop: '40px' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ borderTop: '1px solid #333', paddingTop: '6px', fontSize: '12px' }}>
+                      <div>Seller Signature</div>
+                      <div style={{ marginTop: '24px', borderTop: '1px solid #333', paddingTop: '4px' }}>{sellerName}</div>
+                      <div style={{ marginTop: '20px', borderTop: '1px solid #555', paddingTop: '4px' }}>Date</div>
+                    </div>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ borderTop: '1px solid #333', paddingTop: '6px', fontSize: '12px' }}>
+                      <div>Buyer Signature</div>
+                      <div style={{ marginTop: '24px', borderTop: '1px solid #333', paddingTop: '4px' }}>{selectedLead.name}</div>
+                      <div style={{ marginTop: '20px', borderTop: '1px solid #555', paddingTop: '4px' }}>Date</div>
+                    </div>
+                  </div>
+                </div>
+
+                <p style={{ marginTop: '24px', fontSize: '11px', color: '#777', borderTop: '1px solid #ddd', paddingTop: '12px' }}>
+                  Generated by XBAR LLC™ Ranch Platform. This document is provided as a template for informational purposes only and does not constitute legal advice. Parties are encouraged to have this agreement reviewed by legal counsel before execution.
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </>
   );
 }
