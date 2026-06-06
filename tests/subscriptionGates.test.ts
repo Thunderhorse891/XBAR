@@ -19,9 +19,10 @@ test('document intake blocks a batch that exceeds the current plan count', () =>
   assert.equal(documentIntakeGate(subscription('Starter'), 249, 1), null);
 });
 
-test('Enterprise promises only concrete deliverables', () => {
+test('Enterprise promises only concrete enforced capacity', () => {
   const features = subscriptionPlans.Enterprise.featureFlags.join(' ');
-  assert.doesNotMatch(features, /Custom integrations|Priority support|Unlimited users/);
-  assert.match(features, /Dedicated onboarding/);
-  assert.match(features, /Workspace audit log/);
+  assert.doesNotMatch(features, /Custom integrations|Priority support|Unlimited users|audit log|white-label|onboarding/i);
+  assert.match(features, /60 team seats/);
+  assert.match(features, /20,000 document capacity/);
+  assert.match(features, /200 shared-access seats/);
 });
