@@ -4,6 +4,7 @@ import App from './App';
 import { CloudBootstrap } from './components/CloudBootstrap';
 import ErrorBoundary from './components/ErrorBoundary';
 import './index.css';
+import './premiumCommandCenter.css';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error("Root element not found.");
