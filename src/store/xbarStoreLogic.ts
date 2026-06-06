@@ -111,9 +111,7 @@ export function createOwnershipRecord(horse: HorseRecord): OwnershipRecord {
 export function validateNewHorseInput(input: NewHorseInput) {
   return (
     requireValue(input.name, 'Registered name', 3) ??
-    requireValue(input.barnName, 'Barn name', 2) ??
-    requireValue(input.owner, 'Owner', 2) ??
-    requireValue(input.ownerEntity, 'Owner entity', 2)
+    requireValue(input.owner, 'Owner', 2)
   );
 }
 

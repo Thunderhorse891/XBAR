@@ -259,7 +259,6 @@ export default function Horses() {
               <span className="field-label">Barn name</span>
               <input className="field-input" value={form.barnName} onChange={(event) => {
                 setForm((current) => ({ ...current, barnName: event.target.value }));
-                setFormErrors((current) => ({ ...current, barnName: undefined }));
               }} disabled={!canCreateHorse} />
             </label>
             <label className="field-stack">
@@ -304,7 +303,6 @@ export default function Horses() {
               <span className="field-label">Owner entity</span>
               <input className="field-input" value={form.ownerEntity} onChange={(event) => {
                 setForm((current) => ({ ...current, ownerEntity: event.target.value }));
-                setFormErrors((current) => ({ ...current, ownerEntity: undefined }));
               }} disabled={!canCreateHorse} />
             </label>
             <label className="field-stack">
@@ -319,14 +317,12 @@ export default function Horses() {
               <span className="field-label">Barn</span>
               <input className="field-input" value={form.barn} onChange={(event) => {
                 setForm((current) => ({ ...current, barn: event.target.value }));
-                setFormErrors((current) => ({ ...current, barn: undefined }));
               }} disabled={!canCreateHorse} />
             </label>
             <label className="field-stack">
               <span className="field-label">Pasture</span>
               <input className="field-input" value={form.pasture} onChange={(event) => {
                 setForm((current) => ({ ...current, pasture: event.target.value }));
-                setFormErrors((current) => ({ ...current, pasture: undefined }));
               }} disabled={!canCreateHorse} />
             </label>
           </div>
