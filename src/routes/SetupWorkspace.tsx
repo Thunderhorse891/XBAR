@@ -7,6 +7,7 @@ import { useUiStore } from '@/store/useUiStore';
 import { useWorkspaceReady, useXbarStore } from '@/store/useXbarStore';
 import './authExperience.css';
 import './setupExperience.css';
+import './setupAssetFallback.css';
 
 const proofTiles = [
   {
