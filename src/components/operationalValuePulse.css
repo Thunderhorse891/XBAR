@@ -1,0 +1,194 @@
+.operational-value-pulse {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
+  gap: 1px;
+  margin: 18px 0;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  background: var(--border-strong);
+  box-shadow: var(--shadow-soft);
+}
+
+.operational-value-pulse__summary,
+.operational-value-pulse__signals {
+  background: var(--surface);
+}
+
+.operational-value-pulse__summary {
+  padding: 22px;
+}
+
+.operational-value-pulse__eyebrow,
+.operational-value-pulse__next-label,
+.operational-value-signal__label {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.operational-value-pulse__heading-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 22px;
+  margin-top: 10px;
+}
+
+.operational-value-pulse__title {
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(1.25rem, 2.2vw, 1.9rem);
+  line-height: 1.08;
+}
+
+.operational-value-pulse__copy {
+  max-width: 620px;
+  margin: 9px 0 0;
+  color: var(--muted-strong);
+  line-height: 1.5;
+}
+
+.operational-value-pulse__score {
+  min-width: 98px;
+  padding: 13px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-strong);
+  text-align: right;
+}
+
+.operational-value-pulse__score strong,
+.operational-value-pulse__score span {
+  display: block;
+}
+
+.operational-value-pulse__score strong {
+  color: var(--blue);
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.operational-value-pulse__score span {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.operational-value-pulse--clear .operational-value-pulse__score strong {
+  color: var(--emerald);
+}
+
+.operational-value-pulse--risk .operational-value-pulse__score strong {
+  color: var(--rose);
+}
+
+.operational-value-pulse__next {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.operational-value-pulse__next div,
+.operational-value-pulse__next strong,
+.operational-value-pulse__next span {
+  display: block;
+}
+
+.operational-value-pulse__next strong {
+  margin-top: 5px;
+  color: var(--text);
+}
+
+.operational-value-pulse__next div > span:last-child {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.operational-value-pulse__signals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.operational-value-signal {
+  display: flex;
+  min-height: 142px;
+  flex-direction: column;
+  justify-content: center;
+  padding: 18px;
+  border: 0;
+  outline: 1px solid var(--border);
+  outline-offset: -1px;
+  transition: background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.operational-value-signal:hover {
+  position: relative;
+  z-index: 1;
+  background: var(--blue-soft);
+  box-shadow: inset 3px 0 0 var(--blue);
+}
+
+.operational-value-signal:active {
+  transform: translateY(1px);
+}
+
+.operational-value-signal:focus-visible {
+  position: relative;
+  z-index: 2;
+  outline: 2px solid var(--blue);
+  outline-offset: -3px;
+}
+
+.operational-value-signal__value {
+  margin-top: 8px;
+  color: var(--text);
+  font-size: 1.1rem;
+}
+
+.operational-value-signal--positive .operational-value-signal__value {
+  color: var(--emerald);
+}
+
+.operational-value-signal--risk .operational-value-signal__value {
+  color: var(--rose);
+}
+
+.operational-value-signal__detail {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+@media (max-width: 1080px) {
+  .operational-value-pulse {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .operational-value-pulse__heading-row,
+  .operational-value-pulse__next {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .operational-value-pulse__score {
+    text-align: left;
+  }
+
+  .operational-value-pulse__signals {
+    grid-template-columns: 1fr;
+  }
+}
