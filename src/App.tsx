@@ -7,6 +7,7 @@ import { ToastViewport } from './components/ToastViewport';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
 import { useCloudStore } from './store/useCloudStore';
 import './routes/operationsHierarchy.css';
+import './routes/xbarBrandOverride.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Landing = lazy(() => import('./routes/Landing'));
@@ -120,7 +121,7 @@ export default function App() {
               <Route path="assets" element={<RanchAssets />} />
               <Route path="subscriptions" element={<Subscriptions />} />
               <Route path="shared-access" element={<SharedAccess />} />
-<Route path="settings" element={<Settings />} />
+              <Route path="settings" element={<Settings />} />
               <Route path="*" element={<NotFound />} />
             </Route>
             <Route path="*" element={<NotFound />} />
