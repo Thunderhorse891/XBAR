@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import '@/lib/subscriptionPlans';
 import { documentIntakeGate, sharedListingGate } from '@/lib/subscriptionGates';
 import { useXbarStore } from '@/store/useXbarStore';
 
