@@ -11,5 +11,7 @@
 .follow-up-focus__facts strong { display: block; margin-top: 6px; color: #14202d; }
 .follow-up-note { margin: 16px 0 0; padding: 14px; border-left: 3px solid #78a2ca; background: #f4f7fb; color: #526173; line-height: 1.55; }
 .follow-up-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.follow-up-focus .button--ghost { border-color: rgba(32,49,67,.18); background: #eef3f8; color: #14202d; }
+.follow-up-focus .button--ghost:hover { background: #e3ebf3; }
 @media (max-width: 1050px) { .follow-up-workspace { grid-template-columns: 1fr; } }
 @media (max-width: 620px) { .follow-up-row { align-items: flex-start; flex-direction: column; } .follow-up-row > span:last-child { justify-items: start; } .follow-up-focus__facts { grid-template-columns: 1fr; } }
