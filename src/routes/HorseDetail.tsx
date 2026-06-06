@@ -1010,7 +1010,7 @@ export default function HorseDetail() {
           ) : (
             <EmptyState compact title="No medical timeline" description="Add a care event after the next exam." />
           )}
-          {canManageMedical && (
+          {canEditHorse && (
             <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid var(--border)' }}>
               <div className="form-grid form-grid--tight">
                 <label className="field-stack">

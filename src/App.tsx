@@ -154,7 +154,7 @@ export default function App() {
               <Route path="subscriptions" element={<Subscriptions />} />
               <Route path="shared-access" element={<SharedAccess />} />
               <Route path="marketplace" element={<Marketplace />} />
-<Route path="settings" element={<Settings />} />
+              <Route path="settings" element={<Settings />} />
               <Route path="*" element={<NotFound />} />
             </Route>
             <Route path="*" element={<NotFound />} />
