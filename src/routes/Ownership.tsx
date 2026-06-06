@@ -4,14 +4,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
-import { MetricCard, PageHeader, Pill } from '@/components/app-ui';
+import { MetricCard, PageHeader, Pill, SurfaceTabs } from '@/components/app-ui';
 import { formatDateLabel, formatDateTimeLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { DocumentType, OwnershipStake, TransferStatus } from '@/types/xbar';
 import { ownershipDocumentTypes, ownershipRoles, transferStatuses } from '@/features/ownership/constants';
 import type { SortMode } from '@/features/ownership/constants';
-import { documentTone, ownershipDocsForHorse, scrollToSection, transferTone } from '@/features/ownership/helpers';
+import { documentTone, ownershipDocsForHorse, transferTone } from '@/features/ownership/helpers';
 import { createOwnerRegistry, createRelationshipRows, filterAndSortRelationshipRows, getMissingDocumentRows, getHorsesWithOwnership, getLatestOwnershipDocuments, getPendingTransfers } from '@/features/ownership/selectors';
 import type { OwnerRegistryRow, RelationshipRow } from '@/features/ownership/types';
 import './ownershipExperience.css';
@@ -49,6 +49,7 @@ export default function Ownership() {
   const [coOwner, setCoOwner] = useState({ name: '', share: '25', role: 'Co-Owner' as OwnershipStake['role'], contact: '' });
   const [formError, setFormError] = useState('');
   const [menuState, setMenuState] = useState<MenuState>(null);
+  const [activeTab, setActiveTab] = useState<'Registry' | 'Horses' | 'Transfers' | 'Documents'>('Horses');
   const ownershipDocuments = useMemo(
     () => documents.filter((document) => ownershipDocumentTypes.includes(document.type)),
     [documents],
@@ -241,10 +242,10 @@ export default function Ownership() {
         title="Owner Records"
         actions={
           <>
-            <button className="button button--primary" type="button" onClick={() => scrollToSection('ownership-owner-editor')} disabled={!canManageOwnership}>
+            <button className="button button--primary" type="button" onClick={() => setActiveTab('Registry')} disabled={!canManageOwnership}>
               Add owner
             </button>
-            <button className="button button--ghost" type="button" onClick={() => scrollToSection('ownership-transfer-editor')} disabled={!canManageOwnership || !selectedRecord}>
+            <button className="button button--ghost" type="button" onClick={() => setActiveTab('Transfers')} disabled={!canManageOwnership || !selectedRecord}>
               Add transfer
             </button>
             {canUploadDocuments ? (
@@ -257,40 +258,43 @@ export default function Ownership() {
       />
 
       <div className="ownership-metric-grid">
-        <MetricCard label="Owners" value={`${ownerRegistry.length}`} detail="People and entities on file" tone="slate" className="ownership-metric-card" onClick={() => scrollToSection('ownership-registry')} />
-        <MetricCard label="Linked horses" value={`${horsesWithOwnership}/${horses.length}`} detail="Horses with ownership records" tone="blue" className="ownership-metric-card" onClick={() => scrollToSection('ownership-relationships')} />
-        <MetricCard label="Open transfers" value={`${pendingTransfers.length}`} detail="Signatures, review, or proof still open" tone={pendingTransfers.length ? 'amber' : 'emerald'} className="ownership-metric-card" onClick={() => scrollToSection('ownership-transfer-timeline')} />
-        <MetricCard label="Missing documents" value={`${missingDocumentRows.length}`} detail="Rows with bill, registration, or transfer gaps" tone={missingDocumentRows.length ? 'rose' : 'emerald'} className="ownership-metric-card" onClick={() => scrollToSection('ownership-document-vault')} />
+        <MetricCard label="Owners" value={`${ownerRegistry.length}`} detail="People and entities on file" tone="slate" className="ownership-metric-card" onClick={() => setActiveTab('Registry')} />
+        <MetricCard label="Linked horses" value={`${horsesWithOwnership}/${horses.length}`} detail="Horses with ownership records" tone="blue" className="ownership-metric-card" onClick={() => setActiveTab('Horses')} />
+        <MetricCard label="Open transfers" value={`${pendingTransfers.length}`} detail="Signatures, review, or proof still open" tone={pendingTransfers.length ? 'amber' : 'emerald'} className="ownership-metric-card" onClick={() => setActiveTab('Transfers')} />
+        <MetricCard label="Missing documents" value={`${missingDocumentRows.length}`} detail="Rows with bill, registration, or transfer gaps" tone={missingDocumentRows.length ? 'rose' : 'emerald'} className="ownership-metric-card" onClick={() => setActiveTab('Documents')} />
       </div>
 
-      <section className="ownership-command-panel" aria-label="Ownership search and filters">
-        <div>
-          <span className="section-eyebrow">Ownership control</span>
-          <h2>Find the record, verify the owner, move the transfer</h2>
-        </div>
-        <div className="ownership-toolbar">
-          <label className="ownership-search">
-            <span className="sr-only">Search ownership records</span>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search horse, owner, contact, document gap..." />
-          </label>
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as TransferStatus | 'All')} aria-label="Filter by transfer status">
-            <option value="All">All statuses</option>
-            {transferStatuses.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
-          </select>
-          <select value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)} aria-label="Sort ownership rows">
-            <option value="Deadline">Sort by deadline</option>
-            <option value="Horse">Sort by horse</option>
-            <option value="Status">Sort by status</option>
-            <option value="Confidence">Sort by confidence</option>
-          </select>
-        </div>
-      </section>
+      <div className="ownership-tab-bar">
+        <SurfaceTabs
+          items={['Horses', 'Registry', 'Transfers', 'Documents'] as const}
+          active={activeTab}
+          onChange={(tab) => setActiveTab(tab as typeof activeTab)}
+        />
+        {activeTab === 'Horses' && (
+          <div className="ownership-toolbar ownership-toolbar--inline">
+            <label className="ownership-search">
+              <span className="sr-only">Search ownership records</span>
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search horse, owner, contact..." />
+            </label>
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as TransferStatus | 'All')} aria-label="Filter by transfer status">
+              <option value="All">All statuses</option>
+              {transferStatuses.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+            <select value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)} aria-label="Sort ownership rows">
+              <option value="Deadline">Sort by deadline</option>
+              <option value="Horse">Sort by horse</option>
+              <option value="Status">Sort by status</option>
+              <option value="Confidence">Sort by confidence</option>
+            </select>
+          </div>
+        )}
+      </div>
 
-      <div className="ownership-workspace">
+      {activeTab === 'Registry' && <div className="ownership-workspace">
         <section id="ownership-registry" className="ownership-panel" onContextMenu={(event) => openSectionMenu('registry', event)}>
           <div className="ownership-section-heading">
             <div>
@@ -409,9 +413,9 @@ export default function Ownership() {
             <EmptyState compact title="No horse selected" description="Select an ownership row before adding contact details." />
           )}
         </aside>
-      </div>
+      </div>}
 
-      <section id="ownership-relationships" className="ownership-panel" onContextMenu={(event) => openSectionMenu('relationships', event)}>
+      {activeTab === 'Horses' && <section id="ownership-relationships" className="ownership-panel" onContextMenu={(event) => openSectionMenu('relationships', event)}>
         <div className="ownership-section-heading">
           <div>
             <span className="section-eyebrow">Horse to owner relationships</span>
@@ -488,9 +492,9 @@ export default function Ownership() {
             <Link className="button button--primary" to="/horses?new=1">Add first horse</Link>
           </div>
         )}
-      </section>
+      </section>}
 
-      <div className="ownership-workspace ownership-workspace--timeline">
+      {activeTab === 'Transfers' && <div className="ownership-workspace ownership-workspace--timeline">
         <section id="ownership-transfer-editor" className="ownership-panel ownership-editor-panel">
           <div className="ownership-section-heading ownership-section-heading--compact">
             <div>
@@ -591,9 +595,9 @@ export default function Ownership() {
             <EmptyState title="No ownership record loaded" description="Select a horse to review the transfer chain." />
           )}
         </section>
-      </div>
+      </div>}
 
-      <section id="ownership-document-vault" className="ownership-panel" onContextMenu={(event) => openSectionMenu('documents', event)}>
+      {activeTab === 'Documents' && <section id="ownership-document-vault" className="ownership-panel" onContextMenu={(event) => openSectionMenu('documents', event)}>
         <div className="ownership-section-heading">
           <div>
             <span className="section-eyebrow">Document proof</span>
@@ -661,7 +665,7 @@ export default function Ownership() {
             <EmptyState compact title="No ownership documents yet" description="Start with the bill of sale, registration, and transfer packet for the horses that matter most." />
           </div>
         )}
-      </section>
+      </section>}
 
       <ContextMenu open={Boolean(menuItems.length)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
     </div>

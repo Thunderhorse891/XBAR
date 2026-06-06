@@ -242,7 +242,7 @@ export default function HorseDetail() {
       horseId: horse.id,
       source: docSource,
       uploadedBy: 'Horse Profile',
-      label: `${horse.barnName} profile upload`,
+      label: `${horse.barnName || horse.name} profile upload`,
     });
     pushToast({
       title: result.ok ? 'Document upload updated' : 'Document upload blocked',
@@ -399,10 +399,10 @@ export default function HorseDetail() {
               {[
                 { label: horse.segment, color: 'border-[rgba(12,111,151,0.3)] bg-[rgba(12,111,151,0.12)] text-[#7dcef0]' },
                 { label: horse.status, color: 'border-[rgba(112,129,148,0.3)] bg-[rgba(112,129,148,0.1)] text-[#a0b8cc]' },
-                { label: horse.location.barn, color: 'border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.05)] text-[rgba(200,220,244,0.75)]' },
-              ].map(({ label, color }) => (
+                horse.location.barn ? { label: horse.location.barn, color: 'border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.05)] text-[rgba(200,220,244,0.75)]' } : null,
+              ].filter((x): x is { label: string; color: string } => x !== null).map(({ label, color }, i) => (
                 <span
-                  key={label}
+                  key={`${label}-${i}`}
                   className={classNames(
                     'inline-flex items-center rounded-md border px-3 py-1.5 text-[11px] font-semibold tracking-[0.06em]',
                     color,

@@ -701,6 +701,35 @@
   }
 }
 
+.ownership-tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding-bottom: 4px;
+}
+
+.ownership-tab-bar .surface-tabs {
+  flex-shrink: 0;
+}
+
+.ownership-toolbar--inline {
+  display: flex;
+  flex: 1;
+  gap: 10px;
+  align-items: center;
+}
+
+.ownership-toolbar--inline .ownership-search {
+  flex: 1;
+  min-width: 180px;
+}
+
+.ownership-toolbar--inline select {
+  min-width: 140px;
+}
+
 .ownership-stake-list {
   display: grid;
   gap: 8px;
