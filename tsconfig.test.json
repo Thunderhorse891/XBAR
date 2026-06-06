@@ -8,9 +8,7 @@
     "moduleResolution": "NodeNext",
     "types": ["node", "vite/client"],
     "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"]
-    },
+    "paths": { "@/*": ["src/*"] },
     "declaration": false,
     "sourceMap": false,
     "allowImportingTsExtensions": false
@@ -24,6 +22,7 @@
     "src/lib/platformConfig.ts",
     "src/lib/facebookSharing.ts",
     "src/lib/permissions.ts",
+    "src/lib/cloudSyncPolicy.ts",
     "src/vite-env.d.ts",
     "tests/**/*.ts"
   ]
