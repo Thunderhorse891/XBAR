@@ -1,81 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
+import { decideCloudReconciliation, serializeWorkspaceBackup } from '@/lib/cloudSyncPolicy';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useXbarStore } from '@/store/useXbarStore';
-
-function asRecord(value: unknown) {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-}
-
-function getWorkspacePayload(backup: unknown) {
-  const record = asRecord(backup);
-  if (!record) {
-    return null;
-  }
-
-  return asRecord(record.workspace) ?? record;
-}
-
-function readListLength(value: unknown) {
-  return Array.isArray(value) ? value.length : 0;
-}
-
-function hasMeaningfulWorkspace(backup: unknown) {
-  const workspace = getWorkspacePayload(backup);
-  if (!workspace) {
-    return false;
-  }
-
-  const profile = asRecord(workspace.workspaceProfile);
-  const hasProfileData = [
-    profile?.setupCompleteAt,
-    profile?.businessName,
-    profile?.ranchName,
-    profile?.defaultOwnerName,
-    profile?.defaultOwnerEntity,
-    profile?.ranchManagerName,
-    profile?.operationsEmail,
-    profile?.defaultBarn,
-    profile?.defaultPasture,
-  ].some((value) => typeof value === 'string' && value.trim());
-
-  return (
-    hasProfileData ||
-    [
-      'horses',
-      'documents',
-      'intakeBatches',
-      'expenseReceipts',
-      'ranchAssets',
-      'salesLeads',
-      'sharedListings',
-      'workspaceMembers',
-      'workspaceInvitations',
-    ].some((key) => readListLength(workspace[key]) > 0)
-  );
-}
-
-function serializeWorkspaceBackup(backup: unknown) {
-  const workspace = getWorkspacePayload(backup);
-  if (!workspace) {
-    return '';
-  }
-
-  const normalizedWorkspace = { ...workspace };
-  const profile = asRecord(workspace.workspaceProfile);
-  if (profile) {
-    normalizedWorkspace.workspaceProfile = {
-      ...profile,
-      lastCloudSyncAt: '',
-    };
-  }
-
-  return JSON.stringify(normalizedWorkspace);
-}
-
-function isMissingCloudWorkspaceMessage(message: string) {
-  return message.toLowerCase().includes('no cloud workspace');
-}
 
 export function CloudBootstrap() {
   const initialize = useCloudStore((state) => state.initialize);
@@ -92,219 +19,127 @@ export function CloudBootstrap() {
   const exportWorkspaceBackup = useXbarStore((state) => state.exportWorkspaceBackup);
   const hydrationKeyRef = useRef('');
   const autosaveUnlockedRef = useRef(false);
-  const lastPersistedSignatureRef = useRef(serializeWorkspaceBackup(exportWorkspaceBackup()));
+  const lastPersistedSignatureRef = useRef('');
 
   useEffect(() => {
     let dispose: (() => void) | void;
-
-    void initialize().then((cleanup) => {
-      dispose = cleanup;
-    });
-
-    return () => {
-      dispose?.();
-    };
+    void initialize().then((cleanup) => { dispose = cleanup; });
+    return () => { dispose?.(); };
   }, [initialize]);
 
-  useEffect(() => {
-    setCurrentRole(workspaceRole);
-  }, [setCurrentRole, workspaceRole]);
+  useEffect(() => { setCurrentRole(workspaceRole); }, [setCurrentRole, workspaceRole]);
 
-  // On sign-in: pull cloud data first, import it, then unlock autosave.
-  // This prevents stale/empty local state from overwriting good cloud data.
   useEffect(() => {
     if (cloudStatus !== 'signed-in' || !session?.user.id) {
       hydrationKeyRef.current = '';
       autosaveUnlockedRef.current = false;
       lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
+      setAutosaveReady(false);
       setSyncState('idle');
       return;
     }
 
     const hydrationKey = `${session.user.id}:${workspaceId || 'primary'}`;
-    if (hydrationKeyRef.current === hydrationKey) {
-      return;
-    }
-
+    if (hydrationKeyRef.current === hydrationKey) return;
     hydrationKeyRef.current = hydrationKey;
     autosaveUnlockedRef.current = false;
+    setAutosaveReady(false);
     let cancelled = false;
 
-    const hydrateWorkspace = async () => {
-      const localBackup = exportWorkspaceBackup();
-      const localHasWorkspace = hasMeaningfulWorkspace(localBackup);
-      setSyncState('syncing', 'Loading workspace from cloud...');
-
-      const remote = await loadWorkspaceBackupFromCloud();
-      if (cancelled) {
-        return;
-      }
-
-      if (remote.ok) {
-        const remoteHasWorkspace = hasMeaningfulWorkspace(remote.backup);
-        if (remote.updatedAt) {
-          setLastSyncAt(remote.updatedAt);
-        }
-
-        if (remoteHasWorkspace && !localHasWorkspace) {
-          const imported = importWorkspaceBackup(remote.backup);
-          autosaveUnlockedRef.current = imported.ok;
-          lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
-          setSyncState(imported.ok ? 'idle' : 'error', imported.ok ? 'Cloud workspace loaded.' : imported.message);
-          return;
-        }
-
-        if (!remoteHasWorkspace && localHasWorkspace) {
-          const saved = await saveWorkspaceBackupToCloud(localBackup);
-          if (cancelled) {
-            return;
-          }
-
-          if (saved.ok && saved.updatedAt) {
-            setLastSyncAt(saved.updatedAt);
-          }
-
-          autosaveUnlockedRef.current = saved.ok;
-          lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
-          setSyncState(saved.ok ? 'idle' : 'error', saved.message);
-          return;
-        }
-
-        if (remoteHasWorkspace && localHasWorkspace) {
-          autosaveUnlockedRef.current = serializeWorkspaceBackup(remote.backup) === serializeWorkspaceBackup(localBackup);
-          setSyncState(
-            autosaveUnlockedRef.current ? 'idle' : 'error',
-            autosaveUnlockedRef.current
-              ? 'Cloud workspace connected.'
-              : 'Cloud already has workspace data. Autosave is locked until you refresh from cloud or complete a manual merge.',
-          );
-          return;
-        }
-
-        autosaveUnlockedRef.current = true;
-        lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
-        setSyncState('idle', 'Cloud workspace ready.');
-        return;
-      }
-
-      if (localHasWorkspace && isMissingCloudWorkspaceMessage(remote.message)) {
-        const saved = await saveWorkspaceBackupToCloud(localBackup);
-        if (cancelled) {
-          return;
-        }
-
-        if (saved.ok && saved.updatedAt) {
-          setLastSyncAt(saved.updatedAt);
-        }
-
-        autosaveUnlockedRef.current = saved.ok;
-        lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
-        setSyncState(saved.ok ? 'idle' : 'error', saved.message);
-        return;
-      }
-
-      autosaveUnlockedRef.current = !localHasWorkspace;
+    const finish = (unlocked: boolean, state: 'idle' | 'error', message: string) => {
+      if (cancelled) return;
+      autosaveUnlockedRef.current = unlocked;
       lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
-      setSyncState(localHasWorkspace ? 'error' : 'idle', remote.message);
+      setSyncState(state, message);
+      setAutosaveReady(true);
     };
 
-    void hydrateWorkspace();
+    const hydrate = async () => {
+      const local = exportWorkspaceBackup();
+      setSyncState('syncing', 'Reconciling this ranch with cloud records...');
+      const remote = await loadWorkspaceBackupFromCloud();
+      if (cancelled) return;
+      const decision = decideCloudReconciliation({ local, ...(remote.ok ? { remote: remote.backup } : { remoteError: remote.message }) });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [cloudStatus, exportWorkspaceBackup, importWorkspaceBackup, session?.user.id, setLastSyncAt, setSyncState, workspaceId]);
-
-  useEffect(() => {
-    if (cloudStatus !== 'signed-in') {
-      return;
-    }
-
-    let disposed = false;
-
-    void loadWorkspaceBackupFromCloud().then((result) => {
-      if (disposed) {
+      if (decision === 'import-remote' && remote.ok) {
+        const imported = importWorkspaceBackup(remote.backup);
+        if (imported.ok && remote.updatedAt) setLastSyncAt(remote.updatedAt);
+        finish(imported.ok, imported.ok ? 'idle' : 'error', imported.ok ? 'Cloud workspace loaded safely.' : imported.message);
         return;
       }
 
-      if (result.ok) {
-        importWorkspaceBackup(result.backup);
+      if (decision === 'push-local') {
+        const saved = await saveWorkspaceBackupToCloud(local);
+        if (cancelled) return;
+        if (saved.ok && saved.updatedAt) setLastSyncAt(saved.updatedAt);
+        finish(saved.ok, saved.ok ? 'idle' : 'error', saved.message);
+        return;
       }
 
-      // Unlock autosave regardless — if no cloud backup exists yet, that is fine.
-      setAutosaveReady(true);
-    });
+      if (decision === 'connected') {
+        if (remote.ok && remote.updatedAt) setLastSyncAt(remote.updatedAt);
+        finish(true, 'idle', 'Cloud workspace connected.');
+        return;
+      }
 
-    return () => {
-      disposed = true;
+      if (decision === 'empty-ready') {
+        finish(true, 'idle', remote.ok ? 'Cloud workspace ready.' : remote.message);
+        return;
+      }
+
+      finish(false, 'error', decision === 'conflict-lock'
+        ? 'Local and cloud both contain different ranch work. Autosave is locked until you choose Push cloud or Pull cloud in Settings.'
+        : remote.ok ? 'Cloud workspace needs review.' : remote.message);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cloudStatus]);
 
-  // Autosave — only runs after cloud pull has completed (autosaveReady === true).
+    void hydrate();
+    return () => { cancelled = true; };
+  }, [cloudStatus, exportWorkspaceBackup, importWorkspaceBackup, session?.user.id, setAutosaveReady, setLastSyncAt, setSyncState, workspaceId]);
+
   useEffect(() => {
-    if (cloudStatus !== 'signed-in' || !autosaveReady) {
-      setSyncState('idle');
-      return;
-    }
-
-    if (!autosaveUnlockedRef.current) {
-      return;
-    }
-
+    if (cloudStatus !== 'signed-in' || !autosaveReady || !autosaveUnlockedRef.current) return;
     let disposed = false;
     let syncTimeout: number | undefined;
+    let saving = false;
 
-    const unsubscribe = useXbarStore.subscribe(() => {
-      const nextBackup = exportWorkspaceBackup();
-      const nextSignature = serializeWorkspaceBackup(nextBackup);
-
-      if (nextSignature === lastPersistedSignatureRef.current) {
+    const persistCurrent = async () => {
+      if (disposed || saving) return;
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        setSyncState('error', 'Offline. Ranch changes remain local and will retry when the connection returns.');
         return;
       }
-
-      lastPersistedSignatureRef.current = nextSignature;
-
-      if (syncTimeout) {
-        window.clearTimeout(syncTimeout);
+      const backup = exportWorkspaceBackup();
+      const signature = serializeWorkspaceBackup(backup);
+      if (signature === lastPersistedSignatureRef.current) return;
+      saving = true;
+      setSyncState('syncing', 'Saving ranch changes to cloud...');
+      const result = await saveWorkspaceBackupToCloud(backup);
+      saving = false;
+      if (disposed) return;
+      if (result.ok) {
+        lastPersistedSignatureRef.current = signature;
+        if (result.updatedAt) setLastSyncAt(result.updatedAt);
+        setSyncState('idle', result.message);
+      } else {
+        setSyncState('error', `${result.message} Changes remain local and will retry.`);
       }
+    };
 
-      setSyncState('syncing', 'Saving workspace changes to cloud...');
-      syncTimeout = window.setTimeout(async () => {
-        if (disposed) {
-          return;
-        }
-
-        if (typeof navigator !== 'undefined' && 'onLine' in navigator && !navigator.onLine) {
-          setSyncState('error', 'Offline. Workspace changes remain local until the connection returns.');
-          return;
-        }
-
-        const backup = exportWorkspaceBackup();
-        const result = await saveWorkspaceBackupToCloud(backup);
-        if (disposed) {
-          return;
-        }
-
-        if (result.ok && result.updatedAt) {
-          setLastSyncAt(result.updatedAt);
-          lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
-          setSyncState('idle', result.message);
-          return;
-        }
-
-        setSyncState(result.ok ? 'idle' : 'error', result.message);
-      }, 1600);
-    });
+    const queuePersist = () => {
+      if (syncTimeout) window.clearTimeout(syncTimeout);
+      syncTimeout = window.setTimeout(() => { void persistCurrent(); }, 1600);
+    };
+    const unsubscribe = useXbarStore.subscribe(queuePersist);
+    window.addEventListener('online', queuePersist);
+    queuePersist();
 
     return () => {
       disposed = true;
-      if (syncTimeout) {
-        window.clearTimeout(syncTimeout);
-      }
+      if (syncTimeout) window.clearTimeout(syncTimeout);
       unsubscribe();
+      window.removeEventListener('online', queuePersist);
     };
-  }, [cloudStatus, exportWorkspaceBackup, setLastSyncAt, setSyncState]);
+  }, [autosaveReady, cloudStatus, exportWorkspaceBackup, setLastSyncAt, setSyncState]);
 
   return null;
 }
