@@ -1,0 +1,672 @@
+/* ═══════════════════════════════════════════════
+   XBAR COMMAND SYSTEM — Premium App Visual Layer
+   Purpose: unify internal routes into a dark, cinematic horse-operations OS
+   Scope: visual system only. No routing, auth, Supabase, persistence, or data logic.
+═══════════════════════════════════════════════ */
+
+:root {
+  color-scheme: dark;
+  --bg: #05080d;
+  --bg-deep: #03060a;
+  --surface: rgba(10, 16, 26, 0.92);
+  --surface-strong: rgba(14, 23, 36, 0.96);
+  --surface-elevated: rgba(17, 28, 44, 0.88);
+  --sidebar: #03070d;
+  --sidebar-edge: rgba(124, 169, 220, 0.12);
+  --text: #edf5ff;
+  --muted: #8aa0b8;
+  --muted-strong: #b5c7dc;
+  --border: rgba(132, 168, 210, 0.16);
+  --border-strong: rgba(149, 187, 229, 0.26);
+  --blue: #2d8cff;
+  --blue-soft: rgba(45, 140, 255, 0.13);
+  --blue-line: rgba(45, 140, 255, 0.42);
+  --slate: #8da2b8;
+  --slate-soft: rgba(141, 162, 184, 0.12);
+  --emerald: #70cba6;
+  --emerald-soft: rgba(112, 203, 166, 0.12);
+  --amber: #d6a74d;
+  --amber-soft: rgba(214, 167, 77, 0.13);
+  --rose: #d8666c;
+  --rose-soft: rgba(216, 102, 108, 0.14);
+  --shadow: 0 28px 72px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  --shadow-soft: 0 16px 42px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  --radius-xl: 18px;
+  --radius-lg: 14px;
+  --radius-md: 10px;
+  --radius-sm: 7px;
+  --brand-blue: #2d8cff;
+  --brand-electric: #58a8ff;
+  --brand-silver: #d6e2ef;
+  --brand-gunmetal: #111a26;
+  --brand-charcoal: #09111c;
+  --brand-dark: #05080d;
+}
+
+html,
+body,
+#root {
+  background: var(--bg-deep) !important;
+  color: var(--text) !important;
+}
+
+body {
+  background:
+    radial-gradient(ellipse at 12% -10%, rgba(45, 140, 255, 0.14), transparent 32rem),
+    radial-gradient(ellipse at 92% 8%, rgba(138, 160, 184, 0.10), transparent 30rem),
+    linear-gradient(145deg, #03060a 0%, #070d15 44%, #020408 100%) !important;
+}
+
+body::selection {
+  background: rgba(45, 140, 255, 0.28);
+  color: #ffffff;
+}
+
+.app-loading-shell {
+  background: var(--bg-deep) !important;
+  color: var(--muted-strong) !important;
+}
+
+/* ── App shell / left rail ───────────────────── */
+.app-shell,
+.shell-main,
+[class*="bg-[#eef3f8]"],
+[class*="bg-[#fbfdff]"] {
+  background:
+    radial-gradient(ellipse at 22% 0%, rgba(45, 140, 255, 0.08), transparent 38rem),
+    linear-gradient(180deg, rgba(7, 12, 20, 0.98), rgba(4, 7, 12, 0.99)) !important;
+  color: var(--text) !important;
+}
+
+.sidebar,
+aside {
+  background:
+    radial-gradient(ellipse at 50% -6%, rgba(45, 140, 255, 0.14), transparent 18rem),
+    linear-gradient(180deg, #050a12 0%, #03070d 100%) !important;
+  color: #dbe8f8 !important;
+  border-color: rgba(120, 165, 220, 0.12) !important;
+  box-shadow: 18px 0 54px rgba(0, 0, 0, 0.34);
+}
+
+aside > div:first-child > div:first-child,
+.brand-lockup__mark {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(77, 148, 255, 0.36) !important;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(77, 148, 255, 0.20), transparent 64%),
+    #050910 !important;
+  padding: 0 !important;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.38), 0 0 28px rgba(45, 140, 255, 0.14) !important;
+}
+
+aside > div:first-child > div:first-child > svg,
+.brand-lockup__mark > svg {
+  opacity: 0;
+}
+
+aside > div:first-child > div:first-child::before,
+.brand-lockup__mark::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url('/brand/xbar_public_assets/public/brand/xbar-website-icon.png'), url('/brand/xbar-website-icon.png.png');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 82%;
+  filter: drop-shadow(0 0 12px rgba(77, 148, 255, 0.22));
+}
+
+.brand-lockup__title,
+aside [class*="tracking-[0.14em]"],
+aside [class*="tracking-[0.24em]"] {
+  color: #f3f8ff !important;
+}
+
+.brand-lockup__subtitle,
+.sidebar-card__eyebrow,
+.nav-section__title,
+.sidebar-footer__title,
+aside [class*="text-[#52708d]"],
+aside [class*="text-[#3d5870]"] {
+  color: rgba(168, 194, 224, 0.58) !important;
+}
+
+.sidebar-card,
+.sidebar-footer,
+aside [class*="bg-[#080f1c]"],
+aside [class*="bg-[#08111d]"],
+aside [class*="bg-[#0a1628]"] {
+  border-color: rgba(120, 165, 220, 0.13) !important;
+  background:
+    linear-gradient(145deg, rgba(12, 21, 34, 0.86), rgba(5, 10, 18, 0.92)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 14px 32px rgba(0, 0, 0, 0.24) !important;
+}
+
+.nav-link,
+aside a,
+aside button {
+  border-radius: 9px !important;
+  color: rgba(205, 222, 242, 0.72) !important;
+}
+
+.nav-link:hover,
+aside a:hover,
+aside button:hover {
+  background: rgba(45, 140, 255, 0.09) !important;
+  color: #f5f9ff !important;
+  border-color: rgba(45, 140, 255, 0.30) !important;
+}
+
+.nav-link--active,
+aside a[aria-current='page'] {
+  background: linear-gradient(90deg, rgba(45, 140, 255, 0.18), rgba(45, 140, 255, 0.045)) !important;
+  color: #ffffff !important;
+  border-color: rgba(45, 140, 255, 0.46) !important;
+  box-shadow: inset 3px 0 0 var(--blue), 0 12px 30px rgba(0, 0, 0, 0.24) !important;
+}
+
+/* ── Topbar / page canvas ───────────────────── */
+.topbar,
+header.sticky {
+  background: rgba(5, 9, 15, 0.84) !important;
+  border-color: rgba(120, 165, 220, 0.15) !important;
+  color: var(--text) !important;
+  backdrop-filter: blur(18px) saturate(1.1) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.1) !important;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.24);
+}
+
+.topbar__title,
+.page-title,
+.panel__title,
+.command-stage__title,
+.portfolio-stage__title,
+.detail-hero__title,
+h1,
+h2,
+h3 {
+  color: #f2f7ff !important;
+  letter-spacing: -0.035em;
+}
+
+.topbar__title,
+.page-title {
+  font-size: clamp(1rem, 1.8vw, 1.65rem) !important;
+  line-height: 1.04 !important;
+}
+
+.page-header,
+.shell-content > header,
+main > header:not(.topbar) {
+  border: 1px solid rgba(120, 165, 220, 0.14);
+  border-radius: 18px;
+  padding: clamp(18px, 2.2vw, 26px);
+  background:
+    radial-gradient(ellipse at 8% 0%, rgba(45, 140, 255, 0.13), transparent 28rem),
+    linear-gradient(145deg, rgba(13, 22, 34, 0.92), rgba(5, 9, 16, 0.96));
+  box-shadow: var(--shadow-soft);
+}
+
+.shell-content,
+aside + div > main,
+main.flex.flex-col {
+  background:
+    radial-gradient(ellipse at 70% 0%, rgba(45, 140, 255, 0.07), transparent 36rem),
+    linear-gradient(180deg, rgba(5, 9, 15, 0.96), rgba(3, 6, 10, 0.99)) !important;
+  color: var(--text) !important;
+}
+
+.eyebrow,
+.panel__eyebrow,
+.detail-hero__eyebrow,
+.command-stage__eyebrow,
+.portfolio-stage__eyebrow,
+.dashboard-kpi__label,
+.ledger-stat__label,
+.horse-card__kicker,
+[class*="uppercase"][class*="tracking"] {
+  color: rgba(88, 168, 255, 0.72) !important;
+  font-weight: 850 !important;
+  letter-spacing: 0.18em !important;
+}
+
+.page-description,
+.panel__description,
+.empty-state__description,
+.stack-item__copy,
+.key-value__label,
+p {
+  color: rgba(190, 210, 233, 0.68);
+}
+
+/* ── Command panels / dashboard modules ─────── */
+.panel,
+.metric-card,
+.command-stage,
+.portfolio-stage,
+.command-stage__support-card,
+.command-stage__ledger-item,
+.portfolio-stage__stat,
+.stack-item,
+.empty-state,
+.detail-hero,
+.horse-card,
+.table-shell,
+.context-menu,
+.ownership-panel,
+.ownership-command-panel,
+.ownership-workspace,
+.buyer-momentum,
+.activation-guide,
+[class*="rounded-"][class*="border"][class*="bg-white"],
+[class*="rounded-"][class*="border"][class*="bg-[#fbfdff]"],
+[class*="rounded-"][class*="border"][class*="bg-[#f4f8fb]"] {
+  border-color: rgba(120, 165, 220, 0.16) !important;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(45, 140, 255, 0.075), transparent 58%),
+    linear-gradient(145deg, rgba(12, 21, 34, 0.92), rgba(5, 9, 16, 0.96)) !important;
+  color: var(--text) !important;
+  box-shadow: var(--shadow-soft) !important;
+}
+
+.panel,
+.metric-card,
+.stack-item,
+.horse-card,
+.table-shell {
+  border-radius: var(--radius-lg) !important;
+}
+
+.panel__header,
+.page-header,
+.metric-card,
+.stack-item,
+.table-shell,
+.horse-card,
+.ownership-panel {
+  position: relative;
+}
+
+.panel::before,
+.metric-card::before,
+.command-stage::before,
+.portfolio-stage::before,
+.detail-hero::before,
+.horse-card::before,
+.table-shell::before {
+  content: '';
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(88, 168, 255, 0.40), transparent);
+  opacity: 0.68;
+  pointer-events: none;
+}
+
+.metric-card {
+  min-height: 118px;
+  padding: 18px !important;
+}
+
+.metric-card__label {
+  color: rgba(176, 199, 224, 0.62) !important;
+  font-size: 0.66rem !important;
+  letter-spacing: 0.18em !important;
+  text-transform: uppercase;
+}
+
+.metric-card__value {
+  color: #f5f9ff !important;
+  font-size: clamp(1.75rem, 3vw, 2.55rem) !important;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.055em;
+}
+
+.metric-card__detail {
+  color: rgba(166, 190, 218, 0.66) !important;
+}
+
+.metric-card--amber,
+.pill--amber,
+.ops-briefing-stat__value--warning {
+  --tone: var(--amber);
+}
+
+.metric-card--rose,
+.pill--rose,
+.ops-briefing-stat__value--danger {
+  --tone: var(--rose);
+}
+
+.metric-card--emerald,
+.pill--emerald,
+.ops-briefing-stat__value--clear {
+  --tone: var(--emerald);
+}
+
+.metric-card--interactive:hover,
+.horse-card--interactive:hover,
+.stack-item--interactive:hover,
+.table-row--interactive:hover,
+.ownership-row:hover {
+  transform: translateY(-1px);
+  border-color: rgba(45, 140, 255, 0.34) !important;
+  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+/* ── Dashboard briefing / operations header ─── */
+.ops-briefing-header {
+  border-color: rgba(120, 165, 220, 0.16) !important;
+  background:
+    linear-gradient(90deg, rgba(4, 8, 14, 0.88), rgba(5, 9, 16, 0.74)),
+    url('/brand/xbar-og-image.png'),
+    url('/brand/xbar_public_assets/public/brand/xbar-og-image.png'),
+    linear-gradient(145deg, #07101c, #03060a) !important;
+  background-size: cover;
+  background-position: center;
+  color: #f4f8ff !important;
+  box-shadow: var(--shadow) !important;
+}
+
+.ops-briefing-header__title {
+  color: #ffffff !important;
+  font-size: clamp(2rem, 4vw, 4rem) !important;
+}
+
+.ops-briefing-chip,
+.pill,
+[class*="rounded-full"],
+[class*="rounded-md"][class*="uppercase"] {
+  border: 1px solid rgba(120, 165, 220, 0.18) !important;
+  background: rgba(10, 18, 30, 0.68) !important;
+  color: rgba(214, 228, 244, 0.84) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+.pill--blue,
+.nav-badge--blue,
+[class*="text-[#1155dd]"] {
+  color: #8ec5ff !important;
+}
+
+.pill--emerald {
+  color: #9adfbe !important;
+  border-color: rgba(112, 203, 166, 0.26) !important;
+  background: rgba(112, 203, 166, 0.10) !important;
+}
+
+.pill--amber {
+  color: #ffd894 !important;
+  border-color: rgba(214, 167, 77, 0.28) !important;
+  background: rgba(214, 167, 77, 0.11) !important;
+}
+
+.pill--rose {
+  color: #ffb5bb !important;
+  border-color: rgba(216, 102, 108, 0.30) !important;
+  background: rgba(216, 102, 108, 0.12) !important;
+}
+
+.ops-briefing-stat,
+.dashboard-kpi,
+.ledger-stat {
+  border-color: rgba(120, 165, 220, 0.15) !important;
+  background: rgba(5, 10, 18, 0.68) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+/* ── Forms / controls ───────────────────────── */
+.search-shell__input,
+.field-input,
+.role-select,
+input,
+select,
+textarea,
+[class*="bg-white"] input,
+[class*="bg-white"] select,
+[class*="bg-white"] textarea {
+  border-color: rgba(120, 165, 220, 0.20) !important;
+  background: rgba(4, 8, 14, 0.72) !important;
+  color: #edf5ff !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(151, 175, 202, 0.46) !important;
+}
+
+.search-shell__input:focus,
+.field-input:focus,
+.role-select:focus,
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: rgba(45, 140, 255, 0.66) !important;
+  box-shadow: 0 0 0 3px rgba(45, 140, 255, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.045) !important;
+  outline: none !important;
+}
+
+label,
+.field-label,
+.key-value__label {
+  color: rgba(180, 204, 231, 0.74) !important;
+}
+
+/* ── Buttons ────────────────────────────────── */
+.button,
+.icon-button,
+.public-action,
+.ops-briefing-action,
+button[class*="border"],
+a[class*="border"] {
+  border-color: rgba(120, 165, 220, 0.18) !important;
+  background: rgba(12, 21, 34, 0.78) !important;
+  color: rgba(230, 240, 252, 0.90) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045) !important;
+}
+
+.button--primary,
+.public-action--primary,
+.ops-briefing-action--primary,
+button[class*="bg-[#1155dd]"],
+a[class*="bg-[#1155dd]"] {
+  border-color: rgba(45, 140, 255, 0.72) !important;
+  background: linear-gradient(180deg, #2d8cff 0%, #166fe4 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 14px 30px rgba(22, 111, 228, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+}
+
+.button:hover,
+.icon-button:hover,
+.public-action:hover,
+.ops-briefing-action:hover,
+button[class*="border"]:hover,
+a[class*="border"]:hover {
+  transform: translateY(-1px);
+  border-color: rgba(45, 140, 255, 0.42) !important;
+  background: rgba(18, 31, 49, 0.90) !important;
+  color: #ffffff !important;
+}
+
+.button--primary:hover,
+.public-action--primary:hover,
+.ops-briefing-action--primary:hover,
+button[class*="bg-[#1155dd]"]:hover,
+a[class*="bg-[#1155dd]"]:hover {
+  background: linear-gradient(180deg, #4aa0ff 0%, #207cff 100%) !important;
+}
+
+.button:active,
+.icon-button:active,
+.public-action:active,
+.ops-briefing-action:active,
+button:active,
+a[role='button']:active {
+  transform: scale(0.975);
+  opacity: 0.92;
+  transition: none;
+}
+
+button:disabled,
+.button:disabled,
+.icon-button:disabled {
+  opacity: 0.42 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  filter: saturate(0.5);
+}
+
+/* ── Tables / registries ────────────────────── */
+.table-shell,
+table,
+.data-table {
+  overflow: hidden;
+  border: 1px solid rgba(120, 165, 220, 0.16) !important;
+  border-radius: var(--radius-lg) !important;
+  background: rgba(7, 13, 22, 0.86) !important;
+}
+
+thead,
+.table-head,
+th {
+  background: rgba(4, 8, 14, 0.84) !important;
+  color: rgba(170, 195, 224, 0.72) !important;
+  border-color: rgba(120, 165, 220, 0.14) !important;
+  font-size: 0.68rem !important;
+  letter-spacing: 0.16em !important;
+  text-transform: uppercase;
+}
+
+tbody,
+tr,
+td {
+  border-color: rgba(120, 165, 220, 0.10) !important;
+  color: rgba(230, 240, 252, 0.88) !important;
+}
+
+tbody tr,
+.table-row {
+  background: rgba(8, 15, 25, 0.58) !important;
+}
+
+tbody tr:hover,
+.table-row:hover {
+  background: rgba(45, 140, 255, 0.075) !important;
+}
+
+/* ── Dossier / registry cards ───────────────── */
+.detail-hero,
+.horse-card,
+.ownership-hero,
+.ownership-command-panel,
+.ownership-workspace--timeline {
+  isolation: isolate;
+}
+
+.horse-card__name,
+.detail-hero__title,
+.key-value__value,
+.stack-item__title {
+  color: #f4f8ff !important;
+}
+
+.horse-card__meta,
+.detail-hero__description,
+.key-value__label {
+  color: rgba(173, 196, 222, 0.62) !important;
+}
+
+.progress-track {
+  background: rgba(120, 165, 220, 0.12) !important;
+}
+
+.progress-bar--blue {
+  background: linear-gradient(90deg, #2d8cff, #8bc8ff) !important;
+}
+
+.progress-bar--emerald {
+  background: linear-gradient(90deg, #55b98f, #9adfbe) !important;
+}
+
+.progress-bar--amber {
+  background: linear-gradient(90deg, #b98326, #ffd894) !important;
+}
+
+.progress-bar--rose {
+  background: linear-gradient(90deg, #bd4d55, #ff9ba4) !important;
+}
+
+/* ── Login/setup continuity ─────────────────── */
+.lp-shell,
+.xbar-login-shell,
+.premium-setup-shell {
+  background: #05080d !important;
+}
+
+.lp-hero-logo {
+  object-fit: cover !important;
+  object-position: center top !important;
+}
+
+.lp-card,
+.premium-setup-card {
+  border-color: rgba(120, 165, 220, 0.24) !important;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(45, 140, 255, 0.16), transparent 56%),
+    linear-gradient(145deg, rgba(10, 18, 32, 0.96), rgba(4, 8, 16, 0.94)) !important;
+}
+
+/* ── Mobile refinement ──────────────────────── */
+nav[aria-label='Mobile quick navigation'] {
+  border-color: rgba(120, 165, 220, 0.18) !important;
+  background: rgba(5, 9, 15, 0.94) !important;
+  color: var(--text) !important;
+  box-shadow: 0 18px 56px rgba(0, 0, 0, 0.45) !important;
+  backdrop-filter: blur(16px) !important;
+}
+
+nav[aria-label='Mobile quick navigation'] a,
+nav[aria-label='Mobile quick navigation'] button {
+  color: rgba(210, 228, 248, 0.74) !important;
+}
+
+nav[aria-label='Mobile quick navigation'] a[aria-current='page'] {
+  background: rgba(45, 140, 255, 0.14) !important;
+  color: #ffffff !important;
+}
+
+@media (max-width: 768px) {
+  .shell-content,
+  aside + div > main,
+  main.flex.flex-col {
+    padding-inline: 14px !important;
+  }
+
+  .panel,
+  .metric-card,
+  .command-stage,
+  .portfolio-stage,
+  .page-header {
+    border-radius: 14px !important;
+  }
+
+  .command-stage__title,
+  .portfolio-stage__title,
+  .ops-briefing-header__title {
+    font-size: clamp(1.8rem, 10vw, 3rem) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
