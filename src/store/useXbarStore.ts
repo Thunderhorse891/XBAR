@@ -122,12 +122,14 @@ type XbarStore = {
   ) => ActionResult;
   addRanchAsset: (asset: Pick<RanchAsset, 'name' | 'category' | 'location'>) => ActionResult;
   updateAsset: (assetId: string, patch: AssetPatch) => ActionResult;
+  deleteAsset: (assetId: string) => ActionResult;
   addHorseNote: (horseId: string, note: Pick<HorseNote, 'title' | 'body' | 'author' | 'tone'>) => ActionResult;
   addMedicalEvent: (
     horseId: string,
     event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string; type: MedicalEventType },
   ) => ActionResult;
   addBreedingEvent: (horseId: string, event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string }) => ActionResult;
+  deleteBreedingEvent: (horseId: string, eventId: string) => ActionResult;
   updateHorseLocation: (horseId: string, patch: LocationPatch) => ActionResult;
   updateHorse: (horseId: string, patch: HorsePatch) => ActionResult;
   deleteHorse: (horseId: string) => ActionResult;
@@ -1836,6 +1838,15 @@ export const useXbarStore = create<XbarStore>()(
         }));
         return { ok: true, message: 'Asset record updated.', id: assetId };
       },
+      deleteAsset: (assetId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageAssets');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+        const state = get();
+        const asset = state.ranchAssets.find((a) => a.id === assetId);
+        if (!asset) return { ok: false, message: 'Asset not found.' };
+        set({ ranchAssets: state.ranchAssets.filter((a) => a.id !== assetId) });
+        return { ok: true, message: `${asset.name} removed from equipment.` };
+      },
       addHorseNote: (horseId, note) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
         if (deniedMessage) {
@@ -1961,6 +1972,14 @@ export const useXbarStore = create<XbarStore>()(
         }));
 
         return { ok: true, message: 'Breeding event added.', id: nextEvent.id };
+      },
+      deleteBreedingEvent: (horseId, eventId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageBreeding');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+        const horse = get().horses.find((h) => h.id === horseId);
+        if (!horse) return { ok: false, message: 'Horse not found.' };
+        set({ horses: get().horses.map((h) => h.id === horseId ? { ...h, breedingTimeline: h.breedingTimeline.filter((e) => e.id !== eventId) } : h) });
+        return { ok: true, message: 'Breeding event removed.' };
       },
       updateHorseLocation: (horseId, patch) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');

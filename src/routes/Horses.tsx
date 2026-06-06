@@ -181,8 +181,8 @@ export default function Horses() {
     if (!form.barnName.trim()) nextErrors.barnName = 'Barn name is required.';
     if (form.owner.trim().length < 2) nextErrors.owner = 'Owner is required.';
     if (form.ownerEntity.trim().length < 2) nextErrors.ownerEntity = 'Owner entity is required.';
-    if (!form.barn.trim()) nextErrors.barn = 'Barn is required.';
-    if (!form.pasture.trim()) nextErrors.pasture = 'Pasture is required.';
+    // barn is optional
+    // pasture is optional
 
     setFormErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
@@ -345,7 +345,7 @@ export default function Horses() {
             >
               Use defaults
             </button>
-            <button className="button button--primary" type="button" onClick={handleCreateHorse} disabled={!canCreateHorse || !form.name.trim() || !form.barnName.trim() || !form.owner.trim() || !form.ownerEntity.trim() || !form.barn.trim() || !form.pasture.trim()}>
+            <button className="button button--primary" type="button" onClick={handleCreateHorse} disabled={!canCreateHorse || !form.name.trim() || !form.barnName.trim() || !form.owner.trim()}>
               Create horse
             </button>
           </div>

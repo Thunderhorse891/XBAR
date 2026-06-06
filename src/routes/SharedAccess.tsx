@@ -4,6 +4,7 @@ import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { buildPublicShareUrl, openFacebookShareDialog } from '@/lib/facebookSharing';
+import { isFacebookSharingConfigured } from '@/lib/platformConfig';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -297,7 +298,7 @@ export default function SharedAccess() {
                           });
                         }}
                       >
-                        Post to Facebook
+                        {isFacebookSharingConfigured() ? 'Post to Facebook' : 'Facebook not configured'}
                       </button>
                       {sharedListing ? (
                         <button
