@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { documentIntakeGate, sharedListingGate } from '../src/lib/subscriptionGates.js';
-import { subscriptionTierConfig } from '../src/lib/xbarRuntime.js';
+import { subscriptionPlans } from '../src/lib/subscriptionPlans.js';
 import type { SubscriptionProfile, SubscriptionTier } from '../src/types/xbar.js';
 
 function subscription(tier: SubscriptionTier): SubscriptionProfile {
-  const config = subscriptionTierConfig[tier];
+  const config = subscriptionPlans[tier];
   return { tier, monthlyRate: config.monthlyRate, renewalDate: '', billingState: 'Active', sharedAccessEnabled: config.sharedAccessEnabled, brandedListings: config.brandedListings, featureFlags: config.featureFlags, usage: { seatsUsed: 1, sharedAccessSeatsUsed: 0, storageUsedGb: 0, ...config.limits } };
 }
 
@@ -20,7 +20,7 @@ test('document intake blocks a batch that exceeds the current plan count', () =>
 });
 
 test('Enterprise promises only concrete deliverables', () => {
-  const features = subscriptionTierConfig.Enterprise.featureFlags.join(' ');
+  const features = subscriptionPlans.Enterprise.featureFlags.join(' ');
   assert.doesNotMatch(features, /Custom integrations|Priority support|Unlimited users/);
   assert.match(features, /Dedicated onboarding/);
   assert.match(features, /Workspace audit log/);
