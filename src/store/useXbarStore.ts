@@ -127,6 +127,8 @@ type XbarStore = {
     leadId: string,
     patch: Partial<Pick<SalesLead, 'stage' | 'lastTouch' | 'nextFollowUp' | 'notes' | 'offerAmount' | 'savedListing' | 'shareReady' | 'outcome'>>,
   ) => ActionResult;
+  deleteSalesLead: (leadId: string) => ActionResult;
+  deleteExpenseReceipt: (receiptId: string) => ActionResult;
   addRanchAsset: (asset: Pick<RanchAsset, 'name' | 'category' | 'location'>) => ActionResult;
   updateAsset: (assetId: string, patch: AssetPatch) => ActionResult;
   deleteRanchAsset: (assetId: string) => ActionResult;
@@ -1863,6 +1865,21 @@ export const useXbarStore = create<XbarStore>()(
         });
 
         return { ok: true, message: `${lead.name} updated.`, id: leadId };
+      },
+      deleteSalesLead: (leadId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageSales');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+        const lead = get().salesLeads.find((item) => item.id === leadId);
+        if (!lead) return { ok: false, message: 'Lead not found.' };
+        set((state) => ({ salesLeads: state.salesLeads.filter((item) => item.id !== leadId) }));
+        return { ok: true, message: `${lead.name} removed from pipeline.`, id: leadId };
+      },
+      deleteExpenseReceipt: (receiptId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageAssets');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+        if (!get().expenseReceipts.some((item) => item.id === receiptId)) return { ok: false, message: 'Receipt not found.' };
+        set((state) => ({ expenseReceipts: state.expenseReceipts.filter((item) => item.id !== receiptId) }));
+        return { ok: true, message: 'Receipt removed.', id: receiptId };
       },
       addRanchAsset: (asset) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageAssets');

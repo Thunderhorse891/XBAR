@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useConfirm } from '@/components/ConfirmDialog';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
@@ -19,9 +20,11 @@ export default function Sales() {
   const documents = useXbarStore((state) => state.documents);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const updateSalesLead = useXbarStore((state) => state.updateSalesLead);
+  const deleteSalesLead = useXbarStore((state) => state.deleteSalesLead);
   const recordSharedChannel = useXbarStore((state) => state.recordSharedChannel);
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageSales = useCurrentRoleCapability('manageSales');
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const saleHorses = useMemo(
     () => horses.filter((horse) => horse.sale.askPrice > 0 || horse.sale.listingState === 'Buyer Review' || horse.sale.listingState === 'Market Ready'),
     [horses],
@@ -87,6 +90,20 @@ export default function Sales() {
           label: 'Open horse profile',
           onSelect: () => navigate(`/horses/${menuLead.horseId}`),
         },
+        ...(canManageSales
+          ? [
+              {
+                id: 'delete-lead',
+                label: 'Delete lead',
+                onSelect: async () => {
+                  if (!await confirm('Delete lead?', `Remove "${menuLead.name}" from the pipeline? This cannot be undone.`)) return;
+                  const result = deleteSalesLead(menuLead.id);
+                  pushToast({ title: result.ok ? 'Lead removed' : 'Remove blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                  if (result.ok && selectedLeadId === menuLead.id) setSelectedLeadId(salesLeads.find((l) => l.id !== menuLead.id)?.id ?? '');
+                },
+              },
+            ]
+          : []),
       ]
     : menuHorse
       ? [
@@ -110,6 +127,7 @@ export default function Sales() {
 
   return (
     <>
+      {confirmDialog}
       <div className="surface-hero surface-hero--dark">
         <div className="surface-hero__top">
           <div>
@@ -346,6 +364,21 @@ export default function Sales() {
                 >
                   Save lead changes
                 </button>
+                {canManageSales && (
+                  <button
+                    className="button button--ghost button--compact"
+                    style={{ color: 'var(--rose)' }}
+                    type="button"
+                    onClick={async () => {
+                      if (!await confirm('Delete lead?', `Remove "${selectedLead.name}" from the pipeline? This cannot be undone.`)) return;
+                      const result = deleteSalesLead(selectedLead.id);
+                      pushToast({ title: result.ok ? 'Lead removed' : 'Remove blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                      if (result.ok) setSelectedLeadId(salesLeads.find((l) => l.id !== selectedLead.id)?.id ?? '');
+                    }}
+                  >
+                    Delete lead
+                  </button>
+                )}
               </div>
             </>
           ) : (

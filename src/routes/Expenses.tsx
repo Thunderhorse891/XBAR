@@ -1,5 +1,6 @@
 import { type FormEvent, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useConfirm } from '@/components/ConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { buildBudgetSummary } from '@/lib/dashboardOps';
@@ -17,7 +18,9 @@ export default function Expenses() {
   const horses = useXbarStore((state) => state.horses);
   const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
   const addExpenseReceipt = useXbarStore((state) => state.addExpenseReceipt);
+  const deleteExpenseReceipt = useXbarStore((state) => state.deleteExpenseReceipt);
   const roleWorkspace = useCurrentRoleWorkspace();
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const canManageBudget = useCurrentRoleCapability('manageAssets');
   const budgetSummary = useMemo(() => buildBudgetSummary(expenseReceipts), [expenseReceipts]);
   const [query, setQuery] = useState('');
@@ -88,6 +91,7 @@ export default function Expenses() {
 
   return (
     <div className="ops-experience">
+      {confirmDialog}
       <div className="surface-hero surface-hero--dark">
         <div className="surface-hero__top">
           <div>
@@ -153,7 +157,7 @@ export default function Expenses() {
               {filteredReceipts.map((receipt) => {
                 const horse = horses.find((item) => item.id === receipt.horseId);
                 return (
-                  <Link key={receipt.id} className="ops-record-card" to={receipt.horseId ? `/horses/${receipt.horseId}` : '/expenses'}>
+                  <div key={receipt.id} className="ops-record-card">
                     <div className="ops-record-card__top">
                       <div>
                         <span>{receipt.category}</span>
@@ -167,7 +171,26 @@ export default function Expenses() {
                       <span>{receipt.vendor || 'Vendor pending'}</span>
                       <span>{formatDateLabel(receipt.receiptDate)}</span>
                     </div>
-                  </Link>
+                    <div className="inline-actions" style={{ marginTop: '8px' }}>
+                      {receipt.horseId && (
+                        <Link className="button button--ghost button--compact" style={{ fontSize: '11px' }} to={`/horses/${receipt.horseId}`}>View horse</Link>
+                      )}
+                      {canManageBudget && (
+                        <button
+                          className="button button--ghost button--compact"
+                          style={{ fontSize: '11px', color: 'var(--rose)' }}
+                          type="button"
+                          onClick={async () => {
+                            if (!await confirm('Delete receipt?', `Remove "${receipt.title}" (${formatCurrency(receipt.amount)})? This cannot be undone.`)) return;
+                            const result = deleteExpenseReceipt(receipt.id);
+                            pushToast({ title: result.ok ? 'Receipt removed' : 'Remove blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                          }}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 );
               })}
             </div>
