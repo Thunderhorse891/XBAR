@@ -2189,11 +2189,18 @@ export const useXbarStore = create<XbarStore>()(
       deleteHorse: (horseId) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
         if (deniedMessage) return { ok: false, message: deniedMessage };
-        set((state) => ({ horses: state.horses.filter((h) => h.id !== horseId) }));
-        return { ok: true, message: 'Horse removed from records.', id: horseId };
+        set((state) => ({
+          horses: state.horses.filter((h) => h.id !== horseId),
+          ownershipRecords: state.ownershipRecords.filter((r) => r.horseId !== horseId),
+          salesLeads: state.salesLeads.filter((l) => l.horseId !== horseId),
+          sharedListings: state.sharedListings.filter((l) => l.horseId !== horseId),
+          documents: state.documents.map((d) => d.horseId === horseId ? { ...d, horseId: undefined } : d),
+          expenseReceipts: state.expenseReceipts.map((r) => r.horseId === horseId ? { ...r, horseId: undefined } : r),
+        }));
+        return { ok: true, message: 'Horse and all linked records removed.', id: horseId };
       },
       updateMedicalEvent: (horseId, eventId, patch) => {
-        const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageMedical');
         if (deniedMessage) return { ok: false, message: deniedMessage };
         set((state) => ({
           horses: state.horses.map((h) =>
@@ -2213,7 +2220,7 @@ export const useXbarStore = create<XbarStore>()(
         return { ok: true, message: 'Medical event updated.', id: eventId };
       },
       deleteMedicalEvent: (horseId, eventId) => {
-        const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageMedical');
         if (deniedMessage) return { ok: false, message: deniedMessage };
         set((state) => ({
           horses: state.horses.map((h) =>

@@ -1109,6 +1109,18 @@ a:focus-visible,
   margin-bottom: 18px;
 }
 
+.panel__header--compact {
+  margin-bottom: 12px;
+}
+
+.panel--nested {
+  background: var(--surface-secondary, #f4f7fb);
+  border: 1px solid rgba(32, 49, 67, 0.1);
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: none;
+}
+
 .panel__title-row {
   display: flex;
   gap: 12px;
