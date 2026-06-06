@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
@@ -322,16 +322,67 @@ export default function Medical() {
                     <th>Event</th>
                     <th>Vet</th>
                     <th>Date</th>
+                    {canManageMedical && <th style={{ width: '120px' }}>Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((event) => (
-                    <tr key={event.id}>
-                      <td>{event.horseName}</td>
-                      <td>{event.title}</td>
-                      <td>{event.veterinarian}</td>
-                      <td>{formatDateLabel(event.date)}</td>
-                    </tr>
+                    <Fragment key={event.id}>
+                      <tr>
+                        <td>{event.horseName}</td>
+                        <td>{event.title}</td>
+                        <td>{event.veterinarian}</td>
+                        <td>{formatDateLabel(event.date)}</td>
+                        {canManageMedical && (
+                          <td>
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              <button
+                                className="button button--ghost button--compact"
+                                style={{ fontSize: '11px' }}
+                                type="button"
+                                onClick={() => {
+                                  setEditForm({ title: event.title, body: event.summary, date: event.date, type: event.status ?? '' });
+                                  setEditingEventId(event.id);
+                                }}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                className="button button--ghost button--compact"
+                                style={{ fontSize: '11px', color: 'var(--rose)' }}
+                                type="button"
+                                onClick={async () => {
+                                  if (await confirm('Remove event?', 'Remove this medical event? This cannot be undone.')) {
+                                    const result = deleteMedicalEvent(event.horseId, event.id);
+                                    pushToast({ title: result.ok ? 'Event removed' : 'Remove failed', message: result.message, tone: result.ok ? 'success' : 'error' });
+                                  }
+                                }}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                      {editingEventId === event.id && (
+                        <tr>
+                          <td colSpan={canManageMedical ? 5 : 4} style={{ background: 'rgba(45,111,255,0.08)', padding: '12px 16px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '480px' }}>
+                              <input className="field-input" value={editForm.title} onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))} placeholder="Title" />
+                              <input className="field-input" value={editForm.body} onChange={(e) => setEditForm((f) => ({ ...f, body: e.target.value }))} placeholder="Notes" />
+                              <input className="field-input" type="date" value={editForm.date} onChange={(e) => setEditForm((f) => ({ ...f, date: e.target.value }))} />
+                              <select className="field-select" value={editForm.type} onChange={(e) => setEditForm((f) => ({ ...f, type: e.target.value }))}>
+                                {medicalEventTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+                              </select>
+                              <div className="inline-actions">
+                                <button className="button button--primary button--compact" type="button" disabled={!editForm.title.trim()} onClick={() => { const result = updateMedicalEvent(event.horseId, event.id, { title: editForm.title, summary: editForm.body, date: editForm.date, status: editForm.type }); pushToast({ title: result.ok ? 'Event updated' : 'Update failed', message: result.message, tone: result.ok ? 'success' : 'error' }); if (result.ok) setEditingEventId(null); }}>Save</button>
+                                <button className="button button--ghost button--compact" type="button" onClick={() => setEditingEventId(null)}>Cancel</button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
