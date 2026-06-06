@@ -49,7 +49,7 @@ export function Panel({
   onContextMenu?: MouseEventHandler<HTMLElement>;
 }) {
   return (
-    <section className={`panel ${className}`.trim()} onContextMenu={onContextMenu}>
+    <section className={`panel ${onContextMenu ? 'panel--contextual' : ''} ${className}`.trim()} onContextMenu={onContextMenu} title={onContextMenu ? 'Right-click for panel actions' : undefined}>
       <div className="panel__header">
         <div>
           {eyebrow ? <div className="panel__eyebrow">{eyebrow}</div> : null}
@@ -87,19 +87,38 @@ export function MetricCard({
   onClick?: MouseEventHandler<HTMLDivElement>;
   onContextMenu?: MouseEventHandler<HTMLDivElement>;
 }) {
+  const interactive = Boolean(onClick || onContextMenu);
   return (
     <div
-      className={`metric-card metric-card--${tone}${onClick || onContextMenu ? ' metric-card--interactive' : ''} ${className}`.trim()}
-      title={title}
+      className={`metric-card metric-card--${tone}${interactive ? ' metric-card--interactive' : ''} ${className}`.trim()}
+      title={title ?? (interactive ? `${label}. Press Enter to open${onContextMenu ? ' or Shift+F10 for actions' : ''}.` : undefined)}
       onClick={onClick}
       onContextMenu={onContextMenu}
-      role={onClick ? 'button' : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={onClick ? (e: KeyboardEvent<HTMLDivElement>) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(e as unknown as Parameters<MouseEventHandler<HTMLDivElement>>[0]); } } : undefined}
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      aria-label={interactive ? `${label}: ${value}` : undefined}
+      onKeyDown={interactive ? (event: KeyboardEvent<HTMLDivElement>) => {
+        if ((event.key === 'Enter' || event.key === ' ') && onClick) {
+          event.preventDefault();
+          onClick(event as unknown as Parameters<MouseEventHandler<HTMLDivElement>>[0]);
+          return;
+        }
+        if ((event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) && onContextMenu) {
+          event.preventDefault();
+          const bounds = event.currentTarget.getBoundingClientRect();
+          onContextMenu({
+            ...event,
+            preventDefault: () => event.preventDefault(),
+            clientX: bounds.left + 24,
+            clientY: bounds.top + 24,
+          } as unknown as Parameters<MouseEventHandler<HTMLDivElement>>[0]);
+        }
+      } : undefined}
     >
       <div className="metric-card__label">{label}</div>
       <div className="metric-card__value">{value}</div>
       {showDetail && detail ? <div className="metric-card__detail">{detail}</div> : null}
+      {interactive ? <span className="interactive-cue" aria-hidden="true">{onContextMenu ? 'Open / actions' : 'Open'}</span> : null}
     </div>
   );
 }
