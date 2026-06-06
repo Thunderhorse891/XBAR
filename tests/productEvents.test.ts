@@ -6,3 +6,4 @@ test('subscriber journey events use stable names and structured payloads', () =>
 test('follow-up action event name stays stable for retention reporting', () => { assert.equal(productEventNames.followUpAction, 'sales.follow_up_action'); });
 test('public acquisition events distinguish general calls to action from plan selections', () => { assert.equal(productEventNames.landingCtaClicked, 'acquisition.landing_cta_clicked'); assert.equal(productEventNames.landingPlanSelected, 'acquisition.landing_plan_selected'); });
 test('first-value activation has a stable retention event', () => { assert.equal(productEventNames.activationFirstValueReached, 'activation.first_value_reached'); });
+test('local evaluation entry is measurable without implying an account', () => { assert.equal(productEventNames.localWorkspaceEntered, 'acquisition.local_workspace_entered'); });
