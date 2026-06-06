@@ -17,6 +17,7 @@ export default function RanchAssets() {
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
   const addRanchAsset = useXbarStore((state) => state.addRanchAsset);
   const updateAsset = useXbarStore((state) => state.updateAsset);
+  const deleteAsset = useXbarStore((state) => state.deleteAsset);
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageAssets = useCurrentRoleCapability('manageAssets');
   const assigned = ranchAssets.filter((asset) => asset.status === 'Assigned');
@@ -242,6 +243,21 @@ export default function RanchAssets() {
           <div className="inline-actions">
             <button className="button button--primary button--compact" type="button" onClick={handleSave} disabled={!canManageAssets}>
               Save asset changes
+            </button>
+            <button
+              className="button button--ghost button--compact"
+              type="button"
+              style={{ color: 'var(--rose)', borderColor: 'rgba(191,64,64,0.3)' }}
+              onClick={() => {
+                if (window.confirm(`Remove ${selectedAsset?.name ?? 'this asset'}? This cannot be undone.`)) {
+                  const result = deleteAsset(selectedAssetId);
+                  pushToast({ title: result.ok ? 'Asset removed' : 'Remove blocked', message: result.message, tone: result.ok ? 'warning' : 'error' });
+                  if (result.ok) setSelectedAssetId('');
+                }
+              }}
+              disabled={!canManageAssets || !selectedAssetId}
+            >
+              Delete asset
             </button>
           </div>
         </Panel>

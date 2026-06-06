@@ -333,6 +333,10 @@ export default function BuyerProfile() {
             )}
           </Panel>
         </div>
+      <footer style={{ textAlign: 'center', padding: '24px 0 8px', color: 'rgba(100,130,160,0.45)', fontSize: '11px', letterSpacing: '0.06em' }}>
+        <p>© {new Date().getFullYear()} XBAR LLC™ · Information provided by seller. Buyer is responsible for independent verification of registration and health status.</p>
+        <p style={{ marginTop: '6px' }}><a href='/terms' style={{ color: 'rgba(100,140,180,0.45)', textDecoration: 'none' }}>Terms</a> · <a href='/privacy' style={{ color: 'rgba(100,140,180,0.45)', textDecoration: 'none' }}>Privacy</a></p>
+      </footer>
       </div>
     </main>
   );

@@ -13,6 +13,7 @@ export default function Breeding() {
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const addBreedingEvent = useXbarStore((state) => state.addBreedingEvent);
+  const deleteBreedingEvent = useXbarStore((state) => state.deleteBreedingEvent);
   const pushToast = useUiStore((state) => state.pushToast);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const session = useCloudStore((state) => state.session);
@@ -150,7 +151,10 @@ export default function Breeding() {
                             <div className="stack-item__title">{horse.name}</div>
                             <div className="stack-item__copy">{event.title}</div>
                           </div>
-                          <Pill tone="slate">{formatDateLabel(event.date)}</Pill>
+                          <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
+                            <Pill tone="slate">{formatDateLabel(event.date)}</Pill>
+                            {canManageBreeding && <button className="button button--ghost button--compact" type="button" style={{fontSize:'11px',color:'var(--rose)'}} onClick={()=>{if(window.confirm('Remove this breeding event?')){const r=deleteBreedingEvent(horse.id,event.id);pushToast({title:r.ok?'Event removed':'Remove blocked',message:r.message,tone:r.ok?'warning':'error'});}}}> Delete</button>}
+                          </div>
                         </div>
                         <div className="stack-item__copy">{event.summary}</div>
                       </div>

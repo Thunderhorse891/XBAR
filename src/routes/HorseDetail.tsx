@@ -623,6 +623,17 @@ export default function HorseDetail() {
             <>
               <div className="key-grid key-grid--wide">
                 <KeyValue label="Registry" value={`${horse.registry} · ${horse.aqhaNumber}`} />
+                {horse.aqhaNumber && (
+                  <a
+                    href={`https://www.aqha.com/horse-registration-lookup?registration=${encodeURIComponent(horse.aqhaNumber)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="button button--ghost button--compact"
+                    style={{ fontSize: '11px', marginTop: '4px', display: 'inline-flex' }}
+                  >
+                    Verify on AQHA ↗
+                  </a>
+                )}
                 <KeyValue label="Registration" value={horse.registrationNumber} />
                 <KeyValue label="Color / marks" value={`${horse.color} · ${horse.markings}`} />
                 <KeyValue label="Sex / age" value={`${horse.sex} · ${horse.age}`} />
