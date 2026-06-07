@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { ContextMenu } from '@/components/ContextMenu';
@@ -59,6 +59,14 @@ export default function Sales() {
   const [listingQuery, setListingQuery] = useState('');
   const [showBillOfSale, setShowBillOfSale] = useState(false);
   const billOfSaleRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showBillOfSale) return;
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowBillOfSale(false); };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showBillOfSale]);
+
   const menuLead = menuState?.type === 'lead' ? salesLeads.find((lead) => lead.id === menuState.id) : undefined;
   const menuHorse = menuState?.type === 'horse' ? saleHorses.find((horse) => horse.id === menuState.id) : undefined;
   const menuListing = menuHorse ? sharedListings.find((listing) => listing.horseId === menuHorse.id && listing.state !== 'Archived') : undefined;
@@ -427,8 +435,8 @@ export default function Sales() {
         const sellerName = bsHorse?.owner || workspaceProfile.defaultOwnerName || workspaceProfile.businessName || 'Seller';
         const sellerEntity = bsHorse?.ownerEntity || workspaceProfile.defaultOwnerEntity || workspaceProfile.businessName || '';
         return (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 200, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px', overflowY: 'auto' }}>
-            <div style={{ background: '#fff', color: '#111', maxWidth: '680px', width: '100%', borderRadius: '8px', boxShadow: '0 4px 32px rgba(0,0,0,0.4)' }}>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 200, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px', overflowY: 'auto' }} role="presentation" onClick={() => setShowBillOfSale(false)}>
+            <div style={{ background: '#fff', color: '#111', maxWidth: '680px', width: '100%', borderRadius: '8px', boxShadow: '0 4px 32px rgba(0,0,0,0.4)' }} role="dialog" aria-modal="true" aria-label="Bill of Sale" onClick={(e) => e.stopPropagation()}>
               <div style={{ padding: '16px 24px', borderBottom: '1px solid #e0e0e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8f8f8', borderRadius: '8px 8px 0 0' }}>
                 <strong style={{ fontSize: '15px', color: '#111' }}>Bill of Sale</strong>
                 <div style={{ display: 'flex', gap: '8px' }}>

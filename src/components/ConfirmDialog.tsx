@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 type ConfirmState = {
   open: boolean;
@@ -28,6 +28,13 @@ export function useConfirm() {
     resolveRef.current = null;
     setState((s) => ({ ...s, open: false }));
   }, []);
+
+  useEffect(() => {
+    if (!state.open) return;
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') handleCancel(); };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [state.open, handleCancel]);
 
   const dialog = state.open ? (
     <div className="confirm-overlay" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
