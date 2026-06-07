@@ -1508,16 +1508,17 @@ a:focus-visible,
   background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
   color: var(--text);
   box-shadow: 0 24px 48px rgba(15, 23, 42, 0.06);
-  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease, transform 160ms ease;
 }
 
 .horse-card--interactive {
   cursor: pointer;
 }
 
-.horse-card:hover {
+.horse-card--interactive:hover {
   border-color: rgba(12, 111, 151, 0.18);
   box-shadow: var(--shadow);
+  transform: translateY(-2px);
 }
 
 .horse-card__media {

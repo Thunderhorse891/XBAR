@@ -37,6 +37,10 @@ export default async function handler(req, res) {
     return sendJson(res, access.status, { ok: false, message: access.message });
   }
 
+  if (access.role !== 'Admin') {
+    return sendJson(res, 403, { ok: false, message: 'Only workspace admins can manage billing.' });
+  }
+
   const { supabase, user } = access;
   const { data: billingCustomer } = await supabase
     .from('workspace_billing_customers')

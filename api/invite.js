@@ -27,6 +27,10 @@ export default async function handler(req, res) {
     return sendJson(res, access.status, { ok: false, message: access.message });
   }
 
+  if (access.role !== 'Admin') {
+    return sendJson(res, 403, { ok: false, message: 'Only workspace admins can send invitations.' });
+  }
+
   const supabase = getSupabaseAdmin();
   const redirectTo = `${process.env.VITE_PUBLIC_APP_URL || ''}/login?invite=${encodeURIComponent(invitationId)}&workspace=${encodeURIComponent(workspaceId)}`;
 

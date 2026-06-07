@@ -1,7 +1,7 @@
 import { apiConfig, isSupabaseConfigured, monitoringConfig } from '@/lib/platformConfig';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 
-export type RuntimeEventSeverity = 'info' | 'warning' | 'error';
+export type RuntimeEventSeverity = 'info' | 'warn' | 'error';
 
 type RuntimeEventInput = {
   workspaceId?: string;
