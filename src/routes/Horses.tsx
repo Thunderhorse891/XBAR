@@ -224,9 +224,9 @@ export default function Horses() {
           </div>
           <div className="surface-hero__stats">
             <div className="surface-hero__stat"><span>Total horses</span><strong>{horses.length}</strong></div>
-            <div className="surface-hero__stat"><span>Medical watch</span><strong style={{ color: horses.filter((h) => h.status === 'Medical Review').length ? 'var(--rose)' : 'var(--emerald)' }}>{horses.filter((h) => h.status === 'Medical Review').length}</strong></div>
+            <div className="surface-hero__stat"><span>Medical watch</span><strong className={horses.filter((h) => h.status === 'Medical Review').length ? 'text-rose' : 'text-emerald'}>{horses.filter((h) => h.status === 'Medical Review').length}</strong></div>
             <div className="surface-hero__stat"><span>For sale</span><strong>{horses.filter((h) => h.status === 'Sale Prep').length}</strong></div>
-            <div className="surface-hero__stat"><span>Packet ready</span><strong style={{ color: 'var(--emerald)' }}>{horses.filter((h) => h.readiness.packetStatus === 'Ready').length}</strong></div>
+            <div className="surface-hero__stat"><span>Packet ready</span><strong className="text-emerald">{horses.filter((h) => h.readiness.packetStatus === 'Ready').length}</strong></div>
           </div>
           <div className="inline-actions" style={{ marginTop: '16px' }}>
             <Link to="/documents?upload=1" className="button button--ghost button--compact">Upload docs</Link>

@@ -129,7 +129,7 @@ export default function Subscriptions() {
 
       <Panel eyebrow="Checkout" title="Plans">
         {!billingConfigured && (
-          <div style={{ marginBottom: '16px', padding: '10px 14px', background: 'rgba(200,160,0,0.08)', border: '1px solid rgba(200,160,0,0.2)', borderRadius: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+          <div className="billing-notice">
             Self-serve checkout is not yet active — Stripe payment links have not been configured for this deployment. Contact your administrator to upgrade your plan.
           </div>
         )}

@@ -237,10 +237,9 @@ export default function BuyerProfile() {
             </div>
 
             {/* Contact / inquiry CTA — visible to buyers on the public profile */}
-            <div style={{ marginTop: '4px' }}>
+            <div className="inline-actions--mt-xs">
               <a
-                className="button button--primary"
-                style={{ width: '100%', justifyContent: 'center' }}
+                className="button button--primary button--full"
                 href={`mailto:?subject=Inquiry: ${encodeURIComponent(horse.name)}&body=${encodeURIComponent(`Hi,\n\nI am interested in ${horse.name}. Please contact me to discuss availability and pricing.\n\nProfile: ${publicShareUrl}`)}`}
               >
                 Contact seller about {horse.name}

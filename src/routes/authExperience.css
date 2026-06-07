@@ -83,6 +83,14 @@
 .lp-btn-enter{width:100%;min-height:44px;background:#1461e8;border:1px solid rgba(26,105,250,.5);border-radius:6px;color:#fff;font-size:11px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;cursor:pointer;transition:background .14s,transform .1s;box-shadow:0 6px 18px rgba(14,74,200,.34);margin-top:18px}
 .lp-btn-enter:hover{background:#1e70f5;transform:translateY(-1px)}
 
+/* Invite banner */
+.lp-invite-banner{margin-bottom:16px;padding:10px 14px;background:rgba(45,111,255,.10);border:1px solid rgba(45,111,255,.25);border-radius:8px;font-size:13px;color:rgba(160,200,255,.9)}
+
+/* Login page footer */
+.lp-footer{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px;padding:16px;font-size:11px;color:rgba(100,130,170,.5);text-align:center}
+.lp-footer a{color:rgba(80,130,220,.6);text-decoration:none}
+.lp-footer a:hover{color:rgba(80,130,220,.9)}
+
 /* Responsive — on narrow screens brand collapses, card fills */
 @media(max-width:1100px){.lp-frame{grid-template-columns:1fr}.lp-brand{display:none}.lp-auth{padding:clamp(22px,5vw,52px);justify-content:center;align-items:flex-start;padding-top:clamp(40px,8vh,88px)}.lp-card{width:min(100%,440px)}}
 @media(max-width:480px){.lp-shell{padding:0}.lp-frame{border-radius:0;min-height:100vh;border:none}.lp-auth{padding:32px 18px}.lp-options{flex-direction:column;align-items:flex-start;gap:8px}.lp-mode-switch{flex-direction:column;gap:4px}}
@@ -1189,6 +1197,10 @@
   letter-spacing: 0.18em;
   text-transform: uppercase;
   margin-bottom: 14px;
+}
+
+.mkt-section-badge--flush {
+  margin: 0;
 }
 
 .mkt-section-title {

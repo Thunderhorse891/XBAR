@@ -96,7 +96,7 @@ export default function Expenses() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Budget & Expenses</span>
-            <div className="surface-hero__actions" style={{ marginTop: '16px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <div className="surface-hero__actions">
               <button className="button button--primary" type="button" onClick={() => document.getElementById('expense-intake')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
                 Log receipt
               </button>
@@ -171,14 +171,13 @@ export default function Expenses() {
                       <span>{receipt.vendor || 'Vendor pending'}</span>
                       <span>{formatDateLabel(receipt.receiptDate)}</span>
                     </div>
-                    <div className="inline-actions" style={{ marginTop: '8px' }}>
+                    <div className="inline-actions inline-actions--mt-sm">
                       {receipt.horseId && (
-                        <Link className="button button--ghost button--compact" style={{ fontSize: '11px' }} to={`/horses/${receipt.horseId}`}>View horse</Link>
+                        <Link className="button button--ghost button--xs" to={`/horses/${receipt.horseId}`}>View horse</Link>
                       )}
                       {canManageBudget && (
                         <button
-                          className="button button--ghost button--compact"
-                          style={{ fontSize: '11px', color: 'var(--rose)' }}
+                          className="button button--ghost button--xs button--danger-ghost"
                           type="button"
                           onClick={async () => {
                             if (!await confirm('Delete receipt?', `Remove "${receipt.title}" (${formatCurrency(receipt.amount)})? This cannot be undone.`)) return;

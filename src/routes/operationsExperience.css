@@ -347,6 +347,11 @@
   grid-template-columns: 18px minmax(0, 1fr);
   gap: 12px;
   padding: 16px;
+  cursor: default;
+}
+
+.ops-timeline-item__body {
+  min-width: 0;
 }
 
 .ops-timeline-dot {

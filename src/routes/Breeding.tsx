@@ -136,7 +136,7 @@ export default function Breeding() {
               : allMilestones;
             return (
               <>
-                <div style={{ marginBottom: '14px' }}>
+                <div className="search-wrap">
                   <input
                     className="field-input"
                     placeholder="Search horse or milestone..."
@@ -150,8 +150,8 @@ export default function Breeding() {
                     {filtered.map(({ horse, event }) => (
                       <div key={event.id} className="stack-item">
                         {editingEventId === event.id ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>{horse.name}</div>
+                          <div className="form-column">
+                            <div className="stack-item__title">{horse.name}</div>
                             <input className="field-input" value={editForm.title} onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))} placeholder="Title" />
                             <input className="field-input" value={editForm.body} onChange={(e) => setEditForm((f) => ({ ...f, body: e.target.value }))} placeholder="Notes" />
                             <input className="field-input" type="date" value={editForm.date} onChange={(e) => setEditForm((f) => ({ ...f, date: e.target.value }))} />
@@ -167,10 +167,10 @@ export default function Breeding() {
                                 <div className="stack-item__title">{horse.name}</div>
                                 <div className="stack-item__copy">{event.title}</div>
                               </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <div className="row-actions">
                                 <Pill tone="slate">{formatDateLabel(event.date)}</Pill>
-                                {canManageBreeding && <button className="button button--ghost button--compact" style={{ fontSize: '11px' }} type="button" onClick={() => { setEditForm({ title: event.title, body: event.summary, date: event.date }); setEditingEventId(event.id); }}>Edit</button>}
-                                {canManageBreeding && <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={async () => { if (await confirm('Remove event?', 'Remove this breeding event? This cannot be undone.')) { const result = deleteBreedingEvent(horse.id, event.id); pushToast({ title: result.ok ? 'Event removed' : 'Remove failed', message: result.message, tone: result.ok ? 'success' : 'error' }); } }}>Delete</button>}
+                                {canManageBreeding && <button className="button button--ghost button--xs" type="button" onClick={() => { setEditForm({ title: event.title, body: event.summary, date: event.date }); setEditingEventId(event.id); }}>Edit</button>}
+                                {canManageBreeding && <button className="button button--ghost button--xs button--danger-ghost" type="button" onClick={async () => { if (await confirm('Remove event?', 'Remove this breeding event? This cannot be undone.')) { const result = deleteBreedingEvent(horse.id, event.id); pushToast({ title: result.ok ? 'Event removed' : 'Remove failed', message: result.message, tone: result.ok ? 'success' : 'error' }); } }}>Delete</button>}
                               </div>
                             </div>
                             <div className="stack-item__copy">{event.summary}</div>
@@ -180,7 +180,7 @@ export default function Breeding() {
                     ))}
                   </div>
                 ) : (
-                  <p style={{ color: 'var(--muted)', fontSize: '14px' }}>No milestones match "{milestoneQuery}".</p>
+                  <p className="text-muted">No milestones match "{milestoneQuery}".</p>
                 )}
               </>
             );

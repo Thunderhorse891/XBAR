@@ -733,7 +733,7 @@ export default function HorseDetail() {
                 <span className="field-label">Asking price</span>
                 <input className="field-input" type="number" min="0" value={coreForm.askPrice} onChange={(e) => setCoreForm((f) => ({ ...f, askPrice: e.target.value }))} placeholder="0" />
               </label>
-              <div className="inline-actions" style={{ gridColumn: '1/-1' }}>
+              <div className="inline-actions inline-actions--span">
                 <button className="button button--primary button--compact" type="button" onClick={() => { const result = updateHorse(horse.id, { name: coreForm.name || horse.name, barnName: coreForm.barnName, summary: coreForm.summary, breed: coreForm.breed, registry: coreForm.registry, color: coreForm.color, sex: coreForm.sex, aqhaNumber: coreForm.aqhaNumber, registrationNumber: coreForm.registrationNumber, owner: coreForm.owner, ownerEntity: coreForm.ownerEntity, askPrice: coreForm.askPrice ? Number(coreForm.askPrice) : undefined, foaledOn: coreForm.foaledOn || undefined, microchipId: coreForm.microchipId, markings: coreForm.markings, segment: coreForm.segment, status: coreForm.status, bloodline: { sire: coreForm.bloodlineSire, dam: coreForm.bloodlineDam, family: coreForm.bloodlineFamily } }); if (result.ok) { setEditingCore(false); } else { pushToast({ title: 'Save blocked', message: result.message, tone: 'error' }); } }}>Save</button>
                 <button className="button button--ghost button--compact" type="button" onClick={() => setEditingCore(false)}>Cancel</button>
               </div>
@@ -751,11 +751,11 @@ export default function HorseDetail() {
                 <KeyValue label="Family" value={horse.bloodline.family} />
               </div>
               {(horse.bloodline.sire || horse.bloodline.dam) && (
-                <div style={{ marginTop: '12px' }}>
+                <div className="inline-actions--mt-xs">
                   <PedigreeChart bloodline={horse.bloodline} horseName={horse.name} />
                 </div>
               )}
-              <div className="inline-actions" style={{ marginTop: '12px' }}>
+              <div className="inline-actions inline-actions--mt-xs">
                 {canEditHorse && (
                   <button className="button button--ghost button--compact" type="button" onClick={() => { setCoreForm({ name: horse.name, barnName: horse.barnName, summary: horse.summary, breed: horse.breed, registry: horse.registry, color: horse.color, sex: horse.sex, aqhaNumber: horse.aqhaNumber, registrationNumber: horse.registrationNumber, owner: horse.owner, ownerEntity: horse.ownerEntity, askPrice: horse.sale.askPrice ? String(horse.sale.askPrice) : '', foaledOn: horse.foaledOn ?? '', microchipId: horse.microchipId, markings: horse.markings, bloodlineSire: horse.bloodline.sire, bloodlineDam: horse.bloodline.dam, bloodlineFamily: horse.bloodline.family, segment: horse.segment, status: horse.status }); setEditingCore(true); }}>Edit identity</button>
                 )}
@@ -811,7 +811,7 @@ export default function HorseDetail() {
               Save location
             </button>
           </div>
-          <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+          <div className="section-sep">
             <div className="form-grid form-grid--tight">
               <label className="field-stack">
                 <span className="field-label">Trainer</span>
@@ -976,7 +976,7 @@ export default function HorseDetail() {
               {horse.medicalTimeline.map((event) => (
                 <div key={event.id} className="stack-item">
                   {editingMedicalId === event.id ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div className="form-column">
                       <input className="field-input" value={medicalEditForm.title} onChange={(e) => setMedicalEditForm((f) => ({ ...f, title: e.target.value }))} placeholder="Title" />
                       <input className="field-input" value={medicalEditForm.body} onChange={(e) => setMedicalEditForm((f) => ({ ...f, body: e.target.value }))} placeholder="Notes" />
                       <input className="field-input" type="date" value={medicalEditForm.date} onChange={(e) => setMedicalEditForm((f) => ({ ...f, date: e.target.value }))} />
@@ -996,10 +996,10 @@ export default function HorseDetail() {
                           <div className="stack-item__copy">{event.summary}</div>
                           <div className="timeline__meta">{event.owner}</div>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div className="row-actions">
                           <Pill tone="blue">{formatDateLabel(event.date)}</Pill>
-                          {canManageMedical && <button className="button button--ghost button--compact" style={{ fontSize: '11px' }} type="button" onClick={() => { setMedicalEditForm({ title: event.title, body: event.summary, date: event.date, type: event.status ?? '' }); setEditingMedicalId(event.id); }}>Edit</button>}
-                          {canManageMedical && <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={async () => { if (await confirm('Remove event?', 'Remove this medical event? This cannot be undone.')) { const result = deleteMedicalEvent(horse.id, event.id); pushToast({ title: result.ok ? 'Event removed' : 'Remove failed', message: result.message, tone: result.ok ? 'success' : 'error' }); } }}>Delete</button>}
+                          {canManageMedical && <button className="button button--ghost button--xs" type="button" onClick={() => { setMedicalEditForm({ title: event.title, body: event.summary, date: event.date, type: event.status ?? '' }); setEditingMedicalId(event.id); }}>Edit</button>}
+                          {canManageMedical && <button className="button button--ghost button--xs button--danger-ghost" type="button" onClick={async () => { if (await confirm('Remove event?', 'Remove this medical event? This cannot be undone.')) { const result = deleteMedicalEvent(horse.id, event.id); pushToast({ title: result.ok ? 'Event removed' : 'Remove failed', message: result.message, tone: result.ok ? 'success' : 'error' }); } }}>Delete</button>}
                         </div>
                       </div>
                     </>
@@ -1011,7 +1011,7 @@ export default function HorseDetail() {
             <EmptyState compact title="No medical timeline" description="Add a care event after the next exam." />
           )}
           {canEditHorse && (
-            <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid var(--border)' }}>
+            <div className="section-sep--sm">
               <div className="form-grid form-grid--tight">
                 <label className="field-stack">
                   <span className="field-label">Last vet visit</span>
@@ -1047,7 +1047,7 @@ export default function HorseDetail() {
               horse.breedingTimeline.map((event) => (
                 <div key={event.id} className="stack-item">
                   {editingBreedingId === event.id ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div className="form-column">
                       <input className="field-input" value={breedingEditForm.title} onChange={(e) => setBreedingEditForm((f) => ({ ...f, title: e.target.value }))} placeholder="Title" />
                       <input className="field-input" value={breedingEditForm.body} onChange={(e) => setBreedingEditForm((f) => ({ ...f, body: e.target.value }))} placeholder="Notes" />
                       <input className="field-input" type="date" value={breedingEditForm.date} onChange={(e) => setBreedingEditForm((f) => ({ ...f, date: e.target.value }))} />
@@ -1063,10 +1063,10 @@ export default function HorseDetail() {
                           <div className="stack-item__title">{event.title}</div>
                           <div className="stack-item__copy">{event.summary}</div>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div className="row-actions">
                           <Pill tone="blue">{formatDateLabel(event.date)}</Pill>
-                          {canManageBreeding && <button className="button button--ghost button--compact" style={{ fontSize: '11px' }} type="button" onClick={() => { setBreedingEditForm({ title: event.title, body: event.summary, date: event.date }); setEditingBreedingId(event.id); }}>Edit</button>}
-                          {canManageBreeding && <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={async () => { if (await confirm('Remove event?', 'Remove this breeding event? This cannot be undone.')) { const result = deleteBreedingEvent(horse.id, event.id); pushToast({ title: result.ok ? 'Event removed' : 'Remove failed', message: result.message, tone: result.ok ? 'success' : 'error' }); } }}>Delete</button>}
+                          {canManageBreeding && <button className="button button--ghost button--xs" type="button" onClick={() => { setBreedingEditForm({ title: event.title, body: event.summary, date: event.date }); setEditingBreedingId(event.id); }}>Edit</button>}
+                          {canManageBreeding && <button className="button button--ghost button--xs button--danger-ghost" type="button" onClick={async () => { if (await confirm('Remove event?', 'Remove this breeding event? This cannot be undone.')) { const result = deleteBreedingEvent(horse.id, event.id); pushToast({ title: result.ok ? 'Event removed' : 'Remove failed', message: result.message, tone: result.ok ? 'success' : 'error' }); } }}>Delete</button>}
                         </div>
                       </div>
                     </>
@@ -1078,7 +1078,7 @@ export default function HorseDetail() {
             )}
           </div>
           {canManageBreeding && (
-            <div className="form-grid form-grid--tight" style={{ marginTop: '12px' }}>
+            <div className="form-grid form-grid--tight form-grid--mt-sm">
               <label className="field-stack">
                 <span className="field-label">Breeding milestone</span>
                 <input className="field-input" value={breedingTitle} onChange={(e) => { setBreedingTitle(e.target.value); setBreedingError(''); }} placeholder="e.g. Embryo flush, Foal born" disabled={!canManageBreeding} />
@@ -1087,7 +1087,7 @@ export default function HorseDetail() {
                 <span className="field-label">Date</span>
                 <input className="field-input" type="date" value={breedingDate} onChange={(e) => setBreedingDate(e.target.value)} disabled={!canManageBreeding} />
               </label>
-              <label className="field-stack" style={{ gridColumn: '1 / -1' }}>
+              <label className="field-stack field-stack--wide">
                 <span className="field-label">Notes</span>
                 <input className="field-input" value={breedingBody} onChange={(e) => setBreedingBody(e.target.value)} placeholder="Details" disabled={!canManageBreeding} />
               </label>
@@ -1095,7 +1095,7 @@ export default function HorseDetail() {
           )}
           {breedingError ? <div className="field-error">{breedingError}</div> : null}
           {canManageBreeding && (
-            <div className="inline-actions" style={{ marginTop: '8px' }}>
+            <div className="inline-actions inline-actions--mt-sm">
               <button className="button button--primary button--compact" type="button" disabled={!breedingTitle.trim() || !breedingDate.trim()} onClick={() => {
                 const result = addBreedingEvent(horse.id, { title: breedingTitle, body: breedingBody, author: workspaceProfile.defaultOwnerName || 'Ranch', date: breedingDate });
                 if (result.ok) { setBreedingTitle(''); setBreedingBody(''); setBreedingDate(''); setBreedingError(''); }
@@ -1103,7 +1103,7 @@ export default function HorseDetail() {
               }}>Add breeding event</button>
             </div>
           )}
-          <div className="stack-list" style={{ marginTop: '16px' }}>
+          <div className="stack-list stack-list--mt">
             {salesLeads.length ? (
               <div className="stack-item">
                 <div className="stack-item__title">Active leads</div>

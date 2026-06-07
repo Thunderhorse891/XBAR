@@ -163,7 +163,7 @@ export default function Sales() {
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel eyebrow="Listings" title="Listings">
           {saleHorses.length > 0 && (
-            <div className="inline-search" style={{ marginBottom: '16px' }}>
+            <div className="search-wrap">
               <input
                 className="field-input"
                 placeholder="Search by name, segment, status…"
@@ -376,8 +376,7 @@ export default function Sales() {
                 </button>
                 {canManageSales && (
                   <button
-                    className="button button--ghost button--compact"
-                    style={{ color: 'var(--rose)' }}
+                    className="button button--ghost button--compact button--danger-ghost"
                     type="button"
                     onClick={async () => {
                       if (!await confirm('Delete lead?', `Remove "${selectedLead.name}" from the pipeline? This cannot be undone.`)) return;

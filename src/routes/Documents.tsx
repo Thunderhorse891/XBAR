@@ -314,12 +314,12 @@ export default function Documents() {
             <div className="surface-hero__stat"><span>Total files</span><strong>{documents.length}</strong></div>
             <div className="surface-hero__stat">
               <span>Review queue</span>
-              <strong style={{ color: reviewQueue.length ? 'var(--amber)' : 'var(--emerald)' }}>{reviewQueue.length}</strong>
+              <strong className={reviewQueue.length ? 'text-amber' : 'text-emerald'}>{reviewQueue.length}</strong>
             </div>
-            <div className="surface-hero__stat"><span>Ready to share</span><strong style={{ color: 'var(--emerald)' }}>{buyerSafeDocuments.length}</strong></div>
+            <div className="surface-hero__stat"><span>Ready to share</span><strong className="text-emerald">{buyerSafeDocuments.length}</strong></div>
             <div className="surface-hero__stat">
               <span>Duplicates</span>
-              <strong style={{ color: duplicates.length ? 'var(--amber)' : 'var(--emerald)' }}>{duplicates.length}</strong>
+              <strong className={duplicates.length ? 'text-amber' : 'text-emerald'}>{duplicates.length}</strong>
             </div>
           </div>
         </div>

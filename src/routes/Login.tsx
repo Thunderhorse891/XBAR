@@ -244,7 +244,7 @@ export default function Login() {
 
             {/* Invite banner */}
             {inviteId && (
-              <div style={{ marginBottom: '16px', padding: '10px 14px', background: 'rgba(45,111,255,0.10)', border: '1px solid rgba(45,111,255,0.25)', borderRadius: '8px', fontSize: '13px', color: 'rgba(160,200,255,0.9)' }}>
+              <div className="lp-invite-banner">
                 You were invited to join a workspace. Sign in or create an account to accept.
               </div>
             )}
@@ -358,7 +358,6 @@ export default function Login() {
                   onClick={handleFacebook}
                   disabled={busy !== '' || !isFacebookSharingConfigured()}
                   title={!isFacebookSharingConfigured() ? 'Facebook sign-in is not configured' : undefined}
-                  style={!isFacebookSharingConfigured() ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
                 >
                   <FacebookIcon />
                   {busy === 'facebook' ? 'Connecting…' : 'Continue with Facebook'}
@@ -387,12 +386,12 @@ export default function Login() {
         </section>
 
       </div>
-      <footer style={{ textAlign: 'center', padding: '16px', fontSize: '11px', color: 'rgba(100,130,170,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
+      <footer className="lp-footer">
         <span>© {new Date().getFullYear()} XBAR LLC™</span>
         <span>·</span>
-        <Link to="/terms" style={{ color: 'rgba(80,130,220,0.6)', textDecoration: 'none' }}>Terms</Link>
+        <Link to="/terms">Terms</Link>
         <span>·</span>
-        <Link to="/privacy" style={{ color: 'rgba(80,130,220,0.6)', textDecoration: 'none' }}>Privacy</Link>
+        <Link to="/privacy">Privacy</Link>
       </footer>
     </main>
   );

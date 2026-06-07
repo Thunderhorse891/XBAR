@@ -440,7 +440,7 @@ export default function Settings() {
                       </div>
                       <Pill tone={invite.role === 'Owner' ? 'emerald' : 'blue'}>{roleLabel(invite.role)}</Pill>
                     </div>
-                    <div className="stack-item__copy" style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--muted)', wordBreak: 'break-all' }}>
+                    <div className="stack-item__copy code-text">
                       Invite code: {invite.id}
                     </div>
                     <div className="inline-actions">

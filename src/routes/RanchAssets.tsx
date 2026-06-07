@@ -133,11 +133,11 @@ export default function RanchAssets() {
             </div>
             <div className="surface-hero__stat">
               <span>Service soon</span>
-              <strong style={{ color: serviceSoon.length ? 'var(--amber)' : 'var(--emerald)' }}>{serviceSoon.length}</strong>
+              <strong className={serviceSoon.length ? 'text-amber' : 'text-emerald'}>{serviceSoon.length}</strong>
             </div>
             <div className="surface-hero__stat">
               <span>Available</span>
-              <strong style={{ color: 'var(--emerald)' }}>{ranchAssets.length - assigned.length}</strong>
+              <strong className="text-emerald">{ranchAssets.length - assigned.length}</strong>
             </div>
           </div>
         </div>

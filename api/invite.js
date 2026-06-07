@@ -32,6 +32,10 @@ export default async function handler(req, res) {
   }
 
   const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return sendJson(res, 503, { ok: false, message: 'Invite email service is not configured.' });
+  }
+
   const redirectTo = `${process.env.VITE_PUBLIC_APP_URL || ''}/login?invite=${encodeURIComponent(invitationId)}&workspace=${encodeURIComponent(workspaceId)}`;
 
   const { data, error } = await supabase.auth.admin.inviteUserByEmail(email, {

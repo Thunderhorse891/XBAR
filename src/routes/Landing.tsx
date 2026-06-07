@@ -317,7 +317,7 @@ export default function Landing() {
 
           <div className="mkt-comparison-wrap">
             <div className="mkt-comparison-header">
-              <div className="mkt-section-badge" style={{ margin: 0 }}>Full feature comparison</div>
+              <div className="mkt-section-badge mkt-section-badge--flush">Full feature comparison</div>
             </div>
             <div className="mkt-comparison-scroll">
               <table className="mkt-comparison-table">
@@ -360,7 +360,7 @@ export default function Landing() {
         <div className="mkt-section-inner">
           <h2 className="mkt-cta-title">Ready to run a tighter operation?</h2>
           <p className="mkt-cta-sub">Start with a 14-day trial. No credit card required. Cancel any time.</p>
-          <Link to="/login?mode=signup" className="mkt-hero-primary" style={{ display: 'inline-flex' }}>
+          <Link to="/login?mode=signup" className="mkt-hero-primary">
             Start free trial
           </Link>
           <div className="mkt-trust-row">

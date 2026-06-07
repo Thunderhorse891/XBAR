@@ -257,7 +257,7 @@ export default function Medical() {
               {medicalEvents.slice(0, 5).map((event) => (
                 <div key={event.id} className="stack-item">
                   {editingEventId === event.id ? (
-                    <div className="stack-item__top" style={{ flexDirection: 'column', gap: '8px' }}>
+                    <div className="stack-item__top stack-item__top--column">
                       <input className="field-input" value={editForm.title} onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))} placeholder="Title" />
                       <input className="field-input" value={editForm.body} onChange={(e) => setEditForm((f) => ({ ...f, body: e.target.value }))} placeholder="Notes" />
                       <input className="field-input" type="date" value={editForm.date} onChange={(e) => setEditForm((f) => ({ ...f, date: e.target.value }))} />
@@ -276,10 +276,10 @@ export default function Medical() {
                           <div className="stack-item__title">{event.horseName}</div>
                           <div className="stack-item__copy">{event.title}</div>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div className="row-actions">
                           <Pill tone="blue">{formatDateLabel(event.date)}</Pill>
-                          {canManageMedical && <button className="button button--ghost button--compact" style={{ fontSize: '11px' }} type="button" onClick={() => { setEditForm({ title: event.title, body: event.summary, date: event.date, type: event.status ?? '' }); setEditingEventId(event.id); }}>Edit</button>}
-                          {canManageMedical && <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={async () => { if (await confirm('Remove event?', 'Remove this medical event? This cannot be undone.')) { const result = deleteMedicalEvent(event.horseId, event.id); pushToast({ title: result.ok ? 'Event removed' : 'Remove failed', message: result.message, tone: result.ok ? 'success' : 'error' }); } }}>Delete</button>}
+                          {canManageMedical && <button className="button button--ghost button--xs" type="button" onClick={() => { setEditForm({ title: event.title, body: event.summary, date: event.date, type: event.status ?? '' }); setEditingEventId(event.id); }}>Edit</button>}
+                          {canManageMedical && <button className="button button--ghost button--xs button--danger-ghost" type="button" onClick={async () => { if (await confirm('Remove event?', 'Remove this medical event? This cannot be undone.')) { const result = deleteMedicalEvent(event.horseId, event.id); pushToast({ title: result.ok ? 'Event removed' : 'Remove failed', message: result.message, tone: result.ok ? 'success' : 'error' }); } }}>Delete</button>}
                         </div>
                       </div>
                       <div className="stack-item__copy">{event.summary}</div>
@@ -296,7 +296,7 @@ export default function Medical() {
 
       <Panel eyebrow="Timeline" title="Timeline">
         {medicalEvents.length > 0 && (
-          <div style={{ marginBottom: '14px' }}>
+          <div className="search-wrap">
             <input
               className="field-input"
               placeholder="Search by horse name or event title…"
@@ -335,10 +335,9 @@ export default function Medical() {
                         <td>{formatDateLabel(event.date)}</td>
                         {canManageMedical && (
                           <td>
-                            <div style={{ display: 'flex', gap: '4px' }}>
+                            <div className="row-actions--tight">
                               <button
-                                className="button button--ghost button--compact"
-                                style={{ fontSize: '11px' }}
+                                className="button button--ghost button--xs"
                                 type="button"
                                 onClick={() => {
                                   setEditForm({ title: event.title, body: event.summary, date: event.date, type: event.status ?? '' });
@@ -348,8 +347,7 @@ export default function Medical() {
                                 Edit
                               </button>
                               <button
-                                className="button button--ghost button--compact"
-                                style={{ fontSize: '11px', color: 'var(--rose)' }}
+                                className="button button--ghost button--xs button--danger-ghost"
                                 type="button"
                                 onClick={async () => {
                                   if (await confirm('Remove event?', 'Remove this medical event? This cannot be undone.')) {
@@ -366,8 +364,8 @@ export default function Medical() {
                       </tr>
                       {editingEventId === event.id && (
                         <tr>
-                          <td colSpan={canManageMedical ? 5 : 4} style={{ background: 'rgba(45,111,255,0.08)', padding: '12px 16px' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '480px' }}>
+                          <td colSpan={canManageMedical ? 5 : 4} className="td--edit">
+                            <div className="form-column--narrow">
                               <input className="field-input" value={editForm.title} onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))} placeholder="Title" />
                               <input className="field-input" value={editForm.body} onChange={(e) => setEditForm((f) => ({ ...f, body: e.target.value }))} placeholder="Notes" />
                               <input className="field-input" type="date" value={editForm.date} onChange={(e) => setEditForm((f) => ({ ...f, date: e.target.value }))} />
@@ -388,7 +386,7 @@ export default function Medical() {
               </table>
             </div>
           ) : (
-            <p style={{ color: 'var(--muted)', fontSize: '14px' }}>No events match "{timelineQuery}".</p>
+            <p className="text-muted">No events match "{timelineQuery}".</p>
           );
         })() : (
           <EmptyState title="No medical timeline yet" description="Create a care event to start the timeline." />

@@ -150,9 +150,9 @@ export default function Reminders() {
         {filteredReminders.length ? (
           <div className="ops-timeline-list">
             {filteredReminders.map((reminder) => (
-              <div key={reminder.id} className="ops-timeline-item" style={{ cursor: 'default' }}>
+              <div key={reminder.id} className="ops-timeline-item">
                 <span className={`ops-timeline-dot ops-timeline-dot--${reminder.urgency.toLowerCase()}`} />
-                <div style={{ flex: 1 }}>
+                <div className="ops-timeline-item__body">
                   <div className="ops-timeline-item__top">
                     <strong>{reminder.title}</strong>
                     <Pill tone={urgencyTone(reminder.urgency)}>{reminder.urgency}</Pill>

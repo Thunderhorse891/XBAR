@@ -86,7 +86,7 @@ export default function Marketplace() {
             </div>
             <div className="surface-hero__stat">
               <span>Packet ready</span>
-              <strong style={{ color: readyCount === marketHorses.length && marketHorses.length > 0 ? 'var(--emerald)' : 'var(--amber)' }}>
+              <strong className={readyCount === marketHorses.length && marketHorses.length > 0 ? 'text-emerald' : 'text-amber'}>
                 {readyCount}/{marketHorses.length}
               </strong>
             </div>
@@ -112,7 +112,6 @@ export default function Marketplace() {
               <button
                 key={f}
                 className={`button button--ghost button--compact${sexFilter === f ? ' button--ghost--active' : ''}`}
-                style={sexFilter === f ? { background: 'var(--blue-soft)', borderColor: 'var(--blue)', color: 'var(--blue)' } : {}}
                 type="button"
                 onClick={() => setSexFilter(f)}
               >
