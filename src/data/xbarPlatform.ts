@@ -28,7 +28,6 @@ export const subscriptionSeed: SubscriptionProfile = {
   renewalDate: '',
   billingState: 'Manual Billing',
   sharedAccessEnabled: false,
-  brandedListings: false,
   featureFlags: [
     'First-run workspace setup',
     'Manual document upload',
