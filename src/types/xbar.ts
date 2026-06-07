@@ -315,7 +315,6 @@ export interface SubscriptionProfile {
   renewalDate: string;
   billingState: 'Active' | 'Manual Billing' | 'Past Due';
   sharedAccessEnabled: boolean;
-  brandedListings: boolean;
   featureFlags: string[];
   usage: SubscriptionUsage;
 }
