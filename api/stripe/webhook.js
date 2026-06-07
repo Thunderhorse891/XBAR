@@ -117,12 +117,14 @@ export default async function handler(req, res) {
       let resolvedWorkspaceId = directWorkspaceId;
       if (!resolvedWorkspaceId && customerId) {
         const supabase = getSupabaseAdmin();
-        const { data: billingCustomer } = await supabase
-          .from('workspace_billing_customers')
-          .select('workspace_id')
-          .eq('stripe_customer_id', customerId)
-          .maybeSingle();
-        resolvedWorkspaceId = billingCustomer?.workspace_id || null;
+        if (supabase) {
+          const { data: billingCustomer } = await supabase
+            .from('workspace_billing_customers')
+            .select('workspace_id')
+            .eq('stripe_customer_id', customerId)
+            .maybeSingle();
+          resolvedWorkspaceId = billingCustomer?.workspace_id || null;
+        }
       }
 
       if (resolvedWorkspaceId) {

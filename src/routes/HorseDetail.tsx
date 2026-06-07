@@ -481,7 +481,7 @@ export default function HorseDetail() {
               <button
                 className="inline-flex h-10 items-center justify-center rounded-lg border border-[rgba(255,80,80,0.3)] bg-transparent px-4 text-sm font-semibold text-[rgba(255,140,140,0.8)] transition-all duration-150 ease-[ease] hover:bg-[rgba(255,80,80,0.1)] disabled:cursor-not-allowed disabled:opacity-40"
                 type="button"
-                onClick={async () => { if (await confirm('Remove horse?', 'Remove this horse from all records? This cannot be undone.')) { deleteHorse(horse.id); navigate('/horses'); } }}
+                onClick={async () => { if (await confirm('Remove horse?', 'Remove this horse from all records? This cannot be undone.')) { const result = deleteHorse(horse.id); if (result.ok) { navigate('/horses'); } else { pushToast({ title: 'Remove failed', message: result.message, tone: 'error' }); } } }}
               >
                 Remove horse
               </button>

@@ -84,7 +84,7 @@ export default async function handler(req, res) {
     },
   });
 
-  await supabase.from('workspace_billing_customers').upsert({
+  const { error: upsertError } = await supabase.from('workspace_billing_customers').upsert({
     workspace_id: workspaceId,
     stripe_customer_id: stripeCustomerId,
     stripe_subscription_id: '',
@@ -97,6 +97,10 @@ export default async function handler(req, res) {
     }),
     updated_at: new Date().toISOString(),
   });
+
+  if (upsertError) {
+    return sendJson(res, 500, { ok: false, message: 'Billing record could not be saved. Contact support with your session ID.' });
+  }
 
   return sendJson(res, 200, {
     ok: true,

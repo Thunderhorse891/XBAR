@@ -441,7 +441,9 @@ export default function Sales() {
                       const content = billOfSaleRef.current?.innerHTML ?? '';
                       const win = window.open('', '_blank');
                       if (!win) return;
-                      win.document.write(`<!DOCTYPE html><html><head><title>Bill of Sale — ${bsHorse?.name ?? selectedLead.name}</title><style>body{font-family:Georgia,serif;max-width:680px;margin:40px auto;padding:0 32px;color:#111;line-height:1.6}h1{font-size:22px;text-align:center;margin-bottom:4px}h2{font-size:15px;font-weight:600;margin:24px 0 6px;border-bottom:1px solid #ccc;padding-bottom:4px}p{margin:4px 0}table{width:100%;border-collapse:collapse;margin-top:6px}td{padding:4px 8px;border:1px solid #ddd;font-size:13px}.sig-block{display:flex;gap:40px;margin-top:32px}.sig-line{flex:1;border-top:1px solid #333;padding-top:6px;font-size:12px}.disclaimer{font-size:11px;color:#666;margin-top:24px;border-top:1px solid #e0e0e0;padding-top:12px}@media print{body{margin:0}}</style></head><body>${content}</body></html>`);
+                      const rawTitle = bsHorse?.name ?? selectedLead.name;
+                      const safeTitle = rawTitle.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                      win.document.write(`<!DOCTYPE html><html><head><title>Bill of Sale — ${safeTitle}</title><style>body{font-family:Georgia,serif;max-width:680px;margin:40px auto;padding:0 32px;color:#111;line-height:1.6}h1{font-size:22px;text-align:center;margin-bottom:4px}h2{font-size:15px;font-weight:600;margin:24px 0 6px;border-bottom:1px solid #ccc;padding-bottom:4px}p{margin:4px 0}table{width:100%;border-collapse:collapse;margin-top:6px}td{padding:4px 8px;border:1px solid #ddd;font-size:13px}.sig-block{display:flex;gap:40px;margin-top:32px}.sig-line{flex:1;border-top:1px solid #333;padding-top:6px;font-size:12px}.disclaimer{font-size:11px;color:#666;margin-top:24px;border-top:1px solid #e0e0e0;padding-top:12px}@media print{body{margin:0}}</style></head><body>${content}</body></html>`);
                       win.document.close();
                       win.print();
                     }}
