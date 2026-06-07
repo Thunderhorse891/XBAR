@@ -3,6 +3,7 @@ import { BrowserRouter, HashRouter, Route, Routes, useLocation } from 'react-rou
 import { ActivationGuide } from './components/ActivationGuide';
 import { BuyerMomentum } from './components/BuyerMomentum';
 import ErrorBoundary from './components/ErrorBoundary';
+import { OperationalValuePulseConnected } from './components/OperationalValuePulseConnected';
 import { RequireCloudAuth } from './components/RequireCloudAuth';
 import { RequireSharedListings } from './components/RequireSubscriptionFeature';
 import { RequireWorkspaceSetup } from './components/RequireWorkspaceSetup';
@@ -97,6 +98,7 @@ function DashboardWithActivation() {
     <>
       <ActivationGuide />
       <BuyerMomentum />
+      <OperationalValuePulseConnected />
       <Dashboard />
     </>
   );
