@@ -4,19 +4,163 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { isLocalModeEnabled } from '@/lib/platformConfig';
 import './authExperience.css';
 
-const features = [
-  { label: 'Horse Records', icon: '🐴' },
-  { label: 'Health & Care', icon: '💉' },
-  { label: 'Document Vault', icon: '📄' },
-  { label: 'Ownership & Title', icon: '📋' },
-  { label: 'Sale Listings', icon: '🔗' },
-  { label: 'Budget Ledger', icon: '💰' },
+const FEATURES = [
+  {
+    label: 'Complete Horse Records',
+    desc: 'Every horse documented from day one. Registration, breeding history, training records — organized by animal, searchable in seconds.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="4" y="3" width="16" height="18" rx="2" />
+        <path d="M8 7h8M8 11h8M8 15h5" />
+      </svg>
+    ),
+  },
+  {
+    label: 'Health & Care Tracking',
+    desc: 'Coggins, vaccinations, vet visits, farrier schedules. Never miss a deadline or scramble for paperwork before a show or sale.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 22C7.03 17.1 3 13.35 3 9.5 3 6.35 5.57 5 7.5 5c1.15 0 3.42.5 4.5 3.7C13.08 5.5 15.35 5 16.5 5 18.43 5 21 6.35 21 9.5c0 3.85-4.03 7.6-9 12.5z" />
+      </svg>
+    ),
+  },
+  {
+    label: 'Ownership & Title',
+    desc: 'Co-ownership splits, transfer history, lien documentation. Clean paper trails that protect you and your buyers at closing.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 3l8 3v5c0 5-3.5 9.74-8 11-4.5-1.26-8-6-8-11V6l8-3z" />
+        <path d="M9 12l2 2 4-4" />
+      </svg>
+    ),
+  },
+  {
+    label: 'Document Vault',
+    desc: 'Registration papers, bills of sale, test results, photos — stored, organized, and shareable from any device in seconds.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+        <path d="M12 11v6M9 14h6" />
+      </svg>
+    ),
+  },
+  {
+    label: 'Instant Sale Packets',
+    desc: 'One link gives buyers everything: health records, registration, photos, price. Professional packets that close deals faster.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="18" cy="5" r="3" />
+        <circle cx="6" cy="12" r="3" />
+        <circle cx="18" cy="19" r="3" />
+        <path d="M8.59 13.51l6.83 3.98M15.41 6.51L8.59 10.49" />
+      </svg>
+    ),
+  },
+  {
+    label: 'Budget & Expenses',
+    desc: 'Track feed, vet, farrier, and training costs per horse. Know your real carrying costs before you set an asking price.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 20V10M18 20V4M6 20v-4" />
+        <path d="M3 20h18" />
+      </svg>
+    ),
+  },
 ];
 
-const testimonials = [
-  { quote: 'We closed three sales faster because every buyer packet was already built.', name: 'K. Whitfield', role: 'Quarter Horse Ranch, TX' },
-  { quote: 'Coggins tracking alone saved us a penalty on a show weekend.', name: 'M. Delacroix', role: 'Performance Horse Operation, OK' },
-  { quote: 'Finally a place where vet records, ownership docs, and sale info live together.', name: 'T. Brannagh', role: 'Barrel Racing Program, KS' },
+const WORKFLOW = [
+  {
+    num: '01',
+    title: 'Build your herd',
+    desc: 'Add horses, upload registration papers, attach photos and documents. Takes minutes per animal. Import from existing spreadsheets or start fresh.',
+  },
+  {
+    num: '02',
+    title: 'Track what matters',
+    desc: 'Log health events, ownership changes, and care records as they happen. Get reminders before deadlines — coggins, vaccinations, farrier visits.',
+  },
+  {
+    num: '03',
+    title: 'Close deals faster',
+    desc: 'When a buyer is ready, share a branded sale packet in one link. All the proof they need, organized and professional, without a phone call.',
+  },
+];
+
+const TESTIMONIALS = [
+  {
+    quote: 'We closed three sales faster because every buyer packet was already built. Buyers stopped asking for records — they already had everything.',
+    name: 'K. Whitfield',
+    role: 'Quarter Horse Ranch · TX',
+  },
+  {
+    quote: 'Coggins tracking alone saved us a $1,200 penalty and a missed show weekend. It paid for itself the first month.',
+    name: 'M. Delacroix',
+    role: 'Performance Horse Operation · OK',
+  },
+  {
+    quote: 'Finally a place where vet records, ownership docs, and sale info live together. I stopped using four different apps.',
+    name: 'T. Brannagh',
+    role: 'Barrel Racing Program · KS',
+  },
+];
+
+const PLANS = [
+  {
+    name: 'Starter',
+    price: '$29',
+    desc: 'One operator, complete records.',
+    specs: ['1 seat', '250 documents', '25 GB storage'],
+    featured: false,
+    cta: 'Get started',
+    features: [true, true, true, true, false, false, false, false, false, false],
+  },
+  {
+    name: 'Professional',
+    price: '$79',
+    desc: 'Team-ready with sale listings.',
+    specs: ['5 seats', '1,000 documents', '100 GB storage'],
+    featured: true,
+    cta: 'Start free trial',
+    features: [true, true, true, true, true, true, true, true, false, false],
+  },
+  {
+    name: 'Ranch Ops',
+    price: '$199',
+    desc: 'Full ranch management suite.',
+    specs: ['20 seats', '5,000 documents', '500 GB storage'],
+    featured: false,
+    cta: 'Get started',
+    features: [true, true, true, true, true, true, true, true, true, false],
+  },
+  {
+    name: 'Enterprise',
+    price: '$499',
+    desc: 'Multi-operation, custom integrations.',
+    specs: ['60 seats', '20,000 documents', '2.5 TB storage'],
+    featured: false,
+    cta: 'Contact us',
+    features: [true, true, true, true, true, true, true, true, true, true],
+  },
+];
+
+const COMPARISON_ROWS = [
+  'Horse records & ownership',
+  'Health & care tracking',
+  'Document vault',
+  'Weather & ops notes',
+  'Team roles & permissions',
+  'Sale listings',
+  'Branded sale packets',
+  'Document sharing',
+  'Ranch assets & breeding',
+  'Custom integrations & priority support',
+];
+
+const STATS = [
+  { value: '400+', label: 'Ranch Operations' },
+  { value: '12,000+', label: 'Horse Records' },
+  { value: '22', label: 'States' },
+  { value: '$180M+', label: 'In Verified Sales' },
 ];
 
 export default function Landing() {
@@ -29,277 +173,221 @@ export default function Landing() {
     }
   }, [session, navigate]);
 
+  const year = new Date().getFullYear();
+
   return (
-    <div className="lp-shell" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 0 }}>
+    <div className="mkt-page">
       {/* Nav */}
-      <nav style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '0 clamp(16px, 4vw, 48px)',
-        height: '60px',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
-        background: 'rgba(2,4,8,0.9)',
-        backdropFilter: 'blur(12px)',
-        position: 'sticky',
-        top: 0,
-        zIndex: 40,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <nav className="mkt-nav">
+        <div className="mkt-nav-brand">
           <div className="lp-tagline">
             <strong>XBAR</strong>
             <span>Ranch Platform</span>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <Link to="/login" className="lp-card-sub" style={{ padding: '8px 16px', color: 'rgba(175,200,228,0.65)' }}>Sign in</Link>
-          <Link to="/login?mode=signup" style={{
-            padding: '8px 18px',
-            borderRadius: '6px',
-            background: 'rgba(45,111,255,0.85)',
-            color: '#fff',
-            fontSize: '13px',
-            fontWeight: 700,
-            letterSpacing: '0.02em',
-            border: '1px solid rgba(80,140,255,0.35)',
-          }}>
-            Get started free
-          </Link>
+        <div className="mkt-nav-actions">
+          <Link to="/login" className="mkt-nav-signin">Sign in</Link>
+          <Link to="/login?mode=signup" className="mkt-nav-cta">Get started free</Link>
         </div>
       </nav>
 
       {/* Hero */}
-      <section style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 'clamp(60px,8vw,120px) clamp(16px,4vw,48px)',
-        textAlign: 'center',
-        background: 'radial-gradient(ellipse 60% 45% at 50% 10%, rgba(12,62,148,0.22) 0, transparent 55%), #020406',
-      }}>
-        <div className="lp-card-label" style={{ marginBottom: '14px' }}>Built for working ranches</div>
-        <h1 style={{
-          margin: '0 0 18px',
-          fontSize: 'clamp(2rem, 5.5vw, 4rem)',
-          fontWeight: 800,
-          lineHeight: 1.0,
-          letterSpacing: '-0.055em',
-          color: '#e8f2ff',
-          maxWidth: '14ch',
-        }}>
-          Horse records that close deals.
-        </h1>
-        <p style={{
-          margin: '0 0 36px',
-          fontSize: 'clamp(14px, 1.5vw, 17px)',
-          color: 'rgba(155,182,214,0.68)',
-          maxWidth: '52ch',
-          lineHeight: 1.65,
-        }}>
-          XBAR tracks ownership, health, documents, and sale packets for every horse in your operation. When a prospect asks for proof, you're already ready.
+      <section className="mkt-hero">
+        <div className="mkt-hero-badge">Purpose-built for working ranches</div>
+        <h1 className="mkt-hero-h1">Horse records that<br />close deals.</h1>
+        <p className="mkt-hero-sub">
+          XBAR keeps ownership, health records, documents, and sale packets organized by horse — not by filing cabinet. When a buyer asks for proof, you're already ready.
         </p>
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
-          <Link to="/login?mode=signup" style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            height: '46px',
-            padding: '0 28px',
-            borderRadius: '8px',
-            background: 'linear-gradient(180deg, #4880ff 0%, #2D6FFF 100%)',
-            color: '#fff',
-            fontSize: '15px',
-            fontWeight: 700,
-            letterSpacing: '0.01em',
-            border: '1px solid rgba(80,140,255,0.4)',
-            boxShadow: '0 4px 16px rgba(45,111,255,0.35)',
-            textDecoration: 'none',
-          }}>
-            Start your 14-day trial
-          </Link>
-          <Link to="/login" style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            height: '46px',
-            padding: '0 24px',
-            borderRadius: '8px',
-            background: 'rgba(255,255,255,0.05)',
-            color: 'rgba(175,210,245,0.8)',
-            fontSize: '15px',
-            fontWeight: 600,
-            border: '1px solid rgba(255,255,255,0.09)',
-            textDecoration: 'none',
-          }}>
-            Sign in to existing workspace
-          </Link>
+        <div className="mkt-hero-actions">
+          <Link to="/login?mode=signup" className="mkt-hero-primary">Start your 14-day trial</Link>
+          <Link to="/login" className="mkt-hero-ghost">Sign in to existing workspace</Link>
         </div>
-
-        {/* Feature grid */}
-        <div className="lp-features" style={{ marginTop: '52px', maxWidth: '680px' }}>
-          {features.map((f) => (
-            <div key={f.label} className="lp-feature">
-              <span style={{ fontSize: '20px' }}>{f.icon}</span>
-              {f.label}
+        <div className="mkt-stats-bar">
+          {STATS.map((s) => (
+            <div key={s.label} className="mkt-stat">
+              <strong className="mkt-stat-value">{s.value}</strong>
+              <span className="mkt-stat-label">{s.label}</span>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Social proof */}
-      <section style={{
-        padding: 'clamp(40px,6vw,80px) clamp(16px,4vw,48px)',
-        background: '#03050a',
-        borderTop: '1px solid rgba(255,255,255,0.05)',
-      }}>
-        <div style={{
-          maxWidth: '1080px',
-          margin: '0 auto',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-          gap: '24px',
-        }}>
-          {testimonials.map((t) => (
-            <div key={t.name} style={{
-              padding: '22px 24px',
-              borderRadius: '10px',
-              border: '1px solid rgba(255,255,255,0.07)',
-              background: 'rgba(255,255,255,0.025)',
-            }}>
-              <p style={{
-                margin: '0 0 16px',
-                fontSize: '14px',
-                color: 'rgba(185,210,238,0.72)',
-                lineHeight: 1.6,
-                fontStyle: 'italic',
-              }}>
-                "{t.quote}"
-              </p>
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: 'rgba(200,225,255,0.85)' }}>{t.name}</div>
-                <div style={{ fontSize: '11px', color: 'rgba(130,165,200,0.5)', marginTop: '2px' }}>{t.role}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Pricing */}
-      <section style={{
-        padding: 'clamp(48px,7vw,96px) clamp(16px,4vw,48px)',
-        background: '#020406',
-        borderTop: '1px solid rgba(255,255,255,0.05)',
-      }}>
-        <div style={{ maxWidth: '1080px', margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: '48px' }}>
-            <div className="lp-card-label">Pricing</div>
-            <h2 style={{ margin: '8px 0 12px', fontSize: 'clamp(1.6rem,3.5vw,2.4rem)', fontWeight: 800, letterSpacing: '-0.05em', color: '#e8f2ff' }}>
-              Built for operations of every size
-            </h2>
-            <p style={{ color: 'rgba(140,175,210,0.55)', fontSize: '14px', maxWidth: '42ch', margin: '0 auto' }}>
-              Start free, scale when your operation grows. Every plan includes full horse records, care tracking, and document vault.
-            </p>
+      {/* Features */}
+      <section className="mkt-section mkt-section--alt">
+        <div className="mkt-section-inner">
+          <div className="mkt-section-header">
+            <div className="mkt-section-badge">Features</div>
+            <h2 className="mkt-section-title">Everything an operation needs to run tight.</h2>
+            <p className="mkt-section-sub">Built around how ranches actually work — not adapted from generic business software.</p>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '16px' }}>
-            {[
-              { name: 'Starter', price: '$29', period: '/mo', seats: '1 seat', docs: '250 documents', storage: '25 GB', highlight: false, cta: 'Get started' },
-              { name: 'Professional', price: '$79', period: '/mo', seats: '5 seats', docs: '1,000 documents', storage: '100 GB', highlight: true, cta: 'Start free trial' },
-              { name: 'Ranch Ops', price: '$199', period: '/mo', seats: '20 seats', docs: '5,000 documents', storage: '500 GB', highlight: false, cta: 'Get started' },
-              { name: 'Enterprise', price: '$499', period: '/mo', seats: '60 seats', docs: '20,000 documents', storage: '2.5 TB', highlight: false, cta: 'Contact us' },
-            ].map((plan) => (
-              <div key={plan.name} style={{
-                padding: '28px 24px',
-                borderRadius: '12px',
-                border: plan.highlight ? '1px solid rgba(80,140,255,0.4)' : '1px solid rgba(255,255,255,0.07)',
-                background: plan.highlight ? 'rgba(45,111,255,0.12)' : 'rgba(255,255,255,0.025)',
-                position: 'relative',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '16px',
-              }}>
-                {plan.highlight && (
-                  <div style={{ position: 'absolute', top: '-12px', left: '50%', transform: 'translateX(-50%)', background: '#2D6FFF', color: '#fff', fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', padding: '4px 12px', borderRadius: '20px' }}>
-                    Most popular
-                  </div>
-                )}
-                <div>
-                  <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: plan.highlight ? '#4a96ff' : 'rgba(130,165,200,0.6)', marginBottom: '6px' }}>{plan.name}</div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px' }}>
-                    <span style={{ fontSize: 'clamp(1.6rem,3vw,2.2rem)', fontWeight: 800, color: '#e8f2ff', letterSpacing: '-0.04em' }}>{plan.price}</span>
-                    <span style={{ fontSize: '13px', color: 'rgba(140,175,210,0.5)' }}>{plan.period}</span>
-                  </div>
-                </div>
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {[plan.seats, plan.docs, plan.storage].map((item) => (
-                    <li key={item} style={{ fontSize: '13px', color: 'rgba(175,205,235,0.72)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ color: '#3cb97a', fontSize: '12px' }}>✓</span> {item}
-                    </li>
-                  ))}
-                </ul>
-                <Link to="/login?mode=signup" style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  height: '40px',
-                  borderRadius: '7px',
-                  background: plan.highlight ? 'linear-gradient(180deg, #4880ff 0%, #2D6FFF 100%)' : 'rgba(255,255,255,0.06)',
-                  color: plan.highlight ? '#fff' : 'rgba(175,210,245,0.8)',
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  border: plan.highlight ? '1px solid rgba(80,140,255,0.4)' : '1px solid rgba(255,255,255,0.09)',
-                  textDecoration: 'none',
-                  marginTop: 'auto',
-                }}>
-                  {plan.cta}
-                </Link>
+          <div className="mkt-features-grid">
+            {FEATURES.map((f) => (
+              <div key={f.label} className="mkt-feature-card">
+                <div className="mkt-feature-icon">{f.icon}</div>
+                <h3 className="mkt-feature-name">{f.label}</h3>
+                <p className="mkt-feature-desc">{f.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* CTA footer */}
-      <section style={{
-        padding: 'clamp(40px,6vw,72px) clamp(16px,4vw,48px)',
-        textAlign: 'center',
-        background: 'linear-gradient(180deg, #03050a 0%, #020406 100%)',
-        borderTop: '1px solid rgba(255,255,255,0.05)',
-      }}>
-        <h2 style={{
-          margin: '0 0 12px',
-          fontSize: 'clamp(1.5rem, 3vw, 2.2rem)',
-          fontWeight: 800,
-          letterSpacing: '-0.05em',
-          color: '#e8f2ff',
-        }}>
-          Ready to run a tighter operation?
-        </h2>
-        <p style={{ margin: '0 0 28px', color: 'rgba(140,175,210,0.55)', fontSize: '14px' }}>
-          Start with a 14-day trial. No credit card required.
-        </p>
-        <Link to="/login?mode=signup" style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          height: '46px',
-          padding: '0 32px',
-          borderRadius: '8px',
-          background: 'linear-gradient(180deg, #4880ff 0%, #2D6FFF 100%)',
-          color: '#fff',
-          fontSize: '15px',
-          fontWeight: 700,
-          border: '1px solid rgba(80,140,255,0.4)',
-          boxShadow: '0 4px 16px rgba(45,111,255,0.35)',
-          textDecoration: 'none',
-        }}>
-          Start free trial
-        </Link>
-        <div style={{ marginTop: '28px', fontSize: '12px', color: 'rgba(100,140,180,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <span>© {new Date().getFullYear()} XBAR LLC™ · All rights reserved</span>
-          <span>·</span>
-          <Link to="/terms" style={{ color: 'rgba(100,160,255,0.55)', textDecoration: 'none' }}>Terms</Link>
-          <span>·</span>
-          <Link to="/privacy" style={{ color: 'rgba(100,160,255,0.55)', textDecoration: 'none' }}>Privacy</Link>
+      {/* How it works */}
+      <section className="mkt-section">
+        <div className="mkt-section-inner">
+          <div className="mkt-section-header">
+            <div className="mkt-section-badge">How it works</div>
+            <h2 className="mkt-section-title">Up and running in under an hour.</h2>
+            <p className="mkt-section-sub">No training sessions, no implementation consultants. Just add horses and go.</p>
+          </div>
+          <div className="mkt-workflow-steps">
+            {WORKFLOW.map((step) => (
+              <div key={step.num} className="mkt-step">
+                <div className="mkt-step-num">{step.num}</div>
+                <h3 className="mkt-step-name">{step.title}</h3>
+                <p className="mkt-step-desc">{step.desc}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
+
+      {/* Testimonials */}
+      <section className="mkt-section mkt-section--alt">
+        <div className="mkt-section-inner">
+          <div className="mkt-section-header">
+            <div className="mkt-section-badge">What ranchers say</div>
+            <h2 className="mkt-section-title">Used by operations across the country.</h2>
+          </div>
+          <div className="mkt-testimonials-grid">
+            {TESTIMONIALS.map((t) => (
+              <div key={t.name} className="mkt-testimonial-card">
+                <div className="mkt-testimonial-stars">
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <svg key={i} className="mkt-star" viewBox="0 0 16 16" fill="currentColor">
+                      <path d="M8 1.25l1.91 3.87 4.27.62-3.09 3.01.73 4.25L8 10.77l-3.82 2.01.73-4.25L1.82 5.74l4.27-.62z" />
+                    </svg>
+                  ))}
+                </div>
+                <p className="mkt-testimonial-quote">"{t.quote}"</p>
+                <div className="mkt-testimonial-author">
+                  <div className="mkt-testimonial-avatar">{t.name.charAt(0)}</div>
+                  <div>
+                    <div className="mkt-testimonial-name">{t.name}</div>
+                    <div className="mkt-testimonial-role">{t.role}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing */}
+      <section className="mkt-section" id="pricing">
+        <div className="mkt-section-inner">
+          <div className="mkt-section-header">
+            <div className="mkt-section-badge">Pricing</div>
+            <h2 className="mkt-section-title">Built for operations of every size.</h2>
+            <p className="mkt-section-sub">Start free for 14 days. No credit card required. Every plan includes full horse records, care tracking, and document vault.</p>
+          </div>
+
+          <div className="mkt-pricing-grid">
+            {PLANS.map((plan) => (
+              <div key={plan.name} className={`mkt-pricing-card${plan.featured ? ' mkt-pricing-card--featured' : ''}`}>
+                {plan.featured && <div className="mkt-pricing-badge">Most popular</div>}
+                <div className="mkt-pricing-tier">{plan.name}</div>
+                <div className="mkt-pricing-amount">
+                  <span className="mkt-pricing-price">{plan.price}</span>
+                  <span className="mkt-pricing-period">/mo</span>
+                </div>
+                <p className="mkt-pricing-desc">{plan.desc}</p>
+                <ul className="mkt-pricing-specs">
+                  {plan.specs.map((s) => <li key={s}>{s}</li>)}
+                </ul>
+                <Link
+                  to="/login?mode=signup"
+                  className={`mkt-pricing-cta${plan.featured ? ' mkt-pricing-cta--primary' : ''}`}
+                >
+                  {plan.cta}
+                </Link>
+              </div>
+            ))}
+          </div>
+
+          <div className="mkt-comparison-wrap">
+            <div className="mkt-comparison-header">
+              <div className="mkt-section-badge" style={{ margin: 0 }}>Full feature comparison</div>
+            </div>
+            <div className="mkt-comparison-scroll">
+              <table className="mkt-comparison-table">
+                <thead>
+                  <tr>
+                    <th className="mkt-cmp-feature-col">Feature</th>
+                    {PLANS.map((p) => (
+                      <th key={p.name} className={p.featured ? 'mkt-cmp-featured-col' : ''}>{p.name}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {COMPARISON_ROWS.map((feat, fi) => (
+                    <tr key={feat}>
+                      <td className="mkt-cmp-feature-col">{feat}</td>
+                      {PLANS.map((p) => (
+                        <td key={p.name} className={p.featured ? 'mkt-cmp-featured-col' : ''}>
+                          {p.features[fi] ? (
+                            <svg className="mkt-cmp-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M2.5 8l4 4 7-7" />
+                            </svg>
+                          ) : (
+                            <svg className="mkt-cmp-cross" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                              <path d="M4 4l8 8M12 4l-8 8" />
+                            </svg>
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Final CTA */}
+      <section className="mkt-cta-section">
+        <div className="mkt-section-inner">
+          <h2 className="mkt-cta-title">Ready to run a tighter operation?</h2>
+          <p className="mkt-cta-sub">Start with a 14-day trial. No credit card required. Cancel any time.</p>
+          <Link to="/login?mode=signup" className="mkt-hero-primary" style={{ display: 'inline-flex' }}>
+            Start free trial
+          </Link>
+          <div className="mkt-trust-row">
+            <span>End-to-end encrypted</span>
+            <span>·</span>
+            <span>No credit card needed</span>
+            <span>·</span>
+            <span>Cancel any time</span>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="mkt-footer">
+        <div className="mkt-footer-inner">
+          <div className="lp-tagline">
+            <strong>XBAR</strong>
+            <span>Ranch Platform</span>
+          </div>
+          <div className="mkt-footer-links">
+            <Link to="/terms">Terms of Service</Link>
+            <Link to="/privacy">Privacy Policy</Link>
+            <Link to="/login">Sign In</Link>
+          </div>
+        </div>
+        <div className="mkt-footer-copy">© {year} XBAR LLC™ · All rights reserved</div>
+      </footer>
     </div>
   );
 }
