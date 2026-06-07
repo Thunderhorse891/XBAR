@@ -16,7 +16,12 @@ export default async function handler(req, res) {
   }
 
   const accessToken = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim() || '';
-  const body = await readJsonBody(req);
+  let body;
+  try {
+    body = await readJsonBody(req);
+  } catch (err) {
+    return sendJson(res, err.statusCode || 400, { ok: false, message: err.message });
+  }
   const tier = typeof body.tier === 'string' ? body.tier : '';
   const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId : '';
   const returnUrl = typeof body.returnUrl === 'string' && body.returnUrl ? body.returnUrl : 'https://xbar.app';

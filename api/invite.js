@@ -7,7 +7,12 @@ export default async function handler(req, res) {
   }
 
   const accessToken = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim() || '';
-  const body = await readJsonBody(req);
+  let body;
+  try {
+    body = await readJsonBody(req);
+  } catch (err) {
+    return sendJson(res, err.statusCode || 400, { ok: false, message: err.message });
+  }
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
   const role = typeof body.role === 'string' ? body.role : 'Viewer';
   const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId : '';

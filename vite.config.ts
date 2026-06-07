@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig(() => {
-  const staticTarget = process.env.VITE_STATIC_TARGET ?? (process.env.GITHUB_ACTIONS ? 'github-pages' : 'web');
+  const staticTarget = process.env.VITE_STATIC_TARGET ?? 'web';
   const debugBuild = process.env.VITE_DEBUG_BUILD === 'true';
 
   return {
