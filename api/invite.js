@@ -22,6 +22,10 @@ export default async function handler(req, res) {
     return sendJson(res, 400, { ok: false, message: 'Email and workspace id are required.' });
   }
 
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return sendJson(res, 400, { ok: false, message: 'A valid email address is required.' });
+  }
+
   const access = await requireWorkspaceAccess(accessToken, workspaceId);
   if (!access.ok) {
     return sendJson(res, access.status, { ok: false, message: access.message });

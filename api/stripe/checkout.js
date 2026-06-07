@@ -24,8 +24,14 @@ export default async function handler(req, res) {
   }
   const tier = typeof body.tier === 'string' ? body.tier : '';
   const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId : '';
-  const returnUrl = typeof body.returnUrl === 'string' && body.returnUrl ? body.returnUrl : 'https://xbar.app';
   const seatCount = Number(body.seatCount || 1);
+
+  // Validate returnUrl against allowlist to prevent open-redirect attacks.
+  const appUrl = process.env.VITE_PUBLIC_APP_URL || 'https://xbar.app';
+  const rawReturnUrl = typeof body.returnUrl === 'string' ? body.returnUrl.trim() : '';
+  const returnUrl = rawReturnUrl && (rawReturnUrl === appUrl || rawReturnUrl.startsWith(`${appUrl}/`))
+    ? rawReturnUrl
+    : appUrl;
   const priceId = getStripePriceIdByTier(tier);
 
   if (!workspaceId || !priceId) {
