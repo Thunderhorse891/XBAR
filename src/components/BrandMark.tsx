@@ -9,7 +9,7 @@ export function XbarMark({ title, tone = 'color', ...props }: BrandMarkProps) {
   const mono = tone === 'mono';
 
   return (
-    <svg viewBox="0 0 64 64" role={title ? 'img' : undefined} aria-hidden={title ? undefined : true} style={mono ? undefined : { filter: 'drop-shadow(0 0 8px rgba(45, 111, 255, 0.6))' }} {...props}>
+    <svg viewBox="0 0 64 64" role={title ? 'img' : undefined} aria-hidden={title ? undefined : true} className={mono ? undefined : 'xbar-mark--glow'} {...props}>
       {title ? <title>{title}</title> : null}
       <defs>
         <linearGradient id="xbar-mark-steel" x1="9" x2="55" y1="7" y2="58" gradientUnits="userSpaceOnUse">

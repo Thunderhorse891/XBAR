@@ -26,7 +26,7 @@ export function HorseMediaPreview({
   const mediaUrl = src?.trim();
 
   if (mediaUrl) {
-    return <img src={mediaUrl} alt="" className={imageClassName} />;
+    return <img src={mediaUrl} alt={name} className={imageClassName} />;
   }
 
   return (

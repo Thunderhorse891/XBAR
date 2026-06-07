@@ -1133,7 +1133,7 @@ export const useXbarStore = create<XbarStore>()(
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
               body: JSON.stringify({ email: invite.email, role: invite.role, workspaceId: useCloudStore.getState().workspaceId, invitationId: invite.id }),
             });
-          } catch { /* non-critical */ }
+          } catch (err) { console.debug('[invite] email send failed (non-blocking):', err); }
         }
 
         const workspaceInvitations = [invite, ...state.workspaceInvitations];

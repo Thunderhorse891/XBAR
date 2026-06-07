@@ -36,34 +36,34 @@ export function WorkspaceHelp({
   }
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-end bg-[#2c2621]/28 p-4 backdrop-blur-[2px]" onClick={onClose} role="presentation">
+    <div className="help-backdrop" onClick={onClose} role="presentation">
       <aside
-        className="w-full max-w-[360px] rounded-[10px] border border-[#ddd3c7] bg-[linear-gradient(180deg,#fffdfa_0%,#f7f1ea_100%)] p-5 shadow-xl"
+        className="help-panel"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={`${title} guide`}
       >
-        <div className="flex items-start justify-between gap-4">
+        <div className="help-panel__header">
           <div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8f8378]">Guide</div>
-            <h2 className="mt-2 text-lg font-bold tracking-[-0.04em] text-[#201d1a]">{title}</h2>
+            <div className="help-panel__kicker">Guide</div>
+            <h2 className="help-panel__title">{title}</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#ddd3c7] text-[#726659] transition-all duration-150 ease-[ease] hover:border-[#3d6b4f]/30 hover:bg-[#f5efe7] hover:text-[#201d1a]"
+            className="help-panel__close"
             aria-label="Close guide"
           >
             ×
           </button>
         </div>
 
-        <div className="mt-5 flex flex-col gap-2.5">
+        <div className="help-panel__sections">
           {sections.map((section) => (
-            <div key={section.label} className="rounded-md border border-[#ddd3c7] bg-[#fbf7f1] px-4 py-3">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#6c5f53]">{section.label}</div>
-              <p className="mt-1.5 text-sm leading-6 text-[#4d463f]">{section.text}</p>
+            <div key={section.label} className="help-panel__section">
+              <div className="help-panel__section-label">{section.label}</div>
+              <p className="help-panel__section-text">{section.text}</p>
             </div>
           ))}
         </div>

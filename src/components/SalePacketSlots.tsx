@@ -31,7 +31,7 @@ export function SalePacketSlots({
           >
             <div className="sale-packet-slot__head">
               <span className="sale-packet-slot__label">{slot.label}</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div className="row-actions">
                 <span className="sale-packet-slot__state">{statusLabels[slot.status]}</span>
                 {showFix && (
                   <button

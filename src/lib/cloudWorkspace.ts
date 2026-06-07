@@ -1004,7 +1004,7 @@ export async function uploadMediaAssetToCloud(params: { file: File; horseId: str
     return null;
   }
 
-  const extension = params.file.name.includes('.') ? params.file.name.split('.').pop() : 'bin';
+  const extension = params.file.name.split('.').pop() || 'bin';
   const fileName = `${createId('media')}.${extension}`;
   const path = `${session.user.id}/horses/${sanitizeStorageSegment(params.horseId)}/${fileName}`;
   const { error } = await client.storage.from(supabaseConfig.mediaBucket).upload(path, params.file, {
@@ -1034,7 +1034,7 @@ export async function uploadDocumentAssetToCloud(params: { file: File; horseId?:
     return null;
   }
 
-  const extension = params.file.name.includes('.') ? params.file.name.split('.').pop() : 'bin';
+  const extension = params.file.name.split('.').pop() || 'bin';
   const fileName = `${createId('document')}.${extension}`;
   const horseSegment = sanitizeStorageSegment(params.horseId ?? 'unassigned');
   const path = `${session.user.id}/documents/${horseSegment}/${fileName}`;

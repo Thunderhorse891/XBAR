@@ -3,7 +3,9 @@ import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/
 import { useCloudStore } from '@/store/useCloudStore';
 import { useXbarStore } from '@/store/useXbarStore';
 
-function asRecord(value: unknown) {
+const AUTOSAVE_DEBOUNCE_MS = 1600;
+
+function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 }
 
@@ -294,7 +296,7 @@ export function CloudBootstrap() {
         }
 
         setSyncState(result.ok ? 'idle' : 'error', result.message);
-      }, 1600);
+      }, AUTOSAVE_DEBOUNCE_MS);
     });
 
     return () => {

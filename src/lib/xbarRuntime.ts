@@ -360,7 +360,7 @@ export function rankHorseMatches(horses: HorseRecord[], haystack: string, entiti
     .slice(0, 3);
 }
 
-export function findHorseMatch(horses: HorseRecord[], haystack: string) {
+export function findHorseMatch(horses: HorseRecord[], haystack: string): { horse: HorseRecord | undefined; confidence: number } {
   const [bestMatch] = rankHorseMatches(horses, haystack);
   return {
     horse: bestMatch?.horse,
