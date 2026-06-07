@@ -300,6 +300,7 @@ export default function Medical() {
             <input
               className="field-input"
               placeholder="Search by horse name or event title…"
+              aria-label="Search medical timeline"
               value={timelineQuery}
               onChange={(e) => setTimelineQuery(e.target.value)}
             />

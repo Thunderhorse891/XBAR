@@ -140,6 +140,7 @@ export default function Breeding() {
                   <input
                     className="field-input"
                     placeholder="Search horse or milestone..."
+                    aria-label="Search breeding milestones"
                     value={milestoneQuery}
                     onChange={(e) => setMilestoneQuery(e.target.value)}
                   />

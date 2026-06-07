@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 export type HelpSection = {
   label: string;
@@ -16,10 +16,11 @@ export function WorkspaceHelp({
   sections: HelpSection[];
   onClose: () => void;
 }) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
-    if (!open) {
-      return;
-    }
+    if (!open) return;
+    closeRef.current?.focus();
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -50,6 +51,7 @@ export function WorkspaceHelp({
             <h2 className="help-panel__title">{title}</h2>
           </div>
           <button
+            ref={closeRef}
             type="button"
             onClick={onClose}
             className="help-panel__close"

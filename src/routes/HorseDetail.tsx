@@ -1190,7 +1190,7 @@ export default function HorseDetail() {
       <Panel eyebrow="Activity" title="Activity">
         <div className="detail-grid">
           <div className="stack-list">
-            {horse.alerts.map((alert) => (
+            {horse.alerts.length ? horse.alerts.map((alert) => (
               <div key={alert.id} className="stack-item">
                 <div className="stack-item__top">
                   <div className="stack-item__title">{alert.title}</div>
@@ -1198,7 +1198,9 @@ export default function HorseDetail() {
                 </div>
                 <div className="stack-item__copy">{alert.summary}</div>
               </div>
-            ))}
+            )) : (
+              <EmptyState compact title="No active alerts" description="Alerts from medical, ownership, and document modules will appear here." />
+            )}
           </div>
           <div className="stack-list">
             <div className="stack-item">

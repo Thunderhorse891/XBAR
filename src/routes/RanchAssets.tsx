@@ -157,6 +157,7 @@ export default function RanchAssets() {
               <input
                 className="field-input field-input--wide"
                 placeholder="Search by name, category, or assignment…"
+                aria-label="Search ranch assets"
                 value={assetQuery}
                 onChange={(e) => setAssetQuery(e.target.value)}
               />

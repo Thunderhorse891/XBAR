@@ -565,7 +565,7 @@ export default function Horses() {
                   <td>{horse.segment}</td>
                   <td>{horse.owner}</td>
                   <td>
-                    {horse.location.barn} · {horse.location.pasture}
+                    {[horse.location.barn, horse.location.pasture].filter(Boolean).join(' · ') || '—'}
                   </td>
                   <td>{horse.documents.length}</td>
                   <td>{formatPercent(horse.readiness.score)}</td>

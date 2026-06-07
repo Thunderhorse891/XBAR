@@ -328,7 +328,8 @@ export default function MainLayout() {
 
             <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
               <label className="relative min-w-[220px] max-w-[420px] flex-1">
-                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[#7d8389]" />
+                <span className="sr-only">Search horses</span>
+                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[#7d8389]" aria-hidden="true" />
                 <input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
