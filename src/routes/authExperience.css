@@ -983,6 +983,7 @@
 .lp-divider{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;color:rgba(78,104,140,.52);font-size:10px;letter-spacing:.13em;text-transform:uppercase}
 .lp-divider::before,.lp-divider::after{content:'';height:1px;background:rgba(255,255,255,.068)}
 .lp-btn-social{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:42px;border:1px solid rgba(255,255,255,.085);border-radius:6px;background:rgba(255,255,255,.026);color:rgba(172,200,232,.72);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:background .13s,border-color .13s}
+.lp-btn-social svg{flex-shrink:0}
 .lp-btn-social:hover:not(:disabled){background:rgba(255,255,255,.048);border-color:rgba(255,255,255,.14)}
 .lp-btn-social:disabled{opacity:.36;cursor:default}
 .lp-mode-switch{display:flex;align-items:center;justify-content:center;gap:6px;font-size:11.5px;color:rgba(122,152,188,.58)}
@@ -992,6 +993,12 @@
 .lp-btn-enter:hover{background:#1e70f5;transform:translateY(-1px)}
 @media(max-width:1100px){.lp-frame{grid-template-columns:1fr}.lp-brand{display:none}.lp-auth{padding:clamp(22px,5vw,52px);justify-content:center;align-items:flex-start;padding-top:clamp(40px,8vh,88px)}.lp-card{width:min(100%,440px)}}
 @media(max-width:480px){.lp-shell{padding:0}.lp-frame{border-radius:0;min-height:100vh;border:none}.lp-auth{padding:32px 18px}.lp-options{flex-direction:column;align-items:flex-start;gap:8px}.lp-mode-switch{flex-direction:column;gap:4px}}
+
+/* ─── Password strength meter (lp-password-strength) ─── */
+.lp-password-strength { margin-top: -4px; margin-bottom: 4px; }
+.lp-password-strength__track { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.lp-password-strength__bar { height: 100%; border-radius: 2px; transition: width 0.2s, background 0.2s; }
+.lp-password-strength__label { font-size: 12px; margin-top: 3px; display: inline-block; text-transform: capitalize; }
 
 /* ─── Marketing landing page (mkt-*) ─── */
 

@@ -12,7 +12,7 @@ type BusyState = 'password' | 'magic' | 'facebook' | 'google' | 'apple' | 'reset
 /* ─── icon components ─── */
 function GoogleIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
       <path d="M19.6 10.227c0-.709-.064-1.39-.182-2.045H10v3.868h5.382a4.6 4.6 0 01-1.996 3.018v2.51h3.232c1.891-1.742 2.982-4.305 2.982-7.35z" fill="#4285F4" />
       <path d="M10 20c2.7 0 4.964-.895 6.618-2.423l-3.232-2.509c-.895.6-2.04.955-3.386.955-2.605 0-4.81-1.759-5.595-4.123H1.064v2.59A9.996 9.996 0 0010 20z" fill="#34A853" />
       <path d="M4.405 11.9A6.01 6.01 0 014.09 10c0-.663.114-1.305.314-1.9V5.51H1.064A9.996 9.996 0 000 10c0 1.614.386 3.14 1.064 4.49L4.405 11.9z" fill="#FBBC05" />
@@ -23,7 +23,7 @@ function GoogleIcon() {
 
 function FacebookIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{ flexShrink: 0 }}>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <path d="M24 12.073C24 5.404 18.627 0 12 0S0 5.404 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z" />
     </svg>
   );
@@ -31,7 +31,7 @@ function FacebookIcon() {
 
 function AppleIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" style={{ flexShrink: 0 }}>
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
       <path d="M14.52 0c.077.975-.283 1.942-.847 2.663-.565.737-1.46 1.303-2.37 1.236-.096-.916.32-1.874.848-2.502C12.72.686 13.669.12 14.52 0zM17.84 13.3c-.404.916-.598 1.325-1.12 2.133-.727 1.107-1.751 2.487-3.02 2.5-.978.012-1.302-.637-2.712-.628-1.41.008-1.76.644-2.74.632-1.27-.013-2.243-1.258-2.97-2.365-2.032-3.097-2.246-6.73-.993-8.667.893-1.38 2.302-2.188 3.631-2.188 1.35 0 2.2.64 3.32.64 1.087 0 1.75-.643 3.318-.643 1.188 0 2.45.648 3.34 1.769-2.934 1.61-2.459 5.81.946 6.817z" />
     </svg>
   );
@@ -308,11 +308,11 @@ export default function Login() {
                   const colors: Record<string, string> = { weak: 'var(--rose)', fair: 'var(--amber)', strong: 'var(--emerald)' };
                   const widths: Record<string, string> = { weak: '33%', fair: '66%', strong: '100%' };
                   return (
-                    <div style={{ marginTop: '-4px', marginBottom: '4px' }}>
-                      <div style={{ height: '4px', background: 'var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: widths[level], background: colors[level], borderRadius: '2px', transition: 'width 0.2s, background 0.2s' }} />
+                    <div className="lp-password-strength">
+                      <div className="lp-password-strength__track">
+                        <div className="lp-password-strength__bar" style={{ width: widths[level], background: colors[level] }} />
                       </div>
-                      <span style={{ fontSize: '12px', color: colors[level], marginTop: '3px', display: 'inline-block', textTransform: 'capitalize' }}>{level} password</span>
+                      <span className="lp-password-strength__label" style={{ color: colors[level] }}>{level} password</span>
                     </div>
                   );
                 })()}
