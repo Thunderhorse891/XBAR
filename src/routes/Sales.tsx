@@ -141,11 +141,11 @@ export default function Sales() {
             <div className="surface-hero__stat"><span>Open prospects</span><strong>{salesLeads.filter((lead) => lead.stage !== 'Closed').length}</strong></div>
             <div className="surface-hero__stat">
               <span>Follow-ups due</span>
-              <strong style={{ color: followUpsDue ? 'var(--rose)' : 'var(--emerald)' }}>{followUpsDue}</strong>
+              <strong className={followUpsDue ? 'text-rose' : 'text-emerald'}>{followUpsDue}</strong>
             </div>
             <div className="surface-hero__stat">
               <span>Blockers</span>
-              <strong style={{ color: saleHorses.filter((h) => h.readiness.packetStatus === 'Needs Transfer Docs').length ? 'var(--amber)' : 'var(--emerald)' }}>
+              <strong className={saleHorses.filter((h) => h.readiness.packetStatus === 'Needs Transfer Docs').length ? 'text-amber' : 'text-emerald'}>
                 {saleHorses.filter((h) => h.readiness.packetStatus === 'Needs Transfer Docs').length}
               </strong>
             </div>
@@ -169,7 +169,6 @@ export default function Sales() {
                 placeholder="Search by name, segment, status…"
                 value={listingQuery}
                 onChange={(e) => setListingQuery(e.target.value)}
-                style={{ maxWidth: '360px' }}
               />
             </div>
           )}

@@ -163,7 +163,7 @@ export default function Reminders() {
                     <span>{reminder.horseName ?? 'Ranch-wide'}</span>
                     <span>{reminder.dueDate ? formatDateLabel(reminder.dueDate) : 'No date'}</span>
                   </div>
-                  <div className="inline-actions" style={{ marginTop: '10px' }}>
+                  <div className="inline-actions inline-actions--mt-sm">
                     {reminder.kind === 'Care' && reminder.horseId && (
                       <Link className="button button--primary button--compact" to={`/medical?horse=${reminder.horseId}`}>Add care event</Link>
                     )}

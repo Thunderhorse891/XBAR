@@ -72,7 +72,7 @@ export default function Breeding() {
             </div>
             <div className="surface-hero__stat">
               <span>Blockers</span>
-              <strong style={{ color: breedingHorses.filter((horse) => horse.readiness.packetStatus !== 'Ready').length ? 'var(--amber)' : 'var(--emerald)' }}>
+              <strong className={breedingHorses.filter((horse) => horse.readiness.packetStatus !== 'Ready').length ? 'text-amber' : 'text-emerald'}>
                 {breedingHorses.filter((horse) => horse.readiness.packetStatus !== 'Ready').length}
               </strong>
             </div>
@@ -142,7 +142,6 @@ export default function Breeding() {
                     placeholder="Search horse or milestone..."
                     value={milestoneQuery}
                     onChange={(e) => setMilestoneQuery(e.target.value)}
-                    style={{ maxWidth: '320px' }}
                   />
                 </div>
                 {filtered.length ? (

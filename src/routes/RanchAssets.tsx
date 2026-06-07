@@ -153,13 +153,12 @@ export default function RanchAssets() {
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel eyebrow="Inventory" title="Register">
           {ranchAssets.length > 0 && (
-            <div style={{ marginBottom: '14px' }}>
+            <div className="search-wrap">
               <input
-                className="field-input"
+                className="field-input field-input--wide"
                 placeholder="Search by name, category, or assignment…"
                 value={assetQuery}
                 onChange={(e) => setAssetQuery(e.target.value)}
-                style={{ maxWidth: '380px' }}
               />
             </div>
           )}

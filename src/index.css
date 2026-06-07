@@ -3005,12 +3005,59 @@ a:focus-visible,
 }
 
 .marketplace-card__inquiry {
+  margin-top: 12px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 12px;
 }
 
+.marketplace-card__inquiry .field-stack {
+  margin-bottom: 8px;
+}
+
+.mkt-filter-toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  align-items: center;
+}
+
+.mkt-filter-group {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.field-input--auto {
+  width: auto;
+  min-width: 140px;
+}
+
+.field-input--push {
+  margin-left: auto;
+  min-width: 160px;
+}
+
+.panel__hint {
+  margin: 0 0 14px;
+  font-size: 0.88rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.field-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.th--action {
+  width: 120px;
+}
 
 /* ── Utility color tokens ───────────────────────────────────────────── */
 .text-emerald { color: var(--emerald); }

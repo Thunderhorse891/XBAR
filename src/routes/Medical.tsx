@@ -81,7 +81,7 @@ export default function Medical() {
           <div className="surface-hero__stats">
             <div className="surface-hero__stat">
               <span>Watch</span>
-              <strong style={{ color: medicalWatch.length ? 'var(--rose)' : 'var(--emerald)' }}>{medicalWatch.length}</strong>
+              <strong className={medicalWatch.length ? 'text-rose' : 'text-emerald'}>{medicalWatch.length}</strong>
             </div>
             <div className="surface-hero__stat">
               <span>Timeline</span>
@@ -302,7 +302,6 @@ export default function Medical() {
               placeholder="Search by horse name or event title…"
               value={timelineQuery}
               onChange={(e) => setTimelineQuery(e.target.value)}
-              style={{ maxWidth: '380px' }}
             />
           </div>
         )}
@@ -322,7 +321,7 @@ export default function Medical() {
                     <th>Event</th>
                     <th>Vet</th>
                     <th>Date</th>
-                    {canManageMedical && <th style={{ width: '120px' }}>Actions</th>}
+                    {canManageMedical && <th className="th--action">Actions</th>}
                   </tr>
                 </thead>
                 <tbody>

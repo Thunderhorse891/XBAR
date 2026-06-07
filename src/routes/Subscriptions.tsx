@@ -185,7 +185,7 @@ export default function Subscriptions() {
                         <button className="button button--ghost button--compact" type="button" disabled title="Stripe not configured">
                           Checkout unavailable
                         </button>
-                        <p style={{ marginTop: '6px', fontSize: '11px', color: 'var(--muted)', fontStyle: 'italic' }}>
+                        <p className="field-hint">
                           Contact your admin to configure billing.
                         </p>
                       </div>

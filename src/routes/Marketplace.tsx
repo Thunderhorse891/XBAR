@@ -106,8 +106,8 @@ export default function Marketplace() {
       </div>
 
       <Panel eyebrow="Listings" title="For sale">
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '16px', alignItems: 'center' }}>
-          <div style={{ display: 'flex', gap: '6px' }}>
+        <div className="mkt-filter-toolbar">
+          <div className="mkt-filter-group">
             {sexFilters.map((f) => (
               <button
                 key={f}
@@ -121,20 +121,18 @@ export default function Marketplace() {
           </div>
           {breeds.length > 0 && (
             <select
-              className="field-input"
+              className="field-input field-input--auto"
               value={breedFilter}
               onChange={(e) => setBreedFilter(e.target.value)}
-              style={{ width: 'auto', minWidth: '140px' }}
             >
               <option value="">All breeds</option>
               {breeds.map((b) => <option key={b} value={b}>{b}</option>)}
             </select>
           )}
           <select
-            className="field-input"
+            className="field-input field-input--auto field-input--push"
             value={sort}
             onChange={(e) => setSort(e.target.value as SortKey)}
-            style={{ width: 'auto', minWidth: '160px', marginLeft: 'auto' }}
           >
             <option value="price-asc">Price: low to high</option>
             <option value="price-desc">Price: high to low</option>
@@ -197,8 +195,8 @@ export default function Marketplace() {
                     </div>
 
                     {isInquiring ? (
-                      <div className="marketplace-card__inquiry" style={{ marginTop: '12px' }}>
-                        <label className="field-stack" style={{ marginBottom: '8px' }}>
+                      <div className="marketplace-card__inquiry">
+                        <label className="field-stack">
                           <span className="field-label">Buyer name</span>
                           <input
                             className="field-input"
@@ -219,7 +217,7 @@ export default function Marketplace() {
                         </div>
                       </div>
                     ) : (
-                      <div className="inline-actions" style={{ marginTop: '12px' }}>
+                      <div className="inline-actions inline-actions--mt-xs">
                         <button
                           className="button button--primary button--compact"
                           type="button"
@@ -253,7 +251,7 @@ export default function Marketplace() {
 
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel eyebrow="Quick add" title="Log an inquiry">
-          <p style={{ fontSize: '0.88rem', color: 'var(--muted)', marginBottom: '14px' }}>
+          <p className="panel__hint">
             Use this when a buyer calls or walks in and you don't have their profile yet.
           </p>
           <div className="form-grid form-grid--tight">
@@ -285,7 +283,7 @@ export default function Marketplace() {
               {inquiryError && <span className="field-error">{inquiryError}</span>}
             </label>
           </div>
-          <div className="inline-actions" style={{ marginTop: '10px' }}>
+          <div className="inline-actions inline-actions--mt-sm">
             <button
               className="button button--primary button--compact"
               type="button"
@@ -326,7 +324,7 @@ export default function Marketplace() {
           ) : (
             <EmptyState compact title="No leads yet" description="Inquiries captured here will appear in the pipeline." />
           )}
-          <div className="inline-actions" style={{ marginTop: '12px' }}>
+          <div className="inline-actions inline-actions--mt-xs">
             <Link className="button button--ghost button--compact" to="/sales">
               Open full pipeline
             </Link>

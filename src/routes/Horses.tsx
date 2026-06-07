@@ -228,7 +228,7 @@ export default function Horses() {
             <div className="surface-hero__stat"><span>For sale</span><strong>{horses.filter((h) => h.status === 'Sale Prep').length}</strong></div>
             <div className="surface-hero__stat"><span>Packet ready</span><strong className="text-emerald">{horses.filter((h) => h.readiness.packetStatus === 'Ready').length}</strong></div>
           </div>
-          <div className="inline-actions" style={{ marginTop: '16px' }}>
+          <div className="inline-actions">
             <Link to="/documents?upload=1" className="button button--ghost button--compact">Upload docs</Link>
             <button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>New horse</button>
           </div>
