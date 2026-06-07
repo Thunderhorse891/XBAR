@@ -4,28 +4,29 @@ type ConfirmState = {
   open: boolean;
   title: string;
   message: string;
-  resolve: ((confirmed: boolean) => void) | null;
 };
 
 export function useConfirm() {
-  const [state, setState] = useState<ConfirmState>({ open: false, title: '', message: '', resolve: null });
+  const [state, setState] = useState<ConfirmState>({ open: false, title: '', message: '' });
   const resolveRef = useRef<((confirmed: boolean) => void) | null>(null);
 
   const confirm = useCallback((title: string, message: string): Promise<boolean> => {
     return new Promise((resolve) => {
       resolveRef.current = resolve;
-      setState({ open: true, title, message, resolve });
+      setState({ open: true, title, message });
     });
   }, []);
 
   const handleConfirm = useCallback(() => {
     resolveRef.current?.(true);
-    setState((s) => ({ ...s, open: false, resolve: null }));
+    resolveRef.current = null;
+    setState((s) => ({ ...s, open: false }));
   }, []);
 
   const handleCancel = useCallback(() => {
     resolveRef.current?.(false);
-    setState((s) => ({ ...s, open: false, resolve: null }));
+    resolveRef.current = null;
+    setState((s) => ({ ...s, open: false }));
   }, []);
 
   const dialog = state.open ? (
