@@ -681,7 +681,7 @@ export default function HorseDetail() {
       </section>
 
       {activeTab === 'Overview' ? (
-      <div className="detail-grid">
+      <div className="detail-grid" role="tabpanel" id="tabpanel-overview" aria-labelledby="tab-overview">
         <Panel eyebrow="Identity" title="Registry">
           {editingCore ? (
             <div className="form-grid form-grid--tight">
@@ -848,7 +848,7 @@ export default function HorseDetail() {
       ) : null}
 
       {activeTab === 'Docs' ? (
-      <div className="detail-grid">
+      <div className="detail-grid" role="tabpanel" id="tabpanel-docs" aria-labelledby="tab-docs">
         <Panel eyebrow="Snapshot" title="Snapshot">
           <div className="stack-list">
             <div className="stack-item">
@@ -949,7 +949,7 @@ export default function HorseDetail() {
 
       {activeTab === 'Ops' ? (
         <>
-      <div className="detail-grid">
+      <div className="detail-grid" role="tabpanel" id="tabpanel-ops" aria-labelledby="tab-ops">
         <Panel eyebrow="Ownership" title="Ownership">
           <div className="stack-list">
             {horse.ownership.map((stake) => (
@@ -1187,7 +1187,7 @@ export default function HorseDetail() {
       ) : null}
 
       {activeTab === 'Activity' ? (
-      <Panel eyebrow="Activity" title="Activity">
+      <Panel eyebrow="Activity" title="Activity" role="tabpanel" id="tabpanel-activity" aria-labelledby="tab-activity">
         <div className="detail-grid">
           <div className="stack-list">
             {horse.alerts.length ? horse.alerts.map((alert) => (

@@ -37,6 +37,9 @@ export function Panel({
   action,
   children,
   className = '',
+  id,
+  role,
+  'aria-labelledby': ariaLabelledBy,
   onContextMenu,
 }: {
   eyebrow?: string;
@@ -47,10 +50,13 @@ export function Panel({
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  id?: string;
+  role?: string;
+  'aria-labelledby'?: string;
   onContextMenu?: MouseEventHandler<HTMLElement>;
 }) {
   return (
-    <section className={`panel ${className}`.trim()} onContextMenu={onContextMenu}>
+    <section id={id} role={role} aria-labelledby={ariaLabelledBy} className={`panel ${className}`.trim()} onContextMenu={onContextMenu}>
       <div className="panel__header">
         <div>
           {eyebrow ? <div className="panel__eyebrow">{eyebrow}</div> : null}
@@ -146,9 +152,11 @@ export function SurfaceTabs({
       {items.map((item) => (
         <button
           key={item}
+          id={`tab-${item.replace(/\s+/g, '-').toLowerCase()}`}
           type="button"
           role="tab"
           aria-selected={active === item}
+          aria-controls={`tabpanel-${item.replace(/\s+/g, '-').toLowerCase()}`}
           className={`surface-tab${active === item ? ' surface-tab--active' : ''}`}
           onClick={() => onChange(item)}
         >
