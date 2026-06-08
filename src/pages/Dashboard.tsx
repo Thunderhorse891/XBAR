@@ -276,7 +276,7 @@ export default function Dashboard() {
 
   async function handleReceiptSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!receiptDraft.title.trim() || !receiptDraft.amount) {
+    if (!receiptDraft.title.trim() || !receiptDraft.amount || Number(receiptDraft.amount) <= 0) {
       pushToast({ title: 'Required fields missing', message: 'Receipt label and amount are required.', tone: 'error' });
       return;
     }
