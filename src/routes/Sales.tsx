@@ -463,6 +463,8 @@ export default function Sales() {
                   </button>
                   <button
                     type="button"
+                    // eslint-disable-next-line jsx-a11y/no-autofocus
+                    autoFocus
                     style={{ padding: '6px 14px', borderRadius: '6px', background: '#f0f0f0', color: '#333', border: '1px solid #ccc', fontSize: '13px', cursor: 'pointer' }}
                     onClick={() => setShowBillOfSale(false)}
                   >

@@ -23,7 +23,7 @@ function ToastCard({
   }, [duration, id, removeToast]);
 
   return (
-    <div className={`toast toast--${tone}`} role="status" aria-live="polite">
+    <div className={`toast toast--${tone}`} role="status">
       <div className="toast__body">
         {title ? <div className="toast__title">{title}</div> : null}
         <div className="toast__message">{message}</div>

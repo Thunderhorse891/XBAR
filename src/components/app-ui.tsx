@@ -119,6 +119,7 @@ export function MetricCard({
       onContextMenu={onContextMenu as MouseEventHandler<HTMLDivElement>}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
+      aria-label={onClick && typeof label === 'string' ? label : undefined}
       onKeyDown={onClick ? (e: KeyboardEvent<HTMLDivElement>) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (onClick as MouseEventHandler<HTMLDivElement>)(e as unknown as Parameters<MouseEventHandler<HTMLDivElement>>[0]); } } : undefined}
     >
       {inner}

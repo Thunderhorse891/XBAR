@@ -213,7 +213,7 @@ export async function loadWeatherForecast(params: {
 
   const next12Hours = payload.hourly.time.slice(0, 12).map((time, index) => ({
     time: formatHourLabel(time),
-    temperatureF: round(payload.hourly.temperature_2m[index]),
+    temperatureF: round(payload.hourly.temperature_2m[index] ?? 0),
     rainChance: round(payload.hourly.precipitation_probability[index] ?? 0),
     windMph: round(payload.hourly.wind_speed_10m[index] ?? 0),
     weatherLabel: weatherLabelFromCode(payload.hourly.weather_code[index] ?? payload.current.weather_code),
