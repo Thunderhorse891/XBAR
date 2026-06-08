@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
+import { ActionMenuButton } from '@/components/InteractionSystem';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
+import { DotsIcon } from '@/components/icons';
 import { buildPublicShareUrl } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
@@ -21,6 +23,7 @@ export default function Sales() {
   const updateSalesLead = useXbarStore((state) => state.updateSalesLead);
   const recordSharedChannel = useXbarStore((state) => state.recordSharedChannel);
   const pushToast = useUiStore((state) => state.pushToast);
+  const openRightDrawer = useUiStore((state) => state.openRightDrawer);
   const canManageSales = useCurrentRoleCapability('manageSales');
   const saleHorses = horses.filter(
     (horse) => horse.sale.askPrice > 0 || horse.sale.listingState === 'Buyer Review' || horse.sale.listingState === 'Market Ready',
@@ -55,8 +58,52 @@ export default function Sales() {
   const menuShareUrl = menuPacket
     ? buildPublicShareUrl(menuPacket.sharePath, menuListing?.accessMode === 'Private Token' ? menuListing.shareToken : undefined)
     : '';
+  const openHorseDetails = (horse: (typeof saleHorses)[number]) => {
+    const packet = packetByHorseId[horse.id];
+    openRightDrawer({
+      id: `sale-horse-${horse.id}`,
+      eyebrow: 'Sale listing',
+      title: horse.name,
+      description: horse.summary,
+      facts: [
+        { label: 'Listing', value: horse.sale.listingState },
+        { label: 'Ask', value: formatCompactCurrency(horse.sale.askPrice || horse.insuredValue) },
+        { label: 'Record', value: `${packet?.score ?? 0}% complete` },
+        { label: 'Watchers', value: String(horse.sale.watchlistCount) },
+      ],
+      actions: [
+        { label: 'Open horse record', path: `/horses/${horse.id}` },
+        { label: 'Open sale profile', path: `/profiles/${horse.id}` },
+      ],
+    });
+  };
+  const openLeadDetails = (lead: (typeof salesLeads)[number]) => {
+    const horse = horses.find((item) => item.id === lead.horseId);
+    openRightDrawer({
+      id: `sales-lead-${lead.id}`,
+      eyebrow: 'Sales lead',
+      title: lead.name,
+      description: lead.notes || `${lead.channel} inquiry for ${horse?.name ?? 'an unassigned horse'}.`,
+      facts: [
+        { label: 'Stage', value: lead.stage },
+        { label: 'Horse', value: horse?.name ?? 'Unassigned' },
+        { label: 'Last touch', value: formatDateLabel(lead.lastTouch) },
+        { label: 'Next follow-up', value: lead.nextFollowUp ? formatDateLabel(lead.nextFollowUp) : 'Not scheduled' },
+      ],
+      actions: [
+        { label: 'Open horse record', path: `/horses/${lead.horseId}` },
+        { label: 'Open follow-ups', path: '/follow-ups' },
+      ],
+    });
+  };
+  const openMenu = (type: 'lead' | 'horse', id: string, x: number, y: number) => setMenuState({ type, id, x, y });
   const menuItems = menuLead
     ? [
+        {
+          id: 'lead-quick-view',
+          label: 'Quick view',
+          onSelect: () => openLeadDetails(menuLead),
+        },
         ...(canManageSales
           ? [
               {
@@ -85,6 +132,11 @@ export default function Sales() {
       ]
     : menuHorse
       ? [
+          {
+            id: 'horse-quick-view',
+            label: 'Quick view',
+            onSelect: () => openHorseDetails(menuHorse),
+          },
           {
             id: 'open-horse',
             label: 'Open horse record',
@@ -153,13 +205,21 @@ export default function Sales() {
                 <div
                   key={horse.id}
                   className="horse-card horse-card--interactive"
-                  role="button"
+                  role="group"
                   tabIndex={0}
+                  aria-label={`Sale listing for ${horse.name}`}
+                  title="Press Enter to open the horse record. Press Shift+F10 for actions."
                   onClick={() => navigate(`/horses/${horse.id}`)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/horses/${horse.id}`); } }}
+                  onKeyDown={(event) => {
+                    if (event.target !== event.currentTarget) return;
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      navigate(`/horses/${horse.id}`);
+                    }
+                  }}
                   onContextMenu={(event) => {
                     event.preventDefault();
-                    setMenuState({ type: 'horse', id: horse.id, x: event.clientX, y: event.clientY });
+                    openMenu('horse', horse.id, event.clientX, event.clientY);
                   }}
                 >
                   {(() => {
@@ -181,6 +241,13 @@ export default function Sales() {
                           />
                           <div className="horse-card__media-copy">
                             <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
+                            <ActionMenuButton
+                              className="icon-button icon-button--compact"
+                              label={`Open actions for ${horse.name}`}
+                              onOpen={(x, y) => openMenu('horse', horse.id, x, y)}
+                            >
+                              <DotsIcon className="icon-button__icon" />
+                            </ActionMenuButton>
                           </div>
                         </div>
                         <div className="horse-card__body">
@@ -196,6 +263,16 @@ export default function Sales() {
                             <span>{formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)}</span>
                           </div>
                           <div className="inline-actions inline-actions--card">
+                            <button
+                              className="button button--ghost button--compact"
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openHorseDetails(horse);
+                              }}
+                            >
+                              Quick view
+                            </button>
                             <a
                               className="button button--ghost button--compact"
                               href={publicShareUrl}
@@ -227,42 +304,50 @@ export default function Sales() {
               {salesLeads.map((lead) => {
                 const horse = horses.find((item) => item.id === lead.horseId);
                 return (
-                  <button
-                    key={lead.id}
-                    type="button"
-                    className={`stack-item stack-item--interactive${lead.id === selectedLeadId ? ' stack-item--selected' : ''}`}
-                    onClick={() => {
-                      setSelectedLeadId(lead.id);
-                      setLeadStage(lead.stage);
-                      setLeadLastTouch(lead.lastTouch);
-                      setLeadNextFollowUp(lead.nextFollowUp ?? '');
-                      setLeadOfferAmount(lead.offerAmount ? String(lead.offerAmount) : '');
-                      setLeadNotes(lead.notes ?? '');
-                      setLeadOutcome(lead.outcome ?? 'Won');
-                      setLeadError('');
-                    }}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      setMenuState({ type: 'lead', id: lead.id, x: event.clientX, y: event.clientY });
-                    }}
-                  >
-                    <div className="stack-item__top">
-                      <div>
-                        <div className="stack-item__title">{lead.name}</div>
-                        <div className="stack-item__copy">
-                          {lead.channel} · {horse?.name}
+                  <div key={lead.id} className="record-action-row">
+                    <button
+                      type="button"
+                      className={`stack-item stack-item--interactive${lead.id === selectedLeadId ? ' stack-item--selected' : ''}`}
+                      onClick={() => {
+                        setSelectedLeadId(lead.id);
+                        setLeadStage(lead.stage);
+                        setLeadLastTouch(lead.lastTouch);
+                        setLeadNextFollowUp(lead.nextFollowUp ?? '');
+                        setLeadOfferAmount(lead.offerAmount ? String(lead.offerAmount) : '');
+                        setLeadNotes(lead.notes ?? '');
+                        setLeadOutcome(lead.outcome ?? 'Won');
+                        setLeadError('');
+                      }}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        openMenu('lead', lead.id, event.clientX, event.clientY);
+                      }}
+                    >
+                      <div className="stack-item__top">
+                        <div>
+                          <div className="stack-item__title">{lead.name}</div>
+                          <div className="stack-item__copy">
+                            {lead.channel} · {horse?.name}
+                          </div>
                         </div>
+                        <Pill tone={lead.stage === 'Offer' ? 'emerald' : lead.stage === 'Qualified' ? 'blue' : 'amber'}>
+                          {lead.stage}
+                        </Pill>
                       </div>
-                      <Pill tone={lead.stage === 'Offer' ? 'emerald' : lead.stage === 'Qualified' ? 'blue' : 'amber'}>
-                        {lead.stage}
-                      </Pill>
-                    </div>
-                    <div className="inline-metrics">
-                      <span>{lead.savedListing ? 'Saved listing' : 'Not saved yet'}</span>
-                      <span>{lead.shareReady ? 'Sale link live' : 'Sale link private'}</span>
-                      <span>Last touch {formatDateLabel(lead.lastTouch)}</span>
-                    </div>
-                  </button>
+                      <div className="inline-metrics">
+                        <span>{lead.savedListing ? 'Saved listing' : 'Not saved yet'}</span>
+                        <span>{lead.shareReady ? 'Sale link live' : 'Sale link private'}</span>
+                        <span>Last touch {formatDateLabel(lead.lastTouch)}</span>
+                      </div>
+                    </button>
+                    <ActionMenuButton
+                      className="record-action-row__menu icon-button icon-button--compact"
+                      label={`Open actions for ${lead.name}`}
+                      onOpen={(x, y) => openMenu('lead', lead.id, x, y)}
+                    >
+                      <DotsIcon className="icon-button__icon" />
+                    </ActionMenuButton>
+                  </div>
                 );
               })}
             </div>

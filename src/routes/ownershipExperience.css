@@ -432,6 +432,21 @@
   overflow: hidden;
 }
 
+.ownership-row-shell {
+  position: relative;
+}
+
+.ownership-row-shell .ownership-row {
+  padding-right: 60px;
+}
+
+.ownership-row-shell__menu {
+  position: absolute;
+  top: 16px;
+  right: 14px;
+  z-index: 2;
+}
+
 .ownership-table__head,
 .ownership-row {
   display: grid;
