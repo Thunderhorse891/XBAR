@@ -24,11 +24,13 @@ export const planOutcomes: Record<SubscriptionTier, string[]> = {
 };
 
 export function getCheckoutReadiness(params: {
+  billingEnabled: boolean;
   canManageBilling: boolean;
   hasManagedIdentity: boolean;
   hasPaymentLink: boolean;
   checkoutInProgress: boolean;
 }) {
+  if (!params.billingEnabled) return { ready: false, reason: 'Managed billing is paused. Your workspace and current plan will not change.' };
   if (!params.canManageBilling) return { ready: false, reason: 'Ask a workspace owner to change plans.' };
   if (params.checkoutInProgress) return { ready: false, reason: 'A secure checkout session is already opening.' };
   if (!params.hasManagedIdentity && !params.hasPaymentLink) return { ready: false, reason: 'Sign in to this workspace before choosing a paid plan.' };

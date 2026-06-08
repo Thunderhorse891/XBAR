@@ -5,6 +5,7 @@ import { requireWorkspaceAccess } from '../_lib/supabase-admin.js';
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY || '';
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026-02-25.clover' }) : null;
+const managedBillingEnabled = process.env.MANAGED_BILLING_ENABLED?.trim().toLowerCase() === 'true';
 
 function getTrustedReturnUrl(requestedReturnUrl) {
   const vercelOrigin = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '';
@@ -35,6 +36,10 @@ function getTrustedReturnUrl(requestedReturnUrl) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
+  }
+
+  if (!managedBillingEnabled) {
+    return sendJson(res, 503, { ok: false, message: 'Managed billing is paused. No payment session was created.' });
   }
 
   if (!stripe) {

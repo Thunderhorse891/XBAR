@@ -41,6 +41,7 @@ export default function Subscriptions() {
   const currentPlan = subscriptionPlans[subscription.tier];
   const hasManagedIdentity = Boolean(session?.access_token && workspaceId);
   const anyPaymentLink = Object.values(stripeConfig.paymentLinks).some(Boolean);
+  const billingEnabled = stripeConfig.managedBillingEnabled;
   const monthlyDifference = decisionPlan.monthlyRate - currentPlan.monthlyRate;
 
   const emit = (eventName: Parameters<typeof productEvent>[0], payload: Record<string, unknown>, severity: 'info' | 'warning' = 'info') => {
@@ -75,10 +76,10 @@ export default function Subscriptions() {
   ];
 
   return <>
-    <PageHeader eyebrow="Subscription" title="Plan & billing" actions={<><Pill tone={hasManagedIdentity || anyPaymentLink ? 'emerald' : 'amber'}>{hasManagedIdentity || anyPaymentLink ? 'Secure checkout ready' : 'Sign-in required for checkout'}</Pill><Pill tone="blue">{subscription.tier}</Pill></>} />
+    <PageHeader eyebrow="Subscription" title="Plan & billing" actions={<><Pill tone={billingEnabled && (hasManagedIdentity || anyPaymentLink) ? 'emerald' : 'amber'}>{billingEnabled ? (hasManagedIdentity || anyPaymentLink ? 'Secure checkout ready' : 'Sign-in required for checkout') : 'Managed billing paused'}</Pill><Pill tone="blue">{subscription.tier}</Pill></>} />
     <section className="subscription-hero">
       <div className="subscription-hero__main"><Pill tone={requestedTier ? 'emerald' : 'blue'}>{requestedTier ? `${requestedTier} selected` : 'Built to grow with the operation'}</Pill><h2 className="subscription-hero__title">{requestedTier ? `Review ${requestedTier}, then start securely.` : 'Choose capacity around the work that must move.'}</h2><p className="subscription-hero__copy">Every plan protects the core horse record. Move up when collaboration, sale-readiness, operating breadth, or capacity will remove a real blocker from the ranch.</p><div className="subscription-trust-row"><span>Secure checkout when available</span><span>Change plans as the operation grows</span><span>Your records stay intact</span></div></div>
-      <aside className="subscription-hero__side"><span className="field-label">Current plan</span><strong style={{ fontSize: 28 }}>{subscription.tier}</strong><span className="stack-item__copy">{formatCurrency(subscription.monthlyRate)}/month{subscription.renewalDate ? ` · renews ${formatDateLabel(subscription.renewalDate)}` : ` · ${subscription.billingState}`}</span>{stripeConfig.billingPortalUrl && canManageBilling ? <a className="button button--ghost" href={stripeConfig.billingPortalUrl} target="_blank" rel="noreferrer">Manage payment details</a> : <span className="stack-item__copy">Review the decision framework before changing capacity.</span>}</aside>
+      <aside className="subscription-hero__side"><span className="field-label">Current plan</span><strong style={{ fontSize: 28 }}>{subscription.tier}</strong><span className="stack-item__copy">{formatCurrency(subscription.monthlyRate)}/month{subscription.renewalDate ? ` · renews ${formatDateLabel(subscription.renewalDate)}` : ` · ${subscription.billingState}`}</span>{billingEnabled && stripeConfig.billingPortalUrl && canManageBilling ? <a className="button button--ghost" href={stripeConfig.billingPortalUrl} target="_blank" rel="noreferrer">Manage payment details</a> : <span className="stack-item__copy">{billingEnabled ? 'Review the decision framework before changing capacity.' : 'Billing changes are paused while managed billing is offline.'}</span>}</aside>
     </section>
 
     <section className="subscription-decision" aria-label={`${decisionTier} decision framework`}>
@@ -92,7 +93,7 @@ export default function Subscriptions() {
       const current = tier === subscription.tier;
       const highlighted = tier === decisionTier;
       const busy = checkoutTier === tier;
-      const readiness = getCheckoutReadiness({ canManageBilling, hasManagedIdentity, hasPaymentLink: Boolean(getStripePaymentLink(tier)), checkoutInProgress: checkoutTier !== null });
+      const readiness = getCheckoutReadiness({ billingEnabled, canManageBilling, hasManagedIdentity, hasPaymentLink: Boolean(getStripePaymentLink(tier)), checkoutInProgress: checkoutTier !== null });
       return <article id={`plan-${tier.replace(/\s/g, '-').toLowerCase()}`} className={`subscription-plan${highlighted ? ' subscription-plan--recommended' : ''}`} key={tier}>{highlighted && <span className="subscription-plan__badge">{requestedTier ? 'Your selection' : current ? 'Current fit' : 'Next operating level'}</span>}<div className="subscription-plan__name">{tier}</div><div className="subscription-plan__fit">{tierFit[tier]}</div><div className="subscription-plan__price">{formatCurrency(config.monthlyRate)}<small>/month</small></div><div className="subscription-plan__limits"><span>{config.limits.seatLimit} team seats</span><span>{config.limits.documentLimit.toLocaleString()} documents · {config.limits.storageLimitGb.toLocaleString()} GB</span><span>{config.limits.sharedAccessSeatLimit} shared-access seats</span></div><ul className="subscription-plan__features">{config.featureFlags.map((feature) => <li key={feature}>{feature}</li>)}</ul>{current ? <button className="button button--ghost subscription-plan__action" type="button" disabled>Current plan</button> : <button className="button button--primary subscription-plan__action" type="button" disabled={!readiness.ready} onClick={() => void beginCheckout(tier)}>{busy ? 'Opening secure checkout...' : `Choose ${tier}`}</button>}<div className="subscription-checkout-note">{current ? 'Your current operating capacity.' : readiness.reason}</div></article>;
     })}</div></Panel>
   </>;
