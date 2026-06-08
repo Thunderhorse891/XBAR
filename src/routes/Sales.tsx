@@ -281,7 +281,7 @@ export default function Sales() {
                       <div>
                         <div className="stack-item__title">{lead.name}</div>
                         <div className="stack-item__copy">
-                          {lead.channel} · {horse?.name}
+                          {lead.channel}{horse?.name ? ` · ${horse.name}` : ''}
                         </div>
                       </div>
                       <Pill tone={lead.stage === 'Offer' ? 'emerald' : lead.stage === 'Qualified' ? 'blue' : 'amber'}>
@@ -350,6 +350,10 @@ export default function Sales() {
                   onClick={() => {
                     if (!leadLastTouch.trim()) {
                       setLeadError('Last touch date is required.');
+                      return;
+                    }
+                    if (leadOfferAmount && Number(leadOfferAmount) < 0) {
+                      setLeadError('Offer amount cannot be negative.');
                       return;
                     }
 
