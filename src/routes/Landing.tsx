@@ -73,16 +73,33 @@ const WORKFLOW = [
     num: '01',
     title: 'Build your herd',
     desc: 'Add horses, upload registration papers, attach photos and documents. Takes minutes per animal. Import from existing spreadsheets or start fresh.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+    ),
   },
   {
     num: '02',
     title: 'Track what matters',
     desc: 'Log health events, ownership changes, and care records as they happen. Get reminders before deadlines — coggins, vaccinations, farrier visits.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 2a10 10 0 100 20 10 10 0 000-20z" />
+        <path d="M12 6v6l4 2" />
+      </svg>
+    ),
   },
   {
     num: '03',
     title: 'Close deals faster',
     desc: 'When a buyer is ready, share a branded sale packet in one link. All the proof they need, organized and professional, without a phone call.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+        <path d="M22 4L12 14.01l-3-3" />
+      </svg>
+    ),
   },
 ];
 
@@ -91,16 +108,19 @@ const TESTIMONIALS = [
     quote: 'We closed three sales faster because every buyer packet was already built. Buyers stopped asking for records — they already had everything.',
     name: 'K. Whitfield',
     role: 'Quarter Horse Ranch · TX',
+    detail: '3 deals closed in first week',
   },
   {
     quote: 'Coggins tracking alone saved us a $1,200 penalty and a missed show weekend. It paid for itself the first month.',
     name: 'M. Delacroix',
     role: 'Performance Horse Operation · OK',
+    detail: '$1,200 penalty avoided',
   },
   {
     quote: 'Finally a place where vet records, ownership docs, and sale info live together. I stopped using four different apps.',
     name: 'T. Brannagh',
     role: 'Barrel Racing Program · KS',
+    detail: 'Replaced 4 separate tools',
   },
 ];
 
@@ -121,6 +141,7 @@ const PLANS = [
     specs: ['5 seats', '1,000 documents', '100 GB storage'],
     featured: true,
     cta: 'Start free trial',
+    highlight: ['Team roles & permissions', 'Sale listings & packets', 'Document sharing', 'Breeding program', 'Priority support'],
     features: [true, true, true, true, true, true, true, true, false, false],
   },
   {
@@ -163,6 +184,25 @@ const STATS = [
   { value: '$180M+', label: 'In Verified Sales' },
 ];
 
+const PREVIEW_METRICS = [
+  { value: '47', label: 'Total Horses' },
+  { value: '12', label: 'Listed' },
+  { value: '3', label: 'Alerts' },
+  { value: '94%', label: 'Docs Ready' },
+];
+
+const PREVIEW_HORSES = [
+  { name: 'Whiskey River', tag: 'Listed', tone: 'emerald', detail: 'QH · Mare · TX' },
+  { name: 'Copper Canyon', tag: 'Pending', tone: 'amber', detail: 'Paint · Gelding · TX' },
+  { name: 'Blue Ridge', tag: 'Breeding', tone: 'blue', detail: 'AQHA · Stud · OK' },
+];
+
+const CHECK_ICON = (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2.5 8l4 4 7-7" />
+  </svg>
+);
+
 export default function Landing() {
   const navigate = useNavigate();
   const session = useCloudStore((state) => state.session);
@@ -185,22 +225,39 @@ export default function Landing() {
             <span>Ranch Platform</span>
           </div>
         </div>
-        <div className="mkt-nav-actions">
+        <div className="mkt-nav-links">
+          <Link to="#pricing" className="mkt-nav-link">Pricing</Link>
           <Link to="/login" className="mkt-nav-signin">Sign in</Link>
-          <Link to="/login?mode=signup" className="mkt-nav-cta">Get started free</Link>
         </div>
+        <Link to="/login?mode=signup" className="mkt-nav-cta">Get started free</Link>
       </nav>
 
       {/* Hero */}
       <section className="mkt-hero">
-        <div className="mkt-hero-badge">Purpose-built for working ranches</div>
-        <h1 className="mkt-hero-h1">Horse records that<br />close deals.</h1>
-        <p className="mkt-hero-sub">
-          XBAR keeps ownership, health records, documents, and sale packets organized by horse — not by filing cabinet. When a buyer asks for proof, you're already ready.
-        </p>
-        <div className="mkt-hero-actions">
-          <Link to="/login?mode=signup" className="mkt-hero-primary">Start your 14-day trial</Link>
-          <Link to="/login" className="mkt-hero-ghost">Sign in to existing workspace</Link>
+        <div className="mkt-hero-orb mkt-hero-orb--one" aria-hidden="true" />
+        <div className="mkt-hero-orb mkt-hero-orb--two" aria-hidden="true" />
+        <div className="mkt-hero-inner">
+          <div className="mkt-hero-badge">Purpose-built for working ranches</div>
+          <h1 className="mkt-hero-h1">Horse records that<br /><span className="mkt-hero-h1-accent">close deals.</span></h1>
+          <p className="mkt-hero-sub">
+            XBAR keeps ownership, health records, documents, and sale packets organized by horse — not by filing cabinet. When a buyer asks for proof, you're already ready.
+          </p>
+          <div className="mkt-hero-actions">
+            <Link to="/login?mode=signup" className="mkt-hero-primary">
+              Start your 14-day trial
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14, marginLeft: 6 }}>
+                <path d="M3 8h10M9 4l4 4-4 4" />
+              </svg>
+            </Link>
+            <Link to="/login" className="mkt-hero-ghost">Sign in to existing workspace</Link>
+          </div>
+          <div className="mkt-hero-trust">
+            <span>No credit card required</span>
+            <span className="mkt-hero-trust-dot" aria-hidden="true" />
+            <span>Cancel any time</span>
+            <span className="mkt-hero-trust-dot" aria-hidden="true" />
+            <span>End-to-end encrypted</span>
+          </div>
         </div>
         <div className="mkt-stats-bar">
           {STATS.map((s) => (
@@ -209,6 +266,59 @@ export default function Landing() {
               <span className="mkt-stat-label">{s.label}</span>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Product Preview */}
+      <section className="mkt-preview-section" aria-label="Platform preview">
+        <div className="mkt-section-inner">
+          <div className="mkt-preview-wrapper">
+            <div className="mkt-preview-chrome" role="img" aria-label="XBAR dashboard showing horse records, health alerts, and sale status">
+              <div className="mkt-preview-bar">
+                <div className="mkt-preview-dots" aria-hidden="true">
+                  <span /><span /><span />
+                </div>
+                <div className="mkt-preview-url" aria-hidden="true">xbar.io/dashboard</div>
+              </div>
+              <div className="mkt-preview-body">
+                <div className="mkt-preview-sidebar" aria-hidden="true">
+                  <div className="mkt-preview-sidebar-logo">XBAR</div>
+                  {['Dashboard', 'Horses', 'Medical', 'Documents', 'Sales', 'Breeding'].map((item, i) => (
+                    <div key={item} className={`mkt-preview-sidebar-item${i === 0 ? ' mkt-preview-sidebar-item--active' : ''}`}>
+                      {item}
+                    </div>
+                  ))}
+                </div>
+                <div className="mkt-preview-main" aria-hidden="true">
+                  <div className="mkt-preview-topbar">
+                    <span className="mkt-preview-topbar-title">Dashboard</span>
+                    <span className="mkt-preview-topbar-ranch">Main Ranch</span>
+                  </div>
+                  <div className="mkt-preview-metrics">
+                    {PREVIEW_METRICS.map((m) => (
+                      <div key={m.label} className="mkt-preview-metric">
+                        <div className="mkt-preview-metric__value">{m.value}</div>
+                        <div className="mkt-preview-metric__label">{m.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mkt-preview-horse-list">
+                    {PREVIEW_HORSES.map((h) => (
+                      <div key={h.name} className="mkt-preview-horse-row">
+                        <div className="mkt-preview-horse-avatar" />
+                        <div className="mkt-preview-horse-info">
+                          <div className="mkt-preview-horse-name">{h.name}</div>
+                          <div className="mkt-preview-horse-detail">{h.detail}</div>
+                        </div>
+                        <div className={`mkt-preview-horse-status mkt-preview-horse-status--${h.tone}`}>{h.tag}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="mkt-preview-glow" aria-hidden="true" />
+          </div>
         </div>
       </section>
 
@@ -243,11 +353,27 @@ export default function Landing() {
           <div className="mkt-workflow-steps">
             {WORKFLOW.map((step) => (
               <div key={step.num} className="mkt-step">
+                <div className="mkt-step-icon">{step.icon}</div>
                 <div className="mkt-step-num">{step.num}</div>
                 <h3 className="mkt-step-name">{step.title}</h3>
                 <p className="mkt-step-desc">{step.desc}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Mid-page CTA */}
+      <section className="mkt-mid-cta">
+        <div className="mkt-section-inner">
+          <div className="mkt-mid-cta-inner">
+            <div className="mkt-mid-cta-copy">
+              <div className="mkt-mid-cta-eyebrow">Ready to get organized?</div>
+              <div className="mkt-mid-cta-headline">Join 400+ operations already running XBAR.</div>
+            </div>
+            <Link to="/login?mode=signup" className="mkt-hero-primary mkt-mid-cta-action">
+              Start free — no card required
+            </Link>
           </div>
         </div>
       </section>
@@ -262,14 +388,16 @@ export default function Landing() {
           <div className="mkt-testimonials-grid">
             {TESTIMONIALS.map((t) => (
               <div key={t.name} className="mkt-testimonial-card">
+                <div className="mkt-testimonial-quote-mark" aria-hidden="true">"</div>
                 <div className="mkt-testimonial-stars">
                   {[0, 1, 2, 3, 4].map((i) => (
-                    <svg key={i} className="mkt-star" viewBox="0 0 16 16" fill="currentColor">
+                    <svg key={i} className="mkt-star" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
                       <path d="M8 1.25l1.91 3.87 4.27.62-3.09 3.01.73 4.25L8 10.77l-3.82 2.01.73-4.25L1.82 5.74l4.27-.62z" />
                     </svg>
                   ))}
                 </div>
-                <p className="mkt-testimonial-quote">"{t.quote}"</p>
+                <p className="mkt-testimonial-quote">{t.quote}</p>
+                <div className="mkt-testimonial-result">{t.detail}</div>
                 <div className="mkt-testimonial-author">
                   <div className="mkt-testimonial-avatar">{t.name.charAt(0)}</div>
                   <div>
@@ -305,6 +433,16 @@ export default function Landing() {
                 <ul className="mkt-pricing-specs">
                   {plan.specs.map((s) => <li key={s}>{s}</li>)}
                 </ul>
+                {'highlight' in plan && plan.highlight ? (
+                  <ul className="mkt-pricing-highlights">
+                    {(plan.highlight as string[]).map((f) => (
+                      <li key={f}>
+                        <span className="mkt-pricing-check" aria-hidden="true">{CHECK_ICON}</span>
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
                 <Link
                   to="/login?mode=signup"
                   className={`mkt-pricing-cta${plan.featured ? ' mkt-pricing-cta--primary' : ''}`}
@@ -323,9 +461,9 @@ export default function Landing() {
               <table className="mkt-comparison-table">
                 <thead>
                   <tr>
-                    <th className="mkt-cmp-feature-col">Feature</th>
+                    <th className="mkt-cmp-feature-col" scope="col">Feature</th>
                     {PLANS.map((p) => (
-                      <th key={p.name} className={p.featured ? 'mkt-cmp-featured-col' : ''}>{p.name}</th>
+                      <th key={p.name} className={p.featured ? 'mkt-cmp-featured-col' : ''} scope="col">{p.name}</th>
                     ))}
                   </tr>
                 </thead>
@@ -336,11 +474,11 @@ export default function Landing() {
                       {PLANS.map((p) => (
                         <td key={p.name} className={p.featured ? 'mkt-cmp-featured-col' : ''}>
                           {p.features[fi] ? (
-                            <svg className="mkt-cmp-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <svg className="mkt-cmp-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-label="Included">
                               <path d="M2.5 8l4 4 7-7" />
                             </svg>
                           ) : (
-                            <svg className="mkt-cmp-cross" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                            <svg className="mkt-cmp-cross" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-label="Not included">
                               <path d="M4 4l8 8M12 4l-8 8" />
                             </svg>
                           )}
@@ -357,18 +495,37 @@ export default function Landing() {
 
       {/* Final CTA */}
       <section className="mkt-cta-section">
-        <div className="mkt-section-inner">
+        <div className="mkt-cta-orb" aria-hidden="true" />
+        <div className="mkt-section-inner mkt-cta-inner">
           <h2 className="mkt-cta-title">Ready to run a tighter operation?</h2>
           <p className="mkt-cta-sub">Start with a 14-day trial. No credit card required. Cancel any time.</p>
-          <Link to="/login?mode=signup" className="mkt-hero-primary">
+          <Link to="/login?mode=signup" className="mkt-hero-primary mkt-cta-button">
             Start free trial
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14, marginLeft: 6 }}>
+              <path d="M3 8h10M9 4l4 4-4 4" />
+            </svg>
           </Link>
-          <div className="mkt-trust-row">
-            <span>End-to-end encrypted</span>
-            <span>·</span>
-            <span>No credit card needed</span>
-            <span>·</span>
-            <span>Cancel any time</span>
+          <div className="mkt-trust-chips">
+            <div className="mkt-trust-chip">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M8 2l5.5 2v3.5C13.5 11 11 13.8 8 15c-3-1.2-5.5-4-5.5-7.5V4L8 2z" />
+              </svg>
+              End-to-end encrypted
+            </div>
+            <div className="mkt-trust-chip">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="2" y="7" width="12" height="8" rx="1.5" />
+                <path d="M5 7V5a3 3 0 016 0v2" />
+              </svg>
+              No credit card needed
+            </div>
+            <div className="mkt-trust-chip">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13z" />
+                <path d="M8 5v3.5l2.5 1.5" />
+              </svg>
+              Cancel any time
+            </div>
           </div>
         </div>
       </section>
