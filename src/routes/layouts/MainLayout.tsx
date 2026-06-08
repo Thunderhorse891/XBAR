@@ -145,8 +145,8 @@ function classNames(...parts: Array<string | false | null | undefined>) {
 
 function NavSection({ title, items, badges }: { title: string; items: NavItem[]; badges: Record<string, number> }) {
   return (
-    <div className="flex flex-col gap-2">
-      <div className="px-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-[#3d5870]">{title}</div>
+    <div className="flex flex-col gap-1.5">
+      <div className="px-3 text-[10px] font-bold uppercase tracking-[0.22em] text-[#3d5064]">{title}</div>
       <div className="flex flex-col gap-[1px]">
         {items.map(({ label, path, icon: Icon, badgeKey }) => {
           const badge = badgeKey ? (badges[badgeKey] ?? 0) : 0;
@@ -157,10 +157,10 @@ function NavSection({ title, items, badges }: { title: string; items: NavItem[];
               end={path === '/'}
               className={({ isActive }) =>
                 classNames(
-                  'group flex items-center gap-3 border-l-[3px] px-3 py-[9px] text-[13px] font-medium transition-all duration-150 ease-[ease]',
+                  'group flex items-center gap-3 border-l-[3px] px-3 py-[9px] text-[13px] font-medium transition-colors duration-150',
                   isActive
-                    ? 'border-[#4d94ff] bg-[#0d2040] text-white shadow-[0_6px_18px_rgba(34,102,238,0.2)]'
-                    : 'border-transparent text-[#7a9ab4] hover:border-[#1e3a56] hover:bg-[#0b1c30] hover:text-[#c8ddf0]',
+                    ? 'border-[#2F8DFF] bg-[rgba(47,141,255,0.1)] text-white'
+                    : 'border-transparent text-[#6b8499] hover:border-[#1e3044] hover:bg-[rgba(255,255,255,0.03)] hover:text-[#c2ccd6]',
                 )
               }
             >
@@ -263,120 +263,164 @@ export default function MainLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-[#eef3f8] lg:grid lg:grid-cols-[254px,1fr]">
-      <aside className="hidden min-h-screen flex-col gap-6 border-r border-[#0e1e32] bg-[#050b14] px-5 py-6 text-[#c2d4e8] lg:flex">
-        <div className="flex items-center gap-3">
-          <div className="flex h-[52px] w-[52px] items-center justify-center rounded-lg border border-[#1a2e46] bg-[#050910] p-1.5 shadow-[0_14px_32px_rgba(47,141,255,0.18)]">
+    <div className="min-h-screen bg-[#0D1117] lg:grid lg:grid-cols-[240px,1fr]">
+      {/* ── Sidebar ─────────────────────────────────────────────── */}
+      <aside className="hidden min-h-screen flex-col gap-5 border-r border-[rgba(48,54,61,0.8)] bg-[#0D1117] px-4 py-5 text-[#8B949E] lg:flex">
+
+        {/* Brand lockup */}
+        <div className="flex items-center gap-3 px-1">
+          <div className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-lg border border-[rgba(48,54,61,0.9)] bg-[rgba(255,255,255,0.03)] p-1">
             <XbarMark title="XBAR logo" className="h-full w-full" />
           </div>
           <div className="min-w-0">
-            <div className="truncate text-[1.04rem] font-extrabold uppercase tracking-[0.14em] text-white">{workspaceProfile.businessName || 'XBAR'}</div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#52708d]">Horse Management. Reimagined.</div>
+            <div className="truncate text-[0.96rem] font-extrabold uppercase tracking-[0.14em] text-[#E6EDF3]">{workspaceProfile.businessName || 'XBAR'}</div>
+            <div className="text-[9px] font-bold uppercase tracking-[0.22em] text-[#3d5064]">Operational Infrastructure</div>
           </div>
         </div>
 
-        <div className="rounded-[14px] border border-[#162436] bg-[#080f1c] p-4 shadow-[0_12px_28px_rgba(0,0,0,0.36)]">
+        {/* Ranch status card */}
+        <div className="rounded-xl border border-[rgba(48,54,61,0.9)] bg-[#161B22] p-3.5">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#3d5870]">Ranch</div>
-            <span className={classNames('ops-pulse', opsUrgency !== 'clear' ? '' : '')}>
+            <div className="text-[9px] font-bold uppercase tracking-[0.22em] text-[#3d5064]">Ranch Status</div>
+            <span className={classNames('ops-pulse')}>
               <span className={classNames('ops-pulse__dot', opsUrgency === 'urgent' ? 'ops-pulse__dot--urgent' : opsUrgency === 'warning' ? 'ops-pulse__dot--warning' : '')} />
             </span>
           </div>
-          <div className="mt-2 text-[0.96rem] font-bold leading-tight text-[#ddeaf8]">{workspaceProfile.ranchName || workspaceProfile.businessName || 'Primary ranch'}</div>
-          <div className="mt-0.5 text-xs text-[#526d85]">{roleWorkspace.label}</div>
-          <div className="mt-3 grid grid-cols-2 gap-1.5 text-xs">
-            <span className="rounded border border-[#142030] bg-[#08111d] px-2 py-1.5 text-[#6e8da6]">{horses.length} horses</span>
+          <div className="mt-2 text-[0.88rem] font-bold leading-tight text-[#C2CCD6]">{workspaceProfile.ranchName || workspaceProfile.businessName || 'Primary ranch'}</div>
+          <div className="mt-0.5 text-[11px] text-[#4a6275]">{roleWorkspace.label}</div>
+          <div className="mt-3 grid grid-cols-2 gap-1.5 text-[11px]">
+            <span className="rounded-md border border-[rgba(48,54,61,0.9)] bg-[#0D1117] px-2 py-1.5 text-[#5a7086]">{horses.length} horses</span>
             <span className={classNames(
-              'rounded border px-2 py-1.5',
+              'rounded-md border px-2 py-1.5',
               pendingTransfers > 0
-                ? 'border-[#5a1a1a] bg-[#1a0808] text-[#ff8a8a]'
-                : 'border-[#142030] bg-[#08111d] text-[#6e8da6]',
+                ? 'border-[rgba(248,81,73,0.25)] bg-[rgba(248,81,73,0.08)] text-[#F85149]'
+                : 'border-[rgba(48,54,61,0.9)] bg-[#0D1117] text-[#5a7086]',
             )}>{pendingTransfers} transfers</span>
             <span className={classNames(
-              'rounded border px-2 py-1.5',
+              'rounded-md border px-2 py-1.5',
               pendingReview > 0
-                ? 'border-[#4a3800] bg-[#191000] text-[#fbbf24]'
-                : 'border-[#142030] bg-[#08111d] text-[#6e8da6]',
+                ? 'border-[rgba(210,153,34,0.25)] bg-[rgba(210,153,34,0.08)] text-[#D29922]'
+                : 'border-[rgba(48,54,61,0.9)] bg-[#0D1117] text-[#5a7086]',
             )}>{pendingReview} docs</span>
-            <span className="rounded border border-[#142030] bg-[#08111d] px-2 py-1.5 text-[#6e8da6]">{activeSales} buyers</span>
+            <span className="rounded-md border border-[rgba(48,54,61,0.9)] bg-[#0D1117] px-2 py-1.5 text-[#5a7086]">{activeSales} buyers</span>
           </div>
           <div className="mt-2.5 flex flex-wrap gap-1.5">
-            <span className="inline-flex min-h-[24px] items-center rounded-full border border-[#1a2e46] bg-[#0a1628] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#5a7a94]">{subscription.tier}</span>
-            <span className="inline-flex min-h-[24px] items-center rounded-full border border-[#1a3a6a] bg-[#0c1e3c] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#4d88cc]">{cloudStatus === 'signed-in' ? 'Cloud sync' : 'Browser'}</span>
+            <span className="inline-flex min-h-[22px] items-center rounded-md border border-[rgba(48,54,61,0.9)] bg-[rgba(255,255,255,0.03)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#4a6275]">{subscription.tier}</span>
+            <span className="inline-flex min-h-[22px] items-center rounded-md border border-[rgba(47,141,255,0.2)] bg-[rgba(47,141,255,0.08)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#2F8DFF]">{cloudStatus === 'signed-in' ? 'Cloud sync' : 'Browser'}</span>
           </div>
         </div>
 
+        {/* Navigation sections */}
         <NavSection title="Command" items={sections.Command} badges={navBadges} />
         <NavSection title="Operations" items={sections.Operations} badges={navBadges} />
         <NavSection title="Platform" items={sections.Platform} badges={navBadges} />
 
-        <div className="mt-auto border-t border-[#0a1624] pt-4 text-xs text-[#3d5870]">
-          <div className="font-semibold uppercase tracking-[0.12em] text-[#4a6880]">Horse Management. Reimagined.</div>
-          <div className="mt-1 text-[#2e4560]">{expenseReceipts.length} receipts · {documents.length} files · {horses.length} horses</div>
+        {/* Footer */}
+        <div className="mt-auto border-t border-[rgba(48,54,61,0.6)] pt-3.5 text-[11px] text-[#3d5064]">
+          <div className="font-bold uppercase tracking-[0.12em] text-[#3d5064]">XBAR · Horse Operations</div>
+          <div className="mt-1 text-[#2e4050]">{expenseReceipts.length} receipts · {documents.length} files · {horses.length} horses</div>
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-col bg-[#eef3f8]">
-        <header className="sticky top-0 z-10 border-b border-[#d7e0ea] bg-[#fbfdff]/90 backdrop-blur">
-          <div className="flex min-h-[58px] flex-wrap items-center justify-between gap-4 px-5 py-3">
-            <div className="flex items-center gap-3">
-              <div className="text-[0.96rem] font-extrabold tracking-[0.01em] text-[#16202b]">{currentLabel}</div>
-              <span className={classNames('inline-flex min-h-[24px] items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]', pendingReview || pendingTransfers ? 'border-[#dbe4ed] bg-[#f4f8fb] text-[#627181]' : 'border-[#d7e8ef] bg-[#eaeffd] text-[#1155dd]')}>
+      {/* ── Main content ─────────────────────────────────────────── */}
+      <div className="flex min-w-0 flex-col bg-[#0D1117]">
+
+        {/* Topbar */}
+        <header className="sticky top-0 z-10 border-b border-[rgba(48,54,61,0.9)] bg-[rgba(13,17,23,0.94)] backdrop-blur">
+          <div className="flex min-h-[58px] flex-wrap items-center justify-between gap-3 px-5 py-3">
+            <div className="flex items-center gap-2.5">
+              <div className="text-[0.88rem] font-extrabold tracking-[0.01em] text-[#E6EDF3]">{currentLabel}</div>
+              <span className={classNames(
+                'inline-flex min-h-[22px] items-center rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em]',
+                pendingReview || pendingTransfers
+                  ? 'border-[rgba(210,153,34,0.25)] bg-[rgba(210,153,34,0.08)] text-[#D29922]'
+                  : 'border-[rgba(47,141,255,0.2)] bg-[rgba(47,141,255,0.08)] text-[#2F8DFF]',
+              )}>
                 {pendingReview || pendingTransfers ? `${pendingReview + pendingTransfers} open` : 'Ready'}
               </span>
             </div>
 
-            <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
-              <label className="relative min-w-[220px] max-w-[420px] flex-1">
+            <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
+              <label className="relative min-w-[200px] max-w-[380px] flex-1">
                 <span className="sr-only">Search horses</span>
-                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[#7d8389]" aria-hidden="true" />
+                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-[16px] w-[16px] -translate-y-1/2 text-[#8B949E]" aria-hidden="true" />
                 <input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   onKeyDown={handleSearch}
                   placeholder="Search horses"
-                  className="h-10 w-full rounded-md border border-[#dde5ee] bg-white pl-10 pr-4 text-sm text-[#16202b] transition-all duration-150 ease-[ease] placeholder:text-[#8f959c] focus:border-[#1155dd] focus:outline-none"
+                  className="h-9 w-full rounded-md border border-[rgba(56,63,72,1)] bg-[#1C2128] pl-9 pr-4 text-[13px] text-[#E6EDF3] transition-colors duration-150 placeholder:text-[#4a6275] focus:border-[#2F8DFF] focus:outline-none"
                 />
               </label>
 
-              <div className="hidden h-10 items-center gap-3 rounded-md border border-[#dde5ee] bg-white px-3 text-sm font-semibold text-[#16202b] md:inline-flex">
-                <span className="max-w-[190px] truncate">{accountLabel}</span>
-                <span className="inline-flex rounded-sm border border-[#d8e1ea] bg-[#eef3f8] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#607384]">{cloudSession ? currentRole : 'Browser'}</span>
+              <div className="hidden h-9 items-center gap-2.5 rounded-md border border-[rgba(56,63,72,1)] bg-[#1C2128] px-3 text-[13px] font-semibold text-[#C2CCD6] md:inline-flex">
+                <span className="max-w-[160px] truncate">{accountLabel}</span>
+                <span className="inline-flex rounded border border-[rgba(48,54,61,0.9)] bg-[rgba(255,255,255,0.04)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[#5a7086]">{cloudSession ? currentRole : 'Browser'}</span>
               </div>
 
-              <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb]" type="button" onClick={() => setHelpOpen(true)}>
+              <button
+                className="inline-flex h-9 items-center justify-center rounded-md border border-[rgba(56,63,72,1)] bg-[#1C2128] px-3 text-[13px] font-semibold text-[#C2CCD6] transition-colors duration-150 hover:border-[rgba(86,93,102,1)] hover:bg-[#21262D]"
+                type="button"
+                onClick={() => setHelpOpen(true)}
+              >
                 Help
               </button>
 
               {cloudSession && canSyncCloud ? (
-                <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb]" type="button" onClick={() => void handleCloudSignOut()}>
+                <button
+                  className="inline-flex h-9 items-center justify-center rounded-md border border-[rgba(56,63,72,1)] bg-[#1C2128] px-3 text-[13px] font-semibold text-[#C2CCD6] transition-colors duration-150 hover:border-[rgba(248,81,73,0.4)] hover:bg-[rgba(248,81,73,0.08)] hover:text-[#F85149]"
+                  type="button"
+                  onClick={() => void handleCloudSignOut()}
+                >
                   Sign out
                 </button>
               ) : null}
 
-              <Link className="relative inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb]" to="/reminders" aria-label="Open reminders">
-                <BellIcon className="h-[18px] w-[18px]" />
-                {pendingReview + pendingTransfers ? <span className="absolute right-0.5 top-0.5 min-w-[18px] rounded-full bg-[#CC3333] px-1.5 py-0.5 text-[10px] font-bold text-white">{pendingReview + pendingTransfers}</span> : null}
+              <Link
+                className="relative inline-flex h-9 w-9 items-center justify-center rounded-md border border-[rgba(56,63,72,1)] bg-[#1C2128] text-[#8B949E] transition-colors duration-150 hover:border-[rgba(86,93,102,1)] hover:bg-[#21262D] hover:text-[#E6EDF3]"
+                to="/reminders"
+                aria-label="Open reminders"
+              >
+                <BellIcon className="h-[16px] w-[16px]" />
+                {pendingReview + pendingTransfers ? (
+                  <span className="absolute right-0.5 top-0.5 min-w-[16px] rounded-full bg-[#F85149] px-1 py-px text-center text-[9px] font-bold text-white">
+                    {pendingReview + pendingTransfers}
+                  </span>
+                ) : null}
               </Link>
 
               {canUploadDocuments ? (
-                <Link className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] transition-all duration-150 ease-[ease] hover:border-[#1155dd] hover:bg-[#eef6fb]" to="/documents?upload=1">
+                <Link
+                  className="inline-flex h-9 items-center justify-center rounded-md border border-[rgba(56,63,72,1)] bg-[#1C2128] px-3 text-[13px] font-semibold text-[#C2CCD6] transition-colors duration-150 hover:border-[rgba(86,93,102,1)] hover:bg-[#21262D]"
+                  to="/documents?upload=1"
+                >
                   Upload
                 </Link>
               ) : (
-                <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#dde5ee] bg-white px-4 text-sm font-semibold text-[#16202b] cursor-not-allowed opacity-50" type="button" disabled>
+                <button
+                  className="inline-flex h-9 cursor-not-allowed items-center justify-center rounded-md border border-[rgba(56,63,72,1)] bg-[#1C2128] px-3 text-[13px] font-semibold text-[#C2CCD6] opacity-40"
+                  type="button"
+                  disabled
+                >
                   Upload
                 </button>
               )}
 
               {canCreateHorse ? (
-                <Link className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#1155dd] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#0d44b0]" to="/horses?new=1">
-                  <AddIcon className="h-[16px] w-[16px]" />
+                <Link
+                  className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-[#2F8DFF] px-3 text-[13px] font-bold text-white transition-colors duration-150 hover:bg-[#388bfd]"
+                  to="/horses?new=1"
+                >
+                  <AddIcon className="h-[14px] w-[14px]" />
                   New
                 </Link>
               ) : (
-                <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#1155dd] px-4 text-sm font-semibold text-white shadow-sm cursor-not-allowed opacity-50" type="button" disabled>
-                  <AddIcon className="h-[16px] w-[16px]" />
+                <button
+                  className="inline-flex h-9 cursor-not-allowed items-center justify-center gap-1.5 rounded-md bg-[#2F8DFF] px-3 text-[13px] font-bold text-white opacity-40"
+                  type="button"
+                  disabled
+                >
+                  <AddIcon className="h-[14px] w-[14px]" />
                   New
                 </button>
               )}
@@ -384,17 +428,30 @@ export default function MainLayout() {
           </div>
         </header>
 
-        <main className="flex flex-col gap-[20px] px-6 py-5 pb-28 lg:pb-5">
+        <main className="flex flex-col gap-5 px-5 py-5 pb-28 lg:pb-5">
           <Outlet />
         </main>
 
+        {/* Mobile more menu */}
         {mobileMoreOpen ? (
           <>
-            <button className="fixed inset-0 z-30 bg-[#061426]/30 lg:hidden" type="button" aria-label="Close mobile menu" onClick={() => setMobileMoreOpen(false)} />
-            <div id="mobile-more-menu" className="fixed bottom-[94px] left-3 right-3 z-50 rounded-lg border border-[#d8e1ea] bg-[#fbfdff] p-3 text-[#16202b] shadow-xl lg:hidden">
+            <button
+              className="fixed inset-0 z-30 bg-[rgba(0,0,0,0.6)] lg:hidden"
+              type="button"
+              aria-label="Close mobile menu"
+              onClick={() => setMobileMoreOpen(false)}
+            />
+            <div
+              id="mobile-more-menu"
+              className="fixed bottom-[94px] left-3 right-3 z-50 rounded-xl border border-[rgba(56,63,72,1)] bg-[#161B22] p-3 text-[#E6EDF3] shadow-2xl lg:hidden"
+            >
               {canCreateHorse ? (
-                <Link className="mb-2 flex min-h-[50px] w-full items-center gap-3 rounded-md bg-[#1155dd] px-3 text-left text-sm font-semibold text-white" to="/horses?new=1" onClick={() => setMobileMoreOpen(false)}>
-                  <AddIcon className="h-[18px] w-[18px] shrink-0" />
+                <Link
+                  className="mb-2 flex min-h-[48px] w-full items-center gap-3 rounded-lg bg-[#2F8DFF] px-3 text-left text-[13px] font-bold text-white"
+                  to="/horses?new=1"
+                  onClick={() => setMobileMoreOpen(false)}
+                >
+                  <AddIcon className="h-[16px] w-[16px] shrink-0" />
                   <span>New horse</span>
                 </Link>
               ) : null}
@@ -402,8 +459,18 @@ export default function MainLayout() {
                 {mobileMoreItems.map(({ label, path, icon: Icon }) => {
                   const isActive = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
                   return (
-                    <Link key={label} className={classNames('flex min-h-[54px] items-center gap-3 rounded-md border px-3 text-left text-sm font-semibold transition-all duration-150 ease-[ease]', isActive ? 'border-[#c8d7ff] bg-[#eaeffd] text-[#1155dd]' : 'border-[#e3e9f0] bg-white text-[#33475c] hover:border-[#1155dd] hover:bg-[#eef6fb]')} to={path} onClick={() => setMobileMoreOpen(false)}>
-                      <Icon className="h-[18px] w-[18px] shrink-0" />
+                    <Link
+                      key={label}
+                      className={classNames(
+                        'flex min-h-[52px] items-center gap-2.5 rounded-lg border px-3 text-left text-[12px] font-semibold transition-colors duration-150',
+                        isActive
+                          ? 'border-[rgba(47,141,255,0.25)] bg-[rgba(47,141,255,0.1)] text-[#2F8DFF]'
+                          : 'border-[rgba(48,54,61,0.9)] bg-[#1C2128] text-[#8B949E] hover:border-[rgba(56,63,72,1)] hover:text-[#C2CCD6]',
+                      )}
+                      to={path}
+                      onClick={() => setMobileMoreOpen(false)}
+                    >
+                      <Icon className="h-[16px] w-[16px] shrink-0" />
                       <span className="min-w-0 truncate">{label}</span>
                     </Link>
                   );
@@ -413,23 +480,58 @@ export default function MainLayout() {
           </>
         ) : null}
 
-        <nav className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-2 rounded-lg border border-[#dde5ee] bg-[#fbfdff] p-2 text-[#16202b] shadow-lg lg:hidden" aria-label="Mobile quick navigation">
+        {/* Mobile bottom nav */}
+        <nav
+          className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-1.5 rounded-xl border border-[rgba(56,63,72,1)] bg-[rgba(22,27,34,0.98)] p-2 shadow-2xl backdrop-blur lg:hidden"
+          aria-label="Mobile quick navigation"
+        >
           {([
             { label: 'Home', path: '/', icon: DashboardIcon, badge: pendingTransfers + careDueCount },
             { label: 'Horses', path: '/horses', icon: HorsesIcon, badge: 0 },
             { label: 'Docs', path: '/documents', icon: DocumentsIcon, badge: pendingReview },
             { label: 'Sales', path: '/sales', icon: SalesIcon, badge: 0 },
           ] as const).map(({ label, path, icon: Icon, badge }) => (
-            <NavLink key={label} to={path} end={path === '/'} className={({ isActive }) => classNames('relative flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]', isActive ? 'bg-[#eaeffd] text-[#1155dd]' : 'text-[#798088] hover:bg-white hover:text-[#16202b]')}>
-              <Icon className="h-[18px] w-[18px]" />
+            <NavLink
+              key={label}
+              to={path}
+              end={path === '/'}
+              className={({ isActive }) =>
+                classNames(
+                  'relative flex min-h-[60px] flex-col items-center justify-center gap-1 rounded-lg text-[10px] font-bold transition-colors duration-150',
+                  isActive
+                    ? 'bg-[rgba(47,141,255,0.12)] text-[#2F8DFF]'
+                    : 'text-[#4a6275] hover:bg-[rgba(255,255,255,0.04)] hover:text-[#8B949E]',
+                )
+              }
+            >
+              <Icon className="h-[17px] w-[17px]" />
               <span>{label}</span>
-              {badge > 0 ? <span className="absolute right-2 top-2 min-w-[16px] rounded-full bg-[#CC3333] px-1 py-px text-center text-[9px] font-bold text-white">{badge}</span> : null}
+              {badge > 0 ? (
+                <span className="absolute right-1.5 top-1.5 min-w-[15px] rounded-full bg-[#F85149] px-1 py-px text-center text-[9px] font-bold text-white">
+                  {badge}
+                </span>
+              ) : null}
             </NavLink>
           ))}
-          <button className={classNames('relative flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]', mobileMoreOpen || mobileMoreItems.some((item) => location.pathname.startsWith(item.path) && item.path !== '/') ? 'bg-[#eaeffd] text-[#1155dd]' : 'text-[#798088] hover:bg-white hover:text-[#16202b]')} type="button" onClick={() => setMobileMoreOpen((current) => !current)} aria-expanded={mobileMoreOpen} aria-controls="mobile-more-menu">
-            <DotsIcon className="h-[18px] w-[18px]" />
+          <button
+            className={classNames(
+              'relative flex min-h-[60px] flex-col items-center justify-center gap-1 rounded-lg text-[10px] font-bold transition-colors duration-150',
+              mobileMoreOpen || mobileMoreItems.some((item) => location.pathname.startsWith(item.path) && item.path !== '/')
+                ? 'bg-[rgba(47,141,255,0.12)] text-[#2F8DFF]'
+                : 'text-[#4a6275] hover:bg-[rgba(255,255,255,0.04)] hover:text-[#8B949E]',
+            )}
+            type="button"
+            onClick={() => setMobileMoreOpen((current) => !current)}
+            aria-expanded={mobileMoreOpen}
+            aria-controls="mobile-more-menu"
+          >
+            <DotsIcon className="h-[17px] w-[17px]" />
             <span>More</span>
-            {pendingTransfers + careDueCount > 0 ? <span className="absolute right-2 top-2 min-w-[16px] rounded-full bg-[#CC3333] px-1 py-px text-center text-[9px] font-bold text-white">{pendingTransfers + careDueCount}</span> : null}
+            {pendingTransfers + careDueCount > 0 ? (
+              <span className="absolute right-1.5 top-1.5 min-w-[15px] rounded-full bg-[#F85149] px-1 py-px text-center text-[9px] font-bold text-white">
+                {pendingTransfers + careDueCount}
+              </span>
+            ) : null}
           </button>
         </nav>
 
