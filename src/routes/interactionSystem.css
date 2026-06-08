@@ -84,6 +84,20 @@
 .action-menu-button:hover::after,
 .action-menu-button:focus-visible::after { border-color: rgba(103,167,255,.25); }
 
+.record-action-row {
+  position: relative;
+}
+.record-action-row > .stack-item {
+  width: 100%;
+  padding-right: 58px;
+}
+.record-action-row__menu {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2;
+}
+
 .locked-action { position: relative; display: inline-flex; flex-direction: column; align-items: flex-start; gap: 5px; }
 .locked-action__reason { color: #9aa9ba; font-size: .7rem; line-height: 1.35; }
 :where(button, [role='button']):disabled[title] { position: relative; }
@@ -327,6 +341,7 @@
   .panel__display-controls { width: 100%; margin-left: 0; }
   .panel__display-controls button { min-height: 44px; }
   :where(.button, .icon-button, .surface-tab, .context-menu__item, .action-menu-button) { min-height: 44px; }
+  :where(.icon-button, .action-menu-button) { min-width: 44px; }
   .context-menu { max-width: calc(100vw - 16px); }
   .xbar-task { grid-template-columns: 5px minmax(0, 1fr) auto; }
   .xbar-task__action { grid-column: 2 / -1; }

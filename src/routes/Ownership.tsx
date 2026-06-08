@@ -3,7 +3,9 @@ import type { MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
+import { ActionMenuButton } from '@/components/InteractionSystem';
 import { MetricCard, Pill } from '@/components/app-ui';
+import { DotsIcon } from '@/components/icons';
 import { formatDateLabel, formatDateTimeLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
@@ -32,6 +34,7 @@ export default function Ownership() {
   const removeOwnershipStake = useXbarStore((state) => state.removeOwnershipStake);
   const ensureOwnershipRecord = useXbarStore((state) => state.ensureOwnershipRecord);
   const pushToast = useUiStore((state) => state.pushToast);
+  const openRightDrawer = useUiStore((state) => state.openRightDrawer);
   const canManageOwnership = useCurrentRoleCapability('manageOwnership');
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
 
@@ -106,10 +109,38 @@ export default function Ownership() {
   const menuRecord = menuState?.type === 'record' ? ownershipRecords.find((record) => record.id === menuState.recordId) : undefined;
   const menuHorse = horses.find((horse) => horse.id === menuRecord?.horseId);
   const latestOwnershipDocuments = getLatestOwnershipDocuments(documents, ownershipDocumentTypes);
+  const openOwnershipDetails = (recordId: string) => {
+    const record = ownershipRecords.find((item) => item.id === recordId);
+    const horse = horses.find((item) => item.id === record?.horseId);
+    if (!record || !horse) return;
+    openRightDrawer({
+      id: `ownership-record-${record.id}`,
+      eyebrow: 'Ownership record',
+      title: horse.name,
+      description: record.pendingDocuments.length
+        ? `${record.pendingDocuments.length} transfer requirement${record.pendingDocuments.length === 1 ? '' : 's'} still open.`
+        : 'Ownership proof and transfer requirements are clear.',
+      facts: [
+        { label: 'Legal owner', value: record.legalOwner },
+        { label: 'Transfer', value: record.transferStatus },
+        { label: 'Deadline', value: formatDateLabel(record.complianceDeadline) },
+        { label: 'Confidence', value: `${record.confidence}%` },
+      ],
+      actions: [
+        { label: 'Open horse record', path: `/horses/${horse.id}` },
+        { label: 'Open documents', path: '/documents' },
+      ],
+    });
+  };
 
   const menuItems =
     menuRecord
       ? [
+          {
+            id: 'quick-view',
+            label: 'Quick view',
+            onSelect: () => openOwnershipDetails(menuRecord.id),
+          },
           ...(menuHorse
             ? [
                 {
@@ -426,54 +457,65 @@ export default function Ownership() {
               <span>Documents</span>
             </div>
             {filteredRows.map((row) => (
-              <button
-                key={row.horse.id}
-                type="button"
-                className={`ownership-row${row.record?.id === selectedRecordId ? ' ownership-row--selected' : ''}`}
-                onClick={() => {
-                  if (row.record) {
-                    setSelectedRecordId(row.record.id);
-                    setFormError('');
-                  } else {
-                    const result = ensureOwnershipRecord(row.horse.id);
-                    if (result.ok && result.recordId) {
-                      setSelectedRecordId(result.recordId);
+              <div key={row.horse.id} className="ownership-row-shell" role="row">
+                <button
+                  type="button"
+                  className={`ownership-row${row.record?.id === selectedRecordId ? ' ownership-row--selected' : ''}`}
+                  onClick={() => {
+                    if (row.record) {
+                      setSelectedRecordId(row.record.id);
                       setFormError('');
-                      pushToast({ title: 'Ownership record created', message: result.message, tone: 'success' });
-                    } else if (!result.ok) {
-                      pushToast({ title: 'Could not create record', message: result.message, tone: 'error' });
+                    } else {
+                      const result = ensureOwnershipRecord(row.horse.id);
+                      if (result.ok && result.recordId) {
+                        setSelectedRecordId(result.recordId);
+                        setFormError('');
+                        pushToast({ title: 'Ownership record created', message: result.message, tone: 'success' });
+                      } else if (!result.ok) {
+                        pushToast({ title: 'Could not create record', message: result.message, tone: 'error' });
+                      }
                     }
-                  }
-                }}
-                onContextMenu={(event) => {
-                  if (!row.record) {
-                    return;
-                  }
-                  event.preventDefault();
-                  setMenuState({ type: 'record', recordId: row.record.id, x: event.clientX, y: event.clientY });
-                }}
-              >
-                <span>
-                  <strong>{row.horse.name}</strong>
-                  {row.horse.barnName ? <small>{row.horse.barnName}</small> : null}
-                </span>
-                <span>
-                  <strong>{row.currentOwner}</strong>
-                  <small>{row.horse.ownership.length} stakeholder{row.horse.ownership.length === 1 ? '' : 's'}</small>
-                </span>
-                <span>
-                  <strong>{row.totalShare || 0}%</strong>
-                  <small>{row.totalShare === 100 ? 'Balanced' : 'Needs review'}</small>
-                </span>
-                <span>
-                  <Pill tone={transferTone(row.status)}>{row.status}</Pill>
-                  {row.deadline ? <small>Due {formatDateLabel(row.deadline)}</small> : null}
-                </span>
-                <span>
-                  <strong>{row.billOfSaleCount + row.registrationCount + row.transferDocCount} files</strong>
-                  <small>{row.pendingDocuments.length ? row.pendingDocuments.slice(0, 2).join(', ') : 'Proof on file'}</small>
-                </span>
-              </button>
+                  }}
+                  onContextMenu={(event) => {
+                    if (!row.record) {
+                      return;
+                    }
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setMenuState({ type: 'record', recordId: row.record.id, x: event.clientX, y: event.clientY });
+                  }}
+                >
+                  <span>
+                    <strong>{row.horse.name}</strong>
+                    {row.horse.barnName ? <small>{row.horse.barnName}</small> : null}
+                  </span>
+                  <span>
+                    <strong>{row.currentOwner}</strong>
+                    <small>{row.horse.ownership.length} stakeholder{row.horse.ownership.length === 1 ? '' : 's'}</small>
+                  </span>
+                  <span>
+                    <strong>{row.totalShare || 0}%</strong>
+                    <small>{row.totalShare === 100 ? 'Balanced' : 'Needs review'}</small>
+                  </span>
+                  <span>
+                    <Pill tone={transferTone(row.status)}>{row.status}</Pill>
+                    {row.deadline ? <small>Due {formatDateLabel(row.deadline)}</small> : null}
+                  </span>
+                  <span>
+                    <strong>{row.billOfSaleCount + row.registrationCount + row.transferDocCount} files</strong>
+                    <small>{row.pendingDocuments.length ? row.pendingDocuments.slice(0, 2).join(', ') : 'Proof on file'}</small>
+                  </span>
+                </button>
+                {row.record ? (
+                  <ActionMenuButton
+                    className="ownership-row-shell__menu icon-button icon-button--compact"
+                    label={`Open ownership actions for ${row.horse.name}`}
+                    onOpen={(x, y) => setMenuState({ type: 'record', recordId: row.record!.id, x, y })}
+                  >
+                    <DotsIcon className="icon-button__icon" />
+                  </ActionMenuButton>
+                ) : null}
+              </div>
             ))}
           </div>
         ) : relationshipRows.length ? (

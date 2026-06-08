@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
+import { ActionMenuButton } from '@/components/InteractionSystem';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
+import { DotsIcon } from '@/components/icons';
 import { formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCloudStore } from '@/store/useCloudStore';
@@ -23,6 +25,7 @@ export default function Medical() {
   const session = useCloudStore((state) => state.session);
   const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName || 'Ranch Staff';
   const pushToast = useUiStore((state) => state.pushToast);
+  const openRightDrawer = useUiStore((state) => state.openRightDrawer);
   const canManageMedical = useCurrentRoleCapability('manageMedical');
   const medicalWatch = horses.filter((horse) => horse.status === 'Medical Review');
   const medicalEvents = horses.flatMap((horse) =>
@@ -47,10 +50,80 @@ export default function Medical() {
   const [timelineQuery, setTimelineQuery] = useState('');
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ title: '', body: '', date: '' });
-  const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
+  const [menuState, setMenuState] = useState<
+    | { type: 'horse'; horseId: string; x: number; y: number }
+    | { type: 'event'; horseId: string; eventId: string; x: number; y: number }
+    | null
+  >(null);
   const menuHorse = horses.find((horse) => horse.id === menuState?.horseId);
-  const menuItems = menuHorse
+  const menuEvent = menuState?.type === 'event' ? medicalEvents.find((event) => event.id === menuState.eventId && event.horseId === menuState.horseId) : undefined;
+  const openHorseDetails = (horse: (typeof horses)[number]) => openRightDrawer({
+    id: `medical-horse-${horse.id}`,
+    eyebrow: 'Medical watch',
+    title: horse.name,
+    description: horse.medicalTimeline[0]?.summary || horse.medicalNotes,
+    facts: [
+      { label: 'Status', value: horse.status },
+      { label: 'Veterinarian', value: horse.assignments.veterinarian },
+      { label: 'Last visit', value: formatDateLabel(horse.lastVetVisit) },
+      { label: 'Care events', value: String(horse.medicalTimeline.length) },
+    ],
+    actions: [{ label: 'Open horse record', path: `/horses/${horse.id}` }],
+  });
+  const openEventDetails = (event: (typeof medicalEvents)[number]) => openRightDrawer({
+    id: `medical-event-${event.id}`,
+    eyebrow: event.category,
+    title: `${event.horseName}: ${event.title}`,
+    description: event.summary,
+    facts: [
+      { label: 'Date', value: formatDateLabel(event.date) },
+      { label: 'Horse', value: event.horseName },
+      { label: 'Veterinarian', value: event.veterinarian },
+      { label: 'Owner', value: event.owner },
+    ],
+    actions: [{ label: 'Open horse record', path: `/horses/${event.horseId}` }],
+  });
+  const openHorseMenu = (horseId: string, x: number, y: number) => setMenuState({ type: 'horse', horseId, x, y });
+  const openEventMenu = (horseId: string, eventId: string, x: number, y: number) => setMenuState({ type: 'event', horseId, eventId, x, y });
+  const menuItems = menuEvent
     ? [
+        {
+          id: 'event-quick-view',
+          label: 'Quick view',
+          onSelect: () => openEventDetails(menuEvent),
+        },
+        {
+          id: 'event-open-horse',
+          label: 'Open horse profile',
+          onSelect: () => navigate(`/horses/${menuEvent.horseId}`),
+        },
+        ...(canManageMedical
+          ? [
+              {
+                id: 'event-edit',
+                label: 'Edit care event',
+                onSelect: () => {
+                  setEditForm({ title: menuEvent.title, body: menuEvent.summary, date: menuEvent.date });
+                  setEditingEventId(menuEvent.id);
+                },
+              },
+              {
+                id: 'event-delete',
+                label: 'Delete care event',
+                onSelect: () => {
+                  if (window.confirm('Remove this medical event?')) deleteMedicalEvent(menuEvent.horseId, menuEvent.id);
+                },
+              },
+            ]
+          : []),
+      ]
+    : menuHorse
+    ? [
+        {
+          id: 'quick-view',
+          label: 'Quick view',
+          onSelect: () => openHorseDetails(menuHorse),
+        },
         {
           id: 'open-profile',
           label: 'Open horse profile',
@@ -104,30 +177,36 @@ export default function Medical() {
           {medicalWatch.length ? (
             <div className="stack-list">
               {medicalWatch.map((horse) => (
-                <div
-                  key={horse.id}
-                  className="stack-item stack-item--interactive"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => navigate(`/horses/${horse.id}`)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/horses/${horse.id}`); } }}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    setMenuState({ horseId: horse.id, x: event.clientX, y: event.clientY });
-                  }}
-                >
-                  <div className="stack-item__top">
-                    <div>
-                      <div className="stack-item__title">{horse.name}</div>
-                      <div className="stack-item__copy">{horse.medicalTimeline[0]?.title ?? horse.medicalNotes}</div>
+                <div key={horse.id} className="record-action-row">
+                  <button
+                    type="button"
+                    className="stack-item stack-item--interactive"
+                    onClick={() => navigate(`/horses/${horse.id}`)}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      openHorseMenu(horse.id, event.clientX, event.clientY);
+                    }}
+                  >
+                    <div className="stack-item__top">
+                      <div>
+                        <div className="stack-item__title">{horse.name}</div>
+                        <div className="stack-item__copy">{horse.medicalTimeline[0]?.title ?? horse.medicalNotes}</div>
+                      </div>
+                      <Pill tone="rose">Watch</Pill>
                     </div>
-                    <Pill tone="rose">Watch</Pill>
-                  </div>
-                  <div className="inline-metrics">
-                    <span>{horse.assignments.veterinarian}</span>
-                    <span>Last visit {formatDateLabel(horse.lastVetVisit)}</span>
-                    <span>{horse.documents.length} linked docs</span>
-                  </div>
+                    <div className="inline-metrics">
+                      <span>{horse.assignments.veterinarian}</span>
+                      <span>Last visit {formatDateLabel(horse.lastVetVisit)}</span>
+                      <span>{horse.documents.length} linked docs</span>
+                    </div>
+                  </button>
+                  <ActionMenuButton
+                    className="record-action-row__menu icon-button icon-button--compact"
+                    label={`Open medical actions for ${horse.name}`}
+                    onOpen={(x, y) => openHorseMenu(horse.id, x, y)}
+                  >
+                    <DotsIcon className="icon-button__icon" />
+                  </ActionMenuButton>
                 </div>
               ))}
             </div>
@@ -319,7 +398,25 @@ export default function Medical() {
                 </thead>
                 <tbody>
                   {filtered.map((event) => (
-                    <tr key={event.id}>
+                    <tr
+                      key={event.id}
+                      className="table-row--interactive"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Open ${event.title} for ${event.horseName}`}
+                      title="Press Enter to open details. Press Shift+F10 for actions."
+                      onClick={() => openEventDetails(event)}
+                      onKeyDown={(keyboardEvent) => {
+                        if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
+                          keyboardEvent.preventDefault();
+                          openEventDetails(event);
+                        }
+                      }}
+                      onContextMenu={(contextEvent) => {
+                        contextEvent.preventDefault();
+                        openEventMenu(event.horseId, event.id, contextEvent.clientX, contextEvent.clientY);
+                      }}
+                    >
                       <td>{event.horseName}</td>
                       <td>{event.title}</td>
                       <td>{event.veterinarian}</td>
@@ -337,7 +434,7 @@ export default function Medical() {
         )}
       </Panel>
 
-      <ContextMenu open={Boolean(menuHorse)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
+      <ContextMenu open={Boolean(menuHorse || menuEvent)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
     </>
   );
 }

@@ -26,7 +26,7 @@ test('creates a fresh workspace and lands on the operations dashboard', async ({
 
   await page.goto('/setup');
 
-  const setupHeading = page.getByRole('heading', { name: 'Build the ranch workspace around real records.' });
+  const setupHeading = page.getByRole('heading', { name: 'Build your operating workspace' });
   const openBrowserWorkspace = page.getByRole('button', { name: 'Open browser workspace' });
   const setupVisible = await setupHeading.isVisible({ timeout: 5_000 }).catch(() => false);
   if (!setupVisible) {
@@ -52,6 +52,6 @@ test('creates a fresh workspace and lands on the operations dashboard', async ({
   await page.getByRole('button', { name: 'Create workspace' }).click();
 
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole('heading', { name: 'Ranch desk', exact: true })).toBeVisible();
-  await expect(page.getByText('No records yet')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Build the dashboard', exact: true })).toBeVisible();
+  await expect(page.locator('.empty-state__title', { hasText: 'No records yet' })).toBeVisible();
 });

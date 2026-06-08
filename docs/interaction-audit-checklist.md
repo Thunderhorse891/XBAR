@@ -24,10 +24,10 @@
 - [x] Horse cards and registry rows
 - [x] Horse detail timelines
 - [x] Documents review rows
-- [ ] Sales leads and follow-ups
-- [ ] Medical records
+- [x] Sales leads and follow-ups
+- [x] Medical records
 - [x] Breeding pipeline
-- [ ] Ownership records
+- [x] Ownership records
 - [x] Property, pasture, equipment, and feed
 - [x] Expenses
 - [x] Reminders and notifications

@@ -1593,6 +1593,11 @@ a:focus-visible,
   justify-content: space-between;
 }
 
+.horse-card__media-copy {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
 .horse-card__media-bottom {
   position: absolute;
   left: 0;
