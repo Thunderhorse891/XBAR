@@ -95,21 +95,21 @@ export default function Subscriptions() {
                 <div className="stack-item__title">Seats</div>
                 <strong>{subscription.usage.seatsUsed}/{subscription.usage.seatLimit}</strong>
               </div>
-              <ProgressBar value={(subscription.usage.seatsUsed / subscription.usage.seatLimit) * 100} />
+              <ProgressBar value={subscription.usage.seatLimit ? (subscription.usage.seatsUsed / subscription.usage.seatLimit) * 100 : 0} />
             </div>
             <div className="stack-item">
               <div className="stack-item__top">
                 <div className="stack-item__title">Storage</div>
                 <strong>{subscription.usage.storageUsedGb}/{subscription.usage.storageLimitGb} GB</strong>
               </div>
-              <ProgressBar value={(subscription.usage.storageUsedGb / subscription.usage.storageLimitGb) * 100} tone="blue" />
+              <ProgressBar value={subscription.usage.storageLimitGb ? (subscription.usage.storageUsedGb / subscription.usage.storageLimitGb) * 100 : 0} tone="blue" />
             </div>
             <div className="stack-item">
               <div className="stack-item__top">
                 <div className="stack-item__title">Documents</div>
                 <strong>{subscription.usage.documentsProcessed}/{subscription.usage.documentLimit}</strong>
               </div>
-              <ProgressBar value={(subscription.usage.documentsProcessed / subscription.usage.documentLimit) * 100} tone="slate" />
+              <ProgressBar value={subscription.usage.documentLimit ? (subscription.usage.documentsProcessed / subscription.usage.documentLimit) * 100 : 0} tone="slate" />
             </div>
             <div className="stack-item">
               <div className="stack-item__top">
