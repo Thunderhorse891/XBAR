@@ -1657,15 +1657,15 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Gallery asset not found.' };
         }
         set((current) => ({
-          horses: current.horses.map((h) =>
-            h.id === horseId
-              ? {
-                  ...h,
-                  gallery: h.gallery.filter((a) => a.id !== assetId),
-                  profileImage: h.profileImage === asset.url ? (h.gallery.find((a) => a.id !== assetId)?.url ?? '') : h.profileImage,
-                }
-              : h,
-          ),
+          horses: current.horses.map((h) => {
+            if (h.id !== horseId) return h;
+            const filteredGallery = h.gallery.filter((a) => a.id !== assetId);
+            return {
+              ...h,
+              gallery: filteredGallery,
+              profileImage: h.profileImage === asset.url ? (filteredGallery[0]?.url ?? '') : h.profileImage,
+            };
+          }),
         }));
         return { ok: true, message: 'Photo removed.', id: assetId };
       },
@@ -2100,7 +2100,7 @@ export const useXbarStore = create<XbarStore>()(
               ? {
                   ...h,
                   breedingTimeline: h.breedingTimeline.filter((ev) => ev.id !== eventId),
-                  activity: h.activity.filter((ev) => ev.id !== eventId || ev.category !== 'Breeding'),
+                  activity: h.activity.filter((ev) => !(ev.id === eventId && ev.category === 'Breeding')),
                 }
               : h,
           ),
@@ -2228,7 +2228,7 @@ export const useXbarStore = create<XbarStore>()(
               ? {
                   ...h,
                   medicalTimeline: h.medicalTimeline.filter((ev) => ev.id !== eventId),
-                  activity: h.activity.filter((ev) => ev.id !== eventId || ev.category !== 'Medical'),
+                  activity: h.activity.filter((ev) => !(ev.id === eventId && ev.category === 'Medical')),
                 }
               : h,
           ),
