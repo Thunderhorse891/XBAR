@@ -224,7 +224,7 @@ export default function Sales() {
                           </div>
                           <div className="horse-card__footer">
                             <span>{horse.sale.watchlistCount} watchers</span>
-                            <span>{formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)}</span>
+                            <span>{horse.sale.askPrice ? formatCompactCurrency(horse.sale.askPrice) : '—'}</span>
                           </div>
                           <div className="inline-actions inline-actions--card">
                             <a

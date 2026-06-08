@@ -653,7 +653,7 @@ export default function HorseDetail() {
           </div>
 
           <div className="mt-5 flex flex-wrap gap-3">
-            <StatPill icon={<DollarIcon className="h-4 w-4" />} value={formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)} label="Ask" />
+            <StatPill icon={<DollarIcon className="h-4 w-4" />} value={horse.sale.askPrice ? formatCompactCurrency(horse.sale.askPrice) : '—'} label="Ask" />
           </div>
 
           <div className="mt-5">
