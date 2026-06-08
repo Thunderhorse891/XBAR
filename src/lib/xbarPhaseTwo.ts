@@ -281,7 +281,7 @@ export function buildHorsePacketCompleteness(
         ownershipRecord?.transferStatus === 'Clear'
           ? 'Transfer support is attached but still needs final review.'
           : ownershipRecord
-            ? `Transfer is ${ownershipRecord.transferStatus.toLowerCase()}.`
+            ? `Transfer is ${(ownershipRecord.transferStatus ?? 'pending').toLowerCase()}.`
             : 'Transfer support is attached but still needs review.',
       missingDetail: 'No transfer packet is attached yet.',
     }),
@@ -351,7 +351,7 @@ export function buildHorsePacketCompleteness(
         ownershipRecord?.transferStatus === 'Clear' && ownershipDocs.some(isDocumentReady)
           ? 'Ownership packet is clear and backed by approved docs.'
           : ownershipRecord
-            ? `Transfer posture is ${ownershipRecord.transferStatus}.`
+            ? `Transfer posture is ${ownershipRecord.transferStatus ?? 'pending'}.`
             : 'No ownership trail is attached to the record yet.',
       weight: 22,
       tone: 'slate',
