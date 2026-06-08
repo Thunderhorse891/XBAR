@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { EmptyState } from '@/components/EmptyState';
+import { TaskItem } from '@/components/InteractionSystem';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
-import { kindCopy, urgencyTone } from '@/features/reminders/helpers';
+import { kindCopy } from '@/features/reminders/helpers';
 import type { ReminderFilter, ReminderKind } from '@/features/reminders/types';
 import { buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
 import { formatDateLabel } from '@/lib/format';
@@ -102,20 +103,22 @@ export default function Reminders() {
           <select value={filter} onChange={(event) => setFilter(event.target.value as ReminderFilter)} aria-label="Filter reminder type">{filters.map((item) => <option key={item} value={item}>{item}</option>)}</select>
         </div>
         {filteredReminders.length ? (
-          <div className="ops-timeline-list">
+          <div className="xbar-task-list">
             {filteredReminders.map((reminder) => (
-              <div key={reminder.id} className="ops-timeline-item">
-                <span className={`ops-timeline-dot ops-timeline-dot--${reminder.urgency.toLowerCase()}`} />
-                <div>
-                  <div className="ops-timeline-item__top"><strong>{reminder.title}</strong><Pill tone={urgencyTone(reminder.urgency)}>{reminder.urgency}</Pill></div>
-                  <p>{reminder.detail}</p>
-                  <div className="ops-record-meta"><span>{reminder.kind}</span><span>{reminder.horseName ?? 'Ranch-wide'}</span><span className={`priority-timing--${reminder.timing.toLowerCase().replace(' ', '-')}`}>{reminder.timing}{reminder.dueDate ? ` | ${formatDateLabel(reminder.dueDate)}` : ''}</span></div>
-                  <div className="inline-actions" style={{ marginTop: '10px' }}>
+              <TaskItem
+                key={reminder.id}
+                title={reminder.title}
+                detail={`${reminder.detail} | ${reminder.kind} | ${reminder.horseName ?? 'Ranch-wide'}${reminder.dueDate ? ` | ${formatDateLabel(reminder.dueDate)}` : ''}`}
+                status={reminder.timing}
+                priority={reminder.urgency === 'Due' ? 'urgent' : reminder.urgency === 'Watch' ? 'high' : 'low'}
+                onActivate={() => navigate(reminder.route)}
+                action={
+                  <div className="inline-actions">
                     <button className="button button--primary button--compact" type="button" onClick={() => navigate(reminder.route)}>{reminder.kind === 'Care' ? 'Add care event' : reminder.kind === 'Ownership' ? 'Review transfer' : reminder.kind === 'Documents' ? 'Review document' : 'Open lead'}</button>
                     {reminder.horseId && <button className="button button--ghost button--compact" type="button" onClick={() => navigate(`/horses/${reminder.horseId}`)}>View horse</button>}
                   </div>
-                </div>
-              </div>
+                }
+              />
             ))}
           </div>
         ) : reminders.length ? <EmptyState compact title="No reminders match" description="Adjust the search or filter." /> : <EmptyState title="No urgent work in the queue" description="When care records age, transfer files go missing, documents need approval, or buyers need follow-up, the work will land here." />}

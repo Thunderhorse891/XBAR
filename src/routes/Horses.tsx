@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
+import { ActionMenuButton } from '@/components/InteractionSystem';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
 import { SalePacketSlots } from '@/components/SalePacketSlots';
@@ -62,6 +63,7 @@ export default function Horses() {
   const addHorse = useXbarStore((state) => state.addHorse);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const pushToast = useUiStore((state) => state.pushToast);
+  const openRightDrawer = useUiStore((state) => state.openRightDrawer);
   const canCreateHorse = useCurrentRoleCapability('createHorse');
   const canManageSharedAccess = useCurrentRoleCapability('manageSharedAccess');
   const [searchParams, setSearchParams] = useSearchParams();
@@ -122,6 +124,28 @@ export default function Horses() {
 
   const openHorseMenu = (horseId: string, x: number, y: number) => {
     setMenuState({ horseId, x, y });
+  };
+
+  const openHorseDetails = (horse: (typeof horses)[number]) => {
+    const packet = buildHorsePacketCompleteness(
+      horse,
+      documents.filter((document) => document.horseId === horse.id),
+      ownershipRecords.find((record) => record.horseId === horse.id),
+    );
+    openRightDrawer({
+      id: `horse-${horse.id}`,
+      eyebrow: 'Horse command file',
+      title: horse.name,
+      description: `${horse.segment} in ${horse.location.barn}. Open the full record for care, ownership, documents, and sales history.`,
+      facts: [
+        { label: 'Status', value: horse.status },
+        { label: 'Owner', value: horse.owner },
+        { label: 'Location', value: `${horse.location.barn} | ${horse.location.pasture}` },
+        { label: 'Registration', value: horse.aqhaNumber || horse.registrationNumber || 'Pending' },
+        { label: 'Readiness', value: formatPercent(packet.score) },
+      ],
+      actions: [{ label: 'Open full horse record', path: `/horses/${horse.id}` }],
+    });
   };
 
   const menuHorse = filtered.find((horse) => horse.id === menuState?.horseId) ?? horses.find((horse) => horse.id === menuState?.horseId);
@@ -395,10 +419,10 @@ export default function Horses() {
               <div
                 key={horse.id}
                 className="horse-card horse-card--interactive"
-                role="button"
-                tabIndex={0}
+                role="group"
+                aria-label={`Open ${horse.name} record`}
+                title="Select the card to open the horse record. Use Quick view or the actions menu for alternatives."
                 onClick={() => navigate(`/horses/${horse.id}`)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/horses/${horse.id}`); } }}
                 onContextMenu={(event) => {
                   event.preventDefault();
                   openHorseMenu(horse.id, event.clientX, event.clientY);
@@ -416,18 +440,13 @@ export default function Horses() {
                       <Pill tone={statusTone[horse.status]}>{horse.status === 'Sale Prep' ? 'For Sale' : horse.status}</Pill>
                       <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
                     </div>
-                    <button
+                    <ActionMenuButton
                       className="icon-button icon-button--compact"
-                      type="button"
-                      aria-label="Open quick actions"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        const bounds = event.currentTarget.getBoundingClientRect();
-                        openHorseMenu(horse.id, bounds.left, bounds.bottom + 8);
-                      }}
+                      label={`Open actions for ${horse.name}`}
+                      onOpen={(x, y) => openHorseMenu(horse.id, x, y)}
                     >
                       <DotsIcon className="icon-button__icon" />
-                    </button>
+                    </ActionMenuButton>
                   </div>
                   <div className="horse-card__media-bottom">
                     <div className="horse-card__kicker">{horse.segment}</div>
@@ -508,6 +527,16 @@ export default function Horses() {
                       <button
                         className="button button--ghost button--compact"
                         type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openHorseDetails(horse);
+                        }}
+                      >
+                        Quick view
+                      </button>
+                      <button
+                        className="button button--ghost button--compact"
+                        type="button"
                         onClick={async (event) => {
                           event.stopPropagation();
                           await handleSavedHorseToggle(horse.id);
@@ -560,16 +589,28 @@ export default function Horses() {
                 <tr
                   key={horse.id}
                   className="table-row--interactive"
+                  tabIndex={0}
+                  aria-label={`Open ${horse.name} record`}
+                  title="Press Enter to open. Press Shift+F10 for actions."
                   onClick={() => navigate(`/horses/${horse.id}`)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      navigate(`/horses/${horse.id}`);
+                    }
+                    if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+                      event.preventDefault();
+                      const bounds = event.currentTarget.getBoundingClientRect();
+                      openHorseMenu(horse.id, bounds.left + 32, bounds.top + 32);
+                    }
+                  }}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     openHorseMenu(horse.id, event.clientX, event.clientY);
                   }}
                 >
                   <td>
-                    <Link to={`/horses/${horse.id}`} className="table-link">
-                      {horse.name}
-                    </Link>
+                    <span className="table-link">{horse.name}</span>
                   </td>
                   <td>{horse.segment}</td>
                   <td>{horse.owner}</td>

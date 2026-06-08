@@ -612,8 +612,9 @@ a:focus-visible,
 .command-stage__support-card {
   display: flex;
   flex-direction: column;
+  flex: 1 1 0;
   gap: 10px;
-  min-height: 100%;
+  min-height: 0;
   padding: 18px;
   border-radius: 18px;
   border: 1px solid var(--border);

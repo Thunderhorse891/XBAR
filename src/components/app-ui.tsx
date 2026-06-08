@@ -1,4 +1,5 @@
-import type { KeyboardEvent, MouseEventHandler, ReactNode } from 'react';
+import type { CSSProperties, KeyboardEvent, MouseEventHandler, ReactNode } from 'react';
+import { useUiStore } from '@/store/useUiStore';
 
 type Tone = 'blue' | 'slate' | 'emerald' | 'amber' | 'rose';
 
@@ -37,6 +38,8 @@ export function Panel({
   children,
   className = '',
   onContextMenu,
+  surfaceId,
+  style,
 }: {
   eyebrow?: string;
   title: string;
@@ -47,9 +50,21 @@ export function Panel({
   children: ReactNode;
   className?: string;
   onContextMenu?: MouseEventHandler<HTMLElement>;
+  surfaceId?: string;
+  style?: CSSProperties;
 }) {
+  const mode = useUiStore((state) => (surfaceId ? state.surfaceModes[surfaceId] ?? 'expanded' : 'expanded'));
+  const sendSurfaceEvent = useUiStore((state) => state.sendSurfaceEvent);
+  const statefulClassName = surfaceId ? `panel--stateful panel--${mode}` : '';
+
   return (
-    <section className={`panel ${onContextMenu ? 'panel--contextual' : ''} ${className}`.trim()} onContextMenu={onContextMenu} title={onContextMenu ? 'Right-click for panel actions' : undefined}>
+    <section
+      className={`panel ${onContextMenu ? 'panel--contextual' : ''} ${statefulClassName} ${className}`.trim()}
+      data-surface-id={surfaceId}
+      onContextMenu={onContextMenu}
+      style={style}
+      title={onContextMenu ? 'Right-click for panel actions' : undefined}
+    >
       <div className="panel__header">
         <div>
           {eyebrow ? <div className="panel__eyebrow">{eyebrow}</div> : null}
@@ -59,9 +74,41 @@ export function Panel({
           </div>
           {showDescription && description ? <p className="panel__description">{description}</p> : null}
         </div>
-        {action ? <div className="panel__action">{action}</div> : null}
+        {action || surfaceId ? (
+          <div className="panel__action">
+            {action}
+            {surfaceId ? (
+              <div className="panel__display-controls" aria-label={`${title} display controls`}>
+                <button
+                  type="button"
+                  aria-label={mode === 'collapsed' ? `Expand ${title}` : `Collapse ${title}`}
+                  aria-pressed={mode === 'collapsed'}
+                  onClick={() => sendSurfaceEvent(surfaceId, mode === 'collapsed' ? 'expand' : 'collapse')}
+                >
+                  {mode === 'collapsed' ? 'Expand' : 'Collapse'}
+                </button>
+                <button
+                  type="button"
+                  aria-label={`${mode === 'detailed' ? 'Restore' : 'Show detailed'} ${title}`}
+                  aria-pressed={mode === 'detailed'}
+                  onClick={() => sendSurfaceEvent(surfaceId, mode === 'detailed' ? 'expand' : 'detail')}
+                >
+                  {mode === 'detailed' ? 'Restore' : 'Detail'}
+                </button>
+                <button
+                  type="button"
+                  aria-label={`${mode === 'focus' ? 'Exit focus for' : 'Focus'} ${title}`}
+                  aria-pressed={mode === 'focus'}
+                  onClick={() => sendSurfaceEvent(surfaceId, mode === 'focus' ? 'expand' : 'focus')}
+                >
+                  {mode === 'focus' ? 'Exit focus' : 'Focus'}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
-      {children}
+      {mode === 'collapsed' ? null : children}
     </section>
   );
 }

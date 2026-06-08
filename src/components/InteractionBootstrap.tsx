@@ -15,9 +15,11 @@ const disabledExplanation = 'Unavailable for your current role or until this rec
 
 function prepareInteractiveElements(root: ParentNode = document) {
   root.querySelectorAll<HTMLElement>(delegatedTargets).forEach((element) => {
-    if (element.tabIndex < 0) element.tabIndex = 0;
-    if (!element.getAttribute('role')) element.setAttribute('role', 'button');
-    if (!element.getAttribute('title')) element.setAttribute('title', 'Press Enter to open. Right-click or press Shift+F10 for actions when available.');
+    if (!element.getAttribute('role')) {
+      if (element.tabIndex < 0) element.tabIndex = 0;
+      element.setAttribute('role', 'button');
+      if (!element.getAttribute('title')) element.setAttribute('title', 'Press Enter to open. Right-click or press Shift+F10 for actions when available.');
+    }
   });
 
   root.querySelectorAll<HTMLElement>('button:disabled, [role="button"][aria-disabled="true"], input:disabled, select:disabled, textarea:disabled').forEach((element) => {
@@ -105,12 +107,39 @@ export function InteractionBootstrap() {
       setFallbackMenu({ x: event.clientX, y: event.clientY, items });
     };
 
+    let longPressTimer: number | undefined;
+    const clearLongPress = () => {
+      if (longPressTimer) window.clearTimeout(longPressTimer);
+      longPressTimer = undefined;
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      clearLongPress();
+      if (event.pointerType !== 'touch' || !(event.target instanceof HTMLElement) || event.target.closest('button, a, input, select, textarea')) return;
+      const target = event.target.closest<HTMLElement>(delegatedTargets);
+      if (!target) return;
+      longPressTimer = window.setTimeout(() => {
+        const bounds = target.getBoundingClientRect();
+        const contextEvent = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: bounds.left + Math.min(bounds.width, 32), clientY: bounds.top + Math.min(bounds.height, 32) });
+        target.dispatchEvent(contextEvent);
+        if (!contextEvent.defaultPrevented) openFallback(target, contextEvent.clientX, contextEvent.clientY);
+      }, 550);
+    };
+
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('contextmenu', onContextMenu);
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('pointerup', clearLongPress);
+    document.addEventListener('pointercancel', clearLongPress);
+    document.addEventListener('pointermove', clearLongPress);
     return () => {
       observer.disconnect();
+      clearLongPress();
       document.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('contextmenu', onContextMenu);
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('pointerup', clearLongPress);
+      document.removeEventListener('pointercancel', clearLongPress);
+      document.removeEventListener('pointermove', clearLongPress);
     };
   }, []);
 

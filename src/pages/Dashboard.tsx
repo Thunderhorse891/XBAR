@@ -476,6 +476,8 @@ export default function Dashboard() {
           <Panel
             title="Transfer issues"
             meta={<Pill tone={transferGaps.length ? 'rose' : 'emerald'}>{transferGaps.length ? 'Needs action' : 'Clear'}</Pill>}
+            surfaceId="command-transfer-issues"
+            style={{ order: transferGaps.length ? 0 : 2 }}
             action={
               <Link to="/ownership" className="button button--ghost button--compact">
                 Ownership
@@ -524,6 +526,8 @@ export default function Dashboard() {
           <Panel
             title="Care board"
             meta={<Pill tone={careDueCount ? 'amber' : 'emerald'}>{careDueCount ? 'Due now' : 'Current'}</Pill>}
+            surfaceId="command-care-board"
+            style={{ order: careDueCount ? 0 : 2 }}
             action={
               <div className="inline-actions">
                 <Link to="/weather" className="button button--ghost button--compact">
@@ -580,6 +584,7 @@ export default function Dashboard() {
           <Panel
             title="Budget"
             meta={<Pill tone="blue">{budgetSummary.receiptCount} receipts</Pill>}
+            surfaceId="command-budget"
             action={
               <button
                 type="button"
@@ -624,6 +629,7 @@ export default function Dashboard() {
           <Panel
             title="Recent receipts"
             meta={<Pill tone="slate">{budgetSummary.latestReceipts.length} latest</Pill>}
+            surfaceId="command-recent-receipts"
           >
             {budgetSummary.latestReceipts.length ? (
               <div className="stack-list">
@@ -661,6 +667,7 @@ export default function Dashboard() {
         <Panel
           title="Log receipt"
           meta={<Pill tone={canManageBudget ? 'blue' : 'slate'}>{canManageBudget ? 'Enabled' : 'Read only'}</Pill>}
+          surfaceId="command-receipt-intake"
         >
           <form id="dashboard-receipt-form" className="dashboard-receipt-form" onSubmit={handleReceiptSubmit}>
             <div className="form-grid form-grid--tight">
@@ -790,6 +797,7 @@ export default function Dashboard() {
         <Panel
           title="Queue"
           meta={<Pill tone={reviewQueue.length ? 'amber' : 'emerald'}>{reviewQueue.length ? 'Active' : 'Quiet'}</Pill>}
+          surfaceId="command-work-queue"
         >
           <div className="stack-list">
             {recentBatches.map((batch) => (

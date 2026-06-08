@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
+import { DocumentBlock, Timeline } from '@/components/InteractionSystem';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { useCloudStore } from '@/store/useCloudStore';
@@ -143,23 +144,17 @@ export default function Breeding() {
                   />
                 </div>
                 {filtered.length ? (
-                  <div className="stack-list">
-                    {filtered.map(({ horse, event }) => (
-                      <div key={event.id} className="stack-item">
-                        <div className="stack-item__top">
-                          <div>
-                            <div className="stack-item__title">{horse.name}</div>
-                            <div className="stack-item__copy">{event.title}</div>
-                          </div>
-                          <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
-                            <Pill tone="slate">{formatDateLabel(event.date)}</Pill>
-                            {canManageBreeding && <button className="button button--ghost button--compact" type="button" style={{fontSize:'11px',color:'var(--rose)'}} onClick={()=>{if(window.confirm('Remove this breeding event?')){const r=deleteBreedingEvent(horse.id,event.id);pushToast({title:r.ok?'Event removed':'Remove blocked',message:r.message,tone:r.ok?'warning':'error'});}}}> Delete</button>}
-                          </div>
-                        </div>
-                        <div className="stack-item__copy">{event.summary}</div>
-                      </div>
-                    ))}
-                  </div>
+                  <Timeline
+                    label="Breeding milestones"
+                    items={filtered.map(({ horse, event }) => ({
+                      id: event.id,
+                      date: formatDateLabel(event.date),
+                      title: `${horse.name} | ${event.title}`,
+                      description: event.summary,
+                      onActivate: () => navigate(`/horses/${horse.id}`),
+                      action: <div className="inline-actions"><button className="button button--ghost button--compact" type="button" onClick={() => navigate(`/horses/${horse.id}`)}>Open</button>{canManageBreeding ? <button className="button button--ghost button--compact" type="button" style={{ color: 'var(--rose)' }} onClick={() => { if (window.confirm('Remove this breeding event?')) { const result = deleteBreedingEvent(horse.id, event.id); pushToast({ title: result.ok ? 'Event removed' : 'Remove blocked', message: result.message, tone: result.ok ? 'warning' : 'error' }); } }}>Delete</button> : null}</div>,
+                    }))}
+                  />
                 ) : (
                   <p style={{ color: 'var(--muted)', fontSize: '14px' }}>No milestones match "{milestoneQuery}".</p>
                 )}
@@ -244,18 +239,7 @@ export default function Breeding() {
           {breedingDocs.length ? (
             <div className="stack-list">
               {breedingDocs.map((document) => (
-                <div key={document.id} className="stack-item">
-                  <div className="stack-item__top">
-                    <div>
-                      <div className="stack-item__title">{document.title}</div>
-                      <div className="stack-item__copy">{document.horseId ?? 'Unassigned horse'}</div>
-                    </div>
-                    <Pill tone={document.state === 'Ready' ? 'emerald' : document.state === 'Needs Review' ? 'amber' : 'blue'}>
-                      {document.state}
-                    </Pill>
-                  </div>
-                  <div className="stack-item__copy">{document.summary}</div>
-                </div>
+                <DocumentBlock key={document.id} title={document.title} type={document.type} state={document.state} detail={document.summary} onActivate={() => navigate('/documents')} />
               ))}
             </div>
           ) : (
