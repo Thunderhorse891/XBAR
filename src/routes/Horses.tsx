@@ -437,7 +437,7 @@ export default function Horses() {
                     </div>
                     <div className="horse-card__metric">
                       <span>{valueLabel}</span>
-                      <strong>{formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)}</strong>
+                      <strong>{horse.sale.askPrice ? formatCompactCurrency(horse.sale.askPrice) : '—'}</strong>
                     </div>
                     <div className="horse-card__metric">
                       <span>Share</span>
