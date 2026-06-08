@@ -191,18 +191,22 @@ export default function SetupWorkspace() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="field-stack">
-                  <span className="field-label text-slate-300">Business name</span>
+                  <span className="field-label text-slate-300">Business name <span aria-hidden="true" style={{ color: '#f87171' }}>*</span></span>
                   <input
                     className="field-input premium-auth-input"
+                    required
+                    aria-required="true"
                     value={form.businessName}
                     onChange={(event) => setForm((current) => ({ ...current, businessName: event.target.value }))}
                     placeholder="XBAR LLC"
                   />
                 </label>
                 <label className="field-stack">
-                  <span className="field-label text-slate-300">Ranch name</span>
+                  <span className="field-label text-slate-300">Ranch name <span aria-hidden="true" style={{ color: '#f87171' }}>*</span></span>
                   <input
                     className="field-input premium-auth-input"
+                    required
+                    aria-required="true"
                     value={form.ranchName}
                     onChange={(event) => setForm((current) => ({ ...current, ranchName: event.target.value }))}
                     placeholder="Primary Ranch"
