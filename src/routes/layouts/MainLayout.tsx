@@ -191,6 +191,7 @@ export default function MainLayout() {
   const signOutCloud = useCloudStore((state) => state.signOut);
   const roleWorkspace = useCurrentRoleWorkspace();
   const pushToast = useUiStore((state) => state.pushToast);
+  const setCommandPaletteOpen = useUiStore((state) => state.setCommandPaletteOpen);
   const canCreateHorse = useCurrentRoleCapability('createHorse');
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
   const canManageBilling = useCurrentRoleCapability('manageBilling');
@@ -326,9 +327,12 @@ export default function MainLayout() {
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   onKeyDown={handleSearch}
-                  placeholder="Search horses"
+                  onFocus={() => setCommandPaletteOpen(true)}
+                  placeholder="Search XBAR"
+                  aria-label="Open XBAR search"
                   className="h-10 w-full rounded-md border border-[#dde5ee] bg-white pl-10 pr-4 text-sm text-[#16202b] transition-all duration-150 ease-[ease] placeholder:text-[#8f959c] focus:border-[#1155dd] focus:outline-none"
                 />
+                <kbd className="command-shortcut-hint">Ctrl K</kbd>
               </label>
 
               <div className="hidden h-10 items-center gap-3 rounded-md border border-[#dde5ee] bg-white px-3 text-sm font-semibold text-[#16202b] md:inline-flex">

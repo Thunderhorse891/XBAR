@@ -489,7 +489,18 @@ export default function Documents() {
                   return (
                     <tr
                       key={document.id}
-                      className="table-row--interactive"
+                      className="table-row--contextual"
+                      role="group"
+                      tabIndex={0}
+                      aria-label={`${document.title} review actions`}
+                      title="Use the row actions or press Shift+F10 for more document actions."
+                      onKeyDown={(event) => {
+                        if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+                          event.preventDefault();
+                          const bounds = event.currentTarget.getBoundingClientRect();
+                          setMenuState({ type: 'document', documentId: document.id, x: bounds.left + 32, y: bounds.top + 32 });
+                        }
+                      }}
                       onContextMenu={(event) => {
                         event.preventDefault();
                         setMenuState({ type: 'document', documentId: document.id, x: event.clientX, y: event.clientY });

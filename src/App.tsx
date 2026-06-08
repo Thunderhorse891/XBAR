@@ -9,6 +9,7 @@ import { RequireSharedListings } from './components/RequireSubscriptionFeature';
 import { RequireWorkspaceSetup } from './components/RequireWorkspaceSetup';
 import { SubscriptionEnforcement } from './components/SubscriptionEnforcement';
 import { ToastViewport } from './components/ToastViewport';
+import { InteractionShell } from './components/InteractionSystem';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
 import { useCloudStore } from './store/useCloudStore';
 import './routes/operationsHierarchy.css';
@@ -111,6 +112,7 @@ export default function App() {
     <Router>
       <ErrorBoundary>
         <ToastViewport />
+        <InteractionShell />
         <SubscriptionEnforcement />
         <RouteTelemetry />
         <Suspense fallback={<div className="app-loading-shell">Loading XBAR...</div>}>

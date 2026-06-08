@@ -163,7 +163,22 @@ export default function RanchAssets() {
                   {ranchAssets.filter((a) => !assetQuery.trim() || a.name.toLowerCase().includes(assetQuery.toLowerCase()) || a.category.toLowerCase().includes(assetQuery.toLowerCase()) || a.assignedTo.toLowerCase().includes(assetQuery.toLowerCase())).map((asset) => (
                     <tr
                       key={asset.id}
+                      tabIndex={0}
+                      aria-label={`Select ${asset.name}`}
+                      title="Press Enter to select. Press Shift+F10 for actions."
                       onClick={() => handleAssetSelection(asset.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          handleAssetSelection(asset.id);
+                        }
+                        if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+                          event.preventDefault();
+                          const bounds = event.currentTarget.getBoundingClientRect();
+                          handleAssetSelection(asset.id);
+                          setMenuState({ assetId: asset.id, x: bounds.left + 32, y: bounds.top + 32 });
+                        }
+                      }}
                       onContextMenu={(event) => {
                         event.preventDefault();
                         handleAssetSelection(asset.id);

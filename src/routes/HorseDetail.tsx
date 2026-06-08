@@ -1,6 +1,7 @@
 import { useId, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState } from '@/components/EmptyState';
+import { Timeline } from '@/components/InteractionSystem';
 import { SalePacketSlots } from '@/components/SalePacketSlots';
 import { KeyValue, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
 import { ChevronLeftIcon, SharedAccessIcon } from '@/components/icons';
@@ -817,18 +818,15 @@ export default function HorseDetail() {
 
         <Panel eyebrow="Medical" title="Medical">
           {horse.medicalTimeline.length ? (
-            <div className="timeline">
-              {horse.medicalTimeline.map((event) => (
-                <div key={event.id} className="timeline__item">
-                  <div className="timeline__date">{formatDateLabel(event.date)}</div>
-                  <div>
-                    <div className="timeline__title">{event.title}</div>
-                    <div className="timeline__copy">{event.summary}</div>
-                    <div className="timeline__meta">{event.owner}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <Timeline
+              label={`${horse.name} medical timeline`}
+              items={horse.medicalTimeline.map((event) => ({
+                id: event.id,
+                date: formatDateLabel(event.date),
+                title: event.title,
+                description: `${event.summary} | ${event.owner}`,
+              }))}
+            />
           ) : (
             <EmptyState compact title="No medical timeline" description="Add a care event after the next exam." />
           )}
@@ -989,25 +987,22 @@ export default function HorseDetail() {
                 </button>
               </div>
             </div>
-            <div className="timeline">
-              {[...horse.activity, ...horse.notes.map((note) => ({
+            <Timeline
+              label={`${horse.name} activity timeline`}
+              items={[...horse.activity, ...horse.notes.map((note) => ({
                 id: note.id,
                 date: note.createdAt,
                 title: note.title,
                 summary: note.body,
                 owner: note.author,
                 category: 'Operations' as const,
-              }))].map((entry) => (
-                <div key={entry.id} className="timeline__item">
-                  <div className="timeline__date">{formatDateLabel(entry.date)}</div>
-                  <div>
-                    <div className="timeline__title">{entry.title}</div>
-                    <div className="timeline__copy">{entry.summary}</div>
-                    <div className="timeline__meta">{entry.owner}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
+              }))].map((entry) => ({
+                id: entry.id,
+                date: formatDateLabel(entry.date),
+                title: entry.title,
+                description: `${entry.summary} | ${entry.owner}`,
+              }))}
+            />
           </div>
         </div>
       </Panel>

@@ -146,22 +146,29 @@ export default function Expenses() {
             <div className="ops-record-grid">
               {filteredReceipts.map((receipt) => {
                 const horse = horses.find((item) => item.id === receipt.horseId);
-                return (
+                const content = <>
+                  <div className="ops-record-card__top">
+                    <div>
+                      <span>{receipt.category}</span>
+                      <strong>{receipt.title}</strong>
+                    </div>
+                    <Pill tone="blue">{formatCurrency(receipt.amount)}</Pill>
+                  </div>
+                  <p>{receipt.notes || 'No notes added.'}</p>
+                  <div className="ops-record-meta">
+                    <span>{horse?.name ?? 'Ranch-wide'}</span>
+                    <span>{receipt.vendor || 'Vendor pending'}</span>
+                    <span>{formatDateLabel(receipt.receiptDate)}</span>
+                  </div>
+                </>;
+                return receipt.horseId ? (
                   <button key={receipt.id} className="ops-record-card" type="button" onClick={() => receipt.horseId ? navigate(`/horses/${receipt.horseId}`) : undefined}>
-                    <div className="ops-record-card__top">
-                      <div>
-                        <span>{receipt.category}</span>
-                        <strong>{receipt.title}</strong>
-                      </div>
-                      <Pill tone="blue">{formatCurrency(receipt.amount)}</Pill>
-                    </div>
-                    <p>{receipt.notes || 'No notes added.'}</p>
-                    <div className="ops-record-meta">
-                      <span>{horse?.name ?? 'Ranch-wide'}</span>
-                      <span>{receipt.vendor || 'Vendor pending'}</span>
-                      <span>{formatDateLabel(receipt.receiptDate)}</span>
-                    </div>
+                    {content}
                   </button>
+                ) : (
+                  <article key={receipt.id} className="ops-record-card ops-record-card--static" title="Ranch-wide receipt with no linked horse record.">
+                    {content}
+                  </article>
                 );
               })}
             </div>
