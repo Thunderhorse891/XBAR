@@ -212,13 +212,22 @@ export default function Ownership() {
   };
 
   const addCoOwner = () => {
-    if (!selectedHorse) {
+    if (!selectedHorse) return;
+
+    const share = Number(coOwner.share);
+    if (!coOwner.name.trim()) {
+      setFormError('Owner name is required.');
       return;
     }
+    if (!share || share <= 0 || share > remainingShare) {
+      setFormError(`Share must be between 1 and ${remainingShare}.`);
+      return;
+    }
+    setFormError('');
 
     const result = addOwnershipStake(selectedHorse.id, {
-      name: coOwner.name,
-      share: Number(coOwner.share),
+      name: coOwner.name.trim(),
+      share,
       role: coOwner.role,
       contact: coOwner.contact,
     });
@@ -401,6 +410,7 @@ export default function Ownership() {
                       <input className="field-input" value={coOwner.contact} onChange={(event) => setCoOwner((current) => ({ ...current, contact: event.target.value }))} disabled={!canManageOwnership} />
                     </label>
                   </div>
+                  {formError ? <div className="field-error" role="alert">{formError}</div> : null}
                   <button className="button button--primary ownership-full-button" type="button" onClick={addCoOwner} disabled={!canManageOwnership}>
                     Add owner to horse
                   </button>

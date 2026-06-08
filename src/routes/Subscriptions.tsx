@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { MetricCard, PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
 import { startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency, formatDateLabel } from '@/lib/format';
@@ -17,6 +18,7 @@ export default function Subscriptions() {
   const session = useCloudStore((state) => state.session);
   const workspaceId = useCloudStore((state) => state.workspaceId);
   const pushToast = useUiStore((state) => state.pushToast);
+  const [checkingOut, setCheckingOut] = useState<SubscriptionTier | null>(null);
 
   return (
     <>
@@ -164,21 +166,28 @@ export default function Subscriptions() {
                       <button
                         className="button button--primary button--compact"
                         type="button"
+                        disabled={checkingOut !== null}
                         onClick={async () => {
-                          const managedCheckout = await startManagedCheckout({
-                            tier,
-                            workspaceId,
-                            accessToken: session?.access_token ?? '',
-                          });
-                          if (managedCheckout.ok) {
-                            window.location.href = managedCheckout.url;
-                            return;
+                          if (checkingOut) return;
+                          setCheckingOut(tier);
+                          try {
+                            const managedCheckout = await startManagedCheckout({
+                              tier,
+                              workspaceId,
+                              accessToken: session?.access_token ?? '',
+                            });
+                            if (managedCheckout.ok) {
+                              window.location.href = managedCheckout.url;
+                              return;
+                            }
+                            pushToast({ title: 'Managed checkout unavailable', message: managedCheckout.message, tone: 'error' });
+                            window.open(paymentLink, '_blank', 'noopener,noreferrer');
+                          } finally {
+                            setCheckingOut(null);
                           }
-                          pushToast({ title: 'Managed checkout unavailable', message: managedCheckout.message, tone: 'error' });
-                          window.open(paymentLink, '_blank', 'noopener,noreferrer');
                         }}
                       >
-                        Open checkout
+                        {checkingOut === tier ? 'Opening…' : 'Open checkout'}
                       </button>
                     ) : (
                       <div>

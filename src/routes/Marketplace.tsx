@@ -16,6 +16,7 @@ export default function Marketplace() {
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const salesLeads = useXbarStore((state) => state.salesLeads);
+  const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const createSalesLead = useXbarStore((state) => state.createSalesLead);
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageSales = useCurrentRoleCapability('manageSales');
@@ -50,7 +51,10 @@ export default function Marketplace() {
   const sexFilters: SexFilter[] = ['All', 'Mare', 'Stud', 'Gelding', 'Filly', 'Colt'];
 
   function submitInquiry() {
-    if (!inquiryHorseId) return;
+    if (!inquiryHorseId) {
+      setInquiryError('Select a horse before submitting an inquiry.');
+      return;
+    }
     if (!inquiryName.trim()) {
       setInquiryError('Buyer name is required.');
       return;
@@ -152,7 +156,7 @@ export default function Marketplace() {
           <div className="marketplace-grid">
             {filtered.map((horse) => {
               const pub = sanitizeHorseForBuyerView(horse);
-              const packet = buildHorsePacketCompleteness(horse, documents.filter((d) => d.horseId === horse.id));
+              const packet = buildHorsePacketCompleteness(horse, documents.filter((d) => d.horseId === horse.id), ownershipRecords.find((r) => r.horseId === horse.id));
               const openLeads = salesLeads.filter((l) => l.horseId === horse.id && l.stage !== 'Closed').length;
               const isInquiring = inquiryHorseId === horse.id;
 
