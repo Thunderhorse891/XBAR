@@ -23,10 +23,10 @@ const foundationSteps = [
 ];
 
 const workspacePreviews = [
-  { label: 'Horse profiles', value: 'Identity, media, title, notes' },
-  { label: 'Breeding records', value: 'Contracts, milestones, foaling windows' },
-  { label: 'Care cadence', value: 'Coggins, dental, vaccines, blockers' },
-  { label: 'Ranch clarity', value: 'Expenses, assets, weather, team roles' },
+  { label: 'Horse profiles', value: 'Know every horse\'s health, title, and history at a glance' },
+  { label: 'Breeding records', value: 'Track contracts, foaling windows, and milestones' },
+  { label: 'Care cadence', value: 'Never miss a Coggins, vaccine, or dental — auto-reminders built in' },
+  { label: 'Ranch clarity', value: 'Log expenses, manage assets, and see where money goes' },
 ];
 
 export default function SetupWorkspace() {
@@ -213,7 +213,7 @@ export default function SetupWorkspace() {
                   />
                 </label>
                 <label className="field-stack">
-                  <span className="field-label text-slate-300">Ranch manager</span>
+                  <span className="field-label text-slate-300">Ranch manager <span className="text-slate-500 font-normal">(optional)</span></span>
                   <input
                     className="field-input premium-auth-input"
                     value={form.ranchManagerName}
@@ -222,7 +222,7 @@ export default function SetupWorkspace() {
                   />
                 </label>
                 <label className="field-stack">
-                  <span className="field-label text-slate-300">Ops email</span>
+                  <span className="field-label text-slate-300">Ops email <span className="text-slate-500 font-normal">(optional)</span></span>
                   <input
                     className="field-input premium-auth-input"
                     type="email"
@@ -232,7 +232,7 @@ export default function SetupWorkspace() {
                   />
                 </label>
                 <label className="field-stack">
-                  <span className="field-label text-slate-300">Default owner</span>
+                  <span className="field-label text-slate-300">Default owner <span className="text-slate-500 font-normal">(optional)</span></span>
                   <input
                     className="field-input premium-auth-input"
                     value={form.defaultOwnerName}
@@ -241,7 +241,7 @@ export default function SetupWorkspace() {
                   />
                 </label>
                 <label className="field-stack">
-                  <span className="field-label text-slate-300">Owner entity</span>
+                  <span className="field-label text-slate-300">Owner entity <span className="text-slate-500 font-normal">(optional)</span></span>
                   <input
                     className="field-input premium-auth-input"
                     value={form.defaultOwnerEntity}
@@ -250,7 +250,7 @@ export default function SetupWorkspace() {
                   />
                 </label>
                 <label className="field-stack">
-                  <span className="field-label text-slate-300">Default barn</span>
+                  <span className="field-label text-slate-300">Default barn <span className="text-slate-500 font-normal">(optional)</span></span>
                   <input
                     className="field-input premium-auth-input"
                     value={form.defaultBarn}
@@ -259,7 +259,7 @@ export default function SetupWorkspace() {
                   />
                 </label>
                 <label className="field-stack">
-                  <span className="field-label text-slate-300">Default pasture</span>
+                  <span className="field-label text-slate-300">Default pasture <span className="text-slate-500 font-normal">(optional)</span></span>
                   <input
                     className="field-input premium-auth-input"
                     value={form.defaultPasture}

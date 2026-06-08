@@ -205,22 +205,22 @@ export default function Dashboard() {
             <div className="ops-briefing-stat">
               <span className="ops-briefing-stat__label">Horses</span>
               <span className="ops-briefing-stat__value ops-briefing-stat__value--clear">0</span>
-              <span className="ops-briefing-stat__detail">No records yet</span>
+              <span className="ops-briefing-stat__detail">Add your first</span>
             </div>
             <div className="ops-briefing-stat">
               <span className="ops-briefing-stat__label">Documents</span>
               <span className="ops-briefing-stat__value">0</span>
-              <span className="ops-briefing-stat__detail">Vault is empty</span>
+              <span className="ops-briefing-stat__detail">Upload a packet</span>
             </div>
             <div className="ops-briefing-stat">
               <span className="ops-briefing-stat__label">Transfers</span>
               <span className="ops-briefing-stat__value ops-briefing-stat__value--clear">0</span>
-              <span className="ops-briefing-stat__detail">None pending</span>
+              <span className="ops-briefing-stat__detail">Tracked automatically</span>
             </div>
             <div className="ops-briefing-stat">
               <span className="ops-briefing-stat__label">Buyers</span>
               <span className="ops-briefing-stat__value">0</span>
-              <span className="ops-briefing-stat__detail">No active leads</span>
+              <span className="ops-briefing-stat__detail">Share a listing to start</span>
             </div>
           </div>
         </div>
@@ -249,23 +249,23 @@ export default function Dashboard() {
             />
           </Panel>
 
-          <Panel eyebrow="First steps" title="What to build first">
+          <Panel eyebrow="First steps" title="Up and running in 10 minutes">
             <div className="stack-list">
               <div className="stack-item">
-                <div className="stack-item__title">Horse record</div>
-                <div className="stack-item__copy">One horse gives the system something to organize around. Add the name, breed, barn, and owner.</div>
+                <div className="stack-item__title">Add a horse</div>
+                <div className="stack-item__copy">One horse record unlocks health tracking, care reminders, document organization, and buyer-ready sale packets.</div>
               </div>
               <div className="stack-item">
-                <div className="stack-item__title">Document vault</div>
-                <div className="stack-item__copy">Upload the first packet. Coggins, registration, and health papers establish the chain of record.</div>
+                <div className="stack-item__title">Upload documents</div>
+                <div className="stack-item__copy">Coggins, registration, and health papers build a trusted chain of record — required by buyers and regulators alike.</div>
               </div>
               <div className="stack-item">
-                <div className="stack-item__title">Spend ledger</div>
-                <div className="stack-item__copy">Log feed, wormer, dental, and vet costs. The budget builds itself once receipts come in.</div>
+                <div className="stack-item__title">Log an expense</div>
+                <div className="stack-item__copy">Feed, vet, dental, wormer — log once and the budget report builds itself. Know which horses cost money.</div>
               </div>
               <div className="stack-item">
-                <div className="stack-item__title">Weather watch</div>
-                <div className="stack-item__copy">Set the ranch location and get turnout, hauling, and breeding windows tied to the forecast.</div>
+                <div className="stack-item__title">Share a listing</div>
+                <div className="stack-item__copy">Turn a horse record into a buyer-facing sale packet with a protected link in one click from the horse profile.</div>
               </div>
             </div>
           </Panel>

@@ -11,6 +11,13 @@ import type { SubscriptionTier } from '@/types/xbar';
 
 const tiers: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
 
+const tierDescriptions: Record<SubscriptionTier, string> = {
+  Starter: 'Solo breeder or single-location operation.',
+  Professional: 'Small team with shared buyer access and team roles.',
+  'Ranch Ops': 'Multi-location or high-volume. Full asset management.',
+  Enterprise: 'Custom integrations, dedicated support, and SLAs.',
+};
+
 export default function Subscriptions() {
   const subscription = useXbarStore((state) => state.subscription);
   const canManageBilling = useCurrentRoleCapability('manageBilling');
@@ -147,6 +154,7 @@ export default function Subscriptions() {
                   <div className="stack-item__title">{tier}</div>
                   <Pill tone={current ? 'blue' : 'slate'}>{current ? 'Current' : 'Available'}</Pill>
                 </div>
+                <p className="field-hint" style={{ margin: '0 0 4px' }}>{tierDescriptions[tier]}</p>
                 <div className="inline-metrics">
                   <span>{formatCurrency(config.monthlyRate)}/mo</span>
                   <span>{config.limits.seatLimit} seats</span>
@@ -162,7 +170,11 @@ export default function Subscriptions() {
                 </div>
                 <div className="inline-actions">
                   {!current && canManageBilling ? (
-                    billingConfigured && paymentLink ? (
+                    tier === 'Enterprise' ? (
+                      <a className="button button--primary button--compact" href="mailto:sales@xbar.com" target="_blank" rel="noreferrer">
+                        Contact sales
+                      </a>
+                    ) : billingConfigured && paymentLink ? (
                       <button
                         className="button button--primary button--compact"
                         type="button"
