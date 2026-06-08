@@ -2742,6 +2742,11 @@ a:focus-visible,
     grid-template-columns: 1fr;
   }
 
+  .ops-cmd,
+  .field-tools {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .dashboard-budget-strip {
     grid-template-columns: 1fr;
   }
@@ -2866,6 +2871,11 @@ a:focus-visible,
   .portfolio-toolbar__controls {
     grid-template-columns: 1fr;
     flex-direction: column;
+  }
+
+  .ops-cmd,
+  .field-tools {
+    grid-template-columns: 1fr;
   }
 
   .timeline__item {
@@ -3329,6 +3339,138 @@ a:focus-visible,
   background: rgba(44, 38, 33, 0.28);
   padding: 16px;
   backdrop-filter: blur(2px);
+}
+
+/* ── Command Center ─────────────────────────────────────────────────── */
+.ops-cmd {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ops-cmd-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafd 100%);
+  text-decoration: none;
+  color: inherit;
+  transition: box-shadow 0.15s, transform 0.12s;
+  border-left-width: 3px;
+}
+
+.ops-cmd-item:hover {
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.1);
+  transform: translateY(-1px);
+}
+
+.ops-cmd-item--rose   { border-left-color: var(--rose); }
+.ops-cmd-item--amber  { border-left-color: var(--amber); }
+.ops-cmd-item--blue   { border-left-color: var(--blue); }
+.ops-cmd-item--emerald { border-left-color: var(--emerald); }
+.ops-cmd-item--slate  { border-left-color: var(--slate); }
+
+.ops-cmd-item__module {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ops-cmd-item__title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.ops-cmd-item__summary {
+  font-size: 0.8rem;
+  color: var(--muted-strong);
+  line-height: 1.45;
+  flex: 1;
+}
+
+.ops-cmd-item__bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+}
+
+/* ── Field Tools ────────────────────────────────────────────────────── */
+.field-tools {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.field-tool-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafd 100%);
+  text-decoration: none;
+  color: inherit;
+  transition: box-shadow 0.15s, transform 0.12s;
+}
+
+.field-tool-card:hover {
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.1);
+  transform: translateY(-2px);
+}
+
+.field-tool-card__eyebrow {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.field-tool-card__title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.field-tool-card__summary {
+  font-size: 0.84rem;
+  color: var(--muted-strong);
+  line-height: 1.5;
+}
+
+.field-tool-card__metric {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.field-tool-card--emerald .field-tool-card__metric { color: var(--emerald); }
+.field-tool-card--amber   .field-tool-card__metric { color: var(--amber); }
+.field-tool-card--blue    .field-tool-card__metric { color: var(--blue); }
+.field-tool-card--rose    .field-tool-card__metric { color: var(--rose); }
+
+/* Section header used by command center and field tools */
+.ops-section-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 10px;
 }
 
 .help-panel {

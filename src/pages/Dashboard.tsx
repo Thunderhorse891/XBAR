@@ -4,6 +4,7 @@ import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { buildBudgetSummary, buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
+import { buildCommandCenter, buildFieldTools } from '@/lib/xbarGrowth';
 import { formatCompactCurrency, formatCurrency, formatDateLabel } from '@/lib/format';
 import { resolveWeatherByQuery, type WeatherForecast } from '@/lib/weather';
 import { useCurrentRoleCapability, useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
@@ -22,6 +23,7 @@ export default function Dashboard() {
   const salesLeads = useXbarStore((state) => state.salesLeads);
   const intakeBatches = useXbarStore((state) => state.intakeBatches);
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
+  const sharedAccess = useXbarStore((state) => state.sharedAccess);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const addExpenseReceipt = useXbarStore((state) => state.addExpenseReceipt);
   const roleWorkspace = useCurrentRoleWorkspace();
@@ -52,6 +54,14 @@ export default function Dashboard() {
   const qualifiedBuyerCount = useMemo(() => salesLeads.filter((lead) => lead.stage === 'Qualified' || lead.stage === 'Offer').length, [salesLeads]);
   const feedReserveAsset = useMemo(() => ranchAssets.find((asset) => asset.category === 'Feed & Supply'), [ranchAssets]);
   const recentBatches = useMemo(() => intakeBatches.slice(0, 4), [intakeBatches]);
+  const commandCenter = useMemo(
+    () => buildCommandCenter({ horses, documents, ownershipRecords, salesLeads, ranchAssets, intakeBatches }),
+    [horses, documents, ownershipRecords, salesLeads, ranchAssets, intakeBatches],
+  );
+  const fieldTools = useMemo(
+    () => buildFieldTools({ horses, documents, ownershipRecords, salesLeads, sharedAccess }),
+    [horses, documents, ownershipRecords, salesLeads, sharedAccess],
+  );
 
   useEffect(() => {
     const ranchQuery = workspaceProfile.ranchName.trim();
@@ -451,6 +461,22 @@ export default function Dashboard() {
         />
       </div>
 
+      <div>
+        <div className="ops-section-label">Command center</div>
+        <div className="ops-cmd">
+          {commandCenter.map((item) => (
+            <Link key={item.id} to={item.href} className={`ops-cmd-item ops-cmd-item--${item.tone}`}>
+              <div className="ops-cmd-item__module">{item.module}</div>
+              <div className="ops-cmd-item__title">{item.title}</div>
+              <div className="ops-cmd-item__bottom">
+                <span className="ops-cmd-item__summary">{item.summary}</span>
+                <span className={`pill pill--${item.tone}`}>{item.value}</span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+
       <div className="dashboard-board">
         <div className="dashboard-board__main">
           <Panel
@@ -631,6 +657,20 @@ export default function Dashboard() {
               <EmptyState compact title="No receipts logged" description="Budget entries will appear here after upload." />
             )}
           </Panel>
+        </div>
+      </div>
+
+      <div>
+        <div className="ops-section-label">Field tools</div>
+        <div className="field-tools">
+          {fieldTools.map((tool) => (
+            <Link key={tool.id} to={tool.href} className={`field-tool-card field-tool-card--${tool.tone}`}>
+              <div className="field-tool-card__eyebrow">{tool.eyebrow}</div>
+              <div className="field-tool-card__title">{tool.title}</div>
+              <div className="field-tool-card__summary">{tool.summary}</div>
+              <div className="field-tool-card__metric">{tool.metric}</div>
+            </Link>
+          ))}
         </div>
       </div>
 
