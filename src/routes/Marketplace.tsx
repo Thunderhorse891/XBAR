@@ -107,12 +107,13 @@ export default function Marketplace() {
 
       <Panel eyebrow="Listings" title="For sale">
         <div className="mkt-filter-toolbar">
-          <div className="mkt-filter-group">
+          <div className="mkt-filter-group" role="group" aria-label="Filter by sex">
             {sexFilters.map((f) => (
               <button
                 key={f}
                 className={`button button--ghost button--compact${sexFilter === f ? ' button--ghost--active' : ''}`}
                 type="button"
+                aria-pressed={sexFilter === f}
                 onClick={() => setSexFilter(f)}
               >
                 {f}
@@ -120,7 +121,11 @@ export default function Marketplace() {
             ))}
           </div>
           {breeds.length > 0 && (
+            <label className="sr-only" htmlFor="mkt-breed-filter">Filter by breed</label>
+          )}
+          {breeds.length > 0 && (
             <select
+              id="mkt-breed-filter"
               className="field-input field-input--auto"
               value={breedFilter}
               onChange={(e) => setBreedFilter(e.target.value)}
@@ -129,7 +134,9 @@ export default function Marketplace() {
               {breeds.map((b) => <option key={b} value={b}>{b}</option>)}
             </select>
           )}
+          <label className="sr-only" htmlFor="mkt-sort">Sort listings</label>
           <select
+            id="mkt-sort"
             className="field-input field-input--auto field-input--push"
             value={sort}
             onChange={(e) => setSort(e.target.value as SortKey)}

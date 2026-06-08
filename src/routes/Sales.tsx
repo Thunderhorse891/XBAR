@@ -175,6 +175,7 @@ export default function Sales() {
               <input
                 className="field-input"
                 placeholder="Search by name, segment, status…"
+                aria-label="Search listings"
                 value={listingQuery}
                 onChange={(e) => setListingQuery(e.target.value)}
               />
