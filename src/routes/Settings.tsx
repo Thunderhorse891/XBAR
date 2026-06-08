@@ -287,12 +287,12 @@ export default function Settings() {
         <Panel eyebrow="Ranch profile" title="Profile">
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
-              <span className="field-label">Business name</span>
-              <input className="field-input" value={profileDraft.businessName} onChange={(event) => setProfileDraft((current) => ({ ...current, businessName: event.target.value }))} disabled={!canManageSettings} />
+              <span className="field-label">Business name <span aria-hidden="true" className="field-required">*</span></span>
+              <input className="field-input" value={profileDraft.businessName} required aria-required="true" onChange={(event) => setProfileDraft((current) => ({ ...current, businessName: event.target.value }))} disabled={!canManageSettings} />
             </label>
             <label className="field-stack">
-              <span className="field-label">Ranch name</span>
-              <input className="field-input" value={profileDraft.ranchName} onChange={(event) => setProfileDraft((current) => ({ ...current, ranchName: event.target.value }))} disabled={!canManageSettings} />
+              <span className="field-label">Ranch name <span aria-hidden="true" className="field-required">*</span></span>
+              <input className="field-input" value={profileDraft.ranchName} required aria-required="true" onChange={(event) => setProfileDraft((current) => ({ ...current, ranchName: event.target.value }))} disabled={!canManageSettings} />
             </label>
             <label className="field-stack">
               <span className="field-label">Default owner</span>

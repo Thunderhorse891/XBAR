@@ -427,11 +427,11 @@ export default function Ownership() {
         {filteredRows.length ? (
           <div className="ownership-table" role="table" aria-label="Horse ownership relationships">
             <div className="ownership-table__head" role="row">
-              <span>Horse</span>
-              <span>Current owner</span>
-              <span>Share</span>
-              <span>Status</span>
-              <span>Documents</span>
+              <span role="columnheader">Horse</span>
+              <span role="columnheader">Current owner</span>
+              <span role="columnheader">Share</span>
+              <span role="columnheader">Status</span>
+              <span role="columnheader">Documents</span>
             </div>
             {filteredRows.map((row) => (
               <button

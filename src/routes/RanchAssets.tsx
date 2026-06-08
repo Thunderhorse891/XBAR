@@ -168,12 +168,12 @@ export default function RanchAssets() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Asset</th>
-                    <th>Category</th>
-                    <th>Status</th>
-                    <th>Condition</th>
-                    <th>Assigned to</th>
-                    <th>Next service</th>
+                    <th scope="col">Asset</th>
+                    <th scope="col">Category</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Condition</th>
+                    <th scope="col">Assigned to</th>
+                    <th scope="col">Next service</th>
                   </tr>
                 </thead>
                 <tbody>

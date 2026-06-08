@@ -3076,6 +3076,12 @@ a:focus-visible,
 .text-blue    { color: var(--blue); }
 .text-muted   { color: var(--muted); }
 
+.field-required {
+  color: var(--rose);
+  margin-left: 2px;
+  font-size: 0.85em;
+}
+
 .code-text {
   font-family: monospace;
   font-size: 12px;

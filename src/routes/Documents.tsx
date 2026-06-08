@@ -453,13 +453,14 @@ export default function Documents() {
                 type="file"
                 multiple
                 accept=".pdf,.txt,.csv,image/*"
+                aria-describedby={formErrors.files ? 'docs-files-error' : undefined}
                 onChange={(event) => {
                   setFiles(Array.from(event.target.files ?? []));
                   setFormErrors((current) => ({ ...current, files: undefined }));
                 }}
                 disabled={!canUploadDocuments}
               />
-              {formErrors.files ? <span className="field-error">{formErrors.files}</span> : null}
+              {formErrors.files ? <span id="docs-files-error" className="field-error" role="alert">{formErrors.files}</span> : null}
             </label>
           </div>
           <div className="inline-actions">
@@ -480,11 +481,11 @@ export default function Documents() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Document</th>
-                  <th>Current horse</th>
-                  <th>Status</th>
-                  <th>Assign horse</th>
-                  <th>Action</th>
+                  <th scope="col">Document</th>
+                  <th scope="col">Current horse</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Assign horse</th>
+                  <th scope="col">Action</th>
                 </tr>
               </thead>
               <tbody>

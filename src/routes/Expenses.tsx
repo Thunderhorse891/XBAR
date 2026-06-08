@@ -65,6 +65,10 @@ export default function Expenses() {
 
   async function handleReceiptSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!draft.title.trim() || !draft.amount) {
+      pushToast({ title: 'Required fields missing', message: 'Receipt label and amount are required.', tone: 'error' });
+      return;
+    }
     setSavingReceipt(true);
     const result = await addExpenseReceipt({
       horseId: draft.horseId || undefined,
@@ -224,16 +228,16 @@ export default function Expenses() {
               </select>
             </label>
             <label className="field-stack">
-              <span className="field-label">Receipt label</span>
-              <input className="field-input" value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Feed delivery" disabled={!canManageBudget || savingReceipt} />
+              <span className="field-label">Receipt label <span aria-hidden="true" className="field-required">*</span></span>
+              <input className="field-input" required aria-required="true" value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Feed delivery" disabled={!canManageBudget || savingReceipt} />
             </label>
             <label className="field-stack">
               <span className="field-label">Vendor</span>
               <input className="field-input" value={draft.vendor} onChange={(event) => setDraft((current) => ({ ...current, vendor: event.target.value }))} placeholder="Co-op, vet, farrier" disabled={!canManageBudget || savingReceipt} />
             </label>
             <label className="field-stack">
-              <span className="field-label">Amount</span>
-              <input className="field-input" type="number" min="0" step="0.01" value={draft.amount} onChange={(event) => setDraft((current) => ({ ...current, amount: event.target.value }))} placeholder="240.00" disabled={!canManageBudget || savingReceipt} />
+              <span className="field-label">Amount <span aria-hidden="true" className="field-required">*</span></span>
+              <input className="field-input" type="number" min="0" step="0.01" required aria-required="true" value={draft.amount} onChange={(event) => setDraft((current) => ({ ...current, amount: event.target.value }))} placeholder="240.00" disabled={!canManageBudget || savingReceipt} />
             </label>
             <label className="field-stack">
               <span className="field-label">Receipt date</span>

@@ -537,13 +537,13 @@ export default function Horses() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Horse</th>
-                <th>Segment</th>
-                <th>Owner</th>
-                <th>Location</th>
-                <th>Docs</th>
-                <th>Readiness</th>
-                <th>Status</th>
+                <th scope="col">Horse</th>
+                <th scope="col">Segment</th>
+                <th scope="col">Owner</th>
+                <th scope="col">Location</th>
+                <th scope="col">Docs</th>
+                <th scope="col">Readiness</th>
+                <th scope="col">Status</th>
               </tr>
             </thead>
             <tbody>

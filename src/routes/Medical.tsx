@@ -318,11 +318,11 @@ export default function Medical() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Horse</th>
-                    <th>Event</th>
-                    <th>Vet</th>
-                    <th>Date</th>
-                    {canManageMedical && <th className="th--action">Actions</th>}
+                    <th scope="col">Horse</th>
+                    <th scope="col">Event</th>
+                    <th scope="col">Vet</th>
+                    <th scope="col">Date</th>
+                    {canManageMedical && <th scope="col" className="th--action">Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
