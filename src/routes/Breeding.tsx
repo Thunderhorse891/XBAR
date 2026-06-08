@@ -152,9 +152,9 @@ export default function Breeding() {
                         {editingEventId === event.id ? (
                           <div className="form-column">
                             <div className="stack-item__title">{horse.name}</div>
-                            <input className="field-input" value={editForm.title} onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))} placeholder="Title" />
-                            <input className="field-input" value={editForm.body} onChange={(e) => setEditForm((f) => ({ ...f, body: e.target.value }))} placeholder="Notes" />
-                            <input className="field-input" type="date" value={editForm.date} onChange={(e) => setEditForm((f) => ({ ...f, date: e.target.value }))} />
+                            <input className="field-input" aria-label="Event title" value={editForm.title} onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))} placeholder="Title" />
+                            <input className="field-input" aria-label="Event notes" value={editForm.body} onChange={(e) => setEditForm((f) => ({ ...f, body: e.target.value }))} placeholder="Notes" />
+                            <input className="field-input" type="date" aria-label="Event date" value={editForm.date} onChange={(e) => setEditForm((f) => ({ ...f, date: e.target.value }))} />
                             <div className="inline-actions">
                               <button className="button button--primary button--compact" type="button" disabled={!editForm.title.trim() || !editForm.body.trim()} onClick={() => { const result = updateBreedingEvent(horse.id, event.id, { title: editForm.title, summary: editForm.body, date: editForm.date }); pushToast({ title: result.ok ? 'Event updated' : 'Update failed', message: result.message, tone: result.ok ? 'success' : 'error' }); if (result.ok) setEditingEventId(null); }}>Save</button>
                               <button className="button button--ghost button--compact" type="button" onClick={() => setEditingEventId(null)}>Cancel</button>
