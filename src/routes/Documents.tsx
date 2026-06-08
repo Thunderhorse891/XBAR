@@ -551,6 +551,9 @@ export default function Documents() {
                               {openingDocumentId === document.id ? 'Opening...' : 'Open file'}
                             </button>
                           ) : null}
+                          {document.type === 'Registration' && !document.horseId && !reviewAssignments[document.id] && !(document.entities.horseName || document.entities.registrationNumber) && (
+                            <span className="field-hint">OCR found no horse name or registration number — assign this document to a horse manually using the selector above.</span>
+                          )}
                           {document.type === 'Registration' && !document.horseId && !reviewAssignments[document.id] && (document.entities.horseName || document.entities.registrationNumber) && (
                             <button
                               className="button button--primary button--compact"

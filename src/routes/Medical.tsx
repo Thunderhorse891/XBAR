@@ -265,7 +265,7 @@ export default function Medical() {
                         {medicalEventTypes.map((t) => <option key={t} value={t}>{t}</option>)}
                       </select>
                       <div className="inline-actions">
-                        <button className="button button--primary button--compact" type="button" disabled={!editForm.title.trim()} onClick={() => { const result = updateMedicalEvent(event.horseId, event.id, { title: editForm.title, summary: editForm.body, date: editForm.date, status: editForm.type }); pushToast({ title: result.ok ? 'Event updated' : 'Update failed', message: result.message, tone: result.ok ? 'success' : 'error' }); if (result.ok) setEditingEventId(null); }}>Save</button>
+                        <button className="button button--primary button--compact" type="button" disabled={!editForm.title.trim() || !editForm.date.trim()} onClick={() => { const result = updateMedicalEvent(event.horseId, event.id, { title: editForm.title, summary: editForm.body, date: editForm.date, status: editForm.type }); pushToast({ title: result.ok ? 'Event updated' : 'Update failed', message: result.message, tone: result.ok ? 'success' : 'error' }); if (result.ok) setEditingEventId(null); }}>Save</button>
                         <button className="button button--ghost button--compact" type="button" onClick={() => setEditingEventId(null)}>Cancel</button>
                       </div>
                     </div>
@@ -373,7 +373,7 @@ export default function Medical() {
                                 {medicalEventTypes.map((t) => <option key={t} value={t}>{t}</option>)}
                               </select>
                               <div className="inline-actions">
-                                <button className="button button--primary button--compact" type="button" disabled={!editForm.title.trim()} onClick={() => { const result = updateMedicalEvent(event.horseId, event.id, { title: editForm.title, summary: editForm.body, date: editForm.date, status: editForm.type }); pushToast({ title: result.ok ? 'Event updated' : 'Update failed', message: result.message, tone: result.ok ? 'success' : 'error' }); if (result.ok) setEditingEventId(null); }}>Save</button>
+                                <button className="button button--primary button--compact" type="button" disabled={!editForm.title.trim() || !editForm.date.trim()} onClick={() => { const result = updateMedicalEvent(event.horseId, event.id, { title: editForm.title, summary: editForm.body, date: editForm.date, status: editForm.type }); pushToast({ title: result.ok ? 'Event updated' : 'Update failed', message: result.message, tone: result.ok ? 'success' : 'error' }); if (result.ok) setEditingEventId(null); }}>Save</button>
                                 <button className="button button--ghost button--compact" type="button" onClick={() => setEditingEventId(null)}>Cancel</button>
                               </div>
                             </div>

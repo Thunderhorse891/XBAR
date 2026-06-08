@@ -16,6 +16,7 @@ export default function Weather() {
   const [state, setState] = useState<WeatherState>({ status: 'idle' });
   const [matches, setMatches] = useState<WeatherLocationResult[]>([]);
   const [searching, setSearching] = useState(false);
+  const [waitingForGeo, setWaitingForGeo] = useState(false);
 
   useEffect(() => {
     if (!initialQuery) {
@@ -83,9 +84,11 @@ export default function Weather() {
     }
 
     setSearching(true);
+    setWaitingForGeo(true);
     setState((current) => ({ status: 'loading', forecast: current.forecast }));
     navigator.geolocation.getCurrentPosition(
       async (position) => {
+        setWaitingForGeo(false);
         try {
           const forecast = await loadWeatherForecast({
             latitude: position.coords.latitude,
@@ -101,6 +104,7 @@ export default function Weather() {
         }
       },
       (error) => {
+        setWaitingForGeo(false);
         setSearching(false);
         setState({ status: 'error', error: error.message || 'Location access was denied.' });
       },
@@ -138,6 +142,9 @@ export default function Weather() {
             </button>
             {forecast ? <Pill tone="blue">{forecast.location.label}</Pill> : null}
           </div>
+          {waitingForGeo && (
+            <p className="field-hint">Waiting for browser location permission — check the address bar or a browser prompt.</p>
+          )}
         </form>
       </Panel>
 

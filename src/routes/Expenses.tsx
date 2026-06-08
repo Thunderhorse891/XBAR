@@ -65,7 +65,7 @@ export default function Expenses() {
 
   async function handleReceiptSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!draft.title.trim() || !draft.amount) {
+    if (!draft.title.trim() || !draft.amount || Number(draft.amount) <= 0) {
       pushToast({ title: 'Required fields missing', message: 'Receipt label and amount are required.', tone: 'error' });
       return;
     }
