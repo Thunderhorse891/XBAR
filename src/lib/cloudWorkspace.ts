@@ -106,7 +106,7 @@ function extractPayloadItem<T>(row: RelationalWorkspaceRow | null | undefined): 
 
 function pickNewestTimestamp(values: Array<string | null | undefined>) {
   return values
-    .filter((value): value is string => Boolean(value))
+    .filter((value): value is string => Boolean(value) && Number.isFinite(Date.parse(value as string)))
     .sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? '';
 }
 

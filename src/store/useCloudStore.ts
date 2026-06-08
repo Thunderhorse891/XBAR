@@ -51,6 +51,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     if (get().initialized) {
       return;
     }
+    set({ initialized: true });
 
     const client = getSupabaseClient();
     if (!client) {
