@@ -553,7 +553,7 @@ export default function Settings() {
               {isRelationalCloudEnabled() ? 'Relational sync on' : 'Snapshot-only sync'}
             </Pill>
             <Pill tone={isSnapshotFallbackEnabled() ? 'blue' : 'slate'}>{isSnapshotFallbackEnabled() ? 'Snapshot fallback on' : 'Snapshot fallback off'}</Pill>
-            <Pill tone={isBillingConfigured() ? 'emerald' : 'slate'}>{isBillingConfigured() ? 'Stripe links live' : 'Stripe links off'}</Pill>
+              <Pill tone={isBillingConfigured() ? 'emerald' : 'slate'}>{isBillingConfigured() ? 'Managed billing live' : 'Managed billing paused'}</Pill>
             <Pill tone={isFacebookSharingConfigured() ? 'emerald' : 'slate'}>{isFacebookSharingConfigured() ? 'Facebook share live' : 'Facebook share off'}</Pill>
             <Pill tone="blue">{workspaceStorageDriverLabel}</Pill>
             <Pill tone="slate">Review queue</Pill>

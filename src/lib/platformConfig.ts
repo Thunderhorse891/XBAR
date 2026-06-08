@@ -46,6 +46,7 @@ export const facebookConfig = {
 };
 
 export const stripeConfig = {
+  managedBillingEnabled: readFlag(env.VITE_MANAGED_BILLING_ENABLED, false),
   paymentLinks: {
     Starter: readEnv(env.VITE_STRIPE_PAYMENT_LINK_STARTER),
     Professional: readEnv(env.VITE_STRIPE_PAYMENT_LINK_PROFESSIONAL),
@@ -101,7 +102,7 @@ export function isSnapshotFallbackEnabled() {
 }
 
 export function isBillingConfigured() {
-  return Object.values(stripeConfig.paymentLinks).some(Boolean);
+  return stripeConfig.managedBillingEnabled;
 }
 
 export function isFacebookSharingConfigured() {

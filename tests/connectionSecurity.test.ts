@@ -10,6 +10,8 @@ const migrationSource = await readFile(fromRoot('supabase/migrations/20260605_ha
 const prepareSchemaSource = await readFile(fromRoot('scripts/prepare-supabase-schema.mjs'), 'utf8');
 
 test('managed checkout is admin-only and validates return origins', () => {
+  assert.match(checkoutSource, /MANAGED_BILLING_ENABLED/);
+  assert.match(checkoutSource, /Managed billing is paused\. No payment session was created\./);
   assert.match(checkoutSource, /access\.role !== 'Admin'/);
   assert.match(checkoutSource, /configuredOrigins\.includes\(requestedUrl\.origin\)/);
   assert.doesNotMatch(checkoutSource, /const returnUrl = typeof body\.returnUrl/);
