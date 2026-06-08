@@ -853,7 +853,7 @@ export default function HorseDetail() {
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__title">Medical note</div>
-              <div className="stack-item__copy">{horse.medicalNotes}</div>
+              <div className="stack-item__copy">{horse.medicalNotes || <span className="text-muted">No medical notes on record</span>}</div>
             </div>
             <div className="stack-item">
               <div className="stack-item__title">Packet state</div>
@@ -951,23 +951,27 @@ export default function HorseDetail() {
         <>
       <div className="detail-grid" role="tabpanel" id="tabpanel-ops" aria-labelledby="tab-ops">
         <Panel eyebrow="Ownership" title="Ownership">
-          <div className="stack-list">
-            {horse.ownership.map((stake) => (
-              <div key={stake.id} className="stack-item">
-                <div className="stack-item__top">
-                  <div>
-                    <div className="stack-item__title">{stake.name}</div>
-                    <div className="stack-item__copy">{stake.contact}</div>
+          {horse.ownership.length ? (
+            <div className="stack-list">
+              {horse.ownership.map((stake) => (
+                <div key={stake.id} className="stack-item">
+                  <div className="stack-item__top">
+                    <div>
+                      <div className="stack-item__title">{stake.name}</div>
+                      <div className="stack-item__copy">{stake.contact}</div>
+                    </div>
+                    <Pill tone="slate">{stake.role}</Pill>
                   </div>
-                  <Pill tone="slate">{stake.role}</Pill>
+                  <div className="inline-metrics">
+                    <span>{stake.share}% share</span>
+                    <span>{ownershipRecord?.transferStatus ?? 'No transfer record'}</span>
+                  </div>
                 </div>
-                <div className="inline-metrics">
-                  <span>{stake.share}% share</span>
-                  <span>{ownershipRecord?.transferStatus ?? 'No transfer record'}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState compact title="No owners recorded" description="Add ownership stakes in the Ownership module to track title and co-owner splits." />
+          )}
         </Panel>
 
         <Panel eyebrow="Medical" title="Medical">
@@ -1052,7 +1056,7 @@ export default function HorseDetail() {
                       <input className="field-input" value={breedingEditForm.body} onChange={(e) => setBreedingEditForm((f) => ({ ...f, body: e.target.value }))} placeholder="Notes" />
                       <input className="field-input" type="date" value={breedingEditForm.date} onChange={(e) => setBreedingEditForm((f) => ({ ...f, date: e.target.value }))} />
                       <div className="inline-actions">
-                        <button className="button button--primary button--compact" type="button" disabled={!breedingEditForm.title.trim()} onClick={() => { const result = updateBreedingEvent(horse.id, event.id, { title: breedingEditForm.title, summary: breedingEditForm.body, date: breedingEditForm.date }); pushToast({ title: result.ok ? 'Event updated' : 'Update failed', message: result.message, tone: result.ok ? 'success' : 'error' }); if (result.ok) setEditingBreedingId(null); }}>Save</button>
+                        <button className="button button--primary button--compact" type="button" disabled={!breedingEditForm.title.trim() || !breedingEditForm.date.trim()} onClick={() => { const result = updateBreedingEvent(horse.id, event.id, { title: breedingEditForm.title, summary: breedingEditForm.body, date: breedingEditForm.date }); pushToast({ title: result.ok ? 'Event updated' : 'Update failed', message: result.message, tone: result.ok ? 'success' : 'error' }); if (result.ok) setEditingBreedingId(null); }}>Save</button>
                         <button className="button button--ghost button--compact" type="button" onClick={() => setEditingBreedingId(null)}>Cancel</button>
                       </div>
                     </div>

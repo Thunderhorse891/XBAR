@@ -24,6 +24,7 @@ export default function SharedAccess() {
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
+  const [togglingAccessFor, setTogglingAccessFor] = useState<string | null>(null);
   const activeSharedListings = sharedListings.filter((listing) => listing.state !== 'Archived');
   const liveSharedListings = activeSharedListings.filter((listing) => listing.state === 'Live');
   const facebookSharedListings = activeSharedListings.filter((listing) => listing.channels.includes('Facebook'));
@@ -296,22 +297,28 @@ export default function SharedAccess() {
                         <button
                           className="button button--ghost button--compact"
                           type="button"
+                          disabled={togglingAccessFor === horse.id}
                           onClick={async (event) => {
                             event.stopPropagation();
+                            if (togglingAccessFor) return;
                             const nextAccessMode = sharedListing.accessMode === 'Private Token' ? 'Public Link' : 'Private Token';
                             if (nextAccessMode === 'Public Link' && !await confirmPublicLink(horse.name, packet)) {
                               return;
                             }
-
-                            const result = await updateSharedListingAccessMode(horse.id, nextAccessMode);
-                            pushToast({
-                              title: result.ok ? 'Access updated' : 'Access blocked',
-                              message: result.message,
-                              tone: result.ok ? 'success' : 'error',
-                            });
+                            setTogglingAccessFor(horse.id);
+                            try {
+                              const result = await updateSharedListingAccessMode(horse.id, nextAccessMode);
+                              pushToast({
+                                title: result.ok ? 'Access updated' : 'Access blocked',
+                                message: result.message,
+                                tone: result.ok ? 'success' : 'error',
+                              });
+                            } finally {
+                              setTogglingAccessFor(null);
+                            }
                           }}
                         >
-                          {sharedListing.accessMode === 'Private Token' ? 'Make public' : 'Require token'}
+                          {togglingAccessFor === horse.id ? 'Updating…' : sharedListing.accessMode === 'Private Token' ? 'Make public' : 'Require token'}
                         </button>
                       ) : null}
                     </div>
