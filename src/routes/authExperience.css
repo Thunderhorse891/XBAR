@@ -948,6 +948,7 @@
 }
 
 .mkt-nav-link:hover { color: rgba(175, 200, 228, 0.9); background: rgba(255, 255, 255, 0.04); }
+.mkt-nav-link:focus-visible { outline: 2px solid rgba(114, 179, 255, 0.8); outline-offset: 2px; border-radius: 6px; }
 
 .mkt-nav-signin {
   padding: 8px 16px;
@@ -959,6 +960,7 @@
 }
 
 .mkt-nav-signin:hover { color: rgba(175, 200, 228, 1); }
+.mkt-nav-signin:focus-visible { outline: 2px solid rgba(114, 179, 255, 0.8); outline-offset: 2px; border-radius: 6px; }
 
 .mkt-nav-cta {
   display: inline-flex;
@@ -979,6 +981,7 @@
 }
 
 .mkt-nav-cta:hover { background: rgba(60, 125, 255, 1); box-shadow: 0 6px 22px rgba(45, 111, 255, 0.44); transform: translateY(-1px); }
+.mkt-nav-cta:focus-visible { outline: 2px solid rgba(114, 179, 255, 0.9); outline-offset: 3px; }
 
 /* Hero */
 .mkt-hero {
@@ -1093,6 +1096,7 @@
 }
 
 .mkt-hero-primary:hover { box-shadow: 0 14px 36px rgba(45, 111, 255, 0.56), 0 1px 0 rgba(255, 255, 255, 0.18) inset; transform: translateY(-2px); }
+.mkt-hero-primary:focus-visible { outline: 2px solid rgba(114, 179, 255, 0.9); outline-offset: 4px; }
 
 .mkt-hero-ghost {
   display: inline-flex;
@@ -1839,6 +1843,7 @@
 }
 
 .mkt-pricing-cta--primary:hover { box-shadow: 0 8px 28px rgba(45, 111, 255, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.14); background: linear-gradient(180deg, #5f93ff 0%, #3d7cff 100%); }
+.mkt-pricing-cta:focus-visible { outline: 2px solid rgba(114, 179, 255, 0.8); outline-offset: 3px; }
 
 /* Comparison table */
 .mkt-comparison-wrap {
@@ -2007,6 +2012,7 @@
 /* Responsive */
 @media (max-width: 1024px) {
   .mkt-features-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mkt-testimonials-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .mkt-pricing-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .mkt-pricing-card--featured { margin: 0; padding-top: 32px; }
   .mkt-preview-body { grid-template-columns: 140px 1fr; }
@@ -2027,7 +2033,8 @@
 @media (max-width: 640px) {
   .mkt-preview-body { grid-template-columns: 1fr; }
   .mkt-preview-sidebar { display: none; }
-  .mkt-nav-links { display: none; }
+  .mkt-nav-links { gap: 2px; }
+  .mkt-nav-link { padding: 6px 8px; font-size: 12px; }
 }
 
 @media (max-width: 560px) {
