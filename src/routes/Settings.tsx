@@ -205,7 +205,13 @@ export default function Settings() {
     setCloudBusy(false);
   };
 
+  const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+
   const handleInviteMember = async () => {
+    if (!isValidEmail(inviteEmail)) {
+      pushToast({ title: 'Invalid email', message: 'Enter a valid email address before sending an invite.', tone: 'error' });
+      return;
+    }
     const result = await inviteWorkspaceMember(inviteEmail, inviteRole);
     pushToast({
       title: result.ok ? 'Invite created' : 'Invite blocked',
@@ -270,7 +276,7 @@ export default function Settings() {
                   </label>
                 </div>
                 <div className="inline-actions">
-                  <button className="button button--primary button--compact" type="button" onClick={handleSendMagicLink} disabled={!canSyncCloud || cloudBusy || !authEmail.trim()}>
+                  <button className="button button--primary button--compact" type="button" onClick={handleSendMagicLink} disabled={!canSyncCloud || cloudBusy || !isValidEmail(authEmail)}>
                     {cloudBusy ? 'Sending...' : 'Send magic link'}
                   </button>
                 </div>
@@ -366,7 +372,7 @@ export default function Settings() {
           </div>
 
           <div className="inline-actions">
-            <button className="button button--primary button--compact" type="button" onClick={handleInviteMember} disabled={!canManageSettings || !inviteEmail.trim()}>
+            <button className="button button--primary button--compact" type="button" onClick={handleInviteMember} disabled={!canManageSettings || !isValidEmail(inviteEmail)}>
               Invite member
             </button>
           </div>

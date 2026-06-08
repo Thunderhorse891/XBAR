@@ -339,7 +339,7 @@ export default function Login() {
                 <button
                   className="lp-btn-primary"
                   type="submit"
-                  disabled={busy !== '' || !email.trim() || !password}
+                  disabled={busy !== '' || !email.trim() || !password.trim()}
                 >
                   {busy === 'password' ? 'Checking access…' : authMode === 'signin' ? 'Sign In' : 'Create Account'}
                 </button>

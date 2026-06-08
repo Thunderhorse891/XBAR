@@ -343,7 +343,7 @@ export default function Horses() {
             >
               Use defaults
             </button>
-            <button className="button button--primary" type="button" onClick={handleCreateHorse} disabled={!canCreateHorse || !form.name.trim() || !form.owner.trim()}>
+            <button className="button button--primary" type="button" onClick={handleCreateHorse} disabled={!canCreateHorse || form.name.trim().length < 3 || form.owner.trim().length < 2}>
               Create horse
             </button>
           </div>
