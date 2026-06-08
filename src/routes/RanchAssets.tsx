@@ -258,7 +258,7 @@ export default function RanchAssets() {
             </label>
           </div>
           <div className="inline-actions">
-            <button className="button button--primary button--compact" type="button" onClick={handleSave} disabled={!canManageAssets || !selectedAsset}>
+            <button className="button button--primary button--compact" type="button" onClick={handleSave} disabled={!canManageAssets || !selectedAsset || !form.location.trim()}>
               Save asset changes
             </button>
             {selectedAsset && canManageAssets ? (

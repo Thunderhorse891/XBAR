@@ -156,7 +156,7 @@ export default function Breeding() {
                             <input className="field-input" aria-label="Event notes" value={editForm.body} onChange={(e) => setEditForm((f) => ({ ...f, body: e.target.value }))} placeholder="Notes" />
                             <input className="field-input" type="date" aria-label="Event date" value={editForm.date} onChange={(e) => setEditForm((f) => ({ ...f, date: e.target.value }))} />
                             <div className="inline-actions">
-                              <button className="button button--primary button--compact" type="button" disabled={!editForm.title.trim() || !editForm.body.trim()} onClick={() => { const result = updateBreedingEvent(horse.id, event.id, { title: editForm.title, summary: editForm.body, date: editForm.date }); pushToast({ title: result.ok ? 'Event updated' : 'Update failed', message: result.message, tone: result.ok ? 'success' : 'error' }); if (result.ok) setEditingEventId(null); }}>Save</button>
+                              <button className="button button--primary button--compact" type="button" disabled={!editForm.title.trim() || !editForm.body.trim() || !editForm.date.trim()} onClick={() => { const result = updateBreedingEvent(horse.id, event.id, { title: editForm.title, summary: editForm.body, date: editForm.date }); pushToast({ title: result.ok ? 'Event updated' : 'Update failed', message: result.message, tone: result.ok ? 'success' : 'error' }); if (result.ok) setEditingEventId(null); }}>Save</button>
                               <button className="button button--ghost button--compact" type="button" onClick={() => setEditingEventId(null)}>Cancel</button>
                             </div>
                           </div>
@@ -249,10 +249,12 @@ export default function Breeding() {
 
                 if (result.ok) {
                   setEventBody('');
+                  setEventTitle('Breeding milestone');
+                  setEventDate(new Date().toISOString().slice(0, 10));
                   setEventError('');
                 }
               }}
-              disabled={!canManageBreeding}
+              disabled={!canManageBreeding || !selectedHorseId}
             >
               Save breeding event
             </button>
