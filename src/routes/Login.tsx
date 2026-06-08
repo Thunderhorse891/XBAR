@@ -313,6 +313,9 @@ export default function Login() {
                         <div className="lp-password-strength__bar" style={{ width: widths[level], background: colors[level] }} />
                       </div>
                       <span className="lp-password-strength__label" style={{ color: colors[level] }}>{level} password</span>
+                      {level !== 'strong' && (
+                        <span className="lp-password-strength__hint">Strong: 12+ characters, uppercase, number &amp; symbol</span>
+                      )}
                     </div>
                   );
                 })()}

@@ -906,6 +906,7 @@
 .lp-password-strength__track { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
 .lp-password-strength__bar { height: 100%; border-radius: 2px; transition: width 0.2s, background 0.2s; }
 .lp-password-strength__label { font-size: 12px; margin-top: 3px; display: inline-block; text-transform: capitalize; }
+.lp-password-strength__hint { font-size: 11px; color: var(--muted, #8b949e); display: block; margin-top: 2px; }
 
 /* ─── Marketing landing page (mkt-*) ─── */
 
