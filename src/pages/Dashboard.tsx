@@ -276,6 +276,10 @@ export default function Dashboard() {
 
   async function handleReceiptSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!receiptDraft.title.trim() || !receiptDraft.amount) {
+      pushToast({ title: 'Required fields missing', message: 'Receipt label and amount are required.', tone: 'error' });
+      return;
+    }
     setSavingReceipt(true);
     const result = await addExpenseReceipt({
       horseId: receiptDraft.horseId || undefined,
@@ -715,9 +719,11 @@ export default function Dashboard() {
               </label>
 
               <label className="field-stack">
-                <span className="field-label">Receipt label</span>
+                <span className="field-label">Receipt label <span aria-hidden="true" className="field-required">*</span></span>
                 <input
                   className="field-input"
+                  required
+                  aria-required="true"
                   value={receiptDraft.title}
                   onChange={(event) => setReceiptDraft((current) => ({ ...current, title: event.target.value }))}
                   placeholder="Dental float"
@@ -737,10 +743,12 @@ export default function Dashboard() {
               </label>
 
               <label className="field-stack">
-                <span className="field-label">Amount</span>
+                <span className="field-label">Amount <span aria-hidden="true" className="field-required">*</span></span>
                 <input
                   className="field-input"
                   type="number"
+                  required
+                  aria-required="true"
                   min="0"
                   step="0.01"
                   value={receiptDraft.amount}
