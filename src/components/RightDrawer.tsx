@@ -43,7 +43,9 @@ function useFocusLock(ref: React.RefObject<HTMLElement | null>, active: boolean)
 
 function HorseDetailDrawerContent({ horseId }: { horseId: string }) {
   const horse = useXbarStore((s) => s.horses.find((h) => h.id === horseId));
+  const openDrawer = useUiStore((s) => s.openDrawer);
   if (!horse) return <div className="drawer-body"><p className="text-muted">Horse not found.</p></div>;
+  const hasAlerts = horse.alerts.some((a) => a.severity === 'high' || a.severity === 'medium');
   return (
     <div className="drawer-body">
       <div className="drawer-entity-header">
@@ -56,9 +58,23 @@ function HorseDetailDrawerContent({ horseId }: { horseId: string }) {
         )}
         <div>
           <div className="drawer-entity-name">{horse.name}</div>
-          <div className="drawer-entity-meta">{horse.breed || 'Unknown breed'} · {horse.sex} · {horse.age > 0 ? `${horse.age}yo` : 'Age unknown'}</div>
+          {horse.barnName && horse.barnName !== horse.name && (
+            <div className="drawer-entity-barn">"{horse.barnName}"</div>
+          )}
+          <div className="drawer-entity-meta">{horse.breed || 'Unknown breed'} · {horse.color || horse.sex} · {horse.age > 0 ? `${horse.age}yo` : horse.foaledOn ? horse.foaledOn.slice(0, 4) : 'Age unknown'}</div>
         </div>
       </div>
+
+      {hasAlerts && (
+        <div className="drawer-alert-row">
+          {horse.alerts.filter((a) => a.severity === 'high' || a.severity === 'medium').slice(0, 2).map((alert) => (
+            <div key={alert.id} className={`callout callout--${alert.severity === 'high' ? 'warning' : 'info'}`}>
+              <strong>{alert.title}</strong> — {alert.summary}
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="drawer-section-list">
         <div className="drawer-kv-grid">
           <div className="drawer-kv"><span>Owner</span><strong>{horse.owner || '—'}</strong></div>
@@ -67,9 +83,29 @@ function HorseDetailDrawerContent({ horseId }: { horseId: string }) {
           <div className="drawer-kv"><span>Segment</span><strong>{horse.segment}</strong></div>
           <div className="drawer-kv"><span>AQHA</span><strong>{horse.aqhaNumber || '—'}</strong></div>
           <div className="drawer-kv"><span>Reg #</span><strong>{horse.registrationNumber || '—'}</strong></div>
+          {horse.foaledOn && <div className="drawer-kv"><span>Foaled</span><strong>{horse.foaledOn}</strong></div>}
+          {horse.sale.askPrice > 0 && <div className="drawer-kv"><span>Ask price</span><strong>${horse.sale.askPrice.toLocaleString()}</strong></div>}
+          {horse.lastVetVisit && <div className="drawer-kv"><span>Last vet</span><strong>{horse.lastVetVisit}</strong></div>}
+          <div className="drawer-kv"><span>Listing</span><strong>{horse.sale.listingState}</strong></div>
         </div>
         {horse.summary && <p className="drawer-summary">{horse.summary}</p>}
       </div>
+
+      <div className="drawer-drill-nav">
+        <button className="drawer-drill-btn" type="button" onClick={() => openDrawer({ type: 'horse-health', horseId })}>
+          Health
+        </button>
+        <button className="drawer-drill-btn" type="button" onClick={() => openDrawer({ type: 'horse-documents', horseId })}>
+          Docs
+        </button>
+        <button className="drawer-drill-btn" type="button" onClick={() => openDrawer({ type: 'horse-financial', horseId })}>
+          Expenses
+        </button>
+        <button className="drawer-drill-btn" type="button" onClick={() => openDrawer({ type: 'horse-breeding', horseId })}>
+          Breeding
+        </button>
+      </div>
+
       <div className="drawer-footer">
         <Link to={`/horses/${horse.id}`} className="button button--primary button--full">
           Open full profile

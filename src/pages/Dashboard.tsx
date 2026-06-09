@@ -110,6 +110,11 @@ export default function Dashboard() {
   const menuItems = menuHorse
     ? [
         {
+          id: 'quick-view-horse',
+          label: 'Quick view horse',
+          onSelect: () => openDrawer({ type: 'horse-detail', horseId: menuHorse.id }),
+        },
+        {
           id: 'open-horse',
           label: 'Open horse profile',
           onSelect: () => navigate(`/horses/${menuHorse.id}`),
@@ -130,6 +135,11 @@ export default function Dashboard() {
           ...(menuRecordHorse
             ? [
                 {
+                  id: 'quick-view-record-horse',
+                  label: 'Quick view horse',
+                  onSelect: () => openDrawer({ type: 'horse-detail', horseId: menuRecordHorse.id }),
+                },
+                {
                   id: 'open-record-horse',
                   label: 'Open horse profile',
                   onSelect: () => navigate(`/horses/${menuRecordHorse.id}`),
@@ -147,6 +157,11 @@ export default function Dashboard() {
             ...(menuLeadHorse
               ? [
                   {
+                    id: 'quick-view-lead-horse',
+                    label: 'Quick view horse',
+                    onSelect: () => openDrawer({ type: 'horse-detail', horseId: menuLeadHorse.id }),
+                  },
+                  {
                     id: 'open-lead-horse',
                     label: 'Open horse profile',
                     onSelect: () => navigate(`/horses/${menuLeadHorse.id}`),
@@ -163,6 +178,11 @@ export default function Dashboard() {
               },
               ...(menuExpenseHorse
                 ? [
+                    {
+                      id: 'quick-view-expense-horse',
+                      label: 'Quick view horse',
+                      onSelect: () => openDrawer({ type: 'horse-financial', horseId: menuExpenseHorse.id }),
+                    },
                     {
                       id: 'open-expense-horse',
                       label: 'Open horse profile',
