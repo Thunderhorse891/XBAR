@@ -33,6 +33,7 @@ export default function Ownership() {
   const removeOwnershipStake = useXbarStore((state) => state.removeOwnershipStake);
   const ensureOwnershipRecord = useXbarStore((state) => state.ensureOwnershipRecord);
   const pushToast = useUiStore((state) => state.pushToast);
+  const openDrawer = useUiStore((state) => state.openDrawer);
   const canManageOwnership = useCurrentRoleCapability('manageOwnership');
   const { confirm, dialog: confirmDialog } = useConfirm();
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
@@ -115,6 +116,11 @@ export default function Ownership() {
       ? [
           ...(menuHorse
             ? [
+                {
+                  id: 'view-horse-drawer',
+                  label: 'Quick view horse',
+                  onSelect: () => openDrawer({ type: 'horse-detail', horseId: menuHorse.id }),
+                },
                 {
                   id: 'open-horse',
                   label: 'Open horse profile',
