@@ -1,8 +1,11 @@
-import type { ComponentType, KeyboardEvent, SVGProps } from 'react';
+import type { ComponentType, SVGProps } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { XbarMark } from '@/components/BrandMark';
+import { CommandPalette } from '@/components/CommandPalette';
+import { RightDrawer } from '@/components/RightDrawer';
 import { WorkspaceHelp, type HelpSection } from '@/components/WorkspaceHelp';
+import { useGlobalKeyboard } from '@/hooks/useGlobalKeyboard';
 import {
   AddIcon,
   AssetsIcon,
@@ -182,7 +185,6 @@ function NavSection({ title, items, badges }: { title: string; items: NavItem[];
 export default function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [search, setSearch] = useState('');
   const [helpOpen, setHelpOpen] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const currentRole = useXbarStore((state) => state.currentRole);
@@ -198,6 +200,8 @@ export default function MainLayout() {
   const signOutCloud = useCloudStore((state) => state.signOut);
   const roleWorkspace = useCurrentRoleWorkspace();
   const pushToast = useUiStore((state) => state.pushToast);
+  const openCommandPalette = useUiStore((state) => state.openCommandPalette);
+  const openDrawer = useUiStore((state) => state.openDrawer);
   const canCreateHorse = useCurrentRoleCapability('createHorse');
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
   const canManageBilling = useCurrentRoleCapability('manageBilling');
@@ -239,16 +243,12 @@ export default function MainLayout() {
   const helpSections = routeHelp[currentLabel] ?? routeHelp['Dashboard'];
   const accountLabel = cloudSession?.user?.email ?? currentRole;
 
+  useGlobalKeyboard();
+
   useEffect(() => {
     setHelpOpen(false);
     setMobileMoreOpen(false);
   }, [location.pathname]);
-
-  const handleSearch = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter' && search.trim()) {
-      navigate(`/horses?search=${encodeURIComponent(search.trim())}`);
-    }
-  };
 
   const handleCloudSignOut = async () => {
     const result = await signOutCloud();
@@ -341,17 +341,18 @@ export default function MainLayout() {
             </div>
 
             <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
-              <label className="relative min-w-[200px] max-w-[380px] flex-1">
-                <span className="sr-only">Search horses</span>
-                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-[16px] w-[16px] -translate-y-1/2 text-[#8B949E]" aria-hidden="true" />
-                <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  onKeyDown={handleSearch}
-                  placeholder="Search horses"
-                  className="h-9 w-full rounded-md border border-[rgba(56,63,72,1)] bg-[#1C2128] pl-9 pr-4 text-[13px] text-[#E6EDF3] transition-colors duration-150 placeholder:text-[#4a6275] focus:border-[#2F8DFF] focus:outline-none"
-                />
-              </label>
+              <button
+                type="button"
+                className="relative flex h-9 min-w-[200px] max-w-[380px] flex-1 cursor-text items-center gap-2 rounded-md border border-[rgba(56,63,72,1)] bg-[#1C2128] pl-3 pr-3 text-left text-[13px] transition-colors duration-150 hover:border-[rgba(86,93,102,1)]"
+                onClick={openCommandPalette}
+                aria-label="Open command palette"
+              >
+                <SearchIcon className="h-[16px] w-[16px] shrink-0 text-[#8B949E]" aria-hidden="true" />
+                <span className="flex-1 text-[#4a6275]">Search…</span>
+                <kbd className="hidden items-center gap-0.5 rounded border border-[rgba(56,63,72,1)] bg-[rgba(255,255,255,0.04)] px-1.5 py-px text-[10px] font-bold text-[#4a6275] sm:flex">
+                  ⌘K
+                </kbd>
+              </button>
 
               <div className="hidden h-9 items-center gap-2.5 rounded-md border border-[rgba(56,63,72,1)] bg-[#1C2128] px-3 text-[13px] font-semibold text-[#C2CCD6] md:inline-flex">
                 <span className="max-w-[160px] truncate">{accountLabel}</span>
@@ -376,10 +377,11 @@ export default function MainLayout() {
                 </button>
               ) : null}
 
-              <Link
+              <button
+                type="button"
                 className="relative inline-flex h-9 w-9 items-center justify-center rounded-md border border-[rgba(56,63,72,1)] bg-[#1C2128] text-[#8B949E] transition-colors duration-150 hover:border-[rgba(86,93,102,1)] hover:bg-[#21262D] hover:text-[#E6EDF3]"
-                to="/reminders"
-                aria-label="Open reminders"
+                onClick={() => openDrawer({ type: 'notification-centre' })}
+                aria-label="Open notification centre"
               >
                 <BellIcon className="h-[16px] w-[16px]" />
                 {pendingReview + pendingTransfers ? (
@@ -387,7 +389,7 @@ export default function MainLayout() {
                     {pendingReview + pendingTransfers}
                   </span>
                 ) : null}
-              </Link>
+              </button>
 
               {canUploadDocuments ? (
                 <Link
@@ -537,6 +539,10 @@ export default function MainLayout() {
 
         <WorkspaceHelp open={helpOpen} title={currentLabel} sections={helpSections} onClose={() => setHelpOpen(false)} />
       </div>
+
+      {/* Global overlays — rendered at root of layout so they are above all content */}
+      <RightDrawer />
+      <CommandPalette />
     </div>
   );
 }
