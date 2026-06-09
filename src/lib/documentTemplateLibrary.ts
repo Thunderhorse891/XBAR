@@ -1,4 +1,4 @@
-import type { DocumentRecord, HorseRecord, OwnershipRecord, SubscriptionTier, WorkspaceProfile } from '@/types/xbar';
+import type { DocumentRecord, HorseRecord, OwnershipRecord, SubscriptionTier, WorkspaceProfile } from '../types/xbar.js';
 
 export type DocumentTemplateTier = 'Basic' | 'Pro' | 'Business';
 
