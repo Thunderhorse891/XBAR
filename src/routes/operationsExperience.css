@@ -11,8 +11,8 @@
 }
 
 .ops-experience .button--primary {
-  background: linear-gradient(135deg, #f6efe3 0%, #cbd9e6 48%, #78a2ca 100%);
-  color: #081019;
+  background: linear-gradient(135deg, var(--surface-strong) 0%, rgba(47, 141, 255, 0.18) 48%, var(--blue) 100%);
+  color: var(--text);
   box-shadow: 0 14px 34px rgba(103, 148, 194, 0.2);
 }
 
@@ -170,8 +170,8 @@
 .ops-workspace--columns .panel {
   border: 1px solid rgba(210, 226, 239, 0.16);
   border-radius: 10px;
-  background: rgba(247, 250, 253, 0.955);
-  color: #14202d;
+  background: var(--surface);
+  color: var(--text);
   box-shadow: 0 24px 54px rgba(4, 8, 12, 0.22);
 }
 
@@ -194,7 +194,7 @@
 .ops-section-heading h2 {
   max-width: 680px;
   margin: 8px 0 0;
-  color: #111923;
+  color: var(--text);
   font-size: clamp(1.35rem, 2vw, 2rem);
   line-height: 1.04;
   letter-spacing: 0;
@@ -217,10 +217,10 @@
 .ops-experience .field-textarea {
   width: 100%;
   min-height: 42px;
-  border: 1px solid rgba(32, 49, 67, 0.16);
+  border: 1px solid var(--border);
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.9);
-  color: #14202d;
+  background: var(--surface-strong);
+  color: var(--text);
   padding: 0 12px;
   outline: none;
   transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
@@ -234,9 +234,9 @@
 .ops-toolbar select:focus,
 .ops-experience .field-input:focus,
 .ops-experience .field-textarea:focus {
-  border-color: rgba(74, 122, 170, 0.54);
-  background: #ffffff;
-  box-shadow: 0 0 0 4px rgba(74, 122, 170, 0.12);
+  border-color: rgba(47, 141, 255, 0.54);
+  background: var(--surface-raised);
+  box-shadow: 0 0 0 4px rgba(47, 141, 255, 0.12);
 }
 
 .ops-record-grid {
@@ -249,10 +249,10 @@
 .ops-timeline-item,
 .ops-link-list button {
   width: 100%;
-  border: 1px solid rgba(32, 49, 67, 0.12);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: linear-gradient(180deg, #ffffff 0%, #f4f7fb 100%);
-  color: #14202d;
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-strong) 100%);
+  color: var(--text);
   text-align: left;
   box-shadow: 0 14px 28px rgba(16, 28, 42, 0.07);
   transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
@@ -268,7 +268,7 @@
 .ops-record-card:hover,
 .ops-timeline-item:hover,
 .ops-link-list button:hover {
-  border-color: rgba(74, 122, 170, 0.28);
+  border-color: rgba(47, 141, 255, 0.28);
   box-shadow: 0 22px 42px rgba(16, 28, 42, 0.1);
 }
 
@@ -282,7 +282,7 @@
 
 .ops-record-card span,
 .ops-timeline-item small {
-  color: #28557c;
+  color: var(--muted);
   font-size: 0.7rem;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -293,7 +293,7 @@
 .ops-timeline-item strong {
   display: block;
   margin-top: 6px;
-  color: #101923;
+  color: var(--text);
   font-size: 1.03rem;
 }
 
@@ -301,7 +301,7 @@
 .ops-panel-copy,
 .ops-timeline-item p {
   margin: 0;
-  color: #526173;
+  color: var(--muted);
   line-height: 1.5;
   font-size: 0.9rem;
 }
@@ -318,8 +318,8 @@
   align-items: center;
   padding: 5px 9px;
   border-radius: 6px;
-  background: rgba(234, 240, 247, 0.82);
-  color: #4e5b6b;
+  background: var(--surface-raised);
+  color: var(--muted);
   font-size: 0.76rem;
   font-weight: 700;
   letter-spacing: 0;
