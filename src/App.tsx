@@ -63,6 +63,7 @@ function routeTitle(path: string) {
     '/assets': 'Equipment',
     '/weather': 'Weather',
     '/shared-access': 'Sale Listings',
+    '/marketplace': 'Marketplace',
     '/subscriptions': 'Subscriptions',
     '/settings': 'Settings',
     '/setup': 'Setup',
