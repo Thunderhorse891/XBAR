@@ -1,0 +1,64 @@
+@media (max-width: 760px) {
+  .xbar-command-main,
+  .ops-experience {
+    padding-inline: 12px;
+  }
+
+  .ops-briefing-header__top,
+  .surface-hero__top,
+  .subscription-hero,
+  .subscription-decision,
+  .command-stage--two-col,
+  .dashboard-board,
+  .dashboard-grid,
+  .detail-grid,
+  .ops-workspace--columns {
+    grid-template-columns: 1fr !important;
+  }
+
+  .ops-briefing-header__actions,
+  .ops-hero__actions,
+  .inline-actions,
+  .status-inline,
+  .token-row {
+    flex-wrap: wrap;
+  }
+
+  .ops-briefing-action,
+  .button,
+  .button--compact,
+  .field-input,
+  .field-select,
+  .field-textarea {
+    min-height: 44px;
+  }
+
+  .ops-briefing-stat-row,
+  .metric-grid,
+  .ops-metric-grid,
+  .subscription-usage-grid,
+  .subscription-plan-grid,
+  .priority-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .stack-item,
+  .priority-card,
+  .subscription-plan,
+  .ops-briefing-stat {
+    text-align: left;
+  }
+
+  .table-shell {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .data-table {
+    min-width: 680px;
+  }
+
+  .xbar-mobile-bottom-nav {
+    min-height: 64px;
+  }
+}

@@ -5,6 +5,7 @@ import { TaskItem } from '@/components/InteractionSystem';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { kindCopy } from '@/features/reminders/helpers';
 import type { ReminderFilter, ReminderKind } from '@/features/reminders/types';
+import { buildAlertDigest, buildAlertMailto } from '@/lib/alertCenter';
 import { buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
 import { formatDateLabel } from '@/lib/format';
 import { buildOperationsPriorities } from '@/lib/operationsPriority';
@@ -19,6 +20,7 @@ export default function Reminders() {
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
   const salesLeads = useXbarStore((state) => state.salesLeads);
+  const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const [filter, setFilter] = useState<ReminderFilter>('All');
   const [query, setQuery] = useState('');
 
@@ -30,6 +32,7 @@ export default function Reminders() {
     horseNames: Object.fromEntries(horses.map((horse) => [horse.id, horse.name])),
   }), [documents, expenseReceipts, horses, ownershipRecords, salesLeads]);
 
+  const digest = useMemo(() => buildAlertDigest(briefing.items), [briefing.items]);
   const reminders = briefing.items;
   const filteredReminders = reminders.filter((reminder) => {
     const normalized = query.trim().toLowerCase();
@@ -47,9 +50,10 @@ export default function Reminders() {
         <div>
           <div className="ops-kicker">Daily operations</div>
           <h1 id="reminders-title">Run today before today runs you</h1>
-          <p>A ranked ranch briefing for care, compliance, records, and buyer follow-up. Start at the top and leave the important work handled.</p>
+          <p>Automated expiration and action alerts for Coggins, wormer, dental, transfer files, documents, and buyer follow-up. This queue is the reason a barn stops relying on paper calendars.</p>
           <div className="ops-hero__actions">
             <button className="button button--primary" type="button" onClick={() => briefing.top[0] && navigate(briefing.top[0].route)} disabled={!briefing.top.length}>Start first priority</button>
+            <a className="button button--ghost" href={buildAlertMailto(digest, workspaceProfile.operationsEmail)}>Email alert digest</a>
             <button className="button button--ghost" type="button" onClick={() => navigate('/medical')}>Open health</button>
           </div>
         </div>
@@ -62,6 +66,28 @@ export default function Reminders() {
             <div><span>Transfer</span><b>{ownershipCount}</b></div>
           </div>
         </div>
+      </section>
+
+      <section className="priority-briefing" aria-labelledby="alert-title">
+        <div className="priority-briefing__heading">
+          <div>
+            <span className="ops-kicker">Automated alert center</span>
+            <h2 id="alert-title">Expiration and action alerts</h2>
+          </div>
+          <p>{digest.alerts.length ? `${digest.overdueCount} overdue and ${digest.dueSoonCount} due today or this week.` : 'No expiration alerts are open right now.'}</p>
+        </div>
+        {digest.alerts.length ? (
+          <div className="priority-grid">
+            {digest.alerts.slice(0, 3).map((alert) => (
+              <button key={alert.id} className="priority-card" type="button" onClick={() => navigate(alert.route)}>
+                <span className="priority-card__index">{alert.severity === 'critical' ? 'Critical alert' : 'Watch alert'}</span>
+                <strong>{alert.title}</strong>
+                <p>{alert.detail}</p>
+                <span className="priority-card__meta"><span>{alert.kind}</span><span>{alert.timing}</span><span>{alert.horseName ?? 'Ranch-wide'}</span></span>
+              </button>
+            ))}
+          </div>
+        ) : <EmptyState compact title="Alerts are clear" description="Coggins, wormer, dental, transfer, document, and follow-up alerts will appear automatically as dates age." />}
       </section>
 
       <section className="priority-briefing" aria-labelledby="briefing-title">
