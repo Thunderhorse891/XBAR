@@ -4,6 +4,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
 import { formatDateLabel } from '@/lib/format';
+import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import './operationsExperience.css';
 
@@ -11,7 +12,7 @@ import { kindCopy, urgencyTone } from '@/features/reminders/helpers';
 import type { ReminderFilter, ReminderItem, ReminderKind, ReminderUrgency } from '@/features/reminders/types';
 
 export default function Reminders() {
-
+  const { openDrawer } = useUiStore((state) => ({ openDrawer: state.openDrawer }));
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
@@ -165,7 +166,16 @@ export default function Reminders() {
                   </div>
                   <div className="inline-actions inline-actions--mt-sm">
                     {reminder.kind === 'Care' && reminder.horseId && (
-                      <Link className="button button--primary button--compact" to={`/medical?horse=${reminder.horseId}`}>Add care event</Link>
+                      <>
+                        <button
+                          className="button button--primary button--compact"
+                          type="button"
+                          onClick={() => openDrawer({ type: 'horse-health', horseId: reminder.horseId! })}
+                        >
+                          Quick health view
+                        </button>
+                        <Link className="button button--ghost button--compact" to={`/medical?horse=${reminder.horseId}`}>Add care event</Link>
+                      </>
                     )}
                     {reminder.kind === 'Ownership' && (
                       <Link className="button button--primary button--compact" to="/ownership">Review transfer</Link>
@@ -177,7 +187,13 @@ export default function Reminders() {
                       <Link className="button button--primary button--compact" to="/sales">Open lead</Link>
                     )}
                     {reminder.horseId && (
-                      <Link className="button button--ghost button--compact" to={`/horses/${reminder.horseId}`}>View horse</Link>
+                      <button
+                        className="button button--ghost button--compact"
+                        type="button"
+                        onClick={() => openDrawer({ type: 'horse-detail', horseId: reminder.horseId! })}
+                      >
+                        Quick view
+                      </button>
                     )}
                   </div>
                 </div>

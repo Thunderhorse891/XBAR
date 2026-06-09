@@ -61,16 +61,21 @@ export function CommandPalette() {
 
     const staticActions: ResultItem[] = [
       { id: 'nav-dashboard', label: 'Go to Dashboard', category: 'Navigation', icon: '⊞', action: () => { navigate('/'); close(); } },
-      { id: 'nav-horses', label: 'Go to Horses', category: 'Navigation', icon: '🐎', action: () => { navigate('/horses'); close(); } },
-      { id: 'nav-health', label: 'Go to Health', category: 'Navigation', icon: '♥', action: () => { navigate('/medical'); close(); } },
+      { id: 'nav-horses', label: 'Go to Horses', category: 'Navigation', icon: '◉', action: () => { navigate('/horses'); close(); } },
+      { id: 'nav-health', label: 'Go to Health & Care', category: 'Navigation', icon: '♥', action: () => { navigate('/medical'); close(); } },
       { id: 'nav-breeding', label: 'Go to Breeding', category: 'Navigation', icon: '◎', action: () => { navigate('/breeding'); close(); } },
       { id: 'nav-documents', label: 'Go to Documents', category: 'Navigation', icon: '▣', action: () => { navigate('/documents'); close(); } },
       { id: 'nav-expenses', label: 'Go to Expenses', category: 'Navigation', icon: '$', action: () => { navigate('/expenses'); close(); } },
       { id: 'nav-sales', label: 'Go to Sales', category: 'Navigation', icon: '◇', action: () => { navigate('/sales'); close(); } },
       { id: 'nav-ownership', label: 'Go to Ownership', category: 'Navigation', icon: '◈', action: () => { navigate('/ownership'); close(); } },
+      { id: 'nav-marketplace', label: 'Go to Marketplace', category: 'Navigation', icon: '◆', action: () => { navigate('/marketplace'); close(); } },
+      { id: 'nav-reminders', label: 'Go to Reminders', category: 'Navigation', icon: '◔', action: () => { navigate('/reminders'); close(); } },
+      { id: 'nav-assets', label: 'Go to Ranch Assets', category: 'Navigation', icon: '⬡', action: () => { navigate('/assets'); close(); } },
       { id: 'nav-settings', label: 'Go to Settings', category: 'Navigation', icon: '⚙', action: () => { navigate('/settings'); close(); } },
       { id: 'action-upload', label: 'Upload documents', category: 'Action', icon: '↑', action: () => { navigate('/documents?upload=1'); close(); } },
-      { id: 'action-new-horse', label: 'New horse', category: 'Action', icon: '+', action: () => { navigate('/horses?new=1'); close(); } },
+      { id: 'action-new-horse', label: 'Add new horse', category: 'Action', icon: '+', action: () => { navigate('/horses?new=1'); close(); } },
+      { id: 'action-log-expense', label: 'Log an expense', category: 'Action', icon: '$', action: () => { navigate('/expenses'); close(); } },
+      { id: 'action-add-care', label: 'Add care event', category: 'Action', icon: '♥', action: () => { navigate('/medical'); close(); } },
       { id: 'drawer-notifications', label: 'Notification centre', category: 'System', icon: '◉', action: () => { openDrawer({ type: 'notification-centre' }); close(); } },
       { id: 'drawer-shortcuts', label: 'Keyboard shortcuts', category: 'System', icon: '⌨', action: () => { openDrawer({ type: 'keyboard-shortcuts' }); close(); } },
     ];
@@ -78,10 +83,10 @@ export function CommandPalette() {
     const horseItems: ResultItem[] = horses.map((h) => ({
       id: `horse-${h.id}`,
       label: h.name,
-      sublabel: `${h.breed || h.segment} · ${h.owner}`,
+      sublabel: `${h.breed || h.segment} · ${h.sex} · ${h.status}`,
       category: 'Horse',
       icon: '◉',
-      action: () => { navigate(`/horses/${h.id}`); close(); },
+      action: () => { openDrawer({ type: 'horse-detail', horseId: h.id }); close(); },
     }));
 
     const docItems: ResultItem[] = documents.slice(0, 50).map((d) => ({
@@ -90,7 +95,7 @@ export function CommandPalette() {
       sublabel: `${d.type} · ${d.state}`,
       category: 'Document',
       icon: '▤',
-      action: () => { navigate('/documents'); close(); },
+      action: () => { openDrawer({ type: 'document-preview', documentId: d.id }); close(); },
     }));
 
     const all = [...staticActions, ...horseItems, ...docItems];
