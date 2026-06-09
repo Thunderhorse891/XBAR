@@ -9,6 +9,7 @@ import { formatCompactCurrency, formatCurrency, formatDateLabel } from '@/lib/fo
 import { resolveWeatherByQuery, type WeatherForecast } from '@/lib/weather';
 import { useCurrentRoleCapability, useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
 import { useUiStore } from '@/store/useUiStore';
+import type { DrawerContent } from '@/store/useUiStore';
 import type { ExpenseCategory } from '@/types/xbar';
 import { CARE_SIGNAL_TONE, EXPENSE_CATEGORIES } from '@/features/dashboard/constants';
 import type { DashboardMenuState } from '@/features/dashboard/types';
@@ -16,6 +17,7 @@ import type { DashboardMenuState } from '@/features/dashboard/types';
 export default function Dashboard() {
   const navigate = useNavigate();
   const pushToast = useUiStore((state) => state.pushToast);
+  const openDrawer = useUiStore((state) => state.openDrawer);
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
@@ -547,10 +549,11 @@ export default function Dashboard() {
             {careBoard.length ? (
               <div className="stack-list">
                 {careBoard.slice(0, 6).map((row) => (
-                  <Link
+                  <button
                     key={row.horseId}
-                    to={`/horses/${row.horseId}`}
+                    type="button"
                     className="stack-item stack-item--interactive"
+                    onClick={() => openDrawer({ type: 'horse-health', horseId: row.horseId })}
                     onContextMenu={(event) => {
                       event.preventDefault();
                       setMenuState({ type: 'horse', id: row.horseId, x: event.clientX, y: event.clientY });
@@ -575,7 +578,7 @@ export default function Dashboard() {
                           <span key={signal.key}>{signal.detail}</span>
                         ))}
                     </div>
-                  </Link>
+                  </button>
                 ))}
               </div>
             ) : (
@@ -635,11 +638,16 @@ export default function Dashboard() {
           >
             {budgetSummary.latestReceipts.length ? (
               <div className="stack-list">
-                {budgetSummary.latestReceipts.map((receipt) => (
-                  <Link
+                {budgetSummary.latestReceipts.map((receipt) => {
+                  const drawerTarget: DrawerContent | null = receipt.horseId
+                    ? { type: 'horse-financial', horseId: receipt.horseId }
+                    : null;
+                  return (
+                  <button
                     key={receipt.id}
-                    to={receipt.horseId ? `/horses/${receipt.horseId}` : '/expenses'}
+                    type="button"
                     className="stack-item stack-item--interactive"
+                    onClick={() => drawerTarget ? openDrawer(drawerTarget) : navigate('/expenses')}
                     onContextMenu={(event) => {
                       event.preventDefault();
                       setMenuState({ type: 'expense', id: receipt.id, x: event.clientX, y: event.clientY });
@@ -654,8 +662,9 @@ export default function Dashboard() {
                       <span>{receipt.vendor}</span>
                       <span>{formatDateLabel(receipt.receiptDate)}</span>
                     </div>
-                  </Link>
-                ))}
+                  </button>
+                  );
+                })}
               </div>
             ) : (
               <EmptyState compact title="No receipts logged" description="Budget entries will appear here after upload." />
