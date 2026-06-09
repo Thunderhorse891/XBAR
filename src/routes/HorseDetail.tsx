@@ -358,6 +358,92 @@ export default function HorseDetail() {
     }
   };
 
+  const handleDeleteHorse = async () => {
+    if (await confirm('Remove horse?', 'Remove this horse from all records? This cannot be undone.')) {
+      const result = deleteHorse(horse.id);
+      if (result.ok) {
+        navigate('/horses');
+      } else {
+        pushToast({ title: 'Remove failed', message: result.message, tone: 'error' });
+      }
+    }
+  };
+
+  const handleCoreSave = () => {
+    const result = updateHorse(horse.id, {
+      name: coreForm.name || horse.name,
+      barnName: coreForm.barnName,
+      summary: coreForm.summary,
+      breed: coreForm.breed,
+      registry: coreForm.registry,
+      color: coreForm.color,
+      sex: coreForm.sex,
+      aqhaNumber: coreForm.aqhaNumber,
+      registrationNumber: coreForm.registrationNumber,
+      owner: coreForm.owner,
+      ownerEntity: coreForm.ownerEntity,
+      askPrice: coreForm.askPrice ? Number(coreForm.askPrice) : undefined,
+      foaledOn: coreForm.foaledOn || undefined,
+      microchipId: coreForm.microchipId,
+      markings: coreForm.markings,
+      segment: coreForm.segment,
+      status: coreForm.status,
+      bloodline: { sire: coreForm.bloodlineSire, dam: coreForm.bloodlineDam, family: coreForm.bloodlineFamily },
+    });
+    if (result.ok) {
+      setEditingCore(false);
+    } else {
+      pushToast({ title: 'Save blocked', message: result.message, tone: 'error' });
+    }
+  };
+
+  const handleEditStart = () => {
+    setCoreForm({
+      name: horse.name,
+      barnName: horse.barnName,
+      summary: horse.summary,
+      breed: horse.breed,
+      registry: horse.registry,
+      color: horse.color,
+      sex: horse.sex,
+      aqhaNumber: horse.aqhaNumber,
+      registrationNumber: horse.registrationNumber,
+      owner: horse.owner,
+      ownerEntity: horse.ownerEntity,
+      askPrice: horse.sale.askPrice ? String(horse.sale.askPrice) : '',
+      foaledOn: horse.foaledOn ?? '',
+      microchipId: horse.microchipId,
+      markings: horse.markings,
+      bloodlineSire: horse.bloodline.sire,
+      bloodlineDam: horse.bloodline.dam,
+      bloodlineFamily: horse.bloodline.family,
+      segment: horse.segment,
+      status: horse.status,
+    });
+    setEditingCore(true);
+  };
+
+  const handleMedicalSave = () => {
+    const result = updateHorse(horse.id, {
+      medicalNotes: medicalNotesForm.notes,
+      lastVetVisit: medicalNotesForm.lastVetVisit || undefined,
+    });
+    pushToast({
+      title: result.ok ? 'Medical record saved' : 'Medical save blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
+  };
+
+  const sortedTimeline = [...horse.activity, ...horse.notes.map((note) => ({
+    id: note.id,
+    date: note.createdAt,
+    title: note.title,
+    summary: note.body,
+    owner: note.author,
+    category: 'Operations' as const,
+  }))].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
   return (
     <>
       {confirmDialog}
@@ -400,9 +486,9 @@ export default function HorseDetail() {
                 { label: horse.segment, color: 'border-[rgba(12,111,151,0.3)] bg-[rgba(12,111,151,0.12)] text-[#7dcef0]' },
                 { label: horse.status, color: 'border-[rgba(112,129,148,0.3)] bg-[rgba(112,129,148,0.1)] text-[#a0b8cc]' },
                 horse.location.barn ? { label: horse.location.barn, color: 'border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.05)] text-[rgba(200,220,244,0.75)]' } : null,
-              ].filter((x): x is { label: string; color: string } => x !== null).map(({ label, color }, i) => (
+              ].filter((x): x is { label: string; color: string } => x !== null).map(({ label, color }) => (
                 <span
-                  key={`${label}-${i}`}
+                  key={label}
                   className={classNames(
                     'inline-flex items-center rounded-md border px-3 py-1.5 text-[11px] font-semibold tracking-[0.06em]',
                     color,
@@ -481,7 +567,7 @@ export default function HorseDetail() {
               <button
                 className="inline-flex h-10 items-center justify-center rounded-lg border border-[rgba(255,80,80,0.3)] bg-transparent px-4 text-sm font-semibold text-[rgba(255,140,140,0.8)] transition-all duration-150 ease-[ease] hover:bg-[rgba(255,80,80,0.1)] disabled:cursor-not-allowed disabled:opacity-40"
                 type="button"
-                onClick={async () => { if (await confirm('Remove horse?', 'Remove this horse from all records? This cannot be undone.')) { const result = deleteHorse(horse.id); if (result.ok) { navigate('/horses'); } else { pushToast({ title: 'Remove failed', message: result.message, tone: 'error' }); } } }}
+                onClick={() => void handleDeleteHorse()}
               >
                 Remove horse
               </button>
@@ -734,7 +820,7 @@ export default function HorseDetail() {
                 <input className="field-input" type="number" min="0" value={coreForm.askPrice} onChange={(e) => setCoreForm((f) => ({ ...f, askPrice: e.target.value }))} placeholder="0" />
               </label>
               <div className="inline-actions inline-actions--span">
-                <button className="button button--primary button--compact" type="button" onClick={() => { const result = updateHorse(horse.id, { name: coreForm.name || horse.name, barnName: coreForm.barnName, summary: coreForm.summary, breed: coreForm.breed, registry: coreForm.registry, color: coreForm.color, sex: coreForm.sex, aqhaNumber: coreForm.aqhaNumber, registrationNumber: coreForm.registrationNumber, owner: coreForm.owner, ownerEntity: coreForm.ownerEntity, askPrice: coreForm.askPrice ? Number(coreForm.askPrice) : undefined, foaledOn: coreForm.foaledOn || undefined, microchipId: coreForm.microchipId, markings: coreForm.markings, segment: coreForm.segment, status: coreForm.status, bloodline: { sire: coreForm.bloodlineSire, dam: coreForm.bloodlineDam, family: coreForm.bloodlineFamily } }); if (result.ok) { setEditingCore(false); } else { pushToast({ title: 'Save blocked', message: result.message, tone: 'error' }); } }}>Save</button>
+                <button className="button button--primary button--compact" type="button" onClick={handleCoreSave}>Save</button>
                 <button className="button button--ghost button--compact" type="button" onClick={() => setEditingCore(false)}>Cancel</button>
               </div>
             </div>
@@ -757,7 +843,7 @@ export default function HorseDetail() {
               )}
               <div className="inline-actions inline-actions--mt-xs">
                 {canEditHorse && (
-                  <button className="button button--ghost button--compact" type="button" onClick={() => { setCoreForm({ name: horse.name, barnName: horse.barnName, summary: horse.summary, breed: horse.breed, registry: horse.registry, color: horse.color, sex: horse.sex, aqhaNumber: horse.aqhaNumber, registrationNumber: horse.registrationNumber, owner: horse.owner, ownerEntity: horse.ownerEntity, askPrice: horse.sale.askPrice ? String(horse.sale.askPrice) : '', foaledOn: horse.foaledOn ?? '', microchipId: horse.microchipId, markings: horse.markings, bloodlineSire: horse.bloodline.sire, bloodlineDam: horse.bloodline.dam, bloodlineFamily: horse.bloodline.family, segment: horse.segment, status: horse.status }); setEditingCore(true); }}>Edit identity</button>
+                  <button className="button button--ghost button--compact" type="button" onClick={handleEditStart}>Edit identity</button>
                 )}
                 {horse.aqhaNumber && (
                   <a
@@ -858,7 +944,7 @@ export default function HorseDetail() {
             <div className="stack-item">
               <div className="stack-item__title">Packet state</div>
               <div className="inline-metrics">
-                <span>{horse.documents.length} docs</span>
+                <span>{documents.length} docs</span>
                 <span>{horse.gallery.length} assets</span>
                 <span>{buyerReadyDocuments.length} ready-to-share</span>
                 <span>{packet.shareSlug}</span>
@@ -1027,7 +1113,7 @@ export default function HorseDetail() {
                 </label>
               </div>
               <div className="inline-actions">
-                <button className="button button--ghost button--compact" type="button" onClick={() => { const result = updateHorse(horse.id, { medicalNotes: medicalNotesForm.notes, lastVetVisit: medicalNotesForm.lastVetVisit || undefined }); pushToast({ title: result.ok ? 'Medical record saved' : 'Medical save blocked', message: result.message, tone: result.ok ? 'success' : 'error' }); }}>
+                <button className="button button--ghost button--compact" type="button" onClick={handleMedicalSave}>
                   Save medical info
                 </button>
               </div>
@@ -1244,14 +1330,7 @@ export default function HorseDetail() {
               </div>
             </div>
             <div className="timeline">
-              {[...horse.activity, ...horse.notes.map((note) => ({
-                id: note.id,
-                date: note.createdAt,
-                title: note.title,
-                summary: note.body,
-                owner: note.author,
-                category: 'Operations' as const,
-              }))].map((entry) => (
+              {sortedTimeline.map((entry) => (
                 <div key={entry.id} className="timeline__item">
                   <div className="timeline__date">{formatDateLabel(entry.date)}</div>
                   <div>

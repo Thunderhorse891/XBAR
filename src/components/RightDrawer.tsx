@@ -5,6 +5,7 @@
 
 import { useEffect, useId, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
 import { useXbarStore } from '@/store/useXbarStore';
 import { useUiStore } from '@/store/useUiStore';
 import type { DrawerContent } from '@/store/useUiStore';
@@ -43,7 +44,7 @@ function useFocusLock(ref: React.RefObject<HTMLElement | null>, active: boolean)
 
 function HorseDetailDrawerContent({ horseId }: { horseId: string }) {
   const horse = useXbarStore((s) => s.horses.find((h) => h.id === horseId));
-  const openDrawer = useUiStore((s) => s.openDrawer);
+  const pushDrawer = useUiStore((s) => s.pushDrawer);
   if (!horse) return <div className="drawer-body"><p className="text-muted">Horse not found.</p></div>;
   const hasAlerts = horse.alerts.some((a) => a.severity === 'high' || a.severity === 'medium');
   return (
@@ -84,7 +85,7 @@ function HorseDetailDrawerContent({ horseId }: { horseId: string }) {
           <div className="drawer-kv"><span>AQHA</span><strong>{horse.aqhaNumber || '—'}</strong></div>
           <div className="drawer-kv"><span>Reg #</span><strong>{horse.registrationNumber || '—'}</strong></div>
           {horse.foaledOn && <div className="drawer-kv"><span>Foaled</span><strong>{horse.foaledOn}</strong></div>}
-          {horse.sale.askPrice > 0 && <div className="drawer-kv"><span>Ask price</span><strong>${horse.sale.askPrice.toLocaleString()}</strong></div>}
+          {horse.sale.askPrice > 0 && <div className="drawer-kv"><span>Ask price</span><strong>{formatCompactCurrency(horse.sale.askPrice)}</strong></div>}
           {horse.lastVetVisit && <div className="drawer-kv"><span>Last vet</span><strong>{horse.lastVetVisit}</strong></div>}
           <div className="drawer-kv"><span>Listing</span><strong>{horse.sale.listingState}</strong></div>
         </div>
@@ -92,16 +93,16 @@ function HorseDetailDrawerContent({ horseId }: { horseId: string }) {
       </div>
 
       <div className="drawer-drill-nav">
-        <button className="drawer-drill-btn" type="button" onClick={() => openDrawer({ type: 'horse-health', horseId })}>
+        <button className="drawer-drill-btn" type="button" onClick={() => pushDrawer({ type: 'horse-health', horseId })}>
           Health
         </button>
-        <button className="drawer-drill-btn" type="button" onClick={() => openDrawer({ type: 'horse-documents', horseId })}>
+        <button className="drawer-drill-btn" type="button" onClick={() => pushDrawer({ type: 'horse-documents', horseId })}>
           Docs
         </button>
-        <button className="drawer-drill-btn" type="button" onClick={() => openDrawer({ type: 'horse-financial', horseId })}>
+        <button className="drawer-drill-btn" type="button" onClick={() => pushDrawer({ type: 'horse-financial', horseId })}>
           Expenses
         </button>
-        <button className="drawer-drill-btn" type="button" onClick={() => openDrawer({ type: 'horse-breeding', horseId })}>
+        <button className="drawer-drill-btn" type="button" onClick={() => pushDrawer({ type: 'horse-breeding', horseId })}>
           Breeding
         </button>
       </div>
@@ -128,7 +129,7 @@ function HorseHealthDrawerContent({ horseId }: { horseId: string }) {
         <div className="drawer-timeline">
           {health.slice().reverse().map((ev) => (
             <div key={ev.id} className="drawer-timeline-item">
-              <div className="drawer-timeline-date">{ev.date}</div>
+              <div className="drawer-timeline-date">{formatDateLabel(ev.date)}</div>
               <div>
                 <div className="drawer-timeline-title">{ev.title}</div>
                 {ev.summary && <div className="drawer-timeline-body">{ev.summary}</div>}
@@ -157,7 +158,7 @@ function HorseBreedingDrawerContent({ horseId }: { horseId: string }) {
         <div className="drawer-timeline">
           {timeline.slice().reverse().map((ev) => (
             <div key={ev.id} className="drawer-timeline-item">
-              <div className="drawer-timeline-date">{ev.date}</div>
+              <div className="drawer-timeline-date">{formatDateLabel(ev.date)}</div>
               <div>
                 <div className="drawer-timeline-title">{ev.title}</div>
                 {ev.summary && <div className="drawer-timeline-body">{ev.summary}</div>}
@@ -188,7 +189,7 @@ function HorseDocumentsDrawerContent({ horseId }: { horseId: string }) {
             <div key={doc.id} className="drawer-doc-item">
               <div>
                 <div className="drawer-doc-name">{doc.title}</div>
-                <div className="drawer-doc-meta">{doc.type} · {doc.uploadedAt}</div>
+                <div className="drawer-doc-meta">{doc.type} · {formatDateLabel(doc.uploadedAt)}</div>
               </div>
               <span className={`pill pill--${doc.state === 'Ready' ? 'emerald' : doc.state === 'Needs Review' ? 'amber' : 'slate'}`}>
                 {doc.state}
@@ -209,7 +210,7 @@ function HorseFinancialDrawerContent({ horseId }: { horseId: string }) {
   const total = receipts.reduce((sum, r) => sum + Number(r.amount || 0), 0);
   return (
     <div className="drawer-body">
-      <div className="drawer-section-title">Expenses — ${total.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+      <div className="drawer-section-title">Expenses — {total > 0 ? formatCompactCurrency(total) : '$0'}</div>
       {receipts.length === 0 ? (
         <p className="text-muted drawer-empty">No expenses logged for this horse.</p>
       ) : (
@@ -218,9 +219,9 @@ function HorseFinancialDrawerContent({ horseId }: { horseId: string }) {
             <div key={r.id} className="drawer-expense-item">
               <div>
                 <div className="drawer-doc-name">{r.title}</div>
-                <div className="drawer-doc-meta">{r.category} · {r.receiptDate}</div>
+                <div className="drawer-doc-meta">{r.category} · {formatDateLabel(r.receiptDate)}</div>
               </div>
-              <span className="drawer-expense-amount">${Number(r.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+              <span className="drawer-expense-amount">{formatCompactCurrency(Number(r.amount))}</span>
             </div>
           ))}
         </div>
@@ -243,7 +244,7 @@ function DocumentPreviewDrawerContent({ documentId }: { documentId: string }) {
           <div className="drawer-kv"><span>Type</span><strong>{doc.type}</strong></div>
           <div className="drawer-kv"><span>State</span><strong>{doc.state}</strong></div>
           <div className="drawer-kv"><span>Source</span><strong>{doc.source}</strong></div>
-          <div className="drawer-kv"><span>Uploaded</span><strong>{doc.uploadedAt}</strong></div>
+          <div className="drawer-kv"><span>Uploaded</span><strong>{formatDateLabel(doc.uploadedAt)}</strong></div>
         </div>
         {horse && (
           <div className="drawer-kv"><span>Horse</span><strong>{horse.name}</strong></div>
@@ -258,19 +259,73 @@ function DocumentPreviewDrawerContent({ documentId }: { documentId: string }) {
 }
 
 function NotificationCentreContent() {
+  const documents = useXbarStore((s) => s.documents);
+  const horses = useXbarStore((s) => s.horses);
+  const ownershipRecords = useXbarStore((s) => s.ownershipRecords);
   const toasts = useUiStore((s) => s.toasts);
+
+  const pendingDocs = documents.filter((d) => d.state === 'Needs Review');
+  const pendingTransfers = ownershipRecords.filter((r) => r.transferStatus !== 'Clear');
+  const today = new Date();
+  const careDue = horses.filter((h) => {
+    if (!h.lastVetVisit) return false;
+    const daysSince = Math.floor((today.getTime() - new Date(h.lastVetVisit).getTime()) / 86400000);
+    return daysSince > 330;
+  });
+
+  const hasAny = pendingDocs.length > 0 || pendingTransfers.length > 0 || careDue.length > 0 || toasts.length > 0;
+
   return (
     <div className="drawer-body">
       <div className="drawer-section-title">Notification Centre</div>
-      {toasts.length === 0 ? (
-        <p className="text-muted drawer-empty">No active notifications.</p>
+      {!hasAny ? (
+        <p className="text-muted drawer-empty">All clear — no pending items.</p>
       ) : (
         <div className="stack-list">
-          {toasts.map((t) => (
-            <div key={t.id} className={`callout callout--${t.tone === 'error' ? 'warning' : 'info'}`}>
-              {t.title && <strong>{t.title}: </strong>}{t.message}
+          {pendingDocs.length > 0 && (
+            <div className="callout callout--warning">
+              <strong>{pendingDocs.length} doc{pendingDocs.length > 1 ? 's' : ''} need review</strong>
+              <div className="drawer-notification-list">
+                {pendingDocs.slice(0, 5).map((d) => (
+                  <div key={d.id} className="drawer-notification-item">{d.title}</div>
+                ))}
+                {pendingDocs.length > 5 && <div className="drawer-notification-item">+{pendingDocs.length - 5} more</div>}
+              </div>
             </div>
-          ))}
+          )}
+          {pendingTransfers.length > 0 && (
+            <div className="callout callout--warning">
+              <strong>{pendingTransfers.length} ownership transfer{pendingTransfers.length > 1 ? 's' : ''} open</strong>
+              <div className="drawer-notification-list">
+                {pendingTransfers.slice(0, 5).map((r) => {
+                  const horse = horses.find((h) => h.id === r.horseId);
+                  return (
+                    <div key={r.id} className="drawer-notification-item">{horse?.name ?? 'Unknown horse'} — {r.transferStatus}</div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {careDue.length > 0 && (
+            <div className="callout callout--info">
+              <strong>{careDue.length} horse{careDue.length > 1 ? 's' : ''} due for vet visit</strong>
+              <div className="drawer-notification-list">
+                {careDue.slice(0, 5).map((h) => (
+                  <div key={h.id} className="drawer-notification-item">{h.name} — last visit {formatDateLabel(h.lastVetVisit)}</div>
+                ))}
+              </div>
+            </div>
+          )}
+          {toasts.length > 0 && (
+            <>
+              <div className="drawer-section-title" style={{ fontSize: '11px', marginTop: 8 }}>Recent activity</div>
+              {toasts.slice(-5).reverse().map((t) => (
+                <div key={t.id} className={`callout callout--${t.tone === 'error' ? 'warning' : 'info'}`}>
+                  {t.title && <strong>{t.title}: </strong>}{t.message}
+                </div>
+              ))}
+            </>
+          )}
         </div>
       )}
     </div>

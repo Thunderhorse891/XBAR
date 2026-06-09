@@ -154,7 +154,7 @@ function HorseCard({ horse, packet, saved, canManageSharedAccess, onToggleListin
         <div className="horse-card__body">
           <div className="horse-card__metric-band">
             <div className="horse-card__metric"><span>Record</span><strong>{formatPercent(packet.score)}</strong></div>
-            <div className="horse-card__metric"><span>{horse.segment === 'Sale Prospect' && horse.sale.askPrice ? 'Ask' : 'Insured'}</span><strong>{horse.sale.askPrice ? formatCompactCurrency(horse.sale.askPrice) : '—'}</strong></div>
+            <div className="horse-card__metric"><span>{horse.segment === 'Sale Prospect' ? 'Ask' : 'Insured'}</span><strong>{horse.segment === 'Sale Prospect' ? (horse.sale.askPrice ? formatCompactCurrency(horse.sale.askPrice) : '—') : (horse.insuredValue ? formatCompactCurrency(horse.insuredValue) : '—')}</strong></div>
             <div className="horse-card__metric"><span>Share</span><strong>{saved ? 'Shared' : 'Private'}</strong></div>
           </div>
 

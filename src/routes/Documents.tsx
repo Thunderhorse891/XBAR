@@ -150,6 +150,11 @@ export default function Documents() {
         ...(menuHorseId
           ? [
               {
+                id: 'quick-view-horse',
+                label: 'Quick view horse',
+                onSelect: () => openDrawer({ type: 'horse-detail', horseId: menuHorseId }),
+              },
+              {
                 id: 'open-horse',
                 label: 'Open horse profile',
                 onSelect: () => navigate(`/horses/${menuHorseId}`),
