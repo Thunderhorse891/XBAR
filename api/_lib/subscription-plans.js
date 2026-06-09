@@ -3,7 +3,12 @@ export const subscriptionPlans = {
     monthlyRate: 29,
     sharedAccessEnabled: false,
     brandedListings: false,
-    featureFlags: ['Horse records', 'Care tracking', 'Document vault', 'Weather'],
+    featureFlags: [
+      'Horse command files',
+      'Health expiry alerts',
+      'Expense ledger',
+      'Proof vault',
+    ],
     limits: {
       seatLimit: 1,
       documentLimit: 250,
@@ -15,7 +20,13 @@ export const subscriptionPlans = {
     monthlyRate: 79,
     sharedAccessEnabled: true,
     brandedListings: true,
-    featureFlags: ['Everything in Starter', 'Team roles', 'Sale listings', 'Sale profiles', 'Document sharing'],
+    featureFlags: [
+      'Everything in Starter',
+      'Owner and buyer sharing',
+      'Scheduling workflow',
+      'Client communication controls',
+      'Role-based team access',
+    ],
     limits: {
       seatLimit: 5,
       documentLimit: 1000,
@@ -27,7 +38,13 @@ export const subscriptionPlans = {
     monthlyRate: 199,
     sharedAccessEnabled: true,
     brandedListings: true,
-    featureFlags: ['Everything in Professional', 'Unlimited horses', 'Ranch assets', 'Breeding program', 'Expenses ledger', 'Reminders'],
+    featureFlags: [
+      'Everything in Professional',
+      'Business management',
+      'Inventory and supply control',
+      'Breeding and foaling operations',
+      'Activity accountability',
+    ],
     limits: {
       seatLimit: 20,
       documentLimit: 5000,
@@ -39,7 +56,13 @@ export const subscriptionPlans = {
     monthlyRate: 499,
     sharedAccessEnabled: true,
     brandedListings: true,
-    featureFlags: ['Everything in Ranch Ops', 'Unlimited users', 'Custom integrations', 'Priority support', 'Advanced audit controls'],
+    featureFlags: [
+      'Everything in Ranch Ops',
+      'Enterprise permissions',
+      'Data portability',
+      'Advanced automation roadmap',
+      'Priority implementation path',
+    ],
     limits: {
       seatLimit: 60,
       documentLimit: 20000,
