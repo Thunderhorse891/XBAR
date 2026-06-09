@@ -281,16 +281,25 @@ export default function Horses() {
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return horses.filter((horse) => {
-      const matchesSearch =
-        !term ||
-        [horse.name, horse.barnName, horse.owner, horse.ownerEntity, horse.aqhaNumber, horse.location.barn]
-          .join(' ')
-          .toLowerCase()
-          .includes(term);
-      const matchesSegment = segmentFilter === 'All' || horse.segment === segmentFilter;
-      return matchesSearch && matchesSegment;
-    });
+    const urgencyScore = (h: typeof horses[number]) => {
+      if (h.status === 'Medical Review') return 4;
+      if (h.status === 'Sale Prep' && h.sale.askPrice > 0) return 3;
+      if (h.status === 'In Training') return 2;
+      if (h.alerts?.some((a) => a.severity === 'high')) return 3;
+      return 1;
+    };
+    return horses
+      .filter((horse) => {
+        const matchesSearch =
+          !term ||
+          [horse.name, horse.barnName, horse.owner, horse.ownerEntity, horse.aqhaNumber, horse.location.barn]
+            .join(' ')
+            .toLowerCase()
+            .includes(term);
+        const matchesSegment = segmentFilter === 'All' || horse.segment === segmentFilter;
+        return matchesSearch && matchesSegment;
+      })
+      .sort((a, b) => urgencyScore(b) - urgencyScore(a) || a.name.localeCompare(b.name));
   }, [horses, search, segmentFilter]);
 
 
