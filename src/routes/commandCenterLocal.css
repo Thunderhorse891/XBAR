@@ -1,0 +1,114 @@
+.xbar-command-shell {
+  background: linear-gradient(135deg, #050910 0%, #07101d 48%, #0a1320 100%);
+}
+
+.xbar-command-main {
+  min-height: calc(100vh - 62px);
+  background: linear-gradient(180deg, rgba(7, 16, 29, 0.96), rgba(9, 17, 28, 0.98));
+  color: #dbe8f5;
+}
+
+.xbar-command-topbar {
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.22);
+}
+
+.command-center-briefing {
+  border-color: rgba(78, 109, 142, 0.24) !important;
+  background: linear-gradient(145deg, rgba(9, 18, 32, 0.98), rgba(11, 26, 45, 0.96)) !important;
+  box-shadow: 0 28px 64px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+.command-center-briefing__copy {
+  max-width: 720px;
+  margin: 10px 0 0;
+  color: #9eb4ca;
+  font-size: 0.98rem;
+  line-height: 1.65;
+}
+
+.command-center-next-move {
+  display: grid;
+  gap: 7px;
+  margin-top: 20px;
+  padding: 18px 20px;
+  border: 1px solid rgba(77, 148, 255, 0.22);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(13, 32, 64, 0.92), rgba(7, 17, 29, 0.94));
+}
+
+.command-center-next-move span {
+  color: #70a7ff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.command-center-next-move strong {
+  color: #ffffff;
+  font-size: clamp(1.3rem, 2vw, 2rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+
+.command-center-next-move em {
+  color: #90a9c2;
+  font-style: normal;
+  line-height: 1.55;
+}
+
+.xbar-command-main .command-stage,
+.xbar-command-main .panel,
+.xbar-command-main .metric-card,
+.xbar-command-main .command-stage__support-card,
+.xbar-command-main .stack-item,
+.xbar-command-main .empty-state {
+  border-color: rgba(80, 112, 146, 0.22);
+  background: linear-gradient(180deg, rgba(11, 23, 39, 0.96), rgba(8, 17, 29, 0.98));
+  color: #dbe8f5;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.22);
+}
+
+.xbar-command-main .panel__title,
+.xbar-command-main .stack-item__title,
+.xbar-command-main .empty-state__title,
+.xbar-command-main .command-stage__support-title,
+.xbar-command-main .metric-card__value,
+.command-center-briefing .ops-briefing-header__title,
+.command-center-briefing .ops-briefing-stat__value {
+  color: #f4f8ff;
+}
+
+.xbar-command-main .panel__description,
+.xbar-command-main .stack-item__copy,
+.xbar-command-main .empty-state__description,
+.xbar-command-main .command-stage__support-copy,
+.xbar-command-main .metric-card__detail,
+.xbar-command-main .inline-metrics {
+  color: #95aac0;
+}
+
+.xbar-command-main .button--ghost,
+.xbar-command-main .field-input {
+  border-color: #233852;
+  background: #0b1625;
+  color: #dbe8f5;
+}
+
+.xbar-command-main .button--ghost:hover {
+  border-color: #4d94ff;
+  background: #102035;
+}
+
+.xbar-command-main .ops-briefing-stat,
+.xbar-command-main .ops-briefing-action {
+  border-color: rgba(80, 112, 146, 0.28);
+  background: rgba(9, 19, 33, 0.78);
+  color: #dbe8f5;
+}
+
+.xbar-command-main .ops-briefing-action--primary {
+  background: linear-gradient(180deg, #2f8dff, #1155dd);
+  border-color: rgba(77, 148, 255, 0.8);
+  color: #ffffff;
+}
