@@ -196,6 +196,31 @@ function HorseFinancialDrawerContent({ horseId }: { horseId: string }) {
   );
 }
 
+function DocumentPreviewDrawerContent({ documentId }: { documentId: string }) {
+  const doc = useXbarStore((s) => s.documents.find((d) => d.id === documentId));
+  const horse = useXbarStore((s) => doc?.horseId ? s.horses.find((h) => h.id === doc.horseId) : undefined);
+  if (!doc) return <div className="drawer-body"><p className="text-muted">Document not found.</p></div>;
+  return (
+    <div className="drawer-body">
+      <div className="drawer-section-list">
+        <div className="drawer-kv-grid">
+          <div className="drawer-kv"><span>Type</span><strong>{doc.type}</strong></div>
+          <div className="drawer-kv"><span>State</span><strong>{doc.state}</strong></div>
+          <div className="drawer-kv"><span>Source</span><strong>{doc.source}</strong></div>
+          <div className="drawer-kv"><span>Uploaded</span><strong>{doc.uploadedAt}</strong></div>
+        </div>
+        {horse && (
+          <div className="drawer-kv"><span>Horse</span><strong>{horse.name}</strong></div>
+        )}
+        {doc.summary && <p className="drawer-summary">{doc.summary}</p>}
+      </div>
+      <div className="drawer-footer">
+        <Link to="/documents" className="button button--ghost">Go to Documents</Link>
+      </div>
+    </div>
+  );
+}
+
 function NotificationCentreContent() {
   const toasts = useUiStore((s) => s.toasts);
   return (
@@ -250,6 +275,7 @@ function DrawerBody({ content }: { content: DrawerContent }) {
     case 'horse-breeding': return <HorseBreedingDrawerContent horseId={content.horseId} />;
     case 'horse-documents': return <HorseDocumentsDrawerContent horseId={content.horseId} />;
     case 'horse-financial': return <HorseFinancialDrawerContent horseId={content.horseId} />;
+    case 'document-preview': return <DocumentPreviewDrawerContent documentId={content.documentId} />;
     case 'notification-centre': return <NotificationCentreContent />;
     case 'keyboard-shortcuts': return <KeyboardShortcutsContent />;
     default: return null;
@@ -263,6 +289,7 @@ function drawerTitle(content: DrawerContent, horses: { id: string; name: string 
     case 'horse-breeding': return 'Breeding Records';
     case 'horse-documents': return 'Documents';
     case 'horse-financial': return 'Expenses';
+    case 'document-preview': return 'Document';
     case 'notification-centre': return 'Notifications';
     case 'keyboard-shortcuts': return 'Keyboard Shortcuts';
     default: return 'Detail';

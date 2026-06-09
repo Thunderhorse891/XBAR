@@ -27,6 +27,7 @@ export default function Documents() {
   const discardDocument = useXbarStore((state) => state.discardDocument);
   const addHorse = useXbarStore((state) => state.addHorse);
   const pushToast = useUiStore((state) => state.pushToast);
+  const openDrawer = useUiStore((state) => state.openDrawer);
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
   const canReviewDocuments = useCurrentRoleCapability('reviewDocuments');
   const { confirm, dialog: confirmDialog } = useConfirm();
@@ -438,7 +439,7 @@ export default function Documents() {
               <span className="field-label">Horse</span>
               <button
                 type="button"
-                    className={`button button--ghost button--compact justify-start ${createHorseFromBatch ? 'border-[#3D6B4F] bg-[#EDF4EE] text-[#3D6B4F]' : ''}`}
+                    className={`button button--ghost button--compact justify-start ${createHorseFromBatch ? 'border-[rgba(46,160,67,0.4)] bg-[rgba(46,160,67,0.1)] text-[var(--emerald)]' : ''}`}
                 onClick={() => setCreateHorseFromBatch((current) => !current)}
                 disabled={!canUploadDocuments || Boolean(horseId)}
               >
@@ -541,6 +542,13 @@ export default function Documents() {
                       </td>
                       <td>
                         <div className="inline-actions inline-actions--card">
+                          <button
+                            className="button button--ghost button--compact"
+                            type="button"
+                            onClick={() => openDrawer({ type: 'document-preview', documentId: document.id })}
+                          >
+                            Preview
+                          </button>
                           {document.fileUrl || document.storagePath ? (
                             <button
                               className="button button--ghost button--compact"
