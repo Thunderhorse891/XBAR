@@ -6,7 +6,7 @@ import { buildPrefilledDocument, documentTemplateLibrary, downloadHtmlFile, type
 import { buildSharePath } from '@/lib/xbarRuntime';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
-import type { HorseRecord, SubscriptionTier } from '@/types/xbar';
+import type { SubscriptionTier } from '@/types/xbar';
 
 const tierOrder: DocumentTemplateTier[] = ['Basic', 'Pro', 'Business'];
 const planRank: Record<SubscriptionTier, number> = { Starter: 0, Professional: 1, 'Ranch Ops': 2, Enterprise: 3 };
