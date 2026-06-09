@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
@@ -8,10 +8,11 @@ import { Pill, ProgressBar, SurfaceTabs } from '@/components/app-ui';
 import { DotsIcon } from '@/components/icons';
 import { buildPublicShareUrl } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
+import { useCardState } from '@/hooks/useCardState';
 import { useUiStore } from '@/store/useUiStore';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
-import type { HorseSegment, HorseSex, HorseStatus } from '@/types/xbar';
+import type { HorseRecord, HorseSegment, HorseSex, HorseStatus } from '@/types/xbar';
 
 function createHorseFormDefaults(params: {
   defaultOwnerName: string;
@@ -50,6 +51,174 @@ const segments: SegmentFilter[] = ['All', 'Sale Prospect', 'Broodmare', 'Stud', 
 const horseSegments: HorseSegment[] = ['Broodmare', 'Stud', 'Show String', 'Sale Prospect', 'Young Stock', 'Retired'];
 const horseStatuses: HorseStatus[] = ['In Training', 'Broodmare Program', 'Sale Prep', 'Medical Review', 'Pasture', 'Retired'];
 const horseSexes: HorseSex[] = ['Mare', 'Stud', 'Gelding', 'Filly', 'Colt'];
+
+/* ── Expandable horse card with drawer quick-view ─────────────────── */
+type HorseCardProps = {
+  horse: HorseRecord;
+  packet: ReturnType<typeof buildHorsePacketCompleteness>;
+  saved: boolean;
+  canManageSharedAccess: boolean;
+  onToggleListing: (id: string) => void;
+  onContextMenu: (id: string, x: number, y: number) => void;
+};
+
+function HorseCard({ horse, packet, saved, canManageSharedAccess, onToggleListing, onContextMenu }: HorseCardProps) {
+  const { isCollapsed, isExpanded, expand, collapse, headerRef } = useCardState(horse.id);
+  const openDrawer = useUiStore((s) => s.openDrawer);
+  const headerBtnRef = useRef<HTMLButtonElement>(null);
+
+  const showSaleSignals = horse.segment === 'Sale Prospect' || horse.status === 'Sale Prep';
+
+  return (
+    <div
+      className={`card-expandable${isCollapsed ? ' card-expandable--collapsed' : ' card-expandable--expanded'}`}
+      data-horse-id={horse.id}
+    >
+      {/* Card header — click to toggle */}
+      <div
+        ref={headerRef as React.RefObject<HTMLDivElement>}
+        className="card-expandable__header"
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
+        onClick={() => isCollapsed ? expand() : collapse()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            isCollapsed ? expand() : collapse();
+          }
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onContextMenu(horse.id, e.clientX, e.clientY);
+        }}
+      >
+        <div className="card-expandable__header-left">
+          <svg className="card-expandable__chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polyline points="6 3 11 8 6 13" />
+          </svg>
+          <div className="horse-card__media" style={{ width: 48, height: 48, borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
+            <HorseMediaPreview
+              src={horse.profileImage || horse.gallery[0]?.url}
+              name={horse.name}
+              imageClassName="horse-card__image"
+              fallbackClassName="horse-card__image-fallback"
+            />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div className="card-expandable__title">{horse.name}</div>
+            <div className="card-expandable__meta">{horse.breed || horse.segment} · {horse.owner} · {horse.location.barn}</div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <Pill tone={statusTone[horse.status]}>{horse.status === 'Sale Prep' ? 'For Sale' : horse.status}</Pill>
+          <button
+            ref={headerBtnRef}
+            className="icon-button icon-button--compact"
+            type="button"
+            aria-label="Quick actions"
+            onClick={(e) => {
+              e.stopPropagation();
+              const b = e.currentTarget.getBoundingClientRect();
+              onContextMenu(horse.id, b.left, b.bottom + 8);
+            }}
+          >
+            <DotsIcon className="icon-button__icon" />
+          </button>
+        </div>
+      </div>
+
+      {/* Expanded body */}
+      <div className="card-expandable__body">
+        {/* Media + core metrics */}
+        <div className="horse-card__media" style={{ height: 180, borderRadius: 0 }}>
+          <HorseMediaPreview
+            src={horse.profileImage || horse.gallery[0]?.url}
+            name={horse.name}
+            imageClassName="horse-card__image"
+            fallbackClassName="horse-card__image-fallback"
+          />
+          <div className="horse-card__media-top">
+            <div className="status-inline">
+              <Pill tone={statusTone[horse.status]}>{horse.status === 'Sale Prep' ? 'For Sale' : horse.status}</Pill>
+              <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
+            </div>
+          </div>
+          <div className="horse-card__media-bottom">
+            <div className="horse-card__kicker">{horse.segment}</div>
+            <div className="horse-card__title">{horse.name}</div>
+            <div className="horse-card__subtitle">{horse.registry} · {horse.sex} · {horse.location.barn}</div>
+          </div>
+        </div>
+
+        <div className="horse-card__body">
+          <div className="horse-card__metric-band">
+            <div className="horse-card__metric"><span>Record</span><strong>{formatPercent(packet.score)}</strong></div>
+            <div className="horse-card__metric"><span>{horse.segment === 'Sale Prospect' && horse.sale.askPrice ? 'Ask' : 'Insured'}</span><strong>{horse.sale.askPrice ? formatCompactCurrency(horse.sale.askPrice) : '—'}</strong></div>
+            <div className="horse-card__metric"><span>Share</span><strong>{saved ? 'Shared' : 'Private'}</strong></div>
+          </div>
+
+          {/* Quick-view drawer links */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px 0 4px' }}>
+            <button
+              className="button button--ghost button--compact"
+              type="button"
+              onClick={(e) => { e.stopPropagation(); openDrawer({ type: 'horse-health', horseId: horse.id }, headerBtnRef.current?.id); }}
+            >Health</button>
+            <button
+              className="button button--ghost button--compact"
+              type="button"
+              onClick={(e) => { e.stopPropagation(); openDrawer({ type: 'horse-breeding', horseId: horse.id }); }}
+            >Breeding</button>
+            <button
+              className="button button--ghost button--compact"
+              type="button"
+              onClick={(e) => { e.stopPropagation(); openDrawer({ type: 'horse-documents', horseId: horse.id }); }}
+            >Docs</button>
+            <button
+              className="button button--ghost button--compact"
+              type="button"
+              onClick={(e) => { e.stopPropagation(); openDrawer({ type: 'horse-financial', horseId: horse.id }); }}
+            >Expenses</button>
+          </div>
+
+          {showSaleSignals ? (
+            <div className="horse-card__readiness">
+              <div className="horse-card__readiness-head"><span>Sale readiness</span><strong>{formatPercent(packet.score)}</strong></div>
+              <ProgressBar value={packet.score} tone={packet.tone} />
+            </div>
+          ) : null}
+
+          <div className="horse-card__packet">
+            <div className="horse-card__packet-head">
+              <span>Sale packet</span>
+              <strong>{packet.saleSlots.filter((s) => s.status === 'ready').length}/{packet.saleSlots.length}</strong>
+            </div>
+            <SalePacketSlots slots={packet.saleSlots} compact />
+          </div>
+
+          <div className="horse-card__footer">
+            <div className="status-inline">
+              {saved ? <Pill tone="blue">Shared</Pill> : null}
+              <span>{showSaleSignals ? `${horse.sale.watchlistCount} watching` : `${horse.sale.inquiryCount} leads`}</span>
+            </div>
+            <div className="inline-actions inline-actions--card">
+              <button
+                className="button button--ghost button--compact"
+                type="button"
+                onClick={(e) => { e.stopPropagation(); void onToggleListing(horse.id); }}
+                disabled={!canManageSharedAccess}
+              >
+                {saved ? 'Remove listing' : 'List for sale'}
+              </button>
+              <Link to={`/horses/${horse.id}`} className="button button--primary button--compact">Record</Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Horses() {
   const navigate = useNavigate();
@@ -382,142 +551,16 @@ export default function Horses() {
           {filtered.map((horse) => {
             const saved = sharedListings.some((listing) => listing.horseId === horse.id && listing.state !== 'Archived');
             const packet = packetByHorseId[horse.id];
-            const valueLabel = horse.segment === 'Sale Prospect' && horse.sale.askPrice ? 'Ask' : 'Insured';
-            const accessLabel = saved ? 'Shared' : 'Private';
-            const showSaleSignals = horse.segment === 'Sale Prospect' || horse.status === 'Sale Prep';
             return (
-              <Link
+              <HorseCard
                 key={horse.id}
-                className="horse-card horse-card--interactive"
-                to={`/horses/${horse.id}`}
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  openHorseMenu(horse.id, event.clientX, event.clientY);
-                }}
-              >
-                <div className="horse-card__media">
-                  <HorseMediaPreview
-                    src={horse.profileImage || horse.gallery[0]?.url}
-                    name={horse.name}
-                    imageClassName="horse-card__image"
-                    fallbackClassName="horse-card__image-fallback"
-                  />
-                  <div className="horse-card__media-top">
-                    <div className="status-inline">
-                      <Pill tone={statusTone[horse.status]}>{horse.status === 'Sale Prep' ? 'For Sale' : horse.status}</Pill>
-                      <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
-                    </div>
-                    <button
-                      className="icon-button icon-button--compact"
-                      type="button"
-                      aria-label="Open quick actions"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        const bounds = event.currentTarget.getBoundingClientRect();
-                        openHorseMenu(horse.id, bounds.left, bounds.bottom + 8);
-                      }}
-                    >
-                      <DotsIcon className="icon-button__icon" />
-                    </button>
-                  </div>
-                  <div className="horse-card__media-bottom">
-                    <div className="horse-card__kicker">{horse.segment}</div>
-                    <div className="horse-card__title">{horse.name}</div>
-                    <div className="horse-card__subtitle">
-                      {horse.registry} · {horse.sex} · {horse.location.barn}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="horse-card__body">
-                  <div className="horse-card__metric-band">
-                    <div className="horse-card__metric">
-                      <span>Record</span>
-                      <strong>{formatPercent(packet.score)}</strong>
-                    </div>
-                    <div className="horse-card__metric">
-                      <span>{valueLabel}</span>
-                      <strong>{horse.sale.askPrice ? formatCompactCurrency(horse.sale.askPrice) : '—'}</strong>
-                    </div>
-                    <div className="horse-card__metric">
-                      <span>Share</span>
-                      <strong>{accessLabel}</strong>
-                    </div>
-                  </div>
-
-                  <div className="horse-card__facts">
-                    <span className="horse-card__fact">
-                      <strong>Owner</strong>
-                      {horse.owner}
-                    </span>
-                    <span className="horse-card__fact">
-                      <strong>Barn</strong>
-                      {horse.location.barn}
-                    </span>
-                    <span className="horse-card__fact">
-                      <strong>AQHA</strong>
-                      {horse.aqhaNumber || horse.registrationNumber || 'Pending'}
-                    </span>
-                  </div>
-
-                  {showSaleSignals ? (
-                    <div className="horse-card__readiness">
-                      <div className="horse-card__readiness-head">
-                        <span>Sale readiness</span>
-                        <strong>{formatPercent(packet.score)}</strong>
-                      </div>
-                      <ProgressBar value={packet.score} tone={packet.tone} />
-                    </div>
-                  ) : (
-                    <div className="horse-card__readiness horse-card__readiness--meta">
-                      <div className="horse-card__readiness-head">
-                        <span>Care status</span>
-                        <strong>{horse.status === 'Sale Prep' ? 'For Sale' : horse.status}</strong>
-                      </div>
-                      <div className="inline-metrics">
-                        <span>{horse.gallery.length} assets</span>
-                        <span>{packet.readyCount} clear</span>
-                        <span>{horse.location.barn}</span>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="horse-card__packet">
-                    <div className="horse-card__packet-head">
-                      <span>Sale packet</span>
-                      <strong>{packet.saleSlots.filter((slot) => slot.status === 'ready').length}/{packet.saleSlots.length}</strong>
-                    </div>
-                    <SalePacketSlots slots={packet.saleSlots} compact />
-                  </div>
-
-                  <div className="horse-card__footer">
-                    <div className="status-inline">
-                      {saved ? <Pill tone="blue">Shared</Pill> : null}
-                      <span>{showSaleSignals ? `${horse.sale.watchlistCount} watching` : `${horse.sale.inquiryCount} leads`}</span>
-                    </div>
-                    <div className="inline-actions inline-actions--card">
-                      <button
-                        className="button button--ghost button--compact"
-                        type="button"
-                        onClick={async (event) => {
-                          event.stopPropagation();
-                          await handleSavedHorseToggle(horse.id);
-                        }}
-                        disabled={!canManageSharedAccess}
-                      >
-                        {saved ? 'Remove listing' : 'List for sale'}
-                      </button>
-                      <Link
-                        to={`/horses/${horse.id}`}
-                        className="button button--primary button--compact"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        Record
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              </Link>
+                horse={horse}
+                packet={packet}
+                saved={saved}
+                canManageSharedAccess={canManageSharedAccess}
+                onToggleListing={handleSavedHorseToggle}
+                onContextMenu={openHorseMenu}
+              />
             );
           })}
         </div>
