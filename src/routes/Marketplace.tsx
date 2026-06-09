@@ -18,7 +18,7 @@ export default function Marketplace() {
   const salesLeads = useXbarStore((state) => state.salesLeads);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const createSalesLead = useXbarStore((state) => state.createSalesLead);
-  const pushToast = useUiStore((state) => state.pushToast);
+  const { pushToast, openDrawer } = useUiStore((state) => ({ pushToast: state.pushToast, openDrawer: state.openDrawer }));
   const canManageSales = useCurrentRoleCapability('manageSales');
 
   const [sexFilter, setSexFilter] = useState<SexFilter>('All');
@@ -237,12 +237,13 @@ export default function Marketplace() {
                         >
                           Log inquiry
                         </button>
-                        <Link
+                        <button
                           className="button button--ghost button--compact"
-                          to={`/horses/${horse.id}`}
+                          type="button"
+                          onClick={() => openDrawer({ type: 'horse-detail', horseId: horse.id })}
                         >
-                          View record
-                        </Link>
+                          Quick view
+                        </button>
                       </div>
                     )}
                   </div>

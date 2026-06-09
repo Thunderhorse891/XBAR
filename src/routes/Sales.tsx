@@ -23,7 +23,7 @@ export default function Sales() {
   const deleteSalesLead = useXbarStore((state) => state.deleteSalesLead);
   const recordSharedChannel = useXbarStore((state) => state.recordSharedChannel);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
-  const pushToast = useUiStore((state) => state.pushToast);
+  const { pushToast, openDrawer } = useUiStore((state) => ({ pushToast: state.pushToast, openDrawer: state.openDrawer }));
   const canManageSales = useCurrentRoleCapability('manageSales');
   const { confirm, dialog: confirmDialog } = useConfirm();
   const saleHorses = useMemo(
@@ -122,6 +122,11 @@ export default function Sales() {
             id: 'open-horse',
             label: 'Open horse record',
             onSelect: () => navigate(`/horses/${menuHorse.id}`),
+          },
+          {
+            id: 'view-horse-drawer',
+            label: 'Quick view horse',
+            onSelect: () => openDrawer({ type: 'horse-detail', horseId: menuHorse.id }),
           },
           {
             id: 'open-profile',

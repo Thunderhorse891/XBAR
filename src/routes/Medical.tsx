@@ -24,7 +24,7 @@ export default function Medical() {
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const session = useCloudStore((state) => state.session);
   const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName || 'Ranch Staff';
-  const pushToast = useUiStore((state) => state.pushToast);
+  const { pushToast, openDrawer } = useUiStore((state) => ({ pushToast: state.pushToast, openDrawer: state.openDrawer }));
   const canManageMedical = useCurrentRoleCapability('manageMedical');
   const medicalWatch = useMemo(() => horses.filter((horse) => horse.status === 'Medical Review'), [horses]);
   const medicalEvents = useMemo(
@@ -66,6 +66,11 @@ export default function Medical() {
           id: 'prepare-event',
           label: 'Add care event',
           onSelect: () => setSelectedHorseId(menuHorse.id),
+        },
+        {
+          id: 'view-health-drawer',
+          label: 'Quick view health',
+          onSelect: () => openDrawer({ type: 'horse-health', horseId: menuHorse.id }),
         },
       ]
     : [];
@@ -111,10 +116,13 @@ export default function Medical() {
           {medicalWatch.length ? (
             <div className="stack-list">
               {medicalWatch.map((horse) => (
-                <Link
+                <div
                   key={horse.id}
                   className="stack-item stack-item--interactive"
-                  to={`/horses/${horse.id}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openDrawer({ type: 'horse-health', horseId: horse.id })}
+                  onKeyDown={(e) => e.key === 'Enter' && openDrawer({ type: 'horse-health', horseId: horse.id })}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     setMenuState({ horseId: horse.id, x: event.clientX, y: event.clientY });
@@ -125,14 +133,17 @@ export default function Medical() {
                       <div className="stack-item__title">{horse.name}</div>
                       <div className="stack-item__copy">{horse.medicalTimeline[0]?.title ?? horse.medicalNotes}</div>
                     </div>
-                    <Pill tone="rose">Watch</Pill>
+                    <div className="row-actions">
+                      <Pill tone="rose">Watch</Pill>
+                      <Link className="button button--ghost button--xs" to={`/horses/${horse.id}`} onClick={(e) => e.stopPropagation()}>Profile</Link>
+                    </div>
                   </div>
                   <div className="inline-metrics">
                     <span>{horse.assignments.veterinarian}</span>
                     <span>Last visit {formatDateLabel(horse.lastVetVisit)}</span>
                     <span>{horse.documents.length} linked docs</span>
                   </div>
-                </Link>
+                </div>
               ))}
             </div>
           ) : (

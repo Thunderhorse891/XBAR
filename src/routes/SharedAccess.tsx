@@ -13,7 +13,7 @@ import type { SharedListingRecord } from '@/types/xbar';
 
 export default function SharedAccess() {
   const navigate = useNavigate();
-  const pushToast = useUiStore((state) => state.pushToast);
+  const { pushToast, openDrawer } = useUiStore((state) => ({ pushToast: state.pushToast, openDrawer: state.openDrawer }));
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const salesLeads = useXbarStore((state) => state.salesLeads);
@@ -91,6 +91,11 @@ export default function SharedAccess() {
           id: 'open-horse',
           label: 'Open horse profile',
           onSelect: () => navigate(`/horses/${menuHorse.id}`),
+        },
+        {
+          id: 'view-horse-drawer',
+          label: 'Quick view horse',
+          onSelect: () => openDrawer({ type: 'horse-detail', horseId: menuHorse.id }),
         },
         {
           id: 'open-share',

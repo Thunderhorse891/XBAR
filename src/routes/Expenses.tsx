@@ -14,7 +14,7 @@ import type { ExpenseFilter } from '@/features/expenses/types';
 import './operationsExperience.css';
 
 export default function Expenses() {
-  const pushToast = useUiStore((state) => state.pushToast);
+  const { pushToast, openDrawer } = useUiStore((state) => ({ pushToast: state.pushToast, openDrawer: state.openDrawer }));
   const horses = useXbarStore((state) => state.horses);
   const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
   const addExpenseReceipt = useXbarStore((state) => state.addExpenseReceipt);
@@ -177,7 +177,16 @@ export default function Expenses() {
                     </div>
                     <div className="inline-actions inline-actions--mt-sm">
                       {receipt.horseId && (
-                        <Link className="button button--ghost button--xs" to={`/horses/${receipt.horseId}`}>View horse</Link>
+                        <>
+                          <button
+                            className="button button--ghost button--xs"
+                            type="button"
+                            onClick={() => openDrawer({ type: 'horse-financial', horseId: receipt.horseId! })}
+                          >
+                            All expenses
+                          </button>
+                          <Link className="button button--ghost button--xs" to={`/horses/${receipt.horseId}`}>Profile</Link>
+                        </>
                       )}
                       {canManageBudget && (
                         <button

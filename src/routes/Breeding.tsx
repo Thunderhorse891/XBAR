@@ -16,7 +16,7 @@ export default function Breeding() {
   const addBreedingEvent = useXbarStore((state) => state.addBreedingEvent);
   const updateBreedingEvent = useXbarStore((state) => state.updateBreedingEvent);
   const deleteBreedingEvent = useXbarStore((state) => state.deleteBreedingEvent);
-  const pushToast = useUiStore((state) => state.pushToast);
+  const { pushToast, openDrawer } = useUiStore((state) => ({ pushToast: state.pushToast, openDrawer: state.openDrawer }));
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const session = useCloudStore((state) => state.session);
   const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName || 'Ranch Staff';
@@ -45,6 +45,11 @@ export default function Breeding() {
           id: 'prepare-event',
           label: 'Log breeding event',
           onSelect: () => setSelectedHorseId(menuHorse.id),
+        },
+        {
+          id: 'view-breeding-drawer',
+          label: 'Quick view breeding',
+          onSelect: () => openDrawer({ type: 'horse-breeding', horseId: menuHorse.id }),
         },
       ]
     : [];
@@ -92,10 +97,13 @@ export default function Breeding() {
           {breedingHorses.length ? (
             <div className="stack-list">
               {breedingHorses.map((horse) => (
-                <Link
+                <div
                   key={horse.id}
                   className="stack-item stack-item--interactive"
-                  to={`/horses/${horse.id}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openDrawer({ type: 'horse-breeding', horseId: horse.id })}
+                  onKeyDown={(e) => e.key === 'Enter' && openDrawer({ type: 'horse-breeding', horseId: horse.id })}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     setMenuState({ horseId: horse.id, x: event.clientX, y: event.clientY });
@@ -108,14 +116,17 @@ export default function Breeding() {
                         {horse.sex} · {horse.bloodline.family}
                       </div>
                     </div>
-                    <Pill tone={horse.segment === 'Stud' ? 'emerald' : 'blue'}>{horse.segment}</Pill>
+                    <div className="row-actions">
+                      <Pill tone={horse.segment === 'Stud' ? 'emerald' : 'blue'}>{horse.segment}</Pill>
+                      <Link className="button button--ghost button--xs" to={`/horses/${horse.id}`} onClick={(e) => e.stopPropagation()}>Profile</Link>
+                    </div>
                   </div>
                   <div className="inline-metrics">
                     <span>{horse.assignments.ranchManager}</span>
                     <span>{horse.location.barn}</span>
                     <span>{horse.breedingTimeline.length} milestones</span>
                   </div>
-                </Link>
+                </div>
               ))}
             </div>
           ) : (
