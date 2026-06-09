@@ -17,6 +17,11 @@ export async function readRawBody(req) {
   return Buffer.concat(chunks);
 }
 
+export function getQuery(req) {
+  const url = new URL(req.url || '/', 'http://localhost');
+  return Object.fromEntries(url.searchParams.entries());
+}
+
 export function sendJson(res, statusCode, payload) {
   res.statusCode = statusCode;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
