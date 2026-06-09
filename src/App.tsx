@@ -20,6 +20,7 @@ import './routes/metalBrandSystem.css';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Breeding = lazy(() => import('./routes/Breeding'));
 const BuyerProfile = lazy(() => import('./routes/BuyerProfile'));
+const DocumentLibrary = lazy(() => import('./routes/DocumentLibrary'));
 const Documents = lazy(() => import('./routes/Documents'));
 const Expenses = lazy(() => import('./routes/Expenses'));
 const FollowUps = lazy(() => import('./routes/FollowUps'));
@@ -46,6 +47,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/': 'Dashboard',
   '/assets': 'Equipment',
   '/breeding': 'Breeding',
+  '/document-library': 'Document Library',
   '/documents': 'Document Vault',
   '/expenses': 'Expenses',
   '/follow-ups': 'Buyer Follow-ups',
@@ -128,6 +130,7 @@ export default function App() {
               <Route path="horses" element={<Horses />} />
               <Route path="horses/:id" element={<HorseDetail />} />
               <Route path="documents" element={<Documents />} />
+              <Route path="document-library" element={<DocumentLibrary />} />
               <Route path="weather" element={<Weather />} />
               <Route path="ownership" element={<Ownership />} />
               <Route path="medical" element={<Medical />} />
