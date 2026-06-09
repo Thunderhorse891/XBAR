@@ -29,14 +29,16 @@ export default function Medical() {
   const medicalWatch = useMemo(() => horses.filter((horse) => horse.status === 'Medical Review'), [horses]);
   const medicalEvents = useMemo(
     () =>
-      horses.flatMap((horse) =>
-        horse.medicalTimeline.map((event) => ({
-          horseName: horse.name,
-          veterinarian: horse.assignments.veterinarian,
-          horseId: horse.id,
-          ...event,
-        })),
-      ),
+      horses
+        .flatMap((horse) =>
+          horse.medicalTimeline.map((event) => ({
+            horseName: horse.name,
+            veterinarian: horse.assignments.veterinarian,
+            horseId: horse.id,
+            ...event,
+          })),
+        )
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
     [horses],
   );
   const kits = ranchAssets.filter((asset) => asset.category === 'Medical Kit');

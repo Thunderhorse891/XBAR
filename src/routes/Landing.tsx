@@ -226,7 +226,7 @@ export default function Landing() {
           </div>
         </div>
         <div className="mkt-nav-links">
-          <Link to="#pricing" className="mkt-nav-link">Pricing</Link>
+          <a href="#pricing" className="mkt-nav-link">Pricing</a>
           <Link to="/login" className="mkt-nav-signin">Sign in</Link>
         </div>
         <Link to="/login?mode=signup" className="mkt-nav-cta">Get started free</Link>

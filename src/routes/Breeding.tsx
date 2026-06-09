@@ -145,6 +145,7 @@ export default function Breeding() {
                   event.title.toLowerCase().includes(milestoneQuery.toLowerCase()),
                 )
               : allMilestones;
+            const sorted = [...filtered].sort((a, b) => new Date(b.event.date).getTime() - new Date(a.event.date).getTime());
             return (
               <>
                 <div className="search-wrap">
@@ -156,9 +157,9 @@ export default function Breeding() {
                     onChange={(e) => setMilestoneQuery(e.target.value)}
                   />
                 </div>
-                {filtered.length ? (
+                {sorted.length ? (
                   <div className="stack-list">
-                    {filtered.map(({ horse, event }) => (
+                    {sorted.map(({ horse, event }) => (
                       <div key={event.id} className="stack-item">
                         {editingEventId === event.id ? (
                           <div className="form-column">
@@ -280,7 +281,7 @@ export default function Breeding() {
                   <div className="stack-item__top">
                     <div>
                       <div className="stack-item__title">{document.title}</div>
-                      <div className="stack-item__copy">{document.horseId ?? 'Unassigned horse'}</div>
+                      <div className="stack-item__copy">{horses.find((h) => h.id === document.horseId)?.name ?? document.entities.horseName ?? 'Unassigned'}</div>
                     </div>
                     <Pill tone={document.state === 'Ready' ? 'emerald' : document.state === 'Needs Review' ? 'amber' : 'blue'}>
                       {document.state}
