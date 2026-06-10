@@ -2,6 +2,9 @@ import { createId, todayStamp } from '../lib/xbarRuntime.js';
 import type {
   AssetCondition,
   AssetStatus,
+  AuditAction,
+  AuditEntityType,
+  AuditEvent,
   DocumentRecord,
   DocumentSource,
   ExpenseCategory,
@@ -11,6 +14,7 @@ import type {
   HorseSex,
   HorseStatus,
   IntakeBatch,
+  OwnershipProofRequirement,
   OwnershipRecord,
   SalesLead,
 } from '../types/xbar.js';
@@ -87,18 +91,96 @@ function requireValue(value: string, label: string, minLength = 2) {
   return null;
 }
 
-export function createOwnershipRecord(horse: HorseRecord): OwnershipRecord {
+export function defaultOwnershipProofRequirements(): OwnershipProofRequirement[] {
+  return [
+    { id: createId('proof'), kind: 'bill_of_sale', label: 'Bill of Sale', status: 'missing' },
+    { id: createId('proof'), kind: 'registration_certificate', label: 'Registration certificate', status: 'missing' },
+    { id: createId('proof'), kind: 'transfer_form', label: 'Signed transfer form', status: 'missing' },
+    { id: createId('proof'), kind: 'signature_page', label: 'Signature page — all parties', status: 'missing' },
+  ];
+}
+
+export function computeOwnershipConfidence(requirements: OwnershipProofRequirement[]): number {
+  if (!requirements.length) {
+    return 0;
+  }
+  const score = requirements.reduce((sum, requirement) => {
+    if (requirement.status === 'verified') return sum + 1;
+    if (requirement.status === 'linked') return sum + 0.5;
+    return sum;
+  }, 0);
+  return Math.round((100 * score) / requirements.length);
+}
+
+// Backfills the structured proof chain onto records persisted before the
+// proof model existed. Idempotent: normalized records pass through unchanged
+// apart from the recomputed confidence.
+export function normalizeOwnershipRecord(record: OwnershipRecord): OwnershipRecord {
+  const proofRequirements = record.proofRequirements?.length
+    ? record.proofRequirements
+    : defaultOwnershipProofRequirements();
   return {
-    id: createId('ownership'),
+    ...record,
+    proofRequirements,
+    auditEvents: record.auditEvents ?? [],
+    confidence: computeOwnershipConfidence(proofRequirements),
+  };
+}
+
+export function canMarkTransferClear(record: OwnershipRecord): { ok: boolean; blockers: string[] } {
+  const requirements = record.proofRequirements?.length
+    ? record.proofRequirements
+    : defaultOwnershipProofRequirements();
+  const blockers = requirements
+    .filter((requirement) => requirement.status !== 'verified')
+    .map((requirement) => `${requirement.label} — ${requirement.status}`);
+  return { ok: blockers.length === 0, blockers };
+}
+
+export function createAuditEvent(input: {
+  actor: string;
+  action: AuditAction;
+  entityType: AuditEntityType;
+  entityId: string;
+  summary: string;
+  context?: Record<string, string>;
+}): AuditEvent {
+  return {
+    id: createId('audit'),
+    at: new Date().toISOString(),
+    actor: input.actor,
+    action: input.action,
+    entityType: input.entityType,
+    entityId: input.entityId,
+    summary: input.summary,
+    context: input.context,
+  };
+}
+
+export function createOwnershipRecord(horse: HorseRecord): OwnershipRecord {
+  const id = createId('ownership');
+  const proofRequirements = defaultOwnershipProofRequirements();
+  return {
+    id,
     horseId: horse.id,
     legalOwner: horse.owner,
     transferStatus: 'Attention Required',
     pendingDocuments: ['Ownership memo', 'Registration proof'],
     complianceDeadline: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-    confidence: 35,
+    confidence: computeOwnershipConfidence(proofRequirements),
     auditTrail: [
       `${todayStamp()} Ownership record created from horse record`,
       `${todayStamp()} Supporting ownership documents still need upload`,
+    ],
+    proofRequirements,
+    auditEvents: [
+      createAuditEvent({
+        actor: 'system',
+        action: 'created',
+        entityType: 'ownership',
+        entityId: id,
+        summary: 'Ownership record created — proof chain initialized',
+      }),
     ],
   };
 }

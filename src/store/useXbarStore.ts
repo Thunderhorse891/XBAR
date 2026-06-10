@@ -37,7 +37,11 @@ import {
 } from '@/lib/cloudWorkspace';
 import { workspaceStateStorage } from '@/lib/workspaceStorage';
 import {
+  canMarkTransferClear,
+  computeOwnershipConfidence,
+  createAuditEvent,
   createOwnershipRecord,
+  normalizeOwnershipRecord,
   validateExpenseReceiptInput,
   summarizeBatch,
   validateAssetPatch,
@@ -66,10 +70,14 @@ import type {
   WorkspaceMemberRecord,
 } from '@/types/xbar';
 import type {
+  AuditAction,
+  AuditEntityType,
+  AuditEvent,
   DocumentRecord,
   OwnershipRecord,
   RanchAsset,
   RoleWorkspace,
+  SalePacketBuild,
   SubscriptionProfile,
 } from '@/types/xbar';
 import type { AssetPatch, DocumentIntakeInput, ExpenseReceiptInput, LeadInput, LocationPatch, MediaUploadInput, NewHorseInput } from '@/store/xbarStoreLogic';
@@ -88,6 +96,8 @@ type XbarStore = {
   documents: DocumentRecord[];
   intakeBatches: IntakeBatch[];
   ownershipRecords: OwnershipRecord[];
+  auditEvents: AuditEvent[];
+  salePacketBuilds: SalePacketBuild[];
   expenseReceipts: ExpenseReceipt[];
   ranchAssets: RanchAsset[];
   subscription: SubscriptionProfile;
@@ -140,6 +150,27 @@ type XbarStore = {
     patch: Partial<Pick<OwnershipRecord, 'legalOwner' | 'transferStatus' | 'complianceDeadline' | 'pendingDocuments'>>,
   ) => ActionResult;
   addOwnershipAuditEntry: (recordId: string, entry: string) => ActionResult;
+  recordAuditEvent: (input: {
+    actor: string;
+    action: AuditAction;
+    entityType: AuditEntityType;
+    entityId: string;
+    summary: string;
+    context?: Record<string, string>;
+  }) => void;
+  linkOwnershipProof: (recordId: string, requirementId: string, documentId: string) => ActionResult;
+  verifyOwnershipProof: (recordId: string, requirementId: string, verifiedBy: string) => ActionResult;
+  unlinkOwnershipProof: (recordId: string, requirementId: string) => ActionResult;
+  setTransferStatus: (recordId: string, status: OwnershipRecord['transferStatus'], actor: string) => ActionResult;
+  createSalePacketBuild: (input: {
+    horseId: string;
+    buyerName?: string;
+    buyerEmail?: string;
+    watermark: string;
+    documentIds: string[];
+    includesBillOfSale: boolean;
+    createdBy: string;
+  }) => ActionResult & { packet?: SalePacketBuild };
   addOwnershipStake: (horseId: string, stake: Omit<OwnershipStake, 'id'>) => ActionResult;
   removeOwnershipStake: (horseId: string, stakeId: string) => ActionResult;
   ensureOwnershipRecord: (horseId: string) => ActionResult & { recordId?: string };
@@ -153,6 +184,8 @@ type PersistedXbarState = Pick<
   | 'documents'
   | 'intakeBatches'
   | 'ownershipRecords'
+  | 'auditEvents'
+  | 'salePacketBuilds'
   | 'expenseReceipts'
   | 'ranchAssets'
   | 'subscription'
@@ -183,6 +216,8 @@ function createEmptyWorkspaceState(): PersistedXbarState {
     documents: [],
     intakeBatches: [],
     ownershipRecords: ownershipSeed,
+    auditEvents: [],
+    salePacketBuilds: [],
     expenseReceipts: expenseReceiptsSeed,
     ranchAssets: ranchAssetsSeed,
     subscription: subscriptionSeed,
@@ -410,6 +445,8 @@ function selectPersistedState(state: PersistedXbarState): PersistedXbarState {
     documents: state.documents,
     intakeBatches: state.intakeBatches,
     ownershipRecords: state.ownershipRecords,
+    auditEvents: state.auditEvents,
+    salePacketBuilds: state.salePacketBuilds,
     expenseReceipts: state.expenseReceipts,
     ranchAssets: state.ranchAssets,
     subscription: state.subscription,
@@ -492,7 +529,11 @@ function restorePersistedState(raw: unknown): PersistedXbarState {
     horses,
     documents,
     intakeBatches,
-    ownershipRecords: Array.isArray(state.ownershipRecords) ? (state.ownershipRecords as OwnershipRecord[]) : initialState.ownershipRecords,
+    ownershipRecords: Array.isArray(state.ownershipRecords)
+      ? (state.ownershipRecords as OwnershipRecord[]).map((record) => normalizeOwnershipRecord(record))
+      : initialState.ownershipRecords,
+    auditEvents: Array.isArray(state.auditEvents) ? (state.auditEvents as AuditEvent[]) : [],
+    salePacketBuilds: Array.isArray(state.salePacketBuilds) ? (state.salePacketBuilds as SalePacketBuild[]) : [],
     expenseReceipts: Array.isArray(state.expenseReceipts) ? (state.expenseReceipts as ExpenseReceipt[]) : initialState.expenseReceipts,
     ranchAssets: Array.isArray(state.ranchAssets) ? (state.ranchAssets as RanchAsset[]) : initialState.ranchAssets,
     subscription,
@@ -1844,7 +1885,17 @@ export const useXbarStore = create<XbarStore>()(
         const state = get();
         const asset = state.ranchAssets.find((a) => a.id === assetId);
         if (!asset) return { ok: false, message: 'Asset not found.' };
-        set({ ranchAssets: state.ranchAssets.filter((a) => a.id !== assetId) });
+        const auditEvent = createAuditEvent({
+          actor: state.currentRole,
+          action: 'deleted',
+          entityType: 'asset',
+          entityId: assetId,
+          summary: `Equipment asset "${asset.name}" deleted`,
+        });
+        set({
+          ranchAssets: state.ranchAssets.filter((a) => a.id !== assetId),
+          auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
+        });
         return { ok: true, message: `${asset.name} removed from equipment.` };
       },
       addHorseNote: (horseId, note) => {
@@ -1978,7 +2029,19 @@ export const useXbarStore = create<XbarStore>()(
         if (deniedMessage) return { ok: false, message: deniedMessage };
         const horse = get().horses.find((h) => h.id === horseId);
         if (!horse) return { ok: false, message: 'Horse not found.' };
-        set({ horses: get().horses.map((h) => h.id === horseId ? { ...h, breedingTimeline: h.breedingTimeline.filter((e) => e.id !== eventId) } : h) });
+        const removedBreeding = horse.breedingTimeline.find((e) => e.id === eventId);
+        const breedingAudit = createAuditEvent({
+          actor: get().currentRole,
+          action: 'deleted',
+          entityType: 'breeding',
+          entityId: eventId,
+          summary: `Breeding record "${removedBreeding?.title ?? 'entry'}" deleted from ${horse.name}`,
+          context: { horseId },
+        });
+        set({
+          horses: get().horses.map((h) => h.id === horseId ? { ...h, breedingTimeline: h.breedingTimeline.filter((e) => e.id !== eventId) } : h),
+          auditEvents: [breedingAudit, ...get().auditEvents].slice(0, 500),
+        });
         return { ok: true, message: 'Breeding event removed.' };
       },
       updateHorseLocation: (horseId, patch) => {
@@ -2053,7 +2116,20 @@ export const useXbarStore = create<XbarStore>()(
       deleteHorse: (horseId) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
         if (deniedMessage) return { ok: false, message: deniedMessage };
-        set((state) => ({ horses: state.horses.filter((h) => h.id !== horseId) }));
+        const removedHorse = get().horses.find((h) => h.id === horseId);
+        set((state) => ({
+          horses: state.horses.filter((h) => h.id !== horseId),
+          auditEvents: [
+            createAuditEvent({
+              actor: state.currentRole,
+              action: 'deleted',
+              entityType: 'horse',
+              entityId: horseId,
+              summary: `Horse record "${removedHorse?.name ?? horseId}" deleted with its documents and timelines`,
+            }),
+            ...state.auditEvents,
+          ].slice(0, 500),
+        }));
         return { ok: true, message: 'Horse removed from records.', id: horseId };
       },
       updateMedicalEvent: (horseId, eventId, patch) => {
@@ -2079,6 +2155,8 @@ export const useXbarStore = create<XbarStore>()(
       deleteMedicalEvent: (horseId, eventId) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
         if (deniedMessage) return { ok: false, message: deniedMessage };
+        const medicalHorse = get().horses.find((h) => h.id === horseId);
+        const removedMedical = medicalHorse?.medicalTimeline.find((ev) => ev.id === eventId);
         set((state) => ({
           horses: state.horses.map((h) =>
             h.id === horseId
@@ -2089,6 +2167,17 @@ export const useXbarStore = create<XbarStore>()(
                 }
               : h,
           ),
+          auditEvents: [
+            createAuditEvent({
+              actor: state.currentRole,
+              action: 'deleted',
+              entityType: 'medical',
+              entityId: eventId,
+              summary: `Medical record "${removedMedical?.title ?? 'entry'}" deleted from ${medicalHorse?.name ?? horseId}`,
+              context: { horseId },
+            }),
+            ...state.auditEvents,
+          ].slice(0, 500),
         }));
         return { ok: true, message: 'Medical event removed.', id: eventId };
       },
@@ -2159,6 +2248,236 @@ export const useXbarStore = create<XbarStore>()(
         }));
 
         return { ok: true, message: 'Audit note added.', id: recordId };
+      },
+      recordAuditEvent: (input) => {
+        const event = createAuditEvent(input);
+        set((state) => ({ auditEvents: [event, ...state.auditEvents].slice(0, 500) }));
+      },
+      linkOwnershipProof: (recordId, requirementId, documentId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageOwnership');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+
+        const record = get().ownershipRecords.find((item) => item.id === recordId);
+        if (!record) return { ok: false, message: 'Ownership record not found.' };
+        const document = get().documents.find((item) => item.id === documentId);
+        if (!document) return { ok: false, message: 'Select an uploaded document to use as proof.' };
+
+        const normalized = normalizeOwnershipRecord(record);
+        const requirement = normalized.proofRequirements?.find((item) => item.id === requirementId);
+        if (!requirement) return { ok: false, message: 'Proof requirement not found.' };
+
+        const nextRequirements = (normalized.proofRequirements ?? []).map((item) =>
+          item.id === requirementId
+            ? {
+                ...item,
+                status: 'linked' as const,
+                documentId,
+                documentTitle: document.title,
+                linkedAt: new Date().toISOString(),
+                verifiedAt: undefined,
+                verifiedBy: undefined,
+              }
+            : item,
+        );
+        const auditEvent = createAuditEvent({
+          actor: get().currentRole,
+          action: 'linked-proof',
+          entityType: 'ownership',
+          entityId: recordId,
+          summary: `${requirement.label} linked to document "${document.title}"`,
+          context: { documentId, horseId: record.horseId },
+        });
+
+        set((state) => ({
+          ownershipRecords: state.ownershipRecords.map((item) =>
+            item.id === recordId
+              ? {
+                  ...normalized,
+                  proofRequirements: nextRequirements,
+                  confidence: computeOwnershipConfidence(nextRequirements),
+                  auditEvents: [auditEvent, ...(normalized.auditEvents ?? [])],
+                  auditTrail: [`${todayStamp()} ${auditEvent.summary}`, ...item.auditTrail],
+                }
+              : item,
+          ),
+          auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
+        }));
+
+        return { ok: true, message: `${requirement.label} linked to ${document.title}.`, id: recordId };
+      },
+      verifyOwnershipProof: (recordId, requirementId, verifiedBy) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageOwnership');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+
+        const record = get().ownershipRecords.find((item) => item.id === recordId);
+        if (!record) return { ok: false, message: 'Ownership record not found.' };
+
+        const normalized = normalizeOwnershipRecord(record);
+        const requirement = normalized.proofRequirements?.find((item) => item.id === requirementId);
+        if (!requirement) return { ok: false, message: 'Proof requirement not found.' };
+        if (requirement.status !== 'linked') {
+          return { ok: false, message: 'Link a document before verifying.' };
+        }
+
+        const nextRequirements = (normalized.proofRequirements ?? []).map((item) =>
+          item.id === requirementId
+            ? { ...item, status: 'verified' as const, verifiedAt: new Date().toISOString(), verifiedBy }
+            : item,
+        );
+        const auditEvent = createAuditEvent({
+          actor: verifiedBy,
+          action: 'verified-proof',
+          entityType: 'ownership',
+          entityId: recordId,
+          summary: `${requirement.label} verified against "${requirement.documentTitle ?? 'linked document'}"`,
+          context: { horseId: record.horseId },
+        });
+
+        set((state) => ({
+          ownershipRecords: state.ownershipRecords.map((item) =>
+            item.id === recordId
+              ? {
+                  ...normalized,
+                  proofRequirements: nextRequirements,
+                  confidence: computeOwnershipConfidence(nextRequirements),
+                  auditEvents: [auditEvent, ...(normalized.auditEvents ?? [])],
+                  auditTrail: [`${todayStamp()} ${auditEvent.summary}`, ...item.auditTrail],
+                }
+              : item,
+          ),
+          auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
+        }));
+
+        return { ok: true, message: `${requirement.label} verified.`, id: recordId };
+      },
+      unlinkOwnershipProof: (recordId, requirementId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageOwnership');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+
+        const record = get().ownershipRecords.find((item) => item.id === recordId);
+        if (!record) return { ok: false, message: 'Ownership record not found.' };
+
+        const normalized = normalizeOwnershipRecord(record);
+        const requirement = normalized.proofRequirements?.find((item) => item.id === requirementId);
+        if (!requirement) return { ok: false, message: 'Proof requirement not found.' };
+
+        const nextRequirements = (normalized.proofRequirements ?? []).map((item) =>
+          item.id === requirementId
+            ? {
+                ...item,
+                status: 'missing' as const,
+                documentId: undefined,
+                documentTitle: undefined,
+                linkedAt: undefined,
+                verifiedAt: undefined,
+                verifiedBy: undefined,
+              }
+            : item,
+        );
+        const auditEvent = createAuditEvent({
+          actor: get().currentRole,
+          action: 'unlinked-proof',
+          entityType: 'ownership',
+          entityId: recordId,
+          summary: `${requirement.label} unlinked — proof must be re-established`,
+          context: { horseId: record.horseId },
+        });
+
+        set((state) => ({
+          ownershipRecords: state.ownershipRecords.map((item) =>
+            item.id === recordId
+              ? {
+                  ...normalized,
+                  proofRequirements: nextRequirements,
+                  confidence: computeOwnershipConfidence(nextRequirements),
+                  auditEvents: [auditEvent, ...(normalized.auditEvents ?? [])],
+                  auditTrail: [`${todayStamp()} ${auditEvent.summary}`, ...item.auditTrail],
+                }
+              : item,
+          ),
+          auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
+        }));
+
+        return { ok: true, message: `${requirement.label} unlinked.`, id: recordId };
+      },
+      setTransferStatus: (recordId, status, actor) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageOwnership');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+
+        const record = get().ownershipRecords.find((item) => item.id === recordId);
+        if (!record) return { ok: false, message: 'Ownership record not found.' };
+
+        const normalized = normalizeOwnershipRecord(record);
+        if (status === 'Clear') {
+          const clearance = canMarkTransferClear(normalized);
+          if (!clearance.ok) {
+            return {
+              ok: false,
+              message: `Cannot mark transfer Clear until every proof is verified: ${clearance.blockers.join('; ')}.`,
+            };
+          }
+        }
+
+        const auditEvent = createAuditEvent({
+          actor,
+          action: 'status-change',
+          entityType: 'ownership',
+          entityId: recordId,
+          summary: `Transfer status changed: ${record.transferStatus} → ${status}`,
+          context: { horseId: record.horseId },
+        });
+
+        set((state) => ({
+          ownershipRecords: state.ownershipRecords.map((item) =>
+            item.id === recordId
+              ? {
+                  ...normalized,
+                  transferStatus: status,
+                  auditEvents: [auditEvent, ...(normalized.auditEvents ?? [])],
+                  auditTrail: [`${todayStamp()} ${auditEvent.summary}`, ...item.auditTrail],
+                }
+              : item,
+          ),
+          auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
+        }));
+
+        return { ok: true, message: `Transfer status set to ${status}.`, id: recordId };
+      },
+      createSalePacketBuild: (input) => {
+        const horse = get().horses.find((item) => item.id === input.horseId);
+        if (!horse) {
+          return { ok: false, message: 'Horse record not found for this packet.' };
+        }
+
+        const slug = horse.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'horse';
+        const packet: SalePacketBuild = {
+          id: createId('packet'),
+          horseId: input.horseId,
+          createdAt: new Date().toISOString(),
+          createdBy: input.createdBy,
+          buyerName: input.buyerName,
+          buyerEmail: input.buyerEmail,
+          watermark: input.watermark,
+          documentIds: input.documentIds,
+          includesBillOfSale: input.includesBillOfSale,
+          status: 'generated',
+          fileName: `sale-packet-${slug}-${todayStamp()}.pdf`,
+        };
+        const auditEvent = createAuditEvent({
+          actor: input.createdBy,
+          action: 'generated',
+          entityType: 'sale-packet',
+          entityId: packet.id,
+          summary: `Sale packet generated for ${horse.name} (${input.documentIds.length} documents${input.includesBillOfSale ? ' + Bill of Sale' : ''})`,
+          context: { horseId: input.horseId },
+        });
+
+        set((state) => ({
+          salePacketBuilds: [packet, ...state.salePacketBuilds],
+          auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
+        }));
+
+        return { ok: true, message: `Sale packet ready for ${horse.name}.`, id: packet.id, packet };
       },
       addOwnershipStake: (horseId, stake) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageOwnership');
@@ -2312,6 +2631,8 @@ export const useXbarStore = create<XbarStore>()(
           documents: state.documents,
           intakeBatches: state.intakeBatches,
           ownershipRecords: state.ownershipRecords,
+          auditEvents: state.auditEvents,
+          salePacketBuilds: state.salePacketBuilds,
           expenseReceipts: state.expenseReceipts,
           ranchAssets: state.ranchAssets,
           subscription: state.subscription,

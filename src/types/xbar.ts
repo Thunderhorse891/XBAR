@@ -122,6 +122,92 @@ export interface OwnershipStake {
   contact: string;
 }
 
+export type ProofStatus = 'missing' | 'linked' | 'verified';
+
+export type OwnershipProofKind =
+  | 'bill_of_sale'
+  | 'registration_certificate'
+  | 'transfer_form'
+  | 'signature_page'
+  | 'supporting';
+
+export interface OwnershipProofRequirement {
+  id: string;
+  kind: OwnershipProofKind;
+  label: string;
+  status: ProofStatus;
+  documentId?: string;
+  documentTitle?: string;
+  linkedAt?: string;
+  verifiedAt?: string;
+  verifiedBy?: string;
+  note?: string;
+}
+
+export type AuditEntityType =
+  | 'ownership'
+  | 'document'
+  | 'horse'
+  | 'medical'
+  | 'breeding'
+  | 'sale-packet'
+  | 'asset'
+  | 'shared-access';
+
+export type AuditAction =
+  | 'created'
+  | 'updated'
+  | 'linked-proof'
+  | 'unlinked-proof'
+  | 'verified-proof'
+  | 'status-change'
+  | 'deleted'
+  | 'shared'
+  | 'generated';
+
+export interface AuditEvent {
+  id: string;
+  at: string; // ISO
+  actor: string;
+  action: AuditAction;
+  entityType: AuditEntityType;
+  entityId: string;
+  summary: string;
+  context?: Record<string, string>;
+}
+
+export interface SalePacketBuild {
+  id: string;
+  horseId: string;
+  createdAt: string;
+  createdBy: string;
+  buyerName?: string;
+  buyerEmail?: string;
+  watermark: string;
+  documentIds: string[];
+  includesBillOfSale: boolean;
+  status: 'draft' | 'generated' | 'shared';
+  fileName?: string;
+}
+
+export interface MedicalRecordDetails {
+  recordType: 'exam' | 'vaccination' | 'deworming' | 'dental' | 'farrier' | 'injury' | 'medication';
+  practitioner?: string;
+  medication?: string;
+  dosage?: string;
+  followUpDue?: string;
+  documentId?: string;
+}
+
+export interface BreedingRecordDetails {
+  recordType: 'breeding' | 'pregnancy-check' | 'foaling' | 'weaning' | 'contract';
+  mateName?: string;
+  method?: 'live-cover' | 'ai-fresh' | 'ai-frozen' | 'embryo-transfer';
+  result?: string;
+  dueDate?: string;
+  documentId?: string;
+}
+
 export interface TimelineEvent {
   id: string;
   date: string;
@@ -131,6 +217,7 @@ export interface TimelineEvent {
   category: 'Medical' | 'Breeding' | 'Ownership' | 'Sales' | 'Operations';
   status?: string;
   severity?: Severity;
+  details?: MedicalRecordDetails | BreedingRecordDetails;
 }
 
 export interface DocumentFact {
@@ -266,6 +353,8 @@ export interface OwnershipRecord {
   complianceDeadline: string;
   confidence: number;
   auditTrail: string[];
+  proofRequirements?: OwnershipProofRequirement[];
+  auditEvents?: AuditEvent[];
 }
 
 export interface RanchAsset {
