@@ -176,6 +176,29 @@ export interface AuditEvent {
   context?: Record<string, string>;
 }
 
+export type BuyerRoomEventKind =
+  | 'packet-shared'
+  | 'packet-viewed'
+  | 'question'
+  | 'call-requested'
+  | 'offer'
+  | 'seller-response'
+  | 'deal-status';
+
+export type DealStatus = 'open' | 'offer' | 'under-contract' | 'closed-won' | 'closed-lost';
+
+export interface BuyerRoomEvent {
+  id: string;
+  horseId: string;
+  packetId?: string;
+  kind: BuyerRoomEventKind;
+  at: string; // ISO
+  actor: string; // buyer name/email or seller role
+  note?: string;
+  amount?: number; // offers and responses
+  dealStatus?: DealStatus;
+}
+
 export interface SalePacketBuild {
   id: string;
   horseId: string;

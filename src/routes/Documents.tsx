@@ -5,7 +5,7 @@ import { CommandBrief } from '@/components/CommandBrief';
 import { ContextMenu } from '@/components/ContextMenu';
 import { Panel, Pill } from '@/components/app-ui';
 import { EmptyState } from '@/components/EmptyState';
-import { createSalePacketRemote, hasBackendIdentity } from '@/lib/backendApi';
+import { SalePacketWizard } from '@/components/SalePacketWizard';
 import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { formatDateTimeLabel } from '@/lib/format';
 import { buildDocumentTrustProfile } from '@/lib/xbarPhaseTwo';
@@ -40,18 +40,15 @@ export default function Documents() {
   const subscription = useXbarStore((state) => state.subscription);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const salePacketBuilds = useXbarStore((state) => state.salePacketBuilds);
-  const currentRole = useXbarStore((state) => state.currentRole);
   const createDocumentIntake = useXbarStore((state) => state.createDocumentIntake);
   const reviewDocument = useXbarStore((state) => state.reviewDocument);
   const discardDocument = useXbarStore((state) => state.discardDocument);
   const ensureOwnershipRecord = useXbarStore((state) => state.ensureOwnershipRecord);
   const linkOwnershipProof = useXbarStore((state) => state.linkOwnershipProof);
-  const createSalePacketBuild = useXbarStore((state) => state.createSalePacketBuild);
   const pushToast = useUiStore((state) => state.pushToast);
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
   const canReviewDocuments = useCurrentRoleCapability('reviewDocuments');
   const session = useCloudStore((state) => state.session);
-  const workspaceId = useCloudStore((state) => state.workspaceId);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName || 'Ranch Staff';
 
@@ -422,72 +419,8 @@ export default function Documents() {
     }
   };
 
-  const handleGeneratePacket = async (targetHorseId: string, documentIds: string[]) => {
-    const watermark = `Copy for review – ${new Date().toISOString().slice(0, 10)}`;
-    const auth = { workspaceId, accessToken: session?.access_token ?? '' };
-
-    // Cloud workspace: assemble the real watermarked PDF through the backend.
-    if (hasBackendIdentity(auth)) {
-      setPacketBuildingHorseId(targetHorseId);
-      const remote = await createSalePacketRemote(auth, {
-        horseId: targetHorseId,
-        watermarkText: watermark,
-        documentIds,
-      });
-      setPacketBuildingHorseId('');
-
-      if (remote.ok) {
-        createSalePacketBuild({
-          horseId: targetHorseId,
-          watermark,
-          documentIds,
-          includesBillOfSale: false,
-          createdBy: currentRole,
-          downloadUrl: remote.downloadUrl,
-        });
-        if (typeof window !== 'undefined' && remote.downloadUrl) {
-          window.open(remote.downloadUrl, '_blank', 'noopener,noreferrer');
-        }
-        pushToast({
-          title: 'Sale packet PDF ready',
-          message: `Watermarked packet opened in a new tab. The download link expires in ${Math.round(remote.expiresInSeconds / 60)} minutes.`,
-          tone: 'success',
-        });
-        return;
-      }
-
-      // Tier refusal becomes an upgrade moment, not a dead end.
-      if (remote.tierBlock) {
-        pushToast({
-          title: `Sale packets need the ${remote.tierBlock.requiredPlan} plan`,
-          message: remote.message,
-          tone: 'warning',
-        });
-        navigate(`/subscriptions?plan=${encodeURIComponent(remote.tierBlock.requiredPlan)}`);
-        return;
-      }
-
-      pushToast({ title: 'Packet PDF failed', message: `${remote.message} A local packet record was not created.`, tone: 'error' });
-      return;
-    }
-
-    // Local mode: record the build so the work is tracked; the PDF requires
-    // a signed-in cloud workspace.
-    const result = createSalePacketBuild({
-      horseId: targetHorseId,
-      watermark,
-      documentIds,
-      includesBillOfSale: false,
-      createdBy: currentRole,
-    });
-    pushToast({
-      title: result.ok ? 'Sale packet recorded (local mode)' : 'Sale packet blocked',
-      message: result.ok
-        ? `${result.message} Sign in to your cloud workspace to generate the watermarked PDF.`
-        : result.message,
-      tone: result.ok ? 'success' : 'error',
-    });
-  };
+  // Packet generation is the guided premium workflow (release gate, margin
+  // intelligence, buyer capture, deal-room logging) — see SalePacketWizard.
 
   const shareGroups = horses
     .map((horse) => ({ horse, documents: readyDocuments.filter((document) => document.horseId === horse.id) }))
@@ -1024,10 +957,9 @@ export default function Documents() {
                       <button
                         className="button button--primary button--compact"
                         type="button"
-                        disabled={packetBuildingHorseId === group.horse.id}
-                        onClick={() => void handleGeneratePacket(group.horse.id, group.documents.map((document) => document.id))}
+                        onClick={() => setPacketBuildingHorseId(group.horse.id)}
                       >
-                        {packetBuildingHorseId === group.horse.id ? 'Assembling PDF…' : 'Generate sale packet'}
+                        Start sale packet generator
                       </button>
                     </div>
                   </div>
@@ -1085,6 +1017,11 @@ export default function Documents() {
         </>
       ) : null}
 
+      <SalePacketWizard
+        open={Boolean(packetBuildingHorseId)}
+        initialHorseId={packetBuildingHorseId || null}
+        onClose={() => setPacketBuildingHorseId('')}
+      />
       <ContextMenu open={Boolean(menuItems.length)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
     </>
   );

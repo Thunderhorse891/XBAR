@@ -73,6 +73,7 @@ import type {
   AuditAction,
   AuditEntityType,
   AuditEvent,
+  BuyerRoomEvent,
   DocumentRecord,
   OwnershipRecord,
   RanchAsset,
@@ -98,6 +99,7 @@ type XbarStore = {
   ownershipRecords: OwnershipRecord[];
   auditEvents: AuditEvent[];
   salePacketBuilds: SalePacketBuild[];
+  buyerRoomEvents: BuyerRoomEvent[];
   expenseReceipts: ExpenseReceipt[];
   ranchAssets: RanchAsset[];
   subscription: SubscriptionProfile;
@@ -172,6 +174,15 @@ type XbarStore = {
     createdBy: string;
     downloadUrl?: string;
   }) => ActionResult & { packet?: SalePacketBuild };
+  logBuyerRoomEvent: (input: {
+    horseId: string;
+    kind: BuyerRoomEvent['kind'];
+    actor: string;
+    packetId?: string;
+    note?: string;
+    amount?: number;
+    dealStatus?: BuyerRoomEvent['dealStatus'];
+  }) => ActionResult & { event?: BuyerRoomEvent };
   addOwnershipStake: (horseId: string, stake: Omit<OwnershipStake, 'id'>) => ActionResult;
   removeOwnershipStake: (horseId: string, stakeId: string) => ActionResult;
   ensureOwnershipRecord: (horseId: string) => ActionResult & { recordId?: string };
@@ -187,6 +198,7 @@ type PersistedXbarState = Pick<
   | 'ownershipRecords'
   | 'auditEvents'
   | 'salePacketBuilds'
+  | 'buyerRoomEvents'
   | 'expenseReceipts'
   | 'ranchAssets'
   | 'subscription'
@@ -219,6 +231,7 @@ function createEmptyWorkspaceState(): PersistedXbarState {
     ownershipRecords: ownershipSeed,
     auditEvents: [],
     salePacketBuilds: [],
+    buyerRoomEvents: [],
     expenseReceipts: expenseReceiptsSeed,
     ranchAssets: ranchAssetsSeed,
     subscription: subscriptionSeed,
@@ -448,6 +461,7 @@ function selectPersistedState(state: PersistedXbarState): PersistedXbarState {
     ownershipRecords: state.ownershipRecords,
     auditEvents: state.auditEvents,
     salePacketBuilds: state.salePacketBuilds,
+    buyerRoomEvents: state.buyerRoomEvents,
     expenseReceipts: state.expenseReceipts,
     ranchAssets: state.ranchAssets,
     subscription: state.subscription,
@@ -535,6 +549,7 @@ function restorePersistedState(raw: unknown): PersistedXbarState {
       : initialState.ownershipRecords,
     auditEvents: Array.isArray(state.auditEvents) ? (state.auditEvents as AuditEvent[]) : [],
     salePacketBuilds: Array.isArray(state.salePacketBuilds) ? (state.salePacketBuilds as SalePacketBuild[]) : [],
+    buyerRoomEvents: Array.isArray(state.buyerRoomEvents) ? (state.buyerRoomEvents as BuyerRoomEvent[]) : [],
     expenseReceipts: Array.isArray(state.expenseReceipts) ? (state.expenseReceipts as ExpenseReceipt[]) : initialState.expenseReceipts,
     ranchAssets: Array.isArray(state.ranchAssets) ? (state.ranchAssets as RanchAsset[]) : initialState.ranchAssets,
     subscription,
@@ -2481,6 +2496,45 @@ export const useXbarStore = create<XbarStore>()(
 
         return { ok: true, message: `Sale packet ready for ${horse.name}.`, id: packet.id, packet };
       },
+      logBuyerRoomEvent: (input) => {
+        const horse = get().horses.find((item) => item.id === input.horseId);
+        if (!horse) {
+          return { ok: false, message: 'Horse record not found for this buyer event.' };
+        }
+        const kindLabels: Record<BuyerRoomEvent['kind'], string> = {
+          'packet-shared': 'Packet shared with buyer',
+          'packet-viewed': 'Buyer viewed packet',
+          question: 'Buyer asked a question',
+          'call-requested': 'Buyer requested a call',
+          offer: 'Buyer submitted an offer',
+          'seller-response': 'Seller responded',
+          'deal-status': 'Deal status updated',
+        };
+        const event: BuyerRoomEvent = {
+          id: createId('buyer-event'),
+          horseId: input.horseId,
+          packetId: input.packetId,
+          kind: input.kind,
+          at: new Date().toISOString(),
+          actor: input.actor,
+          note: input.note,
+          amount: input.amount,
+          dealStatus: input.dealStatus,
+        };
+        const auditEvent = createAuditEvent({
+          actor: input.actor,
+          action: input.kind === 'packet-shared' ? 'shared' : 'updated',
+          entityType: 'sale-packet',
+          entityId: input.packetId ?? input.horseId,
+          summary: `${kindLabels[input.kind]} — ${horse.name}${input.amount ? ` ($${input.amount.toLocaleString()})` : ''}`,
+          context: { horseId: input.horseId },
+        });
+        set((state) => ({
+          buyerRoomEvents: [event, ...state.buyerRoomEvents].slice(0, 1000),
+          auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
+        }));
+        return { ok: true, message: `${kindLabels[input.kind]} logged for ${horse.name}.`, id: event.id, event };
+      },
       addOwnershipStake: (horseId, stake) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageOwnership');
         if (deniedMessage) {
@@ -2635,6 +2689,7 @@ export const useXbarStore = create<XbarStore>()(
           ownershipRecords: state.ownershipRecords,
           auditEvents: state.auditEvents,
           salePacketBuilds: state.salePacketBuilds,
+          buyerRoomEvents: state.buyerRoomEvents,
           expenseReceipts: state.expenseReceipts,
           ranchAssets: state.ranchAssets,
           subscription: state.subscription,

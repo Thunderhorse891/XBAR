@@ -92,3 +92,20 @@ test('trivial or trendless spend is not flagged', () => {
   assert.equal(detectSpendAnomalies([receipt('Feed', 30, 0)], now).length, 0);
   assert.equal(detectSpendAnomalies([receipt('Feed', 900, 0)], now).length, 0);
 });
+
+test('horse economics compute burn, break-even, and the safe discount floor', async () => {
+  const { computeHorseEconomics } = await import('../src/lib/businessIntelligence.js');
+  const receipts: ExpenseReceipt[] = [
+    { id: 'e1', horseId: 'h1', category: 'Feed', amount: 300, receiptDate: new Date(now.getFullYear(), now.getMonth(), 2).toISOString() } as ExpenseReceipt,
+    { id: 'e2', horseId: 'h1', category: 'Vet Care', amount: 600, receiptDate: new Date(now.getFullYear(), now.getMonth() - 1, 2).toISOString() } as ExpenseReceipt,
+    { id: 'e3', horseId: 'h1', category: 'Farrier', amount: 1500, receiptDate: new Date(now.getFullYear() - 1, 0, 2).toISOString() } as ExpenseReceipt,
+    { id: 'e4', horseId: 'other', category: 'Feed', amount: 999, receiptDate: now.toISOString() } as ExpenseReceipt,
+  ];
+  const economics = computeHorseEconomics(horse('h1', 'Spirit', 12000), receipts, now);
+  assert.equal(economics.costToDate, 2400);
+  assert.equal(economics.monthlyBurn, 300);
+  assert.equal(economics.breakEvenPrice, 3000);
+  assert.equal(economics.safeDiscountFloor, 3450);
+  assert.equal(economics.projectedMargin, 9000);
+  assert.equal(economics.marginPercent, 75);
+});

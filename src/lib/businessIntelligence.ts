@@ -152,3 +152,44 @@ export function detectSpendAnomalies(receipts: ExpenseReceipt[], now: Date = new
   anomalies.sort((a, b) => b.deltaPercent - a.deltaPercent);
   return anomalies;
 }
+
+export interface HorseEconomics {
+  horseId: string;
+  costToDate: number;
+  monthlyBurn: number;
+  askPrice: number;
+  projectedMargin: number;
+  breakEvenPrice: number;
+  safeDiscountFloor: number;
+  marginPercent: number;
+}
+
+const CARRY_MONTHS = 2; // expected months on market while a buyer closes
+const PROTECTED_MARGIN = 0.15; // never discount below cost + 15%
+
+// Margin intelligence for a sale horse: what it cost, what it burns per
+// month, where break-even sits once carry cost is included, and the lowest
+// price a seller should accept without giving the margin away.
+export function computeHorseEconomics(
+  horse: HorseRecord,
+  receipts: ExpenseReceipt[],
+  now: Date = new Date(),
+): HorseEconomics {
+  const horseReceipts = receipts.filter((receipt) => receipt.horseId === horse.id);
+  const costToDate = horseReceipts.reduce((sum, receipt) => sum + receipt.amount, 0);
+
+  const trailingStart = new Date(now.getFullYear(), now.getMonth() - 3, 1).getTime();
+  const trailingSpend = horseReceipts.reduce((sum, receipt) => {
+    const date = Date.parse(receipt.receiptDate);
+    return !Number.isNaN(date) && date >= trailingStart && date <= now.getTime() ? sum + receipt.amount : sum;
+  }, 0);
+  const monthlyBurn = Math.round(trailingSpend / 3);
+
+  const askPrice = horse.sale?.askPrice ?? 0;
+  const breakEvenPrice = Math.round(costToDate + monthlyBurn * CARRY_MONTHS);
+  const safeDiscountFloor = Math.round(breakEvenPrice * (1 + PROTECTED_MARGIN));
+  const projectedMargin = askPrice > 0 ? askPrice - breakEvenPrice : 0;
+  const marginPercent = askPrice > 0 ? Math.round((projectedMargin / askPrice) * 100) : 0;
+
+  return { horseId: horse.id, costToDate, monthlyBurn, askPrice, projectedMargin, breakEvenPrice, safeDiscountFloor, marginPercent };
+}
