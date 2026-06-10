@@ -229,7 +229,7 @@ export default function Horses() {
           <div className="surface-hero__stats">
             <div className="surface-hero__stat"><span>Command files</span><strong>{horses.length}</strong></div>
             <div className="surface-hero__stat"><span>Care holds</span><strong style={{ color: medicalWatchCount ? 'var(--rose)' : 'var(--emerald)' }}>{medicalWatchCount}</strong></div>
-            <div className="surface-hero__stat"><span>Buyer motion</span><strong>{salePrepCount}</strong></div>
+            <div className="surface-hero__stat"><span>Buyer ready</span><strong>{buyerReadyCount}/{salePrepCount}</strong></div>
             <div className="surface-hero__stat"><span>Proof gaps</span><strong style={{ color: proofGapCount ? 'var(--amber)' : 'var(--emerald)' }}>{proofGapCount}</strong></div>
           </div>
           <div className="inline-actions" style={{ marginTop: '16px' }}>
