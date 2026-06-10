@@ -1,0 +1,370 @@
+.xbar-command-shell {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(47, 141, 255, 0.16), transparent 30%),
+    radial-gradient(circle at 100% 12%, rgba(180, 191, 204, 0.14), transparent 24%),
+    linear-gradient(135deg, #02050a 0%, #07101a 42%, #0d1218 100%);
+}
+
+.xbar-command-main {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(1, 4, 9, 0.055) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(1, 4, 9, 0.045) 1px, transparent 1px),
+    radial-gradient(circle at 22% 0%, rgba(47, 141, 255, 0.16), transparent 26%),
+    linear-gradient(180deg, #f6f8fb 0%, #e8eef5 46%, #dfe7f0 100%);
+  background-size: 44px 44px, 44px 44px, auto, auto;
+}
+
+.xbar-command-main::before {
+  content: '';
+  position: fixed;
+  inset: 62px 0 auto 280px;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(47, 141, 255, 0.54), transparent);
+  z-index: 0;
+}
+
+.xbar-command-main > * {
+  position: relative;
+  z-index: 1;
+}
+
+.xbar-command-topbar {
+  border-bottom: 1px solid rgba(173, 186, 201, 0.18);
+  background:
+    linear-gradient(180deg, rgba(9, 16, 25, 0.98), rgba(5, 10, 17, 0.98));
+  backdrop-filter: blur(20px);
+}
+
+.xbar-command-main .ops-briefing-header,
+.xbar-command-main .surface-hero--dark {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(146, 164, 184, 0.2);
+  background:
+    linear-gradient(120deg, rgba(255, 255, 255, 0.08), transparent 18%),
+    linear-gradient(135deg, rgba(3, 7, 13, 0.98), rgba(10, 18, 29, 0.96) 54%, rgba(15, 22, 30, 0.98)),
+    #060b12;
+  box-shadow:
+    0 32px 80px rgba(1, 4, 9, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(47, 141, 255, 0.16);
+}
+
+.xbar-command-main .ops-briefing-header::before,
+.xbar-command-main .surface-hero--dark::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(47, 141, 255, 0.28), transparent 1px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 1px);
+  background-size: 76px 76px;
+  opacity: 0.22;
+  mask-image: linear-gradient(90deg, black, transparent 72%);
+}
+
+.xbar-command-main .ops-briefing-header::after,
+.xbar-command-main .surface-hero--dark::after {
+  content: '';
+  position: absolute;
+  right: -120px;
+  top: -120px;
+  width: 360px;
+  height: 360px;
+  border: 1px solid rgba(47, 141, 255, 0.22);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(47, 141, 255, 0.18), transparent 62%);
+  pointer-events: none;
+}
+
+.xbar-command-main .ops-briefing-header__title,
+.xbar-command-main .surface-hero--dark h1 {
+  max-width: 980px;
+  color: #f7fbff;
+  font-size: clamp(2.3rem, 5vw, 5.1rem);
+  line-height: 0.88;
+  letter-spacing: -0.08em;
+  text-transform: none;
+}
+
+.xbar-command-main .surface-hero__eyebrow,
+.xbar-command-main .ops-briefing-header__ranch,
+.xbar-command-main .panel__eyebrow {
+  color: #2f8dff;
+  font-weight: 900;
+  letter-spacing: 0.22em;
+}
+
+.xbar-command-main .command-center-briefing__copy,
+.xbar-command-main .surface-hero--dark p {
+  max-width: 820px;
+  color: #c5d2df;
+  font-size: 1.03rem;
+  line-height: 1.7;
+}
+
+.xbar-command-main .command-center-next-move {
+  position: relative;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  padding: 24px 26px;
+  border-radius: 22px;
+  border-color: rgba(47, 141, 255, 0.5);
+  background:
+    linear-gradient(135deg, rgba(47, 141, 255, 0.18), transparent 36%),
+    rgba(3, 9, 18, 0.84);
+  box-shadow: inset 4px 0 0 rgba(47, 141, 255, 0.84), 0 24px 70px rgba(0, 0, 0, 0.22);
+}
+
+.xbar-command-main .command-center-next-move strong {
+  font-size: clamp(1.6rem, 3.4vw, 3.5rem);
+  letter-spacing: -0.07em;
+}
+
+.xbar-command-main .ops-briefing-stat-row,
+.xbar-command-main .surface-hero__stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  padding: 1px;
+  border-radius: 20px;
+  border: 1px solid rgba(146, 164, 184, 0.18);
+  background: linear-gradient(90deg, rgba(47, 141, 255, 0.32), rgba(255, 255, 255, 0.08), rgba(47, 141, 255, 0.18));
+}
+
+.xbar-command-main .ops-briefing-stat,
+.xbar-command-main .surface-hero__stat {
+  margin: 0;
+  border: 0;
+  border-radius: 18px;
+  background: rgba(5, 12, 22, 0.86);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.xbar-command-main .ops-briefing-stat__label,
+.xbar-command-main .surface-hero__stat span,
+.xbar-command-main .metric-card__label,
+.xbar-command-main .ledger-stat__label {
+  color: #6e7f93;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.xbar-command-main .ops-briefing-stat__value,
+.xbar-command-main .surface-hero__stat strong,
+.xbar-command-main .metric-card__value,
+.xbar-command-main .ledger-stat__value {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.055em;
+}
+
+.xbar-command-main .command-stage {
+  border: 1px solid rgba(74, 86, 101, 0.2);
+  border-radius: 28px;
+  padding: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(225, 233, 243, 0.82)),
+    rgba(238, 244, 250, 0.9);
+  box-shadow: 0 28px 90px rgba(25, 36, 49, 0.13);
+}
+
+.xbar-command-main .command-stage__rail {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  padding: 12px;
+  border-radius: 22px;
+  background: rgba(6, 12, 21, 0.94);
+}
+
+.xbar-command-main .command-stage__rail .metric-card {
+  border-color: rgba(47, 141, 255, 0.22);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+  color: #eef6ff;
+  box-shadow: none;
+}
+
+.xbar-command-main .command-stage__rail .metric-card__label,
+.xbar-command-main .command-stage__rail .metric-card__detail {
+  color: #8da1b9;
+}
+
+.xbar-command-main .command-stage__rail .metric-card__value {
+  color: #ffffff;
+}
+
+.xbar-command-main .command-stage__support-card,
+.xbar-command-main .panel,
+.xbar-command-main .metric-card,
+.xbar-command-main .stack-item,
+.xbar-command-main .table-shell {
+  border: 1px solid rgba(63, 75, 90, 0.16);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(236, 242, 248, 0.86)),
+    rgba(245, 248, 252, 0.9);
+  box-shadow:
+    0 18px 48px rgba(34, 45, 59, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.xbar-command-main .panel {
+  border-radius: 24px;
+}
+
+.xbar-command-main .panel__title {
+  color: #07101a;
+  font-size: clamp(1.15rem, 1.6vw, 1.75rem);
+  letter-spacing: -0.045em;
+}
+
+.xbar-command-main .panel__description,
+.xbar-command-main .stack-item__copy,
+.xbar-command-main .metric-card__detail,
+.xbar-command-main .inline-metrics {
+  color: #566473;
+}
+
+.xbar-command-main .stack-item {
+  border-radius: 18px;
+  transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease;
+}
+
+.xbar-command-main .stack-item--interactive:hover,
+.xbar-command-main .horse-card--interactive:hover {
+  transform: translateY(-2px);
+  border-color: rgba(47, 141, 255, 0.38);
+  box-shadow: 0 28px 72px rgba(31, 48, 70, 0.16);
+}
+
+.xbar-command-main .dashboard-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.65fr);
+  gap: 18px;
+}
+
+.xbar-command-main .dashboard-board__main,
+.xbar-command-main .dashboard-board__side {
+  display: grid;
+  gap: 18px;
+}
+
+.xbar-command-main .metric-grid {
+  gap: 14px;
+}
+
+.xbar-command-main .metric-card {
+  min-height: 138px;
+  border-radius: 22px;
+}
+
+.xbar-command-main .horse-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 18px;
+}
+
+.xbar-command-main .horse-card {
+  overflow: hidden;
+  border: 1px solid rgba(63, 75, 90, 0.18);
+  border-radius: 28px;
+  background: rgba(246, 249, 253, 0.92);
+  box-shadow: 0 24px 72px rgba(30, 42, 56, 0.12);
+}
+
+.xbar-command-main .horse-card__media {
+  min-height: 280px;
+  background:
+    linear-gradient(135deg, rgba(2, 5, 10, 0.18), rgba(2, 5, 10, 0.64)),
+    #07101a;
+}
+
+.xbar-command-main .horse-card__body {
+  padding: 18px;
+}
+
+.xbar-command-main .horse-card__metric-band,
+.xbar-command-main .dashboard-budget-strip,
+.xbar-command-main .ownership-proof-strip {
+  border: 1px solid rgba(47, 141, 255, 0.18);
+  border-radius: 18px;
+  background: rgba(7, 16, 28, 0.94);
+  color: #edf5ff;
+}
+
+.xbar-command-main .horse-card__metric span,
+.xbar-command-main .horse-card__packet-head span,
+.xbar-command-main .ownership-proof-strip span {
+  color: #8da1b9;
+}
+
+.xbar-command-main .horse-card__metric strong,
+.xbar-command-main .horse-card__packet-head strong,
+.xbar-command-main .ownership-proof-strip strong {
+  color: #ffffff;
+}
+
+.xbar-command-main .data-table th {
+  color: #6e7f93;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.xbar-command-main .data-table tr:hover td {
+  background: rgba(47, 141, 255, 0.055);
+}
+
+.xbar-command-main .field-input,
+.xbar-command-main .field-textarea,
+.xbar-command-main .field-select {
+  border-color: rgba(63, 75, 90, 0.22);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.xbar-command-main .button--primary,
+.xbar-command-main .ops-briefing-action--primary {
+  border-color: rgba(47, 141, 255, 0.72);
+  background: linear-gradient(180deg, #5eb0ff 0%, #2f8dff 48%, #176cd3 100%);
+  color: #02050a;
+  box-shadow: 0 16px 32px rgba(47, 141, 255, 0.28);
+}
+
+.xbar-command-main .button--ghost,
+.xbar-command-main .ops-briefing-action {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px);
+}
+
+@media (max-width: 1100px) {
+  .xbar-command-main .dashboard-board,
+  .xbar-command-main .ops-briefing-stat-row,
+  .xbar-command-main .surface-hero__stats {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .xbar-command-main::before {
+    inset-left: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .xbar-command-main .dashboard-board,
+  .xbar-command-main .ops-briefing-stat-row,
+  .xbar-command-main .surface-hero__stats,
+  .xbar-command-main .horse-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .xbar-command-main .ops-briefing-header__title,
+  .xbar-command-main .surface-hero--dark h1 {
+    font-size: clamp(2rem, 12vw, 3.3rem);
+  }
+}
