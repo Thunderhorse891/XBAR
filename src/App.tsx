@@ -24,7 +24,7 @@ const Documents = lazy(() => import('./routes/Documents'));
 const Expenses = lazy(() => import('./routes/Expenses'));
 const FollowUps = lazy(() => import('./routes/FollowUps'));
 const HorseDetail = lazy(() => import('./routes/HorseDetail'));
-const Horses = lazy(() => import('./routes/Horses'));
+const Horses = lazy(() => import('./routes/HorsesReleaseGate'));
 const Landing = lazy(() => import('./routes/Landing'));
 const Login = lazy(() => import('./routes/Login'));
 const MainLayout = lazy(() => import('./routes/layouts/MainLayout'));
