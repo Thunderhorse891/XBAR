@@ -1,6 +1,6 @@
-# XBAR Horse Management App
+# XBAR Command Infrastructure
 
-The operating system for modern horse operations: premium horse records, document trust, sales workflows, and ranch operations across web and mobile.
+Premium operational command infrastructure for modern horse and ranch operations: command files, proof control, title and transfer posture, care status, buyer movement, operating ledger, field conditions, and ranch control across web and mobile.
 
 ## Runtime
 
@@ -48,11 +48,24 @@ Capacitor configuration lives in `capacitor.config.ts`.
 
 ## Design System
 
-- Dark-first premium ranch operations command center
-- Graphite surfaces, smoked-glass panels, metallic borders, and electric-blue accents
-- Shared tokens and foundational styles in `src/index.css`
-- Command-center visual layer in `src/routes/xbarCommandSystem.css`
+- Premium command infrastructure, not generic SaaS dashboard UI
+- Graphite shell, metallic/silver workspace surfaces, restrained electric-blue control accents
+- Shared brand rule: one system, distinct operational silhouettes per section
+- Command-center visual layer in `src/routes/xbarCommandSystem.css` and `src/routes/commandCenterLocal.css`
 - Interaction affordances in `src/routes/interactionSystem.css`
+- Base tokens and foundational styles in `src/index.css`
+
+## Product Standard
+
+Each product surface should answer the same operational sequence:
+
+1. Entity
+2. Status
+3. Evidence
+4. Risk
+5. Next action
+
+Daily operations should not collapse into repeated dashboards. Command Center, Command Files, Title & Transfer, Proof Vault, Care Status, Buyer Desk, Operating Ledger, Ranch Assets, Field Conditions, and Ranch Control each require a distinct layout silhouette and workflow.
 
 ## Production Environment
 
@@ -101,6 +114,8 @@ Managed checkout is restricted to workspace admins and only returns customers to
 - Local-first workspace with backup import and export
 - Optional cloud authentication, relational workspace sync, and document storage through Supabase
 - Managed Stripe checkout and webhook-driven subscription reconciliation
-- Horse records, care tracking, ownership, breeding, equipment, expenses, reminders, and weather
-- Document intake, review queue, and buyer-safe sharing
-- Sales listings, buyer follow-ups, and shared buyer profiles
+- Command files for horse identity, care, ownership, documents, sales, and operating history
+- Title & Transfer desk for chain-of-title posture, release evidence, stakeholder share, and proof gaps
+- Proof Vault for document intake, review, matching, approval, and buyer-safe release
+- Operating Ledger for receipt intake, cost allocation, and ranch-level expense visibility
+- Buyer Desk, buyer follow-ups, shared buyer packets, ranch assets, action queue, and field conditions
