@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { CommandBrief } from '@/components/CommandBrief';
+import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { ActionMenuButton } from '@/components/InteractionSystem';
@@ -37,6 +39,17 @@ export default function Medical() {
     })),
   );
   const kits = ranchAssets.filter((asset) => asset.category === 'Medical Kit');
+  const vetDocCount = documents.filter((document) => document.type === 'Vet Record' || document.type === 'Coggins').length;
+  const today = new Date().toISOString().slice(0, 10);
+  const soonCutoff = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+  const followUps = medicalEvents.flatMap((event) => {
+    const due = event.details && 'followUpDue' in event.details ? event.details.followUpDue : undefined;
+    return due ? [{ ...event, followUpDue: due }] : [];
+  });
+  const overdueFollowUps = followUps.filter((event) => event.followUpDue <= today);
+  const dueSoonFollowUps = followUps.filter((event) => event.followUpDue > today && event.followUpDue <= soonCutoff);
+  const addEventFormRef = useRef<HTMLDivElement | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ horseId: string; eventId: string; horseName: string } | null>(null);
   const [selectedHorseId, setSelectedHorseId] = useState(() => {
     const fromRoute = searchParams.get('horse');
     if (fromRoute && horses.some((h) => h.id === fromRoute)) return fromRoute;
@@ -111,7 +124,7 @@ export default function Medical() {
                 id: 'event-delete',
                 label: 'Delete care event',
                 onSelect: () => {
-                  if (window.confirm('Remove this medical event?')) deleteMedicalEvent(menuEvent.horseId, menuEvent.id);
+                  setPendingDelete({ horseId: menuEvent.horseId, eventId: menuEvent.id, horseName: menuEvent.horseName });
                 },
               },
             ]
@@ -139,37 +152,58 @@ export default function Medical() {
 
   return (
     <>
-      <div className="surface-hero surface-hero--dark">
-        <div className="surface-hero__top">
-          <div>
-            <span className="surface-hero__eyebrow">Health & Care</span>
-          </div>
-          <div className="surface-hero__stats">
-            <div className="surface-hero__stat">
-              <span>Watch</span>
-              <strong style={{ color: medicalWatch.length ? 'var(--rose)' : 'var(--emerald)' }}>{medicalWatch.length}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Timeline</span>
-              <strong>{medicalEvents.length}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Kits</span>
-              <strong>{kits.length}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Vet docs</span>
-              <strong>{documents.filter((document) => document.type === 'Vet Record' || document.type === 'Coggins').length}</strong>
-            </div>
-          </div>
-        </div>
-      </div>
+      <CommandBrief
+        variant="wide"
+        eyebrow="Health & Care"
+        entity="Health & Care Command"
+        status={
+          medicalWatch.length || overdueFollowUps.length
+            ? { label: 'Care overdue', tone: 'rose' }
+            : dueSoonFollowUps.length
+              ? { label: 'Follow-ups due soon', tone: 'amber' }
+              : { label: 'On schedule', tone: 'blue' }
+        }
+        summary={`${medicalWatch.length} horses on watch across ${medicalEvents.length} recorded care events.`}
+        evidence={[
+          { label: 'Watch', value: String(medicalWatch.length) },
+          { label: 'Timeline entries', value: String(medicalEvents.length) },
+          { label: 'Vet docs', value: String(vetDocCount), to: '/documents' },
+        ]}
+        risks={[
+          ...medicalWatch.map((horse) => ({
+            label: `${horse.name} — on medical watch`,
+            severity: 'rose' as const,
+            to: `/horses/${horse.id}`,
+          })),
+          ...overdueFollowUps.map((event) => ({
+            label: `${event.horseName} — ${event.title} follow-up overdue`,
+            severity: 'rose' as const,
+            to: `/horses/${event.horseId}`,
+          })),
+          ...dueSoonFollowUps.map((event) => ({
+            label: `${event.horseName} — ${event.title} follow-up due ${formatDateLabel(event.followUpDue)}`,
+            severity: 'amber' as const,
+            to: `/horses/${event.horseId}`,
+          })),
+        ].slice(0, 5)}
+        nextAction={
+          canManageMedical
+            ? {
+                label: 'Log care event',
+                onClick: () => {
+                  addEventFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  addEventFormRef.current?.querySelector<HTMLElement>('select, input')?.focus({ preventScroll: true });
+                },
+              }
+            : { label: 'Log care event', disabledReason: 'Your role cannot manage medical records.' }
+        }
+      />
 
       <div className="metric-grid">
         <MetricCard label="Watchlist" value={`${medicalWatch.length}`} detail="Horses needing care attention" tone="rose" />
         <MetricCard label="Timeline entries" value={`${medicalEvents.length}`} detail="Care records on file" />
         <MetricCard label="Medical kits" value={`${kits.length}`} detail="Travel and treatment kits" tone="blue" />
-        <MetricCard label="Vet-linked docs" value={`${documents.filter((document) => document.type === 'Vet Record' || document.type === 'Coggins').length}`} detail="Medical docs linked" tone="emerald" />
+        <MetricCard label="Vet-linked docs" value={`${vetDocCount}`} detail="Medical docs linked" tone="blue" />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
@@ -225,7 +259,7 @@ export default function Medical() {
                       <div className="stack-item__title">{asset.name}</div>
                       <div className="stack-item__copy">{asset.location}</div>
                     </div>
-                    <Pill tone={asset.condition === 'Attention Required' ? 'rose' : asset.condition === 'Service Soon' ? 'amber' : 'emerald'}>
+                    <Pill tone={asset.condition === 'Attention Required' ? 'rose' : asset.condition === 'Service Soon' ? 'amber' : 'blue'}>
                       {asset.condition}
                     </Pill>
                   </div>
@@ -239,7 +273,7 @@ export default function Medical() {
         </Panel>
       </div>
 
-      <div className="dashboard-grid dashboard-grid--primary">
+      <div className="dashboard-grid dashboard-grid--primary" ref={addEventFormRef}>
         <Panel eyebrow="Care action" title="Add care event">
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
@@ -351,7 +385,7 @@ export default function Medical() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <Pill tone="blue">{formatDateLabel(event.date)}</Pill>
                           <button className="button button--ghost button--compact" style={{ fontSize: '11px' }} type="button" onClick={() => { setEditForm({ title: event.title, body: event.summary, date: event.date }); setEditingEventId(event.id); }}>Edit</button>
-                          <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={() => { if (window.confirm('Remove this medical event?')) deleteMedicalEvent(event.horseId, event.id); }}>Delete</button>
+                          <button className="button button--ghost button--compact" style={{ fontSize: '11px', color: 'var(--rose)' }} type="button" onClick={() => setPendingDelete({ horseId: event.horseId, eventId: event.id, horseName: event.horseName })}>Delete</button>
                         </div>
                       </div>
                       <div className="stack-item__copy">{event.summary}</div>
@@ -435,6 +469,29 @@ export default function Medical() {
       </Panel>
 
       <ContextMenu open={Boolean(menuHorse || menuEvent)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
+
+      <ConfirmActionDialog
+        open={Boolean(pendingDelete)}
+        tone="danger"
+        title="Delete medical record"
+        consequences={[
+          `The event is removed from ${pendingDelete?.horseName ?? 'this horse'}'s medical timeline.`,
+          'Deletion is recorded in the audit log.',
+          'This cannot be undone.',
+        ]}
+        confirmLabel="Delete record"
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => {
+          if (!pendingDelete) return;
+          const result = deleteMedicalEvent(pendingDelete.horseId, pendingDelete.eventId);
+          pushToast({
+            title: result.ok ? 'Medical record deleted' : 'Delete blocked',
+            message: result.message,
+            tone: result.ok ? 'warning' : 'error',
+          });
+          setPendingDelete(null);
+        }}
+      />
     </>
   );
 }

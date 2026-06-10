@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { CommandBrief } from '@/components/CommandBrief';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
@@ -39,7 +40,11 @@ export default function Sales() {
     ]),
   );
   const liveShareCount = saleHorses.filter((horse) => packetByHorseId[horse.id]?.buyerSafe).length;
-  const followUpsDue = salesLeads.filter((lead) => lead.nextFollowUp && lead.nextFollowUp <= new Date().toISOString().slice(0, 10)).length;
+  const today = new Date().toISOString().slice(0, 10);
+  const overdueLeads = salesLeads.filter((lead) => lead.stage !== 'Closed' && lead.nextFollowUp && lead.nextFollowUp <= today);
+  const followUpsDue = salesLeads.filter((lead) => lead.nextFollowUp && lead.nextFollowUp <= today).length;
+  const openProspects = salesLeads.filter((lead) => lead.stage !== 'Closed');
+  const transferBlockedHorses = saleHorses.filter((horse) => horse.readiness.packetStatus === 'Needs Transfer Docs');
   const [selectedLeadId, setSelectedLeadId] = useState(salesLeads[0]?.id ?? '');
   const selectedLead = salesLeads.find((lead) => lead.id === selectedLeadId) ?? salesLeads[0];
   const [leadStage, setLeadStage] = useState(selectedLead?.stage ?? 'New');
@@ -157,33 +162,43 @@ export default function Sales() {
 
   return (
     <>
-      <div className="surface-hero surface-hero--dark">
-        <div className="surface-hero__top">
-          <div>
-            <span className="surface-hero__eyebrow">Sales & Transfers</span>
-          </div>
-          <div className="surface-hero__stats">
-            <div className="surface-hero__stat"><span>Listings</span><strong>{saleHorses.length}</strong></div>
-            <div className="surface-hero__stat"><span>Open prospects</span><strong>{salesLeads.filter((lead) => lead.stage !== 'Closed').length}</strong></div>
-            <div className="surface-hero__stat">
-              <span>Follow-ups due</span>
-              <strong style={{ color: followUpsDue ? 'var(--rose)' : 'var(--emerald)' }}>{followUpsDue}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Blockers</span>
-              <strong style={{ color: saleHorses.filter((h) => h.readiness.packetStatus === 'Needs Transfer Docs').length ? 'var(--amber)' : 'var(--emerald)' }}>
-                {saleHorses.filter((h) => h.readiness.packetStatus === 'Needs Transfer Docs').length}
-              </strong>
-            </div>
-          </div>
-        </div>
-      </div>
+      <CommandBrief
+        variant="wide"
+        eyebrow="Sales"
+        entity="Sales & Transfers"
+        status={
+          overdueLeads.length
+            ? { label: 'Follow-ups overdue', tone: 'rose' }
+            : transferBlockedHorses.length
+              ? { label: 'Transfer paperwork pending', tone: 'amber' }
+              : { label: 'Pipeline current', tone: 'blue' }
+        }
+        summary={`${saleHorses.length} active listings with ${openProspects.length} open prospects and ${liveShareCount} live sale links.`}
+        evidence={[
+          { label: 'Listings', value: String(saleHorses.length) },
+          { label: 'Open prospects', value: String(openProspects.length), to: '/follow-ups' },
+          { label: 'Follow-ups due', value: String(followUpsDue), to: '/follow-ups' },
+        ]}
+        risks={[
+          ...overdueLeads.map((lead) => ({
+            label: `${lead.name} — follow-up overdue since ${formatDateLabel(lead.nextFollowUp ?? today)}`,
+            severity: 'rose' as const,
+            to: '/follow-ups',
+          })),
+          ...transferBlockedHorses.map((horse) => ({
+            label: `${horse.name} — needs transfer docs`,
+            severity: 'amber' as const,
+            to: '/ownership',
+          })),
+        ].slice(0, 5)}
+        nextAction={{ label: 'Open follow-up queue', to: '/follow-ups' }}
+      />
 
       <div className="metric-grid">
         <MetricCard label="Sale horses" value={`${saleHorses.length}`} detail="Active pricing or pending review" />
-        <MetricCard label="Prospects" value={`${salesLeads.filter((lead) => lead.stage !== 'Closed').length}`} detail="Open inquiries across all channels" tone="blue" />
-        <MetricCard label="Shared records" value={`${sharedAccess.savedHorses}`} detail="Listings open in shared access" tone="emerald" />
-        <MetricCard label="Transfer blockers" value={`${saleHorses.filter((horse) => horse.readiness.packetStatus === 'Needs Transfer Docs').length}`} detail="Listings with ownership or paperwork friction" tone="amber" />
+        <MetricCard label="Prospects" value={`${openProspects.length}`} detail="Open inquiries across all channels" tone="blue" />
+        <MetricCard label="Shared records" value={`${sharedAccess.savedHorses}`} detail="Listings open in shared access" tone="blue" />
+        <MetricCard label="Transfer blockers" value={`${transferBlockedHorses.length}`} detail="Listings with ownership or paperwork friction" tone="amber" />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
@@ -330,7 +345,7 @@ export default function Sales() {
                             {lead.channel} · {horse?.name}
                           </div>
                         </div>
-                        <Pill tone={lead.stage === 'Offer' ? 'emerald' : lead.stage === 'Qualified' ? 'blue' : 'amber'}>
+                        <Pill tone={lead.stage === 'Offer' || lead.stage === 'Qualified' ? 'blue' : 'amber'}>
                           {lead.stage}
                         </Pill>
                       </div>
@@ -441,7 +456,7 @@ export default function Sales() {
             <div className="stack-item">
               <div className="stack-item__top">
                 <div className="stack-item__title">Live links</div>
-                <Pill tone={liveShareCount ? 'emerald' : 'amber'}>{liveShareCount}</Pill>
+                <Pill tone={liveShareCount ? 'blue' : 'amber'}>{liveShareCount}</Pill>
               </div>
             </div>
             <div className="stack-item">
@@ -453,7 +468,7 @@ export default function Sales() {
             <div className="stack-item">
               <div className="stack-item__top">
                 <div className="stack-item__title">Follow-ups</div>
-                <Pill tone={followUpsDue ? 'amber' : 'emerald'}>{followUpsDue}</Pill>
+                <Pill tone={followUpsDue ? 'amber' : 'blue'}>{followUpsDue}</Pill>
               </div>
             </div>
           </div>

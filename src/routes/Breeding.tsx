@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { CommandBrief } from '@/components/CommandBrief';
+import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { DocumentBlock, Timeline } from '@/components/InteractionSystem';
@@ -28,6 +30,10 @@ export default function Breeding() {
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
   const [eventError, setEventError] = useState('');
   const [milestoneQuery, setMilestoneQuery] = useState('');
+  const [pendingDelete, setPendingDelete] = useState<{ horseId: string; eventId: string; horseName: string } | null>(null);
+  const addEventFormRef = useRef<HTMLDivElement | null>(null);
+  const milestoneCount = breedingHorses.reduce((sum, horse) => sum + horse.breedingTimeline.length, 0);
+  const blockedHorses = breedingHorses.filter((horse) => horse.readiness.packetStatus !== 'Ready');
   const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
   const menuHorse = breedingHorses.find((horse) => horse.id === menuState?.horseId);
   const menuItems = menuHorse
@@ -47,39 +53,40 @@ export default function Breeding() {
 
   return (
     <>
-      <div className="surface-hero surface-hero--dark">
-        <div className="surface-hero__top">
-          <div>
-            <span className="surface-hero__eyebrow">Breeding Program</span>
-          </div>
-          <div className="surface-hero__stats">
-            <div className="surface-hero__stat">
-              <span>Program horses</span>
-              <strong>{breedingHorses.length}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Contracts</span>
-              <strong>{breedingDocs.length}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Milestones</span>
-              <strong>{breedingHorses.reduce((sum, horse) => sum + horse.breedingTimeline.length, 0)}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Blockers</span>
-              <strong style={{ color: breedingHorses.filter((horse) => horse.readiness.packetStatus !== 'Ready').length ? 'var(--amber)' : 'var(--emerald)' }}>
-                {breedingHorses.filter((horse) => horse.readiness.packetStatus !== 'Ready').length}
-              </strong>
-            </div>
-          </div>
-        </div>
-      </div>
+      <CommandBrief
+        variant="split"
+        eyebrow="Breeding"
+        entity="Breeding Program"
+        status={blockedHorses.length ? { label: `${blockedHorses.length} record blockers`, tone: 'amber' } : { label: 'Program records clear', tone: 'blue' }}
+        summary={`${breedingHorses.length} mares and studs tracked with ${milestoneCount} program milestones on file.`}
+        evidence={[
+          { label: 'Program horses', value: String(breedingHorses.length), to: '/horses' },
+          { label: 'Contracts', value: String(breedingDocs.length), to: '/documents' },
+          { label: 'Upcoming milestones', value: String(milestoneCount) },
+        ]}
+        risks={blockedHorses.slice(0, 5).map((horse) => ({
+          label: `${horse.name} — ${horse.readiness.packetStatus}`,
+          severity: 'amber' as const,
+          to: `/horses/${horse.id}`,
+        }))}
+        nextAction={
+          canManageBreeding
+            ? {
+                label: 'Log breeding event',
+                onClick: () => {
+                  addEventFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  addEventFormRef.current?.querySelector<HTMLElement>('select, input')?.focus({ preventScroll: true });
+                },
+              }
+            : { label: 'Log breeding event', disabledReason: 'Your role cannot manage breeding records.' }
+        }
+      />
 
       <div className="metric-grid">
         <MetricCard label="Program horses" value={`${breedingHorses.length}`} detail="Mares and studs tracked in active breeding context" />
         <MetricCard label="Contract docs" value={`${breedingDocs.length}`} detail="Breeding-specific paperwork linked into the record model" tone="blue" />
-        <MetricCard label="Live milestones" value={`${breedingHorses.reduce((sum, horse) => sum + horse.breedingTimeline.length, 0)}`} detail="Timeline entries currently supporting the program" tone="emerald" />
-        <MetricCard label="Missing records" value={`${breedingHorses.filter((horse) => horse.readiness.packetStatus !== 'Ready').length}`} detail="Horses still missing packet elements or imagery" tone="amber" />
+        <MetricCard label="Live milestones" value={`${milestoneCount}`} detail="Timeline entries currently supporting the program" tone="blue" />
+        <MetricCard label="Missing records" value={`${blockedHorses.length}`} detail="Horses still missing packet elements or imagery" tone="amber" />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
@@ -106,7 +113,7 @@ export default function Breeding() {
                         {horse.sex} · {horse.bloodline.family}
                       </div>
                     </div>
-                    <Pill tone={horse.segment === 'Stud' ? 'emerald' : 'blue'}>{horse.segment}</Pill>
+                    <Pill tone="blue">{horse.segment}</Pill>
                   </div>
                   <div className="inline-metrics">
                     <span>{horse.assignments.ranchManager}</span>
@@ -152,7 +159,7 @@ export default function Breeding() {
                       title: `${horse.name} | ${event.title}`,
                       description: event.summary,
                       onActivate: () => navigate(`/horses/${horse.id}`),
-                      action: <div className="inline-actions"><button className="button button--ghost button--compact" type="button" onClick={() => navigate(`/horses/${horse.id}`)}>Open</button>{canManageBreeding ? <button className="button button--ghost button--compact" type="button" style={{ color: 'var(--rose)' }} onClick={() => { if (window.confirm('Remove this breeding event?')) { const result = deleteBreedingEvent(horse.id, event.id); pushToast({ title: result.ok ? 'Event removed' : 'Remove blocked', message: result.message, tone: result.ok ? 'warning' : 'error' }); } }}>Delete</button> : null}</div>,
+                      action: <div className="inline-actions"><button className="button button--ghost button--compact" type="button" onClick={() => navigate(`/horses/${horse.id}`)}>Open</button>{canManageBreeding ? <button className="button button--ghost button--compact" type="button" style={{ color: 'var(--rose)' }} onClick={() => setPendingDelete({ horseId: horse.id, eventId: event.id, horseName: horse.name })}>Delete</button> : null}</div>,
                     }))}
                   />
                 ) : (
@@ -166,7 +173,7 @@ export default function Breeding() {
         </Panel>
       </div>
 
-      <div className="dashboard-grid dashboard-grid--primary">
+      <div className="dashboard-grid dashboard-grid--primary" ref={addEventFormRef}>
         <Panel eyebrow="Program action" title="Add breeding event" description="Log a milestone.">
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
@@ -249,6 +256,25 @@ export default function Breeding() {
       </div>
 
       <ContextMenu open={Boolean(menuHorse)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
+
+      <ConfirmActionDialog
+        open={Boolean(pendingDelete)}
+        tone="danger"
+        title="Delete breeding record"
+        consequences={[
+          `The event is removed from ${pendingDelete?.horseName ?? 'this horse'}'s breeding timeline.`,
+          'Deletion is recorded in the audit log.',
+          'This cannot be undone.',
+        ]}
+        confirmLabel="Delete record"
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => {
+          if (!pendingDelete) return;
+          const result = deleteBreedingEvent(pendingDelete.horseId, pendingDelete.eventId);
+          pushToast({ title: result.ok ? 'Event removed' : 'Remove blocked', message: result.message, tone: result.ok ? 'warning' : 'error' });
+          setPendingDelete(null);
+        }}
+      />
     </>
   );
 }
