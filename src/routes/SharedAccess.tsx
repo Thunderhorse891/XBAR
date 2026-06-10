@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
@@ -22,6 +23,7 @@ export default function SharedAccess() {
   const updateSharedListingAccessMode = useXbarStore((state) => state.updateSharedListingAccessMode);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
+  const [publicLinkPending, setPublicLinkPending] = useState<{ horseId: string; horseName: string; packetStatus: string } | null>(null);
   const activeSharedListings = sharedListings.filter((listing) => listing.state !== 'Archived');
   const liveSharedListings = activeSharedListings.filter((listing) => listing.state === 'Live');
   const facebookSharedListings = activeSharedListings.filter((listing) => listing.channels.includes('Facebook'));
@@ -76,22 +78,8 @@ export default function SharedAccess() {
     }
   };
 
-  const confirmPublicLink = (horseName: string, packet: ReturnType<typeof buildHorsePacketCompleteness>) => {
-    if (typeof window === 'undefined') {
-      return false;
-    }
-
-    return window.confirm(
-      [
-        `Make ${horseName} public?`,
-        '',
-        'Anyone with the link can view the sale packet without a token.',
-        'Shared fields include horse identity, approved sale photos, sale readiness, and approved packet documents only.',
-        '',
-        `Current packet status: ${packet.buyerProfileStatus}.`,
-      ].join('\n'),
-    );
-  };
+  // Public exposure is a legal-grade action: it goes through a proof-checked
+  // dialog (state below) instead of window.confirm.
 
   const menuItems = menuHorse && menuPacket
     ? [
@@ -124,7 +112,12 @@ export default function SharedAccess() {
                 label: menuListing.accessMode === 'Private Token' ? 'Make public' : 'Require token',
                 onSelect: async () => {
                   const nextAccessMode = menuListing.accessMode === 'Private Token' ? 'Public Link' : 'Private Token';
-                  if (nextAccessMode === 'Public Link' && !confirmPublicLink(menuHorse.name, menuPacket)) {
+                  if (nextAccessMode === 'Public Link') {
+                    setPublicLinkPending({
+                      horseId: menuHorse.id,
+                      horseName: menuHorse.name,
+                      packetStatus: menuPacket.buyerProfileStatus,
+                    });
                     return;
                   }
 
@@ -307,7 +300,12 @@ export default function SharedAccess() {
                           onClick={async (event) => {
                             event.stopPropagation();
                             const nextAccessMode = sharedListing.accessMode === 'Private Token' ? 'Public Link' : 'Private Token';
-                            if (nextAccessMode === 'Public Link' && !confirmPublicLink(horse.name, packet)) {
+                            if (nextAccessMode === 'Public Link') {
+                              setPublicLinkPending({
+                                horseId: horse.id,
+                                horseName: horse.name,
+                                packetStatus: packet.buyerProfileStatus,
+                              });
                               return;
                             }
 
@@ -332,6 +330,33 @@ export default function SharedAccess() {
           )}
         </Panel>
       </div>
+
+      <ConfirmActionDialog
+        open={Boolean(publicLinkPending)}
+        tone="legal"
+        title={`Make ${publicLinkPending?.horseName ?? 'this listing'} publicly viewable`}
+        consequences={[
+          'Anyone with the link can view the sale packet without a token.',
+          'Shared fields include horse identity, approved sale photos, sale readiness, and approved packet documents only.',
+          'The access change is recorded in the audit log.',
+        ]}
+        proofSummary={<span>Current packet status: <strong>{publicLinkPending?.packetStatus ?? 'Unknown'}</strong></span>}
+        acknowledgements={['I understand anyone with the link can view this packet without signing in.']}
+        confirmLabel="Make public"
+        onCancel={() => setPublicLinkPending(null)}
+        onConfirm={() => {
+          const pending = publicLinkPending;
+          setPublicLinkPending(null);
+          if (!pending) return;
+          void updateSharedListingAccessMode(pending.horseId, 'Public Link').then((result) => {
+            pushToast({
+              title: result.ok ? 'Access updated' : 'Access blocked',
+              message: result.message,
+              tone: result.ok ? 'success' : 'error',
+            });
+          });
+        }}
+      />
 
       <ContextMenu open={Boolean(menuItems.length)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
     </>

@@ -1,5 +1,6 @@
 import { useId, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
 import { EmptyState } from '@/components/EmptyState';
 import { Timeline } from '@/components/InteractionSystem';
 import { SalePacketSlots } from '@/components/SalePacketSlots';
@@ -11,6 +12,7 @@ import { formatCompactCurrency, formatDateLabel, formatPercent } from '@/lib/for
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
+import { normalizeOwnershipRecord } from '@/store/xbarStoreLogic';
 import { useCurrentRoleCapability, useHorseRecord, useXbarStore } from '@/store/useXbarStore';
 import type { DocumentRecord, DocumentSource, GalleryAsset, HorseSex, SalesLead } from '@/types/xbar';
 import { classNames, docSources, leadChannels, mediaKinds } from '@/features/horses/constants';
@@ -114,6 +116,7 @@ export default function HorseDetail() {
   const [leadError, setLeadError] = useState('');
   const [locationError, setLocationError] = useState('');
   const [activeTab, setActiveTab] = useState<DetailTab>('Overview');
+  const [horsePendingDelete, setHorsePendingDelete] = useState(false);
   const [editingCore, setEditingCore] = useState(false);
   const [coreForm, setCoreForm] = useState({ name: '', breed: '', color: '', sex: 'Mare' as HorseSex, registrationNumber: '', owner: '', ownerEntity: '', askPrice: '' });
   const [location, setLocation] = useState({
@@ -138,6 +141,7 @@ export default function HorseDetail() {
   const activeSharedListing = sharedListings.find((listing) => listing.horseId === horse.id && listing.state !== 'Archived');
   const saved = Boolean(activeSharedListing);
   const packet = buildHorsePacketCompleteness(horse, documents, ownershipRecord);
+  const normalizedOwnership = ownershipRecord ? normalizeOwnershipRecord(ownershipRecord) : null;
   const publicShareUrl = buildPublicShareUrl(
     packet.sharePath,
     activeSharedListing?.accessMode === 'Private Token' ? activeSharedListing.shareToken : undefined,
@@ -370,7 +374,7 @@ export default function HorseDetail() {
                 <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Packet</span>
                 <span className={classNames(
                   'text-[13px] font-bold tabular-nums',
-                  packet.score >= 75 ? 'text-[#5eead4]' : packet.score >= 50 ? 'text-[#fbbf24]' : 'text-[#ff8a8a]',
+                  packet.score >= 75 ? 'text-[#58c0ff]' : packet.score >= 50 ? 'text-[#fbbf24]' : 'text-[#ff8a8a]',
                 )}>{packet.score}%</span>
               </div>
               <div className="flex items-center gap-2 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.04)] px-3 py-2">
@@ -389,7 +393,7 @@ export default function HorseDetail() {
                   <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Ownership</span>
                   <span className={classNames(
                     'text-[13px] font-bold',
-                    ownershipRecord.transferStatus === 'Clear' ? 'text-[#5eead4]' : 'text-[#ff8a8a]',
+                    ownershipRecord.transferStatus === 'Clear' ? 'text-[#58c0ff]' : 'text-[#ff8a8a]',
                   )}>{ownershipRecord.transferStatus}</span>
                 </div>
               ) : null}
@@ -432,11 +436,32 @@ export default function HorseDetail() {
               <button
                 className="inline-flex h-10 items-center justify-center rounded-lg border border-[rgba(255,80,80,0.3)] bg-transparent px-4 text-sm font-semibold text-[rgba(255,140,140,0.8)] transition-all duration-150 ease-[ease] hover:bg-[rgba(255,80,80,0.1)] disabled:cursor-not-allowed disabled:opacity-40"
                 type="button"
-                onClick={() => { if (window.confirm('Remove this horse from records? This cannot be undone.')) { deleteHorse(horse.id); navigate('/horses'); } }}
+                onClick={() => setHorsePendingDelete(true)}
               >
                 Remove horse
               </button>
             )}
+            <ConfirmActionDialog
+              open={horsePendingDelete}
+              tone="danger"
+              title={`Delete horse record — ${horse.name}`}
+              consequences={[
+                'Deletes the horse record, its medical and breeding timelines, and its activity history.',
+                'Documents remain in the library but lose their horse assignment.',
+                'Sale listings and leads referencing this horse keep their history.',
+                'The deletion is written to the audit log.',
+                'This cannot be undone.',
+              ]}
+              requireText={horse.name}
+              confirmLabel="Delete horse"
+              onCancel={() => setHorsePendingDelete(false)}
+              onConfirm={() => {
+                setHorsePendingDelete(false);
+                const result = deleteHorse(horse.id);
+                pushToast({ title: result.ok ? 'Horse removed' : 'Remove blocked', message: result.message, tone: result.ok ? 'warning' : 'error' });
+                if (result.ok) navigate('/horses');
+              }}
+            />
           </div>
         </div>
       </section>
@@ -687,6 +712,41 @@ export default function HorseDetail() {
             >
               Save location
             </button>
+          </div>
+        </Panel>
+
+        <Panel eyebrow="Ownership proof" title="Proof chain">
+          {normalizedOwnership ? (
+            <>
+              <div className="stack-list">
+                {(normalizedOwnership.proofRequirements ?? []).map((requirement) => (
+                  <div key={requirement.id} className="stack-item">
+                    <div className="stack-item__title">{requirement.label}</div>
+                    <div className="stack-item__copy">
+                      {requirement.status === 'verified'
+                        ? `Verified${requirement.verifiedBy ? ` by ${requirement.verifiedBy}` : ''}${requirement.documentTitle ? ` — ${requirement.documentTitle}` : ''}`
+                        : requirement.status === 'linked'
+                          ? `Linked to ${requirement.documentTitle ?? 'document'} — awaiting verification`
+                          : 'No document linked yet'}
+                    </div>
+                    <Pill tone={requirement.status === 'verified' ? 'blue' : requirement.status === 'linked' ? 'amber' : 'rose'}>
+                      {requirement.status}
+                    </Pill>
+                  </div>
+                ))}
+              </div>
+              <p className="panel__description" style={{ marginTop: 10 }}>
+                Proof-backed confidence: {normalizedOwnership.confidence}% · transfer status {normalizedOwnership.transferStatus}.
+                Proof linking and verification are managed in the Ownership registry.
+              </p>
+            </>
+          ) : (
+            <p className="panel__description">No ownership record yet — open the Ownership registry to initialize the proof chain.</p>
+          )}
+          <div className="inline-actions">
+            <Link className="button button--ghost button--compact" to="/ownership">
+              Open Ownership registry
+            </Link>
           </div>
         </Panel>
       </div>
