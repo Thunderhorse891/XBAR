@@ -188,6 +188,7 @@ export interface SalePacketBuild {
   includesBillOfSale: boolean;
   status: 'draft' | 'generated' | 'shared';
   fileName?: string;
+  downloadUrl?: string;
 }
 
 export interface MedicalRecordDetails {

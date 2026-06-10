@@ -5,6 +5,7 @@ import { CommandBrief } from '@/components/CommandBrief';
 import { ContextMenu } from '@/components/ContextMenu';
 import { Panel, Pill } from '@/components/app-ui';
 import { EmptyState } from '@/components/EmptyState';
+import { createSalePacketRemote, hasBackendIdentity } from '@/lib/backendApi';
 import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { formatDateTimeLabel } from '@/lib/format';
 import { buildDocumentTrustProfile } from '@/lib/xbarPhaseTwo';
@@ -50,6 +51,7 @@ export default function Documents() {
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
   const canReviewDocuments = useCurrentRoleCapability('reviewDocuments');
   const session = useCloudStore((state) => state.session);
+  const workspaceId = useCloudStore((state) => state.workspaceId);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName || 'Ranch Staff';
 
@@ -58,6 +60,7 @@ export default function Documents() {
   const [horseId, setHorseId] = useState('');
   const [uploadedBy, setUploadedBy] = useState(currentUserName);
   const [batchLabel, setBatchLabel] = useState('Live upload batch');
+  const [packetBuildingHorseId, setPacketBuildingHorseId] = useState('');
   const [createHorseFromBatch, setCreateHorseFromBatch] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formErrors, setFormErrors] = useState<{ uploadedBy?: string; files?: string }>({});
@@ -419,17 +422,69 @@ export default function Documents() {
     }
   };
 
-  const handleGeneratePacket = (targetHorseId: string, documentIds: string[]) => {
+  const handleGeneratePacket = async (targetHorseId: string, documentIds: string[]) => {
+    const watermark = `Copy for review – ${new Date().toISOString().slice(0, 10)}`;
+    const auth = { workspaceId, accessToken: session?.access_token ?? '' };
+
+    // Cloud workspace: assemble the real watermarked PDF through the backend.
+    if (hasBackendIdentity(auth)) {
+      setPacketBuildingHorseId(targetHorseId);
+      const remote = await createSalePacketRemote(auth, {
+        horseId: targetHorseId,
+        watermarkText: watermark,
+        documentIds,
+      });
+      setPacketBuildingHorseId('');
+
+      if (remote.ok) {
+        createSalePacketBuild({
+          horseId: targetHorseId,
+          watermark,
+          documentIds,
+          includesBillOfSale: false,
+          createdBy: currentRole,
+          downloadUrl: remote.downloadUrl,
+        });
+        if (typeof window !== 'undefined' && remote.downloadUrl) {
+          window.open(remote.downloadUrl, '_blank', 'noopener,noreferrer');
+        }
+        pushToast({
+          title: 'Sale packet PDF ready',
+          message: `Watermarked packet opened in a new tab. The download link expires in ${Math.round(remote.expiresInSeconds / 60)} minutes.`,
+          tone: 'success',
+        });
+        return;
+      }
+
+      // Tier refusal becomes an upgrade moment, not a dead end.
+      if (remote.tierBlock) {
+        pushToast({
+          title: `Sale packets need the ${remote.tierBlock.requiredPlan} plan`,
+          message: remote.message,
+          tone: 'warning',
+        });
+        navigate(`/subscriptions?plan=${encodeURIComponent(remote.tierBlock.requiredPlan)}`);
+        return;
+      }
+
+      pushToast({ title: 'Packet PDF failed', message: `${remote.message} A local packet record was not created.`, tone: 'error' });
+      return;
+    }
+
+    // Local mode: record the build so the work is tracked; the PDF requires
+    // a signed-in cloud workspace.
     const result = createSalePacketBuild({
       horseId: targetHorseId,
-      watermark: `Copy for review – ${new Date().toISOString().slice(0, 10)}`,
+      watermark,
       documentIds,
       includesBillOfSale: false,
       createdBy: currentRole,
     });
     pushToast({
-      title: result.ok ? 'Sale packet generated' : 'Sale packet blocked',
-      message: result.message,
+      title: result.ok ? 'Sale packet recorded (local mode)' : 'Sale packet blocked',
+      message: result.ok
+        ? `${result.message} Sign in to your cloud workspace to generate the watermarked PDF.`
+        : result.message,
       tone: result.ok ? 'success' : 'error',
     });
   };
@@ -969,9 +1024,10 @@ export default function Documents() {
                       <button
                         className="button button--primary button--compact"
                         type="button"
-                        onClick={() => handleGeneratePacket(group.horse.id, group.documents.map((document) => document.id))}
+                        disabled={packetBuildingHorseId === group.horse.id}
+                        onClick={() => void handleGeneratePacket(group.horse.id, group.documents.map((document) => document.id))}
                       >
-                        Generate sale packet
+                        {packetBuildingHorseId === group.horse.id ? 'Assembling PDF…' : 'Generate sale packet'}
                       </button>
                     </div>
                   </div>
@@ -1009,7 +1065,14 @@ export default function Documents() {
                             {packet.documentIds.length} documents · watermark "{packet.watermark}" · {formatDateTimeLabel(packet.createdAt)} by {packet.createdBy}
                           </div>
                         </div>
-                        <Pill tone={packet.status === 'shared' ? 'blue' : packet.status === 'generated' ? 'blue' : 'amber'}>{packet.status}</Pill>
+                        <div className="inline-actions" style={{ alignItems: 'center' }}>
+                          {packet.downloadUrl ? (
+                            <a className="button button--ghost button--compact" href={packet.downloadUrl} target="_blank" rel="noreferrer">
+                              Download PDF
+                            </a>
+                          ) : null}
+                          <Pill tone={packet.status === 'shared' ? 'blue' : packet.status === 'generated' ? 'blue' : 'amber'}>{packet.status}</Pill>
+                        </div>
                       </div>
                     </div>
                   );

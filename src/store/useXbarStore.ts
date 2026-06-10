@@ -170,6 +170,7 @@ type XbarStore = {
     documentIds: string[];
     includesBillOfSale: boolean;
     createdBy: string;
+    downloadUrl?: string;
   }) => ActionResult & { packet?: SalePacketBuild };
   addOwnershipStake: (horseId: string, stake: Omit<OwnershipStake, 'id'>) => ActionResult;
   removeOwnershipStake: (horseId: string, stakeId: string) => ActionResult;
@@ -2462,6 +2463,7 @@ export const useXbarStore = create<XbarStore>()(
           includesBillOfSale: input.includesBillOfSale,
           status: 'generated',
           fileName: `sale-packet-${slug}-${todayStamp()}.pdf`,
+          downloadUrl: input.downloadUrl,
         };
         const auditEvent = createAuditEvent({
           actor: input.createdBy,

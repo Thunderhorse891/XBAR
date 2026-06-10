@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { generateDocumentFromTemplateRemote, hasBackendIdentity } from '@/lib/backendApi';
+import { useCloudStore } from '@/store/useCloudStore';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
 import { buildPrefilledDocument, documentTemplateLibrary, downloadHtmlFile, type DocumentTemplate, type DocumentTemplateTier } from '@/lib/documentTemplateLibrary';
@@ -45,9 +47,13 @@ export default function DocumentLibrary() {
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const subscription = useXbarStore((state) => state.subscription);
   const pushToast = useUiStore((state) => state.pushToast);
+  const navigate = useNavigate();
+  const session = useCloudStore((state) => state.session);
+  const workspaceId = useCloudStore((state) => state.workspaceId);
   const [activeTier, setActiveTier] = useState<DocumentTemplateTier>('Basic');
   const [selectedHorseId, setSelectedHorseId] = useState(horses[0]?.id ?? '');
   const [selectedTemplateId, setSelectedTemplateId] = useState(documentTemplateLibrary[0].id);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const selectedHorse = horses.find((horse) => horse.id === selectedHorseId) ?? horses[0];
   const selectedTemplate = documentTemplateLibrary.find((template) => template.id === selectedTemplateId) ?? documentTemplateLibrary[0];
@@ -82,6 +88,50 @@ export default function DocumentLibrary() {
     if (!prefilled) return;
     downloadHtmlFile(prefilled.fileName, prefilled.html);
     pushToast({ title: 'Document exported', message: `${prefilled.template.label} downloaded as a print-ready HTML report. Use browser print to save as PDF.`, tone: 'success' });
+  };
+
+  // Cloud workspaces generate the real PDF server-side; a tier refusal
+  // becomes an upgrade moment instead of a dead end.
+  const generatePdf = async () => {
+    if (!selectedHorse) return;
+    const auth = { workspaceId, accessToken: session?.access_token ?? '' };
+    if (!hasBackendIdentity(auth)) {
+      pushToast({
+        title: 'Sign in for PDF generation',
+        message: 'Server-side PDF generation needs a cloud workspace session. Use "Download report" + print to PDF in local mode.',
+        tone: 'warning',
+      });
+      return;
+    }
+    setIsGeneratingPdf(true);
+    const remote = await generateDocumentFromTemplateRemote(auth, {
+      templateId: selectedTemplate.id,
+      horseId: selectedHorse.id,
+    });
+    setIsGeneratingPdf(false);
+    if (remote.ok) {
+      if (typeof window !== 'undefined' && remote.downloadUrl) {
+        window.open(remote.downloadUrl, '_blank', 'noopener,noreferrer');
+      }
+      pushToast({
+        title: 'PDF generated',
+        message: remote.missingFields.length
+          ? `${remote.fileName} is ready. ${remote.missingFields.length} fields were left blank: ${remote.missingFields.slice(0, 4).join(', ')}.`
+          : `${remote.fileName} is ready and stored with this horse's documents.`,
+        tone: 'success',
+      });
+      return;
+    }
+    if (remote.tierBlock) {
+      pushToast({
+        title: `This template needs the ${remote.tierBlock.requiredPlan} plan`,
+        message: remote.message,
+        tone: 'warning',
+      });
+      navigate(`/subscriptions?plan=${encodeURIComponent(remote.tierBlock.requiredPlan)}`);
+      return;
+    }
+    pushToast({ title: 'PDF generation failed', message: remote.message, tone: 'error' });
   };
 
   const copyShareLink = () => {
@@ -158,6 +208,9 @@ export default function DocumentLibrary() {
               <div className="stack-item"><div className="stack-item__title">Missing before signature</div><div className="token-row">{prefilled.missingFields.length ? prefilled.missingFields.map((field) => <Pill key={field} tone="amber">{field}</Pill>) : <Pill tone="emerald">No required gaps flagged</Pill>}</div></div>
               <div className="inline-actions">
                 <button className="button button--primary button--compact" type="button" onClick={openPreview} disabled={locked}>Preview</button>
+                <button className="button button--primary button--compact" type="button" onClick={() => void generatePdf()} disabled={isGeneratingPdf}>
+                  {isGeneratingPdf ? 'Generating PDF…' : locked ? `Generate PDF (${selectedTemplate.minimumPlan}+)` : 'Generate PDF'}
+                </button>
                 <button className="button button--ghost button--compact" type="button" onClick={downloadDocument} disabled={locked}>Download report</button>
                 <button className="button button--ghost button--compact" type="button" onClick={() => window.print()} disabled={locked}>Print / save PDF</button>
                 <button className="button button--ghost button--compact" type="button" onClick={copyShareLink}>Copy secure link</button>

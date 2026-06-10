@@ -17,7 +17,7 @@ export async function loadHorseContext(supabase, workspaceId, horseId) {
       .maybeSingle(),
     supabase
       .from('documents')
-      .select('document_id, title, document_type, state, storage_path, mime_type, extracted_data, created_at')
+      .select('document_id, title, document_type, state, storage_path, mime_type, extracted_data, payload, created_at')
       .eq('workspace_id', workspaceId)
       .eq('horse_id', horseId)
       .order('created_at', { ascending: false }),
@@ -34,7 +34,19 @@ export async function loadHorseContext(supabase, workspaceId, horseId) {
     return { horse: null };
   }
 
-  const docs = documents || [];
+  // Rows written by the app's relational mirror keep file metadata and
+  // identity fields inside the payload jsonb rather than the dedicated
+  // columns, so normalize both shapes into one.
+  const docs = (documents || []).map((doc) => ({
+    ...doc,
+    storage_path: doc.storage_path || doc.payload?.storagePath || '',
+    mime_type: doc.mime_type || doc.payload?.mimeType || '',
+    extracted_data:
+      doc.extracted_data && Object.keys(doc.extracted_data).length
+        ? doc.extracted_data
+        : doc.payload?.entities || {},
+  }));
+  const horsePayload = horse.payload || {};
   const latestCoggins = docs.find((doc) => doc.document_type === 'Coggins');
   const latestExam = docs.find((doc) => doc.document_type === 'Vet Record');
   const ownershipRecord = ownership?.[0] || null;
@@ -42,13 +54,13 @@ export async function loadHorseContext(supabase, workspaceId, horseId) {
   const context = {
     horse: {
       name: horse.name,
-      registrationNumber: horse.registration_number,
-      registry: horse.registry,
-      breed: horse.breed,
-      color: horse.color,
-      birthdate: horse.birthdate,
-      gender: horse.gender,
-      microchip: horse.microchip,
+      registrationNumber: horse.registration_number || horsePayload.registrationNumber || '',
+      registry: horse.registry || horsePayload.registry || '',
+      breed: horse.breed || horsePayload.breed || '',
+      color: horse.color || horsePayload.color || '',
+      birthdate: horse.birthdate || horsePayload.birthdate || horsePayload.foaled || '',
+      gender: horse.gender || horsePayload.sex || '',
+      microchip: horse.microchip || horsePayload.microchip || '',
       barnName: horse.barn_name,
       status: horse.status,
     },
