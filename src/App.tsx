@@ -1,9 +1,6 @@
 import { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, HashRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { ActivationGuide } from './components/ActivationGuide';
-import { BuyerMomentum } from './components/BuyerMomentum';
 import ErrorBoundary from './components/ErrorBoundary';
-import { OperationalValuePulseConnected } from './components/OperationalValuePulseConnected';
 import { RequireCloudAuth } from './components/RequireCloudAuth';
 import { RequireSharedListings } from './components/RequireSubscriptionFeature';
 import { RequireWorkspaceSetup } from './components/RequireWorkspaceSetup';
@@ -17,6 +14,7 @@ import './routes/interactionSystem.css';
 import './routes/xbarCommandSystem.css';
 import './routes/metalBrandSystem.css';
 import './routes/commandCenterLocal.css';
+import './routes/premiumOperatingSystem.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Breeding = lazy(() => import('./routes/Breeding'));
@@ -97,17 +95,6 @@ function RouteTelemetry() {
   return null;
 }
 
-function DashboardWithActivation() {
-  return (
-    <>
-      <ActivationGuide />
-      <BuyerMomentum />
-      <OperationalValuePulseConnected />
-      <Dashboard />
-    </>
-  );
-}
-
 export default function App() {
   const Router = useHashRouting() ? HashRouter : BrowserRouter;
 
@@ -127,7 +114,7 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/setup" element={<RequireCloudAuth><SetupWorkspace /></RequireCloudAuth>} />
             <Route path="/" element={<RequireCloudAuth><RequireWorkspaceSetup><MainLayout /></RequireWorkspaceSetup></RequireCloudAuth>}>
-              <Route index element={<DashboardWithActivation />} />
+              <Route index element={<Dashboard />} />
               <Route path="horses" element={<Horses />} />
               <Route path="horses/:id" element={<HorseDetail />} />
               <Route path="documents" element={<Documents />} />
