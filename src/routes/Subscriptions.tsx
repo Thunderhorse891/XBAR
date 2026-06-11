@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
 import { startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency, formatDateLabel } from '@/lib/format';
@@ -8,6 +8,7 @@ import { productEvent, productEventNames } from '@/lib/productEvents';
 import { revenuePlanMatrix } from '@/lib/revenuePlanMatrix';
 import { trackRuntimeEvent } from '@/lib/runtimeEvents';
 import { getCheckoutReadiness, planOutcomes, recommendedTier } from '@/lib/subscriptionDecision';
+import { buildUsageMeters } from '@/lib/commercialEngine';
 import { subscriptionPlans } from '@/lib/subscriptionPlans';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -17,20 +18,13 @@ import './subscriptionExperience.css';
 
 const tiers: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
 
-function usagePercent(used: number, limit: number) {
-  return limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
-}
-
 export default function Subscriptions() {
   const [params] = useSearchParams();
-  const navigate = useNavigate();
   const requestedValue = params.get('plan');
   const requestedTier = tiers.find((tier) => tier === requestedValue);
   const subscription = useXbarStore((state) => state.subscription);
   const canManageBilling = useCurrentRoleCapability('manageBilling');
   const session = useCloudStore((state) => state.session);
-  const horses = useXbarStore((state) => state.horses);
-  const salePacketBuilds = useXbarStore((state) => state.salePacketBuilds);
   const workspaceId = useCloudStore((state) => state.workspaceId);
   const pushToast = useUiStore((state) => state.pushToast);
   const [checkoutTier, setCheckoutTier] = useState<SubscriptionTier | null>(null);
@@ -67,12 +61,7 @@ export default function Subscriptions() {
     setCheckoutTier(null);
   };
 
-  const usage = [
-    { label: 'Team seats', used: subscription.usage.seatsUsed, limit: subscription.usage.seatLimit, suffix: '' },
-    { label: 'Documents', used: subscription.usage.documentsProcessed, limit: subscription.usage.documentLimit, suffix: '' },
-    { label: 'Storage', used: subscription.usage.storageUsedGb, limit: subscription.usage.storageLimitGb, suffix: ' GB' },
-    { label: 'Shared access', used: subscription.usage.sharedAccessSeatsUsed, limit: subscription.usage.sharedAccessSeatLimit, suffix: '' },
-  ];
+  const usage = buildUsageMeters(subscription);
 
   return <>
     <PageHeader eyebrow="Subscription" title="Plan & billing" actions={<><Pill tone={billingEnabled && (hasManagedIdentity || anyPaymentLink) ? 'emerald' : 'amber'}>{billingEnabled ? (hasManagedIdentity || anyPaymentLink ? 'Secure checkout ready' : 'Sign-in required for checkout') : 'Managed billing paused'}</Pill><Pill tone="blue">{subscription.tier}</Pill></>} />
@@ -90,12 +79,13 @@ export default function Subscriptions() {
     <Panel eyebrow="Capacity" title="Usage pressure" description="Every meter has its next action — upgrade lands exactly when capacity tightens.">
       <div className="subscription-usage-grid">
         {usage.map((item) => {
-          const pct = usagePercent(item.used, item.limit);
+          const pct = item.percent;
           const nextTier = tiers[Math.min(tiers.indexOf(subscription.tier) + 1, tiers.length - 1)];
           return (
             <div className="subscription-usage-card" key={item.label}>
-              <div className="subscription-usage-card__top"><span>{item.label}</span><strong>{item.used}{item.suffix} / {item.limit}{item.suffix}</strong></div>
-              <ProgressBar value={pct} tone={pct >= 95 ? 'rose' : pct >= 80 ? 'amber' : 'blue'} />
+              <div className="subscription-usage-card__top"><span>{item.label}</span><strong>{item.used} / {item.limit}</strong></div>
+              <ProgressBar value={pct} tone={item.pressure === 'blocked' ? 'rose' : item.pressure === 'upgrade' || item.pressure === 'warning' ? 'amber' : 'blue'} />
+              <p className="stack-item__copy">{item.message}</p>
               {pct >= 80 && nextTier !== subscription.tier ? (
                 <button className="button button--primary button--compact" type="button" style={{ marginTop: 8 }} onClick={() => void beginCheckout(nextTier)}>
                   {pct >= 95 ? `At capacity — upgrade to ${nextTier}` : `Running tight — upgrade to ${nextTier}`}
@@ -104,18 +94,6 @@ export default function Subscriptions() {
             </div>
           );
         })}
-        <div className="subscription-usage-card">
-          <div className="subscription-usage-card__top"><span>Horses under management</span><strong>{horses.length}</strong></div>
-          <p className="stack-item__copy">Every horse multiplies document, proof, and packet volume.</p>
-          <button className="button button--ghost button--compact" type="button" onClick={() => navigate('/horses?new=1')}>Add a horse</button>
-        </div>
-        <div className="subscription-usage-card">
-          <div className="subscription-usage-card__top"><span>Sale packets generated</span><strong>{salePacketBuilds.length}</strong></div>
-          <p className="stack-item__copy">{subscription.tier === 'Starter' ? 'Watermarked packets and buyer deal rooms unlock on Professional.' : 'Watermarked, buyer-attributed, audit-logged.'}</p>
-          {subscription.tier === 'Starter'
-            ? <button className="button button--primary button--compact" type="button" onClick={() => void beginCheckout('Professional')}>Unlock with Professional</button>
-            : <button className="button button--ghost button--compact" type="button" onClick={() => navigate('/documents')}>Start sale packet generator</button>}
-        </div>
       </div>
     </Panel>
     <Panel eyebrow="Choose your operating level" title="Plans"><div className="subscription-plan-grid">{tiers.map((tier) => {
@@ -125,7 +103,7 @@ export default function Subscriptions() {
       const highlighted = tier === decisionTier;
       const busy = checkoutTier === tier;
       const readiness = getCheckoutReadiness({ billingEnabled, canManageBilling, hasManagedIdentity, hasPaymentLink: Boolean(getStripePaymentLink(tier)), checkoutInProgress: checkoutTier !== null });
-      return <article id={`plan-${tier.replace(/\s/g, '-').toLowerCase()}`} className={`subscription-plan${highlighted ? ' subscription-plan--recommended' : ''}`} key={tier}>{highlighted && <span className="subscription-plan__badge">{requestedTier ? 'Your selection' : current ? 'Current fit' : 'Next operating level'}</span>}<div className="subscription-plan__name">{tier}</div><div className="subscription-plan__fit">{planProfile.fit}</div><div className="subscription-plan__price">{formatCurrency(config.monthlyRate)}<small>/month</small></div><div className="subscription-plan__limits"><span>{config.limits.seatLimit} team seats</span><span>{config.limits.documentLimit.toLocaleString()} documents · {config.limits.storageLimitGb.toLocaleString()} GB</span><span>{config.limits.sharedAccessSeatLimit} shared-access seats</span></div><ul className="subscription-plan__features">{planProfile.features.map((feature) => <li key={feature.label}>{feature.label}</li>)}</ul>{current ? <button className="button button--ghost subscription-plan__action" type="button" disabled>Current plan</button> : <button className="button button--primary subscription-plan__action" type="button" disabled={!readiness.ready} onClick={() => void beginCheckout(tier)}>{busy ? 'Opening secure checkout...' : `Choose ${tier}`}</button>}<div className="subscription-checkout-note">{current ? 'Your current operating capacity.' : readiness.reason}</div></article>;
+      return <article id={`plan-${tier.replace(/\s/g, '-').toLowerCase()}`} className={`subscription-plan${highlighted ? ' subscription-plan--recommended' : ''}`} key={tier}>{highlighted && <span className="subscription-plan__badge">{requestedTier ? 'Your selection' : current ? 'Current fit' : 'Next operating level'}</span>}<div className="subscription-plan__name">{tier}</div><div className="subscription-plan__fit">{planProfile.fit}</div><div className="subscription-plan__price">{formatCurrency(config.monthlyRate)}<small>/month</small></div><div className="subscription-plan__limits"><span>{config.limits.horseLimit.toLocaleString()} horses · {config.limits.seatLimit} team seats</span><span>{config.limits.documentLimit.toLocaleString()} documents · {config.limits.storageLimitGb.toLocaleString()} GB</span><span>{config.limits.salePacketLimit.toLocaleString()} sale packets · {config.limits.sharedAccessSeatLimit} shared-access seats</span></div><ul className="subscription-plan__features">{planProfile.features.map((feature) => <li key={feature.label}>{feature.label}</li>)}</ul>{current ? <button className="button button--ghost subscription-plan__action" type="button" disabled>Current plan</button> : <button className="button button--primary subscription-plan__action" type="button" disabled={!readiness.ready} onClick={() => void beginCheckout(tier)}>{busy ? 'Opening secure checkout...' : `Choose ${tier}`}</button>}<div className="subscription-checkout-note">{current ? 'Your current operating capacity.' : readiness.reason}</div></article>;
     })}</div></Panel>
   </>;
 }

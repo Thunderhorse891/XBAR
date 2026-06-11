@@ -1,4 +1,16 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import './confirmActionDialog.css';
 
 /*
@@ -35,31 +47,13 @@ export function ConfirmActionDialog({
 }: ConfirmActionDialogProps) {
   const [checked, setChecked] = useState<boolean[]>([]);
   const [typed, setTyped] = useState('');
-  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (open) {
       setChecked(acknowledgements.map(() => false));
       setTyped('');
-      const frame = requestAnimationFrame(() => {
-        const focusable = panelRef.current?.querySelector<HTMLElement>('input, button');
-        focusable?.focus();
-      });
-      return () => cancelAnimationFrame(frame);
     }
-    return undefined;
   }, [open, acknowledgements.length]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onCancel();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, onCancel]);
-
-  if (!open) return null;
 
   const allAcknowledged = checked.every(Boolean);
   const textMatches = !requireText || typed === requireText;
@@ -71,52 +65,45 @@ export function ConfirmActionDialog({
       : '';
 
   return (
-    <div className="confirm-dialog__overlay" role="presentation" onClick={onCancel}>
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="confirm-dialog-title"
-        className={`confirm-dialog confirm-dialog--${tone}`}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <h2 id="confirm-dialog-title" className="confirm-dialog__title">
-          {title}
-        </h2>
-
-        <ul className="confirm-dialog__consequences">
-          {consequences.map((line) => (
-            <li key={line}>{line}</li>
-          ))}
-        </ul>
+    <AlertDialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onCancel(); }}>
+      <AlertDialogContent className={`confirm-dialog confirm-dialog--${tone}`}>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="confirm-dialog__title">{title}</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div>
+              <ul className="confirm-dialog__consequences">
+                {consequences.map((line) => <li key={line}>{line}</li>)}
+              </ul>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
 
         {proofSummary && <div className="confirm-dialog__proof">{proofSummary}</div>}
 
         {acknowledgements.length > 0 && (
           <div className="confirm-dialog__acks">
             {acknowledgements.map((text, index) => (
-              <label key={text} className="confirm-dialog__ack">
-                <input
-                  type="checkbox"
+              <div key={text} className="confirm-dialog__ack">
+                <Checkbox
+                  id={`confirm-dialog-ack-${index}`}
                   checked={checked[index] ?? false}
-                  onChange={(event) =>
-                    setChecked((previous) => previous.map((value, i) => (i === index ? event.target.checked : value)))
+                  onCheckedChange={(value) =>
+                    setChecked((previous) => previous.map((item, i) => (i === index ? Boolean(value) : item)))
                   }
                 />
-                <span>{text}</span>
-              </label>
+                <Label htmlFor={`confirm-dialog-ack-${index}`}>{text}</Label>
+              </div>
             ))}
           </div>
         )}
 
         {requireText && (
           <div className="confirm-dialog__type-check">
-            <label htmlFor="confirm-dialog-type">
+            <Label htmlFor="confirm-dialog-type">
               Type <strong>{requireText}</strong> to confirm
-            </label>
-            <input
+            </Label>
+            <Input
               id="confirm-dialog-type"
-              type="text"
               value={typed}
               onChange={(event) => setTyped(event.target.value)}
               autoComplete="off"
@@ -125,26 +112,21 @@ export function ConfirmActionDialog({
           </div>
         )}
 
-        {blockerHint && (
-          <p className="confirm-dialog__hint" role="status">
-            {blockerHint}
-          </p>
-        )}
+        {blockerHint && <p className="confirm-dialog__hint" role="status">{blockerHint}</p>}
 
-        <div className="confirm-dialog__actions">
-          <button type="button" className="confirm-dialog__cancel" onClick={onCancel}>
-            Cancel
-          </button>
-          <button
+        <AlertDialogFooter className="confirm-dialog__actions">
+          <Button type="button" variant="outline" className="confirm-dialog__cancel" onClick={onCancel}>Cancel</Button>
+          <Button
             type="button"
+            variant={tone === 'danger' ? 'destructive' : 'default'}
             className={`confirm-dialog__confirm confirm-dialog__confirm--${tone}`}
             disabled={!ready}
             onClick={onConfirm}
           >
             {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

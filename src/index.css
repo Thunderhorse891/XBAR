@@ -40,6 +40,26 @@
   --brand-gunmetal: #2C3038;
   --brand-charcoal: #1A1D22;
   --brand-dark: #0D0F12;
+  --background: 210 33% 98%;
+  --foreground: 211 32% 13%;
+  --card: 0 0% 100%;
+  --card-foreground: 211 32% 13%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 211 32% 13%;
+  --primary: 220 100% 59%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 214 34% 94%;
+  --secondary-foreground: 213 28% 25%;
+  --muted-token: 214 30% 95%;
+  --muted-foreground: 213 12% 43%;
+  --accent: 214 72% 95%;
+  --accent-foreground: 220 83% 44%;
+  --destructive: 356 51% 50%;
+  --destructive-foreground: 0 0% 100%;
+  --border-token: 212 29% 89%;
+  --input: 212 29% 82%;
+  --ring: 220 100% 59%;
+  --radius: 0.625rem;
 }
 
 * {

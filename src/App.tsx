@@ -5,8 +5,8 @@ import { RequireCloudAuth } from './components/RequireCloudAuth';
 import { RequireSharedListings } from './components/RequireSubscriptionFeature';
 import { RequireWorkspaceSetup } from './components/RequireWorkspaceSetup';
 import { SubscriptionEnforcement } from './components/SubscriptionEnforcement';
-import { ToastViewport } from './components/ToastViewport';
 import { InteractionShell } from './components/InteractionSystem';
+import { Toaster } from './components/ui/sonner';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
 import { useCloudStore } from './store/useCloudStore';
 import './routes/operationsHierarchy.css';
@@ -101,7 +101,7 @@ export default function App() {
   return (
     <Router>
       <ErrorBoundary>
-        <ToastViewport />
+        <Toaster position="top-right" richColors closeButton />
         <InteractionShell />
         <SubscriptionEnforcement />
         <RouteTelemetry />

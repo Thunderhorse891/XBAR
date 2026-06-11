@@ -88,6 +88,7 @@ export default function HorseDetail() {
   const createSalesLead = useXbarStore((state) => state.createSalesLead);
   const updateHorse = useXbarStore((state) => state.updateHorse);
   const deleteHorse = useXbarStore((state) => state.deleteHorse);
+  const decideDocumentFact = useXbarStore((state) => state.decideDocumentFact);
   const currentRole = useXbarStore((state) => state.currentRole);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const session = useCloudStore((state) => state.session);
@@ -99,6 +100,7 @@ export default function HorseDetail() {
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
   const canEditHorse = useCurrentRoleCapability('editHorse');
   const canManageSales = useCurrentRoleCapability('manageSales');
+  const canReviewDocuments = useCurrentRoleCapability('reviewDocuments');
 
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [mediaKind, setMediaKind] = useState<GalleryAsset['kind']>('Hero');
@@ -407,7 +409,16 @@ export default function HorseDetail() {
                 href={publicShareUrl}
                 target="_blank"
                 rel="noreferrer"
-                onClick={() => void recordSharedChannel(horse.id, 'Direct Link')}
+                onClick={(event) => {
+                  event.preventDefault();
+                  void recordSharedChannel(horse.id, 'Direct Link').then((result) => {
+                    if (!result.ok) {
+                      pushToast({ title: 'Sale listing blocked', message: result.message, tone: 'error' });
+                      return;
+                    }
+                    if (typeof window !== 'undefined') window.open(publicShareUrl, '_blank', 'noopener,noreferrer');
+                  });
+                }}
               >
                 <SharedAccessIcon className="h-4 w-4" />
                 Open sale listing
@@ -819,11 +830,24 @@ export default function HorseDetail() {
               <EmptyState compact title="No documents linked" description="Upload docs to build the record." />
             )}
             {!!horse.documentFacts.length && (
-              <div className="token-row">
+              <div className="stack-list">
                 {horse.documentFacts.map((fact) => (
-                  <Pill key={fact.id} tone="blue">
-                    {fact.label}: {fact.value}
-                  </Pill>
+                  <div className="stack-item" key={fact.id}>
+                    <div className="stack-item__top">
+                      <div><div className="stack-item__title">{fact.label}: {fact.value}</div><div className="stack-item__copy">{Math.round(fact.confidence * 100)}% OCR confidence</div></div>
+                      <Pill tone={fact.decision === 'Accepted' ? 'emerald' : fact.decision === 'Rejected' ? 'rose' : 'amber'}>{fact.decision ?? 'Needs decision'}</Pill>
+                    </div>
+                    <div className="inline-actions">
+                      <button className="button button--primary button--compact" type="button" disabled={!canReviewDocuments || fact.decision === 'Accepted'} onClick={() => {
+                        const result = decideDocumentFact(horse.id, fact.id, 'Accepted');
+                        pushToast({ title: result.ok ? 'OCR fact accepted' : 'Fact decision blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                      }}>Accept into record</button>
+                      <button className="button button--ghost button--compact" type="button" disabled={!canReviewDocuments || fact.decision === 'Rejected'} onClick={() => {
+                        const result = decideDocumentFact(horse.id, fact.id, 'Rejected');
+                        pushToast({ title: result.ok ? 'OCR fact rejected' : 'Fact decision blocked', message: result.message, tone: result.ok ? 'warning' : 'error' });
+                      }}>Reject fact</button>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}

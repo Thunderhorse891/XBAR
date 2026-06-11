@@ -4,7 +4,7 @@ import { XbarMark } from '@/components/BrandMark';
 import { isStaticPreviewHost, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
-import { useWorkspaceReady, useXbarStore } from '@/store/useXbarStore';
+import { useWorkspaceHydrated, useWorkspaceReady, useXbarStore } from '@/store/useXbarStore';
 import './authExperience.css';
 import './setupExperience.css';
 import './setupAssetFallback.css';
@@ -30,6 +30,7 @@ const proofTiles = [
 
 export default function SetupWorkspace() {
   const navigate = useNavigate();
+  const workspaceHydrated = useWorkspaceHydrated();
   const workspaceReady = useWorkspaceReady();
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const initializeWorkspace = useXbarStore((state) => state.initializeWorkspace);
@@ -59,6 +60,10 @@ export default function SetupWorkspace() {
     }
     return status === 'signed-in' ? 'Cloud ready' : 'Sign-in pending';
   }, [status, supabaseReady]);
+
+  if (!workspaceHydrated) {
+    return <div className="app-loading-shell">Loading ranch workspace...</div>;
+  }
 
   if (workspaceReady) {
     return <Navigate to="/" replace />;

@@ -1,4 +1,7 @@
 import type { CSSProperties, KeyboardEvent, MouseEventHandler, ReactNode } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useUiStore } from '@/store/useUiStore';
 
 type Tone = 'blue' | 'slate' | 'emerald' | 'amber' | 'rose';
@@ -58,7 +61,7 @@ export function Panel({
   const statefulClassName = surfaceId ? `panel--stateful panel--${mode}` : '';
 
   return (
-    <section
+    <Card
       className={`panel ${onContextMenu ? 'panel--contextual' : ''} ${statefulClassName} ${className}`.trim()}
       data-surface-id={surfaceId}
       onContextMenu={onContextMenu}
@@ -109,7 +112,7 @@ export function Panel({
         ) : null}
       </div>
       {mode === 'collapsed' ? null : children}
-    </section>
+    </Card>
   );
 }
 
@@ -136,7 +139,7 @@ export function MetricCard({
 }) {
   const interactive = Boolean(onClick || onContextMenu);
   return (
-    <div
+    <Card
       className={`metric-card metric-card--${tone}${interactive ? ' metric-card--interactive' : ''} ${className}`.trim()}
       title={title ?? (interactive ? `${label}. Press Enter to open${onContextMenu ? ' or Shift+F10 for actions' : ''}.` : undefined)}
       onClick={onClick}
@@ -166,7 +169,7 @@ export function MetricCard({
       <div className="metric-card__value">{value}</div>
       {showDetail && detail ? <div className="metric-card__detail">{detail}</div> : null}
       {interactive ? <span className="interactive-cue" aria-hidden="true">{onContextMenu ? 'Open / actions' : 'Open'}</span> : null}
-    </div>
+    </Card>
   );
 }
 
@@ -177,7 +180,7 @@ export function Pill({
   children: ReactNode;
   tone?: Tone;
 }) {
-  return <span className={`pill pill--${tone}`}>{children}</span>;
+  return <Badge variant="outline" className={`pill pill--${tone}`}>{children}</Badge>;
 }
 
 export function SurfaceTabs({
@@ -192,20 +195,19 @@ export function SurfaceTabs({
   className?: string;
 }) {
   return (
-    <div className={`surface-tabs ${className}`.trim()} role="tablist" aria-orientation="horizontal">
-      {items.map((item) => (
-        <button
-          key={item}
-          type="button"
-          role="tab"
-          aria-selected={active === item}
-          className={`surface-tab${active === item ? ' surface-tab--active' : ''}`}
-          onClick={() => onChange(item)}
-        >
-          {item}
-        </button>
-      ))}
-    </div>
+    <Tabs value={active} onValueChange={onChange}>
+      <TabsList className={`surface-tabs ${className}`.trim()}>
+        {items.map((item) => (
+          <TabsTrigger
+            key={item}
+            value={item}
+            className={`surface-tab${active === item ? ' surface-tab--active' : ''}`}
+          >
+            {item}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
   );
 }
 

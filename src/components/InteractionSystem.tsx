@@ -4,7 +4,6 @@ import {
   isValidElement,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type KeyboardEvent,
   type ReactElement,
@@ -12,6 +11,24 @@ import {
 } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ContextMenu, type ContextMenuItem } from '@/components/ContextMenu';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem as CommandMenuItem,
+  CommandList,
+  CommandShortcut,
+} from '@/components/ui/command';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { interactionHint, type SurfaceMode } from '@/lib/interactionState';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -166,19 +183,22 @@ export function RememberedAccordion({
   const send = useUiStore((state) => state.sendSurfaceEvent);
   const expanded = mode !== 'collapsed';
   return (
-    <section className={`remembered-accordion${expanded ? ' remembered-accordion--expanded' : ''}`}>
-      <button
-        className="remembered-accordion__trigger"
-        type="button"
-        aria-expanded={expanded}
-        aria-controls={`${id}-content`}
-        onClick={() => send(id, 'toggle')}
-      >
-        <span><strong>{title}</strong>{summary ? <small>{summary}</small> : null}</span>
-        <span aria-hidden="true">{expanded ? '-' : '+'}</span>
-      </button>
-      {expanded ? <div id={`${id}-content`} className="remembered-accordion__content">{children}</div> : null}
-    </section>
+    <Accordion
+      type="single"
+      collapsible
+      value={expanded ? id : ''}
+      onValueChange={(value) => {
+        if (Boolean(value) !== expanded) send(id, 'toggle');
+      }}
+      className={`remembered-accordion${expanded ? ' remembered-accordion--expanded' : ''}`}
+    >
+      <AccordionItem value={id}>
+        <AccordionTrigger className="remembered-accordion__trigger">
+          <span><strong>{title}</strong>{summary ? <small>{summary}</small> : null}</span>
+        </AccordionTrigger>
+        <AccordionContent className="remembered-accordion__content">{children}</AccordionContent>
+      </AccordionItem>
+    </Accordion>
   );
 }
 
@@ -249,9 +269,6 @@ export function InteractionShell() {
   const exitFocus = useUiStore((state) => state.exitFocusMode);
   const focusedSurfaceId = useUiStore((state) => state.focusedSurfaceId);
   const [query, setQuery] = useState('');
-  const [activeIndex, setActiveIndex] = useState(0);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const drawerCloseRef = useRef<HTMLButtonElement | null>(null);
 
   const commands = useMemo<CommandItem[]>(() => [
     ...routeCommands,
@@ -292,18 +309,12 @@ export function InteractionShell() {
   useEffect(() => {
     if (!paletteOpen) return;
     setQuery('');
-    setActiveIndex(0);
-    requestAnimationFrame(() => inputRef.current?.focus());
   }, [paletteOpen]);
 
   useEffect(() => {
     document.body.classList.toggle('xbar-focus-mode', Boolean(focusedSurfaceId));
     return () => document.body.classList.remove('xbar-focus-mode');
   }, [focusedSurfaceId]);
-
-  useEffect(() => {
-    if (drawer) requestAnimationFrame(() => drawerCloseRef.current?.focus());
-  }, [drawer]);
 
   const run = (item: CommandItem) => {
     setPaletteOpen(false);
@@ -312,38 +323,44 @@ export function InteractionShell() {
 
   return (
     <>
-      {paletteOpen ? <div className="command-palette-backdrop" role="presentation" onMouseDown={() => setPaletteOpen(false)}>
-        <section className="command-palette" role="dialog" aria-modal="true" aria-label="Search XBAR" onMouseDown={(event) => event.stopPropagation()}>
-          <div className="command-palette__search">
-            <input
-              ref={inputRef}
-              value={query}
-              onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); }}
-              onKeyDown={(event) => {
-                if (event.key === 'ArrowDown') { event.preventDefault(); setActiveIndex((current) => Math.min(results.length - 1, current + 1)); }
-                if (event.key === 'ArrowUp') { event.preventDefault(); setActiveIndex((current) => Math.max(0, current - 1)); }
-                if (event.key === 'Enter' && results[activeIndex]) { event.preventDefault(); run(results[activeIndex]); }
-              }}
-              placeholder="Search horses, documents, buyers, and modules"
-              aria-label="Search XBAR"
-            />
-            <kbd>Esc</kbd>
-          </div>
-          <div className="command-palette__results" role="listbox" aria-label="Search results">
-            {results.length ? results.map((item, index) => <button key={item.id} className={`command-palette__result${index === activeIndex ? ' command-palette__result--active' : ''}`} type="button" role="option" aria-selected={index === activeIndex} onMouseEnter={() => setActiveIndex(index)} onClick={() => run(item)}><span><strong>{item.label}</strong><small>{item.detail}</small></span><em>{item.group}</em></button>) : <div className="command-palette__empty">No matching records or modules.</div>}
-          </div>
-          <footer className="command-palette__footer"><span>Up/down to move</span><span>Enter to open</span><span>Ctrl/Cmd+K anywhere</span></footer>
-        </section>
-      </div> : null}
+      <CommandDialog open={paletteOpen} onOpenChange={setPaletteOpen}>
+        <CommandInput
+          value={query}
+          onValueChange={setQuery}
+          placeholder="Search horses, documents, buyers, and modules"
+          aria-label="Search XBAR"
+        />
+        <CommandList className="command-palette__results">
+          <CommandEmpty>No matching records or modules.</CommandEmpty>
+          <CommandGroup heading="Open in XBAR">
+            {results.map((item) => (
+              <CommandMenuItem
+                key={item.id}
+                value={`${item.label} ${item.detail} ${item.group}`}
+                onSelect={() => run(item)}
+                className="command-palette__result"
+              >
+                <span><strong>{item.label}</strong><small>{item.detail}</small></span>
+                <CommandShortcut>{item.group}</CommandShortcut>
+              </CommandMenuItem>
+            ))}
+          </CommandGroup>
+        </CommandList>
+      </CommandDialog>
 
-      {drawer ? <div className="right-drawer-backdrop" role="presentation" onMouseDown={closeDrawer}>
-        <aside className="right-drawer" role="dialog" aria-modal="true" aria-labelledby="right-drawer-title" onMouseDown={(event) => event.stopPropagation()}>
-          <header className="right-drawer__header"><span>{drawer.eyebrow ? <small>{drawer.eyebrow}</small> : null}<h2 id="right-drawer-title">{drawer.title}</h2></span><button ref={drawerCloseRef} type="button" onClick={closeDrawer} aria-label="Close details">Close</button></header>
-          {drawer.description ? <p className="right-drawer__description">{drawer.description}</p> : null}
-          {drawer.facts?.length ? <dl className="right-drawer__facts">{drawer.facts.map((fact) => <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}</dd></div>)}</dl> : null}
-          {drawer.actions?.length ? <div className="right-drawer__actions">{drawer.actions.map((action) => <Link key={action.path} className="button button--primary" to={action.path}>{action.label}</Link>)}</div> : null}
-        </aside>
-      </div> : null}
+      <Sheet open={Boolean(drawer)} onOpenChange={(nextOpen) => { if (!nextOpen) closeDrawer(); }}>
+        {drawer ? (
+          <SheetContent className="right-drawer" side="right">
+            <SheetHeader className="right-drawer__header">
+              {drawer.eyebrow ? <small>{drawer.eyebrow}</small> : null}
+              <SheetTitle id="right-drawer-title">{drawer.title}</SheetTitle>
+              {drawer.description ? <SheetDescription className="right-drawer__description">{drawer.description}</SheetDescription> : null}
+            </SheetHeader>
+            {drawer.facts?.length ? <dl className="right-drawer__facts">{drawer.facts.map((fact) => <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}</dd></div>)}</dl> : null}
+            {drawer.actions?.length ? <SheetFooter className="right-drawer__actions">{drawer.actions.map((action) => <Link key={action.path} className="button button--primary" to={action.path}>{action.label}</Link>)}</SheetFooter> : null}
+          </SheetContent>
+        ) : null}
+      </Sheet>
     </>
   );
 }

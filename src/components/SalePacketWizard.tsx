@@ -1,5 +1,18 @@
 import { useMemo, useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { createSalePacketRemote, hasBackendIdentity } from '@/lib/backendApi';
 import { assessRevenueAtRisk, computeHorseEconomics } from '@/lib/businessIntelligence';
 import { formatCompactCurrency } from '@/lib/format';
@@ -17,6 +30,12 @@ import './confirmActionDialog.css';
  */
 
 const STEPS = ['Horse', 'Release gate', 'Proof', 'Buyer', 'Generate'] as const;
+
+type BuyerPacketForm = {
+  buyerName: string;
+  buyerEmail: string;
+  watermark: string;
+};
 
 export function SalePacketWizard({
   open,
@@ -45,11 +64,14 @@ export function SalePacketWizard({
   const [horseId, setHorseId] = useState<string>(initialHorseId ?? '');
   const [selectedDocIds, setSelectedDocIds] = useState<string[] | null>(null);
   const [cogginsDisclosed, setCogginsDisclosed] = useState(false);
-  const [buyerName, setBuyerName] = useState('');
-  const [buyerEmail, setBuyerEmail] = useState('');
-  const [watermark, setWatermark] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generated, setGenerated] = useState<{ packetId: string; downloadUrl?: string } | null>(null);
+  const buyerForm = useForm<BuyerPacketForm>({
+    defaultValues: { buyerName: '', buyerEmail: '', watermark: '' },
+  });
+  const buyerName = buyerForm.watch('buyerName');
+  const buyerEmail = buyerForm.watch('buyerEmail');
+  const watermark = buyerForm.watch('watermark');
 
   const effectiveHorseId = horseId || initialHorseId || '';
   const horse = horses.find((item) => item.id === effectiveHorseId);
@@ -79,7 +101,7 @@ export function SalePacketWizard({
 
   const reset = () => {
     setStep(0); setHorseId(''); setSelectedDocIds(null); setCogginsDisclosed(false);
-    setBuyerName(''); setBuyerEmail(''); setWatermark(''); setGenerated(null);
+    buyerForm.reset(); setGenerated(null);
   };
   const close = () => { reset(); onClose(); };
 
@@ -166,16 +188,15 @@ export function SalePacketWizard({
   };
 
   return (
-    <div className="confirm-dialog__overlay" role="presentation" onClick={close}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Sale packet generator"
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) close(); }}>
+      <DialogContent
         className="confirm-dialog"
         style={{ width: 'min(640px, 100%)' }}
-        onClick={(event) => event.stopPropagation()}
       >
-        <h2 className="confirm-dialog__title">Sale packet generator</h2>
+        <DialogHeader>
+          <DialogTitle className="confirm-dialog__title">Sale packet generator</DialogTitle>
+          <DialogDescription>Build a legally gated proof packet, open the buyer deal room, and protect margin.</DialogDescription>
+        </DialogHeader>
         <div style={{ display: 'flex', gap: 6, marginTop: 12 }} aria-label={`Step ${step + 1} of ${STEPS.length}`}>
           {STEPS.map((label, index) => (
             <div key={label} style={{ flex: 1 }}>
@@ -188,14 +209,28 @@ export function SalePacketWizard({
         <div style={{ marginTop: 16, minHeight: 220 }}>
           {step === 0 && (
             <div className="confirm-dialog__acks">
-              {horses.filter((item) => (item.sale?.askPrice ?? 0) > 0 || item.status === 'Sale Prep' || item.id === effectiveHorseId).map((item) => (
-                <label key={item.id} className="confirm-dialog__ack">
-                  <input type="radio" name="wizard-horse" checked={effectiveHorseId === item.id} onChange={() => { setHorseId(item.id); setSelectedDocIds(null); setCogginsDisclosed(false); }} />
-                  <span>
-                    <strong>{item.name}</strong> — {item.sale?.askPrice ? `asking ${formatCompactCurrency(item.sale.askPrice)}` : 'no asking price set'} · {item.status}
-                  </span>
-                </label>
-              ))}
+              <Select
+                value={effectiveHorseId}
+                onValueChange={(value) => {
+                  setHorseId(value);
+                  setSelectedDocIds(null);
+                  setCogginsDisclosed(false);
+                }}
+              >
+                <SelectTrigger aria-label="Select horse for sale packet">
+                  <SelectValue placeholder="Select a sale horse" />
+                </SelectTrigger>
+                <SelectContent>
+                  {horses
+                    .filter((item) => (item.sale?.askPrice ?? 0) > 0 || item.status === 'Sale Prep' || item.id === effectiveHorseId)
+                    .map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {item.name} · {item.sale?.askPrice ? formatCompactCurrency(item.sale.askPrice) : 'No asking price'} · {item.status}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              {horse ? <p><strong>{horse.name}</strong> is selected for release-gate review.</p> : null}
               {horses.length === 0 && <p>No horses yet. Close this and add your first horse to begin a sale.</p>}
             </div>
           )}
@@ -224,8 +259,8 @@ export function SalePacketWizard({
               )}
               {(cogginsBlocked || careHold) && ownershipBlockers.length === 0 && (
                 <div className="confirm-dialog__acks" style={{ marginTop: 8 }}>
-                  <label className="confirm-dialog__ack">
-                    <input type="checkbox" checked={cogginsDisclosed} onChange={(event) => setCogginsDisclosed(event.target.checked)} />
+                  <label className="confirm-dialog__ack" htmlFor="wizard-coggins-disclosure">
+                    <Checkbox id="wizard-coggins-disclosure" checked={cogginsDisclosed} onCheckedChange={(value) => setCogginsDisclosed(Boolean(value))} />
                     <span>
                       {cogginsBlocked && careHold
                         ? 'No current Coggins is on file and this horse is under active medical review. I will disclose both to the buyer.'
@@ -260,30 +295,71 @@ export function SalePacketWizard({
                   <button type="button" className="button button--ghost button--compact" onClick={() => { close(); navigate(`/documents?upload=1&horse=${effectiveHorseId}`); }}>Upload proof now</button>
                 </p>
               )}
-              {readyDocs.map((document) => (
-                <label key={document.id} className="confirm-dialog__ack">
-                  <input
-                    type="checkbox"
-                    checked={docSelection.includes(document.id)}
-                    onChange={(event) =>
-                      setSelectedDocIds(event.target.checked ? [...docSelection, document.id] : docSelection.filter((id) => id !== document.id))
-                    }
-                  />
-                  <span><strong>{document.title}</strong> — {document.type}</span>
-                </label>
-              ))}
+              {readyDocs.length > 0 ? (
+                <Table aria-label="Approved sale packet documents">
+                  <TableHeader>
+                    <TableRow><TableHead>Include</TableHead><TableHead>Document</TableHead><TableHead>Type</TableHead></TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {readyDocs.map((document) => (
+                      <TableRow key={document.id}>
+                        <TableCell>
+                          <Checkbox
+                            aria-label={`Include ${document.title}`}
+                            checked={docSelection.includes(document.id)}
+                            onCheckedChange={(value) =>
+                              setSelectedDocIds(Boolean(value) ? [...docSelection, document.id] : docSelection.filter((id) => id !== document.id))
+                            }
+                          />
+                        </TableCell>
+                        <TableCell><strong>{document.title}</strong></TableCell>
+                        <TableCell>{document.type}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : null}
             </div>
           )}
 
           {step === 3 && (
-            <div className="confirm-dialog__type-check" style={{ marginTop: 0, gap: 10 }}>
-              <label htmlFor="wizard-buyer-name">Buyer name (opens the deal room and creates a lead)</label>
-              <input id="wizard-buyer-name" type="text" value={buyerName} onChange={(event) => setBuyerName(event.target.value)} placeholder="John Smith" />
-              <label htmlFor="wizard-buyer-email">Buyer email (optional)</label>
-              <input id="wizard-buyer-email" type="email" value={buyerEmail} onChange={(event) => setBuyerEmail(event.target.value)} placeholder="buyer@example.com" />
-              <label htmlFor="wizard-watermark">Watermark — stamped on every page</label>
-              <input id="wizard-watermark" type="text" value={watermark} onChange={(event) => setWatermark(event.target.value)} placeholder={defaultWatermark} />
-            </div>
+            <Form {...buyerForm}>
+              <form className="confirm-dialog__type-check" style={{ marginTop: 0, gap: 10 }} onSubmit={(event) => event.preventDefault()}>
+                <FormField
+                  control={buyerForm.control}
+                  name="buyerName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Buyer name</FormLabel>
+                      <FormControl><Input {...field} placeholder="John Smith" /></FormControl>
+                      <FormDescription>Opens the deal room and creates a buyer lead.</FormDescription>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={buyerForm.control}
+                  name="buyerEmail"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Buyer email</FormLabel>
+                      <FormControl><Input {...field} type="email" placeholder="buyer@example.com" /></FormControl>
+                      <FormDescription>Optional. Used for packet attribution and follow-up.</FormDescription>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={buyerForm.control}
+                  name="watermark"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Watermark</FormLabel>
+                      <FormControl><Input {...field} placeholder={defaultWatermark} /></FormControl>
+                      <FormDescription>Stamped on every released page.</FormDescription>
+                    </FormItem>
+                  )}
+                />
+              </form>
+            </Form>
           )}
 
           {step === 4 && !generated && horse && (
@@ -345,7 +421,7 @@ export function SalePacketWizard({
           )}
         </div>
         {stepBlockReason && <p className="confirm-dialog__hint">{stepBlockReason}</p>}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

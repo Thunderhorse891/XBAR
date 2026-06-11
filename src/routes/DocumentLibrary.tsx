@@ -4,9 +4,11 @@ import { generateDocumentFromTemplateRemote, hasBackendIdentity } from '@/lib/ba
 import { useCloudStore } from '@/store/useCloudStore';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
+import { UsageMeterPanel } from '@/components/UsageMeterPanel';
 import { buildPrefilledDocument, documentTemplateLibrary, downloadHtmlFile, type DocumentTemplate, type DocumentTemplateTier } from '@/lib/documentTemplateLibrary';
 import { downloadLegalHtml, legalDocuments, openPrintableLegalDocument } from '@/lib/legalDocuments';
 import { buildLocalSalePacket, getBuyerSafePacketDocuments } from '@/lib/localSalePacketGenerator';
+import { appendLocalSalePacketLog, localSalePacketLogKey } from '@/lib/localSalePacketLog';
 import { buildSharePath } from '@/lib/xbarRuntime';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -14,7 +16,6 @@ import type { SubscriptionTier } from '@/types/xbar';
 
 const tierOrder: DocumentTemplateTier[] = ['Basic', 'Pro', 'Business'];
 const planRank: Record<SubscriptionTier, number> = { Starter: 0, Professional: 1, 'Ranch Ops': 2, Enterprise: 3 };
-const packetLogKey = 'xbar-local-sale-packet-log';
 
 function planAllows(current: SubscriptionTier, required: SubscriptionTier) {
   return planRank[current] >= planRank[required];
@@ -43,12 +44,6 @@ function TemplateCard({ template, active, locked, onSelect }: { template: Docume
   );
 }
 
-function appendLocalPacketLog(entry: Record<string, unknown>) {
-  if (typeof window === 'undefined') return;
-  const current = JSON.parse(window.localStorage.getItem(packetLogKey) || '[]') as Record<string, unknown>[];
-  window.localStorage.setItem(packetLogKey, JSON.stringify([{ ...entry, createdAt: new Date().toISOString() }, ...current].slice(0, 100)));
-}
-
 function downloadSalePacketHtml(fileName: string, html: string) {
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
   const url = window.URL.createObjectURL(blob);
@@ -65,6 +60,9 @@ export default function DocumentLibrary() {
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const subscription = useXbarStore((state) => state.subscription);
+  const currentRole = useXbarStore((state) => state.currentRole);
+  const createSalePacketBuild = useXbarStore((state) => state.createSalePacketBuild);
+  const recordSharedChannel = useXbarStore((state) => state.recordSharedChannel);
   const pushToast = useUiStore((state) => state.pushToast);
   const navigate = useNavigate();
   const session = useCloudStore((state) => state.session);
@@ -124,14 +122,30 @@ export default function DocumentLibrary() {
     }
     preview.document.write(localSalePacket.html);
     preview.document.close();
-    appendLocalPacketLog({ horseId: selectedHorse.id, horseName: selectedHorse.name, action: 'previewed', packetScore: localSalePacket.packetScore, releaseStatus: localSalePacket.releaseStatus, includedDocuments: selectedDocumentIds.length });
+    appendLocalSalePacketLog({ horseId: selectedHorse.id, horseName: selectedHorse.name, action: 'previewed', packetScore: localSalePacket.packetScore, releaseStatus: localSalePacket.releaseStatus, includedDocuments: selectedDocumentIds.length });
     pushToast({ title: 'Sale packet preview opened', message: `${selectedHorse.name} packet was logged locally.`, tone: 'success' });
   };
 
   const exportSalePacket = () => {
     if (!localSalePacket || !selectedHorse) return;
+    if (localSalePacket.blockers.length) {
+      pushToast({ title: 'Packet release blocked', message: localSalePacket.blockers[0], tone: 'error' });
+      return;
+    }
+    const build = createSalePacketBuild({
+      horseId: selectedHorse.id,
+      watermark: 'XBAR buyer packet',
+      documentIds: selectedDocumentIds,
+      includesBillOfSale: false,
+      createdBy: currentRole,
+    });
+    if (!build.ok) {
+      pushToast({ title: 'Packet export blocked', message: build.message, tone: 'warning' });
+      if (build.message.toLowerCase().includes('upgrade')) navigate('/subscriptions');
+      return;
+    }
     downloadSalePacketHtml(localSalePacket.fileName, localSalePacket.html);
-    appendLocalPacketLog({ horseId: selectedHorse.id, horseName: selectedHorse.name, action: 'exported', packetScore: localSalePacket.packetScore, releaseStatus: localSalePacket.releaseStatus, includedDocuments: selectedDocumentIds.length });
+    appendLocalSalePacketLog({ horseId: selectedHorse.id, horseName: selectedHorse.name, action: 'exported', packetScore: localSalePacket.packetScore, releaseStatus: localSalePacket.releaseStatus, includedDocuments: selectedDocumentIds.length });
     pushToast({ title: 'Sale packet exported', message: `${selectedHorse.name} buyer packet downloaded and logged locally. Open it and print to PDF.`, tone: 'success' });
   };
 
@@ -199,11 +213,16 @@ export default function DocumentLibrary() {
     pushToast({ title: 'Legal document exported', message: `${legalDoc.shortTitle} downloaded as a print-ready HTML document. Open it and print to PDF.`, tone: 'success' });
   };
 
-  const copyShareLink = () => {
-    if (!sharedLink) return;
-    void navigator.clipboard.writeText(sharedLink).then(() => {
-      pushToast({ title: 'Secure link copied', message: 'Use shared access controls before sending this buyer-facing link.', tone: 'success' });
-    });
+  const copyShareLink = async () => {
+    if (!sharedLink || !selectedHorse) return;
+    const release = await recordSharedChannel(selectedHorse.id, 'Direct Link');
+    if (!release.ok) {
+      pushToast({ title: 'Buyer link blocked', message: release.message, tone: 'warning' });
+      navigate('/shared-access');
+      return;
+    }
+    await navigator.clipboard.writeText(sharedLink);
+    pushToast({ title: 'Audited buyer link copied', message: 'Seller release is confirmed and the direct-link share was recorded.', tone: 'success' });
   };
 
   const toggleProof = (documentId: string) => {
@@ -240,6 +259,8 @@ export default function DocumentLibrary() {
         <MetricCard label="Watermark" value="XBAR" detail="Disclaimer and trademark notice included" tone="slate" />
         <MetricCard label="Export" value="HTML/PDF" detail="Download then print to PDF" tone="emerald" />
       </div>
+
+      <UsageMeterPanel compact />
 
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel title="1. Select horse" meta={<Pill tone="blue">Local-first</Pill>}>
@@ -294,12 +315,12 @@ export default function DocumentLibrary() {
       <Panel title="4. Generate and log packet" meta={<Pill tone="slate">XBAR watermark + disclaimer</Pill>}>
         <div className="stack-list">
           <div className="stack-item"><div className="stack-item__title">PDF-ready output</div><div className="stack-item__copy">The packet opens as branded HTML with XBAR watermark, buyer verification disclaimer, release blockers, proof list, and seller review section. Use browser print to save as PDF.</div></div>
-          <div className="stack-item"><div className="stack-item__title">Local packet log</div><div className="stack-item__copy">Preview/export events are saved in local browser storage under {packetLogKey}. Cloud audit can replace this later.</div></div>
+          <div className="stack-item"><div className="stack-item__title">Local packet log</div><div className="stack-item__copy">Preview/export events are saved in local browser storage under {localSalePacketLogKey}. Cloud audit can replace this later.</div></div>
         </div>
         <div className="inline-actions">
           <button className="button button--primary button--compact" type="button" onClick={previewSalePacket}>Preview packet</button>
           <button className="button button--ghost button--compact" type="button" onClick={exportSalePacket}>Export packet</button>
-          <button className="button button--ghost button--compact" type="button" onClick={copyShareLink}>Copy buyer link</button>
+          <button className="button button--ghost button--compact" type="button" onClick={() => void copyShareLink()}>Copy buyer link</button>
         </div>
       </Panel>
 

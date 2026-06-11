@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { toast as sonnerToast } from 'sonner';
 import { createId } from '@/lib/xbarRuntime';
 import {
   sanitizeSurfaceModes,
@@ -62,16 +63,24 @@ export const useUiStore = create<UiStore>((set) => ({
   commandPaletteOpen: false,
   pushToast: ({ id, duration = 4000, tone = 'info', ...toast }) => {
     const toastId = id ?? createToastId();
-    set((state) => ({
-      toasts: [...state.toasts, { id: toastId, duration, tone, ...toast }],
-    }));
+    const options = { id: toastId, description: toast.title ? toast.message : undefined, duration };
+    const message = toast.title ?? toast.message;
+    if (tone === 'success') sonnerToast.success(message, options);
+    else if (tone === 'error') sonnerToast.error(message, options);
+    else if (tone === 'warning') sonnerToast.warning(message, options);
+    else sonnerToast.info(message, options);
     return toastId;
   },
-  removeToast: (id) =>
+  removeToast: (id) => {
+    sonnerToast.dismiss(id);
     set((state) => ({
       toasts: state.toasts.filter((toast) => toast.id !== id),
-    })),
-  clearToasts: () => set({ toasts: [] }),
+    }));
+  },
+  clearToasts: () => {
+    sonnerToast.dismiss();
+    set({ toasts: [] });
+  },
   sendSurfaceEvent: (id, event) => set((state) => {
     const nextMode = transitionSurfaceMode(state.surfaceModes[id] ?? 'expanded', event);
     const surfaceModes = { ...state.surfaceModes, [id]: nextMode };

@@ -250,6 +250,7 @@ export interface DocumentFact {
   value: string;
   confidence: number;
   sourceDocumentId: string;
+  decision?: 'Accepted' | 'Rejected';
 }
 
 export interface HorseNote {
@@ -305,6 +306,7 @@ export interface HorseRecord {
   owner: string;
   ownerEntity: string;
   insuredValue: number;
+  costBasis?: number;
   profileImage: string;
   tags: string[];
   bloodline: BloodlineProfile;
@@ -319,6 +321,7 @@ export interface HorseRecord {
   documents: string[];
   medicalTimeline: TimelineEvent[];
   breedingTimeline: TimelineEvent[];
+  breedingEconomics?: BreedingEconomics;
   activity: TimelineEvent[];
   documentFacts: DocumentFact[];
   alerts: HorseAlert[];
@@ -412,10 +415,14 @@ export interface ExpenseReceipt {
 }
 
 export interface SubscriptionUsage {
+  horsesUsed: number;
+  horseLimit: number;
   seatsUsed: number;
   seatLimit: number;
   documentsProcessed: number;
   documentLimit: number;
+  salePacketsGenerated: number;
+  salePacketLimit: number;
   storageUsedGb: number;
   storageLimitGb: number;
   sharedAccessSeatsUsed: number;
@@ -450,6 +457,11 @@ export interface SalesLead {
   nextFollowUp?: string;
   notes?: string;
   offerAmount?: number;
+  counterOfferAmount?: number;
+  offerStatus?: 'Draft' | 'Submitted' | 'Countered' | 'Accepted' | 'Rejected' | 'Deposit Due' | 'Deposit Paid';
+  depositAmount?: number;
+  depositStatus?: 'Not Requested' | 'Due' | 'Paid';
+  offerUpdatedAt?: string;
   outcome?: 'Won' | 'Lost';
   savedListing: boolean;
   shareReady: boolean;
@@ -470,6 +482,17 @@ export interface SharedListingRecord {
   createdAt: string;
   updatedAt: string;
   lastSharedAt?: string;
+  releaseConfirmedAt?: string;
+  releaseConfirmedBy?: string;
+  releaseConfirmationVersion?: string;
+}
+
+export interface BreedingEconomics {
+  studFee: number;
+  bookedMares: number;
+  breedingCosts: number;
+  mareProductionValue: number;
+  foalProjectedValue: number;
 }
 
 export interface SharedAccessSnapshot {
