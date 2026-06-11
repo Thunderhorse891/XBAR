@@ -433,7 +433,7 @@ export default function Documents() {
     <>
       <CommandBrief
         eyebrow="Document Vault"
-        entity="Document Pipeline"
+        entity="Your Documents"
         status={heroStatus}
         summary="Every file moves through one path: upload, local OCR, human review, ownership proof, then watermarked sharing."
         evidence={[

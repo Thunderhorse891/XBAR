@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { generateDocumentFromTemplateRemote, hasBackendIdentity } from '@/lib/backendApi';
 import { useCloudStore } from '@/store/useCloudStore';
@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
 import { buildPrefilledDocument, documentTemplateLibrary, downloadHtmlFile, type DocumentTemplate, type DocumentTemplateTier } from '@/lib/documentTemplateLibrary';
 import { downloadLegalHtml, legalDocuments, openPrintableLegalDocument } from '@/lib/legalDocuments';
+import { buildLocalSalePacket, getBuyerSafePacketDocuments } from '@/lib/localSalePacketGenerator';
 import { buildSharePath } from '@/lib/xbarRuntime';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -13,6 +14,7 @@ import type { SubscriptionTier } from '@/types/xbar';
 
 const tierOrder: DocumentTemplateTier[] = ['Basic', 'Pro', 'Business'];
 const planRank: Record<SubscriptionTier, number> = { Starter: 0, Professional: 1, 'Ranch Ops': 2, Enterprise: 3 };
+const packetLogKey = 'xbar-local-sale-packet-log';
 
 function planAllows(current: SubscriptionTier, required: SubscriptionTier) {
   return planRank[current] >= planRank[required];
@@ -41,6 +43,22 @@ function TemplateCard({ template, active, locked, onSelect }: { template: Docume
   );
 }
 
+function appendLocalPacketLog(entry: Record<string, unknown>) {
+  if (typeof window === 'undefined') return;
+  const current = JSON.parse(window.localStorage.getItem(packetLogKey) || '[]') as Record<string, unknown>[];
+  window.localStorage.setItem(packetLogKey, JSON.stringify([{ ...entry, createdAt: new Date().toISOString() }, ...current].slice(0, 100)));
+}
+
+function downloadSalePacketHtml(fileName: string, html: string) {
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url = window.URL.createObjectURL(blob);
+  const anchor = window.document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  window.URL.revokeObjectURL(url);
+}
+
 export default function DocumentLibrary() {
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
@@ -51,15 +69,25 @@ export default function DocumentLibrary() {
   const navigate = useNavigate();
   const session = useCloudStore((state) => state.session);
   const workspaceId = useCloudStore((state) => state.workspaceId);
-  const [activeTier, setActiveTier] = useState<DocumentTemplateTier>('Basic');
+  const [activeTier, setActiveTier] = useState<DocumentTemplateTier>('Pro');
   const [selectedHorseId, setSelectedHorseId] = useState(horses[0]?.id ?? '');
-  const [selectedTemplateId, setSelectedTemplateId] = useState(documentTemplateLibrary[0].id);
+  const [selectedTemplateId, setSelectedTemplateId] = useState(documentTemplateLibrary.find((template) => template.id === 'sales-packet')?.id ?? documentTemplateLibrary[0].id);
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const selectedHorse = horses.find((horse) => horse.id === selectedHorseId) ?? horses[0];
   const selectedTemplate = documentTemplateLibrary.find((template) => template.id === selectedTemplateId) ?? documentTemplateLibrary[0];
   const selectedOwnership = ownershipRecords.find((record) => record.horseId === selectedHorse?.id);
   const sharedLink = selectedHorse ? `${window.location.origin}${buildSharePath(selectedHorse.id)}` : '';
+  const buyerSafeProof = useMemo(() => selectedHorse ? getBuyerSafePacketDocuments(documents, selectedHorse.id) : [], [documents, selectedHorse]);
+  const localSalePacket = selectedHorse ? buildLocalSalePacket({
+    horse: selectedHorse,
+    workspaceProfile,
+    documents,
+    ownershipRecord: selectedOwnership,
+    selectedDocumentIds,
+    generatedBy: workspaceProfile.ranchManagerName || workspaceProfile.businessName || 'XBAR',
+  }) : null;
   const prefilled = selectedHorse ? buildPrefilledDocument({
     templateId: selectedTemplate.id,
     horse: selectedHorse,
@@ -71,8 +99,10 @@ export default function DocumentLibrary() {
   }) : null;
 
   const templatesByTier = useMemo(() => Object.fromEntries(tierOrder.map((tier) => [tier, documentTemplateLibrary.filter((template) => template.tier === tier)])) as Record<DocumentTemplateTier, DocumentTemplate[]>, []);
-  const readyDocCount = documents.filter((document) => document.state === 'Ready').length;
-  const salePacketTemplates = documentTemplateLibrary.filter((template) => template.id === 'sales-packet' || template.label.includes('Sale') || template.label.includes('Transfer'));
+
+  useEffect(() => {
+    setSelectedDocumentIds(buyerSafeProof.filter((document) => document.buyerSafe).map((document) => document.id));
+  }, [selectedHorseId, buyerSafeProof]);
 
   const openPreview = () => {
     if (!prefilled) return;
@@ -83,6 +113,26 @@ export default function DocumentLibrary() {
     }
     preview.document.write(prefilled.html);
     preview.document.close();
+  };
+
+  const previewSalePacket = () => {
+    if (!localSalePacket || !selectedHorse) return;
+    const preview = window.open('', '_blank', 'noopener,noreferrer');
+    if (!preview) {
+      pushToast({ title: 'Preview blocked', message: 'Allow popups to preview the sale packet.', tone: 'error' });
+      return;
+    }
+    preview.document.write(localSalePacket.html);
+    preview.document.close();
+    appendLocalPacketLog({ horseId: selectedHorse.id, horseName: selectedHorse.name, action: 'previewed', packetScore: localSalePacket.packetScore, releaseStatus: localSalePacket.releaseStatus, includedDocuments: selectedDocumentIds.length });
+    pushToast({ title: 'Sale packet preview opened', message: `${selectedHorse.name} packet was logged locally.`, tone: 'success' });
+  };
+
+  const exportSalePacket = () => {
+    if (!localSalePacket || !selectedHorse) return;
+    downloadSalePacketHtml(localSalePacket.fileName, localSalePacket.html);
+    appendLocalPacketLog({ horseId: selectedHorse.id, horseName: selectedHorse.name, action: 'exported', packetScore: localSalePacket.packetScore, releaseStatus: localSalePacket.releaseStatus, includedDocuments: selectedDocumentIds.length });
+    pushToast({ title: 'Sale packet exported', message: `${selectedHorse.name} buyer packet downloaded and logged locally. Open it and print to PDF.`, tone: 'success' });
   };
 
   const downloadDocument = () => {
@@ -156,6 +206,10 @@ export default function DocumentLibrary() {
     });
   };
 
+  const toggleProof = (documentId: string) => {
+    setSelectedDocumentIds((current) => current.includes(documentId) ? current.filter((id) => id !== documentId) : [...current, documentId]);
+  };
+
   if (!horses.length) {
     return <Panel title="Document Library"><EmptyState title="Add a horse first" description="Dynamic templates need horse, owner, and barn data before XBAR can pre-fill documents." action={<Link to="/horses?new=1" className="button button--primary button--compact">Create first horse</Link>} /></Panel>;
   }
@@ -167,25 +221,87 @@ export default function DocumentLibrary() {
       <div className="surface-hero surface-hero--dark">
         <div className="surface-hero__top">
           <div>
-            <span className="surface-hero__eyebrow">Document Library</span>
-            <h1 className="surface-hero__title">Pre-filled contracts, legal notices, reports, and sale packets</h1>
-            <p className="surface-hero__copy">Pull horse, owner, barn, Coggins, health, ownership, and document-vault data into templates, while keeping XBAR commercial terms, trademark notices, and disclaimers printable from the same library.</p>
+            <span className="surface-hero__eyebrow">Sale Packet Generator</span>
+            <h1 className="surface-hero__title">Generate PDF-ready buyer packets before cloud is live</h1>
+            <p className="surface-hero__copy">Select a horse, see release blockers, choose included proof, add XBAR disclaimer and watermark, export the packet, and log the generation locally.</p>
           </div>
           <div className="surface-hero__stats">
-            <div className="surface-hero__stat"><span>Templates</span><strong>{documentTemplateLibrary.length}</strong></div>
+            <div className="surface-hero__stat"><span>Packet score</span><strong>{localSalePacket?.packetScore ?? 0}%</strong></div>
+            <div className="surface-hero__stat"><span>Blockers</span><strong>{localSalePacket?.blockers.length ?? 0}</strong></div>
+            <div className="surface-hero__stat"><span>Included proof</span><strong>{selectedDocumentIds.length}</strong></div>
             <div className="surface-hero__stat"><span>Legal docs</span><strong>{legalDocuments.length}</strong></div>
-            <div className="surface-hero__stat"><span>Sale packet tools</span><strong>{salePacketTemplates.length}</strong></div>
-            <div className="surface-hero__stat"><span>Plan</span><strong>{subscription.tier}</strong></div>
           </div>
         </div>
       </div>
 
       <div className="metric-grid">
-        <MetricCard label="Dynamic prefill" value="Live" detail="Horse, owner, barn, health, sale, and document fields" tone="emerald" />
-        <MetricCard label="Legal packet" value={`${legalDocuments.length}`} detail="Terms, privacy, billing, trademark, disclaimer, acceptable use" tone="blue" />
-        <MetricCard label="Ready docs" value={String(readyDocCount)} detail="Verified proof records available for document workflows" tone="slate" />
-        <MetricCard label="Missing fields" value={String(prefilled?.missingFields.length ?? 0)} detail="Review before e-signature" tone={prefilled?.missingFields.length ? 'amber' : 'emerald'} />
+        <MetricCard label="Release gate" value={localSalePacket?.releaseStatus ?? 'Pending'} detail={localSalePacket?.blockers[0] ?? 'No hard blocker flagged'} tone={localSalePacket?.blockers.length ? 'rose' : 'emerald'} />
+        <MetricCard label="Buyer proof" value={`${selectedDocumentIds.length}/${buyerSafeProof.length}`} detail="Ready records selected for packet" tone="blue" />
+        <MetricCard label="Watermark" value="XBAR" detail="Disclaimer and trademark notice included" tone="slate" />
+        <MetricCard label="Export" value="HTML/PDF" detail="Download then print to PDF" tone="emerald" />
       </div>
+
+      <div className="dashboard-grid dashboard-grid--primary">
+        <Panel title="1. Select horse" meta={<Pill tone="blue">Local-first</Pill>}>
+          <div className="form-grid form-grid--tight">
+            <label className="field-stack">
+              <span className="field-label">Horse</span>
+              <select className="field-input" value={selectedHorse?.id ?? ''} onChange={(event) => setSelectedHorseId(event.target.value)}>
+                {horses.map((horse) => <option key={horse.id} value={horse.id}>{horse.name}</option>)}
+              </select>
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Buyer link preview</span>
+              <input className="field-input" value={sharedLink} readOnly />
+            </label>
+          </div>
+          <div className="stack-list">
+            <div className="stack-item"><div className="stack-item__title">{selectedHorse.name}</div><div className="stack-item__copy">{selectedHorse.segment} · {selectedHorse.status} · {selectedHorse.sale.listingState}</div></div>
+            <div className="stack-item"><div className="stack-item__title">Ask price</div><div className="stack-item__copy">{selectedHorse.sale.askPrice ? `$${selectedHorse.sale.askPrice.toLocaleString()}` : 'Not listed yet'}</div></div>
+          </div>
+        </Panel>
+
+        <Panel title="2. Resolve blockers" meta={<Pill tone={localSalePacket?.blockers.length ? 'rose' : 'emerald'}>{localSalePacket?.blockers.length ? 'Blocked' : 'Clear'}</Pill>}>
+          <div className="stack-list">
+            {localSalePacket?.blockers.length ? localSalePacket.blockers.map((blocker) => (
+              <Link key={blocker} to={blocker.includes('Title') ? '/ownership' : blocker.includes('Care') ? '/medical' : '/documents'} className="stack-item stack-item--interactive">
+                <div className="stack-item__top"><div className="stack-item__title">{blocker}</div><Pill tone="rose">Fix</Pill></div>
+              </Link>
+            )) : <div className="stack-item"><div className="stack-item__title">Release gate clear</div><div className="stack-item__copy">No hard blocker flagged. Review warnings and proof before sending.</div></div>}
+            {localSalePacket?.warnings.slice(0, 4).map((warning) => <div key={warning} className="stack-item"><div className="stack-item__title">Warning</div><div className="stack-item__copy">{warning}</div></div>)}
+          </div>
+        </Panel>
+      </div>
+
+      <Panel title="3. Select included proof" meta={<Pill tone="blue">{selectedDocumentIds.length} selected</Pill>}>
+        {buyerSafeProof.length ? (
+          <div className="stack-list">
+            {buyerSafeProof.map((document) => (
+              <button key={document.id} type="button" className="stack-item stack-item--interactive" onClick={() => toggleProof(document.id)}>
+                <div className="stack-item__top">
+                  <div>
+                    <div className="stack-item__title">{document.type} · {document.title}</div>
+                    <div className="stack-item__copy">{document.summary || 'No summary provided.'}</div>
+                  </div>
+                  <Pill tone={selectedDocumentIds.includes(document.id) ? 'emerald' : 'slate'}>{selectedDocumentIds.includes(document.id) ? 'Included' : 'Excluded'}</Pill>
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : <EmptyState compact title="No verified proof available" description="Approve registration, Coggins, transfer, bill of sale, media, or vet records in Documents before generating a premium packet." action={<Link to="/documents?upload=1" className="button button--primary button--compact">Upload proof</Link>} />}
+      </Panel>
+
+      <Panel title="4. Generate and log packet" meta={<Pill tone="slate">XBAR watermark + disclaimer</Pill>}>
+        <div className="stack-list">
+          <div className="stack-item"><div className="stack-item__title">PDF-ready output</div><div className="stack-item__copy">The packet opens as branded HTML with XBAR watermark, buyer verification disclaimer, release blockers, proof list, and seller review section. Use browser print to save as PDF.</div></div>
+          <div className="stack-item"><div className="stack-item__title">Local packet log</div><div className="stack-item__copy">Preview/export events are saved in local browser storage under {packetLogKey}. Cloud audit can replace this later.</div></div>
+        </div>
+        <div className="inline-actions">
+          <button className="button button--primary button--compact" type="button" onClick={previewSalePacket}>Preview packet</button>
+          <button className="button button--ghost button--compact" type="button" onClick={exportSalePacket}>Export packet</button>
+          <button className="button button--ghost button--compact" type="button" onClick={copyShareLink}>Copy buyer link</button>
+        </div>
+      </Panel>
 
       <Panel title="XBAR LLC legal and commercial documents" meta={<Pill tone="blue">TM / billing / disclaimer</Pill>}>
         <p className="stack-item__copy" style={{ marginBottom: '14px' }}>
@@ -218,7 +334,7 @@ export default function DocumentLibrary() {
       </section>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel title="Choose template" meta={<Pill tone="blue">{activeTier}</Pill>}>
+        <Panel title="Other document templates" meta={<Pill tone="blue">{activeTier}</Pill>}>
           <div className="stack-list">
             {templatesByTier[activeTier].map((template) => (
               <TemplateCard key={template.id} template={template} active={template.id === selectedTemplate.id} locked={!planAllows(subscription.tier, template.minimumPlan)} onSelect={() => setSelectedTemplateId(template.id)} />
@@ -226,20 +342,7 @@ export default function DocumentLibrary() {
           </div>
         </Panel>
 
-        <Panel title="Dynamic prefill" meta={<Pill tone={locked ? 'rose' : 'emerald'}>{locked ? `${selectedTemplate.minimumPlan}+` : 'Ready'}</Pill>}>
-          <div className="form-grid form-grid--tight">
-            <label className="field-stack">
-              <span className="field-label">Horse</span>
-              <select className="field-input" value={selectedHorse?.id ?? ''} onChange={(event) => setSelectedHorseId(event.target.value)}>
-                {horses.map((horse) => <option key={horse.id} value={horse.id}>{horse.name}</option>)}
-              </select>
-            </label>
-            <label className="field-stack">
-              <span className="field-label">Template</span>
-              <input className="field-input" value={selectedTemplate.label} readOnly />
-            </label>
-          </div>
-
+        <Panel title="Template prefill" meta={<Pill tone={locked ? 'rose' : 'emerald'}>{locked ? `${selectedTemplate.minimumPlan}+` : 'Ready'}</Pill>}>
           {prefilled ? (
             <div className="stack-list">
               <div className="stack-item"><div className="stack-item__title">{prefilled.title}</div><div className="stack-item__copy">{prefilled.summary}</div></div>
@@ -251,7 +354,6 @@ export default function DocumentLibrary() {
                 </button>
                 <button className="button button--ghost button--compact" type="button" onClick={downloadDocument} disabled={locked}>Download report</button>
                 <button className="button button--ghost button--compact" type="button" onClick={() => window.print()} disabled={locked}>Print / save PDF</button>
-                <button className="button button--ghost button--compact" type="button" onClick={copyShareLink}>Copy secure link</button>
               </div>
               {locked ? <div className="field-error">This template belongs to {selectedTemplate.minimumPlan}+ plan positioning. Current plan: {subscription.tier}.</div> : null}
             </div>

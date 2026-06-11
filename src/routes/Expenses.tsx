@@ -209,7 +209,7 @@ export default function Expenses() {
     <div className="ops-experience">
       <CommandBrief
         eyebrow="Budget & Expenses"
-        entity="Spend Control"
+        entity="Spending"
         status={heroStatus}
         evidence={[
           { label: 'This month', value: formatCurrency(spend.thisMonthTotal) },
