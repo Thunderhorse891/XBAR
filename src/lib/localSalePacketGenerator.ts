@@ -111,11 +111,13 @@ export function buildLocalSalePacket(params: {
 }
 
 export function downloadSalePacketHtml(packet: LocalSalePacket) {
+  if (typeof window === 'undefined') return;
+
   const blob = new Blob([packet.html], { type: 'text/html;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
+  const url = window.URL.createObjectURL(blob);
   const anchor = window.document.createElement('a');
   anchor.href = url;
   anchor.download = packet.fileName;
   anchor.click();
-  URL.revokeObjectURL(url);
+  window.URL.revokeObjectURL(url);
 }
