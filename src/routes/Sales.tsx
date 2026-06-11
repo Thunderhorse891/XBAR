@@ -22,6 +22,8 @@ export default function Sales() {
   const documents = useXbarStore((state) => state.documents);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const updateSalesLead = useXbarStore((state) => state.updateSalesLead);
+  const buyerRoomEvents = useXbarStore((state) => state.buyerRoomEvents);
+  const logBuyerRoomEvent = useXbarStore((state) => state.logBuyerRoomEvent);
   const recordSharedChannel = useXbarStore((state) => state.recordSharedChannel);
   const pushToast = useUiStore((state) => state.pushToast);
   const openRightDrawer = useUiStore((state) => state.openRightDrawer);
@@ -193,6 +195,51 @@ export default function Sales() {
         ].slice(0, 5)}
         nextAction={{ label: 'Open follow-up queue', to: '/follow-ups' }}
       />
+
+      <Panel eyebrow="Deal room" title="Buyer activity" description="Live buyer intent from shared packets — every event has a seller response.">
+        {buyerRoomEvents.length ? (
+          <div className="stack-list">
+            {buyerRoomEvents.slice(0, 8).map((event) => {
+              const eventHorse = horses.find((item) => item.id === event.horseId);
+              const kindLabel =
+                event.kind === 'packet-shared' ? 'Packet shared' :
+                event.kind === 'packet-viewed' ? 'Packet viewed' :
+                event.kind === 'question' ? 'Question' :
+                event.kind === 'call-requested' ? 'Call requested' :
+                event.kind === 'offer' ? 'Offer' :
+                event.kind === 'seller-response' ? 'Seller response' : 'Deal status';
+              return (
+                <div key={event.id} className="stack-item">
+                  <div className="stack-item__top">
+                    <div>
+                      <div className="stack-item__title">{kindLabel} — {eventHorse?.name ?? 'Unknown horse'}{event.amount ? ` · $${event.amount.toLocaleString()}` : ''}</div>
+                      <div className="stack-item__copy">{event.actor}{event.note ? ` · ${event.note}` : ''} · {formatDateLabel(event.at)}</div>
+                    </div>
+                    <div className="inline-actions">
+                      {event.kind === 'offer' && !event.dealStatus ? (
+                        <>
+                          <button className="button button--primary button--compact" type="button" onClick={() => { logBuyerRoomEvent({ horseId: event.horseId, kind: 'deal-status', actor: 'Seller', note: `Offer from ${event.actor} accepted`, amount: event.amount, dealStatus: 'closed-won' }); }}>
+                            Accept offer
+                          </button>
+                          <button className="button button--ghost button--compact" type="button" onClick={() => { logBuyerRoomEvent({ horseId: event.horseId, kind: 'deal-status', actor: 'Seller', note: `Offer from ${event.actor} declined`, amount: event.amount, dealStatus: 'closed-lost' }); }}>
+                            Decline
+                          </button>
+                        </>
+                      ) : (event.kind === 'question' || event.kind === 'call-requested') ? (
+                        <button className="button button--ghost button--compact" type="button" onClick={() => { logBuyerRoomEvent({ horseId: event.horseId, kind: 'seller-response', actor: 'Seller', note: `Responded to ${event.actor}` }); }}>
+                          Mark responded
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyState compact title="No buyer activity yet" description="Generate a sale packet with a named buyer, or share a listing — questions, call requests, and offers land here." />
+        )}
+      </Panel>
 
       <div className="metric-grid">
         <MetricCard label="Sale horses" value={`${saleHorses.length}`} detail="Active pricing or pending review" />
