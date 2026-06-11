@@ -6,7 +6,7 @@ import type { SubscriptionProfile, SubscriptionTier } from '../src/types/xbar.js
 
 function subscription(tier: SubscriptionTier): SubscriptionProfile {
   const config = subscriptionPlans[tier];
-  return { tier, monthlyRate: config.monthlyRate, renewalDate: '', billingState: 'Active', sharedAccessEnabled: config.sharedAccessEnabled, featureFlags: config.featureFlags, usage: { seatsUsed: 1, documentsProcessed: 0, sharedAccessSeatsUsed: 0, storageUsedGb: 0, ...config.limits } };
+  return { tier, monthlyRate: config.monthlyRate, renewalDate: '', billingState: 'Active', sharedAccessEnabled: config.sharedAccessEnabled, featureFlags: config.featureFlags, usage: { horsesUsed: 0, seatsUsed: 1, documentsProcessed: 0, salePacketsGenerated: 0, sharedAccessSeatsUsed: 0, storageUsedGb: 0, ...config.limits } };
 }
 
 test('Starter cannot create sale listings while Professional can', () => {

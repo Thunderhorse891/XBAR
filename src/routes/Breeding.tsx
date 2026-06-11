@@ -1,10 +1,14 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { CommandBrief } from '@/components/CommandBrief';
+import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { DocumentBlock, Timeline } from '@/components/InteractionSystem';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
-import { formatDateLabel } from '@/lib/format';
+import { buildBreedingRevenueProfile, emptyBreedingEconomics } from '@/lib/breedingRevenue';
+import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
+import { breedingRevenueGate } from '@/lib/subscriptionGates';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
@@ -13,8 +17,11 @@ export default function Breeding() {
   const navigate = useNavigate();
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
+  const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
+  const subscription = useXbarStore((state) => state.subscription);
   const addBreedingEvent = useXbarStore((state) => state.addBreedingEvent);
   const deleteBreedingEvent = useXbarStore((state) => state.deleteBreedingEvent);
+  const updateBreedingEconomics = useXbarStore((state) => state.updateBreedingEconomics);
   const pushToast = useUiStore((state) => state.pushToast);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const session = useCloudStore((state) => state.session);
@@ -23,11 +30,26 @@ export default function Breeding() {
   const breedingHorses = horses.filter((horse) => horse.segment === 'Stud' || horse.sex === 'Mare');
   const breedingDocs = documents.filter((document) => document.type === 'Breeding Contract');
   const [selectedHorseId, setSelectedHorseId] = useState(breedingHorses[0]?.id ?? '');
+  const selectedHorse = breedingHorses.find((horse) => horse.id === selectedHorseId) ?? breedingHorses[0];
+  const selectedRevenue = selectedHorse ? buildBreedingRevenueProfile(selectedHorse, expenseReceipts) : undefined;
+  const revenueGate = breedingRevenueGate(subscription);
+  const initialEconomics = { ...emptyBreedingEconomics, ...selectedHorse?.breedingEconomics };
+  const [economics, setEconomics] = useState({
+    studFee: String(initialEconomics.studFee),
+    bookedMares: String(initialEconomics.bookedMares),
+    breedingCosts: String(initialEconomics.breedingCosts),
+    mareProductionValue: String(initialEconomics.mareProductionValue),
+    foalProjectedValue: String(initialEconomics.foalProjectedValue),
+  });
   const [eventTitle, setEventTitle] = useState('Breeding milestone');
   const [eventBody, setEventBody] = useState('');
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
   const [eventError, setEventError] = useState('');
   const [milestoneQuery, setMilestoneQuery] = useState('');
+  const [pendingDelete, setPendingDelete] = useState<{ horseId: string; eventId: string; horseName: string } | null>(null);
+  const addEventFormRef = useRef<HTMLDivElement | null>(null);
+  const milestoneCount = breedingHorses.reduce((sum, horse) => sum + horse.breedingTimeline.length, 0);
+  const blockedHorses = breedingHorses.filter((horse) => horse.readiness.packetStatus !== 'Ready');
   const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
   const menuHorse = breedingHorses.find((horse) => horse.id === menuState?.horseId);
   const menuItems = menuHorse
@@ -47,39 +69,40 @@ export default function Breeding() {
 
   return (
     <>
-      <div className="surface-hero surface-hero--dark">
-        <div className="surface-hero__top">
-          <div>
-            <span className="surface-hero__eyebrow">Breeding Program</span>
-          </div>
-          <div className="surface-hero__stats">
-            <div className="surface-hero__stat">
-              <span>Program horses</span>
-              <strong>{breedingHorses.length}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Contracts</span>
-              <strong>{breedingDocs.length}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Milestones</span>
-              <strong>{breedingHorses.reduce((sum, horse) => sum + horse.breedingTimeline.length, 0)}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Blockers</span>
-              <strong style={{ color: breedingHorses.filter((horse) => horse.readiness.packetStatus !== 'Ready').length ? 'var(--amber)' : 'var(--emerald)' }}>
-                {breedingHorses.filter((horse) => horse.readiness.packetStatus !== 'Ready').length}
-              </strong>
-            </div>
-          </div>
-        </div>
-      </div>
+      <CommandBrief
+        variant="split"
+        eyebrow="Breeding"
+        entity="Breeding"
+        status={blockedHorses.length ? { label: `${blockedHorses.length} record blockers`, tone: 'amber' } : { label: 'Program records clear', tone: 'blue' }}
+        summary={`${breedingHorses.length} mares and studs tracked with ${milestoneCount} program milestones on file.`}
+        evidence={[
+          { label: 'Program horses', value: String(breedingHorses.length), to: '/horses' },
+          { label: 'Contracts', value: String(breedingDocs.length), to: '/documents' },
+          { label: 'Upcoming milestones', value: String(milestoneCount) },
+        ]}
+        risks={blockedHorses.slice(0, 5).map((horse) => ({
+          label: `${horse.name} — ${horse.readiness.packetStatus}`,
+          severity: 'amber' as const,
+          to: `/horses/${horse.id}`,
+        }))}
+        nextAction={
+          canManageBreeding
+            ? {
+                label: 'Log breeding event',
+                onClick: () => {
+                  addEventFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  addEventFormRef.current?.querySelector<HTMLElement>('select, input')?.focus({ preventScroll: true });
+                },
+              }
+            : { label: 'Log breeding event', disabledReason: 'Your role cannot manage breeding records.' }
+        }
+      />
 
       <div className="metric-grid">
         <MetricCard label="Program horses" value={`${breedingHorses.length}`} detail="Mares and studs tracked in active breeding context" />
         <MetricCard label="Contract docs" value={`${breedingDocs.length}`} detail="Breeding-specific paperwork linked into the record model" tone="blue" />
-        <MetricCard label="Live milestones" value={`${breedingHorses.reduce((sum, horse) => sum + horse.breedingTimeline.length, 0)}`} detail="Timeline entries currently supporting the program" tone="emerald" />
-        <MetricCard label="Missing records" value={`${breedingHorses.filter((horse) => horse.readiness.packetStatus !== 'Ready').length}`} detail="Horses still missing packet elements or imagery" tone="amber" />
+        <MetricCard label="Live milestones" value={`${milestoneCount}`} detail="Timeline entries currently supporting the program" tone="blue" />
+        <MetricCard label="Missing records" value={`${blockedHorses.length}`} detail="Horses still missing packet elements or imagery" tone="amber" />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
@@ -106,7 +129,7 @@ export default function Breeding() {
                         {horse.sex} · {horse.bloodline.family}
                       </div>
                     </div>
-                    <Pill tone={horse.segment === 'Stud' ? 'emerald' : 'blue'}>{horse.segment}</Pill>
+                    <Pill tone="blue">{horse.segment}</Pill>
                   </div>
                   <div className="inline-metrics">
                     <span>{horse.assignments.ranchManager}</span>
@@ -152,7 +175,7 @@ export default function Breeding() {
                       title: `${horse.name} | ${event.title}`,
                       description: event.summary,
                       onActivate: () => navigate(`/horses/${horse.id}`),
-                      action: <div className="inline-actions"><button className="button button--ghost button--compact" type="button" onClick={() => navigate(`/horses/${horse.id}`)}>Open</button>{canManageBreeding ? <button className="button button--ghost button--compact" type="button" style={{ color: 'var(--rose)' }} onClick={() => { if (window.confirm('Remove this breeding event?')) { const result = deleteBreedingEvent(horse.id, event.id); pushToast({ title: result.ok ? 'Event removed' : 'Remove blocked', message: result.message, tone: result.ok ? 'warning' : 'error' }); } }}>Delete</button> : null}</div>,
+                      action: <div className="inline-actions"><button className="button button--ghost button--compact" type="button" onClick={() => navigate(`/horses/${horse.id}`)}>Open</button>{canManageBreeding ? <button className="button button--ghost button--compact" type="button" style={{ color: 'var(--rose)' }} onClick={() => setPendingDelete({ horseId: horse.id, eventId: event.id, horseName: horse.name })}>Delete</button> : null}</div>,
                     }))}
                   />
                 ) : (
@@ -166,12 +189,62 @@ export default function Breeding() {
         </Panel>
       </div>
 
-      <div className="dashboard-grid dashboard-grid--primary">
+      <div className="dashboard-grid dashboard-grid--primary" ref={addEventFormRef}>
+        <Panel eyebrow="Revenue program" title="Breeding economics" description="Turn contracts, mare performance, foal value, and linked spend into an ROI decision.">
+          {selectedRevenue ? (
+            <>
+              <div className="metric-grid">
+                <MetricCard label="Stallion revenue" value={formatCompactCurrency(selectedRevenue.stallionRevenue)} detail="Stud fee multiplied by booked mares" tone="emerald" />
+                <MetricCard label="Mare production" value={formatCompactCurrency(selectedRevenue.economics.mareProductionValue)} detail="Attributed production value" tone="blue" />
+                <MetricCard label="Foal projected" value={formatCompactCurrency(selectedRevenue.economics.foalProjectedValue)} detail="Projected foal value" />
+                <MetricCard label="Program ROI" value={`${Math.round(selectedRevenue.roi)}%`} detail={`${formatCompactCurrency(selectedRevenue.totalCosts)} total linked costs`} tone={selectedRevenue.roi >= 0 ? 'emerald' : 'rose'} />
+              </div>
+              {revenueGate ? (
+                <div className="stack-item"><div className="stack-item__title">Unlock premium breeding-operation controls</div><div className="stack-item__copy">{revenueGate}</div><button className="button button--primary button--compact" type="button" onClick={() => navigate('/subscriptions')}>Upgrade to unlock</button></div>
+              ) : (
+                <div className="form-grid form-grid--tight">
+                  {([
+                    ['studFee', 'Stud fee'],
+                    ['bookedMares', 'Booked mares'],
+                    ['breedingCosts', 'Direct breeding costs'],
+                    ['mareProductionValue', 'Mare production value'],
+                    ['foalProjectedValue', 'Foal projected value'],
+                  ] as const).map(([key, label]) => (
+                    <label className="field-stack" key={key}><span className="field-label">{label}</span><input className="field-input" type="number" min="0" value={economics[key]} onChange={(event) => setEconomics((current) => ({ ...current, [key]: event.target.value }))} disabled={!canManageBreeding} /></label>
+                  ))}
+                  <button className="button button--primary button--compact" type="button" disabled={!selectedHorse || !canManageBreeding} onClick={() => {
+                    if (!selectedHorse) return;
+                    const result = updateBreedingEconomics(selectedHorse.id, {
+                      studFee: Number(economics.studFee),
+                      bookedMares: Number(economics.bookedMares),
+                      breedingCosts: Number(economics.breedingCosts),
+                      mareProductionValue: Number(economics.mareProductionValue),
+                      foalProjectedValue: Number(economics.foalProjectedValue),
+                    });
+                    pushToast({ title: result.ok ? 'Breeding economics saved' : 'Revenue update blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                  }}>Save revenue model</button>
+                </div>
+              )}
+            </>
+          ) : <EmptyState compact title="Select a breeding horse" description="Assign a mare or stud to the program to calculate value and ROI." />}
+        </Panel>
+
         <Panel eyebrow="Program action" title="Add breeding event" description="Log a milestone.">
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
               <span className="field-label">Horse</span>
-              <select className="field-input" value={selectedHorseId} onChange={(event) => setSelectedHorseId(event.target.value)} disabled={!canManageBreeding}>
+              <select className="field-input" value={selectedHorseId} onChange={(event) => {
+                const horse = breedingHorses.find((item) => item.id === event.target.value);
+                const values = { ...emptyBreedingEconomics, ...horse?.breedingEconomics };
+                setSelectedHorseId(event.target.value);
+                setEconomics({
+                  studFee: String(values.studFee),
+                  bookedMares: String(values.bookedMares),
+                  breedingCosts: String(values.breedingCosts),
+                  mareProductionValue: String(values.mareProductionValue),
+                  foalProjectedValue: String(values.foalProjectedValue),
+                });
+              }} disabled={!canManageBreeding}>
                 <option value="">Select horse</option>
                 {breedingHorses.map((horse) => (
                   <option key={horse.id} value={horse.id}>
@@ -249,6 +322,25 @@ export default function Breeding() {
       </div>
 
       <ContextMenu open={Boolean(menuHorse)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
+
+      <ConfirmActionDialog
+        open={Boolean(pendingDelete)}
+        tone="danger"
+        title="Delete breeding record"
+        consequences={[
+          `The event is removed from ${pendingDelete?.horseName ?? 'this horse'}'s breeding timeline.`,
+          'Deletion is recorded in the audit log.',
+          'This cannot be undone.',
+        ]}
+        confirmLabel="Delete record"
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => {
+          if (!pendingDelete) return;
+          const result = deleteBreedingEvent(pendingDelete.horseId, pendingDelete.eventId);
+          pushToast({ title: result.ok ? 'Event removed' : 'Remove blocked', message: result.message, tone: result.ok ? 'warning' : 'error' });
+          setPendingDelete(null);
+        }}
+      />
     </>
   );
 }

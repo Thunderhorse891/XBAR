@@ -1,207 +1,43 @@
+/*
+ * Ownership & Transfer Registry — light workspace.
+ * The CommandBrief hero is the only dark module on this route; everything
+ * below it sits on light panels with metal borders from the global system.
+ * Status language: blue = clear/verified, amber = in progress, rose = blocked.
+ * No green anywhere on this route.
+ */
+
 .ownership-ops {
-  margin: -4px -2px 0;
-  padding: clamp(16px, 2.3vw, 28px);
-  border-radius: 10px;
-  background:
-    radial-gradient(circle at 14% 8%, rgba(45, 140, 255, 0.16), transparent 28%),
-    radial-gradient(circle at 88% 4%, rgba(206, 221, 234, 0.1), transparent 24%),
-    linear-gradient(135deg, #05080d 0%, #101923 50%, #060a10 100%);
-  color: #edf5ff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 28px 70px rgba(7, 12, 18, 0.22);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.ownership-ops .button--primary {
-  background: linear-gradient(135deg, #eef5fb 0%, #c8d0da 48%, #2d8cff 100%);
-  color: #05080d;
-  box-shadow: 0 14px 34px rgba(45, 140, 255, 0.22);
-}
-
-.ownership-ops .button--primary:hover {
-  background: linear-gradient(135deg, #ffffff 0%, #dce7f0 52%, #5fa7ff 100%);
-  transform: translateY(-1px);
-}
-
-.ownership-ops .button--ghost {
-  border-color: rgba(206, 221, 234, 0.24);
-  background: rgba(255, 255, 255, 0.06);
-  color: #edf5ff;
-}
-
-.ownership-ops .button--ghost:hover {
-  border-color: rgba(45, 140, 255, 0.44);
-  background: rgba(24, 168, 255, 0.1);
-  transform: translateY(-1px);
-}
-
-.ownership-legal-brief.surface-hero--dark {
-  padding: clamp(24px, 3vw, 36px);
-  border-color: rgba(206, 221, 234, 0.22);
-  background:
-    linear-gradient(120deg, rgba(255, 255, 255, 0.07), transparent 36%),
-    radial-gradient(circle at 16% 12%, rgba(24, 168, 255, 0.16), transparent 30%),
-    linear-gradient(145deg, rgba(8, 15, 28, 0.98), rgba(14, 23, 36, 0.96));
-  box-shadow: 0 28px 64px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.07);
-}
-
-.ownership-legal-brief h1 {
-  max-width: 940px;
-  margin: 12px 0 0;
-  color: #f2f7ff;
-  font-size: clamp(2.1rem, 4.3vw, 4.85rem);
-  line-height: 0.92;
-  letter-spacing: -0.065em;
-}
-
-.ownership-legal-brief p {
-  max-width: 780px;
-  margin: 16px 0 0;
-  color: #b5c7dc;
-  font-size: clamp(0.98rem, 1.2vw, 1.16rem);
-  line-height: 1.6;
-}
-
-.ownership-proof-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 24px;
-}
-
-.ownership-proof-strip span {
-  display: grid;
-  gap: 6px;
-  min-height: 88px;
-  padding: 15px;
-  border: 1px solid rgba(206, 221, 234, 0.16);
-  border-radius: 12px;
-  background: linear-gradient(180deg, rgba(11, 22, 37, 0.92), rgba(8, 15, 28, 0.86));
-}
-
-.ownership-proof-strip strong {
-  color: #f2f7ff;
-  font-size: 1.35rem;
-  line-height: 1;
-  letter-spacing: -0.04em;
-}
-
-.ownership-proof-strip small {
-  color: #8aa0b8;
-  font-size: 0.73rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  line-height: 1.35;
-  text-transform: uppercase;
-}
-
-.ownership-metric-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-  margin-top: 16px;
-}
-
-.ownership-metric-card.metric-card {
-  border-color: rgba(206, 221, 234, 0.16);
-  background: rgba(255, 255, 255, 0.07);
-  color: #edf5ff;
-  box-shadow: none;
-  cursor: pointer;
-  transition: transform 180ms ease, border-color 180ms ease, background-color 180ms ease;
-}
-
-.ownership-metric-card.metric-card:hover {
-  transform: translateY(-3px);
-  border-color: rgba(45, 140, 255, 0.4);
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.ownership-metric-card.metric-card .metric-card__label,
-.ownership-metric-card.metric-card .metric-card__detail {
-  color: #8aa0b8;
-}
-
-.ownership-metric-card.metric-card .metric-card__value {
-  color: #f2f7ff;
-}
-
-.ownership-command-panel,
 .ownership-panel {
-  border: 1px solid rgba(206, 221, 234, 0.18);
+  border: 1px solid rgba(32, 49, 67, 0.14);
   border-radius: 10px;
-  background: rgba(247, 250, 253, 0.965);
+  background: rgba(251, 252, 254, 0.97);
   color: #14202d;
-  box-shadow: 0 24px 54px rgba(4, 8, 12, 0.24);
-}
-
-.ownership-command-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 0.86fr) minmax(360px, 1.14fr);
-  gap: 18px;
-  align-items: end;
-  margin-top: 16px;
+  box-shadow: 0 18px 40px rgba(16, 28, 42, 0.08);
   padding: clamp(18px, 2vw, 24px);
-}
-
-.ownership-command-panel h2,
-.ownership-section-heading h2 {
-  max-width: 720px;
-  margin: 8px 0 0;
-  color: #111923;
-  font-size: clamp(1.35rem, 2vw, 2rem);
-  line-height: 1.04;
-  letter-spacing: -0.035em;
-}
-
-.ownership-toolbar {
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(150px, 0.32fr) minmax(150px, 0.32fr);
-  gap: 10px;
-}
-
-.ownership-search input,
-.ownership-toolbar select,
-.ownership-ops .field-input,
-.ownership-ops .field-textarea {
-  width: 100%;
-  min-height: 42px;
-  border: 1px solid rgba(32, 49, 67, 0.16);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.9);
-  color: #14202d;
-  padding: 0 12px;
-  outline: none;
-  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
-}
-
-.ownership-ops .field-textarea {
-  padding: 12px;
-}
-
-.ownership-search input:focus,
-.ownership-toolbar select:focus,
-.ownership-ops .field-input:focus,
-.ownership-ops .field-textarea:focus {
-  border-color: rgba(45, 140, 255, 0.54);
-  background: #ffffff;
-  box-shadow: 0 0 0 4px rgba(45, 140, 255, 0.12);
 }
 
 .ownership-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.65fr);
   gap: 16px;
-  margin-top: 16px;
 }
 
-.ownership-workspace--timeline {
-  grid-template-columns: minmax(340px, 0.62fr) minmax(0, 1.38fr);
+.ownership-workspace--main {
+  grid-template-columns: minmax(0, 1.12fr) minmax(380px, 0.88fr);
+  align-items: start;
 }
 
-.ownership-panel {
-  padding: clamp(18px, 2vw, 24px);
+.ownership-workspace--secondary {
+  grid-template-columns: minmax(0, 1.3fr) minmax(340px, 0.7fr);
+  align-items: start;
 }
 
-.ownership-editor-panel {
+.ownership-editor-panel,
+.ownership-record-panel {
   align-self: start;
 }
 
@@ -217,99 +53,61 @@
   margin-bottom: 16px;
 }
 
-.ownership-registry-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+.ownership-section-heading h2 {
+  max-width: 680px;
+  margin: 8px 0 0;
+  color: #111923;
+  font-size: clamp(1.3rem, 1.9vw, 1.85rem);
+  line-height: 1.06;
+  letter-spacing: 0;
 }
 
+/* ---- Registry toolbar -------------------------------------------------- */
+
+.ownership-toolbar {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) minmax(140px, 0.36fr) minmax(140px, 0.36fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.ownership-search input,
+.ownership-toolbar select,
+.ownership-ops .field-input,
+.ownership-ops .field-textarea {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid rgba(32, 49, 67, 0.16);
+  border-radius: 7px;
+  background: #ffffff;
+  color: #14202d;
+  padding: 0 12px;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.ownership-ops .field-textarea {
+  padding: 12px;
+}
+
+.ownership-search input:focus,
+.ownership-toolbar select:focus,
+.ownership-ops .field-input:focus,
+.ownership-ops .field-textarea:focus {
+  border-color: rgba(74, 122, 170, 0.54);
+  background: #ffffff;
+  box-shadow: 0 0 0 4px rgba(74, 122, 170, 0.12);
+}
+
+/* ---- Registry table ----------------------------------------------------- */
+
+.ownership-table,
 .ownership-owner-card,
-.ownership-document-group,
-.ownership-latest-doc,
-.ownership-note-box,
-.ownership-transfer-summary,
-.ownership-table {
+.ownership-note-box {
   border: 1px solid rgba(32, 49, 67, 0.12);
   border-radius: 8px;
   background: linear-gradient(180deg, #ffffff 0%, #f4f7fb 100%);
-  box-shadow: 0 14px 28px rgba(16, 28, 42, 0.07);
-}
-
-.ownership-owner-card {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 16px;
-  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
-}
-
-.ownership-owner-card:hover,
-.ownership-latest-doc:hover {
-  transform: translateY(-3px);
-  border-color: rgba(45, 140, 255, 0.28);
-  box-shadow: 0 22px 42px rgba(16, 28, 42, 0.1);
-}
-
-.ownership-owner-card__top,
-.ownership-document-group__top,
-.ownership-document-row,
-.ownership-section-heading {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-}
-
-.ownership-owner-card__top {
-  align-items: flex-start;
-}
-
-.ownership-owner-card h3,
-.ownership-document-group h3 {
-  margin: 0;
-  color: #101923;
-  font-size: 1.08rem;
-  letter-spacing: -0.025em;
-}
-
-.ownership-owner-card p,
-.ownership-document-group p {
-  margin: 6px 0 0;
-  color: #68778a;
-  font-size: 0.88rem;
-}
-
-.ownership-owner-card__meta {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  color: #4e5b6b;
-  font-size: 0.78rem;
-}
-
-.ownership-owner-card__meta span {
-  min-width: 0;
-  padding: 10px;
-  overflow: hidden;
-  border-radius: 7px;
-  background: rgba(234, 240, 247, 0.72);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ownership-empty-state {
-  display: grid;
-  place-items: center;
-  gap: 14px;
-  min-height: 280px;
-}
-
-.ownership-empty-state--compact {
-  min-height: 170px;
-}
-
-.ownership-full-button {
-  width: 100%;
-  margin-top: 16px;
+  box-shadow: 0 12px 24px rgba(16, 28, 42, 0.06);
 }
 
 .ownership-table {
@@ -334,7 +132,7 @@
 .ownership-table__head,
 .ownership-row {
   display: grid;
-  grid-template-columns: minmax(170px, 1.1fr) minmax(170px, 1fr) minmax(100px, 0.52fr) minmax(150px, 0.72fr) minmax(180px, 1fr);
+  grid-template-columns: minmax(150px, 1.05fr) minmax(150px, 1fr) minmax(86px, 0.5fr) minmax(140px, 0.74fr) minmax(150px, 0.9fr);
   gap: 12px;
   align-items: center;
 }
@@ -346,33 +144,38 @@
   color: #667488;
   font-size: 0.72rem;
   font-weight: 900;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
 .ownership-row {
   width: 100%;
-  min-height: 82px;
+  min-height: 78px;
   padding: 14px 16px;
+  border: 0;
   border-top: 1px solid rgba(32, 49, 67, 0.08);
+  background: transparent;
   color: #14202d;
   text-align: left;
   cursor: pointer;
-  transition: background-color 160ms ease, transform 160ms ease;
+  transition: background-color 160ms ease;
 }
 
-.ownership-row:hover,
-.ownership-row--selected {
+.ownership-row:hover {
   background: #f0f6fb;
+}
+
+.ownership-row--selected,
+.ownership-row--selected:hover {
+  background: #e6f0f9;
+  box-shadow: inset 3px 0 0 #4a7aaa;
 }
 
 .ownership-row span {
   min-width: 0;
 }
 
-.ownership-row strong,
-.ownership-document-row strong,
-.ownership-latest-doc strong {
+.ownership-row strong {
   display: block;
   overflow: hidden;
   color: #101923;
@@ -380,9 +183,7 @@
   white-space: nowrap;
 }
 
-.ownership-row small,
-.ownership-document-row span,
-.ownership-latest-doc small {
+.ownership-row small {
   display: block;
   margin-top: 5px;
   overflow: hidden;
@@ -392,120 +193,370 @@
   white-space: nowrap;
 }
 
-.ownership-timeline-layout {
+.ownership-empty-state {
   display: grid;
-  grid-template-columns: minmax(210px, 0.52fr) minmax(260px, 0.72fr) minmax(260px, 0.76fr);
+  place-items: center;
   gap: 14px;
-  align-items: stretch;
+  min-height: 220px;
 }
 
-.ownership-transfer-summary {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-  background: linear-gradient(145deg, #101923, #172231);
+/* ---- Transfer workspace: proof chain ------------------------------------ */
+
+.ownership-subsection {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(32, 49, 67, 0.1);
 }
 
-.ownership-transfer-summary div {
-  padding: 13px;
-  border: 1px solid rgba(206, 221, 234, 0.12);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.045);
+.ownership-subsection:first-of-type {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
-.ownership-transfer-summary span {
-  color: rgba(237, 245, 255, 0.66);
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+.ownership-subsection__title {
+  margin: 0 0 12px;
+  color: #28557c;
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
-.ownership-transfer-summary strong {
-  display: block;
-  margin-top: 8px;
-  color: #f2f7ff;
-  font-size: 1rem;
-  letter-spacing: -0.02em;
-}
-
-.ownership-timeline {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 2px 0;
-}
-
-.ownership-timeline__item {
+.ownership-proof-list {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
   gap: 10px;
 }
 
-.ownership-timeline__item span {
-  width: 10px;
-  height: 10px;
-  margin-top: 5px;
-  border: 2px solid #2d8cff;
-  border-radius: 999px;
+.ownership-proof-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(32, 49, 67, 0.12);
+  border-left-width: 3px;
+  border-radius: 8px;
   background: #ffffff;
-  box-shadow: 0 0 0 4px rgba(45, 140, 255, 0.16);
 }
 
-.ownership-timeline__item p {
-  margin: 0;
-  padding: 12px;
+.ownership-proof-row--missing {
+  border-left-color: #c2484f;
+}
+
+.ownership-proof-row--linked {
+  border-left-color: #b9842c;
+}
+
+.ownership-proof-row--verified {
+  border-left-color: #3f6fa3;
+}
+
+.ownership-proof-row__info {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 220px;
+}
+
+.ownership-proof-row__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ownership-proof-row__title strong {
+  color: #101923;
+  font-size: 0.94rem;
+}
+
+.ownership-proof-row__info small {
+  color: #68778a;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.ownership-proof-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.ownership-proof-select.field-input {
+  min-height: 36px;
+  max-width: 230px;
+  font-size: 0.82rem;
+}
+
+/* ---- Confidence ----------------------------------------------------------- */
+
+.ownership-confidence {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid rgba(32, 49, 67, 0.12);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.ownership-confidence__caption {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.ownership-confidence__caption span {
+  color: #28557c;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ownership-confidence__caption strong {
+  color: #101923;
+  font-size: 1.15rem;
+}
+
+.ownership-confidence small {
+  display: block;
+  margin-top: 8px;
+  color: #68778a;
+  font-size: 0.75rem;
+}
+
+/* ---- Transfer status control ---------------------------------------------- */
+
+.ownership-status-control {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ownership-status-button {
+  padding: 9px 14px;
+  border: 1px solid rgba(32, 49, 67, 0.18);
+  border-radius: 7px;
+  background: #ffffff;
+  color: #2a3a4c;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+
+.ownership-status-button:hover:not(:disabled) {
+  border-color: rgba(74, 122, 170, 0.5);
+  background: #f0f6fb;
+}
+
+.ownership-status-button--active,
+.ownership-status-button--active:disabled {
+  border-color: #3f6fa3;
+  background: #e6f0f9;
+  color: #1d4671;
+}
+
+.ownership-status-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ownership-status-hint {
+  margin: 10px 0 0;
+  color: #68778a;
+  font-size: 0.78rem;
+}
+
+.ownership-ops .field-error {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(194, 72, 79, 0.4);
+  border-radius: 7px;
+  background: rgba(194, 72, 79, 0.08);
+  color: #8c2f35;
+  font-size: 0.82rem;
+}
+
+/* ---- Audit log -------------------------------------------------------------- */
+
+.ownership-audit-list {
+  display: grid;
+  gap: 8px;
+  max-height: 340px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.ownership-audit-item {
+  padding: 10px 12px;
   border: 1px solid rgba(32, 49, 67, 0.1);
   border-radius: 7px;
   background: #ffffff;
-  color: #4e5b6b;
+}
+
+.ownership-audit-item__meta {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.ownership-audit-item__meta span {
+  color: #68778a;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ownership-audit-item__meta strong {
+  color: #28557c;
+  font-size: 0.78rem;
+}
+
+.ownership-audit-item p {
+  margin: 0;
+  color: #2a3a4c;
+  font-size: 0.86rem;
   line-height: 1.45;
 }
 
 .ownership-note-box {
+  margin-top: 14px;
   padding: 14px;
 }
 
-.ownership-document-groups {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.ownership-document-group {
-  padding: 16px;
-}
-
-.ownership-document-row {
-  align-items: center;
-  padding: 11px;
-  border-radius: 7px;
-  background: rgba(234, 240, 247, 0.74);
-}
-
-.ownership-latest-docs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+.ownership-legacy-notes {
   margin-top: 16px;
 }
 
-.ownership-latest-doc {
-  padding: 14px;
-  text-align: left;
-  cursor: pointer;
-  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
-}
-
-.ownership-latest-doc span {
-  display: inline-flex;
-  margin-bottom: 8px;
-  color: #2d6fff;
+.ownership-audit-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  color: #8a98a9;
   font-size: 0.7rem;
   font-weight: 900;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+
+.ownership-audit-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(32, 49, 67, 0.14);
+}
+
+.ownership-legacy-notes ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  color: #68778a;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+/* ---- Clear confirmation proof summary --------------------------------------- */
+
+.ownership-clear-proof {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.ownership-clear-proof li {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid rgba(63, 111, 163, 0.3);
+  border-radius: 6px;
+  font-size: 0.82rem;
+}
+
+.ownership-clear-proof li strong {
+  font-size: 0.85rem;
+}
+
+.ownership-clear-proof li small {
+  opacity: 0.75;
+  font-size: 0.74rem;
+}
+
+.ownership-clear-proof__warning {
+  border-color: rgba(194, 72, 79, 0.5);
+  color: #c2484f;
+  font-weight: 700;
+}
+
+/* ---- Owner registry cards ---------------------------------------------------- */
+
+.ownership-registry-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.ownership-owner-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.ownership-owner-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(74, 122, 170, 0.28);
+  box-shadow: 0 18px 34px rgba(16, 28, 42, 0.1);
+}
+
+.ownership-owner-card__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.ownership-owner-card h3 {
+  margin: 0;
+  color: #101923;
+  font-size: 1.05rem;
+  letter-spacing: 0;
+}
+
+.ownership-owner-card p {
+  margin: 6px 0 0;
+  color: #68778a;
+  font-size: 0.86rem;
+}
+
+.ownership-owner-card__meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  color: #4e5b6b;
+  font-size: 0.78rem;
+}
+
+.ownership-owner-card__meta span {
+  min-width: 0;
+  padding: 10px;
+  overflow: hidden;
+  border-radius: 7px;
+  background: rgba(234, 240, 247, 0.72);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Co-owner stakes editor ---------------------------------------------------- */
 
 .ownership-stake-list {
   display: grid;
@@ -532,7 +583,7 @@
   padding: 10px 14px;
   border: 1px solid rgba(32, 49, 67, 0.12);
   border-radius: 8px;
-  background: rgba(234, 240, 247, 0.72);
+  background: #ffffff;
 }
 
 .ownership-stake-row__info {
@@ -556,8 +607,13 @@
 }
 
 .ownership-stake-row__info small {
-  color: #68778a;
+  color: #8a98a9;
   font-size: 0.75rem;
+}
+
+.ownership-full-button {
+  width: 100%;
+  margin-top: 16px;
 }
 
 .ownership-full-note {
@@ -567,19 +623,12 @@
   font-style: italic;
 }
 
-@media (max-width: 1300px) {
-  .ownership-command-panel,
-  .ownership-workspace,
-  .ownership-workspace--timeline,
-  .ownership-timeline-layout {
-    grid-template-columns: 1fr;
-  }
+/* ---- Responsive ------------------------------------------------------------------ */
 
-  .ownership-metric-grid,
-  .ownership-document-groups,
-  .ownership-latest-docs,
-  .ownership-proof-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+@media (max-width: 1300px) {
+  .ownership-workspace--main,
+  .ownership-workspace--secondary {
+    grid-template-columns: 1fr;
   }
 
   .ownership-toolbar,
@@ -596,47 +645,38 @@
   }
 }
 
-@media (max-width: 980px) {
-  .ownership-ops {
-    margin: 0 -6px;
-    padding: 14px;
-  }
-
-  .ownership-registry-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 @media (max-width: 720px) {
-  .ownership-legal-brief h1 {
-    font-size: clamp(2rem, 12vw, 3.4rem);
-  }
-
-  .ownership-metric-grid,
   .ownership-toolbar,
-  .ownership-owner-card__meta,
-  .ownership-document-groups,
-  .ownership-latest-docs,
-  .ownership-proof-strip {
+  .ownership-registry-grid,
+  .ownership-owner-card__meta {
     grid-template-columns: 1fr;
   }
 
   .ownership-section-heading,
-  .ownership-owner-card__top,
-  .ownership-document-group__top,
-  .ownership-document-row {
+  .ownership-owner-card__top {
     flex-direction: column;
   }
 
-  .ownership-panel,
-  .ownership-command-panel,
-  .ownership-legal-brief.surface-hero--dark {
+  .ownership-panel {
     padding: 16px;
   }
 
   .ownership-row {
     grid-template-columns: 1fr;
     align-items: start;
+  }
+
+  .ownership-proof-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ownership-proof-row__actions {
+    justify-content: flex-end;
+  }
+
+  .ownership-proof-select.field-input {
+    max-width: none;
   }
 }
 

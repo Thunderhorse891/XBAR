@@ -22,20 +22,23 @@ const BASE36_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 export const subscriptionTierConfig: Record<
   SubscriptionTier,
   Pick<SubscriptionProfile, 'monthlyRate' | 'sharedAccessEnabled' | 'featureFlags'> & {
-    limits: Pick<SubscriptionProfile['usage'], 'seatLimit' | 'documentLimit' | 'storageLimitGb' | 'sharedAccessSeatLimit'>;
+    limits: Pick<SubscriptionProfile['usage'], 'horseLimit' | 'seatLimit' | 'documentLimit' | 'salePacketLimit' | 'storageLimitGb' | 'sharedAccessSeatLimit'>;
   }
 > = {
   Starter: {
     monthlyRate: 29,
     sharedAccessEnabled: false,
     featureFlags: [
-      'Full operations toolkit — horses, care, medical, breeding, expenses, reminders, ranch assets, documents, weather',
+      'Keep clean records — horses, care, documents, expenses, reminders',
+      'Proof vault with OCR intake and review',
       '1 team seat',
       '250 document capacity · 25 GB storage',
     ],
     limits: {
+      horseLimit: 5,
       seatLimit: 1,
       documentLimit: 250,
+      salePacketLimit: 2,
       storageLimitGb: 25,
       sharedAccessSeatLimit: 0,
     },
@@ -45,13 +48,16 @@ export const subscriptionTierConfig: Record<
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Starter',
+      'Make money: watermarked sale packets and buyer deal rooms',
       'Sale listings — publish buyer-ready horse profiles to shared access',
       '5 team seats · 10 shared-access seats',
       '1,000 document capacity · 100 GB storage',
     ],
     limits: {
+      horseLimit: 30,
       seatLimit: 5,
       documentLimit: 1000,
+      salePacketLimit: 30,
       storageLimitGb: 100,
       sharedAccessSeatLimit: 10,
     },
@@ -61,13 +67,15 @@ export const subscriptionTierConfig: Record<
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Professional',
-      'Built for larger, multi-person operations',
+      'Run the operation: team roles, breeding program, equipment at scale',
       '20 team seats · 40 shared-access seats',
       '5,000 document capacity · 500 GB storage',
     ],
     limits: {
+      horseLimit: 200,
       seatLimit: 20,
       documentLimit: 5000,
+      salePacketLimit: 250,
       storageLimitGb: 500,
       sharedAccessSeatLimit: 40,
     },
@@ -77,13 +85,15 @@ export const subscriptionTierConfig: Record<
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Ranch Ops',
-      'Highest-capacity tier for large rosters and teams',
+      'Scale and control for large rosters and teams',
       '60 team seats · 200 shared-access seats',
       '20,000 document capacity · 2,500 GB storage',
     ],
     limits: {
+      horseLimit: 2000,
       seatLimit: 60,
       documentLimit: 20000,
+      salePacketLimit: 2000,
       storageLimitGb: 2500,
       sharedAccessSeatLimit: 200,
     },

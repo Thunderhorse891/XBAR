@@ -1,5 +1,6 @@
 import { useId, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
 import { EmptyState } from '@/components/EmptyState';
 import { Timeline } from '@/components/InteractionSystem';
 import { SalePacketSlots } from '@/components/SalePacketSlots';
@@ -11,6 +12,7 @@ import { formatCompactCurrency, formatDateLabel, formatPercent } from '@/lib/for
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
+import { normalizeOwnershipRecord } from '@/store/xbarStoreLogic';
 import { useCurrentRoleCapability, useHorseRecord, useXbarStore } from '@/store/useXbarStore';
 import type { DocumentRecord, DocumentSource, GalleryAsset, HorseSex, SalesLead } from '@/types/xbar';
 import { classNames, docSources, leadChannels, mediaKinds } from '@/features/horses/constants';
@@ -86,6 +88,7 @@ export default function HorseDetail() {
   const createSalesLead = useXbarStore((state) => state.createSalesLead);
   const updateHorse = useXbarStore((state) => state.updateHorse);
   const deleteHorse = useXbarStore((state) => state.deleteHorse);
+  const decideDocumentFact = useXbarStore((state) => state.decideDocumentFact);
   const currentRole = useXbarStore((state) => state.currentRole);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const session = useCloudStore((state) => state.session);
@@ -97,6 +100,7 @@ export default function HorseDetail() {
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
   const canEditHorse = useCurrentRoleCapability('editHorse');
   const canManageSales = useCurrentRoleCapability('manageSales');
+  const canReviewDocuments = useCurrentRoleCapability('reviewDocuments');
 
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [mediaKind, setMediaKind] = useState<GalleryAsset['kind']>('Hero');
@@ -114,6 +118,7 @@ export default function HorseDetail() {
   const [leadError, setLeadError] = useState('');
   const [locationError, setLocationError] = useState('');
   const [activeTab, setActiveTab] = useState<DetailTab>('Overview');
+  const [horsePendingDelete, setHorsePendingDelete] = useState(false);
   const [editingCore, setEditingCore] = useState(false);
   const [coreForm, setCoreForm] = useState({ name: '', breed: '', color: '', sex: 'Mare' as HorseSex, registrationNumber: '', owner: '', ownerEntity: '', askPrice: '' });
   const [location, setLocation] = useState({
@@ -138,6 +143,7 @@ export default function HorseDetail() {
   const activeSharedListing = sharedListings.find((listing) => listing.horseId === horse.id && listing.state !== 'Archived');
   const saved = Boolean(activeSharedListing);
   const packet = buildHorsePacketCompleteness(horse, documents, ownershipRecord);
+  const normalizedOwnership = ownershipRecord ? normalizeOwnershipRecord(ownershipRecord) : null;
   const publicShareUrl = buildPublicShareUrl(
     packet.sharePath,
     activeSharedListing?.accessMode === 'Private Token' ? activeSharedListing.shareToken : undefined,
@@ -320,7 +326,7 @@ export default function HorseDetail() {
         Horses
       </Link>
 
-      {/* Horse Identity Hero — cinematic command file */}
+      {/* Horse Identity Hero — cinematic horse record */}
       <section className="relative overflow-hidden rounded-[18px] border border-[rgba(148,184,224,0.1)] bg-[linear-gradient(135deg,#030810_0%,#081626_55%,#091830_100%)] shadow-[0_40px_80px_rgba(0,0,0,0.18),0_12px_32px_rgba(0,0,0,0.10),inset_0_1px_0_rgba(255,255,255,0.04)]">
         {/* Background radials */}
         <div className="pointer-events-none absolute inset-0">
@@ -370,7 +376,7 @@ export default function HorseDetail() {
                 <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Packet</span>
                 <span className={classNames(
                   'text-[13px] font-bold tabular-nums',
-                  packet.score >= 75 ? 'text-[#5eead4]' : packet.score >= 50 ? 'text-[#fbbf24]' : 'text-[#ff8a8a]',
+                  packet.score >= 75 ? 'text-[#58c0ff]' : packet.score >= 50 ? 'text-[#fbbf24]' : 'text-[#ff8a8a]',
                 )}>{packet.score}%</span>
               </div>
               <div className="flex items-center gap-2 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.04)] px-3 py-2">
@@ -389,7 +395,7 @@ export default function HorseDetail() {
                   <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Ownership</span>
                   <span className={classNames(
                     'text-[13px] font-bold',
-                    ownershipRecord.transferStatus === 'Clear' ? 'text-[#5eead4]' : 'text-[#ff8a8a]',
+                    ownershipRecord.transferStatus === 'Clear' ? 'text-[#58c0ff]' : 'text-[#ff8a8a]',
                   )}>{ownershipRecord.transferStatus}</span>
                 </div>
               ) : null}
@@ -403,7 +409,16 @@ export default function HorseDetail() {
                 href={publicShareUrl}
                 target="_blank"
                 rel="noreferrer"
-                onClick={() => void recordSharedChannel(horse.id, 'Direct Link')}
+                onClick={(event) => {
+                  event.preventDefault();
+                  void recordSharedChannel(horse.id, 'Direct Link').then((result) => {
+                    if (!result.ok) {
+                      pushToast({ title: 'Sale listing blocked', message: result.message, tone: 'error' });
+                      return;
+                    }
+                    if (typeof window !== 'undefined') window.open(publicShareUrl, '_blank', 'noopener,noreferrer');
+                  });
+                }}
               >
                 <SharedAccessIcon className="h-4 w-4" />
                 Open sale listing
@@ -432,11 +447,32 @@ export default function HorseDetail() {
               <button
                 className="inline-flex h-10 items-center justify-center rounded-lg border border-[rgba(255,80,80,0.3)] bg-transparent px-4 text-sm font-semibold text-[rgba(255,140,140,0.8)] transition-all duration-150 ease-[ease] hover:bg-[rgba(255,80,80,0.1)] disabled:cursor-not-allowed disabled:opacity-40"
                 type="button"
-                onClick={() => { if (window.confirm('Remove this horse from records? This cannot be undone.')) { deleteHorse(horse.id); navigate('/horses'); } }}
+                onClick={() => setHorsePendingDelete(true)}
               >
                 Remove horse
               </button>
             )}
+            <ConfirmActionDialog
+              open={horsePendingDelete}
+              tone="danger"
+              title={`Delete horse record — ${horse.name}`}
+              consequences={[
+                'Deletes the horse record, its medical and breeding timelines, and its activity history.',
+                'Documents remain in the library but lose their horse assignment.',
+                'Sale listings and leads referencing this horse keep their history.',
+                'The deletion is written to the audit log.',
+                'This cannot be undone.',
+              ]}
+              requireText={horse.name}
+              confirmLabel="Delete horse"
+              onCancel={() => setHorsePendingDelete(false)}
+              onConfirm={() => {
+                setHorsePendingDelete(false);
+                const result = deleteHorse(horse.id);
+                pushToast({ title: result.ok ? 'Horse removed' : 'Remove blocked', message: result.message, tone: result.ok ? 'warning' : 'error' });
+                if (result.ok) navigate('/horses');
+              }}
+            />
           </div>
         </div>
       </section>
@@ -689,6 +725,41 @@ export default function HorseDetail() {
             </button>
           </div>
         </Panel>
+
+        <Panel eyebrow="Ownership proof" title="Proof chain">
+          {normalizedOwnership ? (
+            <>
+              <div className="stack-list">
+                {(normalizedOwnership.proofRequirements ?? []).map((requirement) => (
+                  <div key={requirement.id} className="stack-item">
+                    <div className="stack-item__title">{requirement.label}</div>
+                    <div className="stack-item__copy">
+                      {requirement.status === 'verified'
+                        ? `Verified${requirement.verifiedBy ? ` by ${requirement.verifiedBy}` : ''}${requirement.documentTitle ? ` — ${requirement.documentTitle}` : ''}`
+                        : requirement.status === 'linked'
+                          ? `Linked to ${requirement.documentTitle ?? 'document'} — awaiting verification`
+                          : 'No document linked yet'}
+                    </div>
+                    <Pill tone={requirement.status === 'verified' ? 'blue' : requirement.status === 'linked' ? 'amber' : 'rose'}>
+                      {requirement.status}
+                    </Pill>
+                  </div>
+                ))}
+              </div>
+              <p className="panel__description" style={{ marginTop: 10 }}>
+                Proof-backed confidence: {normalizedOwnership.confidence}% · transfer status {normalizedOwnership.transferStatus}.
+                Proof linking and verification are managed in the Ownership registry.
+              </p>
+            </>
+          ) : (
+            <p className="panel__description">No ownership record yet — open the Ownership registry to initialize the proof chain.</p>
+          )}
+          <div className="inline-actions">
+            <Link className="button button--ghost button--compact" to="/ownership">
+              Open Ownership registry
+            </Link>
+          </div>
+        </Panel>
       </div>
 
       ) : null}
@@ -759,11 +830,24 @@ export default function HorseDetail() {
               <EmptyState compact title="No documents linked" description="Upload docs to build the record." />
             )}
             {!!horse.documentFacts.length && (
-              <div className="token-row">
+              <div className="stack-list">
                 {horse.documentFacts.map((fact) => (
-                  <Pill key={fact.id} tone="blue">
-                    {fact.label}: {fact.value}
-                  </Pill>
+                  <div className="stack-item" key={fact.id}>
+                    <div className="stack-item__top">
+                      <div><div className="stack-item__title">{fact.label}: {fact.value}</div><div className="stack-item__copy">{Math.round(fact.confidence * 100)}% OCR confidence</div></div>
+                      <Pill tone={fact.decision === 'Accepted' ? 'emerald' : fact.decision === 'Rejected' ? 'rose' : 'amber'}>{fact.decision ?? 'Needs decision'}</Pill>
+                    </div>
+                    <div className="inline-actions">
+                      <button className="button button--primary button--compact" type="button" disabled={!canReviewDocuments || fact.decision === 'Accepted'} onClick={() => {
+                        const result = decideDocumentFact(horse.id, fact.id, 'Accepted');
+                        pushToast({ title: result.ok ? 'OCR fact accepted' : 'Fact decision blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                      }}>Accept into record</button>
+                      <button className="button button--ghost button--compact" type="button" disabled={!canReviewDocuments || fact.decision === 'Rejected'} onClick={() => {
+                        const result = decideDocumentFact(horse.id, fact.id, 'Rejected');
+                        pushToast({ title: result.ok ? 'OCR fact rejected' : 'Fact decision blocked', message: result.message, tone: result.ok ? 'warning' : 'error' });
+                      }}>Reject fact</button>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}

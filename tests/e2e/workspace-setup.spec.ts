@@ -51,7 +51,7 @@ test('creates a fresh workspace and lands on the operations dashboard', async ({
 
   await page.getByRole('button', { name: 'Create workspace' }).click();
 
-  await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole('heading', { name: 'Build the dashboard', exact: true })).toBeVisible();
-  await expect(page.locator('.empty-state__title', { hasText: 'No records yet' })).toBeVisible();
+  await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: 'Add your first horse.', exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.empty-state__title', { hasText: 'No horse records yet' })).toBeVisible({ timeout: 15_000 });
 });

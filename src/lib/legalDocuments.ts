@@ -35,7 +35,7 @@ export const legalDocuments: LegalDocument[] = [
     notice: 'Operational baseline only. Have counsel review before relying on this as the final customer agreement.',
     sections: [
       { title: 'Acceptance', body: ['These Terms govern access to and use of the XBAR LLC platform, applications, document tools, buyer packet workflows, and related services.', 'By creating an account, accessing a workspace, starting a subscription, or using the service, the user agrees to these Terms.'] },
-      { title: 'Service description', body: ['XBAR LLC provides ranch and horse operation software for command files, proof control, title and transfer posture, care status, buyer movement, operating ledger workflows, document intake, and buyer packet preparation.', 'The service is an operational records platform. It is not a law firm, veterinary practice, accounting firm, insurance agency, livestock broker, escrow service, registry authority, or payment processor.'] },
+      { title: 'Service description', body: ['XBAR LLC provides ranch and horse operation software for horse records, proof control, title and transfer posture, care status, buyer movement, operating ledger workflows, document intake, and buyer packet preparation.', 'The service is an operational records platform. It is not a law firm, veterinary practice, accounting firm, insurance agency, livestock broker, escrow service, registry authority, or payment processor.'] },
       { title: 'Subscriptions and payment', body: ['Paid plans are subscription services. Unless otherwise stated at checkout, subscriptions renew automatically until canceled.', 'The user authorizes recurring charges for the selected plan and approved add-ons, seats, storage, or usage-based charges. Stripe or another payment processor may handle payment processing.'] },
       { title: 'Customer data', body: ['The customer retains ownership of ranch, horse, document, buyer, ownership, medical, expense, and operational data entered into the service.', 'XBAR LLC may host, process, transmit, display, secure, back up, and use that data as needed to provide and improve the service.'] },
       { title: 'No professional advice', body: ['XBAR does not provide legal, veterinary, medical, tax, accounting, insurance, registry, appraisal, brokerage, or financial advice.', 'Generated forms, templates, alerts, readiness scores, proof summaries, and buyer packet workflows are operational aids only. Users should consult qualified professionals before relying on them.'] },
@@ -77,7 +77,7 @@ export const legalDocuments: LegalDocument[] = [
   },
   {
     id: 'equine-records-disclaimer',
-    title: 'XBAR LLC Equine Records, Buyer Packet, and Professional Advice Disclaimer',
+    title: 'XBAR LLC Equine Records, Listings, and Professional Advice Disclaimer',
     shortTitle: 'Equine Disclaimer',
     purpose: 'Specific disclaimer for horse records, buyer packets, Coggins, veterinary data, title transfer, ownership claims, and generated documents.',
     lastUpdated: legalLastUpdated,
@@ -99,7 +99,7 @@ export const legalDocuments: LegalDocument[] = [
     suggestedFileName: 'xbar-llc-trademark-brand-notice.html',
     notice: 'Use TM for unregistered marks. Do not use the registered trademark symbol unless registration is complete.',
     sections: [
-      { title: 'XBAR marks', body: ['XBAR LLC(TM), XBAR(TM), XBAR Command Infrastructure(TM), XBAR Proof Vault(TM), XBAR Command Files(TM), XBAR Buyer Packet(TM), the XBAR name, the XBAR logo, product names, service names, graphics, icons, and trade dress are trademarks, service marks, or brand identifiers of XBAR LLC unless otherwise stated.', 'The TM symbol gives notice that XBAR claims trademark rights. The registered trademark symbol should not be used unless and until a mark is registered with the appropriate trademark office.'] },
+      { title: 'XBAR marks', body: ['XBAR LLC(TM), XBAR(TM), XBAR Command Infrastructure(TM), XBAR Documents(TM), XBAR My Horses(TM), XBAR Listings(TM), the XBAR name, the XBAR logo, product names, service names, graphics, icons, and trade dress are trademarks, service marks, or brand identifiers of XBAR LLC unless otherwise stated.', 'The TM symbol gives notice that XBAR claims trademark rights. The registered trademark symbol should not be used unless and until a mark is registered with the appropriate trademark office.'] },
       { title: 'No license without permission', body: ['Use of the XBAR name, logo, screenshots, product interface, buyer packet marks, marketing copy, or brand assets does not grant ownership or a license except as expressly allowed in writing by XBAR LLC.'] },
       { title: 'Buyer packet attribution', body: ['Buyer packets, generated documents, and shared links may identify that they were generated using XBAR. That attribution does not mean XBAR verified the horse, seller, buyer, price, ownership, health, title, or transaction terms.'] },
     ],

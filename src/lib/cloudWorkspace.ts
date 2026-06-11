@@ -712,27 +712,6 @@ async function saveWorkspaceBackupToRelationalCloud(backup: unknown, session: Se
       })),
     });
 
-    const client = getSupabaseClient();
-    if (!client) {
-      throw new Error('Supabase is not configured for this build.');
-    }
-
-    const { error: subscriptionError } = await client.from('workspace_subscription_profiles').upsert(
-      {
-        workspace_id: workspaceId,
-        tier: workspace.subscription?.tier ?? 'Starter',
-        billing_state: workspace.subscription?.billingState ?? 'Manual Billing',
-        monthly_rate: workspace.subscription?.monthlyRate ?? 0,
-        payload: workspace.subscription ?? {},
-        updated_at: updatedAt,
-      },
-      { onConflict: 'workspace_id' },
-    );
-
-    if (subscriptionError) {
-      throw new Error(subscriptionError.message);
-    }
-
     return {
       ok: true,
       message: 'Relational workspace updated.',

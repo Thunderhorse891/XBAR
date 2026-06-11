@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { generateDocumentFromTemplateRemote, hasBackendIdentity } from '@/lib/backendApi';
+import { useCloudStore } from '@/store/useCloudStore';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
 import { buildPrefilledDocument, documentTemplateLibrary, downloadHtmlFile, type DocumentTemplate, type DocumentTemplateTier } from '@/lib/documentTemplateLibrary';
@@ -63,11 +65,18 @@ export default function DocumentLibrary() {
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const subscription = useXbarStore((state) => state.subscription);
+  const currentRole = useXbarStore((state) => state.currentRole);
+  const createSalePacketBuild = useXbarStore((state) => state.createSalePacketBuild);
+  const recordSharedChannel = useXbarStore((state) => state.recordSharedChannel);
   const pushToast = useUiStore((state) => state.pushToast);
+  const navigate = useNavigate();
+  const session = useCloudStore((state) => state.session);
+  const workspaceId = useCloudStore((state) => state.workspaceId);
   const [activeTier, setActiveTier] = useState<DocumentTemplateTier>('Pro');
   const [selectedHorseId, setSelectedHorseId] = useState(horses[0]?.id ?? '');
   const [selectedTemplateId, setSelectedTemplateId] = useState(documentTemplateLibrary.find((template) => template.id === 'sales-packet')?.id ?? documentTemplateLibrary[0].id);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const selectedHorse = horses.find((horse) => horse.id === selectedHorseId) ?? horses[0];
   const selectedTemplate = documentTemplateLibrary.find((template) => template.id === selectedTemplateId) ?? documentTemplateLibrary[0];
@@ -124,6 +133,22 @@ export default function DocumentLibrary() {
 
   const exportSalePacket = () => {
     if (!localSalePacket || !selectedHorse) return;
+    if (localSalePacket.blockers.length) {
+      pushToast({ title: 'Packet release blocked', message: localSalePacket.blockers[0], tone: 'error' });
+      return;
+    }
+    const build = createSalePacketBuild({
+      horseId: selectedHorse.id,
+      watermark: 'XBAR buyer packet',
+      documentIds: selectedDocumentIds,
+      includesBillOfSale: false,
+      createdBy: currentRole,
+    });
+    if (!build.ok) {
+      pushToast({ title: 'Packet export blocked', message: build.message, tone: 'warning' });
+      if (build.message.toLowerCase().includes('upgrade')) navigate('/subscriptions');
+      return;
+    }
     downloadSalePacketHtml(localSalePacket.fileName, localSalePacket.html);
     appendLocalPacketLog({ horseId: selectedHorse.id, horseName: selectedHorse.name, action: 'exported', packetScore: localSalePacket.packetScore, releaseStatus: localSalePacket.releaseStatus, includedDocuments: selectedDocumentIds.length });
     pushToast({ title: 'Sale packet exported', message: `${selectedHorse.name} buyer packet downloaded and logged locally. Open it and print to PDF.`, tone: 'success' });
@@ -133,6 +158,50 @@ export default function DocumentLibrary() {
     if (!prefilled) return;
     downloadHtmlFile(prefilled.fileName, prefilled.html);
     pushToast({ title: 'Document exported', message: `${prefilled.template.label} downloaded as a print-ready HTML report. Use browser print to save as PDF.`, tone: 'success' });
+  };
+
+  // Cloud workspaces generate the real PDF server-side; a tier refusal
+  // becomes an upgrade moment instead of a dead end.
+  const generatePdf = async () => {
+    if (!selectedHorse) return;
+    const auth = { workspaceId, accessToken: session?.access_token ?? '' };
+    if (!hasBackendIdentity(auth)) {
+      pushToast({
+        title: 'Sign in for PDF generation',
+        message: 'Server-side PDF generation needs a cloud workspace session. Use "Download report" + print to PDF in local mode.',
+        tone: 'warning',
+      });
+      return;
+    }
+    setIsGeneratingPdf(true);
+    const remote = await generateDocumentFromTemplateRemote(auth, {
+      templateId: selectedTemplate.id,
+      horseId: selectedHorse.id,
+    });
+    setIsGeneratingPdf(false);
+    if (remote.ok) {
+      if (typeof window !== 'undefined' && remote.downloadUrl) {
+        window.open(remote.downloadUrl, '_blank', 'noopener,noreferrer');
+      }
+      pushToast({
+        title: 'PDF generated',
+        message: remote.missingFields.length
+          ? `${remote.fileName} is ready. ${remote.missingFields.length} fields were left blank: ${remote.missingFields.slice(0, 4).join(', ')}.`
+          : `${remote.fileName} is ready and stored with this horse's documents.`,
+        tone: 'success',
+      });
+      return;
+    }
+    if (remote.tierBlock) {
+      pushToast({
+        title: `This template needs the ${remote.tierBlock.requiredPlan} plan`,
+        message: remote.message,
+        tone: 'warning',
+      });
+      navigate(`/subscriptions?plan=${encodeURIComponent(remote.tierBlock.requiredPlan)}`);
+      return;
+    }
+    pushToast({ title: 'PDF generation failed', message: remote.message, tone: 'error' });
   };
 
   const previewLegalDocument = (legalDoc: (typeof legalDocuments)[number]) => {
@@ -149,11 +218,16 @@ export default function DocumentLibrary() {
     pushToast({ title: 'Legal document exported', message: `${legalDoc.shortTitle} downloaded as a print-ready HTML document. Open it and print to PDF.`, tone: 'success' });
   };
 
-  const copyShareLink = () => {
-    if (!sharedLink) return;
-    void navigator.clipboard.writeText(sharedLink).then(() => {
-      pushToast({ title: 'Secure link copied', message: 'Use shared access controls before sending this buyer-facing link.', tone: 'success' });
-    });
+  const copyShareLink = async () => {
+    if (!sharedLink || !selectedHorse) return;
+    const release = await recordSharedChannel(selectedHorse.id, 'Direct Link');
+    if (!release.ok) {
+      pushToast({ title: 'Buyer link blocked', message: release.message, tone: 'warning' });
+      navigate('/shared-access');
+      return;
+    }
+    await navigator.clipboard.writeText(sharedLink);
+    pushToast({ title: 'Audited buyer link copied', message: 'Seller release is confirmed and the direct-link share was recorded.', tone: 'success' });
   };
 
   const toggleProof = (documentId: string) => {
@@ -249,7 +323,7 @@ export default function DocumentLibrary() {
         <div className="inline-actions">
           <button className="button button--primary button--compact" type="button" onClick={previewSalePacket}>Preview packet</button>
           <button className="button button--ghost button--compact" type="button" onClick={exportSalePacket}>Export packet</button>
-          <button className="button button--ghost button--compact" type="button" onClick={copyShareLink}>Copy buyer link</button>
+          <button className="button button--ghost button--compact" type="button" onClick={() => void copyShareLink()}>Copy buyer link</button>
         </div>
       </Panel>
 
@@ -299,6 +373,9 @@ export default function DocumentLibrary() {
               <div className="stack-item"><div className="stack-item__title">Missing before signature</div><div className="token-row">{prefilled.missingFields.length ? prefilled.missingFields.map((field) => <Pill key={field} tone="amber">{field}</Pill>) : <Pill tone="emerald">No required gaps flagged</Pill>}</div></div>
               <div className="inline-actions">
                 <button className="button button--primary button--compact" type="button" onClick={openPreview} disabled={locked}>Preview</button>
+                <button className="button button--primary button--compact" type="button" onClick={() => void generatePdf()} disabled={isGeneratingPdf}>
+                  {isGeneratingPdf ? 'Generating PDF…' : locked ? `Generate PDF (${selectedTemplate.minimumPlan}+)` : 'Generate PDF'}
+                </button>
                 <button className="button button--ghost button--compact" type="button" onClick={downloadDocument} disabled={locked}>Download report</button>
                 <button className="button button--ghost button--compact" type="button" onClick={() => window.print()} disabled={locked}>Print / save PDF</button>
               </div>

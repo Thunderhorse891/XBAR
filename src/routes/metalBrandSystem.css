@@ -1,5 +1,7 @@
-/* XBAR metallic X brand system
-   Uses the public metallic X asset as the material reference for the full app. */
+/* XBAR metallic X brand system — light workspace edition.
+   The public metallic X asset stays the material reference for the brand
+   marks and the graphite shell; panels and controls are machined silver on
+   the light workspace. Loads last, so values here are authoritative. */
 
 :root {
   --xbar-black: #010204;
@@ -10,9 +12,10 @@
   --xbar-steel-bright: #eef5fb;
   --xbar-electric: #18a8ff;
   --xbar-electric-soft: rgba(24, 168, 255, 0.16);
-  --xbar-metal-border: rgba(206, 221, 234, 0.24);
-  --xbar-metal-line: linear-gradient(110deg, rgba(255,255,255,.38), rgba(107,126,145,.18) 28%, rgba(255,255,255,.08) 52%, rgba(226,239,249,.34));
-  --xbar-metal-panel: linear-gradient(145deg, rgba(30,36,44,.96), rgba(8,11,16,.98) 42%, rgba(3,5,8,.99));
+  --xbar-metal-border: rgba(96, 124, 154, 0.30);
+  --xbar-metal-line: linear-gradient(110deg, rgba(255,255,255,.9), rgba(150,170,190,.35) 28%, rgba(255,255,255,.5) 52%, rgba(120,150,180,.4));
+  --xbar-metal-panel: linear-gradient(170deg, #ffffff 0%, #f4f9fe 58%, #ecf3fa 100%);
+  --xbar-command-panel: linear-gradient(145deg, rgba(30,36,44,.96), rgba(8,11,16,.98) 42%, rgba(3,5,8,.99));
   --xbar-logo-image: url('/brand/xbar-website-icon.png.png');
   --radius-xl: 22px;
   --radius-lg: 16px;
@@ -21,9 +24,9 @@
 
 body {
   background:
-    radial-gradient(circle at 76% -12%, rgba(24, 168, 255, .14), transparent 30rem),
-    radial-gradient(circle at 10% 30%, rgba(184, 203, 220, .07), transparent 24rem),
-    linear-gradient(155deg, #000 0%, #07090d 48%, #010204 100%) !important;
+    radial-gradient(circle at 76% -12%, rgba(24, 168, 255, .09), transparent 30rem),
+    radial-gradient(circle at 10% 30%, rgba(174, 185, 197, .12), transparent 24rem),
+    linear-gradient(155deg, #f4f9fe 0%, #eef5fb 48%, #e6eef6 100%) !important;
 }
 
 body::before {
@@ -32,7 +35,7 @@ body::before {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-image: linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px);
+  background-image: linear-gradient(rgba(17,21,27,.022) 1px, transparent 1px), linear-gradient(90deg, rgba(17,21,27,.022) 1px, transparent 1px);
   background-size: 72px 72px;
   mask-image: radial-gradient(circle at 60% 18%, black, transparent 72%);
 }
@@ -58,10 +61,10 @@ aside > div:first-child > div:first-child,
   position: relative;
   overflow: hidden;
   color: transparent !important;
-  border: 1px solid var(--xbar-metal-border) !important;
+  border: 1px solid rgba(206, 221, 234, 0.24) !important;
   background: #020305 !important;
   box-shadow:
-    0 18px 44px rgba(0,0,0,.58),
+    0 18px 44px rgba(0,0,0,.4),
     0 0 26px rgba(24,168,255,.11),
     inset 0 1px 0 rgba(255,255,255,.22),
     inset 0 -1px 0 rgba(0,0,0,.9) !important;
@@ -104,23 +107,25 @@ aside > div:first-child > div:first-child > svg,
 
 .brand-canvas__lockup { opacity: 0; }
 
-/* Machined app shell */
+/* Machined graphite shell (sidebar keeps the dark brand identity). */
 .sidebar,
 aside {
   border-right: 1px solid rgba(224,237,248,.18) !important;
   background:
     linear-gradient(90deg, rgba(255,255,255,.025), transparent 18%),
     linear-gradient(180deg, #080a0e, #010204 80%) !important;
-  box-shadow: 18px 0 60px rgba(0,0,0,.58), inset -1px 0 0 rgba(255,255,255,.035) !important;
+  box-shadow: 14px 0 44px rgba(8,14,22,.30), inset -1px 0 0 rgba(255,255,255,.035) !important;
 }
 
+/* Topbar: brushed light steel. */
 .topbar,
 header.sticky {
-  border-bottom-color: rgba(219,234,246,.18) !important;
-  background: linear-gradient(180deg, rgba(20,24,30,.94), rgba(5,7,10,.92)) !important;
-  box-shadow: 0 18px 48px rgba(0,0,0,.38), inset 0 -1px 0 rgba(24,168,255,.12) !important;
+  border-bottom-color: rgba(96, 124, 154, 0.26) !important;
+  background: linear-gradient(180deg, rgba(252,254,255,.94), rgba(236,243,250,.92)) !important;
+  box-shadow: 0 14px 30px -24px rgba(17,21,27,.28), inset 0 -1px 0 rgba(24,168,255,.10) !important;
 }
 
+/* Machined silver panels on the light workspace. */
 .panel,
 .metric-card,
 .command-stage,
@@ -136,17 +141,13 @@ header.sticky {
 .ownership-workspace,
 .buyer-momentum,
 .activation-guide,
-.lp-card,
-.premium-setup-card,
-.premium-setup-form,
-[class*="rounded-"][class*="border"][class*="bg-white"],
-[class*="rounded-"][class*="border"][class*="bg-[#fbfdff]"] {
+.premium-setup-form {
   border-color: var(--xbar-metal-border) !important;
   background: var(--xbar-metal-panel) !important;
   box-shadow:
-    0 24px 64px rgba(0,0,0,.48),
-    inset 0 1px 0 rgba(255,255,255,.13),
-    inset 0 -1px 0 rgba(0,0,0,.82) !important;
+    0 18px 40px -26px rgba(17,21,27,.35),
+    inset 0 1px 0 rgba(255,255,255,.9),
+    inset 0 -1px 0 rgba(96,124,154,.14) !important;
 }
 
 .panel::after,
@@ -155,15 +156,13 @@ header.sticky {
 .portfolio-stage::after,
 .detail-hero::after,
 .horse-card::after,
-.table-shell::after,
-.lp-card::after,
-.premium-setup-card::after {
+.table-shell::after {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
   border-radius: inherit;
-  background: linear-gradient(120deg, rgba(255,255,255,.055), transparent 24%, transparent 76%, rgba(24,168,255,.055));
+  background: linear-gradient(120deg, rgba(255,255,255,.5), transparent 24%, transparent 76%, rgba(24,168,255,.05));
 }
 
 .panel::before,
@@ -172,12 +171,29 @@ header.sticky {
 .portfolio-stage::before,
 .detail-hero::before,
 .horse-card::before,
-.table-shell::before,
-.lp-card::before {
+.table-shell::before {
+  background: linear-gradient(90deg, transparent, rgba(45,140,255,.5), rgba(24,168,255,.6), transparent) !important;
+  box-shadow: 0 0 12px rgba(24,168,255,.18);
+}
+
+/* Auth cards stay dark graphite — premium command surfaces on the light shell. */
+.lp-card,
+.premium-setup-card {
+  border-color: rgba(206, 221, 234, 0.24) !important;
+  background: var(--xbar-command-panel) !important;
+  box-shadow:
+    0 24px 64px rgba(8,14,22,.38),
+    inset 0 1px 0 rgba(255,255,255,.13),
+    inset 0 -1px 0 rgba(0,0,0,.82) !important;
+}
+
+.lp-card::before,
+.premium-setup-card::before {
   background: linear-gradient(90deg, transparent, rgba(235,244,252,.66), rgba(24,168,255,.78), transparent) !important;
   box-shadow: 0 0 14px rgba(24,168,255,.28);
 }
 
+/* Mission-brief header keeps the dark command treatment with the brand mark. */
 .ops-briefing-header {
   isolation: isolate;
   background:
@@ -202,9 +218,9 @@ header.sticky {
 .ops-briefing-action,
 button[class*="border"],
 a[class*="border"] {
-  border-color: rgba(207,222,234,.26) !important;
-  background: linear-gradient(180deg, rgba(47,56,66,.94), rgba(11,14,19,.98)) !important;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.20), 0 10px 24px rgba(0,0,0,.34) !important;
+  border-color: rgba(96,124,154,.36) !important;
+  background: linear-gradient(180deg, #ffffff, #eaf1f8) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 8px 18px -12px rgba(17,21,27,.4) !important;
 }
 
 .button--primary,
@@ -214,7 +230,8 @@ button[class*="bg-[#1155dd]"],
 a[class*="bg-[#1155dd]"] {
   border-color: rgba(92,196,255,.78) !important;
   background: linear-gradient(180deg, #26b4ff, #0878d6 55%, #045ba9) !important;
-  box-shadow: 0 14px 34px rgba(0,139,235,.30), 0 0 18px rgba(24,168,255,.20), inset 0 1px 0 rgba(255,255,255,.42) !important;
+  box-shadow: 0 14px 30px -12px rgba(0,139,235,.5), 0 0 18px rgba(24,168,255,.16), inset 0 1px 0 rgba(255,255,255,.42) !important;
+  color: #ffffff !important;
 }
 
 .nav-link--active,
@@ -224,32 +241,33 @@ aside a[aria-current='page'] {
   box-shadow: inset 3px 0 0 var(--xbar-electric), 0 0 24px rgba(24,168,255,.12) !important;
 }
 
+/* Inset machined inputs — light. */
 input,
 select,
 textarea,
 .field-input,
 .search-shell__input,
 .role-select {
-  border-color: rgba(203,220,233,.22) !important;
-  background: linear-gradient(180deg, rgba(2,3,5,.92), rgba(12,15,20,.86)) !important;
-  box-shadow: inset 0 2px 8px rgba(0,0,0,.72), inset 0 1px 0 rgba(255,255,255,.04) !important;
+  border-color: rgba(96,124,154,.38) !important;
+  background: #ffffff !important;
+  box-shadow: inset 0 2px 5px rgba(17,21,27,.08), inset 0 1px 0 rgba(255,255,255,.6) !important;
 }
 
 thead,
 .table-head,
 th {
-  background: linear-gradient(180deg, rgba(34,40,48,.96), rgba(8,11,15,.98)) !important;
-  border-color: rgba(210,225,237,.18) !important;
+  background: linear-gradient(180deg, #f4f9fe, #eaf1f8) !important;
+  border-color: rgba(96,124,154,.26) !important;
 }
 
 tbody tr,
 .table-row {
-  background: linear-gradient(90deg, rgba(12,15,20,.9), rgba(5,7,10,.94)) !important;
+  background: #ffffff !important;
 }
 
 tbody tr:hover,
 .table-row:hover {
-  background: linear-gradient(90deg, rgba(24,168,255,.11), rgba(16,22,29,.94)) !important;
+  background: rgba(24,168,255,.08) !important;
 }
 
 @media (max-width: 768px) {

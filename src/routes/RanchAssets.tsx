@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { CommandBrief } from '@/components/CommandBrief';
+import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
-import { MetricCard, Panel, Pill } from '@/components/app-ui';
+import { Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
-import type { AssetCategory, AssetCondition, AssetStatus } from '@/types/xbar';
+import type { AssetCategory, AssetCondition, AssetStatus, RanchAsset } from '@/types/xbar';
 
 const statuses: AssetStatus[] = ['Available', 'Assigned', 'In Service'];
 const conditions: AssetCondition[] = ['Excellent', 'Service Soon', 'Attention Required'];
@@ -26,6 +28,9 @@ export default function RanchAssets() {
   const [assetQuery, setAssetQuery] = useState('');
   const [newAsset, setNewAsset] = useState({ name: '', category: 'Equipment' as AssetCategory, location: '' });
   const [newAssetError, setNewAssetError] = useState('');
+  const [assetPendingDelete, setAssetPendingDelete] = useState<RanchAsset | null>(null);
+  const addAssetFormRef = useRef<HTMLDivElement | null>(null);
+  const attentionRequired = ranchAssets.filter((asset) => asset.condition === 'Attention Required');
   const [menuState, setMenuState] = useState<{ assetId: string; x: number; y: number } | null>(null);
 
   const selectedAsset = ranchAssets.find((asset) => asset.id === selectedAssetId) ?? ranchAssets[0];
@@ -100,38 +105,40 @@ export default function RanchAssets() {
 
   return (
     <>
-      <div className="surface-hero surface-hero--dark">
-        <div className="surface-hero__top">
-          <div>
-            <span className="surface-hero__eyebrow">Equipment</span>
-          </div>
-          <div className="surface-hero__stats">
-            <div className="surface-hero__stat">
-              <span>Assets</span>
-              <strong>{ranchAssets.length}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Assigned</span>
-              <strong>{assigned.length}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Service soon</span>
-              <strong style={{ color: serviceSoon.length ? 'var(--amber)' : 'var(--emerald)' }}>{serviceSoon.length}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Available</span>
-              <strong style={{ color: 'var(--emerald)' }}>{ranchAssets.length - assigned.length}</strong>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="metric-grid">
-        <MetricCard label="Tracked assets" value={`${ranchAssets.length}`} detail="Tack, kits, stock" />
-        <MetricCard label="Assigned" value={`${assigned.length}`} detail="Tied to active work" tone="blue" />
-        <MetricCard label="Service soon" value={`${serviceSoon.length}`} detail="Needs maintenance or refill" tone="amber" />
-        <MetricCard label="Availability" value={`${ranchAssets.length - assigned.length}`} detail="Assets ready for reassignment" tone="emerald" />
-      </div>
+      <CommandBrief
+        variant="compact"
+        eyebrow="Equipment"
+        entity="Equipment Readiness"
+        status={
+          attentionRequired.length
+            ? { label: 'Attention required', tone: 'rose' }
+            : serviceSoon.length
+              ? { label: 'Service due', tone: 'amber' }
+              : { label: 'Fleet ready', tone: 'blue' }
+        }
+        summary={`${ranchAssets.length} tracked assets across tack, kits, feed, and transport. ${assigned.length} are assigned to active work.`}
+        evidence={[
+          { label: 'Assets', value: `${ranchAssets.length}` },
+          { label: 'Assigned', value: `${assigned.length}` },
+          { label: 'Service due', value: `${serviceSoon.length}` },
+          { label: 'Available', value: `${ranchAssets.length - assigned.length}` },
+        ]}
+        risks={[
+          ...attentionRequired.slice(0, 2).map((asset) => ({ label: `${asset.name}: attention required`, severity: 'rose' as const })),
+          ...serviceSoon
+            .filter((asset) => asset.condition === 'Service Soon')
+            .slice(0, 2)
+            .map((asset) => ({ label: `${asset.name}: service soon`, severity: 'amber' as const })),
+        ]}
+        nextAction={{
+          label: 'Add an asset',
+          onClick: () => {
+            addAssetFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            addAssetFormRef.current?.querySelector('input')?.focus();
+          },
+          disabledReason: canManageAssets ? undefined : 'Your role cannot manage equipment. Ask an Admin for access.',
+        }}
+      />
 
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel eyebrow="Inventory" title="Register">
@@ -264,11 +271,7 @@ export default function RanchAssets() {
               type="button"
               style={{ color: 'var(--rose)', borderColor: 'rgba(191,64,64,0.3)' }}
               onClick={() => {
-                if (window.confirm(`Remove ${selectedAsset?.name ?? 'this asset'}? This cannot be undone.`)) {
-                  const result = deleteAsset(selectedAssetId);
-                  pushToast({ title: result.ok ? 'Asset removed' : 'Remove blocked', message: result.message, tone: result.ok ? 'warning' : 'error' });
-                  if (result.ok) setSelectedAssetId('');
-                }
+                if (selectedAsset) setAssetPendingDelete(selectedAsset);
               }}
               disabled={!canManageAssets || !selectedAssetId}
             >
@@ -278,6 +281,7 @@ export default function RanchAssets() {
         </Panel>
       </div>
 
+      <div ref={addAssetFormRef}>
       <Panel eyebrow="Add to inventory" title="New asset">
         <div className="form-grid form-grid--tight">
           <label className="field-stack field-stack--wide">
@@ -316,6 +320,29 @@ export default function RanchAssets() {
           </button>
         </div>
       </Panel>
+      </div>
+
+      <ConfirmActionDialog
+        open={Boolean(assetPendingDelete)}
+        tone="danger"
+        title={`Delete asset — ${assetPendingDelete?.name ?? ''}`}
+        consequences={[
+          `${assetPendingDelete?.name ?? 'This asset'} is removed from the equipment registry.`,
+          'Assignment and service history for this asset are no longer tracked.',
+          'The deletion is written to the audit log.',
+          'This cannot be undone.',
+        ]}
+        requireText={assetPendingDelete?.name ?? ''}
+        confirmLabel="Delete asset"
+        onCancel={() => setAssetPendingDelete(null)}
+        onConfirm={() => {
+          if (!assetPendingDelete) return;
+          const result = deleteAsset(assetPendingDelete.id);
+          pushToast({ title: result.ok ? 'Asset removed' : 'Remove blocked', message: result.message, tone: result.ok ? 'warning' : 'error' });
+          if (result.ok && selectedAssetId === assetPendingDelete.id) setSelectedAssetId('');
+          setAssetPendingDelete(null);
+        }}
+      />
 
       <ContextMenu open={Boolean(menuAsset)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
     </>

@@ -2,7 +2,7 @@ import type { SubscriptionTier } from '../types/xbar.js';
 
 export const planOutcomes: Record<SubscriptionTier, string[]> = {
   Starter: [
-    'Build a dependable horse command file',
+    'Build a dependable horse record',
     'Keep care and source documents together',
     'See weather alongside daily operations',
   ],

@@ -6,8 +6,9 @@ import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { kindCopy } from '@/features/reminders/helpers';
 import type { ReminderFilter, ReminderKind } from '@/features/reminders/types';
 import { buildAlertDigest, buildAlertMailto } from '@/lib/alertCenter';
+import { assessRevenueAtRisk, detectSpendAnomalies } from '@/lib/businessIntelligence';
 import { buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
-import { formatDateLabel } from '@/lib/format';
+import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
 import { buildOperationsPriorities } from '@/lib/operationsPriority';
 import { useXbarStore } from '@/store/useXbarStore';
 import './operationsExperience.css';
@@ -33,6 +34,11 @@ export default function Reminders() {
   }), [documents, expenseReceipts, horses, ownershipRecords, salesLeads]);
 
   const digest = useMemo(() => buildAlertDigest(briefing.items), [briefing.items]);
+  const revenueRisk = useMemo(
+    () => assessRevenueAtRisk(horses, ownershipRecords, documents),
+    [horses, ownershipRecords, documents],
+  );
+  const spendAnomalies = useMemo(() => detectSpendAnomalies(expenseReceipts), [expenseReceipts]);
   const reminders = briefing.items;
   const filteredReminders = reminders.filter((reminder) => {
     const normalized = query.trim().toLowerCase();
@@ -88,6 +94,46 @@ export default function Reminders() {
             ))}
           </div>
         ) : <EmptyState compact title="Alerts are clear" description="Coggins, wormer, dental, transfer, document, and follow-up alerts will appear automatically as dates age." />}
+      </section>
+
+      <section className="priority-briefing" aria-labelledby="revenue-title">
+        <div className="priority-briefing__heading">
+          <div>
+            <span className="ops-kicker">Revenue intelligence</span>
+            <h2 id="revenue-title">Sale value blocked by paperwork</h2>
+          </div>
+          <p>
+            {revenueRisk.items.length
+              ? `${formatCompactCurrency(revenueRisk.valueAtRisk)} of ${formatCompactCurrency(revenueRisk.totalListedValue)} listed value cannot close today. Each blocker below has a one-click fix.`
+              : revenueRisk.totalListedValue > 0
+                ? `All ${formatCompactCurrency(revenueRisk.totalListedValue)} of listed value is paperwork-ready for buyers.`
+                : 'List a horse with an asking price and XBAR will track what stands between it and a closed sale.'}
+          </p>
+        </div>
+        {revenueRisk.items.length ? (
+          <div className="priority-grid">
+            {revenueRisk.items.slice(0, 3).map((item) => (
+              <button key={item.horseId} className="priority-card" type="button" onClick={() => navigate(item.actionRoute)}>
+                <span className="priority-card__index">{item.askPrice > 0 ? `${formatCompactCurrency(item.askPrice)} blocked` : 'Sale prep blocked'}</span>
+                <strong>{item.actionLabel}</strong>
+                <p>{item.blockers.join(' · ')}</p>
+                <span className="priority-card__meta"><span>Revenue</span><span>{item.horseName}</span></span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {spendAnomalies.length ? (
+          <div className="priority-grid" style={{ marginTop: 12 }}>
+            {spendAnomalies.slice(0, 2).map((anomaly) => (
+              <button key={anomaly.category} className="priority-card" type="button" onClick={() => navigate(anomaly.actionRoute)}>
+                <span className="priority-card__index">Spend running {anomaly.deltaPercent}% above trend</span>
+                <strong>{anomaly.actionLabel}</strong>
+                <p>{anomaly.category}: {formatCompactCurrency(anomaly.monthTotal)} this month vs {formatCompactCurrency(anomaly.trailingAverage)} trailing average.</p>
+                <span className="priority-card__meta"><span>Spend control</span><span>Ranch-wide</span></span>
+              </button>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       <section className="priority-briefing" aria-labelledby="briefing-title">

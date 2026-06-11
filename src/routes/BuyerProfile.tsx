@@ -6,12 +6,137 @@ import { SalePacketSlots } from '@/components/SalePacketSlots';
 import { KeyValue, MetricCard, Panel, Pill } from '@/components/app-ui';
 import { buildPublicShareUrl, openFacebookShareDialog } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
-import { isPublicShareLocalPreviewEnabled } from '@/lib/platformConfig';
+import { apiConfig, isPublicShareLocalPreviewEnabled } from '@/lib/platformConfig';
 import { loadPublicBuyerProfile, sanitizeDocumentForBuyerView, sanitizeHorseForBuyerView, sanitizeSharedListingForBuyerView, trackPublicBuyerProfileView, type PublicBuyerProfilePayload } from '@/lib/publicShare';
 import { hasBuyerShareAccess } from '@/lib/workspaceAccess';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
 import { useHorseRecord, useXbarStore } from '@/store/useXbarStore';
+
+
+// Buyer deal-room actions: questions, call requests, and offers flow back to
+// the seller — through the public API on real shared links, or straight into
+// the workspace deal room during internal/local preview.
+function BuyerActionPanel({
+  sharePath,
+  shareToken,
+  source,
+  onLocalLog,
+}: {
+  sharePath: string;
+  shareToken: string;
+  source: 'rpc' | 'local';
+  onLocalLog: (input: { kind: 'question' | 'call-requested' | 'offer'; actor: string; note?: string; amount?: number }) => void;
+}) {
+  const [mode, setMode] = useState<null | 'question' | 'call-requested' | 'offer'>(null);
+  const [buyerName, setBuyerName] = useState('');
+  const [buyerEmail, setBuyerEmail] = useState('');
+  const [message, setMessage] = useState('');
+  const [amount, setAmount] = useState('');
+  const [statusText, setStatusText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async () => {
+    if (!mode) return;
+    if (!buyerName.trim()) {
+      setStatusText('Your name is required so the seller can respond.');
+      return;
+    }
+    const offerAmount = Number(amount);
+    if (mode === 'offer' && (!Number.isFinite(offerAmount) || offerAmount <= 0)) {
+      setStatusText('Enter your offer amount.');
+      return;
+    }
+    setSubmitting(true);
+    setStatusText('');
+
+    if (source === 'local') {
+      onLocalLog({
+        kind: mode,
+        actor: buyerName.trim(),
+        note: [message.trim(), buyerEmail.trim() ? `Contact: ${buyerEmail.trim()}` : ''].filter(Boolean).join(' — ') || undefined,
+        amount: mode === 'offer' ? offerAmount : undefined,
+      });
+      setSubmitting(false);
+      setStatusText('Delivered to the seller. They will respond using your contact details.');
+      setMode(null);
+      return;
+    }
+
+    try {
+      const base = apiConfig.baseUrl ? apiConfig.baseUrl.replace(/\/$/, '') : '';
+      const response = await fetch(`${base}/api/buyer-inquiries`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sharePath,
+          shareToken,
+          kind: mode,
+          buyerName: buyerName.trim(),
+          buyerEmail: buyerEmail.trim(),
+          message: message.trim(),
+          amount: mode === 'offer' ? offerAmount : undefined,
+        }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { ok?: boolean; message?: string };
+      setSubmitting(false);
+      if (response.ok && payload.ok) {
+        setStatusText(payload.message ?? 'Delivered to the seller.');
+        setMode(null);
+      } else {
+        setStatusText(payload.message ?? 'Your message could not be delivered. Try again.');
+      }
+    } catch {
+      setSubmitting(false);
+      setStatusText('Your message could not be delivered. Check your connection and try again.');
+    }
+  };
+
+  return (
+    <Panel eyebrow="Interested?" title="Contact the seller">
+      <div className="inline-actions" role="group" aria-label="Buyer actions">
+        <button className={`button button--compact ${mode === 'question' ? 'button--primary' : 'button--ghost'}`} type="button" onClick={() => setMode('question')}>
+          Ask a question
+        </button>
+        <button className={`button button--compact ${mode === 'call-requested' ? 'button--primary' : 'button--ghost'}`} type="button" onClick={() => setMode('call-requested')}>
+          Request a call
+        </button>
+        <button className={`button button--compact ${mode === 'offer' ? 'button--primary' : 'button--ghost'}`} type="button" onClick={() => setMode('offer')}>
+          Submit an offer
+        </button>
+      </div>
+      {mode && (
+        <div className="form-grid form-grid--tight" style={{ marginTop: 12 }}>
+          <label className="field-stack">
+            <span className="field-label">Your name</span>
+            <input className="field-input" value={buyerName} onChange={(event) => setBuyerName(event.target.value)} placeholder="John Smith" />
+          </label>
+          <label className="field-stack">
+            <span className="field-label">Email or phone</span>
+            <input className="field-input" value={buyerEmail} onChange={(event) => setBuyerEmail(event.target.value)} placeholder="you@example.com" />
+          </label>
+          {mode === 'offer' && (
+            <label className="field-stack">
+              <span className="field-label">Offer amount (USD)</span>
+              <input className="field-input" type="number" min="1" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="15000" />
+            </label>
+          )}
+          <label className="field-stack field-stack--wide">
+            <span className="field-label">{mode === 'question' ? 'Your question' : mode === 'offer' ? 'Terms or notes (optional)' : 'Best time to call'}</span>
+            <input className="field-input" value={message} onChange={(event) => setMessage(event.target.value)} placeholder={mode === 'question' ? 'Is she up to date on vaccinations?' : 'Weekday afternoons'} />
+          </label>
+          <div className="inline-actions" style={{ gridColumn: '1/-1' }}>
+            <button className="button button--primary button--compact" type="button" disabled={submitting} onClick={() => void submit()}>
+              {submitting ? 'Sending…' : mode === 'offer' ? 'Send offer to seller' : 'Send to seller'}
+            </button>
+            <button className="button button--ghost button--compact" type="button" onClick={() => setMode(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {statusText && <p className="panel__description" role="status" style={{ marginTop: 10 }}>{statusText}</p>}
+    </Panel>
+  );
+}
 
 export default function BuyerProfile() {
   const { id } = useParams<{ id: string }>();
@@ -20,6 +145,7 @@ export default function BuyerProfile() {
   const pushToast = useUiStore((state) => state.pushToast);
   const localDocuments = useXbarStore((state) => state.documents.filter((document) => document.horseId === id));
   const localSharedListing = useXbarStore((state) => state.sharedListings.find((listing) => listing.horseId === id && listing.state !== 'Archived'));
+  const logBuyerRoomEvent = useXbarStore((state) => state.logBuyerRoomEvent);
   const shareToken = searchParams.get('t')?.trim() ?? '';
   const localPreviewAllowed = isPublicShareLocalPreviewEnabled() && searchParams.get('preview') === 'local';
   const localAccessAllowed = hasBuyerShareAccess(localSharedListing, shareToken);
@@ -333,6 +459,17 @@ export default function BuyerProfile() {
             )}
           </Panel>
         </div>
+      <BuyerActionPanel
+        sharePath={sharePath}
+        shareToken={shareToken}
+        source={remoteState.source ?? 'rpc'}
+        onLocalLog={(input) => {
+          if (id) {
+            logBuyerRoomEvent({ horseId: id, kind: input.kind, actor: input.actor, note: input.note, amount: input.amount });
+            pushToast({ title: 'Buyer activity logged', message: 'This inquiry is now in the deal room timeline.', tone: 'success' });
+          }
+        }}
+      />
       <footer style={{ textAlign: 'center', padding: '24px 0 8px', color: 'rgba(100,130,160,0.45)', fontSize: '11px', letterSpacing: '0.06em' }}>
         <p>© {new Date().getFullYear()} XBAR LLC™ · Information provided by seller. Buyer is responsible for independent verification of registration and health status.</p>
         <p style={{ marginTop: '6px' }}><a href='/terms' style={{ color: 'rgba(100,140,180,0.45)', textDecoration: 'none' }}>Terms</a> · <a href='/privacy' style={{ color: 'rgba(100,140,180,0.45)', textDecoration: 'none' }}>Privacy</a></p>

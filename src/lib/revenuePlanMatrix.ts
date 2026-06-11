@@ -16,7 +16,7 @@ export const revenuePlanMatrix: Record<SubscriptionTier, RevenuePlanProfile> = {
     fit: 'For a private owner or small barn getting out of spreadsheets.',
     revenueRole: 'Entry plan that proves XBAR value through clean horse records, care history, documents, and operating visibility.',
     features: [
-      { label: 'Horse command files', detail: 'Identity, ownership, care notes, documents, reminders, expenses, and weather context in one workspace.' },
+      { label: 'Horse records', detail: 'Identity, ownership, care notes, documents, reminders, expenses, and weather context in one workspace.' },
       { label: 'Health expiry alerts', detail: 'Track Coggins, vaccines, deworming, and treatment reminders before records go stale.' },
       { label: 'Expense ledger', detail: 'Log feed, farrier, vet, supplements, bedding, travel, and documents for cleaner cost awareness.' },
       { label: 'Proof vault', detail: 'Keep registration, bills of sale, vet records, Coggins, breeding contracts, insurance, and transfer packets attached to the horse file.' },
