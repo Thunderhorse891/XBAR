@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { readJsonBody, sendJson, getQuery } from './_lib/http.js';
 import { requireWorkspaceAccess } from './_lib/supabase-admin.js';
-import { getWorkspaceEntitlements, tierIncludesPlan } from './_lib/entitlements.js';
+import { checkSalePacketCapacity, getWorkspaceEntitlements, tierIncludesPlan } from './_lib/entitlements.js';
 import { loadHorseContext } from './_lib/horse-context.js';
 import { createSectionedPdf, assemblePacketPdf } from './_lib/pdf.js';
 import { sendEmail } from './_lib/email.js';
@@ -55,6 +55,16 @@ export default async function handler(req, res) {
       code: 'tier_required',
       message: `Sale packet assembly requires the Professional plan (current effective plan: ${entitlements.effectiveTier}).`,
       requiredPlan: 'Professional',
+      currentPlan: entitlements.effectiveTier,
+      billingState: entitlements.billingState,
+    });
+  }
+  const capacity = await checkSalePacketCapacity(supabase, workspaceId, 1, entitlements.limits);
+  if (!capacity.ok) {
+    return sendJson(res, 403, {
+      ok: false,
+      code: 'sale_packet_limit_reached',
+      message: capacity.message,
       currentPlan: entitlements.effectiveTier,
       billingState: entitlements.billingState,
     });

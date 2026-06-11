@@ -34,13 +34,30 @@ export async function checkDocumentCapacity(supabase, workspaceId, incomingCount
   const { count } = await supabase
     .from('documents')
     .select('document_id', { count: 'exact', head: true })
-    .eq('workspace_id', workspaceId);
+    .eq('workspace_id', workspaceId)
+    .neq('state', 'Archived');
 
   const used = Number(count || 0);
   if (used + incomingCount > limits.documentLimit) {
     return {
       ok: false,
       message: `This batch would exceed the plan's ${limits.documentLimit} document limit (${used} in use). Upgrade to continue.`,
+    };
+  }
+  return { ok: true, used };
+}
+
+export async function checkSalePacketCapacity(supabase, workspaceId, incomingCount, limits) {
+  const { count } = await supabase
+    .from('sale_packets')
+    .select('packet_id', { count: 'exact', head: true })
+    .eq('workspace_id', workspaceId);
+
+  const used = Number(count || 0);
+  if (used + incomingCount > limits.salePacketLimit) {
+    return {
+      ok: false,
+      message: `This packet would exceed the plan's ${limits.salePacketLimit} sale packet limit (${used} generated). Upgrade to continue.`,
     };
   }
   return { ok: true, used };

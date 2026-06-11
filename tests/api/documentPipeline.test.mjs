@@ -15,7 +15,7 @@ import {
   NEEDS_REVIEW_THRESHOLD,
 } from '../../api/_lib/document-extraction.js';
 import { templateCatalog, getTemplateById, renderTemplate } from '../../api/_lib/document-templates.js';
-import { tierIncludesPlan } from '../../api/_lib/entitlements.js';
+import { checkSalePacketCapacity, tierIncludesPlan } from '../../api/_lib/entitlements.js';
 import { extractZipEntries, isZipBuffer } from '../../api/_lib/zip.js';
 import { createSectionedPdf, assemblePacketPdf } from '../../api/_lib/pdf.js';
 
@@ -199,6 +199,31 @@ test('tier entitlement ladder enforces template access', () => {
   assert.equal(tierIncludesPlan('Ranch Ops', 'Professional'), true);
   assert.equal(tierIncludesPlan('Enterprise', 'Ranch Ops'), true);
   assert.equal(tierIncludesPlan('Professional', 'Ranch Ops'), false);
+});
+
+test('server sale packet capacity blocks generation at the plan limit', async () => {
+  const supabase = {
+    from(table) {
+      assert.equal(table, 'sale_packets');
+      return {
+        select(column, options) {
+          assert.equal(column, 'packet_id');
+          assert.deepEqual(options, { count: 'exact', head: true });
+          return {
+            async eq(field, value) {
+              assert.equal(field, 'workspace_id');
+              assert.equal(value, 'workspace-1');
+              return { count: 2 };
+            },
+          };
+        },
+      };
+    },
+  };
+
+  const blocked = await checkSalePacketCapacity(supabase, 'workspace-1', 1, { salePacketLimit: 2 });
+  assert.equal(blocked.ok, false);
+  assert.match(blocked.message, /2 sale packet limit/);
 });
 
 test('zip extraction handles stored and deflated entries', () => {
