@@ -65,6 +65,9 @@ export default function DocumentLibrary() {
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const subscription = useXbarStore((state) => state.subscription);
+  const currentRole = useXbarStore((state) => state.currentRole);
+  const createSalePacketBuild = useXbarStore((state) => state.createSalePacketBuild);
+  const recordSharedChannel = useXbarStore((state) => state.recordSharedChannel);
   const pushToast = useUiStore((state) => state.pushToast);
   const navigate = useNavigate();
   const session = useCloudStore((state) => state.session);
@@ -130,6 +133,22 @@ export default function DocumentLibrary() {
 
   const exportSalePacket = () => {
     if (!localSalePacket || !selectedHorse) return;
+    if (localSalePacket.blockers.length) {
+      pushToast({ title: 'Packet release blocked', message: localSalePacket.blockers[0], tone: 'error' });
+      return;
+    }
+    const build = createSalePacketBuild({
+      horseId: selectedHorse.id,
+      watermark: 'XBAR buyer packet',
+      documentIds: selectedDocumentIds,
+      includesBillOfSale: false,
+      createdBy: currentRole,
+    });
+    if (!build.ok) {
+      pushToast({ title: 'Packet export blocked', message: build.message, tone: 'warning' });
+      if (build.message.toLowerCase().includes('upgrade')) navigate('/subscriptions');
+      return;
+    }
     downloadSalePacketHtml(localSalePacket.fileName, localSalePacket.html);
     appendLocalPacketLog({ horseId: selectedHorse.id, horseName: selectedHorse.name, action: 'exported', packetScore: localSalePacket.packetScore, releaseStatus: localSalePacket.releaseStatus, includedDocuments: selectedDocumentIds.length });
     pushToast({ title: 'Sale packet exported', message: `${selectedHorse.name} buyer packet downloaded and logged locally. Open it and print to PDF.`, tone: 'success' });
@@ -199,11 +218,16 @@ export default function DocumentLibrary() {
     pushToast({ title: 'Legal document exported', message: `${legalDoc.shortTitle} downloaded as a print-ready HTML document. Open it and print to PDF.`, tone: 'success' });
   };
 
-  const copyShareLink = () => {
-    if (!sharedLink) return;
-    void navigator.clipboard.writeText(sharedLink).then(() => {
-      pushToast({ title: 'Secure link copied', message: 'Use shared access controls before sending this buyer-facing link.', tone: 'success' });
-    });
+  const copyShareLink = async () => {
+    if (!sharedLink || !selectedHorse) return;
+    const release = await recordSharedChannel(selectedHorse.id, 'Direct Link');
+    if (!release.ok) {
+      pushToast({ title: 'Buyer link blocked', message: release.message, tone: 'warning' });
+      navigate('/shared-access');
+      return;
+    }
+    await navigator.clipboard.writeText(sharedLink);
+    pushToast({ title: 'Audited buyer link copied', message: 'Seller release is confirmed and the direct-link share was recorded.', tone: 'success' });
   };
 
   const toggleProof = (documentId: string) => {
@@ -299,7 +323,7 @@ export default function DocumentLibrary() {
         <div className="inline-actions">
           <button className="button button--primary button--compact" type="button" onClick={previewSalePacket}>Preview packet</button>
           <button className="button button--ghost button--compact" type="button" onClick={exportSalePacket}>Export packet</button>
-          <button className="button button--ghost button--compact" type="button" onClick={copyShareLink}>Copy buyer link</button>
+          <button className="button button--ghost button--compact" type="button" onClick={() => void copyShareLink()}>Copy buyer link</button>
         </div>
       </Panel>
 
