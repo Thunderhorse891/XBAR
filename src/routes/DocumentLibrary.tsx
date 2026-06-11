@@ -5,6 +5,7 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
 import { buildPrefilledDocument, documentTemplateLibrary, downloadHtmlFile, type DocumentTemplate, type DocumentTemplateTier } from '@/lib/documentTemplateLibrary';
+import { downloadLegalHtml, legalDocuments, openPrintableLegalDocument } from '@/lib/legalDocuments';
 import { buildSharePath } from '@/lib/xbarRuntime';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -134,6 +135,20 @@ export default function DocumentLibrary() {
     pushToast({ title: 'PDF generation failed', message: remote.message, tone: 'error' });
   };
 
+  const previewLegalDocument = (legalDoc: (typeof legalDocuments)[number]) => {
+    const opened = openPrintableLegalDocument(legalDoc);
+    pushToast({
+      title: opened ? 'Legal document opened' : 'Preview blocked',
+      message: opened ? `${legalDoc.shortTitle} opened in a printable PDF-ready tab.` : 'Allow popups to preview and print the legal document.',
+      tone: opened ? 'success' : 'error',
+    });
+  };
+
+  const downloadLegalDocument = (legalDoc: (typeof legalDocuments)[number]) => {
+    downloadLegalHtml(legalDoc);
+    pushToast({ title: 'Legal document exported', message: `${legalDoc.shortTitle} downloaded as a print-ready HTML document. Open it and print to PDF.`, tone: 'success' });
+  };
+
   const copyShareLink = () => {
     if (!sharedLink) return;
     void navigator.clipboard.writeText(sharedLink).then(() => {
@@ -153,12 +168,12 @@ export default function DocumentLibrary() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Document Library</span>
-            <h1 className="surface-hero__title">Pre-filled contracts, reports, and sale packets</h1>
-            <p className="surface-hero__copy">Pull horse, owner, barn, Coggins, health, ownership, and document-vault data into templates so users review and export instead of writing from scratch.</p>
+            <h1 className="surface-hero__title">Pre-filled contracts, legal notices, reports, and sale packets</h1>
+            <p className="surface-hero__copy">Pull horse, owner, barn, Coggins, health, ownership, and document-vault data into templates, while keeping XBAR commercial terms, trademark notices, and disclaimers printable from the same library.</p>
           </div>
           <div className="surface-hero__stats">
             <div className="surface-hero__stat"><span>Templates</span><strong>{documentTemplateLibrary.length}</strong></div>
-            <div className="surface-hero__stat"><span>Ready docs</span><strong>{readyDocCount}</strong></div>
+            <div className="surface-hero__stat"><span>Legal docs</span><strong>{legalDocuments.length}</strong></div>
             <div className="surface-hero__stat"><span>Sale packet tools</span><strong>{salePacketTemplates.length}</strong></div>
             <div className="surface-hero__stat"><span>Plan</span><strong>{subscription.tier}</strong></div>
           </div>
@@ -167,10 +182,33 @@ export default function DocumentLibrary() {
 
       <div className="metric-grid">
         <MetricCard label="Dynamic prefill" value="Live" detail="Horse, owner, barn, health, sale, and document fields" tone="emerald" />
-        <MetricCard label="Export" value="HTML/PDF" detail="Download print-ready report, then save as PDF" tone="blue" />
-        <MetricCard label="Share" value="Secure link" detail="Copy buyer-facing horse profile link" tone="slate" />
+        <MetricCard label="Legal packet" value={`${legalDocuments.length}`} detail="Terms, privacy, billing, trademark, disclaimer, acceptable use" tone="blue" />
+        <MetricCard label="Ready docs" value={String(readyDocCount)} detail="Verified proof records available for document workflows" tone="slate" />
         <MetricCard label="Missing fields" value={String(prefilled?.missingFields.length ?? 0)} detail="Review before e-signature" tone={prefilled?.missingFields.length ? 'amber' : 'emerald'} />
       </div>
+
+      <Panel title="XBAR LLC legal and commercial documents" meta={<Pill tone="blue">TM / billing / disclaimer</Pill>}>
+        <p className="stack-item__copy" style={{ marginBottom: '14px' }}>
+          PDF-ready legal documents for charging customers, buyer packet disclaimers, trademark notice, acceptable use, privacy, and subscription billing. These are operational baseline documents and should be reviewed by counsel before final launch.
+        </p>
+        <div className="stack-list">
+          {legalDocuments.map((legalDoc) => (
+            <div key={legalDoc.id} className="stack-item">
+              <div className="stack-item__top">
+                <div>
+                  <div className="stack-item__title">{legalDoc.shortTitle}</div>
+                  <div className="stack-item__copy">{legalDoc.purpose}</div>
+                </div>
+                <Pill tone={legalDoc.id === 'trademark-notice' ? 'amber' : 'blue'}>{legalDoc.id === 'trademark-notice' ? 'TM' : 'Legal'}</Pill>
+              </div>
+              <div className="inline-actions inline-actions--card">
+                <button className="button button--primary button--compact" type="button" onClick={() => previewLegalDocument(legalDoc)}>Preview / print PDF</button>
+                <button className="button button--ghost button--compact" type="button" onClick={() => downloadLegalDocument(legalDoc)}>Download PDF-ready file</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Panel>
 
       <section className="surface-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

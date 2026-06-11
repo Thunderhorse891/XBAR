@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { SalePacketWizard } from '@/components/SalePacketWizard';
 import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { formatDateTimeLabel } from '@/lib/format';
+import { downloadLegalHtml, legalDocuments, openPrintableLegalDocument } from '@/lib/legalDocuments';
 import { buildDocumentTrustProfile } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
 import { useCloudStore } from '@/store/useCloudStore';
@@ -1013,6 +1014,47 @@ export default function Documents() {
             ) : (
               <EmptyState compact title="No sale packets yet" description="Generate a packet above and it will be listed here for hand-off." />
             )}
+          </Panel>
+
+          <Panel title="Legal & commerce documents" description="XBAR LLC(TM) terms, policies, and the equine records disclaimer — include them with buyer hand-offs.">
+            <div className="stack-list">
+              {legalDocuments.map((legalDoc) => (
+                <div key={legalDoc.id} className="stack-item">
+                  <div className="stack-item__top">
+                    <div>
+                      <div className="stack-item__title">{legalDoc.shortTitle}</div>
+                      <div className="stack-item__copy">{legalDoc.purpose}</div>
+                    </div>
+                    <div className="inline-actions">
+                      <button
+                        className="button button--ghost button--compact"
+                        type="button"
+                        onClick={() => {
+                          const opened = openPrintableLegalDocument(legalDoc);
+                          pushToast({
+                            title: opened ? 'Legal document opened' : 'Preview blocked',
+                            message: opened ? `${legalDoc.shortTitle} opened in a printable PDF-ready tab.` : 'Allow popups to preview and print the legal document.',
+                            tone: opened ? 'success' : 'error',
+                          });
+                        }}
+                      >
+                        Preview / print
+                      </button>
+                      <button
+                        className="button button--ghost button--compact"
+                        type="button"
+                        onClick={() => {
+                          downloadLegalHtml(legalDoc);
+                          pushToast({ title: 'Legal document exported', message: `${legalDoc.shortTitle} downloaded as a print-ready file.`, tone: 'success' });
+                        }}
+                      >
+                        Download
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </Panel>
         </>
       ) : null}

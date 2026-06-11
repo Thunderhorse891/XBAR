@@ -35,7 +35,7 @@ function createHorseFormDefaults(params: {
   };
 }
 
-type ViewMode = 'Portfolio' | 'Registry';
+type ViewMode = 'Command Files' | 'Registry Matrix';
 type SegmentFilter = 'All' | HorseSegment;
 
 const statusTone: Record<HorseStatus, 'blue' | 'slate' | 'amber' | 'rose' | 'emerald'> = {
@@ -67,7 +67,7 @@ export default function Horses() {
   const canCreateHorse = useCurrentRoleCapability('createHorse');
   const canManageSharedAccess = useCurrentRoleCapability('manageSharedAccess');
   const [searchParams, setSearchParams] = useSearchParams();
-  const [viewMode, setViewMode] = useState<ViewMode>('Portfolio');
+  const [viewMode, setViewMode] = useState<ViewMode>('Command Files');
   const [segmentFilter, setSegmentFilter] = useState<SegmentFilter>('All');
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [formErrors, setFormErrors] = useState<Partial<Record<'name' | 'barnName' | 'owner' | 'ownerEntity' | 'barn' | 'pasture', string>>>({});
@@ -91,18 +91,15 @@ export default function Horses() {
 
   const setNewHorseParam = (open: boolean) => {
     const nextParams = new URLSearchParams(searchParams);
-    if (open) {
-      nextParams.set('new', '1');
-    } else {
-      nextParams.delete('new');
-    }
+    if (open) nextParams.set('new', '1');
+    else nextParams.delete('new');
     setSearchParams(nextParams);
   };
 
   const filtered = horses.filter((horse) => {
     const matchesSearch =
       !search.trim() ||
-      [horse.name, horse.barnName, horse.owner, horse.ownerEntity, horse.aqhaNumber, horse.location.barn]
+      [horse.name, horse.barnName, horse.owner, horse.ownerEntity, horse.aqhaNumber, horse.registrationNumber, horse.location.barn, horse.location.pasture]
         .join(' ')
         .toLowerCase()
         .includes(search.trim().toLowerCase());
@@ -110,21 +107,31 @@ export default function Horses() {
     return matchesSearch && matchesSegment;
   });
 
+  const commandPackets = horses.map((horse) => ({
+    horse,
+    packet: buildHorsePacketCompleteness(
+      horse,
+      documents.filter((document) => document.horseId === horse.id),
+      ownershipRecords.find((record) => record.horseId === horse.id),
+    ),
+  }));
+  const medicalWatchCount = horses.filter((horse) => horse.status === 'Medical Review').length;
+  const buyerReadyCount = horses.filter((horse) => horse.readiness.packetStatus === 'Ready').length;
+  const salePrepCount = horses.filter((horse) => horse.status === 'Sale Prep' || horse.segment === 'Sale Prospect').length;
+  const proofGapCount = commandPackets.reduce((sum, item) => sum + item.packet.saleSlots.filter((slot) => slot.status !== 'ready').length, 0);
 
   const handleSavedHorseToggle = async (horseId: string) => {
     const horse = horses.find((item) => item.id === horseId);
     const wasSaved = sharedListings.some((listing) => listing.horseId === horseId && listing.state !== 'Archived');
     const result = await toggleSharedListing(horseId);
     pushToast({
-      title: result.ok ? (wasSaved ? 'Removed from shared access' : 'Added to shared access') : 'Shared access blocked',
-      message: horse && result.ok ? `${horse.name} ${wasSaved ? 'was removed from' : 'is now in'} the shared-access list.` : result.message,
+      title: result.ok ? (wasSaved ? 'Buyer packet removed' : 'Buyer packet staged') : 'Buyer packet blocked',
+      message: horse && result.ok ? `${horse.name} ${wasSaved ? 'was removed from' : 'is now staged in'} buyer packet access.` : result.message,
       tone: result.ok ? 'success' : 'error',
     });
   };
 
-  const openHorseMenu = (horseId: string, x: number, y: number) => {
-    setMenuState({ horseId, x, y });
-  };
+  const openHorseMenu = (horseId: string, x: number, y: number) => setMenuState({ horseId, x, y });
 
   const openHorseDetails = (horse: (typeof horses)[number]) => {
     const packet = buildHorsePacketCompleteness(
@@ -134,17 +141,17 @@ export default function Horses() {
     );
     openRightDrawer({
       id: `horse-${horse.id}`,
-      eyebrow: 'Horse command file',
+      eyebrow: 'Command File',
       title: horse.name,
-      description: `${horse.segment} in ${horse.location.barn}. Open the full record for care, ownership, documents, and sales history.`,
+      description: `${horse.segment} in ${horse.location.barn}. Open the command file for identity, care, ownership, proof, buyer movement, and operating history.`,
       facts: [
         { label: 'Status', value: horse.status },
-        { label: 'Owner', value: horse.owner },
+        { label: 'Legal owner', value: horse.owner },
         { label: 'Location', value: `${horse.location.barn} | ${horse.location.pasture}` },
         { label: 'Registration', value: horse.aqhaNumber || horse.registrationNumber || 'Pending' },
         { label: 'Readiness', value: formatPercent(packet.score) },
       ],
-      actions: [{ label: 'Open full horse record', path: `/horses/${horse.id}` }],
+      actions: [{ label: 'Open command file', path: `/horses/${horse.id}` }],
     });
   };
 
@@ -158,44 +165,27 @@ export default function Horses() {
       )
     : undefined;
   const menuListing = menuHorse ? sharedListings.find((listing) => listing.horseId === menuHorse.id && listing.state !== 'Archived') : undefined;
-  const menuShareUrl = menuPacket
-    ? buildPublicShareUrl(menuPacket.sharePath, menuListing?.accessMode === 'Private Token' ? menuListing.shareToken : undefined)
-    : '';
+  const menuShareUrl = menuPacket ? buildPublicShareUrl(menuPacket.sharePath, menuListing?.accessMode === 'Private Token' ? menuListing.shareToken : undefined) : '';
   const menuItems = menuHorse && menuPacket
     ? [
-        {
-          id: 'open-profile',
-          label: 'Open record',
-          onSelect: () => navigate(`/horses/${menuHorse.id}`),
-        },
+        { id: 'open-profile', label: 'Open command file', onSelect: () => navigate(`/horses/${menuHorse.id}`) },
         ...(menuSaved
           ? [
               {
                 id: 'open-share-view',
-                label: 'Open listing',
+                label: 'Open buyer packet',
                 onSelect: async () => {
                   await recordSharedChannel(menuHorse.id, 'Direct Link');
-                  if (typeof window !== 'undefined') {
-                    window.open(menuShareUrl, '_blank', 'noopener,noreferrer');
-                  }
+                  if (typeof window !== 'undefined') window.open(menuShareUrl, '_blank', 'noopener,noreferrer');
                 },
               },
             ]
           : []),
         ...(canManageSharedAccess
-          ? [
-              {
-                id: 'toggle-shared',
-                label: menuSaved ? 'Remove from shared access' : 'Add to shared access',
-                onSelect: async () => handleSavedHorseToggle(menuHorse.id),
-              },
-            ]
+          ? [{ id: 'toggle-shared', label: menuSaved ? 'Remove buyer packet' : 'Stage buyer packet', onSelect: async () => handleSavedHorseToggle(menuHorse.id) }]
           : []),
-        {
-          id: 'open-sales',
-          label: 'Open sales board',
-          onSelect: () => navigate('/sales'),
-        },
+        { id: 'open-sales', label: 'Open Buyer Desk', onSelect: () => navigate('/sales') },
+        { id: 'open-proof', label: 'Open Proof Vault', onSelect: () => navigate('/documents') },
       ]
     : [];
 
@@ -203,22 +193,14 @@ export default function Horses() {
     const nextErrors: Partial<Record<'name' | 'barnName' | 'owner' | 'ownerEntity' | 'barn' | 'pasture', string>> = {};
     if (form.name.trim().length < 3) nextErrors.name = 'Registered name is required.';
     if (!form.barnName.trim()) nextErrors.barnName = 'Barn name is required.';
-    if (form.owner.trim().length < 2) nextErrors.owner = 'Owner is required.';
+    if (form.owner.trim().length < 2) nextErrors.owner = 'Legal owner is required.';
     if (form.ownerEntity.trim().length < 2) nextErrors.ownerEntity = 'Owner entity is required.';
-    // barn is optional
-    // pasture is optional
 
     setFormErrors(nextErrors);
-    if (Object.keys(nextErrors).length) {
-      return;
-    }
+    if (Object.keys(nextErrors).length) return;
 
     const result = addHorse(form);
-    pushToast({
-      title: result.ok ? 'Horse created' : 'Horse not created',
-      message: result.message,
-      tone: result.ok ? 'success' : 'error',
-    });
+    pushToast({ title: result.ok ? 'Command file created' : 'Command file blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
     if (result.ok && result.id) {
       setForm(
         createHorseFormDefaults({
@@ -235,408 +217,148 @@ export default function Horses() {
 
   return (
     <>
-      <div className="surface-hero surface-hero--dark">
+      <div className="surface-hero surface-hero--dark command-files-hero">
         <div className="surface-hero__top">
           <div>
-            <span className="surface-hero__eyebrow">Horse Operations</span>
+            <span className="surface-hero__eyebrow">Command Files</span>
+            <h1>Horse files with identity, proof, risk, and buyer readiness.</h1>
+            <p className="command-center-briefing__copy">
+              Each file connects legal owner, location, care posture, release evidence, sales readiness, buyer packet status, and next operational action.
+            </p>
           </div>
           <div className="surface-hero__stats">
-            <div className="surface-hero__stat"><span>Total horses</span><strong>{horses.length}</strong></div>
-            <div className="surface-hero__stat"><span>Medical watch</span><strong style={{ color: horses.filter((h) => h.status === 'Medical Review').length ? 'var(--rose)' : 'var(--emerald)' }}>{horses.filter((h) => h.status === 'Medical Review').length}</strong></div>
-            <div className="surface-hero__stat"><span>For sale</span><strong>{horses.filter((h) => h.status === 'Sale Prep').length}</strong></div>
-            <div className="surface-hero__stat"><span>Packet ready</span><strong style={{ color: 'var(--emerald)' }}>{horses.filter((h) => h.readiness.packetStatus === 'Ready').length}</strong></div>
+            <div className="surface-hero__stat"><span>Command files</span><strong>{horses.length}</strong></div>
+            <div className="surface-hero__stat"><span>Care holds</span><strong style={{ color: medicalWatchCount ? 'var(--rose)' : 'var(--emerald)' }}>{medicalWatchCount}</strong></div>
+            <div className="surface-hero__stat"><span>Buyer ready</span><strong>{buyerReadyCount}/{salePrepCount}</strong></div>
+            <div className="surface-hero__stat"><span>Proof gaps</span><strong style={{ color: proofGapCount ? 'var(--amber)' : 'var(--emerald)' }}>{proofGapCount}</strong></div>
           </div>
           <div className="inline-actions" style={{ marginTop: '16px' }}>
-            <Link to="/documents?upload=1" className="button button--ghost button--compact">Upload docs</Link>
-            <button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>New horse</button>
+            <Link to="/documents?upload=1" className="button button--ghost button--compact">Upload proof</Link>
+            <button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>New command file</button>
           </div>
         </div>
       </div>
 
       {createOpen ? (
         <section className="panel">
-            <div className="panel__header">
-              <div>
-                <div className="panel__eyebrow">New horse</div>
-                <h2 className="panel__title">Add horse</h2>
-              </div>
-              <button className="button button--ghost button--compact" type="button" onClick={() => setNewHorseParam(false)}>
-                Close
-              </button>
+          <div className="panel__header">
+            <div><div className="panel__eyebrow">Command file intake</div><h2 className="panel__title">Create command file</h2></div>
+            <button className="button button--ghost button--compact" type="button" onClick={() => setNewHorseParam(false)}>Close</button>
           </div>
           <div className="form-grid">
-            <label className="field-stack">
-              <span className="field-label">Registered name</span>
-              <input className="field-input" value={form.name} onChange={(event) => {
-                setForm((current) => ({ ...current, name: event.target.value }));
-                setFormErrors((current) => ({ ...current, name: undefined }));
-              }} disabled={!canCreateHorse} />
-              {formErrors.name ? <span className="field-error">{formErrors.name}</span> : null}
-            </label>
-            <label className="field-stack">
-              <span className="field-label">Barn name</span>
-              <input className="field-input" value={form.barnName} onChange={(event) => {
-                setForm((current) => ({ ...current, barnName: event.target.value }));
-                setFormErrors((current) => ({ ...current, barnName: undefined }));
-              }} disabled={!canCreateHorse} />
-              {formErrors.barnName ? <span className="field-error">{formErrors.barnName}</span> : null}
-            </label>
-            <label className="field-stack">
-              <span className="field-label">Segment</span>
-              <select className="field-input" value={form.segment} onChange={(event) => setForm((current) => ({ ...current, segment: event.target.value as HorseSegment }))} disabled={!canCreateHorse}>
-                {horseSegments.map((segment) => (
-                  <option key={segment} value={segment}>
-                    {segment}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field-stack">
-              <span className="field-label">Status</span>
-              <select className="field-input" value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as HorseStatus }))} disabled={!canCreateHorse}>
-                {horseStatuses.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field-stack">
-              <span className="field-label">Sex</span>
-              <select className="field-input" value={form.sex} onChange={(event) => setForm((current) => ({ ...current, sex: event.target.value as HorseSex }))} disabled={!canCreateHorse}>
-                {horseSexes.map((sex) => (
-                  <option key={sex} value={sex}>
-                    {sex}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field-stack">
-              <span className="field-label">Owner</span>
-              <input className="field-input" value={form.owner} onChange={(event) => {
-                setForm((current) => ({ ...current, owner: event.target.value }));
-                setFormErrors((current) => ({ ...current, owner: undefined }));
-              }} disabled={!canCreateHorse} />
-              {formErrors.owner ? <span className="field-error">{formErrors.owner}</span> : null}
-            </label>
-            <label className="field-stack">
-              <span className="field-label">Owner entity</span>
-              <input className="field-input" value={form.ownerEntity} onChange={(event) => {
-                setForm((current) => ({ ...current, ownerEntity: event.target.value }));
-                setFormErrors((current) => ({ ...current, ownerEntity: undefined }));
-              }} disabled={!canCreateHorse} />
-              {formErrors.ownerEntity ? <span className="field-error">{formErrors.ownerEntity}</span> : null}
-            </label>
-            <label className="field-stack">
-              <span className="field-label">AQHA number</span>
-              <input className="field-input" value={form.aqhaNumber} onChange={(event) => setForm((current) => ({ ...current, aqhaNumber: event.target.value }))} disabled={!canCreateHorse} />
-            </label>
-            <label className="field-stack">
-              <span className="field-label">Registration number</span>
-              <input className="field-input" value={form.registrationNumber} onChange={(event) => setForm((current) => ({ ...current, registrationNumber: event.target.value }))} disabled={!canCreateHorse} />
-            </label>
-            <label className="field-stack">
-              <span className="field-label">Barn</span>
-              <input className="field-input" value={form.barn} onChange={(event) => {
-                setForm((current) => ({ ...current, barn: event.target.value }));
-                setFormErrors((current) => ({ ...current, barn: undefined }));
-              }} disabled={!canCreateHorse} />
-              {formErrors.barn ? <span className="field-error">{formErrors.barn}</span> : null}
-            </label>
-            <label className="field-stack">
-              <span className="field-label">Pasture</span>
-              <input className="field-input" value={form.pasture} onChange={(event) => {
-                setForm((current) => ({ ...current, pasture: event.target.value }));
-                setFormErrors((current) => ({ ...current, pasture: undefined }));
-              }} disabled={!canCreateHorse} />
-              {formErrors.pasture ? <span className="field-error">{formErrors.pasture}</span> : null}
-            </label>
+            <label className="field-stack"><span className="field-label">Registered name</span><input className="field-input" value={form.name} onChange={(event) => { setForm((current) => ({ ...current, name: event.target.value })); setFormErrors((current) => ({ ...current, name: undefined })); }} disabled={!canCreateHorse} />{formErrors.name ? <span className="field-error">{formErrors.name}</span> : null}</label>
+            <label className="field-stack"><span className="field-label">Barn name</span><input className="field-input" value={form.barnName} onChange={(event) => { setForm((current) => ({ ...current, barnName: event.target.value })); setFormErrors((current) => ({ ...current, barnName: undefined })); }} disabled={!canCreateHorse} />{formErrors.barnName ? <span className="field-error">{formErrors.barnName}</span> : null}</label>
+            <label className="field-stack"><span className="field-label">Program segment</span><select className="field-input" value={form.segment} onChange={(event) => setForm((current) => ({ ...current, segment: event.target.value as HorseSegment }))} disabled={!canCreateHorse}>{horseSegments.map((segment) => <option key={segment} value={segment}>{segment}</option>)}</select></label>
+            <label className="field-stack"><span className="field-label">Operational status</span><select className="field-input" value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as HorseStatus }))} disabled={!canCreateHorse}>{horseStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
+            <label className="field-stack"><span className="field-label">Sex</span><select className="field-input" value={form.sex} onChange={(event) => setForm((current) => ({ ...current, sex: event.target.value as HorseSex }))} disabled={!canCreateHorse}>{horseSexes.map((sex) => <option key={sex} value={sex}>{sex}</option>)}</select></label>
+            <label className="field-stack"><span className="field-label">Legal owner</span><input className="field-input" value={form.owner} onChange={(event) => { setForm((current) => ({ ...current, owner: event.target.value })); setFormErrors((current) => ({ ...current, owner: undefined })); }} disabled={!canCreateHorse} />{formErrors.owner ? <span className="field-error">{formErrors.owner}</span> : null}</label>
+            <label className="field-stack"><span className="field-label">Owner entity</span><input className="field-input" value={form.ownerEntity} onChange={(event) => { setForm((current) => ({ ...current, ownerEntity: event.target.value })); setFormErrors((current) => ({ ...current, ownerEntity: undefined })); }} disabled={!canCreateHorse} />{formErrors.ownerEntity ? <span className="field-error">{formErrors.ownerEntity}</span> : null}</label>
+            <label className="field-stack"><span className="field-label">AQHA number</span><input className="field-input" value={form.aqhaNumber} onChange={(event) => setForm((current) => ({ ...current, aqhaNumber: event.target.value }))} disabled={!canCreateHorse} /></label>
+            <label className="field-stack"><span className="field-label">Registration number</span><input className="field-input" value={form.registrationNumber} onChange={(event) => setForm((current) => ({ ...current, registrationNumber: event.target.value }))} disabled={!canCreateHorse} /></label>
+            <label className="field-stack"><span className="field-label">Barn</span><input className="field-input" value={form.barn} onChange={(event) => { setForm((current) => ({ ...current, barn: event.target.value })); setFormErrors((current) => ({ ...current, barn: undefined })); }} disabled={!canCreateHorse} />{formErrors.barn ? <span className="field-error">{formErrors.barn}</span> : null}</label>
+            <label className="field-stack"><span className="field-label">Pasture</span><input className="field-input" value={form.pasture} onChange={(event) => { setForm((current) => ({ ...current, pasture: event.target.value })); setFormErrors((current) => ({ ...current, pasture: undefined })); }} disabled={!canCreateHorse} />{formErrors.pasture ? <span className="field-error">{formErrors.pasture}</span> : null}</label>
           </div>
           <div className="inline-actions">
-            <button
-              className="button button--ghost"
-              type="button"
-              onClick={() =>
-                setForm((current) => ({
-                  ...current,
-                  owner: workspaceProfile.defaultOwnerName,
-                  ownerEntity: workspaceProfile.defaultOwnerEntity,
-                  barn: workspaceProfile.defaultBarn,
-                  pasture: workspaceProfile.defaultPasture,
-                }))
-              }
-              disabled={!canCreateHorse}
-            >
-              Use defaults
-            </button>
-            <button className="button button--primary" type="button" onClick={handleCreateHorse} disabled={!canCreateHorse || !form.name.trim() || !form.barnName.trim() || !form.owner.trim()}>
-              Create horse
-            </button>
+            <button className="button button--ghost" type="button" onClick={() => setForm((current) => ({ ...current, owner: workspaceProfile.defaultOwnerName, ownerEntity: workspaceProfile.defaultOwnerEntity, barn: workspaceProfile.defaultBarn, pasture: workspaceProfile.defaultPasture }))} disabled={!canCreateHorse}>Use ranch defaults</button>
+            <button className="button button--primary" type="button" onClick={handleCreateHorse} disabled={!canCreateHorse || !form.name.trim() || !form.barnName.trim() || !form.owner.trim()}>Create command file</button>
           </div>
         </section>
       ) : null}
 
-
-
       <section className="portfolio-toolbar">
         <div className="portfolio-toolbar__controls">
-          <SurfaceTabs
-            items={['Portfolio', 'Registry']}
-            active={viewMode}
-            onChange={(mode) => setViewMode(mode as ViewMode)}
-          />
-          <SurfaceTabs
-            items={segments}
-            active={segmentFilter}
-            onChange={(segment) => setSegmentFilter(segment as SegmentFilter)}
-            className="surface-tabs--wrap"
-          />
+          <SurfaceTabs items={['Command Files', 'Registry Matrix']} active={viewMode} onChange={(mode) => setViewMode(mode as ViewMode)} />
+          <SurfaceTabs items={segments} active={segmentFilter} onChange={(segment) => setSegmentFilter(segment as SegmentFilter)} className="surface-tabs--wrap" />
         </div>
-
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          className="field-input field-input--wide"
-          placeholder="Search horse, owner, AQHA"
-          aria-label="Search horses"
-        />
+        <input value={search} onChange={(event) => setSearch(event.target.value)} className="field-input field-input--wide" placeholder="Search command file, owner, AQHA, barn, proof context" aria-label="Search command files" />
       </section>
 
-      {viewMode === 'Portfolio' ? (
+      {viewMode === 'Command Files' ? (
         filtered.length ? (
-        <div className="horse-grid">
-          {filtered.map((horse) => {
-            const saved = sharedListings.some((listing) => listing.horseId === horse.id && listing.state !== 'Archived');
-            const packet = buildHorsePacketCompleteness(
-              horse,
-              documents.filter((document) => document.horseId === horse.id),
-              ownershipRecords.find((record) => record.horseId === horse.id),
-            );
-            const valueLabel = horse.segment === 'Sale Prospect' && horse.sale.askPrice ? 'Ask' : 'Insured';
-            const accessLabel = saved ? 'Shared' : 'Private';
-            const showSaleSignals = horse.segment === 'Sale Prospect' || horse.status === 'Sale Prep';
-            return (
-              <div
-                key={horse.id}
-                className="horse-card horse-card--interactive"
-                role="group"
-                aria-label={`Open ${horse.name} record`}
-                title="Select the card to open the horse record. Use Quick view or the actions menu for alternatives."
-                onClick={() => navigate(`/horses/${horse.id}`)}
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  openHorseMenu(horse.id, event.clientX, event.clientY);
-                }}
-              >
-                <div className="horse-card__media">
-                  <HorseMediaPreview
-                    src={horse.profileImage || horse.gallery[0]?.url}
-                    name={horse.name}
-                    imageClassName="horse-card__image"
-                    fallbackClassName="horse-card__image-fallback"
-                  />
-                  <div className="horse-card__media-top">
-                    <div className="status-inline">
-                      <Pill tone={statusTone[horse.status]}>{horse.status === 'Sale Prep' ? 'For Sale' : horse.status}</Pill>
-                      <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
+          <div className="horse-grid">
+            {filtered.map((horse) => {
+              const saved = sharedListings.some((listing) => listing.horseId === horse.id && listing.state !== 'Archived');
+              const packet = buildHorsePacketCompleteness(
+                horse,
+                documents.filter((document) => document.horseId === horse.id),
+                ownershipRecords.find((record) => record.horseId === horse.id),
+              );
+              const valueLabel = horse.segment === 'Sale Prospect' && horse.sale.askPrice ? 'Ask' : 'Insured';
+              const accessLabel = saved ? 'Released' : 'Private';
+              const showSaleSignals = horse.segment === 'Sale Prospect' || horse.status === 'Sale Prep';
+              const openProofSlots = packet.saleSlots.filter((slot) => slot.status !== 'ready').length;
+              return (
+                <div key={horse.id} className="horse-card horse-card--interactive" role="group" aria-label={`Open ${horse.name} command file`} title="Select the card to open the command file. Use Quick review or the actions menu for alternatives." onClick={() => navigate(`/horses/${horse.id}`)} onContextMenu={(event) => { event.preventDefault(); openHorseMenu(horse.id, event.clientX, event.clientY); }}>
+                  <div className="horse-card__media">
+                    <HorseMediaPreview src={horse.profileImage || horse.gallery[0]?.url} name={horse.name} imageClassName="horse-card__image" fallbackClassName="horse-card__image-fallback" />
+                    <div className="horse-card__media-top">
+                      <div className="status-inline"><Pill tone={statusTone[horse.status]}>{horse.status === 'Sale Prep' ? 'Buyer Prep' : horse.status}</Pill><Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill></div>
+                      <ActionMenuButton className="icon-button icon-button--compact" label={`Open actions for ${horse.name}`} onOpen={(x, y) => openHorseMenu(horse.id, x, y)}><DotsIcon className="icon-button__icon" /></ActionMenuButton>
                     </div>
-                    <ActionMenuButton
-                      className="icon-button icon-button--compact"
-                      label={`Open actions for ${horse.name}`}
-                      onOpen={(x, y) => openHorseMenu(horse.id, x, y)}
-                    >
-                      <DotsIcon className="icon-button__icon" />
-                    </ActionMenuButton>
+                    <div className="horse-card__media-bottom"><div className="horse-card__kicker">{horse.segment}</div><div className="horse-card__title">{horse.name}</div><div className="horse-card__subtitle">{horse.registry} · {horse.sex} · {horse.location.barn}</div></div>
                   </div>
-                  <div className="horse-card__media-bottom">
-                    <div className="horse-card__kicker">{horse.segment}</div>
-                    <div className="horse-card__title">{horse.name}</div>
-                    <div className="horse-card__subtitle">
-                      {horse.registry} · {horse.sex} · {horse.location.barn}
+
+                  <div className="horse-card__body">
+                    <div className="horse-card__metric-band">
+                      <div className="horse-card__metric"><span>Readiness</span><strong>{formatPercent(packet.score)}</strong></div>
+                      <div className="horse-card__metric"><span>{valueLabel}</span><strong>{formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)}</strong></div>
+                      <div className="horse-card__metric"><span>Release</span><strong>{accessLabel}</strong></div>
+                    </div>
+
+                    <div className="horse-card__facts">
+                      <span className="horse-card__fact"><strong>Legal owner</strong>{horse.owner}</span>
+                      <span className="horse-card__fact"><strong>Location</strong>{horse.location.barn}</span>
+                      <span className="horse-card__fact"><strong>Registry</strong>{horse.aqhaNumber || horse.registrationNumber || 'Pending'}</span>
+                    </div>
+
+                    {showSaleSignals ? (
+                      <div className="horse-card__readiness"><div className="horse-card__readiness-head"><span>Buyer readiness</span><strong>{formatPercent(packet.score)}</strong></div><ProgressBar value={packet.score} tone={packet.tone} /></div>
+                    ) : (
+                      <div className="horse-card__readiness horse-card__readiness--meta"><div className="horse-card__readiness-head"><span>Operating posture</span><strong>{horse.status === 'Sale Prep' ? 'Buyer Prep' : horse.status}</strong></div><div className="inline-metrics"><span>{horse.gallery.length} media assets</span><span>{packet.readyCount} proof clear</span><span>{horse.location.barn}</span></div></div>
+                    )}
+
+                    <div className="horse-card__packet">
+                      <div className="horse-card__packet-head"><span>Release evidence</span><strong>{packet.saleSlots.filter((slot) => slot.status === 'ready').length}/{packet.saleSlots.length}</strong></div>
+                      <SalePacketSlots slots={packet.saleSlots} compact />
+                    </div>
+
+                    <div className="horse-card__footer">
+                      <div className="status-inline">{saved ? <Pill tone="blue">Buyer packet live</Pill> : <Pill tone={openProofSlots ? 'amber' : 'emerald'}>{openProofSlots ? `${openProofSlots} proof gaps` : 'Proof clear'}</Pill>}<span>{showSaleSignals ? `${horse.sale.watchlistCount} watching` : `${horse.sale.inquiryCount} leads`}</span></div>
+                      <div className="inline-actions inline-actions--card">
+                        <button className="button button--ghost button--compact" type="button" onClick={(event) => { event.stopPropagation(); openHorseDetails(horse); }}>Quick review</button>
+                        <button className="button button--ghost button--compact" type="button" onClick={async (event) => { event.stopPropagation(); await handleSavedHorseToggle(horse.id); }} disabled={!canManageSharedAccess}>{saved ? 'Hold packet' : 'Stage packet'}</button>
+                        <Link to={`/horses/${horse.id}`} className="button button--primary button--compact" onClick={(event) => event.stopPropagation()}>Command file</Link>
+                      </div>
                     </div>
                   </div>
                 </div>
-
-                <div className="horse-card__body">
-                  <div className="horse-card__metric-band">
-                    <div className="horse-card__metric">
-                      <span>Record</span>
-                      <strong>{formatPercent(packet.score)}</strong>
-                    </div>
-                    <div className="horse-card__metric">
-                      <span>{valueLabel}</span>
-                      <strong>{formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)}</strong>
-                    </div>
-                    <div className="horse-card__metric">
-                      <span>Share</span>
-                      <strong>{accessLabel}</strong>
-                    </div>
-                  </div>
-
-                  <div className="horse-card__facts">
-                    <span className="horse-card__fact">
-                      <strong>Owner</strong>
-                      {horse.owner}
-                    </span>
-                    <span className="horse-card__fact">
-                      <strong>Barn</strong>
-                      {horse.location.barn}
-                    </span>
-                    <span className="horse-card__fact">
-                      <strong>AQHA</strong>
-                      {horse.aqhaNumber || horse.registrationNumber || 'Pending'}
-                    </span>
-                  </div>
-
-                  {showSaleSignals ? (
-                    <div className="horse-card__readiness">
-                      <div className="horse-card__readiness-head">
-                        <span>Sale readiness</span>
-                        <strong>{formatPercent(packet.score)}</strong>
-                      </div>
-                      <ProgressBar value={packet.score} tone={packet.tone} />
-                    </div>
-                  ) : (
-                    <div className="horse-card__readiness horse-card__readiness--meta">
-                      <div className="horse-card__readiness-head">
-                        <span>Care status</span>
-                        <strong>{horse.status === 'Sale Prep' ? 'For Sale' : horse.status}</strong>
-                      </div>
-                      <div className="inline-metrics">
-                        <span>{horse.gallery.length} assets</span>
-                        <span>{packet.readyCount} clear</span>
-                        <span>{horse.location.barn}</span>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="horse-card__packet">
-                    <div className="horse-card__packet-head">
-                      <span>Sale packet</span>
-                      <strong>{packet.saleSlots.filter((slot) => slot.status === 'ready').length}/{packet.saleSlots.length}</strong>
-                    </div>
-                    <SalePacketSlots slots={packet.saleSlots} compact />
-                  </div>
-
-                  <div className="horse-card__footer">
-                    <div className="status-inline">
-                      {saved ? <Pill tone="blue">Shared</Pill> : null}
-                      <span>{showSaleSignals ? `${horse.sale.watchlistCount} watching` : `${horse.sale.inquiryCount} leads`}</span>
-                    </div>
-                    <div className="inline-actions inline-actions--card">
-                      <button
-                        className="button button--ghost button--compact"
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          openHorseDetails(horse);
-                        }}
-                      >
-                        Quick view
-                      </button>
-                      <button
-                        className="button button--ghost button--compact"
-                        type="button"
-                        onClick={async (event) => {
-                          event.stopPropagation();
-                          await handleSavedHorseToggle(horse.id);
-                        }}
-                        disabled={!canManageSharedAccess}
-                      >
-                        {saved ? 'Remove listing' : 'List for sale'}
-                      </button>
-                      <Link
-                        to={`/horses/${horse.id}`}
-                        className="button button--primary button--compact"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        Record
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
         ) : (
-          <EmptyState
-            title="No horses match this view"
-            description="Adjust filters, clear search, or add a horse."
-            action={
-              <button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>
-                Add horse
-              </button>
-            }
-          />
+          <EmptyState title="No command files match this control view" description="Adjust filters, clear search, or create a new command file." action={<button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>Create command file</button>} />
         )
       ) : filtered.length ? (
         <div className="table-shell">
           <table className="data-table">
-            <thead>
-              <tr>
-                <th>Horse</th>
-                <th>Segment</th>
-                <th>Owner</th>
-                <th>Location</th>
-                <th>Docs</th>
-                <th>Readiness</th>
-                <th>Status</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Command file</th><th>Program</th><th>Legal owner</th><th>Location</th><th>Proof</th><th>Readiness</th><th>Status</th></tr></thead>
             <tbody>
               {filtered.map((horse) => (
-                <tr
-                  key={horse.id}
-                  className="table-row--interactive"
-                  tabIndex={0}
-                  aria-label={`Open ${horse.name} record`}
-                  title="Press Enter to open. Press Shift+F10 for actions."
-                  onClick={() => navigate(`/horses/${horse.id}`)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      navigate(`/horses/${horse.id}`);
-                    }
-                    if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
-                      event.preventDefault();
-                      const bounds = event.currentTarget.getBoundingClientRect();
-                      openHorseMenu(horse.id, bounds.left + 32, bounds.top + 32);
-                    }
-                  }}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    openHorseMenu(horse.id, event.clientX, event.clientY);
-                  }}
-                >
-                  <td>
-                    <span className="table-link">{horse.name}</span>
-                  </td>
+                <tr key={horse.id} className="table-row--interactive" tabIndex={0} aria-label={`Open ${horse.name} command file`} title="Press Enter to open. Press Shift+F10 for actions." onClick={() => navigate(`/horses/${horse.id}`)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigate(`/horses/${horse.id}`); } if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) { event.preventDefault(); const bounds = event.currentTarget.getBoundingClientRect(); openHorseMenu(horse.id, bounds.left + 32, bounds.top + 32); } }} onContextMenu={(event) => { event.preventDefault(); openHorseMenu(horse.id, event.clientX, event.clientY); }}>
+                  <td><span className="table-link">{horse.name}</span></td>
                   <td>{horse.segment}</td>
                   <td>{horse.owner}</td>
-                  <td>
-                    {horse.location.barn} · {horse.location.pasture}
-                  </td>
+                  <td>{horse.location.barn} · {horse.location.pasture}</td>
                   <td>{horse.documents.length}</td>
                   <td>{formatPercent(horse.readiness.score)}</td>
-                  <td>
-                    <Pill tone={statusTone[horse.status]}>{horse.status === 'Sale Prep' ? 'For Sale' : horse.status}</Pill>
-                  </td>
+                  <td><Pill tone={statusTone[horse.status]}>{horse.status === 'Sale Prep' ? 'Buyer Prep' : horse.status}</Pill></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       ) : (
-        <EmptyState
-          title="No horses match this registry view"
-          description="Adjust filters, clear search, or add a horse."
-          action={
-              <button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>
-                Add horse
-              </button>
-          }
-        />
+        <EmptyState title="No command files match this matrix" description="Adjust filters, clear search, or create a command file." action={<button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>Create command file</button>} />
       )}
 
       <ContextMenu open={Boolean(menuState && menuHorse)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />

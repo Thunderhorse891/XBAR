@@ -1,9 +1,6 @@
 import { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, HashRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { ActivationGuide } from './components/ActivationGuide';
-import { BuyerMomentum } from './components/BuyerMomentum';
 import ErrorBoundary from './components/ErrorBoundary';
-import { OperationalValuePulseConnected } from './components/OperationalValuePulseConnected';
 import { RequireCloudAuth } from './components/RequireCloudAuth';
 import { RequireSharedListings } from './components/RequireSubscriptionFeature';
 import { RequireWorkspaceSetup } from './components/RequireWorkspaceSetup';
@@ -16,6 +13,8 @@ import './routes/operationsHierarchy.css';
 import './routes/interactionSystem.css';
 import './routes/xbarCommandSystem.css';
 import './routes/metalBrandSystem.css';
+import './routes/commandCenterLocal.css';
+import './routes/premiumOperatingSystem.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Breeding = lazy(() => import('./routes/Breeding'));
@@ -44,25 +43,25 @@ const Terms = lazy(() => import('./routes/Terms'));
 const Weather = lazy(() => import('./routes/Weather'));
 
 const ROUTE_LABELS: Record<string, string> = {
-  '/': 'Dashboard',
-  '/assets': 'Equipment',
-  '/breeding': 'Breeding',
+  '/': 'Command Center',
+  '/assets': 'Ranch Assets',
+  '/breeding': 'Breeding Program',
   '/document-library': 'Document Library',
-  '/documents': 'Document Vault',
-  '/expenses': 'Expenses',
+  '/documents': 'Proof Vault',
+  '/expenses': 'Operating Ledger',
   '/follow-ups': 'Buyer Follow-ups',
-  '/horses': 'Horses',
+  '/horses': 'Command Files',
   '/landing': 'Ranch Platform',
   '/login': 'Login',
-  '/medical': 'Health',
-  '/ownership': 'Ownership',
-  '/reminders': 'Reminders',
-  '/sales': 'Sales',
-  '/settings': 'Settings',
+  '/medical': 'Care Status',
+  '/ownership': 'Title & Transfer',
+  '/reminders': 'Action Queue',
+  '/sales': 'Buyer Desk',
+  '/settings': 'Ranch Control',
   '/setup': 'Setup',
-  '/shared-access': 'Sale Listings',
-  '/subscriptions': 'Subscriptions',
-  '/weather': 'Weather',
+  '/shared-access': 'Buyer Packet',
+  '/subscriptions': 'Plan Control',
+  '/weather': 'Field Conditions',
 };
 
 function useHashRouting() {
@@ -71,8 +70,8 @@ function useHashRouting() {
 }
 
 function routeTitle(path: string) {
-  if (path.startsWith('/profiles/')) return 'XBAR | Sale Packet';
-  if (path.startsWith('/horses/')) return 'XBAR | Horse Record';
+  if (path.startsWith('/profiles/')) return 'XBAR | Buyer Packet';
+  if (path.startsWith('/horses/')) return 'XBAR | Horse Command File';
   return `XBAR | ${ROUTE_LABELS[path] ?? 'Ranch'}`;
 }
 
@@ -96,17 +95,6 @@ function RouteTelemetry() {
   return null;
 }
 
-function DashboardWithActivation() {
-  return (
-    <>
-      <ActivationGuide />
-      <BuyerMomentum />
-      <OperationalValuePulseConnected />
-      <Dashboard />
-    </>
-  );
-}
-
 export default function App() {
   const Router = useHashRouting() ? HashRouter : BrowserRouter;
 
@@ -117,7 +105,7 @@ export default function App() {
         <InteractionShell />
         <SubscriptionEnforcement />
         <RouteTelemetry />
-        <Suspense fallback={<div className="app-loading-shell">Loading XBAR...</div>}>
+        <Suspense fallback={<div className="app-loading-shell">Loading XBAR Command...</div>}>
           <Routes>
             <Route path="/profiles/:id" element={<BuyerProfile />} />
             <Route path="/landing" element={<Landing />} />
@@ -126,7 +114,7 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/setup" element={<RequireCloudAuth><SetupWorkspace /></RequireCloudAuth>} />
             <Route path="/" element={<RequireCloudAuth><RequireWorkspaceSetup><MainLayout /></RequireWorkspaceSetup></RequireCloudAuth>}>
-              <Route index element={<DashboardWithActivation />} />
+              <Route index element={<Dashboard />} />
               <Route path="horses" element={<Horses />} />
               <Route path="horses/:id" element={<HorseDetail />} />
               <Route path="documents" element={<Documents />} />
