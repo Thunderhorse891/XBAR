@@ -109,3 +109,11 @@ test('horse economics compute burn, break-even, and the safe discount floor', as
   assert.equal(economics.projectedMargin, 9000);
   assert.equal(economics.marginPercent, 75);
 });
+
+test('an active medical review prices the listing as blocked with disclosure required', () => {
+  const held = { id: 'h1', name: 'Spirit', status: 'Medical Review', owner: 'Erin', sale: { askPrice: 9000, listingState: 'Market Ready' } } as unknown as HorseRecord;
+  const result = assessRevenueAtRisk([held], [clearRecord('h1')], [cogginsDoc('h1', 30)], now);
+  assert.equal(result.valueAtRisk, 9000);
+  assert.match(result.items[0]!.blockers[0] ?? '', /medical review/);
+  assert.equal(result.items[0]!.actionRoute, '/medical?horse=h1');
+});

@@ -89,6 +89,14 @@ export function assessRevenueAtRisk(
       }
     }
 
+    if (horse.status === 'Medical Review') {
+      blockers.push('Active medical review — buyer disclosure required');
+      if (!actionLabel) {
+        actionLabel = `Review care hold for ${horse.name}`;
+        actionRoute = `/medical?horse=${horse.id}`;
+      }
+    }
+
     if (blockers.length) {
       valueAtRisk += askPrice;
       items.push({ horseId: horse.id, horseName: horse.name, askPrice, blockers, actionLabel, actionRoute });

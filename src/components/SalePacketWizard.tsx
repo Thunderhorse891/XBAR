@@ -65,8 +65,11 @@ export function SalePacketWizard({
 
   // Title/transfer problems hard-block release; a stale Coggins can be
   // disclosed and acknowledged, never silently ignored.
-  const ownershipBlockers = (risk?.blockers ?? []).filter((blocker) => !blocker.includes('Coggins'));
+  const ownershipBlockers = (risk?.blockers ?? []).filter(
+    (blocker) => !blocker.includes('Coggins') && !blocker.includes('medical review'),
+  );
   const cogginsBlocked = (risk?.blockers ?? []).some((blocker) => blocker.includes('Coggins'));
+  const careHold = horse?.status === 'Medical Review';
   const readyDocs = documents.filter((document) => document.horseId === effectiveHorseId && document.state === 'Ready');
   const docSelection = selectedDocIds ?? readyDocs.map((document) => document.id);
   const defaultWatermark = `Copy for ${buyerName.trim() || 'buyer review'} – ${new Date().toISOString().slice(0, 10)}`;
@@ -83,7 +86,7 @@ export function SalePacketWizard({
   const stepBlockReason =
     step === 0 && !horse ? 'Select a horse to continue.'
     : step === 1 && ownershipBlockers.length ? 'Title & transfer blockers must be cleared before a packet can be released.'
-    : step === 1 && cogginsBlocked && !cogginsDisclosed ? 'Acknowledge the Coggins disclosure to continue.'
+    : step === 1 && (cogginsBlocked || careHold) && !cogginsDisclosed ? 'Acknowledge the buyer disclosure to continue.'
     : step === 2 && docSelection.length === 0 ? 'Include at least one approved document.'
     : '';
 
@@ -219,11 +222,23 @@ export function SalePacketWizard({
               ) : (
                 <p style={{ fontSize: 14, color: '#303842', marginTop: 0 }}>Title &amp; transfer is provable. This packet can be released.</p>
               )}
-              {cogginsBlocked && ownershipBlockers.length === 0 && (
+              {(cogginsBlocked || careHold) && ownershipBlockers.length === 0 && (
                 <div className="confirm-dialog__acks" style={{ marginTop: 8 }}>
                   <label className="confirm-dialog__ack">
                     <input type="checkbox" checked={cogginsDisclosed} onChange={(event) => setCogginsDisclosed(event.target.checked)} />
-                    <span>No current Coggins is on file. I will disclose this to the buyer in the packet. (Or close and <button type="button" className="button button--ghost button--compact" onClick={() => { close(); navigate(`/documents?upload=1&horse=${horse.id}`); }}>upload the Coggins now</button>.)</span>
+                    <span>
+                      {cogginsBlocked && careHold
+                        ? 'No current Coggins is on file and this horse is under active medical review. I will disclose both to the buyer.'
+                        : careHold
+                          ? `${horse.name} is under active medical review. I will disclose the care hold to the buyer.`
+                          : 'No current Coggins is on file. I will disclose this to the buyer in the packet.'}
+                      {cogginsBlocked && (
+                        <> (Or close and <button type="button" className="button button--ghost button--compact" onClick={() => { close(); navigate(`/documents?upload=1&horse=${horse.id}`); }}>upload the Coggins now</button>.)</>
+                      )}
+                      {careHold && !cogginsBlocked && (
+                        <> (Or close and <button type="button" className="button button--ghost button--compact" onClick={() => { close(); navigate(`/medical?horse=${horse.id}`); }}>review the care hold</button>.)</>
+                      )}
+                    </span>
                   </label>
                 </div>
               )}
