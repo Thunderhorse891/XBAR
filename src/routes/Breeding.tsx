@@ -56,7 +56,7 @@ export default function Breeding() {
       <CommandBrief
         variant="split"
         eyebrow="Breeding"
-        entity="Breeding Program"
+        entity="Breeding"
         status={blockedHorses.length ? { label: `${blockedHorses.length} record blockers`, tone: 'amber' } : { label: 'Program records clear', tone: 'blue' }}
         summary={`${breedingHorses.length} mares and studs tracked with ${milestoneCount} program milestones on file.`}
         evidence={[

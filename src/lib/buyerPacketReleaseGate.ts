@@ -38,11 +38,11 @@ export function buildBuyerPacketReleaseGate(params: {
   });
 
   if (params.horse.status === 'Medical Review') {
-    blockers.push('Care Status: medical review is still open.');
+    blockers.push('Health: medical review is still open.');
   }
 
   if (params.ownershipRecord && params.ownershipRecord.transferStatus !== 'Clear') {
-    blockers.push(`Title & Transfer: transfer status is ${params.ownershipRecord.transferStatus}.`);
+    blockers.push(`Ownership: transfer status is ${params.ownershipRecord.transferStatus}.`);
   }
 
   params.horse.alerts

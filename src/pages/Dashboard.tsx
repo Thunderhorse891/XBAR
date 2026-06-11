@@ -61,7 +61,7 @@ export default function Dashboard() {
         ? 'Approve proof waiting in the vault'
         : qualifiedBuyerCount
           ? 'Move qualified buyers forward'
-          : 'Prepare the next buyer-ready command file';
+          : 'Prepare the next buyer-ready horse record';
   const nextMovePath = transferGaps.length
     ? '/ownership'
     : careDueCount
@@ -76,7 +76,7 @@ export default function Dashboard() {
     const ranchQuery = workspaceProfile.ranchName.trim();
     if (!ranchQuery) {
       setWeather(null);
-      setWeatherError('Set the ranch location in Ranch Control.');
+      setWeatherError('Set the ranch location in Settings.');
       return;
     }
 
@@ -112,23 +112,23 @@ export default function Dashboard() {
   const menuExpenseHorse = horses.find((horse) => horse.id === menuExpense?.horseId);
   const menuItems = menuHorse
     ? [
-        { id: 'open-horse', label: 'Open command file', onSelect: () => navigate(`/horses/${menuHorse.id}`) },
+        { id: 'open-horse', label: 'Open horse record', onSelect: () => navigate(`/horses/${menuHorse.id}`) },
         { id: 'open-profile', label: 'Open buyer packet', onSelect: () => navigate(`/profiles/${menuHorse.id}`) },
       ]
     : menuRecord
       ? [
           { id: 'open-ownership', label: 'Open title & transfer', onSelect: () => navigate('/ownership') },
-          ...(menuRecordHorse ? [{ id: 'open-record-horse', label: 'Open command file', onSelect: () => navigate(`/horses/${menuRecordHorse.id}`) }] : []),
+          ...(menuRecordHorse ? [{ id: 'open-record-horse', label: 'Open horse record', onSelect: () => navigate(`/horses/${menuRecordHorse.id}`) }] : []),
         ]
       : menuLead
         ? [
             { id: 'open-sales', label: 'Open buyer desk', onSelect: () => navigate('/sales') },
-            ...(menuLeadHorse ? [{ id: 'open-lead-horse', label: 'Open command file', onSelect: () => navigate(`/horses/${menuLeadHorse.id}`) }] : []),
+            ...(menuLeadHorse ? [{ id: 'open-lead-horse', label: 'Open horse record', onSelect: () => navigate(`/horses/${menuLeadHorse.id}`) }] : []),
           ]
         : menuExpense
           ? [
               { id: 'open-ledger', label: 'Open operating ledger', onSelect: () => navigate('/expenses') },
-              ...(menuExpenseHorse ? [{ id: 'open-expense-horse', label: 'Open command file', onSelect: () => navigate(`/horses/${menuExpenseHorse.id}`) }] : []),
+              ...(menuExpenseHorse ? [{ id: 'open-expense-horse', label: 'Open horse record', onSelect: () => navigate(`/horses/${menuExpenseHorse.id}`) }] : []),
             ]
           : [];
   const hasWorkspaceData = Boolean(
@@ -173,36 +173,36 @@ export default function Dashboard() {
         <div className="ops-briefing-header command-center-briefing">
           <div className="ops-briefing-header__top">
             <div className="ops-briefing-header__left">
-              <div className="ops-briefing-header__ranch">Local command workspace</div>
-              <h1 className="ops-briefing-header__title">Stand up the ranch command system.</h1>
+              <div className="ops-briefing-header__ranch">Your barn</div>
+              <h1 className="ops-briefing-header__title">Add your first horse.</h1>
               <p className="command-center-briefing__copy">
-                Create the first horse command file, attach proof, then let XBAR organize care, ownership, buyers, field conditions, and operating cost around the record.
+                Create a record for your first horse and upload its papers. XBAR keeps health, ownership, buyers, weather, and costs organized around it.
               </p>
               <div className="ops-briefing-header__chips">
-                <span className="ops-briefing-chip">Horse command file</span>
-                <span className="ops-briefing-chip">Proof vault</span>
-                <span className="ops-briefing-chip">Operating ledger</span>
-                <span className="ops-briefing-chip">Field conditions</span>
+                <span className="ops-briefing-chip">Horse records</span>
+                <span className="ops-briefing-chip">Papers</span>
+                <span className="ops-briefing-chip">Costs</span>
+                <span className="ops-briefing-chip">Weather</span>
               </div>
             </div>
             <div className="ops-briefing-header__actions">
-              <Link to="/horses?new=1" className="ops-briefing-action ops-briefing-action--primary">Create command file</Link>
-              <Link to="/documents?upload=1" className="ops-briefing-action">Upload proof</Link>
-              <Link to="/settings" className="ops-briefing-action">Ranch Control</Link>
+              <Link to="/horses?new=1" className="ops-briefing-action ops-briefing-action--primary">Add a horse</Link>
+              <Link to="/documents?upload=1" className="ops-briefing-action">Upload papers</Link>
+              <Link to="/settings" className="ops-briefing-action">Settings</Link>
             </div>
           </div>
           <div className="ops-briefing-stat-row">
-            <div className="ops-briefing-stat"><span className="ops-briefing-stat__label">Files</span><span className="ops-briefing-stat__value ops-briefing-stat__value--clear">0</span><span className="ops-briefing-stat__detail">no command files</span></div>
-            <div className="ops-briefing-stat"><span className="ops-briefing-stat__label">Proof</span><span className="ops-briefing-stat__value">0</span><span className="ops-briefing-stat__detail">vault empty</span></div>
+            <div className="ops-briefing-stat"><span className="ops-briefing-stat__label">Horses</span><span className="ops-briefing-stat__value ops-briefing-stat__value--clear">0</span><span className="ops-briefing-stat__detail">none yet</span></div>
+            <div className="ops-briefing-stat"><span className="ops-briefing-stat__label">Papers</span><span className="ops-briefing-stat__value">0</span><span className="ops-briefing-stat__detail">none uploaded</span></div>
             <div className="ops-briefing-stat"><span className="ops-briefing-stat__label">Transfers</span><span className="ops-briefing-stat__value ops-briefing-stat__value--clear">0</span><span className="ops-briefing-stat__detail">none pending</span></div>
-            <div className="ops-briefing-stat"><span className="ops-briefing-stat__label">Buyers</span><span className="ops-briefing-stat__value">0</span><span className="ops-briefing-stat__detail">no movement</span></div>
+            <div className="ops-briefing-stat"><span className="ops-briefing-stat__label">Buyers</span><span className="ops-briefing-stat__value">0</span><span className="ops-briefing-stat__detail">no activity yet</span></div>
           </div>
         </div>
 
         <div className="dashboard-grid dashboard-grid--primary">
-          <Panel eyebrow="First move" title="Create the first command file">
+          <Panel eyebrow="First move" title="Create the first horse record">
             <EmptyState
-              title="No command files yet"
+              title="No horse records yet"
               description="Add the first horse, then attach proof. The system becomes useful when every decision points back to a file."
               action={
                 <div className="inline-actions">
@@ -216,7 +216,7 @@ export default function Dashboard() {
 
           <Panel eyebrow="Operating sequence" title="What to build first">
             <div className="stack-list">
-              <div className="stack-item"><div className="stack-item__title">Horse command file</div><div className="stack-item__copy">One horse gives the system something to organize around: identity, barn, owner, and status.</div></div>
+              <div className="stack-item"><div className="stack-item__title">Horse record</div><div className="stack-item__copy">One horse gives the system something to organize around: identity, barn, owner, and status.</div></div>
               <div className="stack-item"><div className="stack-item__title">Proof vault</div><div className="stack-item__copy">Upload Coggins, registration, health papers, contracts, and receipts so gaps are visible.</div></div>
               <div className="stack-item"><div className="stack-item__title">Operating ledger</div><div className="stack-item__copy">Log feed, wormer, dental, and vet costs while context is fresh.</div></div>
               <div className="stack-item"><div className="stack-item__title">Field conditions</div><div className="stack-item__copy">Set ranch location and use weather for turnout, hauling, and breeding windows.</div></div>
@@ -254,14 +254,14 @@ export default function Dashboard() {
           </div>
           <div className="ops-briefing-header__actions">
             <button type="button" className="ops-briefing-action ops-briefing-action--primary" onClick={() => navigate(nextMovePath)}>Open next move</button>
-            <Link to="/documents" className="ops-briefing-action">Proof Vault</Link>
-            <Link to="/weather" className="ops-briefing-action">Field Conditions</Link>
+            <Link to="/documents" className="ops-briefing-action">Documents</Link>
+            <Link to="/weather" className="ops-briefing-action">Weather</Link>
           </div>
         </div>
         <div className="command-center-next-move">
           <span>Highest-value move</span>
           <strong>{nextMove}</strong>
-          <em>{urgencyCount > 0 ? 'XBAR is surfacing the first visible blocker.' : 'Use the clear window to strengthen buyer readiness or proof files.'}</em>
+          <em>{urgencyCount > 0 ? 'XBAR is surfacing the first visible blocker.' : 'Use the clear window to strengthen buyer readiness or documents.'}</em>
         </div>
         <div className="ops-briefing-stat-row">
           <button type="button" className="ops-briefing-stat ops-briefing-stat--clickable" onClick={() => navigate('/ownership')} title="Open title and transfer">
@@ -315,7 +315,7 @@ export default function Dashboard() {
             <div className="command-stage__support-label">Field conditions</div>
             <strong className="command-stage__support-title">{weatherLoading ? 'Loading...' : weather ? `${weather.current.temperatureF}°F · ${weather.current.weatherLabel}` : 'Forecast offline'}</strong>
             <div className="command-stage__support-copy">
-              <span>{weather ? `${weather.today.rainChance}% rain · ${weather.current.windMph} mph wind · UV ${weather.today.uvIndex}` : weatherError || 'Open Field Conditions and set the ranch location.'}</span>
+              <span>{weather ? `${weather.today.rainChance}% rain · ${weather.current.windMph} mph wind · UV ${weather.today.uvIndex}` : weatherError || 'Open Weather and set the ranch location.'}</span>
               <span>{weather ? weather.notes.turnout : 'Use weather to plan turnout, hauling, and breeding work.'}</span>
             </div>
           </div>
@@ -331,7 +331,7 @@ export default function Dashboard() {
 
       <div className="dashboard-board">
         <div className="dashboard-board__main">
-          <Panel title="Title & transfer holds" meta={<Pill tone={transferGaps.length ? 'rose' : 'emerald'}>{transferGaps.length ? 'Action required' : 'Clear'}</Pill>} surfaceId="command-transfer-issues" style={{ order: transferGaps.length ? 0 : 2 }} action={<Link to="/ownership" className="button button--ghost button--compact">Title & Transfer</Link>}>
+          <Panel title="Title & transfer holds" meta={<Pill tone={transferGaps.length ? 'rose' : 'emerald'}>{transferGaps.length ? 'Action required' : 'Clear'}</Pill>} surfaceId="command-transfer-issues" style={{ order: transferGaps.length ? 0 : 2 }} action={<Link to="/ownership" className="button button--ghost button--compact">Ownership</Link>}>
             {transferGaps.length ? (
               <div className="stack-list">
                 {transferGaps.slice(0, 6).map((gap) => (
@@ -353,11 +353,11 @@ export default function Dashboard() {
                 ))}
               </div>
             ) : (
-              <EmptyState compact title="Transfer proof clear" description="No command files are waiting on transfer papers." />
+              <EmptyState compact title="Transfer proof clear" description="No horse records are waiting on transfer papers." />
             )}
           </Panel>
 
-          <Panel title="Care holds" meta={<Pill tone={careDueCount ? 'amber' : 'emerald'}>{careDueCount ? 'Due now' : 'Current'}</Pill>} surfaceId="command-care-board" style={{ order: careDueCount ? 0 : 2 }} action={<div className="inline-actions"><Link to="/weather" className="button button--ghost button--compact">Field Conditions</Link><Link to="/medical" className="button button--ghost button--compact">Care Status</Link></div>}>
+          <Panel title="Care holds" meta={<Pill tone={careDueCount ? 'amber' : 'emerald'}>{careDueCount ? 'Due now' : 'Current'}</Pill>} surfaceId="command-care-board" style={{ order: careDueCount ? 0 : 2 }} action={<div className="inline-actions"><Link to="/weather" className="button button--ghost button--compact">Weather</Link><Link to="/medical" className="button button--ghost button--compact">Health</Link></div>}>
             {careBoard.length ? (
               <div className="stack-list">
                 {careBoard.slice(0, 6).map((row) => (
@@ -380,7 +380,7 @@ export default function Dashboard() {
                 ))}
               </div>
             ) : (
-              <EmptyState compact title="No care holds" description="Care status appears once command files and proof records exist." />
+              <EmptyState compact title="No care holds" description="Care status appears once horse records and proof records exist." />
             )}
           </Panel>
         </div>
@@ -403,7 +403,7 @@ export default function Dashboard() {
             )}
           </Panel>
 
-          <Panel title="Proof queue" meta={<Pill tone={reviewQueue.length ? 'amber' : 'emerald'}>{reviewQueue.length ? 'Active' : 'Clear'}</Pill>} surfaceId="command-work-queue" action={<Link to="/documents" className="button button--ghost button--compact">Proof Vault</Link>}>
+          <Panel title="Proof queue" meta={<Pill tone={reviewQueue.length ? 'amber' : 'emerald'}>{reviewQueue.length ? 'Active' : 'Clear'}</Pill>} surfaceId="command-work-queue" action={<Link to="/documents" className="button button--ghost button--compact">Documents</Link>}>
             <div className="stack-list">
               {reviewQueue.slice(0, 5).map((document) => (
                 <Link key={document.id} to="/documents" className="stack-item stack-item--interactive">
@@ -428,7 +428,7 @@ export default function Dashboard() {
           <form id="dashboard-receipt-form" className="dashboard-receipt-form" onSubmit={handleReceiptSubmit}>
             <div className="form-grid form-grid--tight">
               <label className="field-stack"><span className="field-label">Category</span><select className="field-input" value={receiptDraft.category} onChange={(event) => setReceiptDraft((current) => ({ ...current, category: event.target.value as ExpenseCategory }))} disabled={!canManageBudget || savingReceipt}>{EXPENSE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}</select></label>
-              <label className="field-stack"><span className="field-label">Command file</span><select className="field-input" value={receiptDraft.horseId} onChange={(event) => setReceiptDraft((current) => ({ ...current, horseId: event.target.value }))} disabled={!canManageBudget || savingReceipt}><option value="">Ranch-wide</option>{horses.map((horse) => <option key={horse.id} value={horse.id}>{horse.name}</option>)}</select></label>
+              <label className="field-stack"><span className="field-label">Horse record</span><select className="field-input" value={receiptDraft.horseId} onChange={(event) => setReceiptDraft((current) => ({ ...current, horseId: event.target.value }))} disabled={!canManageBudget || savingReceipt}><option value="">Ranch-wide</option>{horses.map((horse) => <option key={horse.id} value={horse.id}>{horse.name}</option>)}</select></label>
               <label className="field-stack"><span className="field-label">Receipt label</span><input className="field-input" value={receiptDraft.title} onChange={(event) => setReceiptDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Dental float" disabled={!canManageBudget || savingReceipt} /></label>
               <label className="field-stack"><span className="field-label">Vendor</span><input className="field-input" value={receiptDraft.vendor} onChange={(event) => setReceiptDraft((current) => ({ ...current, vendor: event.target.value }))} placeholder="Rolling Plains Vet" disabled={!canManageBudget || savingReceipt} /></label>
               <label className="field-stack"><span className="field-label">Amount</span><input className="field-input" type="number" min="0" step="0.01" value={receiptDraft.amount} onChange={(event) => setReceiptDraft((current) => ({ ...current, amount: event.target.value }))} placeholder="240.00" disabled={!canManageBudget || savingReceipt} /></label>
@@ -444,7 +444,7 @@ export default function Dashboard() {
           </form>
         </Panel>
 
-        <Panel title="Buyer desk" meta={<Pill tone={salesLeads.length ? 'blue' : 'slate'}>{salesLeads.length ? 'Active' : 'Quiet'}</Pill>} surfaceId="command-buyer-desk" action={<Link to="/sales" className="button button--ghost button--compact">Buyer Desk</Link>}>
+        <Panel title="Buyer desk" meta={<Pill tone={salesLeads.length ? 'blue' : 'slate'}>{salesLeads.length ? 'Active' : 'Quiet'}</Pill>} surfaceId="command-buyer-desk" action={<Link to="/sales" className="button button--ghost button--compact">Sales</Link>}>
           {salesLeads.length ? (
             <div className="stack-list">
               {salesLeads.slice(0, 5).map((lead) => {
@@ -467,7 +467,7 @@ export default function Dashboard() {
               })}
             </div>
           ) : (
-            <EmptyState compact title="No buyer movement" description="Buyer activity appears here once leads are attached to command files." />
+            <EmptyState compact title="No buyer movement" description="Buyer activity appears here once leads are attached to horse records." />
           )}
         </Panel>
       </div>

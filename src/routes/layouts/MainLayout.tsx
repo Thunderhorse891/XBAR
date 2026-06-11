@@ -38,55 +38,55 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { label: 'Command Center', path: '/', icon: DashboardIcon, section: 'Command' },
-  { label: 'Command Files', path: '/horses', icon: HorsesIcon, section: 'Command' },
-  { label: 'Title & Transfer', path: '/ownership', icon: OwnershipIcon, section: 'Command', badgeKey: 'transfers' },
-  { label: 'Proof Vault', path: '/documents', icon: DocumentsIcon, section: 'Command', badgeKey: 'docs' },
+  { label: 'Home', path: '/', icon: DashboardIcon, section: 'Command' },
+  { label: 'My Horses', path: '/horses', icon: HorsesIcon, section: 'Command' },
+  { label: 'Ownership', path: '/ownership', icon: OwnershipIcon, section: 'Command', badgeKey: 'transfers' },
+  { label: 'Documents', path: '/documents', icon: DocumentsIcon, section: 'Command', badgeKey: 'docs' },
   { label: 'Document Library', path: '/document-library', icon: DocumentsIcon, section: 'Command' },
-  { label: 'Care Status', path: '/medical', icon: MedicalIcon, section: 'Operations', badgeKey: 'care' },
-  { label: 'Breeding Program', path: '/breeding', icon: BreedingIcon, section: 'Operations' },
-  { label: 'Buyer Desk', path: '/sales', icon: SalesIcon, section: 'Operations' },
-  { label: 'Operating Ledger', path: '/expenses', icon: SubscriptionIcon, section: 'Operations' },
-  { label: 'Action Queue', path: '/reminders', icon: BellIcon, section: 'Operations', badgeKey: 'reminders' },
-  { label: 'Ranch Assets', path: '/assets', icon: AssetsIcon, section: 'Operations' },
-  { label: 'Field Conditions', path: '/weather', icon: WeatherIcon, section: 'Operations' },
-  { label: 'Buyer Packet', path: '/shared-access', icon: SharedAccessIcon, section: 'Control' },
-  { label: 'Plan Control', path: '/subscriptions', icon: SubscriptionIcon, section: 'Control', requires: 'billing' },
-  { label: 'Ranch Control', path: '/settings', icon: SettingsIcon, section: 'Control', requires: 'settings' },
+  { label: 'Health', path: '/medical', icon: MedicalIcon, section: 'Operations', badgeKey: 'care' },
+  { label: 'Breeding', path: '/breeding', icon: BreedingIcon, section: 'Operations' },
+  { label: 'Sales', path: '/sales', icon: SalesIcon, section: 'Operations' },
+  { label: 'Expenses', path: '/expenses', icon: SubscriptionIcon, section: 'Operations' },
+  { label: 'Reminders', path: '/reminders', icon: BellIcon, section: 'Operations', badgeKey: 'reminders' },
+  { label: 'Equipment', path: '/assets', icon: AssetsIcon, section: 'Operations' },
+  { label: 'Weather', path: '/weather', icon: WeatherIcon, section: 'Operations' },
+  { label: 'Listings', path: '/shared-access', icon: SharedAccessIcon, section: 'Control' },
+  { label: 'Plan & Billing', path: '/subscriptions', icon: SubscriptionIcon, section: 'Control', requires: 'billing' },
+  { label: 'Settings', path: '/settings', icon: SettingsIcon, section: 'Control', requires: 'settings' },
 ];
 
 const routeLabels: Record<string, string> = {
-  '/': 'Command Center',
-  '/horses': 'Command Files',
-  '/documents': 'Proof Vault',
+  '/': 'Home',
+  '/horses': 'My Horses',
+  '/documents': 'Documents',
   '/document-library': 'Document Library',
-  '/ownership': 'Title & Transfer',
-  '/medical': 'Care Status',
-  '/breeding': 'Breeding Program',
-  '/sales': 'Buyer Desk',
-  '/expenses': 'Operating Ledger',
-  '/reminders': 'Action Queue',
-  '/assets': 'Ranch Assets',
-  '/weather': 'Field Conditions',
-  '/subscriptions': 'Plan Control',
-  '/shared-access': 'Buyer Packet',
-  '/settings': 'Ranch Control',
+  '/ownership': 'Ownership',
+  '/medical': 'Health',
+  '/breeding': 'Breeding',
+  '/sales': 'Sales',
+  '/expenses': 'Expenses',
+  '/reminders': 'Reminders',
+  '/assets': 'Equipment',
+  '/weather': 'Weather',
+  '/subscriptions': 'Plan & Billing',
+  '/shared-access': 'Listings',
+  '/settings': 'Settings',
 };
 
 const routeHelp: Record<string, HelpSection[]> = {
-  'Command Center': [
+  'Home': [
     { label: 'Daily brief', text: 'Start with the highest-risk decision: transfer proof, care holds, document review, buyer movement, or spending.' },
     { label: 'Command shape', text: 'Every section should answer entity, status, evidence, risk, and next action.' },
   ],
-  'Command Files': [
-    { label: 'Horse file', text: 'Each horse should read like a command file: identity, ownership, care, documents, sales, and history.' },
+  'My Horses': [
+    { label: 'Horse file', text: 'Each horse should read like a horse record: identity, ownership, care, documents, sales, and history.' },
     { label: 'Confirmed data', text: 'Unknown should remain unknown until verified by a source record.' },
   ],
-  'Title & Transfer': [
+  'Ownership': [
     { label: 'Proof chain', text: 'Use this area for owners, percentages, sale status, transfer blockers, and source documents.' },
     { label: 'Control', text: 'No sale or transfer should move without visible proof gaps resolved.' },
   ],
-  'Proof Vault': [
+  'Documents': [
     { label: 'Vault', text: 'Upload first. Assign, approve, and keep the document chain clean.' },
     { label: 'Release discipline', text: 'Only approved ready-to-share files should reach buyer packets.' },
   ],
@@ -94,48 +94,48 @@ const routeHelp: Record<string, HelpSection[]> = {
     { label: 'Prefill', text: 'Templates pull horse, owner, barn, health, Coggins, sale, and document-vault data.' },
     { label: 'Export', text: 'Preview, download a report, print to PDF, or copy the buyer-facing link.' },
   ],
-  'Care Status': [
+  'Health': [
     { label: 'Care holds', text: 'Coggins, vaccines, dental, wormer, treatment, and due dates belong here.' },
     { label: 'Source dates', text: 'Do not guess due dates. Use records the operation can verify.' },
   ],
-  'Breeding Program': [
+  'Breeding': [
     { label: 'Program', text: 'Track pairings, milestones, contracts, foaling windows, and proof.' },
     { label: 'Decisions', text: 'Breeding movement should connect back to files and history.' },
   ],
-  'Buyer Desk': [
+  'Sales': [
     { label: 'Pipeline', text: 'Keep lead movement, buyer quality, record readiness, and follow-ups visible.' },
     { label: 'Buyer packet', text: 'Share only when the horse and documents are ready.' },
   ],
-  'Operating Ledger': [
+  'Expenses': [
     { label: 'Ledger', text: 'Log costs while the context is fresh.' },
     { label: 'Connect', text: 'Receipts should connect to horses, care, documents, and operating decisions.' },
   ],
-  'Action Queue': [
+  'Reminders': [
     { label: 'Queue', text: 'This is the work list for care, papers, documents, transfers, and buyer movement.' },
     { label: 'Confidence', text: 'An action should always show the source of the work.' },
   ],
-  'Ranch Assets': [
+  'Equipment': [
     { label: 'Assets', text: 'Track equipment, kits, feed supply, transport, and service work.' },
     { label: 'Field use', text: 'Keep mobile actions short and readable.' },
   ],
-  'Field Conditions': [
+  'Weather': [
     { label: 'Conditions', text: 'Use weather for turnout, hauling, handling, breeding, and field work.' },
-    { label: 'Location', text: 'Set the ranch location in Ranch Control for better daily context.' },
+    { label: 'Location', text: 'Set the ranch location in Settings for better daily context.' },
   ],
-  'Plan Control': [
+  'Plan & Billing': [
     { label: 'Plan state', text: 'Keep plan status clear without implying cloud billing is connected before it is.' },
     { label: 'Limits', text: 'Storage, seats, listings, and documents should remain easy to understand.' },
   ],
-  'Buyer Packet': [
+  'Listings': [
     { label: 'Release', text: 'Buyer links need approved, sanitized records only.' },
     { label: 'Proof', text: 'Preview before making any horse public.' },
   ],
-  'Ranch Control': [
+  'Settings': [
     { label: 'Control', text: 'Manage ranch defaults, members, sync, and backups.' },
     { label: 'Recovery', text: 'Use backups before large imports or cloud changes.' },
   ],
   'Horse Command File': [
-    { label: 'Command file', text: 'Identity, care, ownership, documents, sales, and history should read as one record.' },
+    { label: 'Horse record', text: 'Identity, care, ownership, documents, sales, and history should read as one record.' },
     { label: 'Missing data', text: 'Unknown should stay unknown until verified.' },
   ],
 };
@@ -144,10 +144,16 @@ function classNames(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(' ');
 }
 
+const sectionDisplayNames: Record<NavSectionName, string> = {
+  Command: 'My Barn',
+  Operations: 'Daily Work',
+  Control: 'Account',
+};
+
 function NavSection({ title, items, badges }: { title: NavSectionName; items: NavItem[]; badges: Record<string, number> }) {
   return (
     <div className="flex flex-col gap-2">
-      <div className="px-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-[#536d88]">{title}</div>
+      <div className="px-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-[#536d88]">{sectionDisplayNames[title]}</div>
       <div className="flex flex-col gap-[1px]">
         {items.map(({ label, path, icon: Icon, badgeKey }) => {
           const badge = badgeKey ? (badges[badgeKey] ?? 0) : 0;
@@ -234,7 +240,7 @@ export default function MainLayout() {
   const commandState = opsUrgency === 'urgent' ? 'Action required' : opsUrgency === 'warning' ? 'Watch active' : 'Command clear';
   const localStatus = cloudStatus === 'signed-in' ? 'Cloud sync connected' : 'Local browser workspace';
   const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse Command File' : routeLabels[location.pathname] ?? 'Ranch';
-  const helpSections = routeHelp[currentLabel] ?? routeHelp['Command Center'];
+  const helpSections = routeHelp[currentLabel] ?? routeHelp['Home'];
   const accountLabel = cloudSession?.user?.email ?? currentRole;
 
   useEffect(() => { setHelpOpen(false); setMobileMoreOpen(false); }, [location.pathname]);
@@ -289,7 +295,7 @@ export default function MainLayout() {
 
         <div className="mt-auto border-t border-[#0a1624] pt-4 text-xs text-[#3d5870]">
           <div className="font-semibold uppercase tracking-[0.12em] text-[#4a6880]">Local command workspace</div>
-          <div className="mt-1 text-[#2e4560]">{expenseReceipts.length} receipts · {documents.length} proof files · {horses.length} command files</div>
+          <div className="mt-1 text-[#2e4560]">{expenseReceipts.length} receipts · {documents.length} documents · {horses.length} horse records</div>
         </div>
       </aside>
 
@@ -311,7 +317,7 @@ export default function MainLayout() {
                   onChange={(event) => setSearch(event.target.value)}
                   onKeyDown={handleSearch}
                   onFocus={() => setCommandPaletteOpen(true)}
-                  placeholder="Find command file, proof, buyer, or action"
+                  placeholder="Find horse record, proof, buyer, or action"
                   aria-label="Open XBAR search"
                   className="h-10 w-full rounded-md border border-[#1d3047] bg-[#0b1625] pl-10 pr-4 text-sm text-[#e9f2ff] transition-all duration-150 ease-[ease] placeholder:text-[#677f98] focus:border-[#4d94ff] focus:outline-none"
                 />
@@ -361,7 +367,7 @@ export default function MainLayout() {
               {canCreateHorse ? (
                 <button className="mb-2 flex min-h-[50px] w-full items-center gap-3 rounded-md bg-[#1155dd] px-3 text-left text-sm font-semibold text-white" type="button" onClick={() => { setMobileMoreOpen(false); navigate('/horses?new=1'); }}>
                   <AddIcon className="h-[18px] w-[18px] shrink-0" />
-                  <span>New command file</span>
+                  <span>Add horse</span>
                 </button>
               ) : null}
               <div className="grid grid-cols-2 gap-2">

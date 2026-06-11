@@ -308,10 +308,10 @@ export function SalePacketWizard({
                   <a className="button button--primary button--compact" href={generated.downloadUrl} target="_blank" rel="noreferrer">Download packet PDF</a>
                 )}
                 <button className="button button--ghost button--compact" type="button" onClick={() => { close(); navigate('/shared-access'); }}>
-                  Open Buyer Packet sharing for {horse.name}
+                  Open Listings sharing for {horse.name}
                 </button>
                 <button className="button button--ghost button--compact" type="button" onClick={() => { close(); navigate('/sales'); }}>
-                  Open Buyer Desk to track {buyerName.trim() || 'this buyer'}
+                  Open Sales to track {buyerName.trim() || 'this buyer'}
                 </button>
                 <button
                   className="button button--ghost button--compact"

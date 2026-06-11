@@ -65,7 +65,7 @@ export const roleSeed: RoleWorkspace[] = [
     role: 'Owner',
     label: 'Horse Owner / Client',
     summary: 'Read-only horse records, documents, and sale packets.',
-    primaryModules: ['Sale Listings', 'Documents', 'Title & Transfer'],
+    primaryModules: ['Sale Listings', 'Documents', 'Ownership'],
     permissions: ['Packet viewing', 'Client document upload', 'Saved listing access'],
   },
   {

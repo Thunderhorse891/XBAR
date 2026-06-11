@@ -43,25 +43,25 @@ const Terms = lazy(() => import('./routes/Terms'));
 const Weather = lazy(() => import('./routes/Weather'));
 
 const ROUTE_LABELS: Record<string, string> = {
-  '/': 'Command Center',
-  '/assets': 'Ranch Assets',
-  '/breeding': 'Breeding Program',
+  '/': 'Home',
+  '/assets': 'Equipment',
+  '/breeding': 'Breeding',
   '/document-library': 'Document Library',
-  '/documents': 'Proof Vault',
-  '/expenses': 'Operating Ledger',
+  '/documents': 'Documents',
+  '/expenses': 'Expenses',
   '/follow-ups': 'Buyer Follow-ups',
-  '/horses': 'Command Files',
+  '/horses': 'My Horses',
   '/landing': 'Ranch Platform',
   '/login': 'Login',
-  '/medical': 'Care Status',
-  '/ownership': 'Title & Transfer',
-  '/reminders': 'Action Queue',
-  '/sales': 'Buyer Desk',
-  '/settings': 'Ranch Control',
+  '/medical': 'Health',
+  '/ownership': 'Ownership',
+  '/reminders': 'Reminders',
+  '/sales': 'Sales',
+  '/settings': 'Settings',
   '/setup': 'Setup',
-  '/shared-access': 'Buyer Packet',
-  '/subscriptions': 'Plan Control',
-  '/weather': 'Field Conditions',
+  '/shared-access': 'Listings',
+  '/subscriptions': 'Plan & Billing',
+  '/weather': 'Weather',
 };
 
 function useHashRouting() {
@@ -70,7 +70,7 @@ function useHashRouting() {
 }
 
 function routeTitle(path: string) {
-  if (path.startsWith('/profiles/')) return 'XBAR | Buyer Packet';
+  if (path.startsWith('/profiles/')) return 'XBAR | Listings';
   if (path.startsWith('/horses/')) return 'XBAR | Horse Command File';
   return `XBAR | ${ROUTE_LABELS[path] ?? 'Ranch'}`;
 }

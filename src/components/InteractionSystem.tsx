@@ -225,7 +225,7 @@ type CommandItem = {
 };
 
 const routeCommands: CommandItem[] = [
-  ['dashboard', 'Command Center', 'Daily ranch operations', '/', 'Navigate'],
+  ['dashboard', 'Home', 'Daily ranch operations', '/', 'Navigate'],
   ['horses', 'Horse registry', 'All horse records', '/horses', 'Navigate'],
   ['documents', 'Document vault', 'Source records and review', '/documents', 'Navigate'],
   ['ownership', 'Ownership', 'Transfers and proof', '/ownership', 'Navigate'],

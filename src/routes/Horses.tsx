@@ -35,7 +35,7 @@ function createHorseFormDefaults(params: {
   };
 }
 
-type ViewMode = 'Command Files' | 'Registry Matrix';
+type ViewMode = 'My Horses' | 'Registry Matrix';
 type SegmentFilter = 'All' | HorseSegment;
 
 const statusTone: Record<HorseStatus, 'blue' | 'slate' | 'amber' | 'rose' | 'emerald'> = {
@@ -67,7 +67,7 @@ export default function Horses() {
   const canCreateHorse = useCurrentRoleCapability('createHorse');
   const canManageSharedAccess = useCurrentRoleCapability('manageSharedAccess');
   const [searchParams, setSearchParams] = useSearchParams();
-  const [viewMode, setViewMode] = useState<ViewMode>('Command Files');
+  const [viewMode, setViewMode] = useState<ViewMode>('My Horses');
   const [segmentFilter, setSegmentFilter] = useState<SegmentFilter>('All');
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [formErrors, setFormErrors] = useState<Partial<Record<'name' | 'barnName' | 'owner' | 'ownerEntity' | 'barn' | 'pasture', string>>>({});
@@ -143,7 +143,7 @@ export default function Horses() {
       id: `horse-${horse.id}`,
       eyebrow: 'Command File',
       title: horse.name,
-      description: `${horse.segment} in ${horse.location.barn}. Open the command file for identity, care, ownership, proof, buyer movement, and operating history.`,
+      description: `${horse.segment} in ${horse.location.barn}. Open the horse record for identity, care, ownership, proof, buyer movement, and operating history.`,
       facts: [
         { label: 'Status', value: horse.status },
         { label: 'Legal owner', value: horse.owner },
@@ -151,7 +151,7 @@ export default function Horses() {
         { label: 'Registration', value: horse.aqhaNumber || horse.registrationNumber || 'Pending' },
         { label: 'Readiness', value: formatPercent(packet.score) },
       ],
-      actions: [{ label: 'Open command file', path: `/horses/${horse.id}` }],
+      actions: [{ label: 'Open horse record', path: `/horses/${horse.id}` }],
     });
   };
 
@@ -168,7 +168,7 @@ export default function Horses() {
   const menuShareUrl = menuPacket ? buildPublicShareUrl(menuPacket.sharePath, menuListing?.accessMode === 'Private Token' ? menuListing.shareToken : undefined) : '';
   const menuItems = menuHorse && menuPacket
     ? [
-        { id: 'open-profile', label: 'Open command file', onSelect: () => navigate(`/horses/${menuHorse.id}`) },
+        { id: 'open-profile', label: 'Open horse record', onSelect: () => navigate(`/horses/${menuHorse.id}`) },
         ...(menuSaved
           ? [
               {
@@ -184,8 +184,8 @@ export default function Horses() {
         ...(canManageSharedAccess
           ? [{ id: 'toggle-shared', label: menuSaved ? 'Remove buyer packet' : 'Stage buyer packet', onSelect: async () => handleSavedHorseToggle(menuHorse.id) }]
           : []),
-        { id: 'open-sales', label: 'Open Buyer Desk', onSelect: () => navigate('/sales') },
-        { id: 'open-proof', label: 'Open Proof Vault', onSelect: () => navigate('/documents') },
+        { id: 'open-sales', label: 'Open Sales', onSelect: () => navigate('/sales') },
+        { id: 'open-proof', label: 'Open Documents', onSelect: () => navigate('/documents') },
       ]
     : [];
 
@@ -200,7 +200,7 @@ export default function Horses() {
     if (Object.keys(nextErrors).length) return;
 
     const result = addHorse(form);
-    pushToast({ title: result.ok ? 'Command file created' : 'Command file blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+    pushToast({ title: result.ok ? 'Horse record created' : 'Horse record blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
     if (result.ok && result.id) {
       setForm(
         createHorseFormDefaults({
@@ -220,21 +220,21 @@ export default function Horses() {
       <div className="surface-hero surface-hero--dark command-files-hero">
         <div className="surface-hero__top">
           <div>
-            <span className="surface-hero__eyebrow">Command Files</span>
+            <span className="surface-hero__eyebrow">My Horses</span>
             <h1>Horse files with identity, proof, risk, and buyer readiness.</h1>
             <p className="command-center-briefing__copy">
               Each file connects legal owner, location, care posture, release evidence, sales readiness, buyer packet status, and next operational action.
             </p>
           </div>
           <div className="surface-hero__stats">
-            <div className="surface-hero__stat"><span>Command files</span><strong>{horses.length}</strong></div>
+            <div className="surface-hero__stat"><span>Horse records</span><strong>{horses.length}</strong></div>
             <div className="surface-hero__stat"><span>Care holds</span><strong style={{ color: medicalWatchCount ? 'var(--rose)' : 'var(--emerald)' }}>{medicalWatchCount}</strong></div>
             <div className="surface-hero__stat"><span>Buyer ready</span><strong>{buyerReadyCount}/{salePrepCount}</strong></div>
             <div className="surface-hero__stat"><span>Proof gaps</span><strong style={{ color: proofGapCount ? 'var(--amber)' : 'var(--emerald)' }}>{proofGapCount}</strong></div>
           </div>
           <div className="inline-actions" style={{ marginTop: '16px' }}>
             <Link to="/documents?upload=1" className="button button--ghost button--compact">Upload proof</Link>
-            <button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>New command file</button>
+            <button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>Add horse</button>
           </div>
         </div>
       </div>
@@ -242,7 +242,7 @@ export default function Horses() {
       {createOpen ? (
         <section className="panel">
           <div className="panel__header">
-            <div><div className="panel__eyebrow">Command file intake</div><h2 className="panel__title">Create command file</h2></div>
+            <div><div className="panel__eyebrow">Horse record intake</div><h2 className="panel__title">Create horse record</h2></div>
             <button className="button button--ghost button--compact" type="button" onClick={() => setNewHorseParam(false)}>Close</button>
           </div>
           <div className="form-grid">
@@ -260,20 +260,20 @@ export default function Horses() {
           </div>
           <div className="inline-actions">
             <button className="button button--ghost" type="button" onClick={() => setForm((current) => ({ ...current, owner: workspaceProfile.defaultOwnerName, ownerEntity: workspaceProfile.defaultOwnerEntity, barn: workspaceProfile.defaultBarn, pasture: workspaceProfile.defaultPasture }))} disabled={!canCreateHorse}>Use ranch defaults</button>
-            <button className="button button--primary" type="button" onClick={handleCreateHorse} disabled={!canCreateHorse || !form.name.trim() || !form.barnName.trim() || !form.owner.trim()}>Create command file</button>
+            <button className="button button--primary" type="button" onClick={handleCreateHorse} disabled={!canCreateHorse || !form.name.trim() || !form.barnName.trim() || !form.owner.trim()}>Create horse record</button>
           </div>
         </section>
       ) : null}
 
       <section className="portfolio-toolbar">
         <div className="portfolio-toolbar__controls">
-          <SurfaceTabs items={['Command Files', 'Registry Matrix']} active={viewMode} onChange={(mode) => setViewMode(mode as ViewMode)} />
+          <SurfaceTabs items={['My Horses', 'Registry Matrix']} active={viewMode} onChange={(mode) => setViewMode(mode as ViewMode)} />
           <SurfaceTabs items={segments} active={segmentFilter} onChange={(segment) => setSegmentFilter(segment as SegmentFilter)} className="surface-tabs--wrap" />
         </div>
-        <input value={search} onChange={(event) => setSearch(event.target.value)} className="field-input field-input--wide" placeholder="Search command file, owner, AQHA, barn, proof context" aria-label="Search command files" />
+        <input value={search} onChange={(event) => setSearch(event.target.value)} className="field-input field-input--wide" placeholder="Search horse record, owner, AQHA, barn, proof context" aria-label="Search horse records" />
       </section>
 
-      {viewMode === 'Command Files' ? (
+      {viewMode === 'My Horses' ? (
         filtered.length ? (
           <div className="horse-grid">
             {filtered.map((horse) => {
@@ -288,7 +288,7 @@ export default function Horses() {
               const showSaleSignals = horse.segment === 'Sale Prospect' || horse.status === 'Sale Prep';
               const openProofSlots = packet.saleSlots.filter((slot) => slot.status !== 'ready').length;
               return (
-                <div key={horse.id} className="horse-card horse-card--interactive" role="group" aria-label={`Open ${horse.name} command file`} title="Select the card to open the command file. Use Quick review or the actions menu for alternatives." onClick={() => navigate(`/horses/${horse.id}`)} onContextMenu={(event) => { event.preventDefault(); openHorseMenu(horse.id, event.clientX, event.clientY); }}>
+                <div key={horse.id} className="horse-card horse-card--interactive" role="group" aria-label={`Open ${horse.name} horse record`} title="Select the card to open the horse record. Use Quick review or the actions menu for alternatives." onClick={() => navigate(`/horses/${horse.id}`)} onContextMenu={(event) => { event.preventDefault(); openHorseMenu(horse.id, event.clientX, event.clientY); }}>
                   <div className="horse-card__media">
                     <HorseMediaPreview src={horse.profileImage || horse.gallery[0]?.url} name={horse.name} imageClassName="horse-card__image" fallbackClassName="horse-card__image-fallback" />
                     <div className="horse-card__media-top">
@@ -327,7 +327,7 @@ export default function Horses() {
                       <div className="inline-actions inline-actions--card">
                         <button className="button button--ghost button--compact" type="button" onClick={(event) => { event.stopPropagation(); openHorseDetails(horse); }}>Quick review</button>
                         <button className="button button--ghost button--compact" type="button" onClick={async (event) => { event.stopPropagation(); await handleSavedHorseToggle(horse.id); }} disabled={!canManageSharedAccess}>{saved ? 'Hold packet' : 'Stage packet'}</button>
-                        <Link to={`/horses/${horse.id}`} className="button button--primary button--compact" onClick={(event) => event.stopPropagation()}>Command file</Link>
+                        <Link to={`/horses/${horse.id}`} className="button button--primary button--compact" onClick={(event) => event.stopPropagation()}>Horse record</Link>
                       </div>
                     </div>
                   </div>
@@ -336,15 +336,15 @@ export default function Horses() {
             })}
           </div>
         ) : (
-          <EmptyState title="No command files match this control view" description="Adjust filters, clear search, or create a new command file." action={<button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>Create command file</button>} />
+          <EmptyState title="No horse records match this control view" description="Adjust filters, clear search, or create a new horse record." action={<button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>Create horse record</button>} />
         )
       ) : filtered.length ? (
         <div className="table-shell">
           <table className="data-table">
-            <thead><tr><th>Command file</th><th>Program</th><th>Legal owner</th><th>Location</th><th>Proof</th><th>Readiness</th><th>Status</th></tr></thead>
+            <thead><tr><th>Horse record</th><th>Program</th><th>Legal owner</th><th>Location</th><th>Proof</th><th>Readiness</th><th>Status</th></tr></thead>
             <tbody>
               {filtered.map((horse) => (
-                <tr key={horse.id} className="table-row--interactive" tabIndex={0} aria-label={`Open ${horse.name} command file`} title="Press Enter to open. Press Shift+F10 for actions." onClick={() => navigate(`/horses/${horse.id}`)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigate(`/horses/${horse.id}`); } if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) { event.preventDefault(); const bounds = event.currentTarget.getBoundingClientRect(); openHorseMenu(horse.id, bounds.left + 32, bounds.top + 32); } }} onContextMenu={(event) => { event.preventDefault(); openHorseMenu(horse.id, event.clientX, event.clientY); }}>
+                <tr key={horse.id} className="table-row--interactive" tabIndex={0} aria-label={`Open ${horse.name} horse record`} title="Press Enter to open. Press Shift+F10 for actions." onClick={() => navigate(`/horses/${horse.id}`)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigate(`/horses/${horse.id}`); } if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) { event.preventDefault(); const bounds = event.currentTarget.getBoundingClientRect(); openHorseMenu(horse.id, bounds.left + 32, bounds.top + 32); } }} onContextMenu={(event) => { event.preventDefault(); openHorseMenu(horse.id, event.clientX, event.clientY); }}>
                   <td><span className="table-link">{horse.name}</span></td>
                   <td>{horse.segment}</td>
                   <td>{horse.owner}</td>
@@ -358,7 +358,7 @@ export default function Horses() {
           </table>
         </div>
       ) : (
-        <EmptyState title="No command files match this matrix" description="Adjust filters, clear search, or create a command file." action={<button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>Create command file</button>} />
+        <EmptyState title="No horse records match this matrix" description="Adjust filters, clear search, or create a horse record." action={<button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>Create horse record</button>} />
       )}
 
       <ContextMenu open={Boolean(menuState && menuHorse)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />

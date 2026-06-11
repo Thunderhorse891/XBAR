@@ -324,7 +324,7 @@ export default function HorseDetail() {
         Horses
       </Link>
 
-      {/* Horse Identity Hero — cinematic command file */}
+      {/* Horse Identity Hero — cinematic horse record */}
       <section className="relative overflow-hidden rounded-[18px] border border-[rgba(148,184,224,0.1)] bg-[linear-gradient(135deg,#030810_0%,#081626_55%,#091830_100%)] shadow-[0_40px_80px_rgba(0,0,0,0.18),0_12px_32px_rgba(0,0,0,0.10),inset_0_1px_0_rgba(255,255,255,0.04)]">
         {/* Background radials */}
         <div className="pointer-events-none absolute inset-0">
