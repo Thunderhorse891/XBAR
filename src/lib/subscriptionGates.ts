@@ -1,3 +1,4 @@
+import { documentLimitGate, horseLimitGate, salePacketLimitGate } from './subscriptionUsage.js';
 import type { SubscriptionProfile } from '../types/xbar.js';
 
 export const subscriptionUpgradePath = '/subscriptions';
@@ -9,8 +10,7 @@ export function sharedListingGate(subscription: SubscriptionProfile) {
 }
 
 export function documentIntakeGate(subscription: SubscriptionProfile, currentDocumentCount: number, incomingDocumentCount: number) {
-  const nextCount = currentDocumentCount + incomingDocumentCount;
-  return nextCount <= subscription.usage.documentLimit
-    ? null
-    : `This upload would exceed the ${subscription.usage.documentLimit.toLocaleString()} document limit for ${subscription.tier}. Upgrade or remove documents before uploading.`;
+  return documentLimitGate(subscription, currentDocumentCount, incomingDocumentCount);
 }
+
+export { horseLimitGate, salePacketLimitGate };
