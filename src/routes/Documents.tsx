@@ -6,6 +6,7 @@ import { MetricCard, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
 import { EmptyState } from '@/components/EmptyState';
 import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { formatDateTimeLabel } from '@/lib/format';
+import { downloadLegalHtml, legalDocuments, openPrintableLegalDocument } from '@/lib/legalDocuments';
 import { buildDocumentTrustProfile } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
 import { useCloudStore } from '@/store/useCloudStore';
@@ -14,7 +15,7 @@ import type { DocumentRecord, DocumentSource } from '@/types/xbar';
 import { documentSources } from '@/features/documents/constants';
 import type { DocumentsView } from '@/features/documents/types';
 
-type SurfaceId = 'vault' | 'verify' | 'buyer' | 'storage' | 'intake' | 'batches' | 'duplicates';
+type SurfaceId = 'vault' | 'verify' | 'buyer' | 'storage' | 'intake' | 'legal' | 'batches' | 'duplicates';
 
 export default function Documents() {
   const navigate = useNavigate();
@@ -96,6 +97,20 @@ export default function Documents() {
     window.open(access.url, '_blank', 'noopener,noreferrer');
   };
 
+  const previewLegalDocument = (legalDoc: (typeof legalDocuments)[number]) => {
+    const opened = openPrintableLegalDocument(legalDoc);
+    pushToast({
+      title: opened ? 'Legal document opened' : 'Preview blocked',
+      message: opened ? `${legalDoc.shortTitle} opened in a printable PDF-ready tab.` : 'Allow popups to preview and print the legal document.',
+      tone: opened ? 'success' : 'error',
+    });
+  };
+
+  const downloadLegalDocument = (legalDoc: (typeof legalDocuments)[number]) => {
+    downloadLegalHtml(legalDoc);
+    pushToast({ title: 'Legal document exported', message: `${legalDoc.shortTitle} downloaded as a PDF-ready file. Open it and print to PDF.`, tone: 'success' });
+  };
+
   const menuItems = menuDocument
     ? [
         ...(menuDocument.fileUrl || menuDocument.storagePath
@@ -155,6 +170,12 @@ export default function Documents() {
                 { id: 'focus-intake', label: 'Focus proof intake', onSelect: () => scrollToSection('documents-intake') },
               ]
             : []),
+          ...(menuState.surfaceId === 'legal'
+            ? [
+                { id: 'focus-legal', label: 'Open legal documents', onSelect: () => setActiveView('Legal') },
+                { id: 'open-terms', label: 'Open Terms page', onSelect: () => navigate('/terms') },
+              ]
+            : []),
           ...(menuState.surfaceId === 'batches'
             ? [
                 { id: 'focus-batches', label: 'Focus intake batches', onSelect: () => scrollToSection('documents-batches') },
@@ -197,15 +218,15 @@ export default function Documents() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Proof Vault</span>
-            <h1>Document intelligence for intake, match, verification, and release.</h1>
+            <h1>Document intelligence for intake, match, verification, legal protection, and release.</h1>
             <p className="command-center-briefing__copy">
-              Control the evidence chain behind command files, title transfer, care status, operating cost, and buyer packet release.
+              Control the evidence chain behind command files, title transfer, care status, operating cost, buyer packet release, and XBAR LLC commercial protection.
             </p>
           </div>
           <div className="surface-hero__stats">
             <div className="surface-hero__stat"><span>Proof files</span><strong>{documents.length}</strong></div>
             <div className="surface-hero__stat"><span>Verify queue</span><strong style={{ color: reviewQueue.length ? 'var(--amber)' : 'var(--emerald)' }}>{reviewQueue.length}</strong></div>
-            <div className="surface-hero__stat"><span>Release-ready</span><strong style={{ color: 'var(--emerald)' }}>{buyerSafeDocuments.length}</strong></div>
+            <div className="surface-hero__stat"><span>Legal docs</span><strong>{legalDocuments.length}</strong></div>
             <div className="surface-hero__stat"><span>Blocked release</span><strong style={{ color: releaseBlockedCount ? 'var(--amber)' : 'var(--emerald)' }}>{releaseBlockedCount}</strong></div>
           </div>
         </div>
@@ -215,30 +236,46 @@ export default function Documents() {
         <MetricCard label="Vault control" value={`${documents.length}`} detail={`${matchedDocuments.length} matched or ready`} tone="slate" title="Registration, medical, transfer, insurance, receipt, and media proof" onClick={() => scrollToSection('documents-review')} onContextMenu={(event) => openSurfaceMenu('vault', event)} />
         <MetricCard label="Verification queue" value={`${reviewQueue.length}`} detail="Files waiting on assignment or release decision" tone={reviewQueue.length ? 'amber' : 'emerald'} onClick={() => scrollToSection('documents-review')} onContextMenu={(event) => openSurfaceMenu('verify', event)} />
         <MetricCard label="Buyer release" value={`${buyerSafeDocuments.length}`} detail="Approved proof cleared for buyer packet surfaces" tone="emerald" onClick={() => navigate('/shared-access')} onContextMenu={(event) => openSurfaceMenu('buyer', event)} />
-        <MetricCard label="Storage control" value={`${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB`} detail="Ranch proof storage against current plan" tone="slate" onClick={() => navigate('/subscriptions')} onContextMenu={(event) => openSurfaceMenu('storage', event)} />
+        <MetricCard label="Legal packet" value={`${legalDocuments.length}`} detail="Terms, privacy, billing, trademark, disclaimer, acceptable use" tone="blue" onClick={() => setActiveView('Legal')} onContextMenu={(event) => openSurfaceMenu('legal', event)} />
       </div>
 
       <section className="surface-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <SurfaceTabs items={['Verify', 'Intake', 'Batches', 'Flags']} active={activeView} onChange={(view) => setActiveView(view as DocumentsView)} />
+          <SurfaceTabs items={['Verify', 'Intake', 'Legal', 'Batches', 'Flags']} active={activeView} onChange={(view) => setActiveView(view as DocumentsView)} />
           <div className="flex flex-wrap gap-2">
             <Pill tone={reviewQueue.length ? 'amber' : 'emerald'}>{reviewQueue.length} verify</Pill>
-            <Pill tone="blue">{intakeBatches.length} intake batches</Pill>
+            <Pill tone="blue">{legalDocuments.length} legal docs</Pill>
             <Pill tone="emerald">{buyerSafeDocuments.length} release-ready</Pill>
           </div>
         </div>
       </section>
 
+      {activeView === 'Legal' ? (
+        <Panel eyebrow="XBAR LLC legal packet" title="PDF-ready legal documents for charging customers" description="Terms, privacy, billing, trademark, acceptable use, and equine disclaimer documents. These are operational baseline documents and should be reviewed by counsel before final public launch." className="cursor-context-menu" onContextMenu={(event) => openSurfaceMenu('legal', event)}>
+          <div className="stack-list">
+            {legalDocuments.map((legalDoc) => (
+              <div key={legalDoc.id} className="stack-item">
+                <div className="stack-item__top">
+                  <div>
+                    <div className="stack-item__title">{legalDoc.shortTitle}</div>
+                    <div className="stack-item__copy">{legalDoc.purpose}</div>
+                  </div>
+                  <Pill tone={legalDoc.id === 'trademark-notice' ? 'amber' : 'blue'}>{legalDoc.id === 'trademark-notice' ? 'TM' : 'Legal'}</Pill>
+                </div>
+                <div className="stack-item__copy">{legalDoc.notice}</div>
+                <div className="inline-actions inline-actions--card">
+                  <button className="button button--primary button--compact" type="button" onClick={() => previewLegalDocument(legalDoc)}>Preview / print PDF</button>
+                  <button className="button button--ghost button--compact" type="button" onClick={() => downloadLegalDocument(legalDoc)}>Download PDF-ready file</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      ) : null}
+
       {activeView === 'Intake' ? (
         <div className="dashboard-grid dashboard-grid--primary">
-          <Panel
-            eyebrow="Proof intake"
-            title="Add evidence to the vault"
-            description="Files enter review before they are trusted by command files, title transfer, care status, or buyer packet release."
-            action={<Pill tone={uploadOpen ? 'blue' : 'slate'}>{uploadOpen ? 'Top-bar launch' : `${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB used`}</Pill>}
-            className="cursor-context-menu"
-            onContextMenu={(event) => openSurfaceMenu('intake', event)}
-          >
+          <Panel eyebrow="Proof intake" title="Add evidence to the vault" description="Files enter review before they are trusted by command files, title transfer, care status, or buyer packet release." action={<Pill tone={uploadOpen ? 'blue' : 'slate'}>{uploadOpen ? 'Top-bar launch' : `${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB used`}</Pill>} className="cursor-context-menu" onContextMenu={(event) => openSurfaceMenu('intake', event)}>
             <div id="documents-intake" className="form-grid">
               <label className="field-stack"><span className="field-label">Intake batch label</span><input className="field-input" value={batchLabel} onChange={(event) => setBatchLabel(event.target.value)} disabled={!canUploadDocuments} /></label>
               <label className="field-stack"><span className="field-label">Evidence source</span><select className="field-input" value={source} onChange={(event) => setSource(event.target.value as DocumentSource)} disabled={!canUploadDocuments}>{documentSources.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
@@ -271,13 +308,7 @@ export default function Documents() {
                         <td><div className="table-cell__stack"><span>{selectedHorse?.name ?? document.entities.horseName ?? 'Unassigned'}</span><span>{document.source}</span></div></td>
                         <td><div className="table-cell__stack"><Pill tone={document.state === 'Ready' ? 'emerald' : document.state === 'Matched' ? 'blue' : trust.tone}>{document.state}</Pill><span>{document.duplicateRisk === 'Possible Duplicate' ? 'Duplicate review required' : 'Manual verification'}</span></div></td>
                         <td><select className="field-input field-input--compact" value={reviewAssignments[document.id] ?? document.horseId ?? ''} onChange={(event) => setReviewAssignments((current) => ({ ...current, [document.id]: event.target.value }))} disabled={!canReviewDocuments}><option value="">Select command file</option>{horses.map((horse) => <option key={horse.id} value={horse.id}>{horse.name}</option>)}</select></td>
-                        <td>
-                          <div className="inline-actions inline-actions--card">
-                            {document.fileUrl || document.storagePath ? <button className="button button--ghost button--compact" type="button" onClick={() => void openDocument(document)} disabled={openingDocumentId === document.id}>{openingDocumentId === document.id ? 'Opening...' : 'Open proof'}</button> : null}
-                            <button className="button button--ghost button--compact" type="button" onClick={() => { const result = reviewDocument(document.id, reviewAssignments[document.id] ?? document.horseId); pushToast({ title: result.ok ? 'Proof verified' : 'Verification blocked', message: result.message, tone: result.ok ? 'success' : 'error' }); }} disabled={!canReviewDocuments}>Verify</button>
-                            <button className="button button--ghost button--compact" type="button" onClick={() => { const result = discardDocument(document.id); pushToast({ title: result.ok ? 'Proof rejected' : 'Reject blocked', message: result.message, tone: result.ok ? 'warning' : 'error' }); }} disabled={!canReviewDocuments}>Reject</button>
-                          </div>
-                        </td>
+                        <td><div className="inline-actions inline-actions--card">{document.fileUrl || document.storagePath ? <button className="button button--ghost button--compact" type="button" onClick={() => void openDocument(document)} disabled={openingDocumentId === document.id}>{openingDocumentId === document.id ? 'Opening...' : 'Open proof'}</button> : null}<button className="button button--ghost button--compact" type="button" onClick={() => { const result = reviewDocument(document.id, reviewAssignments[document.id] ?? document.horseId); pushToast({ title: result.ok ? 'Proof verified' : 'Verification blocked', message: result.message, tone: result.ok ? 'success' : 'error' }); }} disabled={!canReviewDocuments}>Verify</button><button className="button button--ghost button--compact" type="button" onClick={() => { const result = discardDocument(document.id); pushToast({ title: result.ok ? 'Proof rejected' : 'Reject blocked', message: result.message, tone: result.ok ? 'warning' : 'error' }); }} disabled={!canReviewDocuments}>Reject</button></div></td>
                       </tr>
                     );
                   })}
@@ -290,21 +321,13 @@ export default function Documents() {
 
       {activeView === 'Flags' ? (
         <Panel eyebrow="Proof flags" title="Duplicates and release blockers" description="Resolve duplicate risk before proof is allowed to influence buyer-facing or title-transfer workflows." className="cursor-context-menu" onContextMenu={(event) => openSurfaceMenu('duplicates', event)}>
-          {duplicates.length ? (
-            <div id="documents-duplicates" className="stack-list">
-              {duplicates.map((document) => { const trust = buildDocumentTrustProfile(document, horses); return <div key={document.id} className="stack-item" onContextMenu={(event) => openSurfaceMenu('duplicates', event)}><div className="stack-item__top"><div className="stack-item__title">{document.title}</div><Pill tone="rose">{document.duplicateRisk}</Pill></div><div className="stack-item__copy">{trust.duplicateSummary}</div></div>; })}
-            </div>
-          ) : <EmptyState compact title="No proof flags" description="Duplicate and release-blocker flags land here." />}
+          {duplicates.length ? <div id="documents-duplicates" className="stack-list">{duplicates.map((document) => { const trust = buildDocumentTrustProfile(document, horses); return <div key={document.id} className="stack-item" onContextMenu={(event) => openSurfaceMenu('duplicates', event)}><div className="stack-item__top"><div className="stack-item__title">{document.title}</div><Pill tone="rose">{document.duplicateRisk}</Pill></div><div className="stack-item__copy">{trust.duplicateSummary}</div></div>; })}</div> : <EmptyState compact title="No proof flags" description="Duplicate and release-blocker flags land here." />}
         </Panel>
       ) : null}
 
       {activeView === 'Batches' ? (
         <Panel eyebrow="Intake batches" title="Proof intake history" description="Track how evidence entered the vault, how much was matched, and what still requires verification." className="cursor-context-menu" onContextMenu={(event) => openSurfaceMenu('batches', event)}>
-          {intakeBatches.length ? (
-            <div id="documents-batches" className="stack-list">
-              {intakeBatches.map((batch) => <div key={batch.id} className="stack-item" onContextMenu={(event) => openSurfaceMenu('batches', event)}><div className="stack-item__top"><div><div className="stack-item__title">{batch.label}</div><div className="stack-item__copy">{batch.fileCount} files · {batch.source} · {formatDateTimeLabel(batch.receivedAt)}</div></div><Pill tone={batch.state === 'Completed' ? 'emerald' : batch.state === 'Reviewing' ? 'amber' : 'blue'}>{batch.state}</Pill></div><div className="inline-metrics"><span>{batch.processedCount}/{batch.fileCount} logged</span><span>{batch.matchedCount} matched</span><span>{batch.needsReviewCount} waiting</span></div></div>)}
-            </div>
-          ) : <EmptyState compact title="No proof intake batches" description="Upload proof files to start the queue." />}
+          {intakeBatches.length ? <div id="documents-batches" className="stack-list">{intakeBatches.map((batch) => <div key={batch.id} className="stack-item" onContextMenu={(event) => openSurfaceMenu('batches', event)}><div className="stack-item__top"><div><div className="stack-item__title">{batch.label}</div><div className="stack-item__copy">{batch.fileCount} files · {batch.source} · {formatDateTimeLabel(batch.receivedAt)}</div></div><Pill tone={batch.state === 'Completed' ? 'emerald' : batch.state === 'Reviewing' ? 'amber' : 'blue'}>{batch.state}</Pill></div><div className="inline-metrics"><span>{batch.processedCount}/{batch.fileCount} logged</span><span>{batch.matchedCount} matched</span><span>{batch.needsReviewCount} waiting</span></div></div>)}</div> : <EmptyState compact title="No proof intake batches" description="Upload proof files to start the queue." />}
         </Panel>
       ) : null}
 
