@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
 import { startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency, formatDateLabel } from '@/lib/format';
@@ -23,11 +23,14 @@ function usagePercent(used: number, limit: number) {
 
 export default function Subscriptions() {
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const requestedValue = params.get('plan');
   const requestedTier = tiers.find((tier) => tier === requestedValue);
   const subscription = useXbarStore((state) => state.subscription);
   const canManageBilling = useCurrentRoleCapability('manageBilling');
   const session = useCloudStore((state) => state.session);
+  const horses = useXbarStore((state) => state.horses);
+  const salePacketBuilds = useXbarStore((state) => state.salePacketBuilds);
   const workspaceId = useCloudStore((state) => state.workspaceId);
   const pushToast = useUiStore((state) => state.pushToast);
   const [checkoutTier, setCheckoutTier] = useState<SubscriptionTier | null>(null);
@@ -84,7 +87,37 @@ export default function Subscriptions() {
     </section>
 
     <Panel eyebrow="Revenue fit" title={`${decisionTier} operating value`}><div className="subscription-usage-grid">{decisionProfile.features.map((feature) => <div className="subscription-usage-card" key={feature.label}><div className="subscription-usage-card__top"><span>{feature.label}</span></div><p className="stack-item__copy">{feature.detail}</p></div>)}</div></Panel>
-    <Panel eyebrow="Capacity" title="Current usage"><div className="subscription-usage-grid">{usage.map((item) => <div className="subscription-usage-card" key={item.label}><div className="subscription-usage-card__top"><span>{item.label}</span><strong>{item.used}{item.suffix} / {item.limit}{item.suffix}</strong></div><ProgressBar value={usagePercent(item.used, item.limit)} tone={usagePercent(item.used, item.limit) >= 80 ? 'amber' : 'blue'} /></div>)}</div></Panel>
+    <Panel eyebrow="Capacity" title="Usage pressure" description="Every meter has its next action — upgrade lands exactly when capacity tightens.">
+      <div className="subscription-usage-grid">
+        {usage.map((item) => {
+          const pct = usagePercent(item.used, item.limit);
+          const nextTier = tiers[Math.min(tiers.indexOf(subscription.tier) + 1, tiers.length - 1)];
+          return (
+            <div className="subscription-usage-card" key={item.label}>
+              <div className="subscription-usage-card__top"><span>{item.label}</span><strong>{item.used}{item.suffix} / {item.limit}{item.suffix}</strong></div>
+              <ProgressBar value={pct} tone={pct >= 95 ? 'rose' : pct >= 80 ? 'amber' : 'blue'} />
+              {pct >= 80 && nextTier !== subscription.tier ? (
+                <button className="button button--primary button--compact" type="button" style={{ marginTop: 8 }} onClick={() => void beginCheckout(nextTier)}>
+                  {pct >= 95 ? `At capacity — upgrade to ${nextTier}` : `Running tight — upgrade to ${nextTier}`}
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
+        <div className="subscription-usage-card">
+          <div className="subscription-usage-card__top"><span>Horses under management</span><strong>{horses.length}</strong></div>
+          <p className="stack-item__copy">Every horse multiplies document, proof, and packet volume.</p>
+          <button className="button button--ghost button--compact" type="button" onClick={() => navigate('/horses?new=1')}>Add a horse</button>
+        </div>
+        <div className="subscription-usage-card">
+          <div className="subscription-usage-card__top"><span>Sale packets generated</span><strong>{salePacketBuilds.length}</strong></div>
+          <p className="stack-item__copy">{subscription.tier === 'Starter' ? 'Watermarked packets and buyer deal rooms unlock on Professional.' : 'Watermarked, buyer-attributed, audit-logged.'}</p>
+          {subscription.tier === 'Starter'
+            ? <button className="button button--primary button--compact" type="button" onClick={() => void beginCheckout('Professional')}>Unlock with Professional</button>
+            : <button className="button button--ghost button--compact" type="button" onClick={() => navigate('/documents')}>Start sale packet generator</button>}
+        </div>
+      </div>
+    </Panel>
     <Panel eyebrow="Choose your operating level" title="Plans"><div className="subscription-plan-grid">{tiers.map((tier) => {
       const config = subscriptionPlans[tier];
       const planProfile = revenuePlanMatrix[tier];

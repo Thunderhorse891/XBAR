@@ -29,7 +29,8 @@ export const subscriptionTierConfig: Record<
     monthlyRate: 29,
     sharedAccessEnabled: false,
     featureFlags: [
-      'Full operations toolkit — horses, care, medical, breeding, expenses, reminders, ranch assets, documents, weather',
+      'Keep clean records — horses, care, documents, expenses, reminders',
+      'Proof vault with OCR intake and review',
       '1 team seat',
       '250 document capacity · 25 GB storage',
     ],
@@ -45,6 +46,7 @@ export const subscriptionTierConfig: Record<
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Starter',
+      'Make money: watermarked sale packets and buyer deal rooms',
       'Sale listings — publish buyer-ready horse profiles to shared access',
       '5 team seats · 10 shared-access seats',
       '1,000 document capacity · 100 GB storage',
@@ -61,7 +63,7 @@ export const subscriptionTierConfig: Record<
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Professional',
-      'Built for larger, multi-person operations',
+      'Run the operation: team roles, breeding program, equipment at scale',
       '20 team seats · 40 shared-access seats',
       '5,000 document capacity · 500 GB storage',
     ],
@@ -77,7 +79,7 @@ export const subscriptionTierConfig: Record<
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Ranch Ops',
-      'Highest-capacity tier for large rosters and teams',
+      'Scale and control for large rosters and teams',
       '60 team seats · 200 shared-access seats',
       '20,000 document capacity · 2,500 GB storage',
     ],

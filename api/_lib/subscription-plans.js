@@ -4,10 +4,10 @@ export const subscriptionPlans = {
     sharedAccessEnabled: false,
     brandedListings: false,
     featureFlags: [
-      'Horse command files',
-      'Health expiry alerts',
-      'Expense ledger',
-      'Proof vault',
+      'Keep clean records — horses, care, documents, expenses, reminders',
+      'Proof vault with OCR intake and review',
+      '1 team seat',
+      '250 document capacity · 25 GB storage',
     ],
     limits: {
       seatLimit: 1,
@@ -22,10 +22,10 @@ export const subscriptionPlans = {
     brandedListings: true,
     featureFlags: [
       'Everything in Starter',
-      'Owner and buyer sharing',
-      'Scheduling workflow',
-      'Client communication controls',
-      'Role-based team access',
+      'Make money: watermarked sale packets and buyer deal rooms',
+      'Sale listings — publish buyer-ready horse profiles to shared access',
+      '5 team seats · 10 shared-access seats',
+      '1,000 document capacity · 100 GB storage',
     ],
     limits: {
       seatLimit: 5,
@@ -40,10 +40,9 @@ export const subscriptionPlans = {
     brandedListings: true,
     featureFlags: [
       'Everything in Professional',
-      'Business management',
-      'Inventory and supply control',
-      'Breeding and foaling operations',
-      'Activity accountability',
+      'Run the operation: team roles, breeding program, equipment at scale',
+      '20 team seats · 40 shared-access seats',
+      '5,000 document capacity · 500 GB storage',
     ],
     limits: {
       seatLimit: 20,
@@ -58,10 +57,9 @@ export const subscriptionPlans = {
     brandedListings: true,
     featureFlags: [
       'Everything in Ranch Ops',
-      'Enterprise permissions',
-      'Data portability',
-      'Advanced automation roadmap',
-      'Priority implementation path',
+      'Scale and control for large rosters and teams',
+      '60 team seats · 200 shared-access seats',
+      '20,000 document capacity · 2,500 GB storage',
     ],
     limits: {
       seatLimit: 60,
