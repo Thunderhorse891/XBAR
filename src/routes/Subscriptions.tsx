@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
+import { PageHeader, Panel, Pill } from '@/components/app-ui';
+import { UsageMeterPanel } from '@/components/UsageMeterPanel';
 import { startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency, formatDateLabel } from '@/lib/format';
 import { getStripePaymentLink, stripeConfig } from '@/lib/platformConfig';
@@ -9,6 +10,7 @@ import { revenuePlanMatrix } from '@/lib/revenuePlanMatrix';
 import { trackRuntimeEvent } from '@/lib/runtimeEvents';
 import { getCheckoutReadiness, planOutcomes, recommendedTier } from '@/lib/subscriptionDecision';
 import { subscriptionPlans } from '@/lib/subscriptionPlans';
+import { getPlanCapacity } from '@/lib/subscriptionUsage';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
@@ -16,10 +18,6 @@ import type { SubscriptionTier } from '@/types/xbar';
 import './subscriptionExperience.css';
 
 const tiers: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
-
-function usagePercent(used: number, limit: number) {
-  return limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
-}
 
 export default function Subscriptions() {
   const [params] = useSearchParams();
@@ -64,13 +62,6 @@ export default function Subscriptions() {
     setCheckoutTier(null);
   };
 
-  const usage = [
-    { label: 'Team seats', used: subscription.usage.seatsUsed, limit: subscription.usage.seatLimit, suffix: '' },
-    { label: 'Documents', used: subscription.usage.documentsProcessed, limit: subscription.usage.documentLimit, suffix: '' },
-    { label: 'Storage', used: subscription.usage.storageUsedGb, limit: subscription.usage.storageLimitGb, suffix: ' GB' },
-    { label: 'Shared access', used: subscription.usage.sharedAccessSeatsUsed, limit: subscription.usage.sharedAccessSeatLimit, suffix: '' },
-  ];
-
   return <>
     <PageHeader eyebrow="Subscription" title="Plan & billing" actions={<><Pill tone={billingEnabled && (hasManagedIdentity || anyPaymentLink) ? 'emerald' : 'amber'}>{billingEnabled ? (hasManagedIdentity || anyPaymentLink ? 'Secure checkout ready' : 'Sign-in required for checkout') : 'Managed billing paused'}</Pill><Pill tone="blue">{subscription.tier}</Pill></>} />
     <section className="subscription-hero">
@@ -84,15 +75,16 @@ export default function Subscriptions() {
     </section>
 
     <Panel eyebrow="Revenue fit" title={`${decisionTier} operating value`}><div className="subscription-usage-grid">{decisionProfile.features.map((feature) => <div className="subscription-usage-card" key={feature.label}><div className="subscription-usage-card__top"><span>{feature.label}</span></div><p className="stack-item__copy">{feature.detail}</p></div>)}</div></Panel>
-    <Panel eyebrow="Capacity" title="Current usage"><div className="subscription-usage-grid">{usage.map((item) => <div className="subscription-usage-card" key={item.label}><div className="subscription-usage-card__top"><span>{item.label}</span><strong>{item.used}{item.suffix} / {item.limit}{item.suffix}</strong></div><ProgressBar value={usagePercent(item.used, item.limit)} tone={usagePercent(item.used, item.limit) >= 80 ? 'amber' : 'blue'} /></div>)}</div></Panel>
+    <UsageMeterPanel />
     <Panel eyebrow="Choose your operating level" title="Plans"><div className="subscription-plan-grid">{tiers.map((tier) => {
       const config = subscriptionPlans[tier];
+      const capacity = getPlanCapacity(tier);
       const planProfile = revenuePlanMatrix[tier];
       const current = tier === subscription.tier;
       const highlighted = tier === decisionTier;
       const busy = checkoutTier === tier;
       const readiness = getCheckoutReadiness({ billingEnabled, canManageBilling, hasManagedIdentity, hasPaymentLink: Boolean(getStripePaymentLink(tier)), checkoutInProgress: checkoutTier !== null });
-      return <article id={`plan-${tier.replace(/\s/g, '-').toLowerCase()}`} className={`subscription-plan${highlighted ? ' subscription-plan--recommended' : ''}`} key={tier}>{highlighted && <span className="subscription-plan__badge">{requestedTier ? 'Your selection' : current ? 'Current fit' : 'Next operating level'}</span>}<div className="subscription-plan__name">{tier}</div><div className="subscription-plan__fit">{planProfile.fit}</div><div className="subscription-plan__price">{formatCurrency(config.monthlyRate)}<small>/month</small></div><div className="subscription-plan__limits"><span>{config.limits.seatLimit} team seats</span><span>{config.limits.documentLimit.toLocaleString()} documents · {config.limits.storageLimitGb.toLocaleString()} GB</span><span>{config.limits.sharedAccessSeatLimit} shared-access seats</span></div><ul className="subscription-plan__features">{planProfile.features.map((feature) => <li key={feature.label}>{feature.label}</li>)}</ul>{current ? <button className="button button--ghost subscription-plan__action" type="button" disabled>Current plan</button> : <button className="button button--primary subscription-plan__action" type="button" disabled={!readiness.ready} onClick={() => void beginCheckout(tier)}>{busy ? 'Opening secure checkout...' : `Choose ${tier}`}</button>}<div className="subscription-checkout-note">{current ? 'Your current operating capacity.' : readiness.reason}</div></article>;
+      return <article id={`plan-${tier.replace(/\s/g, '-').toLowerCase()}`} className={`subscription-plan${highlighted ? ' subscription-plan--recommended' : ''}`} key={tier}>{highlighted && <span className="subscription-plan__badge">{requestedTier ? 'Your selection' : current ? 'Current fit' : 'Next operating level'}</span>}<div className="subscription-plan__name">{tier}</div><div className="subscription-plan__fit">{planProfile.fit}</div><div className="subscription-plan__price">{formatCurrency(config.monthlyRate)}<small>/month</small></div><div className="subscription-plan__limits"><span>{capacity.horseLimit.toLocaleString()} horses · {capacity.salePacketLimit.toLocaleString()} packets</span><span>{capacity.seatLimit} team seats</span><span>{capacity.documentLimit.toLocaleString()} documents · {capacity.storageLimitGb.toLocaleString()} GB</span><span>{capacity.sharedAccessSeatLimit} shared-access seats</span></div><ul className="subscription-plan__features">{planProfile.features.map((feature) => <li key={feature.label}>{feature.label}</li>)}</ul>{current ? <button className="button button--ghost subscription-plan__action" type="button" disabled>Current plan</button> : <button className="button button--primary subscription-plan__action" type="button" disabled={!readiness.ready} onClick={() => void beginCheckout(tier)}>{busy ? 'Opening secure checkout...' : `Choose ${tier}`}</button>}<div className="subscription-checkout-note">{current ? 'Your current operating capacity.' : readiness.reason}</div></article>;
     })}</div></Panel>
   </>;
 }
