@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import '@/lib/subscriptionPlans';
-import { documentIntakeGate, sharedListingGate } from '@/lib/subscriptionGates';
+import { documentIntakeGate, horseLimitGate, sharedListingGate } from '@/lib/subscriptionGates';
 import { useXbarStore } from '@/store/useXbarStore';
 
 let installed = false;
@@ -13,6 +13,7 @@ export function SubscriptionEnforcement() {
     const state = useXbarStore.getState();
     const toggleSharedListing = state.toggleSharedListing;
     const createDocumentIntake = state.createDocumentIntake;
+    const addHorse = state.addHorse;
 
     useXbarStore.setState({
       toggleSharedListing: async (horseId) => {
@@ -25,6 +26,11 @@ export function SubscriptionEnforcement() {
         const current = useXbarStore.getState();
         const blocked = documentIntakeGate(current.subscription, current.documents.length, input.files.filter(Boolean).length);
         return blocked ? { ok: false, message: blocked } : createDocumentIntake(input);
+      },
+      addHorse: (input) => {
+        const current = useXbarStore.getState();
+        const blocked = horseLimitGate(current.subscription, current.horses.length);
+        return blocked ? { ok: false, message: blocked } : addHorse(input);
       },
     });
   }, []);
