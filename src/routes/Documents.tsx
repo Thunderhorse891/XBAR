@@ -46,6 +46,8 @@ export default function Documents() {
   const discardDocument = useXbarStore((state) => state.discardDocument);
   const ensureOwnershipRecord = useXbarStore((state) => state.ensureOwnershipRecord);
   const linkOwnershipProof = useXbarStore((state) => state.linkOwnershipProof);
+  const updateHorse = useXbarStore((state) => state.updateHorse);
+  const recordAuditEvent = useXbarStore((state) => state.recordAuditEvent);
   const pushToast = useUiStore((state) => state.pushToast);
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
   const canReviewDocuments = useCurrentRoleCapability('reviewDocuments');
@@ -133,6 +135,45 @@ export default function Documents() {
       ? [{ label: `${unmatchedDocuments.length} ${unmatchedDocuments.length === 1 ? 'document' : 'documents'} not matched to a horse`, severity: 'rose' as const }]
       : []),
   ];
+
+  const applyExtractedFacts = (document: DocumentRecord) => {
+    const targetId = reviewAssignments[document.id] ?? document.horseId ?? '';
+    const horse = horses.find((item) => item.id === targetId);
+    if (!horse) {
+      pushToast({ title: 'Pick a horse first', message: 'Select which horse these facts belong to, then apply.', tone: 'warning' });
+      return;
+    }
+    const applied: string[] = [];
+    const patch: { registrationNumber?: string; owner?: string } = {};
+    if (document.entities.registrationNumber && !horse.registrationNumber.trim()) {
+      patch.registrationNumber = document.entities.registrationNumber;
+      applied.push(`registration # ${document.entities.registrationNumber}`);
+    }
+    if (document.entities.ownerName && !horse.owner.trim()) {
+      patch.owner = document.entities.ownerName;
+      applied.push(`owner ${document.entities.ownerName}`);
+    }
+    if (!applied.length) {
+      pushToast({ title: 'Nothing new to apply', message: `${horse.name} already has values for every fact this document extracted. Existing data is never overwritten.`, tone: 'info' });
+      return;
+    }
+    const result = updateHorse(horse.id, patch);
+    if (result.ok) {
+      recordAuditEvent({
+        actor: currentUserName,
+        action: 'updated',
+        entityType: 'horse',
+        entityId: horse.id,
+        summary: `OCR facts accepted from "${document.title}": ${applied.join(', ')}`,
+        context: { documentId: document.id },
+      });
+    }
+    pushToast({
+      title: result.ok ? 'Facts applied to record' : 'Apply blocked',
+      message: result.ok ? `${horse.name} updated: ${applied.join(', ')}. Logged to the audit trail.` : result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
+  };
 
   const menuDocument = menuState?.type === 'document' ? documents.find((document) => document.id === menuState.documentId) : undefined;
   const menuHorseId = menuDocument ? reviewAssignments[menuDocument.id] ?? menuDocument.horseId : undefined;
@@ -765,6 +806,15 @@ export default function Documents() {
                                   {openingDocumentId === document.id ? 'Opening...' : 'Open file'}
                                 </button>
                               ) : null}
+                              <button
+                                className="button button--ghost button--compact"
+                                type="button"
+                                onClick={() => applyExtractedFacts(document)}
+                                disabled={!canReviewDocuments}
+                                title="Copy extracted facts into empty fields on the horse record (never overwrites)."
+                              >
+                                Apply facts
+                              </button>
                               <button
                                 className="button button--ghost button--compact"
                                 type="button"
