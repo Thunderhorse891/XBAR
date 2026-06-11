@@ -109,15 +109,3 @@ export function buildLocalSalePacket(params: {
     releaseStatus: releaseGate.status,
   };
 }
-
-export function downloadSalePacketHtml(packet: LocalSalePacket) {
-  if (typeof window === 'undefined') return;
-
-  const blob = new Blob([packet.html], { type: 'text/html;charset=utf-8' });
-  const url = window.URL.createObjectURL(blob);
-  const anchor = window.document.createElement('a');
-  anchor.href = url;
-  anchor.download = packet.fileName;
-  anchor.click();
-  window.URL.revokeObjectURL(url);
-}
