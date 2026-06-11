@@ -4,7 +4,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
 import { buildPrefilledDocument, documentTemplateLibrary, downloadHtmlFile, type DocumentTemplate, type DocumentTemplateTier } from '@/lib/documentTemplateLibrary';
 import { downloadLegalHtml, legalDocuments, openPrintableLegalDocument } from '@/lib/legalDocuments';
-import { buildLocalSalePacket, downloadSalePacketHtml, getBuyerSafePacketDocuments } from '@/lib/localSalePacketGenerator';
+import { buildLocalSalePacket, getBuyerSafePacketDocuments } from '@/lib/localSalePacketGenerator';
 import { buildSharePath } from '@/lib/xbarRuntime';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -47,6 +47,16 @@ function appendLocalPacketLog(entry: Record<string, unknown>) {
   window.localStorage.setItem(packetLogKey, JSON.stringify([{ ...entry, createdAt: new Date().toISOString() }, ...current].slice(0, 100)));
 }
 
+function downloadSalePacketHtml(fileName: string, html: string) {
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url = window.URL.createObjectURL(blob);
+  const anchor = window.document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  window.URL.revokeObjectURL(url);
+}
+
 export default function DocumentLibrary() {
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
@@ -83,12 +93,10 @@ export default function DocumentLibrary() {
   }) : null;
 
   const templatesByTier = useMemo(() => Object.fromEntries(tierOrder.map((tier) => [tier, documentTemplateLibrary.filter((template) => template.tier === tier)])) as Record<DocumentTemplateTier, DocumentTemplate[]>, []);
-  const readyDocCount = documents.filter((document) => document.state === 'Ready').length;
-  const salePacketTemplates = documentTemplateLibrary.filter((template) => template.id === 'sales-packet' || template.label.includes('Sale') || template.label.includes('Transfer'));
 
   useEffect(() => {
     setSelectedDocumentIds(buyerSafeProof.filter((document) => document.buyerSafe).map((document) => document.id));
-  }, [selectedHorseId, buyerSafeProof.length]);
+  }, [selectedHorseId, buyerSafeProof]);
 
   const openPreview = () => {
     if (!prefilled) return;
@@ -116,7 +124,7 @@ export default function DocumentLibrary() {
 
   const exportSalePacket = () => {
     if (!localSalePacket || !selectedHorse) return;
-    downloadSalePacketHtml(localSalePacket);
+    downloadSalePacketHtml(localSalePacket.fileName, localSalePacket.html);
     appendLocalPacketLog({ horseId: selectedHorse.id, horseName: selectedHorse.name, action: 'exported', packetScore: localSalePacket.packetScore, releaseStatus: localSalePacket.releaseStatus, includedDocuments: selectedDocumentIds.length });
     pushToast({ title: 'Sale packet exported', message: `${selectedHorse.name} buyer packet downloaded and logged locally. Open it and print to PDF.`, tone: 'success' });
   };
