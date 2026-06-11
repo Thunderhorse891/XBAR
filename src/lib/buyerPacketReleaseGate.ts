@@ -1,4 +1,5 @@
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
+import { buildSaleHold } from '@/lib/saleTrustEngine';
 import type { DocumentRecord, HorseRecord, OwnershipRecord } from '@/types/xbar';
 
 export type BuyerPacketReleaseGate = {
@@ -20,6 +21,7 @@ export function buildBuyerPacketReleaseGate(params: {
   ownershipRecord?: OwnershipRecord;
 }): BuyerPacketReleaseGate {
   const packet = buildHorsePacketCompleteness(params.horse, params.documents, params.ownershipRecord);
+  const saleHold = buildSaleHold(params.horse, params.documents, params.ownershipRecord);
   const blockers: string[] = [];
   const warnings: string[] = [];
 
@@ -37,13 +39,7 @@ export function buildBuyerPacketReleaseGate(params: {
     if (requirement.status === 'review') warnings.push(`${requirement.label}: ${requirement.detail}`);
   });
 
-  if (params.horse.status === 'Medical Review') {
-    blockers.push('Care Status: medical review is still open.');
-  }
-
-  if (params.ownershipRecord && params.ownershipRecord.transferStatus !== 'Clear') {
-    blockers.push(`Title & Transfer: transfer status is ${params.ownershipRecord.transferStatus}.`);
-  }
+  blockers.push(...saleHold.reasons.map((reason) => `Sale hold: ${reason}`));
 
   params.horse.alerts
     .filter((alert) => alert.severity === 'high')

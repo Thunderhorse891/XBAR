@@ -6,6 +6,7 @@ import { buildPrefilledDocument, documentTemplateLibrary, downloadHtmlFile, type
 import { downloadLegalHtml, legalDocuments, openPrintableLegalDocument } from '@/lib/legalDocuments';
 import { buildLocalSalePacket, getBuyerSafePacketDocuments } from '@/lib/localSalePacketGenerator';
 import { buildSharePath } from '@/lib/xbarRuntime';
+import { packetExportGate } from '@/lib/subscriptionGates';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import type { SubscriptionTier } from '@/types/xbar';
@@ -63,6 +64,7 @@ export default function DocumentLibrary() {
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const subscription = useXbarStore((state) => state.subscription);
+  const recordSalePacketGenerated = useXbarStore((state) => state.recordSalePacketGenerated);
   const pushToast = useUiStore((state) => state.pushToast);
   const [activeTier, setActiveTier] = useState<DocumentTemplateTier>('Pro');
   const [selectedHorseId, setSelectedHorseId] = useState(horses[0]?.id ?? '');
@@ -124,6 +126,15 @@ export default function DocumentLibrary() {
 
   const exportSalePacket = () => {
     if (!localSalePacket || !selectedHorse) return;
+    if (localSalePacket.blockers.length) {
+      pushToast({ title: 'Packet export blocked', message: localSalePacket.blockers[0], tone: 'error' });
+      return;
+    }
+    const usageResult = recordSalePacketGenerated();
+    if (!usageResult.ok) {
+      pushToast({ title: 'Upgrade to unlock packet export', message: usageResult.message, tone: 'error' });
+      return;
+    }
     downloadSalePacketHtml(localSalePacket.fileName, localSalePacket.html);
     appendLocalPacketLog({ horseId: selectedHorse.id, horseName: selectedHorse.name, action: 'exported', packetScore: localSalePacket.packetScore, releaseStatus: localSalePacket.releaseStatus, includedDocuments: selectedDocumentIds.length });
     pushToast({ title: 'Sale packet exported', message: `${selectedHorse.name} buyer packet downloaded and logged locally. Open it and print to PDF.`, tone: 'success' });
@@ -248,9 +259,10 @@ export default function DocumentLibrary() {
         </div>
         <div className="inline-actions">
           <button className="button button--primary button--compact" type="button" onClick={previewSalePacket}>Preview packet</button>
-          <button className="button button--ghost button--compact" type="button" onClick={exportSalePacket}>Export packet</button>
+          <button className="button button--ghost button--compact" type="button" onClick={exportSalePacket} disabled={Boolean(packetExportGate(subscription) || localSalePacket?.blockers.length)}>Export packet</button>
           <button className="button button--ghost button--compact" type="button" onClick={copyShareLink}>Copy buyer link</button>
         </div>
+        {packetExportGate(subscription) ? <div className="field-error">{packetExportGate(subscription)} <Link to="/subscriptions">Upgrade to unlock.</Link></div> : null}
       </Panel>
 
       <Panel title="XBAR LLC legal and commercial documents" meta={<Pill tone="blue">TM / billing / disclaimer</Pill>}>

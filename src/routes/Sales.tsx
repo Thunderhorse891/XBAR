@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
@@ -8,6 +8,9 @@ import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { DotsIcon } from '@/components/icons';
 import { buildPublicShareUrl } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
+import { loadBuyerRoomActivity } from '@/lib/publicShare';
+import { buildSaleHold } from '@/lib/saleTrustEngine';
+import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
@@ -20,8 +23,12 @@ export default function Sales() {
   const sharedListings = useXbarStore((state) => state.sharedListings);
   const documents = useXbarStore((state) => state.documents);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
+  const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const updateSalesLead = useXbarStore((state) => state.updateSalesLead);
   const recordSharedChannel = useXbarStore((state) => state.recordSharedChannel);
+  const confirmSharedListingRelease = useXbarStore((state) => state.confirmSharedListingRelease);
+  const workspaceId = useCloudStore((state) => state.workspaceId);
+  const session = useCloudStore((state) => state.session);
   const pushToast = useUiStore((state) => state.pushToast);
   const openRightDrawer = useUiStore((state) => state.openRightDrawer);
   const canManageSales = useCurrentRoleCapability('manageSales');
@@ -46,11 +53,20 @@ export default function Sales() {
   const [leadLastTouch, setLeadLastTouch] = useState(selectedLead?.lastTouch ?? new Date().toISOString().slice(0, 10));
   const [leadNextFollowUp, setLeadNextFollowUp] = useState(selectedLead?.nextFollowUp ?? '');
   const [leadOfferAmount, setLeadOfferAmount] = useState(selectedLead?.offerAmount ? String(selectedLead.offerAmount) : '');
+  const [leadCounterOfferAmount, setLeadCounterOfferAmount] = useState(selectedLead?.counterOfferAmount ? String(selectedLead.counterOfferAmount) : '');
+  const [leadOfferStatus, setLeadOfferStatus] = useState(selectedLead?.offerStatus ?? 'Draft');
+  const [leadDepositAmount, setLeadDepositAmount] = useState(selectedLead?.depositAmount ? String(selectedLead.depositAmount) : '');
+  const [leadDepositStatus, setLeadDepositStatus] = useState(selectedLead?.depositStatus ?? 'Not Requested');
   const [leadNotes, setLeadNotes] = useState(selectedLead?.notes ?? '');
   const [leadOutcome, setLeadOutcome] = useState(selectedLead?.outcome ?? 'Won');
   const [leadError, setLeadError] = useState('');
   const [menuState, setMenuState] = useState<{ type: 'lead' | 'horse'; id: string; x: number; y: number } | null>(null);
   const [listingQuery, setListingQuery] = useState('');
+  const [buyerActivity, setBuyerActivity] = useState<Awaited<ReturnType<typeof loadBuyerRoomActivity>>>([]);
+  const authorizedSeller = session?.user?.user_metadata?.full_name || session?.user?.email || workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName;
+  useEffect(() => {
+    void loadBuyerRoomActivity(workspaceId).then(setBuyerActivity);
+  }, [workspaceId]);
   const menuLead = menuState?.type === 'lead' ? salesLeads.find((lead) => lead.id === menuState.id) : undefined;
   const menuHorse = menuState?.type === 'horse' ? saleHorses.find((horse) => horse.id === menuState.id) : undefined;
   const menuListing = menuHorse ? sharedListings.find((listing) => listing.horseId === menuHorse.id && listing.state !== 'Archived') : undefined;
@@ -146,8 +162,9 @@ export default function Sales() {
             id: 'open-profile',
             label: 'Open sale listing',
             onSelect: async () => {
-              await recordSharedChannel(menuHorse.id, 'Direct Link');
-              if (typeof window !== 'undefined') {
+              const result = await recordSharedChannel(menuHorse.id, 'Direct Link');
+              pushToast({ title: result.ok ? 'Buyer packet opened' : 'Release blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+              if (result.ok && typeof window !== 'undefined') {
                 window.open(menuShareUrl, '_blank', 'noopener,noreferrer');
               }
             },
@@ -225,6 +242,7 @@ export default function Sales() {
                   {(() => {
                     const packet = packetByHorseId[horse.id];
                     const sharedListing = sharedListings.find((listing) => listing.horseId === horse.id && listing.state !== 'Archived');
+                    const saleHold = buildSaleHold(horse, documents, ownershipRecords.find((record) => record.horseId === horse.id));
                     const publicShareUrl = buildPublicShareUrl(
                       packet.sharePath,
                       sharedListing?.accessMode === 'Private Token' ? sharedListing.shareToken : undefined,
@@ -253,6 +271,9 @@ export default function Sales() {
                         <div className="horse-card__body">
                           <div className="horse-card__title">{horse.name}</div>
                           <div className="horse-card__subtitle">{horse.sale.listingState}</div>
+                          <Pill tone={saleHold.held ? 'rose' : sharedListing?.releaseConfirmedAt ? 'emerald' : 'amber'}>
+                            {saleHold.held ? `Hold: ${saleHold.reasons[0]}` : sharedListing?.releaseConfirmedAt ? 'Seller release confirmed' : 'Seller release required'}
+                          </Pill>
                           <p className="horse-card__summary">{horse.summary}</p>
                           <div className="inline-metrics">
                             <span>{packet.score}% record complete</span>
@@ -273,18 +294,30 @@ export default function Sales() {
                             >
                               Quick view
                             </button>
-                            <a
+                            <button
                               className="button button--ghost button--compact"
-                              href={publicShareUrl}
-                              target="_blank"
-                              rel="noreferrer"
+                              type="button"
                               onClick={async (event) => {
                                 event.stopPropagation();
-                                await recordSharedChannel(horse.id, 'Direct Link');
+                                const result = await recordSharedChannel(horse.id, 'Direct Link');
+                                pushToast({ title: result.ok ? 'Buyer packet opened' : 'Release blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                                if (result.ok) window.open(publicShareUrl, '_blank', 'noopener,noreferrer');
                               }}
                             >
                               Open sale listing
-                            </a>
+                            </button>
+                            <button
+                              className="button button--primary button--compact"
+                              type="button"
+                              disabled={!canManageSales || saleHold.held || !sharedListing || Boolean(sharedListing.releaseConfirmedAt)}
+                              onClick={async (event) => {
+                                event.stopPropagation();
+                                const result = await confirmSharedListingRelease(horse.id, authorizedSeller);
+                                pushToast({ title: result.ok ? 'Release confirmed' : 'Confirmation blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                              }}
+                            >
+                              {sharedListing?.releaseConfirmedAt ? 'Release confirmed' : 'Confirm legal release'}
+                            </button>
                           </div>
                         </div>
                       </>
@@ -314,6 +347,10 @@ export default function Sales() {
                         setLeadLastTouch(lead.lastTouch);
                         setLeadNextFollowUp(lead.nextFollowUp ?? '');
                         setLeadOfferAmount(lead.offerAmount ? String(lead.offerAmount) : '');
+                        setLeadCounterOfferAmount(lead.counterOfferAmount ? String(lead.counterOfferAmount) : '');
+                        setLeadOfferStatus(lead.offerStatus ?? 'Draft');
+                        setLeadDepositAmount(lead.depositAmount ? String(lead.depositAmount) : '');
+                        setLeadDepositStatus(lead.depositStatus ?? 'Not Requested');
                         setLeadNotes(lead.notes ?? '');
                         setLeadOutcome(lead.outcome ?? 'Won');
                         setLeadError('');
@@ -385,6 +422,26 @@ export default function Sales() {
                   <input className="field-input" type="number" min="0" value={leadOfferAmount} onChange={(event) => setLeadOfferAmount(event.target.value)} disabled={!canManageSales} />
                 </label>
                 <label className="field-stack">
+                  <span className="field-label">Counteroffer</span>
+                  <input className="field-input" type="number" min="0" value={leadCounterOfferAmount} onChange={(event) => setLeadCounterOfferAmount(event.target.value)} disabled={!canManageSales} />
+                </label>
+                <label className="field-stack">
+                  <span className="field-label">Offer status</span>
+                  <select className="field-input" value={leadOfferStatus} onChange={(event) => setLeadOfferStatus(event.target.value as typeof leadOfferStatus)} disabled={!canManageSales}>
+                    {(['Draft', 'Submitted', 'Countered', 'Accepted', 'Rejected', 'Deposit Due', 'Deposit Paid'] as const).map((status) => <option key={status} value={status}>{status}</option>)}
+                  </select>
+                </label>
+                <label className="field-stack">
+                  <span className="field-label">Deposit amount</span>
+                  <input className="field-input" type="number" min="0" value={leadDepositAmount} onChange={(event) => setLeadDepositAmount(event.target.value)} disabled={!canManageSales} />
+                </label>
+                <label className="field-stack">
+                  <span className="field-label">Deposit status</span>
+                  <select className="field-input" value={leadDepositStatus} onChange={(event) => setLeadDepositStatus(event.target.value as typeof leadDepositStatus)} disabled={!canManageSales}>
+                    {(['Not Requested', 'Due', 'Paid'] as const).map((status) => <option key={status} value={status}>{status}</option>)}
+                  </select>
+                </label>
+                <label className="field-stack">
                   <span className="field-label">Closed outcome</span>
                   <select className="field-input" value={leadOutcome} onChange={(event) => setLeadOutcome(event.target.value as 'Won' | 'Lost')} disabled={!canManageSales}>
                     <option value="Won">Won</option>
@@ -413,6 +470,10 @@ export default function Sales() {
                       nextFollowUp: leadNextFollowUp,
                       notes: leadNotes,
                       offerAmount: leadOfferAmount ? Number(leadOfferAmount) : undefined,
+                      counterOfferAmount: leadCounterOfferAmount ? Number(leadCounterOfferAmount) : undefined,
+                      offerStatus: leadOfferStatus,
+                      depositAmount: leadDepositAmount ? Number(leadDepositAmount) : undefined,
+                      depositStatus: leadDepositStatus,
                       outcome: leadStage === 'Closed' ? leadOutcome : undefined,
                     });
 
@@ -456,6 +517,25 @@ export default function Sales() {
                 <Pill tone={followUpsDue ? 'amber' : 'emerald'}>{followUpsDue}</Pill>
               </div>
             </div>
+          </div>
+          <div className="stack-list" style={{ marginTop: '16px' }}>
+            {buyerActivity.slice(0, 8).map((activity) => {
+              const horse = horses.find((item) => item.id === activity.horseId);
+              const buyer = String(activity.metadata.buyerName ?? activity.metadata.email ?? 'Buyer');
+              return (
+                <div className="stack-item" key={activity.id}>
+                  <div className="stack-item__top">
+                    <div>
+                      <div className="stack-item__title">{buyer} · {activity.eventType.replace('_', ' ')}</div>
+                      <div className="stack-item__copy">{horse?.name ?? 'Buyer packet'} · {formatDateLabel(activity.viewedAt)}</div>
+                    </div>
+                    <Pill tone={activity.eventType === 'offer' ? 'emerald' : activity.eventType === 'proof_request' ? 'amber' : 'blue'}>{activity.eventType}</Pill>
+                  </div>
+                  {activity.metadata.message ? <div className="stack-item__copy">{String(activity.metadata.message)}</div> : null}
+                </div>
+              );
+            })}
+            {!buyerActivity.length ? <EmptyState compact title="No buyer activity yet" description="Views, questions, proof requests, downloads, and offers will appear here." /> : null}
           </div>
         </Panel>
       </div>

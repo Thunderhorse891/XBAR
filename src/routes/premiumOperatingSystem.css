@@ -368,3 +368,4 @@
     font-size: clamp(2rem, 12vw, 3.3rem);
   }
 }
+.commercial-pressure{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 16px;border:1px solid rgba(219,167,76,.35);border-radius:10px;background:linear-gradient(120deg,rgba(76,50,12,.82),rgba(20,28,40,.94));color:#f8f4ec;box-shadow:0 14px 32px rgba(0,0,0,.18)}.commercial-pressure>div{display:grid;gap:3px}.commercial-pressure strong{font-size:14px}.commercial-pressure span{color:rgba(248,244,236,.7);font-size:12px}.commercial-pressure--upgrade{border-color:rgba(226,144,64,.55);background:linear-gradient(120deg,rgba(100,45,10,.88),rgba(20,28,40,.96))}.commercial-pressure--blocked{border-color:rgba(214,76,76,.62);background:linear-gradient(120deg,rgba(91,21,21,.9),rgba(20,28,40,.96))}@media(max-width:720px){.commercial-pressure{align-items:flex-start;flex-direction:column}.commercial-pressure .button{width:100%}}

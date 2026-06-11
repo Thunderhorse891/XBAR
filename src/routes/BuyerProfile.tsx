@@ -7,7 +7,7 @@ import { KeyValue, MetricCard, Panel, Pill } from '@/components/app-ui';
 import { buildPublicShareUrl, openFacebookShareDialog } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
 import { isPublicShareLocalPreviewEnabled } from '@/lib/platformConfig';
-import { loadPublicBuyerProfile, sanitizeDocumentForBuyerView, sanitizeHorseForBuyerView, sanitizeSharedListingForBuyerView, trackPublicBuyerProfileView, type PublicBuyerProfilePayload } from '@/lib/publicShare';
+import { loadPublicBuyerProfile, sanitizeDocumentForBuyerView, sanitizeHorseForBuyerView, sanitizeSharedListingForBuyerView, trackPublicBuyerAction, trackPublicBuyerProfileView, type PublicBuyerProfilePayload } from '@/lib/publicShare';
 import { hasBuyerShareAccess } from '@/lib/workspaceAccess';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
@@ -21,6 +21,11 @@ export default function BuyerProfile() {
   const localDocuments = useXbarStore((state) => state.documents.filter((document) => document.horseId === id));
   const localSharedListing = useXbarStore((state) => state.sharedListings.find((listing) => listing.horseId === id && listing.state !== 'Archived'));
   const shareToken = searchParams.get('t')?.trim() ?? '';
+  const [buyerName, setBuyerName] = useState('');
+  const [buyerEmail, setBuyerEmail] = useState('');
+  const [buyerMessage, setBuyerMessage] = useState('');
+  const [buyerOffer, setBuyerOffer] = useState('');
+  const [buyerBusy, setBuyerBusy] = useState(false);
   const localPreviewAllowed = isPublicShareLocalPreviewEnabled() && searchParams.get('preview') === 'local';
   const localAccessAllowed = hasBuyerShareAccess(localSharedListing, shareToken);
 
@@ -183,6 +188,29 @@ export default function BuyerProfile() {
   const salePhotoAssets = horse.gallery.filter(
     (asset) => asset.status === 'Approved' && (asset.kind === 'Hero' || asset.kind === 'Conformation' || asset.kind === 'Sale Still'),
   ).slice(0, 4);
+  const submitBuyerAction = async (eventType: 'question' | 'proof_request' | 'offer') => {
+    if (!buyerEmail.trim() || !buyerName.trim()) {
+      pushToast({ title: 'Contact details required', message: 'Enter your name and email before sending this to the ranch.', tone: 'error' });
+      return;
+    }
+    if (eventType === 'offer' && (!Number.isFinite(Number(buyerOffer)) || Number(buyerOffer) <= 0)) {
+      pushToast({ title: 'Offer amount required', message: 'Enter a valid offer amount.', tone: 'error' });
+      return;
+    }
+    setBuyerBusy(true);
+    const result = await trackPublicBuyerAction({
+      sharePath,
+      shareToken,
+      eventType,
+      metadata: { buyerName: buyerName.trim(), buyerEmail: buyerEmail.trim(), message: buyerMessage.trim(), offerAmount: eventType === 'offer' ? Number(buyerOffer) : undefined, horseName: horse.name },
+    });
+    pushToast({ title: result.ok ? 'Sent to ranch' : 'Could not send', message: result.message, tone: result.ok ? 'success' : 'error' });
+    if (result.ok) {
+      setBuyerMessage('');
+      if (eventType === 'offer') setBuyerOffer('');
+    }
+    setBuyerBusy(false);
+  };
 
   return (
     <main className="buyer-shell">
@@ -289,6 +317,21 @@ export default function BuyerProfile() {
             </div>
           </Panel>
         </div>
+
+        <Panel eyebrow="Buyer Deal Room" title="Ask, request proof, or make an offer" description="Your activity is time-stamped for the ranch. An offer is not accepted until the seller confirms it in writing.">
+          <div className="form-grid form-grid--tight">
+            <label className="field-stack"><span className="field-label">Your name</span><input className="field-input" value={buyerName} onChange={(event) => setBuyerName(event.target.value)} /></label>
+            <label className="field-stack"><span className="field-label">Email</span><input className="field-input" type="email" value={buyerEmail} onChange={(event) => setBuyerEmail(event.target.value)} /></label>
+            <label className="field-stack"><span className="field-label">Offer amount</span><input className="field-input" type="number" min="0" value={buyerOffer} onChange={(event) => setBuyerOffer(event.target.value)} placeholder={horse.sale.askPrice ? String(horse.sale.askPrice) : 'Enter amount'} /></label>
+            <label className="field-stack field-stack--wide"><span className="field-label">Question or proof request</span><textarea className="field-textarea" rows={4} value={buyerMessage} onChange={(event) => setBuyerMessage(event.target.value)} placeholder="Ask about the horse, request a specific proof record, or add offer terms." /></label>
+          </div>
+          <div className="inline-actions">
+            <button className="button button--primary button--compact" type="button" disabled={buyerBusy} onClick={() => void submitBuyerAction('question')}>Send question</button>
+            <button className="button button--ghost button--compact" type="button" disabled={buyerBusy} onClick={() => void submitBuyerAction('proof_request')}>Request proof</button>
+            <button className="button button--ghost button--compact" type="button" disabled={buyerBusy} onClick={() => void submitBuyerAction('offer')}>Submit offer</button>
+            <button className="button button--ghost button--compact" type="button" onClick={() => { void trackPublicBuyerAction({ sharePath, shareToken, eventType: 'download', metadata: { horseName: horse.name } }); window.print(); }}>Print / save packet</button>
+          </div>
+        </Panel>
 
         <div className="detail-grid">
           <Panel eyebrow="Verified support" title="Approved docs">

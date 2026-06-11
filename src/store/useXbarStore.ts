@@ -36,6 +36,9 @@ import {
   upsertSharedListingInCloud,
 } from '@/lib/cloudWorkspace';
 import { workspaceStateStorage } from '@/lib/workspaceStorage';
+import { featureGate, usageGate } from '@/lib/commercialEngine';
+import { emptyBreedingEconomics } from '@/lib/breedingRevenue';
+import { applyAutomaticSaleHolds, buildSaleHold } from '@/lib/saleTrustEngine';
 import {
   createOwnershipRecord,
   validateExpenseReceiptInput,
@@ -48,6 +51,7 @@ import {
 } from '@/store/xbarStoreLogic';
 import type {
   DocumentFact,
+  BreedingEconomics,
   ExpenseReceipt,
   HorseNote,
   HorseRecord,
@@ -80,7 +84,7 @@ type ActionResult = {
   id?: string;
 };
 
-type HorsePatch = Partial<Pick<HorseRecord, 'name' | 'breed' | 'color' | 'sex' | 'registrationNumber' | 'registry' | 'aqhaNumber' | 'owner' | 'ownerEntity' | 'segment' | 'status'>> & { askPrice?: number };
+type HorsePatch = Partial<Pick<HorseRecord, 'name' | 'breed' | 'color' | 'sex' | 'registrationNumber' | 'registry' | 'aqhaNumber' | 'owner' | 'ownerEntity' | 'segment' | 'status' | 'costBasis'>> & { askPrice?: number };
 
 type XbarStore = {
   currentRole: UserRole;
@@ -102,7 +106,8 @@ type XbarStore = {
   initializeWorkspace: (profile: Partial<WorkspaceProfile>) => ActionResult;
   updateWorkspaceProfile: (patch: Partial<WorkspaceProfile>) => ActionResult;
   toggleSharedListing: (horseId: string) => Promise<ActionResult>;
-  recordSharedChannel: (horseId: string, channel: SharedChannel) => Promise<void>;
+  confirmSharedListingRelease: (horseId: string, confirmedBy: string) => Promise<ActionResult>;
+  recordSharedChannel: (horseId: string, channel: SharedChannel) => Promise<ActionResult>;
   rotateSharedListingToken: (horseId: string) => Promise<ActionResult>;
   updateSharedListingAccessMode: (horseId: string, accessMode: SharedListingRecord['accessMode']) => Promise<ActionResult>;
   inviteWorkspaceMember: (email: string, role: UserRole) => Promise<ActionResult>;
@@ -118,8 +123,9 @@ type XbarStore = {
   createSalesLead: (input: LeadInput) => ActionResult;
   updateSalesLead: (
     leadId: string,
-    patch: Partial<Pick<SalesLead, 'stage' | 'lastTouch' | 'nextFollowUp' | 'notes' | 'offerAmount' | 'savedListing' | 'shareReady' | 'outcome'>>,
+    patch: Partial<Pick<SalesLead, 'stage' | 'lastTouch' | 'nextFollowUp' | 'notes' | 'offerAmount' | 'counterOfferAmount' | 'offerStatus' | 'depositAmount' | 'depositStatus' | 'offerUpdatedAt' | 'savedListing' | 'shareReady' | 'outcome'>>,
   ) => ActionResult;
+  recordSalePacketGenerated: () => ActionResult;
   addRanchAsset: (asset: Pick<RanchAsset, 'name' | 'category' | 'location'>) => ActionResult;
   updateAsset: (assetId: string, patch: AssetPatch) => ActionResult;
   deleteAsset: (assetId: string) => ActionResult;
@@ -129,6 +135,7 @@ type XbarStore = {
     event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string; type: MedicalEventType },
   ) => ActionResult;
   addBreedingEvent: (horseId: string, event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string }) => ActionResult;
+  updateBreedingEconomics: (horseId: string, economics: BreedingEconomics) => ActionResult;
   deleteBreedingEvent: (horseId: string, eventId: string) => ActionResult;
   updateHorseLocation: (horseId: string, patch: LocationPatch) => ActionResult;
   updateHorse: (horseId: string, patch: HorsePatch) => ActionResult;
@@ -143,6 +150,7 @@ type XbarStore = {
   addOwnershipStake: (horseId: string, stake: Omit<OwnershipStake, 'id'>) => ActionResult;
   removeOwnershipStake: (horseId: string, stakeId: string) => ActionResult;
   ensureOwnershipRecord: (horseId: string) => ActionResult & { recordId?: string };
+  decideDocumentFact: (horseId: string, factId: string, decision: 'Accepted' | 'Rejected') => ActionResult;
   exportWorkspaceBackup: () => WorkspaceBackup;
   importWorkspaceBackup: (backup: unknown) => ActionResult;
 };
@@ -202,9 +210,13 @@ const initialState = {
 };
 
 function syncDerivedValues(
-  state: Pick<XbarStore, 'horses' | 'salesLeads' | 'sharedListings' | 'sharedAccess' | 'workspaceMembers' | 'workspaceInvitations' | 'subscription'>,
+  state: Pick<XbarStore, 'horses' | 'salesLeads' | 'sharedListings' | 'sharedAccess' | 'workspaceMembers' | 'workspaceInvitations' | 'subscription'>
+    & Partial<Pick<XbarStore, 'documents' | 'ownershipRecords'>>,
 ) {
-  const horses = state.horses.map((horse) => {
+  const heldHorses = state.documents && state.ownershipRecords
+    ? applyAutomaticSaleHolds(state.horses, state.documents, state.ownershipRecords)
+    : state.horses;
+  const horses = heldHorses.map((horse) => {
     const leadCount = state.salesLeads.filter((lead) => lead.horseId === horse.id && lead.stage !== 'Closed').length;
     return {
       ...horse,
@@ -231,6 +243,8 @@ function syncDerivedValues(
       ...state.subscription,
       usage: {
         ...state.subscription.usage,
+        horsesUsed: horses.length,
+        documentsProcessed: state.documents?.length ?? state.subscription.usage.documentsProcessed,
         seatsUsed,
         sharedAccessSeatsUsed,
       },
@@ -314,6 +328,9 @@ function createSharedListingRecord(horseId: string, patch?: Partial<SharedListin
     createdAt: patch?.createdAt ?? timestamp,
     updatedAt: patch?.updatedAt ?? timestamp,
     lastSharedAt: patch?.lastSharedAt,
+    releaseConfirmedAt: patch?.releaseConfirmedAt,
+    releaseConfirmedBy: patch?.releaseConfirmedBy,
+    releaseConfirmationVersion: patch?.releaseConfirmationVersion,
   };
 }
 
@@ -466,8 +483,12 @@ function restorePersistedState(raw: unknown): PersistedXbarState {
           initialState.subscription.sharedAccessEnabled,
         usage: {
           ...(state.subscription as SubscriptionProfile).usage,
+          horsesUsed: usage.horsesUsed ?? horses.length,
+          horseLimit: usage.horseLimit ?? initialState.subscription.usage.horseLimit,
           documentsProcessed: usage.documentsProcessed ?? usage.ocrProcessed ?? initialState.subscription.usage.documentsProcessed,
           documentLimit: usage.documentLimit ?? usage.ocrLimit ?? initialState.subscription.usage.documentLimit,
+          salePacketsGenerated: usage.salePacketsGenerated ?? initialState.subscription.usage.salePacketsGenerated,
+          salePacketLimit: usage.salePacketLimit ?? initialState.subscription.usage.salePacketLimit,
           sharedAccessSeatsUsed:
             usage.sharedAccessSeatsUsed ?? usage.portalSeatsUsed ?? initialState.subscription.usage.sharedAccessSeatsUsed,
           sharedAccessSeatLimit:
@@ -500,6 +521,8 @@ function restorePersistedState(raw: unknown): PersistedXbarState {
     salesLeads: Array.isArray(state.salesLeads)
       ? (state.salesLeads as SalesLead[]).map((lead) => ({
           ...lead,
+          offerStatus: lead.offerStatus ?? (lead.offerAmount ? 'Submitted' : 'Draft'),
+          depositStatus: lead.depositStatus ?? 'Not Requested',
           shareReady:
             lead.shareReady ??
             (lead as SalesLead & { ownerPortalReady?: boolean }).ownerPortalReady ??
@@ -525,6 +548,8 @@ function restorePersistedState(raw: unknown): PersistedXbarState {
     workspaceMembers: normalizedWorkspaceMembers,
     workspaceInvitations: baseState.workspaceInvitations,
     subscription: baseState.subscription,
+    documents: baseState.documents,
+    ownershipRecords: baseState.ownershipRecords,
   });
 
   return {
@@ -563,6 +588,7 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
     owner: input.owner.trim(),
     ownerEntity: input.ownerEntity.trim(),
     insuredValue: 0,
+    costBasis: 0,
     profileImage: '',
     tags: ['intake-pending'],
     bloodline: {
@@ -610,6 +636,7 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
     documents: [],
     medicalTimeline: [],
     breedingTimeline: [],
+    breedingEconomics: { ...emptyBreedingEconomics },
     activity: [
       {
         id: createId('activity'),
@@ -883,6 +910,10 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const state = get();
+        const planBlocked = featureGate(state.subscription, 'buyerDealRoom');
+        if (planBlocked) {
+          return { ok: false, message: planBlocked };
+        }
         if (!state.horses.some((horse) => horse.id === horseId)) {
           return { ok: false, message: 'Horse record not found for shared access.' };
         }
@@ -951,7 +982,44 @@ export const useXbarStore = create<XbarStore>()(
           id: horseId,
         };
       },
+      confirmSharedListingRelease: async (horseId, confirmedBy) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageSharedAccess');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+        const state = get();
+        const horse = state.horses.find((item) => item.id === horseId);
+        const listing = state.sharedListings.find((item) => item.horseId === horseId && item.state !== 'Archived');
+        if (!horse || !listing) return { ok: false, message: 'Create the buyer listing before confirming release.' };
+        const hold = buildSaleHold(horse, state.documents, state.ownershipRecords.find((record) => record.horseId === horseId));
+        if (hold.held) return { ok: false, message: `Release blocked: ${hold.reasons[0]}` };
+        if (!confirmedBy.trim()) return { ok: false, message: 'Authorized seller name is required for legal release confirmation.' };
+        const nextListing = {
+          ...listing,
+          releaseConfirmedAt: nowStamp(),
+          releaseConfirmedBy: confirmedBy.trim(),
+          releaseConfirmationVersion: 'buyer-packet-release-v1',
+          updatedAt: todayStamp(),
+        };
+        if (isSupabaseConfigured()) {
+          const cloudResult = await upsertSharedListingInCloud(nextListing);
+          if (!cloudResult.ok) return cloudResult;
+        }
+        set((current) => ({
+          sharedListings: current.sharedListings.map((item) => item.id === listing.id ? nextListing : item),
+        }));
+        return { ok: true, message: 'Buyer packet release legally confirmed.', id: listing.id };
+      },
       recordSharedChannel: async (horseId, channel) => {
+        const state = get();
+        const blocked = featureGate(state.subscription, 'buyerDealRoom');
+        if (blocked) return { ok: false, message: blocked };
+        const horse = state.horses.find((item) => item.id === horseId);
+        const listing = state.sharedListings.find((item) => item.horseId === horseId && item.state !== 'Archived');
+        if (!horse || !listing) return { ok: false, message: 'Create the buyer listing before sharing.' };
+        const hold = buildSaleHold(horse, state.documents, state.ownershipRecords.find((record) => record.horseId === horseId));
+        if (hold.held) return { ok: false, message: `Buyer packet is on hold: ${hold.reasons[0]}` };
+        if (!listing.releaseConfirmedAt || !listing.releaseConfirmedBy) {
+          return { ok: false, message: 'Authorized seller release confirmation is required before sharing the buyer packet.' };
+        }
         if (isSupabaseConfigured()) {
           const cloudResult = await updateSharedListingChannelsInCloud({ horseId, channel });
           if (!cloudResult.ok) {
@@ -972,6 +1040,7 @@ export const useXbarStore = create<XbarStore>()(
               : listing,
           ),
         }));
+        return { ok: true, message: 'Buyer packet shared and audit activity recorded.', id: horseId };
       },
       rotateSharedListingToken: async (horseId) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageSharedAccess');
@@ -1059,6 +1128,10 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const state = get();
+        const planBlocked = featureGate(state.subscription, 'teamInvites');
+        if (planBlocked) {
+          return { ok: false, message: planBlocked };
+        }
         const validationError = validateWorkspaceInvitation({
           email,
           role,
@@ -1269,16 +1342,26 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: deniedMessage };
         }
 
+        const state = get();
+        const capacityBlocked = usageGate('Horse', state.horses.length, state.subscription.usage.horseLimit);
+        if (capacityBlocked) {
+          return { ok: false, message: capacityBlocked };
+        }
+
         const validationError = validateNewHorseInput(input);
         if (validationError) {
           return { ok: false, message: validationError };
         }
 
-        const horse = createHorseRecord(input, get().workspaceProfile);
+        const horse = createHorseRecord(input, state.workspaceProfile);
         const ownershipRecord = createOwnershipRecord(horse);
         set((state) => ({
           horses: [horse, ...state.horses],
           ownershipRecords: [ownershipRecord, ...state.ownershipRecords],
+          subscription: {
+            ...state.subscription,
+            usage: { ...state.subscription.usage, horsesUsed: state.horses.length + 1 },
+          },
         }));
         return { ok: true, message: `${horse.name} is now live in the horse portfolio.`, id: horse.id };
       },
@@ -1412,12 +1495,14 @@ export const useXbarStore = create<XbarStore>()(
             return {
               documents: allDocuments,
               intakeBatches: [batch, ...current.intakeBatches],
-              horses: [...createdHorses, ...nextHorses],
+              horses: applyAutomaticSaleHolds([...createdHorses, ...nextHorses], allDocuments, [...createdOwnershipRecords, ...current.ownershipRecords]),
               ownershipRecords: [...createdOwnershipRecords, ...current.ownershipRecords],
               subscription: {
                 ...current.subscription,
                 usage: {
                   ...current.subscription.usage,
+                  horsesUsed: current.horses.length + createdHorses.length,
+                  documentsProcessed: allDocuments.length,
                   storageUsedGb: normalizeUsage(current.subscription.usage.storageUsedGb + storageIncrease),
                 },
               },
@@ -1478,7 +1563,7 @@ export const useXbarStore = create<XbarStore>()(
 
           return {
             documents: nextDocuments,
-            horses: nextHorses,
+            horses: applyAutomaticSaleHolds(nextHorses, nextDocuments, current.ownershipRecords),
             intakeBatches: nextBatches,
           };
         });
@@ -1510,6 +1595,11 @@ export const useXbarStore = create<XbarStore>()(
           return {
             documents: nextDocuments,
             intakeBatches: current.intakeBatches.map((batch) => summarizeBatch(batch, nextDocuments)),
+            horses: applyAutomaticSaleHolds(current.horses, nextDocuments, current.ownershipRecords),
+            subscription: {
+              ...current.subscription,
+              usage: { ...current.subscription.usage, documentsProcessed: nextDocuments.filter((item) => item.state !== 'Archived').length },
+            },
           };
         });
 
@@ -1714,6 +1804,8 @@ export const useXbarStore = create<XbarStore>()(
           lastTouch: todayStamp(),
           nextFollowUp: '',
           notes: '',
+          offerStatus: 'Draft',
+          depositStatus: 'Not Requested',
           savedListing: false,
           shareReady: Boolean(shareReady),
         };
@@ -1764,6 +1856,16 @@ export const useXbarStore = create<XbarStore>()(
         if (deniedMessage) {
           return { ok: false, message: deniedMessage };
         }
+        if (
+          patch.offerAmount !== undefined ||
+          patch.counterOfferAmount !== undefined ||
+          patch.offerStatus !== undefined ||
+          patch.depositAmount !== undefined ||
+          patch.depositStatus !== undefined
+        ) {
+          const planBlocked = featureGate(get().subscription, 'buyerDealRoom');
+          if (planBlocked) return { ok: false, message: planBlocked };
+        }
 
         const lead = get().salesLeads.find((item) => item.id === leadId);
         if (!lead) {
@@ -1777,6 +1879,14 @@ export const useXbarStore = create<XbarStore>()(
                   ...item,
                   ...patch,
                   lastTouch: patch.lastTouch ?? item.lastTouch,
+                  offerUpdatedAt:
+                    patch.offerAmount !== undefined ||
+                    patch.counterOfferAmount !== undefined ||
+                    patch.offerStatus !== undefined ||
+                    patch.depositAmount !== undefined ||
+                    patch.depositStatus !== undefined
+                      ? nowStamp()
+                      : item.offerUpdatedAt,
                 }
               : item,
           );
@@ -1796,6 +1906,23 @@ export const useXbarStore = create<XbarStore>()(
         });
 
         return { ok: true, message: `${lead.name} updated.`, id: leadId };
+      },
+      recordSalePacketGenerated: () => {
+        const state = get();
+        const featureBlocked = featureGate(state.subscription, 'packetExport');
+        if (featureBlocked) return { ok: false, message: featureBlocked };
+        const capacityBlocked = usageGate('Sale packet', state.subscription.usage.salePacketsGenerated, state.subscription.usage.salePacketLimit);
+        if (capacityBlocked) return { ok: false, message: capacityBlocked };
+        set((current) => ({
+          subscription: {
+            ...current.subscription,
+            usage: {
+              ...current.subscription.usage,
+              salePacketsGenerated: current.subscription.usage.salePacketsGenerated + 1,
+            },
+          },
+        }));
+        return { ok: true, message: 'Sale packet generation recorded.' };
       },
       addRanchAsset: (asset) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageAssets');
@@ -1871,8 +1998,8 @@ export const useXbarStore = create<XbarStore>()(
           createdAt: todayStamp(),
         };
 
-        set((state) => ({
-          horses: state.horses.map((horse) =>
+        set((state) => {
+          const horses = state.horses.map((horse) =>
             horse.id === horseId
               ? {
                   ...horse,
@@ -1889,9 +2016,9 @@ export const useXbarStore = create<XbarStore>()(
                     ...horse.activity,
                   ],
                 }
-              : horse,
-          ),
-        }));
+              : horse);
+          return { horses: applyAutomaticSaleHolds(horses, state.documents, state.ownershipRecords) };
+        });
 
         return { ok: true, message: 'Horse note saved.', id: nextNote.id };
       },
@@ -1942,6 +2069,8 @@ export const useXbarStore = create<XbarStore>()(
         if (deniedMessage) {
           return { ok: false, message: deniedMessage };
         }
+        const planBlocked = featureGate(get().subscription, 'breedingRevenue');
+        if (planBlocked) return { ok: false, message: planBlocked };
 
         if (!event.title.trim() || !event.body.trim() || !event.author.trim() || !event.date.trim()) {
           return { ok: false, message: 'Breeding events need a title, note, owner, and date.' };
@@ -1972,6 +2101,16 @@ export const useXbarStore = create<XbarStore>()(
         }));
 
         return { ok: true, message: 'Breeding event added.', id: nextEvent.id };
+      },
+      updateBreedingEconomics: (horseId, economics) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageBreeding');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+        const planBlocked = featureGate(get().subscription, 'breedingRevenue');
+        if (planBlocked) return { ok: false, message: planBlocked };
+        if (!get().horses.some((horse) => horse.id === horseId)) return { ok: false, message: 'Horse record not found.' };
+        const normalized = Object.fromEntries(Object.entries(economics).map(([key, value]) => [key, Math.max(0, Number(value) || 0)])) as unknown as BreedingEconomics;
+        set((state) => ({ horses: state.horses.map((horse) => horse.id === horseId ? { ...horse, breedingEconomics: normalized } : horse) }));
+        return { ok: true, message: 'Breeding revenue profile updated.', id: horseId };
       },
       deleteBreedingEvent: (horseId, eventId) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageBreeding');
@@ -2027,8 +2166,8 @@ export const useXbarStore = create<XbarStore>()(
         const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
         if (deniedMessage) return { ok: false, message: deniedMessage };
         if (!get().horses.some((h) => h.id === horseId)) return { ok: false, message: 'Horse not found.' };
-        set((state) => ({
-          horses: state.horses.map((h) =>
+        set((state) => {
+          const horses = state.horses.map((h) =>
             h.id === horseId
               ? {
                   ...h,
@@ -2043,17 +2182,22 @@ export const useXbarStore = create<XbarStore>()(
                   ownerEntity: patch.ownerEntity?.trim() ?? h.ownerEntity,
                   segment: patch.segment ?? h.segment,
                   status: patch.status ?? h.status,
+                  costBasis: patch.costBasis !== undefined ? Math.max(0, patch.costBasis) : h.costBasis,
                   sale: patch.askPrice !== undefined ? { ...h.sale, askPrice: patch.askPrice } : h.sale,
                 }
               : h,
-          ),
-        }));
+          );
+          return { horses: applyAutomaticSaleHolds(horses, state.documents, state.ownershipRecords) };
+        });
         return { ok: true, message: 'Horse record updated.', id: horseId };
       },
       deleteHorse: (horseId) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'editHorse');
         if (deniedMessage) return { ok: false, message: deniedMessage };
-        set((state) => ({ horses: state.horses.filter((h) => h.id !== horseId) }));
+        set((state) => {
+          const horses = state.horses.filter((h) => h.id !== horseId);
+          return { horses, subscription: { ...state.subscription, usage: { ...state.subscription.usage, horsesUsed: horses.length } } };
+        });
         return { ok: true, message: 'Horse removed from records.', id: horseId };
       },
       updateMedicalEvent: (horseId, eventId, patch) => {
@@ -2103,16 +2247,15 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Ownership record not found.' };
         }
 
-        set((state) => ({
-          ownershipRecords: state.ownershipRecords.map((item) =>
+        set((state) => {
+          const ownershipRecords = state.ownershipRecords.map((item) =>
             item.id === recordId
               ? {
                   ...item,
                   ...patch,
                 }
-              : item,
-          ),
-          horses: state.horses.map((horse) =>
+              : item);
+          const horses = state.horses.map((horse) =>
             horse.id === record.horseId
               ? {
                   ...horse,
@@ -2126,9 +2269,9 @@ export const useXbarStore = create<XbarStore>()(
                       : stake,
                   ),
                 }
-              : horse,
-          ),
-        }));
+              : horse);
+          return { ownershipRecords, horses: applyAutomaticSaleHolds(horses, state.documents, ownershipRecords) };
+        });
 
         return { ok: true, message: 'Ownership record updated.', id: recordId };
       },
@@ -2191,8 +2334,8 @@ export const useXbarStore = create<XbarStore>()(
           contact: stake.contact.trim(),
         };
 
-        set((state) => ({
-          horses: state.horses.map((horse) =>
+        set((state) => {
+          const horses = state.horses.map((horse) =>
             horse.id === horseId
               ? {
                   ...horse,
@@ -2209,8 +2352,9 @@ export const useXbarStore = create<XbarStore>()(
                   ],
                 }
               : horse,
-          ),
-        }));
+          );
+          return { horses: applyAutomaticSaleHolds(horses, state.documents, state.ownershipRecords) };
+        });
 
         return { ok: true, message: `${nextStake.name} added to the ownership split.`, id: nextStake.id };
       },
@@ -2269,6 +2413,27 @@ export const useXbarStore = create<XbarStore>()(
           ownershipRecords: [newRecord, ...state.ownershipRecords],
         }));
         return { ok: true, message: `Ownership record created for ${horse.name}.`, recordId: newRecord.id };
+      },
+      decideDocumentFact: (horseId, factId, decision) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'reviewDocuments');
+        if (deniedMessage) return { ok: false, message: deniedMessage };
+        const horse = get().horses.find((item) => item.id === horseId);
+        if (!horse) return { ok: false, message: 'Horse record not found.' };
+        if (!horse.documentFacts.some((fact) => fact.id === factId)) return { ok: false, message: 'OCR fact not found.' };
+        set((state) => ({
+          horses: state.horses.map((item) => item.id === horseId ? {
+            ...item,
+            documentFacts: item.documentFacts.map((fact) => fact.id === factId ? { ...fact, decision } : fact),
+            activity: [createTimelineEvent({
+              title: `OCR fact ${decision.toLowerCase()}`,
+              summary: `${factId} was ${decision.toLowerCase()} into the horse record.`,
+              owner: 'Proof Vault',
+              date: todayStamp(),
+              category: 'Operations',
+            }), ...item.activity],
+          } : item),
+        }));
+        return { ok: true, message: `OCR fact ${decision.toLowerCase()}.`, id: factId };
       },
       exportWorkspaceBackup: () => ({
         app: 'XBAR',

@@ -5,6 +5,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
 import { buildPublicShareUrl, openFacebookShareDialog } from '@/lib/facebookSharing';
 import { isFacebookSharingConfigured } from '@/lib/platformConfig';
+import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -17,7 +18,9 @@ export default function SharedAccess() {
   const documents = useXbarStore((state) => state.documents);
   const salesLeads = useXbarStore((state) => state.salesLeads);
   const sharedListings = useXbarStore((state) => state.sharedListings);
+  const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const recordSharedChannel = useXbarStore((state) => state.recordSharedChannel);
+  const confirmSharedListingRelease = useXbarStore((state) => state.confirmSharedListingRelease);
   const rotateSharedListingToken = useXbarStore((state) => state.rotateSharedListingToken);
   const updateSharedListingAccessMode = useXbarStore((state) => state.updateSharedListingAccessMode);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
@@ -48,7 +51,12 @@ export default function SharedAccess() {
   const menuListing = menuHorse ? activeSharedListings.find((listing) => listing.horseId === menuHorse.id) : undefined;
 
   const getShareToken = (listing: SharedListingRecord | undefined) => (listing?.accessMode === 'Private Token' ? listing.shareToken : undefined);
-  const copyShareLink = async (path: string, listing?: SharedListingRecord) => {
+  const copyShareLink = async (horseId: string, path: string, listing?: SharedListingRecord) => {
+    const releaseResult = await recordSharedChannel(horseId, 'Direct Link');
+    if (!releaseResult.ok) {
+      pushToast({ title: 'Copy blocked', message: releaseResult.message, tone: 'error' });
+      return;
+    }
     const url = buildPublicShareUrl(path, getShareToken(listing));
     if (!navigator?.clipboard?.writeText) {
       pushToast({
@@ -104,8 +112,9 @@ export default function SharedAccess() {
           id: 'open-share',
           label: 'Open listing',
           onSelect: async () => {
-            await recordSharedChannel(menuHorse.id, 'Direct Link');
-            if (typeof window !== 'undefined') {
+            const result = await recordSharedChannel(menuHorse.id, 'Direct Link');
+            pushToast({ title: result.ok ? 'Buyer packet opened' : 'Release blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+            if (result.ok && typeof window !== 'undefined') {
               window.open(buildPublicShareUrl(menuPacket.sharePath, getShareToken(menuListing)), '_blank', 'noopener,noreferrer');
             }
           },
@@ -114,7 +123,7 @@ export default function SharedAccess() {
           id: 'copy-link',
           label: 'Copy listing link',
           onSelect: () => {
-            void copyShareLink(menuPacket.sharePath, menuListing);
+            void copyShareLink(menuHorse.id, menuPacket.sharePath, menuListing);
           },
         },
         ...(menuListing
@@ -158,10 +167,8 @@ export default function SharedAccess() {
           id: 'post-facebook',
           label: 'Post to Facebook',
           onSelect: async () => {
-            const result = openFacebookShareDialog(menuPacket.sharePath, getShareToken(menuListing));
-            if (result.ok) {
-              await recordSharedChannel(menuHorse.id, 'Facebook');
-            }
+            const releaseResult = await recordSharedChannel(menuHorse.id, 'Facebook');
+            const result = releaseResult.ok ? openFacebookShareDialog(menuPacket.sharePath, getShareToken(menuListing)) : releaseResult;
             pushToast({
               title: result.ok ? 'Facebook ready' : 'Facebook unavailable',
               message: result.message,
@@ -221,6 +228,7 @@ export default function SharedAccess() {
                 const packet = packetByHorseId[horse.id];
                 const sharedListing = activeSharedListings.find((listing) => listing.horseId === horse.id);
                 const publicShareUrl = buildPublicShareUrl(packet.sharePath, getShareToken(sharedListing));
+                const saleHold = buildSaleHold(horse, documents, ownershipRecords.find((record) => record.horseId === horse.id));
 
                 return (
                   <div
@@ -243,6 +251,9 @@ export default function SharedAccess() {
                         <Pill tone={sharedListing?.accessMode === 'Public Link' ? 'emerald' : 'slate'}>
                           {sharedListing?.accessMode ?? 'Private Token'}
                         </Pill>
+                        <Pill tone={saleHold.held ? 'rose' : sharedListing?.releaseConfirmedAt ? 'emerald' : 'amber'}>
+                          {saleHold.held ? 'Sale hold' : sharedListing?.releaseConfirmedAt ? 'Release confirmed' : 'Confirmation required'}
+                        </Pill>
                       </div>
                     </div>
                     <div className="inline-metrics">
@@ -260,24 +271,24 @@ export default function SharedAccess() {
                       >
                         Open record
                       </Link>
-                      <a
+                      <button
                         className="button button--ghost button--compact"
-                        href={publicShareUrl}
-                        target="_blank"
-                        rel="noreferrer"
+                        type="button"
                         onClick={async (event) => {
                           event.stopPropagation();
-                          await recordSharedChannel(horse.id, 'Direct Link');
+                          const result = await recordSharedChannel(horse.id, 'Direct Link');
+                          pushToast({ title: result.ok ? 'Buyer packet opened' : 'Release blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                          if (result.ok) window.open(publicShareUrl, '_blank', 'noopener,noreferrer');
                         }}
                       >
                         Open listing
-                      </a>
+                      </button>
                       <button
                         className="button button--ghost button--compact"
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          void copyShareLink(packet.sharePath, sharedListing);
+                          void copyShareLink(horse.id, packet.sharePath, sharedListing);
                         }}
                       >
                         Copy link
@@ -287,10 +298,8 @@ export default function SharedAccess() {
                         type="button"
                         onClick={async (event) => {
                           event.stopPropagation();
-                          const result = openFacebookShareDialog(packet.sharePath, getShareToken(sharedListing));
-                          if (result.ok) {
-                            await recordSharedChannel(horse.id, 'Facebook');
-                          }
+                          const releaseResult = await recordSharedChannel(horse.id, 'Facebook');
+                          const result = releaseResult.ok ? openFacebookShareDialog(packet.sharePath, getShareToken(sharedListing)) : releaseResult;
                           pushToast({
                             title: result.ok ? 'Facebook ready' : 'Facebook unavailable',
                             message: result.message,
@@ -300,6 +309,11 @@ export default function SharedAccess() {
                       >
                         {isFacebookSharingConfigured() ? 'Post to Facebook' : 'Facebook not configured'}
                       </button>
+                      <button className="button button--primary button--compact" type="button" disabled={saleHold.held || !sharedListing || Boolean(sharedListing.releaseConfirmedAt)} onClick={async (event) => {
+                        event.stopPropagation();
+                        const result = await confirmSharedListingRelease(horse.id, workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName);
+                        pushToast({ title: result.ok ? 'Release confirmed' : 'Confirmation blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                      }}>{sharedListing?.releaseConfirmedAt ? 'Release confirmed' : 'Confirm legal release'}</button>
                       {sharedListing ? (
                         <button
                           className="button button--ghost button--compact"

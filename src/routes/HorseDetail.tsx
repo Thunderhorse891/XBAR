@@ -81,6 +81,7 @@ export default function HorseDetail() {
   const recordSharedChannel = useXbarStore((state) => state.recordSharedChannel);
   const uploadHorseMedia = useXbarStore((state) => state.uploadHorseMedia);
   const createDocumentIntake = useXbarStore((state) => state.createDocumentIntake);
+  const decideDocumentFact = useXbarStore((state) => state.decideDocumentFact);
   const addHorseNote = useXbarStore((state) => state.addHorseNote);
   const updateHorseLocation = useXbarStore((state) => state.updateHorseLocation);
   const createSalesLead = useXbarStore((state) => state.createSalesLead);
@@ -95,6 +96,7 @@ export default function HorseDetail() {
   const canManageSharedAccess = useCurrentRoleCapability('manageSharedAccess');
   const canUploadMedia = useCurrentRoleCapability('uploadMedia');
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
+  const canReviewDocuments = useCurrentRoleCapability('reviewDocuments');
   const canEditHorse = useCurrentRoleCapability('editHorse');
   const canManageSales = useCurrentRoleCapability('manageSales');
 
@@ -403,7 +405,13 @@ export default function HorseDetail() {
                 href={publicShareUrl}
                 target="_blank"
                 rel="noreferrer"
-                onClick={() => void recordSharedChannel(horse.id, 'Direct Link')}
+                onClick={(event) => {
+                  event.preventDefault();
+                  void recordSharedChannel(horse.id, 'Direct Link').then((result) => {
+                    pushToast({ title: result.ok ? 'Buyer packet opened' : 'Release blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                    if (result.ok) window.open(publicShareUrl, '_blank', 'noopener,noreferrer');
+                  });
+                }}
               >
                 <SharedAccessIcon className="h-4 w-4" />
                 Open sale listing
@@ -759,11 +767,29 @@ export default function HorseDetail() {
               <EmptyState compact title="No documents linked" description="Upload docs to build the record." />
             )}
             {!!horse.documentFacts.length && (
-              <div className="token-row">
+              <div className="stack-list">
                 {horse.documentFacts.map((fact) => (
-                  <Pill key={fact.id} tone="blue">
-                    {fact.label}: {fact.value}
-                  </Pill>
+                  <div className="stack-item" key={fact.id}>
+                    <div className="stack-item__top">
+                      <div>
+                        <div className="stack-item__title">{fact.label}: {fact.value}</div>
+                        <div className="stack-item__copy">OCR confidence {formatPercent(fact.confidence * 100)}</div>
+                      </div>
+                      <Pill tone={fact.decision === 'Accepted' ? 'emerald' : fact.decision === 'Rejected' ? 'rose' : 'amber'}>
+                        {fact.decision ?? 'Needs decision'}
+                      </Pill>
+                    </div>
+                    <div className="inline-actions">
+                      <button className="button button--ghost button--compact" type="button" disabled={!canReviewDocuments} onClick={() => {
+                        const result = decideDocumentFact(horse.id, fact.id, 'Accepted');
+                        pushToast({ title: result.ok ? 'Fact accepted' : 'Decision blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                      }}>Accept into record</button>
+                      <button className="button button--ghost button--compact" type="button" disabled={!canReviewDocuments} onClick={() => {
+                        const result = decideDocumentFact(horse.id, fact.id, 'Rejected');
+                        pushToast({ title: result.ok ? 'Fact rejected' : 'Decision blocked', message: result.message, tone: result.ok ? 'warning' : 'error' });
+                      }}>Reject fact</button>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}

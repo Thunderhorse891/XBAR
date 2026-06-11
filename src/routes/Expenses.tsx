@@ -4,6 +4,8 @@ import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { buildBudgetSummary } from '@/lib/dashboardOps';
 import { formatCompactCurrency, formatCurrency, formatDateLabel } from '@/lib/format';
+import { buildProfitPortfolio } from '@/lib/profitIntelligence';
+import { profitIntelligenceGate } from '@/lib/subscriptionGates';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
 import type { ExpenseCategory } from '@/types/xbar';
@@ -17,7 +19,10 @@ export default function Expenses() {
   const pushToast = useUiStore((state) => state.pushToast);
   const horses = useXbarStore((state) => state.horses);
   const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
+  const salesLeads = useXbarStore((state) => state.salesLeads);
+  const subscription = useXbarStore((state) => state.subscription);
   const addExpenseReceipt = useXbarStore((state) => state.addExpenseReceipt);
+  const updateHorse = useXbarStore((state) => state.updateHorse);
   const roleWorkspace = useCurrentRoleWorkspace();
   const canManageBudget = useCurrentRoleCapability('manageAssets');
   const budgetSummary = buildBudgetSummary(expenseReceipts);
@@ -25,6 +30,13 @@ export default function Expenses() {
   const [categoryFilter, setCategoryFilter] = useState<ExpenseFilter>('All');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [savingReceipt, setSavingReceipt] = useState(false);
+  const profitPortfolio = useMemo(() => buildProfitPortfolio(horses, expenseReceipts, salesLeads), [expenseReceipts, horses, salesLeads]);
+  const [profitHorseId, setProfitHorseId] = useState(horses[0]?.id ?? '');
+  const profitHorse = horses.find((horse) => horse.id === profitHorseId) ?? horses[0];
+  const profitProfile = profitPortfolio.find((profile) => profile.horseId === profitHorse?.id);
+  const [costBasis, setCostBasis] = useState(String(profitHorse?.costBasis ?? 0));
+  const [askingPrice, setAskingPrice] = useState(String(profitHorse?.sale.askPrice ?? 0));
+  const profitGate = profitIntelligenceGate(subscription);
   const [draft, setDraft] = useState({
     horseId: '',
     title: '',
@@ -119,6 +131,63 @@ export default function Expenses() {
         <MetricCard label="Horse linked" value={String(horseLinkedCount)} detail="Receipts tied to horse profiles" tone="emerald" />
         <MetricCard label="Ranch-wide" value={String(ranchWideCount)} detail="Feed room, travel, and shared costs" tone="slate" />
         <MetricCard label="Largest" value={largestReceipt ? formatCompactCurrency(largestReceipt.amount) : '$0'} detail={largestReceipt?.title ?? 'No receipts yet'} tone="amber" />
+      </div>
+
+      <div className="ops-workspace ops-workspace--split">
+        <section className="ops-panel ops-panel--wide">
+          <div className="ops-section-heading">
+            <div>
+              <span className="section-eyebrow">Profit intelligence</span>
+              <h2>Know the break-even before setting the sale price</h2>
+            </div>
+            <Pill tone={profitGate ? 'amber' : 'emerald'}>{profitGate ? 'Ranch Ops' : 'Live margin'}</Pill>
+          </div>
+          {profitProfile ? (
+            <>
+              <div className="metric-grid">
+                <MetricCard label="Cost basis" value={formatCompactCurrency(profitProfile.costBasis)} detail="Acquisition or retained basis" />
+                <MetricCard label="Linked spend" value={formatCompactCurrency(profitProfile.spend)} detail="Feed, vet, farrier, training, and receipts" tone="blue" />
+                <MetricCard label="Break-even" value={formatCompactCurrency(profitProfile.breakEven)} detail="Cost basis plus linked spend" tone="amber" />
+                <MetricCard label="Safe sale price" value={formatCompactCurrency(profitProfile.safeSalePrice)} detail="Break-even plus a 15% operating buffer" tone={profitProfile.profitLoss >= 0 ? 'emerald' : 'rose'} />
+              </div>
+              <div className="stack-list">
+                {profitPortfolio.slice(0, 8).map((profile) => (
+                  <button className={`stack-item stack-item--interactive${profile.horseId === profitProfile.horseId ? ' stack-item--selected' : ''}`} type="button" key={profile.horseId} onClick={() => {
+                    const horse = horses.find((item) => item.id === profile.horseId);
+                    setProfitHorseId(profile.horseId);
+                    setCostBasis(String(horse?.costBasis ?? 0));
+                    setAskingPrice(String(horse?.sale.askPrice ?? 0));
+                  }}>
+                    <div className="stack-item__top">
+                      <div>
+                        <div className="stack-item__title">{profile.horseName}</div>
+                        <div className="stack-item__copy">Break-even {formatCurrency(profile.breakEven)} · sale value {formatCurrency(profile.salePrice)}</div>
+                      </div>
+                      <Pill tone={profile.profitLoss >= 0 ? 'emerald' : 'rose'}>{formatCurrency(profile.profitLoss)}</Pill>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : <EmptyState compact title="No horses to price yet" description="Create a horse record, then link receipts to calculate break-even and safe sale price." />}
+        </section>
+        <aside className="ops-panel ops-panel--form">
+          <div className="ops-section-heading ops-section-heading--compact">
+            <div><span className="section-eyebrow">Pricing action</span><h2>{profitHorse?.name ?? 'Select horse'}</h2></div>
+            <Pill tone={profitGate ? 'amber' : 'blue'}>{profitGate ? 'Upgrade to unlock' : 'Editable'}</Pill>
+          </div>
+          {profitGate ? <div className="stack-item"><div className="stack-item__title">Turn receipts into pricing decisions</div><div className="stack-item__copy">{profitGate}</div><button className="button button--primary button--compact" type="button" onClick={() => navigate('/subscriptions')}>Upgrade to unlock</button></div> : (
+            <div className="ops-form">
+              <label className="field-stack"><span className="field-label">Cost basis</span><input className="field-input" type="number" min="0" value={costBasis} onChange={(event) => setCostBasis(event.target.value)} /></label>
+              <label className="field-stack"><span className="field-label">Asking price</span><input className="field-input" type="number" min="0" value={askingPrice} onChange={(event) => setAskingPrice(event.target.value)} /></label>
+              <button className="button button--primary ops-full-button" type="button" disabled={!profitHorse || !canManageBudget} onClick={() => {
+                if (!profitHorse) return;
+                const result = updateHorse(profitHorse.id, { costBasis: Number(costBasis), askPrice: Number(askingPrice) });
+                pushToast({ title: result.ok ? 'Sale economics updated' : 'Pricing update blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+              }}>Save pricing decision</button>
+            </div>
+          )}
+        </aside>
       </div>
 
       <div className="ops-workspace ops-workspace--split">

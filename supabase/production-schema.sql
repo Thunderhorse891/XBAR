@@ -1165,7 +1165,8 @@ begin
   into listing_row
   from public.shared_listings sl
   where sl.share_path = p_share_path
-    and sl.state <> 'Archived'
+    and sl.state = 'Live'
+    and coalesce(sl.payload ->> 'releaseConfirmedAt', '') <> ''
   order by sl.updated_at desc
   limit 1;
 
@@ -1287,7 +1288,8 @@ begin
   into listing_row
   from public.shared_listings sl
   where sl.share_path = p_share_path
-    and sl.state <> 'Archived'
+    and sl.state = 'Live'
+    and coalesce(sl.payload ->> 'releaseConfirmedAt', '') <> ''
   order by sl.updated_at desc
   limit 1;
 
@@ -1320,6 +1322,60 @@ end;
 $$;
 
 grant execute on function public.xbar_track_public_share_view(text, text) to anon, authenticated;
+
+create or replace function public.xbar_track_public_share_action(
+  p_share_path text,
+  p_share_token text default null,
+  p_event_type text default 'question',
+  p_metadata jsonb default '{}'::jsonb
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare listing_row record; offer_lead_id text;
+begin
+  if p_event_type not in ('download', 'question', 'proof_request', 'offer') then raise exception 'Unsupported buyer-room event.'; end if;
+  select sl.workspace_id, sl.listing_id, sl.horse_id, coalesce(nullif(sl.access_mode, ''), 'Private Token') as access_mode, coalesce(sl.share_token, '') as share_token
+  into listing_row from public.shared_listings sl where sl.share_path = p_share_path and sl.state = 'Live' and coalesce(sl.payload ->> 'releaseConfirmedAt', '') <> '' order by sl.updated_at desc limit 1;
+  if not found then return; end if;
+  if listing_row.access_mode <> 'Public Link' and coalesce(p_share_token, '') <> listing_row.share_token then return; end if;
+  insert into public.public_share_events (workspace_id, listing_id, horse_id, share_path, event_type, access_mode, metadata)
+  values (listing_row.workspace_id, listing_row.listing_id, listing_row.horse_id, p_share_path, p_event_type, listing_row.access_mode, coalesce(p_metadata, '{}'::jsonb) || jsonb_build_object('trackedAt', timezone('utc', now())));
+  if p_event_type = 'offer' then
+    offer_lead_id := 'buyer-offer-' || replace(gen_random_uuid()::text, '-', '');
+    insert into public.sales_leads (workspace_id, lead_id, horse_id, lead_name, channel, stage, last_touch, next_follow_up, payload)
+    values (
+      listing_row.workspace_id,
+      offer_lead_id,
+      listing_row.horse_id,
+      left(coalesce(nullif(p_metadata ->> 'buyerName', ''), 'Buyer offer'), 200),
+      'Site Inquiry',
+      'Offer',
+      current_date::text,
+      (current_date + 1)::text,
+      jsonb_build_object(
+        'id', offer_lead_id,
+        'name', left(coalesce(nullif(p_metadata ->> 'buyerName', ''), 'Buyer offer'), 200),
+        'channel', 'Site Inquiry',
+        'horseId', listing_row.horse_id,
+        'stage', 'Offer',
+        'lastTouch', current_date::text,
+        'nextFollowUp', (current_date + 1)::text,
+        'notes', left(coalesce(p_metadata ->> 'message', ''), 2000),
+        'offerAmount', case when coalesce(p_metadata ->> 'offerAmount', '') ~ '^[0-9]+([.][0-9]+)?$' then greatest(0, (p_metadata ->> 'offerAmount')::numeric) else 0 end,
+        'offerStatus', 'Submitted',
+        'depositStatus', 'Not Requested',
+        'savedListing', true,
+        'shareReady', true
+      )
+    );
+  end if;
+end;
+$$;
+
+grant execute on function public.xbar_track_public_share_action(text, text, text, jsonb) to anon, authenticated;
 
 create policy if not exists "shared listings write owner admin"
 on public.shared_listings

@@ -7,6 +7,7 @@ const fromRoot = (filePath: string) => path.resolve(process.cwd(), filePath);
 const checkoutSource = await readFile(fromRoot('api/stripe/checkout.js'), 'utf8');
 const plansSource = await readFile(fromRoot('api/_lib/subscription-plans.js'), 'utf8');
 const migrationSource = await readFile(fromRoot('supabase/migrations/20260605_harden_workspace_rls.sql'), 'utf8');
+const commercialMigrationSource = await readFile(fromRoot('supabase/migrations/20260611_commercial_entitlements.sql'), 'utf8');
 const prepareSchemaSource = await readFile(fromRoot('scripts/prepare-supabase-schema.mjs'), 'utf8');
 
 test('managed checkout is admin-only and validates return origins', () => {
@@ -38,4 +39,13 @@ test('schema preparation removes unsupported policy syntax', () => {
   assert.match(prepareSchemaSource, /create policy if not exists/);
   assert.match(prepareSchemaSource, /drop policy if exists/);
   assert.match(prepareSchemaSource, /production-schema\.generated\.sql/);
+});
+
+test('commercial entitlements are enforced at the database boundary', () => {
+  assert.match(commercialMigrationSource, /trg_horses_enforce_commercial_limits/);
+  assert.match(commercialMigrationSource, /trg_documents_enforce_commercial_limits/);
+  assert.match(commercialMigrationSource, /trg_shared_listings_enforce_commercial_limits/);
+  assert.match(commercialMigrationSource, /Authorized seller release confirmation is required/);
+  assert.match(commercialMigrationSource, /xbar_track_public_share_action/);
+  assert.match(commercialMigrationSource, /releaseConfirmedAt/);
 });

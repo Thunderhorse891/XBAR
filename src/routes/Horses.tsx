@@ -175,8 +175,9 @@ export default function Horses() {
                 id: 'open-share-view',
                 label: 'Open buyer packet',
                 onSelect: async () => {
-                  await recordSharedChannel(menuHorse.id, 'Direct Link');
-                  if (typeof window !== 'undefined') window.open(menuShareUrl, '_blank', 'noopener,noreferrer');
+                  const result = await recordSharedChannel(menuHorse.id, 'Direct Link');
+                  pushToast({ title: result.ok ? 'Buyer packet opened' : 'Release blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                  if (result.ok && typeof window !== 'undefined') window.open(menuShareUrl, '_blank', 'noopener,noreferrer');
                 },
               },
             ]

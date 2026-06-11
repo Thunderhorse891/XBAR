@@ -1,6 +1,6 @@
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
-import type { DocumentRecord, HorseRecord, OwnershipRecord, SharedListingRecord } from '@/types/xbar';
+import type { BuyerRoomActivity, DocumentRecord, HorseRecord, OwnershipRecord, SharedListingRecord } from '@/types/xbar';
 
 // insuredValue, summary, segment, status, ownership, medicalNotes, and full alerts are
 // intentionally omitted — they are internal fields that must not reach the public buyer view.
@@ -287,4 +287,45 @@ export async function trackPublicBuyerProfileView(params: {
   } catch {
     // Ignore analytics failures on public buyer views.
   }
+}
+
+export async function trackPublicBuyerAction(params: {
+  sharePath: string;
+  shareToken?: string;
+  eventType: 'download' | 'question' | 'proof_request' | 'offer';
+  metadata?: Record<string, unknown>;
+}) {
+  if (!isSupabaseConfigured()) {
+    return { ok: false, message: 'Buyer Deal Room actions require the cloud workspace.' };
+  }
+  const client = getSupabaseClient();
+  if (!client) return { ok: false, message: 'Buyer Deal Room is unavailable in this build.' };
+  const { error } = await client.rpc('xbar_track_public_share_action', {
+    p_share_path: params.sharePath,
+    p_share_token: params.shareToken?.trim() || null,
+    p_event_type: params.eventType,
+    p_metadata: params.metadata ?? {},
+  });
+  return error ? { ok: false, message: error.message } : { ok: true, message: 'Buyer activity sent to the ranch.' };
+}
+
+export async function loadBuyerRoomActivity(workspaceId?: string) {
+  if (!isSupabaseConfigured() || !workspaceId) return [] as BuyerRoomActivity[];
+  const client = getSupabaseClient();
+  if (!client) return [] as BuyerRoomActivity[];
+  const { data, error } = await client
+    .from('public_share_events')
+    .select('id, listing_id, horse_id, event_type, metadata, viewed_at')
+    .eq('workspace_id', workspaceId)
+    .order('viewed_at', { ascending: false })
+    .limit(100);
+  if (error) return [] as BuyerRoomActivity[];
+  return (data ?? []).map((event) => ({
+    id: String(event.id),
+    listingId: String(event.listing_id ?? ''),
+    horseId: String(event.horse_id ?? ''),
+    eventType: event.event_type as BuyerRoomActivity['eventType'],
+    metadata: event.metadata && typeof event.metadata === 'object' ? event.metadata as Record<string, unknown> : {},
+    viewedAt: String(event.viewed_at ?? ''),
+  }));
 }

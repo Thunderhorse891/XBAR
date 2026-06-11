@@ -2,6 +2,7 @@ import type { ComponentType, KeyboardEvent, SVGProps } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { XbarMark } from '@/components/BrandMark';
+import { CommercialPressureBanner } from '@/components/CommercialPressureBanner';
 import { WorkspaceHelp, type HelpSection } from '@/components/WorkspaceHelp';
 import {
   AddIcon,
@@ -351,6 +352,7 @@ export default function MainLayout() {
         </header>
 
         <main className="xbar-command-main flex flex-col gap-[20px] px-6 py-5 pb-28 lg:pb-5">
+          <CommercialPressureBanner />
           <Outlet />
         </main>
 
