@@ -44,7 +44,7 @@ test('buyer room finds the highest offer from event history', () => {
 });
 
 test('buyer deal room summary prioritizes unanswered questions before offers', () => {
-  const [summary] = buildBuyerDealRoomSummaries({ horses: [horse], leads: [lead], events });
+  const summary = buildBuyerDealRoomSummaries({ horses: [horse], leads: [lead], events })[0]!;
   assert.equal(summary.horseId, 'horse-1');
   assert.equal(summary.openQuestions, 1);
   assert.equal(summary.highestOffer, 22500);
