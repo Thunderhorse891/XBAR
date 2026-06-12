@@ -26,9 +26,9 @@ function BuyerActionPanel({
   sharePath: string;
   shareToken: string;
   source: 'rpc' | 'local';
-  onLocalLog: (input: { kind: 'question' | 'call-requested' | 'offer'; actor: string; note?: string; amount?: number }) => void;
+  onLocalLog: (input: { kind: 'question' | 'call-requested' | 'proof-requested' | 'offer'; actor: string; note?: string; amount?: number }) => void;
 }) {
-  const [mode, setMode] = useState<null | 'question' | 'call-requested' | 'offer'>(null);
+  const [mode, setMode] = useState<null | 'question' | 'call-requested' | 'proof-requested' | 'offer'>(null);
   const [buyerName, setBuyerName] = useState('');
   const [buyerEmail, setBuyerEmail] = useState('');
   const [message, setMessage] = useState('');
@@ -45,6 +45,10 @@ function BuyerActionPanel({
     const offerAmount = Number(amount);
     if (mode === 'offer' && (!Number.isFinite(offerAmount) || offerAmount <= 0)) {
       setStatusText('Enter your offer amount.');
+      return;
+    }
+    if ((mode === 'question' || mode === 'proof-requested') && !message.trim()) {
+      setStatusText(mode === 'proof-requested' ? 'Describe the proof or document you want to review.' : 'Enter your question for the seller.');
       return;
     }
     setSubmitting(true);
@@ -101,6 +105,9 @@ function BuyerActionPanel({
         <button className={`button button--compact ${mode === 'call-requested' ? 'button--primary' : 'button--ghost'}`} type="button" onClick={() => setMode('call-requested')}>
           Request a call
         </button>
+        <button className={`button button--compact ${mode === 'proof-requested' ? 'button--primary' : 'button--ghost'}`} type="button" onClick={() => setMode('proof-requested')}>
+          Request proof
+        </button>
         <button className={`button button--compact ${mode === 'offer' ? 'button--primary' : 'button--ghost'}`} type="button" onClick={() => setMode('offer')}>
           Submit an offer
         </button>
@@ -122,8 +129,13 @@ function BuyerActionPanel({
             </label>
           )}
           <label className="field-stack field-stack--wide">
-            <span className="field-label">{mode === 'question' ? 'Your question' : mode === 'offer' ? 'Terms or notes (optional)' : 'Best time to call'}</span>
-            <input className="field-input" value={message} onChange={(event) => setMessage(event.target.value)} placeholder={mode === 'question' ? 'Is she up to date on vaccinations?' : 'Weekday afternoons'} />
+            <span className="field-label">{mode === 'question' ? 'Your question' : mode === 'proof-requested' ? 'Proof or document requested' : mode === 'offer' ? 'Terms or notes (optional)' : 'Best time to call'}</span>
+            <input
+              className="field-input"
+              value={message}
+              onChange={(event) => setMessage(event.target.value)}
+              placeholder={mode === 'question' ? 'Is she up to date on vaccinations?' : mode === 'proof-requested' ? 'Current Coggins and registration certificate' : 'Weekday afternoons'}
+            />
           </label>
           <div className="inline-actions" style={{ gridColumn: '1/-1' }}>
             <button className="button button--primary button--compact" type="button" disabled={submitting} onClick={() => void submit()}>
@@ -143,12 +155,16 @@ export default function BuyerProfile() {
   const [searchParams] = useSearchParams();
   const localHorse = useHorseRecord(id);
   const pushToast = useUiStore((state) => state.pushToast);
-  const localDocuments = useXbarStore((state) => state.documents.filter((document) => document.horseId === id));
+  const documentsInWorkspace = useXbarStore((state) => state.documents);
   const localSharedListing = useXbarStore((state) => state.sharedListings.find((listing) => listing.horseId === id && listing.state !== 'Archived'));
   const logBuyerRoomEvent = useXbarStore((state) => state.logBuyerRoomEvent);
   const shareToken = searchParams.get('t')?.trim() ?? '';
   const localPreviewAllowed = isPublicShareLocalPreviewEnabled() && searchParams.get('preview') === 'local';
   const localAccessAllowed = hasBuyerShareAccess(localSharedListing, shareToken);
+  const localDocuments = useMemo(
+    () => documentsInWorkspace.filter((document) => document.horseId === id),
+    [documentsInWorkspace, id],
+  );
 
   // Sanitized local preview payload — only buyer-safe fields, never raw internal records.
   const localPayload = useMemo(

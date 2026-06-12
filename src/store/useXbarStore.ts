@@ -189,7 +189,9 @@ type XbarStore = {
     note?: string;
     amount?: number;
     dealStatus?: BuyerRoomEvent['dealStatus'];
+    replyToEventId?: string;
   }) => ActionResult & { event?: BuyerRoomEvent };
+  mergeBuyerRoomEvents: (events: BuyerRoomEvent[]) => ActionResult;
   addOwnershipStake: (horseId: string, stake: Omit<OwnershipStake, 'id'>) => ActionResult;
   removeOwnershipStake: (horseId: string, stakeId: string) => ActionResult;
   ensureOwnershipRecord: (horseId: string) => ActionResult & { recordId?: string };
@@ -2652,8 +2654,10 @@ export const useXbarStore = create<XbarStore>()(
         const kindLabels: Record<BuyerRoomEvent['kind'], string> = {
           'packet-shared': 'Packet shared with buyer',
           'packet-viewed': 'Buyer viewed packet',
+          'packet-downloaded': 'Buyer downloaded packet',
           question: 'Buyer asked a question',
           'call-requested': 'Buyer requested a call',
+          'proof-requested': 'Buyer requested proof',
           offer: 'Buyer submitted an offer',
           'seller-response': 'Seller responded',
           'deal-status': 'Deal status updated',
@@ -2668,6 +2672,7 @@ export const useXbarStore = create<XbarStore>()(
           note: input.note,
           amount: input.amount,
           dealStatus: input.dealStatus,
+          replyToEventId: input.replyToEventId,
         };
         const auditEvent = createAuditEvent({
           actor: input.actor,
@@ -2682,6 +2687,18 @@ export const useXbarStore = create<XbarStore>()(
           auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
         }));
         return { ok: true, message: `${kindLabels[input.kind]} logged for ${horse.name}.`, id: event.id, event };
+      },
+      mergeBuyerRoomEvents: (events) => {
+        const current = get().buyerRoomEvents;
+        const merged = [...events, ...current]
+          .filter((event, index, list) => list.findIndex((candidate) => candidate.id === event.id) === index)
+          .sort((left, right) => Date.parse(right.at) - Date.parse(left.at))
+          .slice(0, 1000);
+        set({ buyerRoomEvents: merged });
+        return {
+          ok: true,
+          message: events.length ? `${events.length} public buyer event${events.length === 1 ? '' : 's'} refreshed.` : 'Buyer activity is current.',
+        };
       },
       addOwnershipStake: (horseId, stake) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageOwnership');

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BuyerDealRoomPanel } from '@/components/BuyerDealRoomPanel';
+import { BuyerResponseQueue } from '@/components/BuyerResponseQueue';
 import { CommandBrief } from '@/components/CommandBrief';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
@@ -213,6 +214,7 @@ export default function Sales() {
       />
 
       <BuyerDealRoomPanel />
+      <BuyerResponseQueue />
 
       <div className="metric-grid">
         <MetricCard label="Sale horses" value={`${saleHorses.length}`} detail="Active pricing or pending review" />

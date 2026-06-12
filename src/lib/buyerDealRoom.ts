@@ -1,4 +1,4 @@
-import type { BuyerRoomEvent, DealStatus, HorseRecord, SalesLead } from '@/types/xbar';
+import type { BuyerRoomEvent, DealStatus, HorseRecord, SalesLead } from '../types/xbar.js';
 
 export type BuyerDealRoomAction = {
   label: string;
@@ -19,11 +19,23 @@ export type BuyerDealRoomHorseSummary = {
   action: BuyerDealRoomAction;
 };
 
+export type PublicShareEventRow = {
+  id?: string;
+  listing_id?: string;
+  horse_id?: string;
+  event_type?: string;
+  metadata?: unknown;
+  viewed_at?: string;
+  created_at?: string;
+};
+
 const eventWeight: Record<BuyerRoomEvent['kind'], number> = {
   'packet-shared': 1,
   'packet-viewed': 2,
+  'packet-downloaded': 3,
   question: 4,
   'call-requested': 5,
+  'proof-requested': 6,
   offer: 8,
   'seller-response': 1,
   'deal-status': 3,
@@ -38,12 +50,25 @@ export function sortBuyerRoomEvents(events: BuyerRoomEvent[]) {
 }
 
 export function hasSellerResponse(events: BuyerRoomEvent[], target: BuyerRoomEvent) {
-  if (target.kind !== 'question' && target.kind !== 'call-requested') return true;
-  return events.some((event) => event.horseId === target.horseId && event.kind === 'seller-response' && timeValue(event.at) >= timeValue(target.at));
+  if (target.kind !== 'question' && target.kind !== 'call-requested' && target.kind !== 'proof-requested') return true;
+  return events.some(
+    (event) =>
+      event.horseId === target.horseId &&
+      event.kind === 'seller-response' &&
+      (event.replyToEventId ? event.replyToEventId === target.id : timeValue(event.at) >= timeValue(target.at)),
+  );
+}
+
+export function openBuyerRequests(events: BuyerRoomEvent[]) {
+  return sortBuyerRoomEvents(events).filter(
+    (event) =>
+      (event.kind === 'question' || event.kind === 'call-requested' || event.kind === 'proof-requested') &&
+      !hasSellerResponse(events, event),
+  );
 }
 
 export function openBuyerQuestions(events: BuyerRoomEvent[]) {
-  return sortBuyerRoomEvents(events).filter((event) => (event.kind === 'question' || event.kind === 'call-requested') && !hasSellerResponse(events, event));
+  return openBuyerRequests(events);
 }
 
 export function highestBuyerOffer(events: BuyerRoomEvent[]) {
@@ -63,7 +88,7 @@ export function latestDealStatus(events: BuyerRoomEvent[]): DealStatus | 'quiet'
 function buildDealRoomAction(params: { openQuestions: number; highestOffer: number; latestStatus: DealStatus | 'quiet'; lead?: SalesLead }): BuyerDealRoomAction {
   if (params.latestStatus === 'closed-won') return { label: 'Closed won', tone: 'emerald', reason: 'Buyer room has a won deal status.' };
   if (params.latestStatus === 'closed-lost') return { label: 'Closed lost', tone: 'slate', reason: 'Buyer room has a lost deal status.' };
-  if (params.openQuestions > 0) return { label: 'Answer buyer', tone: 'amber', reason: `${params.openQuestions} buyer question or call request needs a seller response.` };
+  if (params.openQuestions > 0) return { label: 'Answer buyer', tone: 'amber', reason: `${params.openQuestions} buyer request needs a seller response.` };
   if (params.highestOffer > 0) return { label: 'Work offer', tone: 'blue', reason: `Highest open offer is $${params.highestOffer.toLocaleString()}.` };
   if (params.lead?.nextFollowUp) return { label: 'Follow up', tone: 'blue', reason: 'Lead has a scheduled next follow-up.' };
   return { label: 'Create movement', tone: 'slate', reason: 'No active buyer-room pressure yet.' };
@@ -75,7 +100,7 @@ export function buildBuyerDealRoomSummaries(params: { horses: HorseRecord[]; lea
     .map((horse): BuyerDealRoomHorseSummary => {
       const horseEvents = params.events.filter((event) => event.horseId === horse.id);
       const horseLeads = params.leads.filter((lead) => lead.horseId === horse.id && lead.stage !== 'Closed');
-      const openQuestions = openBuyerQuestions(horseEvents).length;
+      const openQuestions = openBuyerRequests(horseEvents).length;
       const highestOffer = Math.max(highestBuyerOffer(horseEvents), ...horseLeads.map((lead) => lead.offerAmount ?? 0));
       const latestStatus = latestDealStatus(horseEvents);
       return {
@@ -99,4 +124,50 @@ export function buildBuyerDealRoomSummaries(params: { horses: HorseRecord[]; lea
         (item.status === 'open' ? 5 : 0);
       return priority(b) - priority(a) || timeValue(b.latestActivityAt) - timeValue(a.latestActivityAt);
     });
+}
+
+function asRecord(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+export function publicShareEventToBuyerRoomEvent(row: PublicShareEventRow): BuyerRoomEvent | null {
+  const eventKind: Record<string, BuyerRoomEvent['kind']> = {
+    view: 'packet-viewed',
+    'buyer-question': 'question',
+    'buyer-call-requested': 'call-requested',
+    'buyer-proof-requested': 'proof-requested',
+    'buyer-offer': 'offer',
+    'buyer-packet-downloaded': 'packet-downloaded',
+    'seller-response': 'seller-response',
+  };
+  const kind = eventKind[row.event_type ?? ''];
+  if (!kind || !row.id || !row.horse_id) return null;
+
+  const metadata = asRecord(row.metadata);
+  const buyerName = typeof metadata.buyerName === 'string' ? metadata.buyerName.trim() : '';
+  const buyerEmail = typeof metadata.buyerEmail === 'string' ? metadata.buyerEmail.trim() : '';
+  const message = typeof metadata.message === 'string' ? metadata.message.trim() : '';
+  const responseNote = typeof metadata.note === 'string' ? metadata.note.trim() : '';
+  const responseActor = typeof metadata.actor === 'string' ? metadata.actor.trim() : '';
+  const replyToEventId = typeof metadata.replyToEventId === 'string' ? metadata.replyToEventId.trim() : '';
+  const amount = Number(metadata.amount);
+  const note = [
+    message,
+    responseNote,
+    buyerEmail ? `Contact: ${buyerEmail}` : '',
+    kind === 'packet-viewed' ? 'Opened the shared buyer profile.' : '',
+    kind === 'packet-downloaded' ? 'Downloaded the buyer packet.' : '',
+  ].filter(Boolean).join(' — ');
+
+  return {
+    id: `public-share-${row.id}`,
+    horseId: row.horse_id,
+    packetId: row.listing_id || undefined,
+    kind,
+    at: row.viewed_at || row.created_at || new Date().toISOString(),
+    actor: responseActor || buyerName || buyerEmail || 'Buyer visitor',
+    note: note || undefined,
+    amount: Number.isFinite(amount) && amount > 0 ? amount : undefined,
+    replyToEventId: replyToEventId || undefined,
+  };
 }
