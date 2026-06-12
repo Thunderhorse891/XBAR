@@ -1,4 +1,4 @@
-import type { SalesLead } from '../types/xbar.js';
+import type { BuyerRoomEvent, SalesLead } from '../types/xbar.js';
 
 export type FollowUpTiming = 'Overdue' | 'Today' | 'Upcoming' | 'Unscheduled';
 
@@ -24,6 +24,14 @@ export function scheduleNextFollowUp(lead: SalesLead, days: number, now = new Da
 export function completeFollowUp(lead: SalesLead, now = new Date()) {
   const cadence = lead.stage === 'Offer' ? 2 : lead.stage === 'Qualified' ? 4 : 7;
   return scheduleNextFollowUp(lead, cadence, now);
+}
+
+export function schedulePacketDownloadFollowUp(lead: SalesLead, event: BuyerRoomEvent, now = new Date()) {
+  if (event.kind !== 'packet-downloaded') return null;
+  const eventDetail = event.note?.trim();
+  const followUpNote = `Packet download follow-up for ${event.actor}${eventDetail ? `: ${eventDetail}` : '.'}`;
+  const notes = [lead.notes?.trim(), lead.notes?.includes(followUpNote) ? '' : followUpNote].filter(Boolean).join('\n\n');
+  return { nextFollowUp: dateStamp(now), notes, shareReady: true };
 }
 
 export function sortFollowUps(leads: SalesLead[], now = new Date()) {

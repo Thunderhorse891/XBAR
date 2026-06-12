@@ -30,6 +30,7 @@ import { getCapabilityDeniedMessage, hasRoleCapability } from '@/lib/permissions
 import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { featureGate } from '@/lib/commercialEngine';
 import { buildOfferDecision } from '@/lib/profitIntelligence';
+import { schedulePacketDownloadFollowUp } from '@/lib/salesFollowUp';
 import {
   createWorkspaceInvitationInCloud,
   removeWorkspaceMemberFromCloud,
@@ -193,6 +194,7 @@ type XbarStore = {
   }) => ActionResult & { event?: BuyerRoomEvent };
   mergeBuyerRoomEvents: (events: BuyerRoomEvent[]) => ActionResult;
   captureBuyerRoomOffer: (eventId: string) => ActionResult;
+  captureBuyerRoomFollowUp: (eventId: string) => ActionResult;
   addOwnershipStake: (horseId: string, stake: Omit<OwnershipStake, 'id'>) => ActionResult;
   removeOwnershipStake: (horseId: string, stakeId: string) => ActionResult;
   ensureOwnershipRecord: (horseId: string) => ActionResult & { recordId?: string };
@@ -2754,6 +2756,56 @@ export const useXbarStore = create<XbarStore>()(
           ok: true,
           id: lead.id,
           message: `${event.actor}'s ${event.amount.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })} offer is now in the Sales margin workflow.`,
+        };
+      },
+      captureBuyerRoomFollowUp: (eventId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageSales');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+        const planBlocked = featureGate(get().subscription, 'buyerDealRoom');
+        if (planBlocked) {
+          return { ok: false, message: planBlocked };
+        }
+
+        const event = get().buyerRoomEvents.find((item) => item.id === eventId);
+        if (!event || event.kind !== 'packet-downloaded') {
+          return { ok: false, message: 'Buyer packet download event not found.' };
+        }
+
+        const normalizedActor = event.actor.trim().toLowerCase();
+        let lead = get().salesLeads.find(
+          (item) => item.stage !== 'Closed' && item.horseId === event.horseId && item.name.trim().toLowerCase() === normalizedActor,
+        );
+        if (!lead) {
+          const created = get().createSalesLead({
+            horseId: event.horseId,
+            name: event.actor,
+            channel: 'Site Inquiry',
+            shareReady: true,
+          });
+          if (!created.ok || !created.id) {
+            return created;
+          }
+          lead = get().salesLeads.find((item) => item.id === created.id);
+        }
+        if (!lead) {
+          return { ok: false, message: 'Buyer lead could not be prepared for follow-up.' };
+        }
+
+        const patch = schedulePacketDownloadFollowUp(lead, event);
+        if (!patch) {
+          return { ok: false, message: 'Buyer packet download event not found.' };
+        }
+        const updated = get().updateSalesLead(lead.id, patch);
+        if (!updated.ok) {
+          return updated;
+        }
+
+        return {
+          ok: true,
+          id: lead.id,
+          message: `Follow-up for ${event.actor} is due today in Sales.`,
         };
       },
       addOwnershipStake: (horseId, stake) => {
