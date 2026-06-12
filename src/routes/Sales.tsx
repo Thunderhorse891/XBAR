@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BuyerDealRoomPanel } from '@/components/BuyerDealRoomPanel';
 import { BuyerResponseQueue } from '@/components/BuyerResponseQueue';
@@ -69,6 +69,24 @@ export default function Sales() {
   const [leadError, setLeadError] = useState('');
   const [menuState, setMenuState] = useState<{ type: 'lead' | 'horse'; id: string; x: number; y: number } | null>(null);
   const [listingQuery, setListingQuery] = useState('');
+
+  useEffect(() => {
+    if (!selectedLead) return;
+    setSelectedLeadId(selectedLead.id);
+    setLeadStage(selectedLead.stage);
+    setLeadLastTouch(selectedLead.lastTouch);
+    setLeadNextFollowUp(selectedLead.nextFollowUp ?? '');
+    setLeadOfferAmount(selectedLead.offerAmount ? String(selectedLead.offerAmount) : '');
+    setLeadCounterOfferAmount(selectedLead.counterOfferAmount ? String(selectedLead.counterOfferAmount) : '');
+    setLeadOfferStatus(selectedLead.offerStatus ?? 'Draft');
+    setLeadDepositAmount(selectedLead.depositAmount ? String(selectedLead.depositAmount) : '');
+    setLeadDepositStatus(selectedLead.depositStatus ?? 'Not Requested');
+    setLeadNotes(selectedLead.notes ?? '');
+    setLeadOutcome(selectedLead.outcome ?? 'Won');
+    setAcceptMarginOverride(false);
+    setLeadError('');
+  }, [selectedLead]);
+
   const authorizedSeller = workspaceProfile.defaultOwnerName || workspaceProfile.ranchManagerName || workspaceProfile.businessName;
   const selectedHorse = selectedLead ? horses.find((horse) => horse.id === selectedLead.horseId) : undefined;
   const offerDecision = selectedHorse

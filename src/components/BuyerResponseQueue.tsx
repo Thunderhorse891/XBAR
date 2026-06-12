@@ -33,9 +33,11 @@ function eventTone(kind: BuyerRoomEvent['kind']) {
 export function BuyerResponseQueue() {
   const events = useXbarStore((state) => state.buyerRoomEvents);
   const horses = useXbarStore((state) => state.horses);
+  const salesLeads = useXbarStore((state) => state.salesLeads);
   const currentRole = useXbarStore((state) => state.currentRole);
   const logBuyerRoomEvent = useXbarStore((state) => state.logBuyerRoomEvent);
   const mergeBuyerRoomEvents = useXbarStore((state) => state.mergeBuyerRoomEvents);
+  const captureBuyerRoomOffer = useXbarStore((state) => state.captureBuyerRoomOffer);
   const canManageSales = useCurrentRoleCapability('manageSales');
   const [syncing, setSyncing] = useState(false);
   const [respondingEventId, setRespondingEventId] = useState('');
@@ -66,6 +68,15 @@ export function BuyerResponseQueue() {
           const needsResponse =
             (event.kind === 'question' || event.kind === 'call-requested' || event.kind === 'proof-requested') &&
             !hasSellerResponse(events, event);
+          const offerCaptured =
+            event.kind === 'offer' &&
+            salesLeads.some(
+              (lead) =>
+                lead.horseId === event.horseId &&
+                lead.name.trim().toLowerCase() === event.actor.trim().toLowerCase() &&
+                lead.stage === 'Offer' &&
+                lead.offerAmount === event.amount,
+            );
           return (
             <div className="stack-item" key={event.id}>
               <div className="stack-item__top">
@@ -80,6 +91,20 @@ export function BuyerResponseQueue() {
               </div>
               <div className="inline-actions" style={{ marginTop: 10 }}>
                 {event.amount ? <Pill tone="blue">{formatCompactCurrency(event.amount)}</Pill> : null}
+                {event.kind === 'offer' && offerCaptured ? <Pill tone="emerald">In offer workflow</Pill> : null}
+                {event.kind === 'offer' && !offerCaptured ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!canManageSales}
+                    onClick={() => {
+                      const result = captureBuyerRoomOffer(event.id);
+                      setSyncMessage(result.message);
+                    }}
+                  >
+                    Send to offer workflow
+                  </Button>
+                ) : null}
                 {needsResponse ? (
                   <Button
                     variant="outline"
