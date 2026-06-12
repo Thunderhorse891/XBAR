@@ -26,10 +26,11 @@ export function completeFollowUp(lead: SalesLead, now = new Date()) {
   return scheduleNextFollowUp(lead, cadence, now);
 }
 
-export function schedulePacketDownloadFollowUp(lead: SalesLead, event: BuyerRoomEvent, now = new Date()) {
-  if (event.kind !== 'packet-downloaded') return null;
+export function scheduleBuyerActivityFollowUp(lead: SalesLead, event: BuyerRoomEvent, now = new Date()) {
+  if (event.kind !== 'packet-downloaded' && event.kind !== 'call-requested') return null;
   const eventDetail = event.note?.trim();
-  const followUpNote = `Packet download follow-up for ${event.actor}${eventDetail ? `: ${eventDetail}` : '.'}`;
+  const activityLabel = event.kind === 'call-requested' ? 'Buyer call request' : 'Packet download follow-up';
+  const followUpNote = `${activityLabel} for ${event.actor}${eventDetail ? `: ${eventDetail}` : '.'}`;
   const notes = [lead.notes?.trim(), lead.notes?.includes(followUpNote) ? '' : followUpNote].filter(Boolean).join('\n\n');
   return { nextFollowUp: dateStamp(now), notes, shareReady: true };
 }

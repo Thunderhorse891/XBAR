@@ -30,7 +30,7 @@ import { getCapabilityDeniedMessage, hasRoleCapability } from '@/lib/permissions
 import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { featureGate } from '@/lib/commercialEngine';
 import { buildOfferDecision } from '@/lib/profitIntelligence';
-import { schedulePacketDownloadFollowUp } from '@/lib/salesFollowUp';
+import { scheduleBuyerActivityFollowUp } from '@/lib/salesFollowUp';
 import {
   createWorkspaceInvitationInCloud,
   removeWorkspaceMemberFromCloud,
@@ -2769,8 +2769,8 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const event = get().buyerRoomEvents.find((item) => item.id === eventId);
-        if (!event || event.kind !== 'packet-downloaded') {
-          return { ok: false, message: 'Buyer packet download event not found.' };
+        if (!event || (event.kind !== 'packet-downloaded' && event.kind !== 'call-requested')) {
+          return { ok: false, message: 'Buyer follow-up event not found.' };
         }
 
         const normalizedActor = event.actor.trim().toLowerCase();
@@ -2793,9 +2793,9 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Buyer lead could not be prepared for follow-up.' };
         }
 
-        const patch = schedulePacketDownloadFollowUp(lead, event);
+        const patch = scheduleBuyerActivityFollowUp(lead, event);
         if (!patch) {
-          return { ok: false, message: 'Buyer packet download event not found.' };
+          return { ok: false, message: 'Buyer follow-up event not found.' };
         }
         const updated = get().updateSalesLead(lead.id, patch);
         if (!updated.ok) {
