@@ -258,7 +258,7 @@ export default function MainLayout() {
 
   return (
     <div className="xbar-command-shell min-h-screen lg:grid lg:grid-cols-[264px,1fr]">
-      <aside className="hidden min-h-screen flex-col gap-6 border-r border-border bg-secondary/80 px-5 py-6 text-foreground lg:flex">
+      <aside className="hidden min-h-screen flex-col gap-5 border-r border-border bg-secondary/80 px-5 py-6 text-foreground lg:flex">
         <div className="flex items-center gap-3">
           <div className="flex h-[52px] w-[52px] items-center justify-center rounded-lg border border-border bg-background p-1.5 shadow-sm">
             <XbarMark title="XBAR logo" className="h-full w-full" />
@@ -302,9 +302,9 @@ export default function MainLayout() {
 
       <div className="flex min-w-0 flex-col">
         <header className="xbar-command-topbar sticky top-0 z-10 border-b border-border bg-background/90 backdrop-blur">
-          <div className="flex min-h-[62px] flex-wrap items-center justify-between gap-4 px-5 py-3">
+          <div className="flex min-h-[62px] flex-wrap items-center justify-between gap-4 px-4 py-3 lg:px-6">
             <div className="flex items-center gap-3">
-              <div className="text-[0.98rem] font-extrabold tracking-[0.01em] text-foreground">{currentLabel}</div>
+              <div className="topbar__title text-[length:var(--font-display)] font-extrabold leading-[1.04] tracking-[-0.02em] text-foreground">{currentLabel}</div>
               <span className={classNames('inline-flex min-h-[24px] items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]', pendingReview || pendingTransfers ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-primary/20 bg-accent text-primary')}>
                 {pendingReview || pendingTransfers ? `${pendingReview + pendingTransfers} open` : 'Control clear'}
               </span>
@@ -357,7 +357,7 @@ export default function MainLayout() {
           </div>
         </header>
 
-        <main className="xbar-command-main flex flex-col gap-[20px] px-6 py-5 pb-28 lg:pb-5">
+        <main className="xbar-command-main flex flex-col gap-5 px-4 py-4 pb-28 lg:px-6 lg:py-5 lg:pb-5">
           <CommercialPressureBanner />
           <Outlet />
         </main>

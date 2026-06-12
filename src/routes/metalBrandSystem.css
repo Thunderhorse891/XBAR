@@ -14,9 +14,7 @@
   --xbar-metal-line: linear-gradient(110deg, rgba(255,255,255,.38), rgba(107,126,145,.18) 28%, rgba(255,255,255,.08) 52%, rgba(226,239,249,.34));
   --xbar-metal-panel: linear-gradient(145deg, rgba(30,36,44,.96), rgba(8,11,16,.98) 42%, rgba(3,5,8,.99));
   --xbar-logo-image: url('/brand/xbar-website-icon.png.png');
-  --radius-xl: 22px;
-  --radius-lg: 16px;
-  --radius-md: 11px;
+  /* Radius scale comes from the canonical token set in src/index.css. */
 }
 
 body {
@@ -47,7 +45,7 @@ aside > div:first-child > div:first-child::before,
   position: absolute;
   inset: 0;
   background: var(--xbar-logo-image) center / cover no-repeat;
-  filter: drop-shadow(0 0 14px rgba(24, 168, 255, .24));
+  filter: drop-shadow(0 0 14px rgba(24, 168, 255, .12));
 }
 
 aside > div:first-child > div:first-child,
@@ -98,19 +96,20 @@ aside > div:first-child > div:first-child > svg,
   aspect-ratio: 1;
   border-radius: 25%;
   background: var(--xbar-logo-image) center / contain no-repeat;
-  filter: drop-shadow(0 34px 70px rgba(0,0,0,.8)) drop-shadow(0 0 34px rgba(24,168,255,.18));
+  filter: drop-shadow(0 34px 70px rgba(0,0,0,.8)) drop-shadow(0 0 34px rgba(24,168,255,.12));
   opacity: .96;
 }
 
 .brand-canvas__lockup { opacity: 0; }
 
-/* Machined app shell */
+/* Machined app shell — single source of truth for sidebar/topbar surfaces. */
 .sidebar,
 aside {
   border-right: 1px solid rgba(224,237,248,.18) !important;
   background:
     linear-gradient(90deg, rgba(255,255,255,.025), transparent 18%),
     linear-gradient(180deg, #080a0e, #010204 80%) !important;
+  color: #dbe8f8 !important;
   box-shadow: 18px 0 60px rgba(0,0,0,.58), inset -1px 0 0 rgba(255,255,255,.035) !important;
 }
 
@@ -118,6 +117,9 @@ aside {
 header.sticky {
   border-bottom-color: rgba(219,234,246,.18) !important;
   background: linear-gradient(180deg, rgba(20,24,30,.94), rgba(5,7,10,.92)) !important;
+  color: var(--text) !important;
+  backdrop-filter: blur(18px) saturate(1.1) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.1) !important;
   box-shadow: 0 18px 48px rgba(0,0,0,.38), inset 0 -1px 0 rgba(24,168,255,.12) !important;
 }
 
@@ -125,6 +127,9 @@ header.sticky {
 .metric-card,
 .command-stage,
 .portfolio-stage,
+.command-stage__support-card,
+.command-stage__ledger-item,
+.portfolio-stage__stat,
 .stack-item,
 .empty-state,
 .detail-hero,
@@ -140,13 +145,57 @@ header.sticky {
 .premium-setup-card,
 .premium-setup-form,
 [class*="rounded-"][class*="border"][class*="bg-white"],
-[class*="rounded-"][class*="border"][class*="bg-[#fbfdff]"] {
+[class*="rounded-"][class*="border"][class*="bg-[#fbfdff]"],
+[class*="rounded-"][class*="border"][class*="bg-[#f4f8fb]"] {
   border-color: var(--xbar-metal-border) !important;
   background: var(--xbar-metal-panel) !important;
+  color: var(--text) !important;
   box-shadow:
     0 24px 64px rgba(0,0,0,.48),
     inset 0 1px 0 rgba(255,255,255,.13),
     inset 0 -1px 0 rgba(0,0,0,.82) !important;
+}
+
+/* Status edges — inset 3px left edge so screens can flag blocked/ready/attention
+   states without new layouts. Applied via the optional `edge` prop on Panel/MetricCard. */
+.panel--edge-blue,
+.metric-card--edge-blue {
+  box-shadow:
+    0 24px 64px rgba(0,0,0,.48),
+    inset 0 1px 0 rgba(255,255,255,.13),
+    inset 0 -1px 0 rgba(0,0,0,.82),
+    inset 3px 0 0 var(--blue) !important;
+}
+
+.panel--edge-amber,
+.metric-card--edge-amber {
+  box-shadow:
+    0 24px 64px rgba(0,0,0,.48),
+    inset 0 1px 0 rgba(255,255,255,.13),
+    inset 0 -1px 0 rgba(0,0,0,.82),
+    inset 3px 0 0 var(--amber) !important;
+}
+
+.panel--edge-rose,
+.metric-card--edge-rose {
+  box-shadow:
+    0 24px 64px rgba(0,0,0,.48),
+    inset 0 1px 0 rgba(255,255,255,.13),
+    inset 0 -1px 0 rgba(0,0,0,.82),
+    inset 3px 0 0 var(--rose) !important;
+}
+
+/* Stack rows — quieter than full panels, with subtle depth and a restrained hover. */
+.stack-item {
+  border-color: rgba(132, 168, 210, .14) !important;
+  background: linear-gradient(180deg, rgba(17, 24, 36, .85), rgba(9, 14, 22, .92)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05) !important;
+}
+
+.stack-item--interactive:hover {
+  transform: translateY(-1px);
+  border-color: rgba(45, 140, 255, .35) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 24px -12px rgba(0,0,0,.6) !important;
 }
 
 .panel::after,
@@ -166,6 +215,8 @@ header.sticky {
   background: linear-gradient(120deg, rgba(255,255,255,.055), transparent 24%, transparent 76%, rgba(24,168,255,.055));
 }
 
+/* Machined top line — defined once here (xbarCommandSystem no longer duplicates it).
+   Restrained: blue capped at .35 alpha, no outer glow. */
 .panel::before,
 .metric-card::before,
 .command-stage::before,
@@ -174,8 +225,15 @@ header.sticky {
 .horse-card::before,
 .table-shell::before,
 .lp-card::before {
-  background: linear-gradient(90deg, transparent, rgba(235,244,252,.66), rgba(24,168,255,.78), transparent) !important;
-  box-shadow: 0 0 14px rgba(24,168,255,.28);
+  content: '';
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: 0;
+  height: 1px;
+  pointer-events: none;
+  opacity: .68;
+  background: linear-gradient(90deg, transparent, rgba(235,244,252,.45), rgba(24,168,255,.35), transparent) !important;
 }
 
 .ops-briefing-header {
@@ -195,7 +253,7 @@ header.sticky {
   background: radial-gradient(circle at 82% 50%, rgba(24,168,255,.16), transparent 28rem);
 }
 
-/* Steel controls with electric-blue active energy. */
+/* Steel controls with restrained blue authority — no neon halos. */
 .button,
 .icon-button,
 .public-action,
@@ -204,6 +262,7 @@ button[class*="border"],
 a[class*="border"] {
   border-color: rgba(207,222,234,.26) !important;
   background: linear-gradient(180deg, rgba(47,56,66,.94), rgba(11,14,19,.98)) !important;
+  color: rgba(230, 240, 252, .90) !important;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.20), 0 10px 24px rgba(0,0,0,.34) !important;
 }
 
@@ -212,16 +271,18 @@ a[class*="border"] {
 .ops-briefing-action--primary,
 button[class*="bg-[#1155dd]"],
 a[class*="bg-[#1155dd]"] {
-  border-color: rgba(92,196,255,.78) !important;
-  background: linear-gradient(180deg, #26b4ff, #0878d6 55%, #045ba9) !important;
-  box-shadow: 0 14px 34px rgba(0,139,235,.30), 0 0 18px rgba(24,168,255,.20), inset 0 1px 0 rgba(255,255,255,.42) !important;
+  border-color: rgba(92,196,255,.55) !important;
+  background: linear-gradient(180deg, #1f8fe8 0%, #0f6ec4 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 8px 20px -10px rgba(0,139,235,.45), inset 0 1px 0 rgba(255,255,255,.22) !important;
 }
 
 .nav-link--active,
 aside a[aria-current='page'] {
   border-color: rgba(24,168,255,.56) !important;
   background: linear-gradient(90deg, rgba(24,168,255,.21), rgba(20,25,32,.75)) !important;
-  box-shadow: inset 3px 0 0 var(--xbar-electric), 0 0 24px rgba(24,168,255,.12) !important;
+  color: #ffffff !important;
+  box-shadow: inset 3px 0 0 var(--xbar-electric) !important;
 }
 
 input,
@@ -229,9 +290,13 @@ select,
 textarea,
 .field-input,
 .search-shell__input,
-.role-select {
+.role-select,
+[class*="bg-white"] input,
+[class*="bg-white"] select,
+[class*="bg-white"] textarea {
   border-color: rgba(203,220,233,.22) !important;
   background: linear-gradient(180deg, rgba(2,3,5,.92), rgba(12,15,20,.86)) !important;
+  color: #edf5ff !important;
   box-shadow: inset 0 2px 8px rgba(0,0,0,.72), inset 0 1px 0 rgba(255,255,255,.04) !important;
 }
 

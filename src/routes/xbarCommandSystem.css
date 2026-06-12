@@ -5,36 +5,12 @@
 ═══════════════════════════════════════════════ */
 
 :root {
-  color-scheme: dark;
-  --bg: #05080d;
-  --bg-deep: #03060a;
-  --surface: rgba(10, 16, 26, 0.92);
-  --surface-strong: rgba(14, 23, 36, 0.96);
+  /* Core graphite tokens (bg/surface/text/border/blue/amber/rose, radius + type scale)
+     are declared once in src/index.css. Only layer-specific tokens live here. */
   --surface-elevated: rgba(17, 28, 44, 0.88);
-  --sidebar: #03070d;
-  --sidebar-edge: rgba(124, 169, 220, 0.12);
-  --text: #edf5ff;
-  --muted: #8aa0b8;
-  --muted-strong: #b5c7dc;
-  --border: rgba(132, 168, 210, 0.16);
-  --border-strong: rgba(149, 187, 229, 0.26);
-  --blue: #2d8cff;
-  --blue-soft: rgba(45, 140, 255, 0.13);
   --blue-line: rgba(45, 140, 255, 0.42);
-  --slate: #8da2b8;
-  --slate-soft: rgba(141, 162, 184, 0.12);
   --emerald: #70cba6;
   --emerald-soft: rgba(112, 203, 166, 0.12);
-  --amber: #d6a74d;
-  --amber-soft: rgba(214, 167, 77, 0.13);
-  --rose: #d8666c;
-  --rose-soft: rgba(216, 102, 108, 0.14);
-  --shadow: 0 28px 72px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.045);
-  --shadow-soft: 0 16px 42px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.035);
-  --radius-xl: 18px;
-  --radius-lg: 14px;
-  --radius-md: 10px;
-  --radius-sm: 7px;
   --brand-blue: #2d8cff;
   --brand-electric: #58a8ff;
   --brand-silver: #d6e2ef;
@@ -78,15 +54,7 @@ body::selection {
   color: var(--text) !important;
 }
 
-.sidebar,
-aside {
-  background:
-    radial-gradient(ellipse at 50% -6%, rgba(45, 140, 255, 0.14), transparent 18rem),
-    linear-gradient(180deg, #050a12 0%, #03070d 100%) !important;
-  color: #dbe8f8 !important;
-  border-color: rgba(120, 165, 220, 0.12) !important;
-  box-shadow: 18px 0 54px rgba(0, 0, 0, 0.34);
-}
+/* Sidebar surface recipe lives in metalBrandSystem.css (loads last). */
 
 aside > div:first-child > div:first-child,
 .brand-lockup__mark {
@@ -97,7 +65,7 @@ aside > div:first-child > div:first-child,
     radial-gradient(circle at 50% 0%, rgba(77, 148, 255, 0.20), transparent 64%),
     #050910 !important;
   padding: 0 !important;
-  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.38), 0 0 28px rgba(45, 140, 255, 0.14) !important;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.38), 0 0 28px rgba(45, 140, 255, 0.12) !important;
 }
 
 aside > div:first-child > div:first-child > svg,
@@ -114,7 +82,7 @@ aside > div:first-child > div:first-child::before,
   background-position: center;
   background-repeat: no-repeat;
   background-size: 82%;
-  filter: drop-shadow(0 0 12px rgba(77, 148, 255, 0.22));
+  filter: drop-shadow(0 0 12px rgba(77, 148, 255, 0.12));
 }
 
 .brand-lockup__title,
@@ -146,7 +114,7 @@ aside [class*="bg-[#0a1628]"] {
 .nav-link,
 aside a,
 aside button {
-  border-radius: 9px !important;
+  border-radius: var(--radius-md) !important;
   color: rgba(205, 222, 242, 0.72) !important;
 }
 
@@ -158,25 +126,9 @@ aside button:hover {
   border-color: rgba(45, 140, 255, 0.30) !important;
 }
 
-.nav-link--active,
-aside a[aria-current='page'] {
-  background: linear-gradient(90deg, rgba(45, 140, 255, 0.18), rgba(45, 140, 255, 0.045)) !important;
-  color: #ffffff !important;
-  border-color: rgba(45, 140, 255, 0.46) !important;
-  box-shadow: inset 3px 0 0 var(--blue), 0 12px 30px rgba(0, 0, 0, 0.24) !important;
-}
+/* Active-nav and topbar surface recipes live in metalBrandSystem.css (loads last). */
 
 /* ── Topbar / page canvas ───────────────────── */
-.topbar,
-header.sticky {
-  background: rgba(5, 9, 15, 0.84) !important;
-  border-color: rgba(120, 165, 220, 0.15) !important;
-  color: var(--text) !important;
-  backdrop-filter: blur(18px) saturate(1.1) !important;
-  -webkit-backdrop-filter: blur(18px) saturate(1.1) !important;
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.24);
-}
-
 .topbar__title,
 .page-title,
 .panel__title,
@@ -192,7 +144,7 @@ h3 {
 
 .topbar__title,
 .page-title {
-  font-size: clamp(1rem, 1.8vw, 1.65rem) !important;
+  font-size: var(--font-display) !important;
   line-height: 1.04 !important;
 }
 
@@ -200,7 +152,7 @@ h3 {
 .shell-content > header,
 main > header:not(.topbar) {
   border: 1px solid rgba(120, 165, 220, 0.14);
-  border-radius: 18px;
+  border-radius: var(--radius-xl);
   padding: clamp(18px, 2.2vw, 26px);
   background:
     radial-gradient(ellipse at 8% 0%, rgba(45, 140, 255, 0.13), transparent 28rem),
@@ -237,39 +189,15 @@ main.flex.flex-col {
 .stack-item__copy,
 .key-value__label,
 p {
-  color: rgba(190, 210, 233, 0.68);
+  color: var(--muted);
 }
 
-/* ── Command panels / dashboard modules ─────── */
-.panel,
-.metric-card,
-.command-stage,
-.portfolio-stage,
-.command-stage__support-card,
-.command-stage__ledger-item,
-.portfolio-stage__stat,
-.stack-item,
-.empty-state,
-.detail-hero,
-.horse-card,
-.table-shell,
-.context-menu,
-.ownership-panel,
-.ownership-command-panel,
-.ownership-workspace,
-.buyer-momentum,
-.activation-guide,
-[class*="rounded-"][class*="border"][class*="bg-white"],
-[class*="rounded-"][class*="border"][class*="bg-[#fbfdff]"],
-[class*="rounded-"][class*="border"][class*="bg-[#f4f8fb]"] {
-  border-color: rgba(120, 165, 220, 0.16) !important;
-  background:
-    radial-gradient(ellipse at 50% 0%, rgba(45, 140, 255, 0.075), transparent 58%),
-    linear-gradient(145deg, rgba(12, 21, 34, 0.92), rgba(5, 9, 16, 0.96)) !important;
-  color: var(--text) !important;
-  box-shadow: var(--shadow-soft) !important;
+.panel__description {
+  font-size: var(--font-meta);
 }
 
+/* ── Command panels / dashboard modules ───────
+   Panel surface recipe (background/border/shadow) lives in metalBrandSystem.css. */
 .panel,
 .metric-card,
 .stack-item,
@@ -288,23 +216,7 @@ p {
   position: relative;
 }
 
-.panel::before,
-.metric-card::before,
-.command-stage::before,
-.portfolio-stage::before,
-.detail-hero::before,
-.horse-card::before,
-.table-shell::before {
-  content: '';
-  position: absolute;
-  left: 18px;
-  right: 18px;
-  top: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(88, 168, 255, 0.40), transparent);
-  opacity: 0.68;
-  pointer-events: none;
-}
+/* Panel top-line ::before is defined once in metalBrandSystem.css. */
 
 .metric-card {
   min-height: 118px;
@@ -312,21 +224,22 @@ p {
 }
 
 .metric-card__label {
-  color: rgba(176, 199, 224, 0.62) !important;
-  font-size: 0.66rem !important;
+  color: var(--muted) !important;
+  font-size: var(--font-micro) !important;
   letter-spacing: 0.18em !important;
   text-transform: uppercase;
 }
 
 .metric-card__value {
   color: #f5f9ff !important;
-  font-size: clamp(1.75rem, 3vw, 2.55rem) !important;
+  font-size: clamp(1.6rem, 2.6vw, 2.2rem) !important;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.055em;
 }
 
 .metric-card__detail {
-  color: rgba(166, 190, 218, 0.66) !important;
+  color: var(--muted) !important;
+  font-size: var(--font-meta) !important;
 }
 
 .metric-card--amber,
@@ -353,7 +266,7 @@ p {
 .table-row--interactive:hover,
 .ownership-row:hover {
   transform: translateY(-1px);
-  border-color: rgba(45, 140, 255, 0.34) !important;
+  border-color: rgba(45, 140, 255, 0.35) !important;
   box-shadow: 0 24px 58px rgba(0, 0, 0, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
 }
 
@@ -418,22 +331,8 @@ p {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
 }
 
-/* ── Forms / controls ───────────────────────── */
-.search-shell__input,
-.field-input,
-.role-select,
-input,
-select,
-textarea,
-[class*="bg-white"] input,
-[class*="bg-white"] select,
-[class*="bg-white"] textarea {
-  border-color: rgba(120, 165, 220, 0.20) !important;
-  background: rgba(4, 8, 14, 0.72) !important;
-  color: #edf5ff !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
-}
-
+/* ── Forms / controls ───────────────────────────
+   Input surface recipe (background/border/shadow/color) lives in metalBrandSystem.css. */
 input::placeholder,
 textarea::placeholder {
   color: rgba(151, 175, 202, 0.46) !important;
@@ -456,30 +355,9 @@ label,
   color: rgba(180, 204, 231, 0.74) !important;
 }
 
-/* ── Buttons ────────────────────────────────── */
-.button,
-.icon-button,
-.public-action,
-.ops-briefing-action,
-button[class*="border"],
-a[class*="border"] {
-  border-color: rgba(120, 165, 220, 0.18) !important;
-  background: rgba(12, 21, 34, 0.78) !important;
-  color: rgba(230, 240, 252, 0.90) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045) !important;
-}
-
-.button--primary,
-.public-action--primary,
-.ops-briefing-action--primary,
-button[class*="bg-[#1155dd]"],
-a[class*="bg-[#1155dd]"] {
-  border-color: rgba(45, 140, 255, 0.72) !important;
-  background: linear-gradient(180deg, #2d8cff 0%, #166fe4 100%) !important;
-  color: #ffffff !important;
-  box-shadow: 0 14px 30px rgba(22, 111, 228, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
-}
-
+/* ── Buttons ──────────────────────────────────
+   Base + primary button surface recipes live in metalBrandSystem.css.
+   Interaction states (hover/active/disabled) stay here. */
 .button:hover,
 .icon-button:hover,
 .public-action:hover,
@@ -497,7 +375,7 @@ a[class*="border"]:hover {
 .ops-briefing-action--primary:hover,
 button[class*="bg-[#1155dd]"]:hover,
 a[class*="bg-[#1155dd]"]:hover {
-  background: linear-gradient(180deg, #4aa0ff 0%, #207cff 100%) !important;
+  background: linear-gradient(180deg, #2f9af0 0%, #1478d0 100%) !important;
 }
 
 .button:active,
@@ -530,12 +408,12 @@ table,
   background: rgba(7, 13, 22, 0.86) !important;
 }
 
+/* thead/tbody surface recipes (background/border) live in metalBrandSystem.css.
+   Table typography stays here. */
 thead,
 .table-head,
 th {
-  background: rgba(4, 8, 14, 0.84) !important;
   color: rgba(170, 195, 224, 0.72) !important;
-  border-color: rgba(120, 165, 220, 0.14) !important;
   font-size: 0.68rem !important;
   letter-spacing: 0.16em !important;
   text-transform: uppercase;
@@ -546,16 +424,6 @@ tr,
 td {
   border-color: rgba(120, 165, 220, 0.10) !important;
   color: rgba(230, 240, 252, 0.88) !important;
-}
-
-tbody tr,
-.table-row {
-  background: rgba(8, 15, 25, 0.58) !important;
-}
-
-tbody tr:hover,
-.table-row:hover {
-  background: rgba(45, 140, 255, 0.075) !important;
 }
 
 /* ── Dossier / registry cards ───────────────── */
@@ -651,7 +519,7 @@ nav[aria-label='Mobile quick navigation'] a[aria-current='page'] {
   .command-stage,
   .portfolio-stage,
   .page-header {
-    border-radius: 14px !important;
+    border-radius: var(--radius-lg) !important;
   }
 
   .command-stage__title,
