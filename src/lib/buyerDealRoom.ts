@@ -13,6 +13,7 @@ export type BuyerDealRoomHorseSummary = {
   eventCount: number;
   openQuestions: number;
   offers: number;
+  packetDownloads: number;
   highestOffer: number;
   latestActivityAt?: string;
   status: DealStatus | 'quiet';
@@ -85,11 +86,12 @@ export function latestDealStatus(events: BuyerRoomEvent[]): DealStatus | 'quiet'
   return 'quiet';
 }
 
-function buildDealRoomAction(params: { openQuestions: number; highestOffer: number; latestStatus: DealStatus | 'quiet'; lead?: SalesLead }): BuyerDealRoomAction {
+function buildDealRoomAction(params: { openQuestions: number; highestOffer: number; packetDownloads: number; latestStatus: DealStatus | 'quiet'; lead?: SalesLead }): BuyerDealRoomAction {
   if (params.latestStatus === 'closed-won') return { label: 'Closed won', tone: 'emerald', reason: 'Buyer room has a won deal status.' };
   if (params.latestStatus === 'closed-lost') return { label: 'Closed lost', tone: 'slate', reason: 'Buyer room has a lost deal status.' };
   if (params.openQuestions > 0) return { label: 'Answer buyer', tone: 'amber', reason: `${params.openQuestions} buyer request needs a seller response.` };
   if (params.highestOffer > 0) return { label: 'Work offer', tone: 'blue', reason: `Highest open offer is $${params.highestOffer.toLocaleString()}.` };
+  if (params.packetDownloads > 0) return { label: 'Follow up', tone: 'blue', reason: `${params.packetDownloads} buyer packet download${params.packetDownloads === 1 ? '' : 's'} signal active review.` };
   if (params.lead?.nextFollowUp) return { label: 'Follow up', tone: 'blue', reason: 'Lead has a scheduled next follow-up.' };
   return { label: 'Create movement', tone: 'slate', reason: 'No active buyer-room pressure yet.' };
 }
@@ -102,6 +104,7 @@ export function buildBuyerDealRoomSummaries(params: { horses: HorseRecord[]; lea
       const horseLeads = params.leads.filter((lead) => lead.horseId === horse.id && lead.stage !== 'Closed');
       const openQuestions = openBuyerRequests(horseEvents).length;
       const highestOffer = Math.max(highestBuyerOffer(horseEvents), ...horseLeads.map((lead) => lead.offerAmount ?? 0));
+      const packetDownloads = horseEvents.filter((event) => event.kind === 'packet-downloaded').length;
       const latestStatus = latestDealStatus(horseEvents);
       return {
         horseId: horse.id,
@@ -110,16 +113,18 @@ export function buildBuyerDealRoomSummaries(params: { horses: HorseRecord[]; lea
         eventCount: horseEvents.length,
         openQuestions,
         offers: horseEvents.filter((event) => event.kind === 'offer').length + horseLeads.filter((lead) => (lead.offerAmount ?? 0) > 0).length,
+        packetDownloads,
         highestOffer,
         latestActivityAt: sortBuyerRoomEvents(horseEvents)[0]?.at ?? horseLeads.map((lead) => lead.lastTouch).sort().at(-1),
         status: latestStatus,
-        action: buildDealRoomAction({ openQuestions, highestOffer, latestStatus, lead: horseLeads[0] }),
+        action: buildDealRoomAction({ openQuestions, highestOffer, packetDownloads, latestStatus, lead: horseLeads[0] }),
       };
     })
     .sort((a, b) => {
       const priority = (item: BuyerDealRoomHorseSummary) =>
         item.openQuestions * 100 +
         item.highestOffer / 1000 +
+        item.packetDownloads * 10 +
         (item.status === 'offer' ? 25 : 0) +
         (item.status === 'open' ? 5 : 0);
       return priority(b) - priority(a) || timeValue(b.latestActivityAt) - timeValue(a.latestActivityAt);
