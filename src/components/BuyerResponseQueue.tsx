@@ -80,8 +80,8 @@ export function BuyerResponseQueue() {
                 lead.stage === 'Offer' &&
                 lead.offerAmount === event.amount,
             );
-          const packetDownloadLead =
-            event.kind === 'packet-downloaded'
+          const followUpLead =
+            event.kind === 'packet-downloaded' || event.kind === 'call-requested'
               ? salesLeads.find(
                   (lead) =>
                     lead.stage !== 'Closed' &&
@@ -117,12 +117,12 @@ export function BuyerResponseQueue() {
                     Send to offer workflow
                   </Button>
                 ) : null}
-                {event.kind === 'packet-downloaded' && packetDownloadLead?.nextFollowUp ? (
+                {(event.kind === 'packet-downloaded' || event.kind === 'call-requested') && followUpLead?.nextFollowUp ? (
                   <Button asChild variant="outline" size="sm">
-                    <Link to={`/follow-ups?lead=${packetDownloadLead.id}`}>Open follow-up</Link>
+                    <Link to={`/follow-ups?lead=${followUpLead.id}`}>Open follow-up</Link>
                   </Button>
                 ) : null}
-                {event.kind === 'packet-downloaded' && !packetDownloadLead?.nextFollowUp ? (
+                {(event.kind === 'packet-downloaded' || event.kind === 'call-requested') && !followUpLead?.nextFollowUp ? (
                   <Button
                     variant="outline"
                     size="sm"
@@ -132,7 +132,7 @@ export function BuyerResponseQueue() {
                       setSyncMessage(result.message);
                     }}
                   >
-                    Schedule follow-up
+                    {event.kind === 'call-requested' ? 'Schedule call' : 'Schedule follow-up'}
                   </Button>
                 ) : null}
                 {needsResponse ? (

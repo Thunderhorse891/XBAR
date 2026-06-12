@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { completeFollowUp, followUpTiming, schedulePacketDownloadFollowUp, sortFollowUps } from '../src/lib/salesFollowUp.js';
+import { completeFollowUp, followUpTiming, scheduleBuyerActivityFollowUp, sortFollowUps } from '../src/lib/salesFollowUp.js';
 import type { BuyerRoomEvent, SalesLead } from '../src/types/xbar.js';
 
 const now = new Date('2026-06-05T12:00:00');
@@ -10,10 +10,17 @@ test('completing an offer follow-up keeps a tight cadence', () => { const patch 
 test('follow-up queue puts overdue buyers before unscheduled and upcoming buyers', () => { const leads = sortFollowUps([{ ...base, id: 'upcoming', nextFollowUp: '2026-06-20' }, { ...base, id: 'unscheduled' }, { ...base, id: 'overdue', nextFollowUp: '2026-06-01' }], now); assert.deepEqual(leads.map((lead) => lead.id), ['overdue', 'unscheduled', 'upcoming']); });
 test('packet downloads schedule a same-day follow-up without changing sales stage', () => {
   const event = { id: 'download-1', horseId: base.horseId, kind: 'packet-downloaded', at: now.toISOString(), actor: 'Buyer', note: 'Reviewing with trainer.' } as BuyerRoomEvent;
-  const patch = schedulePacketDownloadFollowUp(base, event, now);
+  const patch = scheduleBuyerActivityFollowUp(base, event, now);
   assert.equal(patch?.nextFollowUp, '2026-06-05');
   assert.equal(patch?.shareReady, true);
   assert.match(patch?.notes ?? '', /Reviewing with trainer/);
   assert.equal('stage' in (patch ?? {}), false);
-  assert.equal(schedulePacketDownloadFollowUp({ ...base, notes: patch?.notes }, event, now)?.notes, patch?.notes);
+  assert.equal(scheduleBuyerActivityFollowUp({ ...base, notes: patch?.notes }, event, now)?.notes, patch?.notes);
+});
+test('buyer call requests schedule sales work without closing the request', () => {
+  const event = { id: 'call-1', horseId: base.horseId, kind: 'call-requested', at: now.toISOString(), actor: 'Buyer', note: 'Weekday afternoon.' } as BuyerRoomEvent;
+  const patch = scheduleBuyerActivityFollowUp(base, event, now);
+  assert.equal(patch?.nextFollowUp, '2026-06-05');
+  assert.match(patch?.notes ?? '', /Buyer call request/);
+  assert.equal('stage' in (patch ?? {}), false);
 });
