@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildBreedingRevenueProfile } from '../src/lib/breedingRevenue.js';
+import { hasSellerResponse, openBuyerRequests, publicShareEventToBuyerRoomEvent } from '../src/lib/buyerDealRoom.js';
 import { buildUsageMeters, featureGate, usagePressure } from '../src/lib/commercialEngine.js';
 import { buildHorseProfitProfile, buildOfferDecision } from '../src/lib/profitIntelligence.js';
 import { buildSaleHold } from '../src/lib/saleTrustEngine.js';
 import { subscriptionPlans } from '../src/lib/subscriptionPlans.js';
-import type { DocumentRecord, ExpenseReceipt, HorseRecord, OwnershipRecord, SubscriptionProfile } from '../src/types/xbar.js';
+import type { BuyerRoomEvent, DocumentRecord, ExpenseReceipt, HorseRecord, OwnershipRecord, SubscriptionProfile } from '../src/types/xbar.js';
 
 function subscription(tier: SubscriptionProfile['tier'], used = 0): SubscriptionProfile {
   const config = subscriptionPlans[tier];
@@ -84,6 +85,44 @@ test('offer decision guardrail requires cost proof before relying on margin', ()
   const decision = buildOfferDecision(noCostHorse, [], 14000);
   assert.equal(decision.status, 'missing-costs');
   assert.equal(decision.overrideRequired, true);
+});
+
+test('public buyer proof requests become actionable deal-room events', () => {
+  const event = publicShareEventToBuyerRoomEvent({
+    id: 'share-event-1',
+    listing_id: 'listing-1',
+    horse_id: horse.id,
+    event_type: 'buyer-proof-requested',
+    metadata: { buyerName: 'Buyer One', buyerEmail: 'buyer@example.com', message: 'Please send the current Coggins.' },
+    viewed_at: '2026-06-11T14:00:00.000Z',
+  });
+
+  assert.equal(event?.kind, 'proof-requested');
+  assert.equal(event?.actor, 'Buyer One');
+  assert.match(event?.note ?? '', /current Coggins/);
+  assert.equal(openBuyerRequests(event ? [event] : []).length, 1);
+
+  const response = publicShareEventToBuyerRoomEvent({
+    id: 'share-event-2',
+    listing_id: 'listing-1',
+    horse_id: horse.id,
+    event_type: 'seller-response',
+    metadata: { actor: 'sales@example.com', note: 'Coggins sent.', replyToEventId: event?.id },
+    viewed_at: '2026-06-11T14:05:00.000Z',
+  });
+  assert.equal(response?.kind, 'seller-response');
+  assert.equal(response?.replyToEventId, event?.id);
+  assert.equal(hasSellerResponse([event, response].filter(Boolean) as BuyerRoomEvent[], event as BuyerRoomEvent), true);
+});
+
+test('seller responses resolve only the intended buyer request', () => {
+  const first = { id: 'request-1', horseId: horse.id, kind: 'question', at: '2026-06-11T14:00:00.000Z', actor: 'Buyer One' } as BuyerRoomEvent;
+  const second = { id: 'request-2', horseId: horse.id, kind: 'proof-requested', at: '2026-06-11T14:01:00.000Z', actor: 'Buyer Two' } as BuyerRoomEvent;
+  const response = { id: 'response-1', horseId: horse.id, kind: 'seller-response', at: '2026-06-11T14:02:00.000Z', actor: 'Sales Lead', replyToEventId: first.id } as BuyerRoomEvent;
+
+  assert.equal(hasSellerResponse([first, second, response], first), true);
+  assert.equal(hasSellerResponse([first, second, response], second), false);
+  assert.deepEqual(openBuyerRequests([first, second, response]).map((event) => event.id), [second.id]);
 });
 
 test('sale hold blocks missing Coggins and ownership proof', () => {

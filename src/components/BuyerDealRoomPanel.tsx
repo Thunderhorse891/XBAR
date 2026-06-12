@@ -21,7 +21,7 @@ export function BuyerDealRoomPanel({ compact = false }: { compact?: boolean }) {
     <Panel
       eyebrow="Buyer Deal Room"
       title="Deal pressure"
-      description={compact ? undefined : 'Buyer-facing intent by horse: unanswered questions, open offers, latest deal status, and the next seller action.'}
+      description={compact ? undefined : 'Buyer-facing intent by horse: unanswered questions and proof requests, open offers, latest deal status, and the next seller action.'}
       meta={<Pill tone={activeQuestionCount ? 'amber' : highestOffer ? 'blue' : 'slate'}>{activeQuestionCount ? `${activeQuestionCount} response needed` : highestOffer ? 'Offer pressure' : 'Quiet'}</Pill>}
       action={<Link className="button button--ghost button--compact" to="/sales">Sales</Link>}
     >
@@ -41,7 +41,7 @@ export function BuyerDealRoomPanel({ compact = false }: { compact?: boolean }) {
               <div className="inline-metrics">
                 <span>Ask {formatCompactCurrency(summary.askPrice)}</span>
                 <span>High offer {summary.highestOffer ? formatCompactCurrency(summary.highestOffer) : 'none'}</span>
-                <span>{summary.openQuestions} open question{summary.openQuestions === 1 ? '' : 's'}</span>
+                <span>{summary.openQuestions} open request{summary.openQuestions === 1 ? '' : 's'}</span>
               </div>
               {!compact ? <div className="stack-item__copy" style={{ marginTop: 8 }}>{summary.action.reason}</div> : null}
             </Link>

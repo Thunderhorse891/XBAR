@@ -9,7 +9,7 @@ import { getSupabaseAdmin } from './_lib/supabase-admin.js';
  * workspace's deal room reads them.
  */
 
-const ALLOWED_KINDS = new Set(['question', 'call-requested', 'offer', 'packet-downloaded']);
+const ALLOWED_KINDS = new Set(['question', 'call-requested', 'proof-requested', 'offer', 'packet-downloaded']);
 const MAX_MESSAGE_CHARS = 1200;
 
 export default async function handler(req, res) {
@@ -40,6 +40,12 @@ export default async function handler(req, res) {
   }
   if (kind === 'offer' && !amount) {
     return sendJson(res, 400, { ok: false, message: 'An offer needs an amount.' });
+  }
+  if ((kind === 'question' || kind === 'proof-requested') && !message) {
+    return sendJson(res, 400, {
+      ok: false,
+      message: kind === 'proof-requested' ? 'Describe the proof or document you want to review.' : 'Enter your question for the seller.',
+    });
   }
 
   const supabase = getSupabaseAdmin();
@@ -90,6 +96,8 @@ export default async function handler(req, res) {
         ? 'Your offer was delivered to the seller.'
         : kind === 'call-requested'
           ? 'Your call request was delivered to the seller.'
+          : kind === 'proof-requested'
+            ? 'Your proof request was delivered to the seller.'
           : 'Your message was delivered to the seller.',
   });
 }

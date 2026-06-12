@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { Readable } from 'node:stream';
 import { deflateRawSync } from 'node:zlib';
+import buyerInquiryHandler from '../../api/buyer-inquiries.js';
+import buyerResponseHandler from '../../api/buyer-responses.js';
 import {
   classifyDocumentType,
   extractRegistrationFields,
@@ -49,6 +52,46 @@ Issuing Veterinarian: Dr. Maria Lopez
 Destination: Triple Oak Farm, Lexington KY
 Expiration Date: 06/01/2026
 `;
+
+async function invokeJsonHandler(handler, body) {
+  const req = Readable.from([JSON.stringify(body)]);
+  req.method = 'POST';
+  req.url = '/api/buyer-inquiries';
+  return new Promise((resolve) => {
+    const response = {
+      statusCode: 200,
+      headers: {},
+      setHeader(name, value) {
+        this.headers[name] = value;
+      },
+      end(payload) {
+        resolve({ statusCode: this.statusCode, body: JSON.parse(payload) });
+      },
+    };
+    void handler(req, response);
+  });
+}
+
+test('buyer proof requests require actionable details', async () => {
+  const response = await invokeJsonHandler(buyerInquiryHandler, {
+    sharePath: '/profiles/horse-1',
+    kind: 'proof-requested',
+    buyerName: 'Buyer',
+    message: '',
+  });
+  assert.equal(response.statusCode, 400);
+  assert.match(response.body.message, /Describe the proof/);
+});
+
+test('seller buyer responses require a target and response note', async () => {
+  const response = await invokeJsonHandler(buyerResponseHandler, {
+    workspaceId: 'workspace-1',
+    replyToEventId: '',
+    note: '',
+  });
+  assert.equal(response.statusCode, 400);
+  assert.match(response.body.message, /Workspace, buyer request, and response note/);
+});
 
 test('classifies the four core document types', () => {
   assert.equal(classifyDocumentType(REGISTRATION_TEXT).type, 'registration');
