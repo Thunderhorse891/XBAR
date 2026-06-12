@@ -1,9 +1,11 @@
-import { isRelationalCloudEnabled, isSnapshotFallbackEnabled, supabaseConfig } from '@/lib/platformConfig';
+import { apiConfig, isRelationalCloudEnabled, isSnapshotFallbackEnabled, supabaseConfig } from '@/lib/platformConfig';
+import { publicShareEventToBuyerRoomEvent, type PublicShareEventRow } from '@/lib/buyerDealRoom';
 import { createId, todayStamp } from '@/lib/xbarRuntime';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import type { Session } from '@supabase/supabase-js';
 import type {
   DocumentRecord,
+  BuyerRoomEvent,
   ExpenseReceipt,
   HorseRecord,
   IntakeBatch,
@@ -295,6 +297,118 @@ export async function loadWorkspaceAccessProfile(sessionOverride?: Session | nul
     workspaceRole: 'Admin',
     source: 'session',
   };
+}
+
+export async function loadPublicBuyerRoomEventsFromCloud(): Promise<
+  { ok: true; events: BuyerRoomEvent[] } | { ok: false; message: string }
+> {
+  const client = getSupabaseClient();
+  if (!client) {
+    return { ok: false, message: 'Cloud buyer activity is unavailable in this build.' };
+  }
+
+  try {
+    const session = await getActiveSession();
+    if (!session?.user) {
+      return { ok: false, message: 'Sign in to refresh buyer activity from shared links.' };
+    }
+
+    const accessProfile = await loadWorkspaceAccessProfile(session);
+    if (!accessProfile.workspaceId) {
+      return { ok: false, message: 'No cloud workspace is connected for buyer activity.' };
+    }
+
+    const { data, error } = await client
+      .from('public_share_events')
+      .select('id, listing_id, horse_id, event_type, metadata, viewed_at, created_at')
+      .eq('workspace_id', accessProfile.workspaceId)
+      .order('viewed_at', { ascending: false })
+      .limit(1000);
+
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    const events = ((data ?? []) as PublicShareEventRow[])
+      .map(publicShareEventToBuyerRoomEvent)
+      .filter((event): event is BuyerRoomEvent => Boolean(event));
+
+    return { ok: true, events };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : 'Unable to refresh buyer activity.',
+    };
+  }
+}
+
+export async function recordBuyerRoomSellerResponseInCloud(input: {
+  replyToEventId: string;
+  note: string;
+}): Promise<
+  | { ok: true; cloudAttempted: boolean; message: string; event?: BuyerRoomEvent }
+  | { ok: false; cloudAttempted: true; message: string }
+> {
+  if (!input.replyToEventId.startsWith('public-share-')) {
+    return { ok: true, cloudAttempted: false, message: 'Seller response recorded in the local buyer timeline.' };
+  }
+
+  const client = getSupabaseClient();
+  if (!client) {
+    return { ok: true, cloudAttempted: false, message: 'Seller response recorded in the local buyer timeline.' };
+  }
+
+  try {
+    const session = await getActiveSession();
+    if (!session?.user) {
+      return { ok: true, cloudAttempted: false, message: 'Seller response recorded in the local buyer timeline.' };
+    }
+
+    const accessProfile = await loadWorkspaceAccessProfile(session);
+    if (!accessProfile.workspaceId) {
+      return { ok: true, cloudAttempted: false, message: 'Seller response recorded in the local buyer timeline.' };
+    }
+
+    const base = apiConfig.baseUrl ? apiConfig.baseUrl.replace(/\/$/, '') : '';
+    const response = await fetch(`${base}/api/buyer-responses`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        workspaceId: accessProfile.workspaceId,
+        replyToEventId: input.replyToEventId,
+        note: input.note,
+      }),
+    });
+    const payload = (await response.json().catch(() => ({}))) as {
+      ok?: boolean;
+      message?: string;
+      event?: PublicShareEventRow;
+    };
+    if (!response.ok || !payload.ok) {
+      return {
+        ok: false,
+        cloudAttempted: true,
+        message: payload.message ?? 'The seller response could not be recorded in the cloud buyer timeline.',
+      };
+    }
+
+    const event = payload.event ? publicShareEventToBuyerRoomEvent(payload.event) ?? undefined : undefined;
+    return {
+      ok: true,
+      cloudAttempted: true,
+      message: payload.message ?? 'Seller response recorded in the cloud buyer timeline.',
+      event,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      cloudAttempted: true,
+      message: error instanceof Error ? error.message : 'The seller response could not be recorded in the cloud buyer timeline.',
+    };
+  }
 }
 
 async function ensurePrimaryWorkspace(session: Session, backup: CloudWorkspaceBackup) {

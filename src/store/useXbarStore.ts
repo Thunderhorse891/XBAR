@@ -29,6 +29,7 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { getCapabilityDeniedMessage, hasRoleCapability } from '@/lib/permissions';
 import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { featureGate } from '@/lib/commercialEngine';
+import { buildOfferDecision } from '@/lib/profitIntelligence';
 import {
   createWorkspaceInvitationInCloud,
   removeWorkspaceMemberFromCloud,
@@ -188,7 +189,10 @@ type XbarStore = {
     note?: string;
     amount?: number;
     dealStatus?: BuyerRoomEvent['dealStatus'];
+    replyToEventId?: string;
   }) => ActionResult & { event?: BuyerRoomEvent };
+  mergeBuyerRoomEvents: (events: BuyerRoomEvent[]) => ActionResult;
+  captureBuyerRoomOffer: (eventId: string) => ActionResult;
   addOwnershipStake: (horseId: string, stake: Omit<OwnershipStake, 'id'>) => ActionResult;
   removeOwnershipStake: (horseId: string, stakeId: string) => ActionResult;
   ensureOwnershipRecord: (horseId: string) => ActionResult & { recordId?: string };
@@ -1928,6 +1932,21 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Lead not found.' };
         }
 
+        const nextOfferStatus = patch.offerStatus ?? lead.offerStatus;
+        if (nextOfferStatus && ['Accepted', 'Deposit Due', 'Deposit Paid'].includes(nextOfferStatus)) {
+          const horse = get().horses.find((item) => item.id === lead.horseId);
+          if (!horse) return { ok: false, message: 'Horse record not found for this offer.' };
+          const decision = buildOfferDecision(
+            horse,
+            get().expenseReceipts,
+            patch.offerAmount ?? lead.offerAmount ?? 0,
+            patch.counterOfferAmount ?? lead.counterOfferAmount ?? 0,
+          );
+          if (decision.acceptanceBlocked) {
+            return { ok: false, message: `${decision.label}. ${decision.recommendation}` };
+          }
+        }
+
         set((current) => {
           const salesLeads = current.salesLeads.map((item) =>
             item.id === leadId
@@ -2636,8 +2655,10 @@ export const useXbarStore = create<XbarStore>()(
         const kindLabels: Record<BuyerRoomEvent['kind'], string> = {
           'packet-shared': 'Packet shared with buyer',
           'packet-viewed': 'Buyer viewed packet',
+          'packet-downloaded': 'Buyer downloaded packet',
           question: 'Buyer asked a question',
           'call-requested': 'Buyer requested a call',
+          'proof-requested': 'Buyer requested proof',
           offer: 'Buyer submitted an offer',
           'seller-response': 'Seller responded',
           'deal-status': 'Deal status updated',
@@ -2652,6 +2673,7 @@ export const useXbarStore = create<XbarStore>()(
           note: input.note,
           amount: input.amount,
           dealStatus: input.dealStatus,
+          replyToEventId: input.replyToEventId,
         };
         const auditEvent = createAuditEvent({
           actor: input.actor,
@@ -2666,6 +2688,73 @@ export const useXbarStore = create<XbarStore>()(
           auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
         }));
         return { ok: true, message: `${kindLabels[input.kind]} logged for ${horse.name}.`, id: event.id, event };
+      },
+      mergeBuyerRoomEvents: (events) => {
+        const current = get().buyerRoomEvents;
+        const merged = [...events, ...current]
+          .filter((event, index, list) => list.findIndex((candidate) => candidate.id === event.id) === index)
+          .sort((left, right) => Date.parse(right.at) - Date.parse(left.at))
+          .slice(0, 1000);
+        set({ buyerRoomEvents: merged });
+        return {
+          ok: true,
+          message: events.length ? `${events.length} public buyer event${events.length === 1 ? '' : 's'} refreshed.` : 'Buyer activity is current.',
+        };
+      },
+      captureBuyerRoomOffer: (eventId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageSales');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+        const planBlocked = featureGate(get().subscription, 'buyerDealRoom');
+        if (planBlocked) {
+          return { ok: false, message: planBlocked };
+        }
+
+        const event = get().buyerRoomEvents.find((item) => item.id === eventId);
+        if (!event || event.kind !== 'offer' || !(event.amount && event.amount > 0)) {
+          return { ok: false, message: 'Buyer offer event not found.' };
+        }
+
+        const normalizedActor = event.actor.trim().toLowerCase();
+        let lead = get().salesLeads.find(
+          (item) => item.horseId === event.horseId && item.name.trim().toLowerCase() === normalizedActor,
+        );
+        if (!lead) {
+          const created = get().createSalesLead({
+            horseId: event.horseId,
+            name: event.actor,
+            channel: 'Site Inquiry',
+            shareReady: true,
+          });
+          if (!created.ok || !created.id) {
+            return created;
+          }
+          lead = get().salesLeads.find((item) => item.id === created.id);
+        }
+        if (!lead) {
+          return { ok: false, message: 'Buyer lead could not be prepared for this offer.' };
+        }
+
+        const offerNote = event.note?.trim() ?? '';
+        const notes = [lead.notes?.trim(), offerNote && !lead.notes?.includes(offerNote) ? offerNote : ''].filter(Boolean).join('\n\n');
+        const updated = get().updateSalesLead(lead.id, {
+          stage: 'Offer',
+          lastTouch: todayStamp(),
+          offerAmount: event.amount,
+          offerStatus: 'Submitted',
+          shareReady: true,
+          notes,
+        });
+        if (!updated.ok) {
+          return updated;
+        }
+
+        return {
+          ok: true,
+          id: lead.id,
+          message: `${event.actor}'s ${event.amount.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })} offer is now in the Sales margin workflow.`,
+        };
       },
       addOwnershipStake: (horseId, stake) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageOwnership');

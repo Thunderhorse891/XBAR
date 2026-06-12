@@ -1,14 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { BuyerDealRoomPanel } from '@/components/BuyerDealRoomPanel';
+import { BuyerResponseQueue } from '@/components/BuyerResponseQueue';
 import { CommandBrief } from '@/components/CommandBrief';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
 import { ActionMenuButton } from '@/components/InteractionSystem';
+import { OfferDecisionPanel } from '@/components/OfferDecisionPanel';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { DotsIcon } from '@/components/icons';
 import { buildPublicShareUrl } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
+import { buildOfferDecision } from '@/lib/profitIntelligence';
 import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { useUiStore } from '@/store/useUiStore';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
@@ -21,10 +25,9 @@ export default function Sales() {
   const sharedAccess = useXbarStore((state) => state.sharedAccess);
   const sharedListings = useXbarStore((state) => state.sharedListings);
   const documents = useXbarStore((state) => state.documents);
+  const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const updateSalesLead = useXbarStore((state) => state.updateSalesLead);
-  const buyerRoomEvents = useXbarStore((state) => state.buyerRoomEvents);
-  const logBuyerRoomEvent = useXbarStore((state) => state.logBuyerRoomEvent);
   const recordSharedChannel = useXbarStore((state) => state.recordSharedChannel);
   const confirmSharedListingRelease = useXbarStore((state) => state.confirmSharedListingRelease);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
@@ -62,10 +65,33 @@ export default function Sales() {
   const [leadDepositStatus, setLeadDepositStatus] = useState(selectedLead?.depositStatus ?? 'Not Requested');
   const [leadNotes, setLeadNotes] = useState(selectedLead?.notes ?? '');
   const [leadOutcome, setLeadOutcome] = useState(selectedLead?.outcome ?? 'Won');
+  const [acceptMarginOverride, setAcceptMarginOverride] = useState(false);
   const [leadError, setLeadError] = useState('');
   const [menuState, setMenuState] = useState<{ type: 'lead' | 'horse'; id: string; x: number; y: number } | null>(null);
   const [listingQuery, setListingQuery] = useState('');
+
+  useEffect(() => {
+    if (!selectedLead) return;
+    setSelectedLeadId(selectedLead.id);
+    setLeadStage(selectedLead.stage);
+    setLeadLastTouch(selectedLead.lastTouch);
+    setLeadNextFollowUp(selectedLead.nextFollowUp ?? '');
+    setLeadOfferAmount(selectedLead.offerAmount ? String(selectedLead.offerAmount) : '');
+    setLeadCounterOfferAmount(selectedLead.counterOfferAmount ? String(selectedLead.counterOfferAmount) : '');
+    setLeadOfferStatus(selectedLead.offerStatus ?? 'Draft');
+    setLeadDepositAmount(selectedLead.depositAmount ? String(selectedLead.depositAmount) : '');
+    setLeadDepositStatus(selectedLead.depositStatus ?? 'Not Requested');
+    setLeadNotes(selectedLead.notes ?? '');
+    setLeadOutcome(selectedLead.outcome ?? 'Won');
+    setAcceptMarginOverride(false);
+    setLeadError('');
+  }, [selectedLead]);
+
   const authorizedSeller = workspaceProfile.defaultOwnerName || workspaceProfile.ranchManagerName || workspaceProfile.businessName;
+  const selectedHorse = selectedLead ? horses.find((horse) => horse.id === selectedLead.horseId) : undefined;
+  const offerDecision = selectedHorse
+    ? buildOfferDecision(selectedHorse, expenseReceipts, Number(leadOfferAmount) || 0, Number(leadCounterOfferAmount) || 0)
+    : null;
   const menuLead = menuState?.type === 'lead' ? salesLeads.find((lead) => lead.id === menuState.id) : undefined;
   const menuHorse = menuState?.type === 'horse' ? saleHorses.find((horse) => horse.id === menuState.id) : undefined;
   const menuListing = menuHorse ? sharedListings.find((listing) => listing.horseId === menuHorse.id && listing.state !== 'Archived') : undefined;
@@ -205,50 +231,8 @@ export default function Sales() {
         nextAction={{ label: 'Open follow-up queue', to: '/follow-ups' }}
       />
 
-      <Panel eyebrow="Deal room" title="Buyer activity" description="Live buyer intent from shared packets — every event has a seller response.">
-        {buyerRoomEvents.length ? (
-          <div className="stack-list">
-            {buyerRoomEvents.slice(0, 8).map((event) => {
-              const eventHorse = horses.find((item) => item.id === event.horseId);
-              const kindLabel =
-                event.kind === 'packet-shared' ? 'Packet shared' :
-                event.kind === 'packet-viewed' ? 'Packet viewed' :
-                event.kind === 'question' ? 'Question' :
-                event.kind === 'call-requested' ? 'Call requested' :
-                event.kind === 'offer' ? 'Offer' :
-                event.kind === 'seller-response' ? 'Seller response' : 'Deal status';
-              return (
-                <div key={event.id} className="stack-item">
-                  <div className="stack-item__top">
-                    <div>
-                      <div className="stack-item__title">{kindLabel} — {eventHorse?.name ?? 'Unknown horse'}{event.amount ? ` · $${event.amount.toLocaleString()}` : ''}</div>
-                      <div className="stack-item__copy">{event.actor}{event.note ? ` · ${event.note}` : ''} · {formatDateLabel(event.at)}</div>
-                    </div>
-                    <div className="inline-actions">
-                      {event.kind === 'offer' && !event.dealStatus ? (
-                        <>
-                          <button className="button button--primary button--compact" type="button" onClick={() => { logBuyerRoomEvent({ horseId: event.horseId, kind: 'deal-status', actor: 'Seller', note: `Offer from ${event.actor} accepted`, amount: event.amount, dealStatus: 'closed-won' }); }}>
-                            Accept offer
-                          </button>
-                          <button className="button button--ghost button--compact" type="button" onClick={() => { logBuyerRoomEvent({ horseId: event.horseId, kind: 'deal-status', actor: 'Seller', note: `Offer from ${event.actor} declined`, amount: event.amount, dealStatus: 'closed-lost' }); }}>
-                            Decline
-                          </button>
-                        </>
-                      ) : (event.kind === 'question' || event.kind === 'call-requested') ? (
-                        <button className="button button--ghost button--compact" type="button" onClick={() => { logBuyerRoomEvent({ horseId: event.horseId, kind: 'seller-response', actor: 'Seller', note: `Responded to ${event.actor}` }); }}>
-                          Mark responded
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <EmptyState compact title="No buyer activity yet" description="Generate a sale packet with a named buyer, or share a listing — questions, call requests, and offers land here." />
-        )}
-      </Panel>
+      <BuyerDealRoomPanel />
+      <BuyerResponseQueue />
 
       <div className="metric-grid">
         <MetricCard label="Sale horses" value={`${saleHorses.length}`} detail="Active pricing or pending review" />
@@ -407,6 +391,7 @@ export default function Sales() {
                         setLeadDepositStatus(lead.depositStatus ?? 'Not Requested');
                         setLeadNotes(lead.notes ?? '');
                         setLeadOutcome(lead.outcome ?? 'Won');
+                        setAcceptMarginOverride(false);
                         setLeadError('');
                       }}
                       onContextMenu={(event) => {
@@ -448,6 +433,29 @@ export default function Sales() {
         </Panel>
       </div>
 
+      {offerDecision && selectedHorse ? (
+        <OfferDecisionPanel
+          decision={offerDecision}
+          horseName={selectedHorse.name}
+          overrideApproved={acceptMarginOverride}
+          canManageSales={canManageSales}
+          onOverrideApproved={setAcceptMarginOverride}
+          onCounterAtFloor={() => {
+            setLeadCounterOfferAmount(String(offerDecision.safeSalePrice));
+            setLeadOfferStatus('Countered');
+            setLeadStage('Offer');
+            setAcceptMarginOverride(false);
+            setLeadError('');
+          }}
+          onPrepareDeposit={() => {
+            setLeadOfferStatus('Deposit Due');
+            setLeadDepositStatus('Due');
+            setLeadStage('Offer');
+            setLeadError('');
+          }}
+        />
+      ) : null}
+
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel eyebrow="Lead lifecycle" title={selectedLead ? `${selectedLead.name} lead` : 'Lead'}>
           {selectedLead ? (
@@ -473,11 +481,11 @@ export default function Sales() {
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Offer amount</span>
-                  <input className="field-input" type="number" min="0" value={leadOfferAmount} onChange={(event) => setLeadOfferAmount(event.target.value)} disabled={!canManageSales} />
+                  <input className="field-input" type="number" min="0" value={leadOfferAmount} onChange={(event) => { setLeadOfferAmount(event.target.value); setAcceptMarginOverride(false); }} disabled={!canManageSales} />
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Counteroffer</span>
-                  <input className="field-input" type="number" min="0" value={leadCounterOfferAmount} onChange={(event) => setLeadCounterOfferAmount(event.target.value)} disabled={!canManageSales} />
+                  <input className="field-input" type="number" min="0" value={leadCounterOfferAmount} onChange={(event) => { setLeadCounterOfferAmount(event.target.value); setAcceptMarginOverride(false); }} disabled={!canManageSales} />
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Offer status</span>
@@ -515,6 +523,24 @@ export default function Sales() {
                   onClick={() => {
                     if (!leadLastTouch.trim()) {
                       setLeadError('Last touch date is required.');
+                      return;
+                    }
+
+                    const acceptingOffer = ['Accepted', 'Deposit Due', 'Deposit Paid'].includes(leadOfferStatus);
+                    if (acceptingOffer && offerDecision?.acceptanceBlocked) {
+                      setLeadError(`${offerDecision.label}. ${offerDecision.recommendation}`);
+                      return;
+                    }
+                    if (acceptingOffer && offerDecision?.overrideRequired && !acceptMarginOverride) {
+                      setLeadError('Review and approve the margin override before accepting this offer.');
+                      return;
+                    }
+                    if (leadDepositStatus !== 'Not Requested' && !(Number(leadDepositAmount) > 0)) {
+                      setLeadError('Deposit amount is required when the deposit is due or paid.');
+                      return;
+                    }
+                    if (leadOfferStatus === 'Deposit Paid' && leadDepositStatus !== 'Paid') {
+                      setLeadError('Mark the deposit status Paid before completing the deposit-paid step.');
                       return;
                     }
 

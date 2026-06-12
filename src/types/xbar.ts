@@ -179,8 +179,10 @@ export interface AuditEvent {
 export type BuyerRoomEventKind =
   | 'packet-shared'
   | 'packet-viewed'
+  | 'packet-downloaded'
   | 'question'
   | 'call-requested'
+  | 'proof-requested'
   | 'offer'
   | 'seller-response'
   | 'deal-status';
@@ -197,6 +199,7 @@ export interface BuyerRoomEvent {
   note?: string;
   amount?: number; // offers and responses
   dealStatus?: DealStatus;
+  replyToEventId?: string;
 }
 
 export interface SalePacketBuild {

@@ -3,13 +3,13 @@ import { getSupabaseAdmin } from './_lib/supabase-admin.js';
 
 /*
  * Public buyer deal-room intake. Anonymous buyers on a shared packet page can
- * ask a question, request a call, or submit an offer. The share path/token is
- * validated against the listing (same RPC the public page uses) before
- * anything is written, and events land in public_share_events where the
- * workspace's deal room reads them.
+ * ask a question, request a call or proof, submit an offer, or download the
+ * buyer packet. The share path/token is validated against the listing (same
+ * RPC the public page uses) before anything is written, and events land in
+ * public_share_events where the workspace's deal room reads them.
  */
 
-const ALLOWED_KINDS = new Set(['question', 'call-requested', 'offer', 'packet-downloaded']);
+const ALLOWED_KINDS = new Set(['question', 'call-requested', 'proof-requested', 'offer', 'packet-downloaded']);
 const MAX_MESSAGE_CHARS = 1200;
 
 export default async function handler(req, res) {
@@ -40,6 +40,12 @@ export default async function handler(req, res) {
   }
   if (kind === 'offer' && !amount) {
     return sendJson(res, 400, { ok: false, message: 'An offer needs an amount.' });
+  }
+  if ((kind === 'question' || kind === 'proof-requested') && !message) {
+    return sendJson(res, 400, {
+      ok: false,
+      message: kind === 'proof-requested' ? 'Describe the proof or document you want to review.' : 'Enter your question for the seller.',
+    });
   }
 
   const supabase = getSupabaseAdmin();
@@ -88,8 +94,12 @@ export default async function handler(req, res) {
     message:
       kind === 'offer'
         ? 'Your offer was delivered to the seller.'
+        : kind === 'packet-downloaded'
+          ? 'Your buyer packet is ready and the seller was notified.'
         : kind === 'call-requested'
           ? 'Your call request was delivered to the seller.'
+          : kind === 'proof-requested'
+            ? 'Your proof request was delivered to the seller.'
           : 'Your message was delivered to the seller.',
   });
 }
