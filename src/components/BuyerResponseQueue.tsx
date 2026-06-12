@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { Panel, Pill } from '@/components/app-ui';
 import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
 import { loadPublicBuyerRoomEventsFromCloud, recordBuyerRoomSellerResponseInCloud } from '@/lib/cloudWorkspace';
@@ -39,9 +43,13 @@ export function BuyerResponseQueue() {
   const logBuyerRoomEvent = useXbarStore((state) => state.logBuyerRoomEvent);
   const mergeBuyerRoomEvents = useXbarStore((state) => state.mergeBuyerRoomEvents);
   const captureBuyerRoomOffer = useXbarStore((state) => state.captureBuyerRoomOffer);
+  const captureBuyerRoomFollowUp = useXbarStore((state) => state.captureBuyerRoomFollowUp);
   const canManageSales = useCurrentRoleCapability('manageSales');
   const [syncing, setSyncing] = useState(false);
   const [respondingEventId, setRespondingEventId] = useState('');
+  const [responseEvent, setResponseEvent] = useState<BuyerRoomEvent | null>(null);
+  const [responseNote, setResponseNote] = useState('');
+  const [responseError, setResponseError] = useState('');
   const [syncMessage, setSyncMessage] = useState('');
   const openRequests = openBuyerRequests(events);
   const activity = sortBuyerRoomEvents(events).slice(0, 30);
@@ -61,6 +69,52 @@ export function BuyerResponseQueue() {
     void refresh(false);
   }, [refresh]);
 
+  const submitResponse = async () => {
+    if (!responseEvent) return;
+    const note = responseNote.trim();
+    if (!note) {
+      setResponseError('Write the response delivered to the buyer.');
+      return;
+    }
+
+    setResponseError('');
+    setRespondingEventId(responseEvent.id);
+    const cloudResult = await recordBuyerRoomSellerResponseInCloud({ replyToEventId: responseEvent.id, note });
+    setRespondingEventId('');
+    if (!cloudResult.ok) {
+      setResponseError(cloudResult.message);
+      setSyncMessage(cloudResult.message);
+      return;
+    }
+    if (cloudResult.cloudAttempted) {
+      if (cloudResult.event) {
+        mergeBuyerRoomEvents([cloudResult.event]);
+      } else {
+        await refresh(false);
+      }
+      setSyncMessage(cloudResult.message);
+      setResponseEvent(null);
+      setResponseNote('');
+      return;
+    }
+
+    const localResult = logBuyerRoomEvent({
+      horseId: responseEvent.horseId,
+      kind: 'seller-response',
+      actor: currentRole,
+      replyToEventId: responseEvent.id,
+      note,
+    });
+    if (!localResult.ok) {
+      setResponseError(localResult.message);
+      setSyncMessage(localResult.message);
+      return;
+    }
+    setSyncMessage(localResult.message);
+    setResponseEvent(null);
+    setResponseNote('');
+  };
+
   const renderEvents = (visibleEvents: BuyerRoomEvent[], emptyTitle: string, emptyDescription: string) => (
     visibleEvents.length ? (
       <div className="stack-list">
@@ -78,6 +132,15 @@ export function BuyerResponseQueue() {
                 lead.stage === 'Offer' &&
                 lead.offerAmount === event.amount,
             );
+          const followUpLead =
+            event.kind === 'packet-downloaded' || event.kind === 'call-requested'
+              ? salesLeads.find(
+                  (lead) =>
+                    lead.stage !== 'Closed' &&
+                    lead.horseId === event.horseId &&
+                    lead.name.trim().toLowerCase() === event.actor.trim().toLowerCase(),
+                )
+              : undefined;
           return (
             <div className="stack-item" key={event.id}>
               <div className="stack-item__top">
@@ -106,40 +169,36 @@ export function BuyerResponseQueue() {
                     Send to offer workflow
                   </Button>
                 ) : null}
+                {(event.kind === 'packet-downloaded' || event.kind === 'call-requested') && followUpLead?.nextFollowUp ? (
+                  <Button asChild variant="outline" size="sm">
+                    <Link to={`/follow-ups?lead=${followUpLead.id}`}>Open follow-up</Link>
+                  </Button>
+                ) : null}
+                {(event.kind === 'packet-downloaded' || event.kind === 'call-requested') && !followUpLead?.nextFollowUp ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!canManageSales}
+                    onClick={() => {
+                      const result = captureBuyerRoomFollowUp(event.id);
+                      setSyncMessage(result.message);
+                    }}
+                  >
+                    {event.kind === 'call-requested' ? 'Schedule call' : 'Schedule follow-up'}
+                  </Button>
+                ) : null}
                 {needsResponse ? (
                   <Button
                     variant="outline"
                     size="sm"
                     disabled={!canManageSales || respondingEventId === event.id}
-                    onClick={async () => {
-                      const note = event.kind === 'proof-requested' ? `Proof request from ${event.actor} marked sent.` : `Request from ${event.actor} marked answered.`;
-                      setRespondingEventId(event.id);
-                      const cloudResult = await recordBuyerRoomSellerResponseInCloud({ replyToEventId: event.id, note });
-                      setRespondingEventId('');
-                      if (!cloudResult.ok) {
-                        setSyncMessage(cloudResult.message);
-                        return;
-                      }
-                      if (cloudResult.cloudAttempted) {
-                        if (cloudResult.event) {
-                          mergeBuyerRoomEvents([cloudResult.event]);
-                        } else {
-                          await refresh(false);
-                        }
-                        setSyncMessage(cloudResult.message);
-                        return;
-                      }
-                      const localResult = logBuyerRoomEvent({
-                        horseId: event.horseId,
-                        kind: 'seller-response',
-                        actor: currentRole,
-                        replyToEventId: event.id,
-                        note,
-                      });
-                      setSyncMessage(localResult.message);
+                    onClick={() => {
+                      setResponseEvent(event);
+                      setResponseNote('');
+                      setResponseError('');
                     }}
                   >
-                    {respondingEventId === event.id ? 'Recording...' : event.kind === 'proof-requested' ? 'Mark proof sent' : 'Mark answered'}
+                    Respond to buyer
                   </Button>
                 ) : null}
               </div>
@@ -158,26 +217,86 @@ export function BuyerResponseQueue() {
   );
 
   return (
-    <Panel
-      eyebrow="Buyer response queue"
-      title="Buyer activity"
-      description="Questions, proof requests, offers, packet views, and seller responses from shared buyer links."
-      meta={<Pill tone={openRequests.length ? 'amber' : activity.length ? 'blue' : 'slate'}>{openRequests.length ? `${openRequests.length} response needed` : activity.length ? 'Activity current' : 'Quiet'}</Pill>}
-      action={<Button variant="outline" size="sm" disabled={syncing} onClick={() => void refresh()}>{syncing ? 'Refreshing...' : 'Refresh activity'}</Button>}
-    >
-      <Tabs defaultValue={openRequests.length ? 'responses' : 'activity'}>
-        <TabsList>
-          <TabsTrigger value="responses">Needs response ({openRequests.length})</TabsTrigger>
-          <TabsTrigger value="activity">All activity ({activity.length})</TabsTrigger>
-        </TabsList>
-        <TabsContent value="responses">
-          {renderEvents(openRequests, 'No buyer requests waiting', 'New buyer questions, call requests, and proof requests will appear here.')}
-        </TabsContent>
-        <TabsContent value="activity">
-          {renderEvents(activity, 'No buyer activity yet', 'Share a buyer packet to begin tracking views, requests, and offers.')}
-        </TabsContent>
-      </Tabs>
-      {syncMessage ? <p className="panel__description" role="status" style={{ marginTop: 12 }}>{syncMessage}</p> : null}
-    </Panel>
+    <>
+      <Panel
+        eyebrow="Buyer response queue"
+        title="Buyer activity"
+        description="Questions, proof requests, offers, packet downloads, scheduled follow-ups, and seller responses from shared buyer links."
+        meta={<Pill tone={openRequests.length ? 'amber' : activity.length ? 'blue' : 'slate'}>{openRequests.length ? `${openRequests.length} response needed` : activity.length ? 'Activity current' : 'Quiet'}</Pill>}
+        action={<Button variant="outline" size="sm" disabled={syncing} onClick={() => void refresh()}>{syncing ? 'Refreshing...' : 'Refresh activity'}</Button>}
+      >
+        <Tabs defaultValue={openRequests.length ? 'responses' : 'activity'}>
+          <TabsList>
+            <TabsTrigger value="responses">Needs response ({openRequests.length})</TabsTrigger>
+            <TabsTrigger value="activity">All activity ({activity.length})</TabsTrigger>
+          </TabsList>
+          <TabsContent value="responses">
+            {renderEvents(openRequests, 'No buyer requests waiting', 'New buyer questions, call requests, and proof requests will appear here.')}
+          </TabsContent>
+          <TabsContent value="activity">
+            {renderEvents(activity, 'No buyer activity yet', 'Share a buyer packet to begin tracking views, requests, and offers.')}
+          </TabsContent>
+        </Tabs>
+        {syncMessage ? <p className="panel__description" role="status" style={{ marginTop: 12 }}>{syncMessage}</p> : null}
+      </Panel>
+
+      <Dialog
+        open={Boolean(responseEvent)}
+        onOpenChange={(open) => {
+          if (!open && !respondingEventId) {
+            setResponseEvent(null);
+            setResponseNote('');
+            setResponseError('');
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Respond to {responseEvent?.actor ?? 'buyer'}</DialogTitle>
+            <DialogDescription>
+              Record the response delivered to the buyer. This resolves the exact request and becomes part of the buyer-room timeline.
+            </DialogDescription>
+          </DialogHeader>
+          {responseEvent ? (
+            <div className="rounded-md border bg-muted/40 p-3 text-sm">
+              <div className="font-medium">{eventLabel(responseEvent.kind)} · {horses.find((horse) => horse.id === responseEvent.horseId)?.name ?? 'Horse record'}</div>
+              <div className="mt-1 text-muted-foreground">{responseEvent.note || 'No additional buyer note.'}</div>
+            </div>
+          ) : null}
+          <Field data-invalid={Boolean(responseError)}>
+            <FieldLabel htmlFor="buyer-response-note">Seller response</FieldLabel>
+            <Textarea
+              id="buyer-response-note"
+              maxLength={1200}
+              rows={6}
+              value={responseNote}
+              onChange={(event) => setResponseNote(event.target.value)}
+              placeholder="Write the answer, proof delivered, or call outcome shared with the buyer."
+              aria-invalid={Boolean(responseError)}
+              disabled={Boolean(respondingEventId)}
+            />
+            <FieldDescription>{responseNote.length}/1200 characters · Recorded against this buyer request.</FieldDescription>
+            <FieldError>{responseError}</FieldError>
+          </Field>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              type="button"
+              disabled={Boolean(respondingEventId)}
+              onClick={() => {
+                setResponseEvent(null);
+                setResponseNote('');
+                setResponseError('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="button" disabled={Boolean(respondingEventId)} onClick={() => void submitResponse()}>
+              {respondingEventId ? 'Recording response...' : 'Record seller response'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

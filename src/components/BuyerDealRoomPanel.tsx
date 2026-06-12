@@ -16,13 +16,14 @@ export function BuyerDealRoomPanel({ compact = false }: { compact?: boolean }) {
   const visibleSummaries = compact ? summaries.slice(0, 4) : summaries.slice(0, 8);
   const activeQuestionCount = summaries.reduce((total, summary) => total + summary.openQuestions, 0);
   const highestOffer = summaries.reduce((highest, summary) => Math.max(highest, summary.highestOffer), 0);
+  const packetDownloadCount = summaries.reduce((total, summary) => total + summary.packetDownloads, 0);
 
   return (
     <Panel
       eyebrow="Buyer Deal Room"
       title="Deal pressure"
-      description={compact ? undefined : 'Buyer-facing intent by horse: unanswered questions and proof requests, open offers, latest deal status, and the next seller action.'}
-      meta={<Pill tone={activeQuestionCount ? 'amber' : highestOffer ? 'blue' : 'slate'}>{activeQuestionCount ? `${activeQuestionCount} response needed` : highestOffer ? 'Offer pressure' : 'Quiet'}</Pill>}
+      description={compact ? undefined : 'Buyer-facing intent by horse: unanswered questions and proof requests, packet downloads, open offers, latest deal status, and the next seller action.'}
+      meta={<Pill tone={activeQuestionCount ? 'amber' : highestOffer || packetDownloadCount ? 'blue' : 'slate'}>{activeQuestionCount ? `${activeQuestionCount} response needed` : highestOffer ? 'Offer pressure' : packetDownloadCount ? `${packetDownloadCount} packet download${packetDownloadCount === 1 ? '' : 's'}` : 'Quiet'}</Pill>}
       action={<Link className="button button--ghost button--compact" to="/sales">Sales</Link>}
     >
       {visibleSummaries.length ? (
@@ -33,7 +34,7 @@ export function BuyerDealRoomPanel({ compact = false }: { compact?: boolean }) {
                 <div>
                   <div className="stack-item__title">{summary.horseName}</div>
                   <div className="stack-item__copy">
-                    {summary.eventCount} buyer event{summary.eventCount === 1 ? '' : 's'} · {summary.offers} offer{summary.offers === 1 ? '' : 's'} · {summary.latestActivityAt ? `Last ${formatDateLabel(summary.latestActivityAt)}` : 'No activity yet'}
+                    {summary.eventCount} buyer event{summary.eventCount === 1 ? '' : 's'} · {summary.packetDownloads} packet download{summary.packetDownloads === 1 ? '' : 's'} · {summary.offers} offer{summary.offers === 1 ? '' : 's'} · {summary.latestActivityAt ? `Last ${formatDateLabel(summary.latestActivityAt)}` : 'No activity yet'}
                   </div>
                 </div>
                 <Pill tone={actionTone(summary.action.tone)}>{summary.action.label}</Pill>

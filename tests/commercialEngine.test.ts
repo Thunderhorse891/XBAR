@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildBreedingRevenueProfile } from '../src/lib/breedingRevenue.js';
-import { hasSellerResponse, openBuyerRequests, publicShareEventToBuyerRoomEvent } from '../src/lib/buyerDealRoom.js';
+import { buildBuyerDealRoomSummaries, hasSellerResponse, openBuyerRequests, publicShareEventToBuyerRoomEvent } from '../src/lib/buyerDealRoom.js';
 import { buildUsageMeters, featureGate, usagePressure } from '../src/lib/commercialEngine.js';
 import { buildHorseProfitProfile, buildOfferDecision } from '../src/lib/profitIntelligence.js';
 import { buildPublicBuyerPacketArtifact } from '../src/lib/publicBuyerPacket.js';
@@ -114,6 +114,22 @@ test('public buyer proof requests become actionable deal-room events', () => {
   assert.equal(response?.kind, 'seller-response');
   assert.equal(response?.replyToEventId, event?.id);
   assert.equal(hasSellerResponse([event, response].filter(Boolean) as BuyerRoomEvent[], event as BuyerRoomEvent), true);
+});
+
+test('buyer packet downloads dispatch seller follow-up pressure', () => {
+  const download = {
+    id: 'download-1',
+    horseId: horse.id,
+    kind: 'packet-downloaded',
+    at: '2026-06-12T12:00:00.000Z',
+    actor: 'Buyer One',
+  } as BuyerRoomEvent;
+
+  const summary = buildBuyerDealRoomSummaries({ horses: [horse], leads: [], events: [download] })[0];
+
+  assert.equal(summary.packetDownloads, 1);
+  assert.equal(summary.action.label, 'Follow up');
+  assert.match(summary.action.reason, /packet download/);
 });
 
 test('public buyer packet includes approved summaries without internal record data', () => {
