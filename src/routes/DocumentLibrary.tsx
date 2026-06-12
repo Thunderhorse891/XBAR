@@ -376,7 +376,16 @@ export default function DocumentLibrary() {
                 <button className="button button--ghost button--compact" type="button" onClick={downloadDocument} disabled={locked}>Download report</button>
                 <button className="button button--ghost button--compact" type="button" onClick={() => window.print()} disabled={locked}>Print / save PDF</button>
               </div>
-              {locked ? <div className="field-error">This template belongs to {selectedTemplate.minimumPlan}+ plan positioning. Current plan: {subscription.tier}.</div> : null}
+              {locked ? (
+                <div className="field-error">
+                  This template belongs to {selectedTemplate.minimumPlan}+ plan positioning. Current plan: {subscription.tier}.{' '}
+                  {selectedTemplate.minimumPlan === 'Professional'
+                    ? 'Upgrading to Professional unlocks watermarked sale packets and buyer deal rooms.'
+                    : selectedTemplate.minimumPlan === 'Ranch Ops'
+                      ? 'Upgrading to Ranch Ops unlocks team roles, the breeding program, and equipment at scale.'
+                      : `Upgrading to ${selectedTemplate.minimumPlan} unlocks this template.`}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </Panel>

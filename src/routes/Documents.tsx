@@ -988,6 +988,14 @@ export default function Documents() {
             description="Bundle each horse's approved documents into a watermarked sale packet."
             action={
               <button className="button button--ghost button--compact" type="button" onClick={() => navigate(SHARED_ACCESS_PATH)}>
+            {subscription.tier === 'Starter' ? (
+              <p className="panel__description" style={{ marginBottom: 12 }}>
+                Starter records the packet build. Upgrading to Professional unlocks the watermarked PDF and the buyer deal room.{' '}
+                <button className="button button--ghost button--compact" type="button" onClick={() => navigate('/subscriptions?plan=Professional')}>
+                  View Plan &amp; Billing
+                </button>
+              </p>
+            ) : null}
                 Open Shared Access workspace
               </button>
             }
