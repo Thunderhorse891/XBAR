@@ -192,6 +192,7 @@ type XbarStore = {
     replyToEventId?: string;
   }) => ActionResult & { event?: BuyerRoomEvent };
   mergeBuyerRoomEvents: (events: BuyerRoomEvent[]) => ActionResult;
+  captureBuyerRoomOffer: (eventId: string) => ActionResult;
   addOwnershipStake: (horseId: string, stake: Omit<OwnershipStake, 'id'>) => ActionResult;
   removeOwnershipStake: (horseId: string, stakeId: string) => ActionResult;
   ensureOwnershipRecord: (horseId: string) => ActionResult & { recordId?: string };
@@ -2698,6 +2699,61 @@ export const useXbarStore = create<XbarStore>()(
         return {
           ok: true,
           message: events.length ? `${events.length} public buyer event${events.length === 1 ? '' : 's'} refreshed.` : 'Buyer activity is current.',
+        };
+      },
+      captureBuyerRoomOffer: (eventId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageSales');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+        const planBlocked = featureGate(get().subscription, 'buyerDealRoom');
+        if (planBlocked) {
+          return { ok: false, message: planBlocked };
+        }
+
+        const event = get().buyerRoomEvents.find((item) => item.id === eventId);
+        if (!event || event.kind !== 'offer' || !(event.amount && event.amount > 0)) {
+          return { ok: false, message: 'Buyer offer event not found.' };
+        }
+
+        const normalizedActor = event.actor.trim().toLowerCase();
+        let lead = get().salesLeads.find(
+          (item) => item.horseId === event.horseId && item.name.trim().toLowerCase() === normalizedActor,
+        );
+        if (!lead) {
+          const created = get().createSalesLead({
+            horseId: event.horseId,
+            name: event.actor,
+            channel: 'Site Inquiry',
+            shareReady: true,
+          });
+          if (!created.ok || !created.id) {
+            return created;
+          }
+          lead = get().salesLeads.find((item) => item.id === created.id);
+        }
+        if (!lead) {
+          return { ok: false, message: 'Buyer lead could not be prepared for this offer.' };
+        }
+
+        const offerNote = event.note?.trim() ?? '';
+        const notes = [lead.notes?.trim(), offerNote && !lead.notes?.includes(offerNote) ? offerNote : ''].filter(Boolean).join('\n\n');
+        const updated = get().updateSalesLead(lead.id, {
+          stage: 'Offer',
+          lastTouch: todayStamp(),
+          offerAmount: event.amount,
+          offerStatus: 'Submitted',
+          shareReady: true,
+          notes,
+        });
+        if (!updated.ok) {
+          return updated;
+        }
+
+        return {
+          ok: true,
+          id: lead.id,
+          message: `${event.actor}'s ${event.amount.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })} offer is now in the Sales margin workflow.`,
         };
       },
       addOwnershipStake: (horseId, stake) => {
