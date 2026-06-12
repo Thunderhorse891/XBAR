@@ -29,6 +29,7 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { getCapabilityDeniedMessage, hasRoleCapability } from '@/lib/permissions';
 import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { featureGate } from '@/lib/commercialEngine';
+import { buildOfferDecision } from '@/lib/profitIntelligence';
 import {
   createWorkspaceInvitationInCloud,
   removeWorkspaceMemberFromCloud,
@@ -1926,6 +1927,21 @@ export const useXbarStore = create<XbarStore>()(
         const lead = get().salesLeads.find((item) => item.id === leadId);
         if (!lead) {
           return { ok: false, message: 'Lead not found.' };
+        }
+
+        const nextOfferStatus = patch.offerStatus ?? lead.offerStatus;
+        if (nextOfferStatus && ['Accepted', 'Deposit Due', 'Deposit Paid'].includes(nextOfferStatus)) {
+          const horse = get().horses.find((item) => item.id === lead.horseId);
+          if (!horse) return { ok: false, message: 'Horse record not found for this offer.' };
+          const decision = buildOfferDecision(
+            horse,
+            get().expenseReceipts,
+            patch.offerAmount ?? lead.offerAmount ?? 0,
+            patch.counterOfferAmount ?? lead.counterOfferAmount ?? 0,
+          );
+          if (decision.acceptanceBlocked) {
+            return { ok: false, message: `${decision.label}. ${decision.recommendation}` };
+          }
         }
 
         set((current) => {

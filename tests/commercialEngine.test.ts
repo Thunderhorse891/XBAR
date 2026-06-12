@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildBreedingRevenueProfile } from '../src/lib/breedingRevenue.js';
 import { buildUsageMeters, featureGate, usagePressure } from '../src/lib/commercialEngine.js';
-import { buildHorseProfitProfile } from '../src/lib/profitIntelligence.js';
+import { buildHorseProfitProfile, buildOfferDecision } from '../src/lib/profitIntelligence.js';
 import { buildSaleHold } from '../src/lib/saleTrustEngine.js';
 import { subscriptionPlans } from '../src/lib/subscriptionPlans.js';
 import type { DocumentRecord, ExpenseReceipt, HorseRecord, OwnershipRecord, SubscriptionProfile } from '../src/types/xbar.js';
@@ -61,6 +61,29 @@ test('profit and breeding intelligence tie spend to revenue decisions', () => {
   const breeding = buildBreedingRevenueProfile(horse, [receipt]);
   assert.equal(breeding.stallionRevenue, 6000);
   assert.equal(Math.round(breeding.roi), 220);
+});
+
+test('offer decision guardrail blocks losses and protects margin', () => {
+  const loss = buildOfferDecision(horse, [receipt], 11000);
+  assert.equal(loss.status, 'loss');
+  assert.equal(loss.acceptanceBlocked, true);
+  assert.equal(loss.safeSalePrice, 13800);
+
+  const thinMargin = buildOfferDecision(horse, [receipt], 12500);
+  assert.equal(thinMargin.status, 'thin-margin');
+  assert.equal(thinMargin.overrideRequired, true);
+
+  const protectedMargin = buildOfferDecision(horse, [receipt], 14000);
+  assert.equal(protectedMargin.status, 'protected-margin');
+  assert.equal(protectedMargin.acceptanceBlocked, false);
+  assert.equal(protectedMargin.overrideRequired, false);
+});
+
+test('offer decision guardrail requires cost proof before relying on margin', () => {
+  const noCostHorse = { ...horse, costBasis: 0 } as HorseRecord;
+  const decision = buildOfferDecision(noCostHorse, [], 14000);
+  assert.equal(decision.status, 'missing-costs');
+  assert.equal(decision.overrideRequired, true);
 });
 
 test('sale hold blocks missing Coggins and ownership proof', () => {
