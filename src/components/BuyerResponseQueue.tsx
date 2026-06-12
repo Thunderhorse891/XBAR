@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Panel, Pill } from '@/components/app-ui';
@@ -39,6 +40,7 @@ export function BuyerResponseQueue() {
   const logBuyerRoomEvent = useXbarStore((state) => state.logBuyerRoomEvent);
   const mergeBuyerRoomEvents = useXbarStore((state) => state.mergeBuyerRoomEvents);
   const captureBuyerRoomOffer = useXbarStore((state) => state.captureBuyerRoomOffer);
+  const captureBuyerRoomFollowUp = useXbarStore((state) => state.captureBuyerRoomFollowUp);
   const canManageSales = useCurrentRoleCapability('manageSales');
   const [syncing, setSyncing] = useState(false);
   const [respondingEventId, setRespondingEventId] = useState('');
@@ -78,6 +80,15 @@ export function BuyerResponseQueue() {
                 lead.stage === 'Offer' &&
                 lead.offerAmount === event.amount,
             );
+          const packetDownloadLead =
+            event.kind === 'packet-downloaded'
+              ? salesLeads.find(
+                  (lead) =>
+                    lead.stage !== 'Closed' &&
+                    lead.horseId === event.horseId &&
+                    lead.name.trim().toLowerCase() === event.actor.trim().toLowerCase(),
+                )
+              : undefined;
           return (
             <div className="stack-item" key={event.id}>
               <div className="stack-item__top">
@@ -104,6 +115,24 @@ export function BuyerResponseQueue() {
                     }}
                   >
                     Send to offer workflow
+                  </Button>
+                ) : null}
+                {event.kind === 'packet-downloaded' && packetDownloadLead?.nextFollowUp ? (
+                  <Button asChild variant="outline" size="sm">
+                    <Link to={`/follow-ups?lead=${packetDownloadLead.id}`}>Open follow-up</Link>
+                  </Button>
+                ) : null}
+                {event.kind === 'packet-downloaded' && !packetDownloadLead?.nextFollowUp ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!canManageSales}
+                    onClick={() => {
+                      const result = captureBuyerRoomFollowUp(event.id);
+                      setSyncMessage(result.message);
+                    }}
+                  >
+                    Schedule follow-up
                   </Button>
                 ) : null}
                 {needsResponse ? (
@@ -161,7 +190,7 @@ export function BuyerResponseQueue() {
     <Panel
       eyebrow="Buyer response queue"
       title="Buyer activity"
-      description="Questions, proof requests, offers, packet views, and seller responses from shared buyer links."
+      description="Questions, proof requests, offers, packet downloads, scheduled follow-ups, and seller responses from shared buyer links."
       meta={<Pill tone={openRequests.length ? 'amber' : activity.length ? 'blue' : 'slate'}>{openRequests.length ? `${openRequests.length} response needed` : activity.length ? 'Activity current' : 'Quiet'}</Pill>}
       action={<Button variant="outline" size="sm" disabled={syncing} onClick={() => void refresh()}>{syncing ? 'Refreshing...' : 'Refresh activity'}</Button>}
     >
