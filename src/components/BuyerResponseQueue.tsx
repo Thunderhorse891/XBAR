@@ -25,6 +25,7 @@ function eventLabel(kind: BuyerRoomEvent['kind']) {
 
 function eventTone(kind: BuyerRoomEvent['kind']) {
   if (kind === 'offer') return 'blue';
+  if (kind === 'packet-downloaded') return 'blue';
   if (kind === 'question' || kind === 'call-requested' || kind === 'proof-requested') return 'amber';
   if (kind === 'seller-response') return 'emerald';
   return 'slate';

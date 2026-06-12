@@ -4,9 +4,13 @@ import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
 import { SalePacketSlots } from '@/components/SalePacketSlots';
 import { KeyValue, MetricCard, Panel, Pill } from '@/components/app-ui';
+import { Button } from '@/components/ui/button';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
 import { buildPublicShareUrl, openFacebookShareDialog } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
 import { apiConfig, isPublicShareLocalPreviewEnabled } from '@/lib/platformConfig';
+import { buildPublicBuyerPacketArtifact, downloadPublicBuyerPacketArtifact } from '@/lib/publicBuyerPacket';
 import { loadPublicBuyerProfile, sanitizeDocumentForBuyerView, sanitizeHorseForBuyerView, sanitizeSharedListingForBuyerView, trackPublicBuyerProfileView, type PublicBuyerProfilePayload } from '@/lib/publicShare';
 import { hasBuyerShareAccess } from '@/lib/workspaceAccess';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
@@ -22,13 +26,15 @@ function BuyerActionPanel({
   shareToken,
   source,
   onLocalLog,
+  onDownloadPacket,
 }: {
   sharePath: string;
   shareToken: string;
   source: 'rpc' | 'local';
-  onLocalLog: (input: { kind: 'question' | 'call-requested' | 'proof-requested' | 'offer'; actor: string; note?: string; amount?: number }) => void;
+  onLocalLog: (input: { kind: 'question' | 'call-requested' | 'proof-requested' | 'offer' | 'packet-downloaded'; actor: string; note?: string; amount?: number }) => void;
+  onDownloadPacket: () => void;
 }) {
-  const [mode, setMode] = useState<null | 'question' | 'call-requested' | 'proof-requested' | 'offer'>(null);
+  const [mode, setMode] = useState<null | 'question' | 'call-requested' | 'proof-requested' | 'offer' | 'packet-downloaded'>(null);
   const [buyerName, setBuyerName] = useState('');
   const [buyerEmail, setBuyerEmail] = useState('');
   const [message, setMessage] = useState('');
@@ -61,8 +67,11 @@ function BuyerActionPanel({
         note: [message.trim(), buyerEmail.trim() ? `Contact: ${buyerEmail.trim()}` : ''].filter(Boolean).join(' — ') || undefined,
         amount: mode === 'offer' ? offerAmount : undefined,
       });
+      if (mode === 'packet-downloaded') {
+        onDownloadPacket();
+      }
       setSubmitting(false);
-      setStatusText('Delivered to the seller. They will respond using your contact details.');
+      setStatusText(mode === 'packet-downloaded' ? 'Buyer packet downloaded and seller notified.' : 'Delivered to the seller. They will respond using your contact details.');
       setMode(null);
       return;
     }
@@ -85,6 +94,9 @@ function BuyerActionPanel({
       const payload = (await response.json().catch(() => ({}))) as { ok?: boolean; message?: string };
       setSubmitting(false);
       if (response.ok && payload.ok) {
+        if (mode === 'packet-downloaded') {
+          onDownloadPacket();
+        }
         setStatusText(payload.message ?? 'Delivered to the seller.');
         setMode(null);
       } else {
@@ -98,52 +110,55 @@ function BuyerActionPanel({
 
   return (
     <Panel eyebrow="Interested?" title="Contact the seller">
-      <div className="inline-actions" role="group" aria-label="Buyer actions">
-        <button className={`button button--compact ${mode === 'question' ? 'button--primary' : 'button--ghost'}`} type="button" onClick={() => setMode('question')}>
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Buyer actions">
+        <Button variant={mode === 'packet-downloaded' ? 'default' : 'outline'} size="sm" type="button" onClick={() => setMode('packet-downloaded')}>
+          Download buyer packet
+        </Button>
+        <Button variant={mode === 'question' ? 'default' : 'outline'} size="sm" type="button" onClick={() => setMode('question')}>
           Ask a question
-        </button>
-        <button className={`button button--compact ${mode === 'call-requested' ? 'button--primary' : 'button--ghost'}`} type="button" onClick={() => setMode('call-requested')}>
+        </Button>
+        <Button variant={mode === 'call-requested' ? 'default' : 'outline'} size="sm" type="button" onClick={() => setMode('call-requested')}>
           Request a call
-        </button>
-        <button className={`button button--compact ${mode === 'proof-requested' ? 'button--primary' : 'button--ghost'}`} type="button" onClick={() => setMode('proof-requested')}>
+        </Button>
+        <Button variant={mode === 'proof-requested' ? 'default' : 'outline'} size="sm" type="button" onClick={() => setMode('proof-requested')}>
           Request proof
-        </button>
-        <button className={`button button--compact ${mode === 'offer' ? 'button--primary' : 'button--ghost'}`} type="button" onClick={() => setMode('offer')}>
+        </Button>
+        <Button variant={mode === 'offer' ? 'default' : 'outline'} size="sm" type="button" onClick={() => setMode('offer')}>
           Submit an offer
-        </button>
+        </Button>
       </div>
       {mode && (
-        <div className="form-grid form-grid--tight" style={{ marginTop: 12 }}>
-          <label className="field-stack">
-            <span className="field-label">Your name</span>
-            <input className="field-input" value={buyerName} onChange={(event) => setBuyerName(event.target.value)} placeholder="John Smith" />
-          </label>
-          <label className="field-stack">
-            <span className="field-label">Email or phone</span>
-            <input className="field-input" value={buyerEmail} onChange={(event) => setBuyerEmail(event.target.value)} placeholder="you@example.com" />
-          </label>
+        <FieldGroup className="mt-3 grid gap-3 md:grid-cols-2">
+          <Field>
+            <FieldLabel htmlFor="buyer-name">Your name</FieldLabel>
+            <Input id="buyer-name" value={buyerName} onChange={(event) => setBuyerName(event.target.value)} placeholder="John Smith" />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="buyer-contact">Email or phone</FieldLabel>
+            <Input id="buyer-contact" value={buyerEmail} onChange={(event) => setBuyerEmail(event.target.value)} placeholder="you@example.com" />
+          </Field>
           {mode === 'offer' && (
-            <label className="field-stack">
-              <span className="field-label">Offer amount (USD)</span>
-              <input className="field-input" type="number" min="1" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="15000" />
-            </label>
+            <Field>
+              <FieldLabel htmlFor="buyer-offer">Offer amount (USD)</FieldLabel>
+              <Input id="buyer-offer" type="number" min="1" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="15000" />
+            </Field>
           )}
-          <label className="field-stack field-stack--wide">
-            <span className="field-label">{mode === 'question' ? 'Your question' : mode === 'proof-requested' ? 'Proof or document requested' : mode === 'offer' ? 'Terms or notes (optional)' : 'Best time to call'}</span>
-            <input
-              className="field-input"
+          <Field className="md:col-span-2">
+            <FieldLabel htmlFor="buyer-message">{mode === 'question' ? 'Your question' : mode === 'proof-requested' ? 'Proof or document requested' : mode === 'offer' ? 'Terms or notes (optional)' : mode === 'packet-downloaded' ? 'Note for seller (optional)' : 'Best time to call'}</FieldLabel>
+            <Input
+              id="buyer-message"
               value={message}
               onChange={(event) => setMessage(event.target.value)}
-              placeholder={mode === 'question' ? 'Is she up to date on vaccinations?' : mode === 'proof-requested' ? 'Current Coggins and registration certificate' : 'Weekday afternoons'}
+              placeholder={mode === 'question' ? 'Is she up to date on vaccinations?' : mode === 'proof-requested' ? 'Current Coggins and registration certificate' : mode === 'packet-downloaded' ? 'I am reviewing this with my trainer.' : 'Weekday afternoons'}
             />
-          </label>
-          <div className="inline-actions" style={{ gridColumn: '1/-1' }}>
-            <button className="button button--primary button--compact" type="button" disabled={submitting} onClick={() => void submit()}>
-              {submitting ? 'Sending…' : mode === 'offer' ? 'Send offer to seller' : 'Send to seller'}
-            </button>
-            <button className="button button--ghost button--compact" type="button" onClick={() => setMode(null)}>Cancel</button>
+          </Field>
+          <div className="flex flex-wrap gap-2 md:col-span-2">
+            <Button type="button" disabled={submitting} onClick={() => void submit()}>
+              {submitting ? 'Sending...' : mode === 'packet-downloaded' ? 'Download packet' : mode === 'offer' ? 'Send offer to seller' : 'Send to seller'}
+            </Button>
+            <Button variant="ghost" type="button" onClick={() => setMode(null)}>Cancel</Button>
           </div>
-        </div>
+        </FieldGroup>
       )}
       {statusText && <p className="panel__description" role="status" style={{ marginTop: 10 }}>{statusText}</p>}
     </Panel>
@@ -325,6 +340,13 @@ export default function BuyerProfile() {
   const salePhotoAssets = horse.gallery.filter(
     (asset) => asset.status === 'Approved' && (asset.kind === 'Hero' || asset.kind === 'Conformation' || asset.kind === 'Sale Still'),
   ).slice(0, 4);
+  const downloadBuyerPacket = () => {
+    downloadPublicBuyerPacketArtifact(buildPublicBuyerPacketArtifact({
+      horse,
+      documents: visibleDocuments.map(({ document }) => document),
+      sharedListing,
+    }));
+  };
 
   return (
     <main className="buyer-shell">
@@ -411,6 +433,19 @@ export default function BuyerProfile() {
           />
         </div>
 
+        <BuyerActionPanel
+          sharePath={sharePath}
+          shareToken={shareToken}
+          source={remoteState.source ?? 'rpc'}
+          onDownloadPacket={downloadBuyerPacket}
+          onLocalLog={(input) => {
+            if (id) {
+              logBuyerRoomEvent({ horseId: id, kind: input.kind, actor: input.actor, note: input.note, amount: input.amount });
+              pushToast({ title: 'Buyer activity logged', message: 'This buyer action is now in the deal room timeline.', tone: 'success' });
+            }
+          }}
+        />
+
         <div className="detail-grid">
           <Panel eyebrow="Sale packet" title="Coverage">
             <SalePacketSlots slots={packet.saleSlots} />
@@ -475,17 +510,6 @@ export default function BuyerProfile() {
             )}
           </Panel>
         </div>
-      <BuyerActionPanel
-        sharePath={sharePath}
-        shareToken={shareToken}
-        source={remoteState.source ?? 'rpc'}
-        onLocalLog={(input) => {
-          if (id) {
-            logBuyerRoomEvent({ horseId: id, kind: input.kind, actor: input.actor, note: input.note, amount: input.amount });
-            pushToast({ title: 'Buyer activity logged', message: 'This inquiry is now in the deal room timeline.', tone: 'success' });
-          }
-        }}
-      />
       <footer style={{ textAlign: 'center', padding: '24px 0 8px', color: 'rgba(100,130,160,0.45)', fontSize: '11px', letterSpacing: '0.06em' }}>
         <p>© {new Date().getFullYear()} XBAR LLC™ · Information provided by seller. Buyer is responsible for independent verification of registration and health status.</p>
         <p style={{ marginTop: '6px' }}><a href='/terms' style={{ color: 'rgba(100,140,180,0.45)', textDecoration: 'none' }}>Terms</a> · <a href='/privacy' style={{ color: 'rgba(100,140,180,0.45)', textDecoration: 'none' }}>Privacy</a></p>

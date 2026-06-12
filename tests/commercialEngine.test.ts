@@ -4,6 +4,7 @@ import { buildBreedingRevenueProfile } from '../src/lib/breedingRevenue.js';
 import { hasSellerResponse, openBuyerRequests, publicShareEventToBuyerRoomEvent } from '../src/lib/buyerDealRoom.js';
 import { buildUsageMeters, featureGate, usagePressure } from '../src/lib/commercialEngine.js';
 import { buildHorseProfitProfile, buildOfferDecision } from '../src/lib/profitIntelligence.js';
+import { buildPublicBuyerPacketArtifact } from '../src/lib/publicBuyerPacket.js';
 import { buildSaleHold } from '../src/lib/saleTrustEngine.js';
 import { subscriptionPlans } from '../src/lib/subscriptionPlans.js';
 import type { BuyerRoomEvent, DocumentRecord, ExpenseReceipt, HorseRecord, OwnershipRecord, SubscriptionProfile } from '../src/types/xbar.js';
@@ -113,6 +114,47 @@ test('public buyer proof requests become actionable deal-room events', () => {
   assert.equal(response?.kind, 'seller-response');
   assert.equal(response?.replyToEventId, event?.id);
   assert.equal(hasSellerResponse([event, response].filter(Boolean) as BuyerRoomEvent[], event as BuyerRoomEvent), true);
+});
+
+test('public buyer packet includes approved summaries without internal record data', () => {
+  const documents = [{
+    id: 'doc-1',
+    title: 'Current Coggins',
+    type: 'Coggins',
+    summary: 'Negative EIA test confirmed.',
+    fileName: 'private-source-file.pdf',
+    extractedTextPreview: 'PRIVATE OCR TEXT',
+    entities: { ownerName: 'PRIVATE OWNER' },
+  }] as unknown as Parameters<typeof buildPublicBuyerPacketArtifact>[0]['documents'];
+  const horseWithPrivateData = {
+    ...horse,
+    name: 'Blue Moon',
+    breed: 'Quarter Horse',
+    sex: 'Mare',
+    age: 6,
+    color: 'Bay',
+    registry: 'AQHA',
+    registrationNumber: 'AQHA-123',
+    aqhaNumber: '',
+    sale: { ...horse.sale, askPrice: 25000, listingState: 'Market Ready' },
+    readiness: { score: 92, packetStatus: 'Ready', blockers: [] },
+    medicalNotes: 'PRIVATE MEDICAL NOTE',
+  } as HorseRecord;
+
+  const artifact = buildPublicBuyerPacketArtifact({
+    horse: horseWithPrivateData,
+    documents,
+    generatedAt: new Date('2026-06-12T12:00:00.000Z'),
+  });
+
+  assert.equal(artifact.fileName, 'xbar-buyer-packet-blue-moon.html');
+  assert.match(artifact.html, /Blue Moon/);
+  assert.match(artifact.html, /Current Coggins/);
+  assert.match(artifact.html, /Negative EIA test confirmed/);
+  assert.doesNotMatch(artifact.html, /PRIVATE MEDICAL NOTE/);
+  assert.doesNotMatch(artifact.html, /PRIVATE OCR TEXT/);
+  assert.doesNotMatch(artifact.html, /PRIVATE OWNER/);
+  assert.doesNotMatch(artifact.html, /private-source-file\.pdf/);
 });
 
 test('seller responses resolve only the intended buyer request', () => {
