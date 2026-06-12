@@ -13,7 +13,7 @@
   --xbar-metal-border: rgba(206, 221, 234, 0.24);
   --xbar-metal-line: linear-gradient(110deg, rgba(255,255,255,.38), rgba(107,126,145,.18) 28%, rgba(255,255,255,.08) 52%, rgba(226,239,249,.34));
   --xbar-metal-panel: linear-gradient(145deg, rgba(30,36,44,.96), rgba(8,11,16,.98) 42%, rgba(3,5,8,.99));
-  --xbar-logo-image: url('/brand/xbar-website-icon.png.png');
+  --xbar-logo-image: url('/brand/xbar_public_assets/public/brand/xbar-website-icon.png');
   /* Radius scale comes from the canonical token set in src/index.css. */
 }
 

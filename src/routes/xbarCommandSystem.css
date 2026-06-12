@@ -78,7 +78,7 @@ aside > div:first-child > div:first-child::before,
   content: '';
   position: absolute;
   inset: 0;
-  background-image: url('/brand/xbar_public_assets/public/brand/xbar-website-icon.png'), url('/brand/xbar-website-icon.png.png');
+  background-image: url('/brand/xbar_public_assets/public/brand/xbar-website-icon.png'), url('/brand/xbar-mark.svg');
   background-position: center;
   background-repeat: no-repeat;
   background-size: 82%;
