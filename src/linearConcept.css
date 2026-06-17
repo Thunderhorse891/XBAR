@@ -1,0 +1,1416 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap');
+
+/* Linear-style visual layer for XBAR. Presentation only. */
+:root {
+  color-scheme: light;
+  --bg: #f7f7f8;
+  --bg-deep: #eceef1;
+  --surface: #ffffff;
+  --surface-strong: #f2f3f5;
+  --sidebar: #ffffff;
+  --sidebar-edge: #e4e5e8;
+  --text: #1a1c1f;
+  --muted: #777b82;
+  --muted-strong: #454950;
+  --border: #e3e4e8;
+  --border-strong: #c8cbd2;
+  --blue: #111318;
+  --blue-soft: rgba(17, 19, 24, 0.06);
+  --slate: #6f737a;
+  --slate-soft: rgba(111, 115, 122, 0.1);
+  --emerald: #0f8a64;
+  --emerald-soft: rgba(15, 138, 100, 0.1);
+  --amber: #b7791f;
+  --amber-soft: rgba(183, 121, 31, 0.1);
+  --rose: #ba3d45;
+  --rose-soft: rgba(186, 61, 69, 0.1);
+  --shadow: 0 1px 2px rgba(17, 19, 24, 0.06), 0 12px 28px rgba(17, 19, 24, 0.05);
+  --shadow-soft: 0 1px 2px rgba(17, 19, 24, 0.04);
+  --radius-xl: 8px;
+  --radius-lg: 6px;
+  --radius-md: 4px;
+  --radius-sm: 3px;
+  --linear-bg: #f7f7f8;
+  --linear-bg-raised: #fbfbfc;
+  --linear-surface: #ffffff;
+  --linear-surface-low: #f1f2f4;
+  --linear-surface-muted: #e9eaee;
+  --linear-line: #e3e4e8;
+  --linear-line-strong: #c8cbd2;
+  --linear-text: #1a1c1f;
+  --linear-muted: #777b82;
+  --linear-muted-strong: #454950;
+  --linear-black: #111318;
+  --linear-focus: #3b5ccc;
+}
+
+html,
+body,
+#root {
+  background: var(--linear-bg) !important;
+  color: var(--linear-text) !important;
+}
+
+body {
+  margin: 0;
+  font-family: 'Hanken Grotesk', 'Inter', 'Segoe UI Variable Text', system-ui, sans-serif !important;
+  background: var(--linear-bg) !important;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+body::before,
+.ops-briefing-header::before,
+.ops-briefing-header::after,
+.brand-canvas::before,
+.brand-canvas::after,
+.panel::before,
+.panel::after,
+.metric-card::before,
+.metric-card::after,
+.surface-panel::before,
+.surface-panel::after,
+.command-stage::before,
+.command-stage::after,
+.portfolio-stage::before,
+.portfolio-stage::after,
+.detail-hero::before,
+.detail-hero::after,
+.horse-card::before,
+.horse-card::after,
+.table-shell::before,
+.table-shell::after,
+.lp-card::before,
+.premium-setup-card::before {
+  content: none !important;
+  display: none !important;
+}
+
+* {
+  letter-spacing: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.page-title,
+.panel__title,
+.ops-briefing-header__title,
+.revenue-hero h1,
+.lp-card-title {
+  font-family: 'Hanken Grotesk', 'Inter', 'Segoe UI Variable Text', system-ui, sans-serif !important;
+  letter-spacing: 0 !important;
+}
+
+.font-data-mono,
+.font-data-mono-bold,
+.data-table,
+.ownership-table,
+.inline-metrics,
+.revenue-console__rows,
+.metric-card__label,
+.panel__eyebrow,
+.eyebrow,
+.field-label,
+.revenue-kicker {
+  font-family: 'Geist', 'SFMono-Regular', Consolas, monospace !important;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+.icon-button:focus-visible,
+.nav-link:focus-visible,
+.surface-tab:focus-visible,
+.stack-item--interactive:focus-visible,
+.horse-card--interactive:focus-visible,
+.table-row--interactive:focus-visible,
+.metric-card--interactive:focus-visible {
+  outline: 2px solid var(--linear-focus) !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 4px rgba(59, 92, 204, 0.12) !important;
+}
+
+::selection {
+  background: rgba(17, 19, 24, 0.12) !important;
+  color: var(--linear-text) !important;
+}
+
+.app-loading-shell,
+.app-shell,
+.shell-main,
+.buyer-shell,
+.app-error-shell,
+.xbar-command-shell,
+.xbar-command-main,
+.premium-setup-shell,
+.premium-auth-shell,
+.xbar-login-shell,
+.lp-shell,
+.revenue-landing {
+  background: var(--linear-bg) !important;
+  color: var(--linear-text) !important;
+}
+
+.xbar-command-shell {
+  min-height: 100vh;
+}
+
+.xbar-command-main {
+  padding-top: 22px !important;
+}
+
+.xbar-command-shell > aside {
+  background: var(--linear-surface) !important;
+  color: var(--linear-muted-strong) !important;
+  border-color: var(--linear-line) !important;
+  box-shadow: none !important;
+}
+
+body .xbar-command-shell > aside[class*="bg-[#050b14]"],
+body .xbar-command-shell > aside {
+  background: var(--linear-surface) !important;
+  color: var(--linear-muted-strong) !important;
+  border-color: var(--linear-line) !important;
+  box-shadow: none !important;
+}
+
+.xbar-command-shell > aside svg[style],
+.xbar-command-shell .brand-lockup__mark svg[style] {
+  filter: none !important;
+}
+
+.xbar-command-shell > aside > div:first-child {
+  color: var(--linear-text) !important;
+}
+
+.xbar-command-shell > aside > div:first-child > div:first-child {
+  background: var(--linear-surface-low) !important;
+  border-color: var(--linear-line) !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+}
+
+.xbar-command-shell > aside > div:nth-child(2) {
+  background: var(--linear-bg-raised) !important;
+  border-color: var(--linear-line) !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+}
+
+.xbar-command-shell > aside [class*="text-[#"] {
+  color: var(--linear-muted) !important;
+}
+
+.xbar-command-shell > aside [class*="text-white"],
+.xbar-command-shell > aside [class*="text-[#c2"],
+.xbar-command-shell > aside [class*="text-[#dde"],
+.xbar-command-shell > aside [class*="text-[#e"] {
+  color: var(--linear-text) !important;
+}
+
+.xbar-command-shell > aside [class*="bg-[#"] {
+  background: var(--linear-surface-low) !important;
+}
+
+.xbar-command-shell > aside [class*="border-[#"] {
+  border-color: var(--linear-line) !important;
+}
+
+.xbar-command-shell > aside a,
+.xbar-command-shell > aside button {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: var(--linear-muted-strong) !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+}
+
+.xbar-command-shell > aside a:hover,
+.xbar-command-shell > aside button:hover {
+  background: var(--linear-surface-low) !important;
+  color: var(--linear-text) !important;
+}
+
+.xbar-command-shell > aside a[aria-current="page"] {
+  background: var(--linear-surface-low) !important;
+  border-left-color: var(--linear-black) !important;
+  color: var(--linear-text) !important;
+  box-shadow: inset 2px 0 0 var(--linear-black) !important;
+}
+
+body .xbar-command-shell > aside > div,
+body .xbar-command-shell > aside > div > div,
+body .xbar-command-shell > aside span {
+  box-shadow: none !important;
+}
+
+.nav-badge {
+  background: var(--linear-black) !important;
+  color: #ffffff !important;
+  border-radius: 3px !important;
+}
+
+.nav-badge--amber,
+.nav-badge--blue {
+  background: var(--linear-muted-strong) !important;
+}
+
+.ops-pulse__dot,
+.ops-pulse__dot--urgent,
+.ops-pulse__dot--warning {
+  background: var(--linear-muted) !important;
+  box-shadow: 0 0 0 2px rgba(17, 19, 24, 0.08) !important;
+}
+
+.xbar-command-topbar {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border-color: var(--linear-line) !important;
+  box-shadow: none !important;
+  color: var(--linear-text) !important;
+  backdrop-filter: blur(18px) saturate(130%) !important;
+}
+
+.xbar-command-topbar [class*="text-[#"],
+.xbar-command-topbar [class*="text-white"] {
+  color: var(--linear-text) !important;
+}
+
+.xbar-command-topbar [class*="bg-[#"],
+.xbar-command-topbar input,
+.xbar-command-topbar button,
+.command-shortcut-hint {
+  background: var(--linear-surface) !important;
+  border-color: var(--linear-line) !important;
+  color: var(--linear-text) !important;
+  box-shadow: none !important;
+}
+
+.xbar-command-topbar input::placeholder {
+  color: var(--linear-muted) !important;
+}
+
+.xbar-command-topbar button:hover {
+  background: var(--linear-surface-low) !important;
+  border-color: var(--linear-line-strong) !important;
+}
+
+.xbar-command-topbar button[class*="bg-[#1155dd]"] {
+  background: var(--linear-black) !important;
+  border-color: var(--linear-black) !important;
+  color: #ffffff !important;
+}
+
+.xbar-command-topbar button[class*="bg-[#1155dd]"] svg {
+  color: #ffffff !important;
+}
+
+.xbar-command-topbar [class*="rounded"] {
+  border-radius: 4px !important;
+}
+
+nav[aria-label="Mobile quick navigation"],
+body nav[class*="fixed bottom-3"] {
+  background: rgba(255, 255, 255, 0.96) !important;
+  border-color: var(--linear-line) !important;
+  color: var(--linear-text) !important;
+  box-shadow: 0 12px 32px rgba(17, 19, 24, 0.12) !important;
+  backdrop-filter: blur(18px) !important;
+}
+
+nav[aria-label="Mobile quick navigation"] a,
+nav[aria-label="Mobile quick navigation"] button {
+  border-radius: 4px !important;
+  color: var(--linear-muted-strong) !important;
+}
+
+nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
+nav[aria-label="Mobile quick navigation"] button[aria-expanded="true"] {
+  background: var(--linear-black) !important;
+  color: #ffffff !important;
+}
+
+#mobile-more-menu {
+  background: var(--linear-surface) !important;
+  border-color: var(--linear-line) !important;
+  color: var(--linear-text) !important;
+  border-radius: 6px !important;
+}
+
+.page-header {
+  align-items: flex-end;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--linear-line);
+}
+
+.page-title {
+  color: var(--linear-text) !important;
+  font-size: clamp(1.5rem, 2vw, 2rem) !important;
+  line-height: 1.08 !important;
+  font-weight: 700 !important;
+}
+
+.page-description,
+.panel__description,
+.stack-item__copy,
+.timeline__copy,
+.detail-block,
+.horse-card__summary,
+.metric-card__detail,
+.empty-state__description,
+.command-stage__support-copy,
+.revenue-section__header p,
+.revenue-hero__lead,
+.lp-card-sub {
+  color: var(--linear-muted) !important;
+}
+
+.eyebrow,
+.panel__eyebrow,
+.detail-hero__eyebrow,
+.surface-hero__eyebrow,
+.ops-briefing-header__ranch,
+.ops-briefing-stat__label,
+.metric-card__label,
+.ledger-stat__label,
+.dashboard-kpi__label,
+.command-stage__support-label,
+.revenue-kicker,
+.lp-card-label,
+.section-eyebrow,
+.ops-kicker {
+  color: var(--linear-muted) !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+}
+
+.surface-panel,
+.surface-hero,
+.metric-card,
+.panel,
+.horse-card,
+.detail-hero__media,
+.detail-hero__side,
+.table-shell,
+.buyer-hero,
+.media-tile,
+.weather-hour-card,
+.ledger-stage,
+.command-stage,
+.portfolio-stage,
+.portfolio-toolbar,
+.command-stage__support-card,
+.command-stage__ledger-item,
+.portfolio-stage__stat,
+.dashboard-brand-panel,
+.dashboard-kpi,
+.ledger-stat,
+.stack-item,
+.sale-packet-slot,
+.callout,
+.empty-state,
+.buyer-share,
+.buyer-momentum,
+.operational-value-pulse,
+.operational-value-signal,
+.command-brief,
+.ops-panel,
+.priority-briefing,
+.priority-card,
+.ops-hero,
+.ownership-panel,
+.ownership-editor-panel,
+.ownership-record-panel,
+.ownership-table,
+.ownership-owner-card,
+.ownership-note-box,
+.ownership-proof-row,
+.revenue-console,
+.revenue-pillar,
+.revenue-trust-card,
+.revenue-plan,
+.revenue-faq,
+.revenue-pipeline__step,
+.lp-card,
+.lp-feature,
+.premium-setup-card,
+.premium-setup-form,
+.app-error-panel {
+  background: var(--linear-surface) !important;
+  border: 1px solid var(--linear-line) !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  color: var(--linear-text) !important;
+}
+
+.panel,
+.metric-card,
+.surface-panel,
+.surface-hero,
+.command-stage,
+.portfolio-stage,
+.ledger-stage,
+.ops-panel,
+.priority-briefing,
+.ownership-panel {
+  padding: 18px !important;
+}
+
+.panel__header {
+  padding-bottom: 14px !important;
+  border-bottom: 1px solid var(--linear-line) !important;
+}
+
+.panel__title,
+.stack-item__title,
+.empty-state__title,
+.metric-card__value,
+.ledger-stat__value,
+.dashboard-kpi__value,
+.command-stage__support-title,
+.surface-hero__title,
+.ownership-section-heading h2,
+.priority-briefing__heading h2,
+.ops-section-heading h2,
+.revenue-section h2,
+.revenue-pillar h3,
+.revenue-plan h3,
+.lp-card-title {
+  color: var(--linear-text) !important;
+}
+
+.command-brief__entity,
+.command-brief__summary,
+.command-brief__evidence-item dt,
+.command-brief__evidence-item dd,
+.command-brief__evidence-item dd a,
+.command-brief__status,
+.command-brief__risk,
+.command-brief__disabled-reason,
+.command-brief__next,
+.command-brief__side {
+  color: var(--linear-text) !important;
+}
+
+.command-brief__summary,
+.command-brief__disabled-reason,
+.command-brief__evidence-item dt {
+  color: var(--linear-muted) !important;
+}
+
+.metric-card {
+  min-height: 120px !important;
+}
+
+.metric-card__value,
+.ops-briefing-stat__value,
+.ledger-stat__value,
+.dashboard-kpi__value {
+  color: var(--linear-text) !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-card--blue,
+.metric-card--slate,
+.metric-card--emerald,
+.metric-card--amber,
+.metric-card--rose {
+  background: var(--linear-surface) !important;
+}
+
+.metric-card--interactive,
+.stack-item--interactive,
+.horse-card--interactive,
+.priority-card,
+.ownership-owner-card,
+.buyer-momentum__lead {
+  transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease !important;
+}
+
+.metric-card--interactive:hover,
+.stack-item--interactive:hover,
+.horse-card--interactive:hover,
+.priority-card:hover,
+.ownership-owner-card:hover,
+.buyer-momentum__lead:hover {
+  background: var(--linear-surface-low) !important;
+  border-color: var(--linear-line-strong) !important;
+  box-shadow: none !important;
+  transform: translateY(-1px) !important;
+}
+
+.ops-briefing-header,
+.ops-hero,
+.revenue-cta {
+  background: var(--linear-surface) !important;
+  border-color: var(--linear-line) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  color: var(--linear-text) !important;
+}
+
+.ops-briefing-header {
+  min-height: auto !important;
+  padding: clamp(22px, 3vw, 34px) !important;
+}
+
+.ops-briefing-header__title {
+  max-width: 24ch !important;
+  color: var(--linear-text) !important;
+  font-size: clamp(1.8rem, 3.2vw, 3.15rem) !important;
+  line-height: 1.04 !important;
+}
+
+.ops-briefing-chip,
+.ops-briefing-action,
+.ops-briefing-stat,
+.revenue-chip,
+.pill,
+.badge,
+[class*="pill--"],
+[class*="revenue-chip--"] {
+  background: var(--linear-surface-low) !important;
+  border: 1px solid var(--linear-line) !important;
+  border-radius: 4px !important;
+  color: var(--linear-muted-strong) !important;
+  box-shadow: none !important;
+}
+
+.ops-briefing-action--primary,
+.button--primary,
+.public-action--primary,
+.command-brief__primary,
+.lp-btn-primary,
+.lp-btn-enter,
+.ownership-full-button {
+  background: var(--linear-black) !important;
+  border: 1px solid var(--linear-black) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.ops-briefing-action--primary:hover,
+.button--primary:hover,
+.public-action--primary:hover,
+.command-brief__primary:hover,
+.lp-btn-primary:hover,
+.lp-btn-enter:hover,
+.ownership-full-button:hover {
+  background: #2d3035 !important;
+  border-color: #2d3035 !important;
+}
+
+.button,
+.icon-button,
+.surface-tab,
+.public-action,
+.ops-briefing-action,
+.command-brief__secondary,
+.lp-btn-social,
+.lp-pw-eye,
+.ownership-status-button {
+  min-height: 36px;
+  border-radius: 4px !important;
+  background: var(--linear-surface) !important;
+  border: 1px solid var(--linear-line) !important;
+  color: var(--linear-text) !important;
+  box-shadow: none !important;
+  font-weight: 600 !important;
+}
+
+.button--ghost,
+.icon-button,
+.surface-tab,
+.command-brief__secondary,
+.public-action:not(.public-action--primary),
+.lp-btn-social,
+.lp-pw-eye {
+  background: var(--linear-surface) !important;
+  color: var(--linear-text) !important;
+}
+
+.button:hover,
+.icon-button:hover,
+.surface-tab:hover,
+.command-brief__secondary:hover,
+.public-action:hover,
+.lp-btn-social:hover,
+.lp-pw-eye:hover,
+.ownership-status-button:hover:not(:disabled) {
+  background: var(--linear-surface-low) !important;
+  border-color: var(--linear-line-strong) !important;
+  color: var(--linear-text) !important;
+  box-shadow: none !important;
+}
+
+.surface-tab--active,
+.ownership-status-button--active,
+.ownership-status-button--active:disabled {
+  background: var(--linear-black) !important;
+  border-color: var(--linear-black) !important;
+  color: #ffffff !important;
+}
+
+.field-input,
+.field-textarea,
+.search-shell__input,
+.role-select,
+.ownership-search input,
+.ownership-toolbar select,
+.ownership-ops .field-input,
+.ownership-ops .field-textarea,
+.ops-search input,
+.lp-input,
+.command-palette__search input {
+  background: var(--linear-surface) !important;
+  color: var(--linear-text) !important;
+  border: 1px solid var(--linear-line) !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+}
+
+.field-input::placeholder,
+.field-textarea::placeholder,
+.search-shell__input::placeholder,
+.ops-search input::placeholder,
+.lp-input::placeholder {
+  color: var(--linear-muted) !important;
+}
+
+.field-input:focus,
+.field-textarea:focus,
+.search-shell__input:focus,
+.role-select:focus,
+.ownership-search input:focus,
+.ownership-toolbar select:focus,
+.ownership-ops .field-input:focus,
+.ownership-ops .field-textarea:focus,
+.ops-search input:focus,
+.lp-input:focus {
+  border-color: var(--linear-focus) !important;
+  box-shadow: 0 0 0 3px rgba(59, 92, 204, 0.12) !important;
+}
+
+.field-label,
+.lp-label-text {
+  color: var(--linear-muted-strong) !important;
+}
+
+.table-shell,
+.ownership-table {
+  overflow: auto;
+}
+
+.data-table,
+.ownership-table {
+  border-collapse: collapse !important;
+}
+
+.data-table th,
+.ownership-table__head,
+.ownership-row,
+.data-table td {
+  border-color: var(--linear-line) !important;
+}
+
+.data-table th,
+.ownership-table__head {
+  background: var(--linear-surface-low) !important;
+  color: var(--linear-muted-strong) !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+}
+
+.data-table td,
+.ownership-row {
+  color: var(--linear-text) !important;
+  background: var(--linear-surface) !important;
+}
+
+.data-table tbody tr:hover,
+.table-row--selected,
+.ownership-row:hover,
+.ownership-row--selected,
+.ownership-row--selected:hover {
+  background: var(--linear-surface-low) !important;
+  box-shadow: inset 2px 0 0 var(--linear-black) !important;
+}
+
+.progress-track,
+.ownership-confidence,
+.revenue-console__row {
+  background: var(--linear-surface-low) !important;
+  border-color: var(--linear-line) !important;
+}
+
+.progress-bar,
+.progress-bar--blue,
+.progress-bar--slate,
+.progress-bar--emerald,
+.progress-bar--amber,
+.progress-bar--rose {
+  background: var(--linear-black) !important;
+}
+
+.context-menu,
+.toast,
+.command-palette,
+.right-drawer {
+  background: var(--linear-surface) !important;
+  border-color: var(--linear-line) !important;
+  color: var(--linear-text) !important;
+  border-radius: 6px !important;
+  box-shadow: var(--shadow) !important;
+}
+
+.context-menu__hint,
+.command-palette__footer,
+.command-palette__search {
+  border-color: var(--linear-line) !important;
+  color: var(--linear-muted) !important;
+}
+
+.context-menu__item,
+.command-palette__result {
+  color: var(--linear-text) !important;
+  border-radius: 4px !important;
+}
+
+.context-menu__item:hover,
+.command-palette__result--active,
+.command-palette__result:hover {
+  background: var(--linear-surface-low) !important;
+  border-color: var(--linear-line) !important;
+  box-shadow: none !important;
+}
+
+.command-palette__result small,
+.command-palette__result em,
+.context-menu__item small {
+  color: var(--linear-muted) !important;
+}
+
+.brand-canvas,
+.brand-canvas__lockup,
+.xbar-wordmark,
+.revenue-nav,
+.revenue-footer {
+  color: var(--linear-text) !important;
+}
+
+.brand-canvas__x,
+.brand-canvas__bar,
+.xbar-wordmark__copy strong {
+  color: var(--linear-text) !important;
+  text-shadow: none !important;
+}
+
+.brand-canvas__rule {
+  background: var(--linear-line-strong) !important;
+}
+
+.xbar-wordmark__mark,
+.premium-brand-mark,
+.brand-lockup__mark {
+  background: var(--linear-black) !important;
+  border-color: var(--linear-black) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.revenue-landing {
+  min-height: 100vh;
+}
+
+.revenue-nav {
+  background: rgba(255, 255, 255, 0.94) !important;
+  border-bottom: 1px solid var(--linear-line) !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(18px) !important;
+}
+
+.revenue-hero,
+.revenue-section,
+.revenue-section--bordered,
+.revenue-section__inner,
+.revenue-pain,
+.revenue-cta {
+  background: var(--linear-bg) !important;
+  color: var(--linear-text) !important;
+  border-color: var(--linear-line) !important;
+}
+
+.revenue-hero {
+  min-height: min(760px, calc(100vh - 72px));
+  align-items: center;
+}
+
+.revenue-hero h1,
+.revenue-section h2,
+.revenue-cta h2 {
+  color: var(--linear-text) !important;
+  line-height: 1.06 !important;
+}
+
+.revenue-proof-line li,
+.revenue-pain__list li,
+.revenue-plan li,
+.revenue-pipeline__step p,
+.revenue-pillar p,
+.revenue-trust-card p,
+.revenue-faq p {
+  color: var(--linear-muted) !important;
+}
+
+.revenue-console,
+.revenue-pillar,
+.revenue-trust-card,
+.revenue-plan,
+.revenue-faq,
+.revenue-pipeline__step {
+  background: var(--linear-surface) !important;
+}
+
+.revenue-plan--featured {
+  border-color: var(--linear-black) !important;
+  box-shadow: inset 0 0 0 1px var(--linear-black) !important;
+}
+
+.revenue-plan__badge {
+  background: var(--linear-black) !important;
+  color: #ffffff !important;
+  border-radius: 4px !important;
+}
+
+.revenue-footer {
+  background: var(--linear-surface) !important;
+  border-top: 1px solid var(--linear-line) !important;
+}
+
+.xbar-login-shell,
+.lp-shell {
+  min-height: 100vh;
+}
+
+.xbar-login-noise {
+  display: none !important;
+}
+
+.premium-setup-frame {
+  background: var(--linear-bg) !important;
+}
+
+.premium-setup-brand,
+.premium-setup-panel {
+  background: var(--linear-bg) !important;
+  border-color: var(--linear-line) !important;
+  color: var(--linear-text) !important;
+}
+
+.premium-setup-hero,
+.premium-setup-hero::after,
+.premium-setup-brand__shade {
+  display: none !important;
+}
+
+.premium-setup-wordmark,
+.premium-setup-brand-title,
+.premium-setup-card__header h2,
+.premium-setup-preview span {
+  color: var(--linear-text) !important;
+  text-shadow: none !important;
+}
+
+.premium-setup-kicker,
+.premium-setup-status,
+.premium-setup-eyebrow,
+.premium-setup-card-eyebrow,
+.premium-setup-brand-copy,
+.premium-setup-card__header p:last-child,
+.premium-setup-preview p,
+.premium-setup-field span {
+  color: var(--linear-muted) !important;
+  text-shadow: none !important;
+}
+
+.premium-setup-status,
+.premium-setup-proof,
+.premium-setup-preview,
+.premium-setup-card,
+.premium-setup-proof-tile {
+  background: var(--linear-surface) !important;
+  border-color: var(--linear-line) !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  color: var(--linear-text) !important;
+  backdrop-filter: none !important;
+}
+
+.premium-setup-proof-tile:hover,
+.premium-setup-proof-tile:focus-visible,
+.premium-setup-proof-tile[aria-pressed='true'] {
+  background: var(--linear-surface-low) !important;
+  color: var(--linear-text) !important;
+  box-shadow: inset 2px 0 0 var(--linear-black) !important;
+}
+
+.premium-setup-field .premium-auth-input {
+  background: var(--linear-surface) !important;
+  border-color: var(--linear-line) !important;
+  border-radius: 4px !important;
+  color: var(--linear-text) !important;
+  box-shadow: none !important;
+}
+
+.premium-setup-field .premium-auth-input:focus {
+  border-color: var(--linear-focus) !important;
+  box-shadow: 0 0 0 3px rgba(59, 92, 204, 0.12) !important;
+}
+
+.premium-setup-actions .premium-auth-button--primary {
+  background: var(--linear-black) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.premium-setup-actions .premium-auth-button--ghost {
+  background: var(--linear-surface) !important;
+  border-color: var(--linear-line) !important;
+  color: var(--linear-text) !important;
+}
+
+.lp-frame {
+  background: var(--linear-bg) !important;
+}
+
+.lp-brand,
+.lp-auth,
+.lp-card,
+.lp-local-mode {
+  color: var(--linear-text) !important;
+}
+
+.lp-card {
+  background: var(--linear-surface) !important;
+  border-color: var(--linear-line) !important;
+  border-radius: 8px !important;
+}
+
+.lp-feature {
+  background: var(--linear-surface) !important;
+  border-color: var(--linear-line) !important;
+  color: var(--linear-muted-strong) !important;
+}
+
+.lp-divider {
+  color: var(--linear-muted) !important;
+}
+
+.lp-divider::before,
+.lp-divider::after {
+  background: var(--linear-line) !important;
+}
+
+.app-error-panel,
+.buyer-hero,
+.buyer-share {
+  background: var(--linear-surface) !important;
+}
+
+.buyer-hero__media,
+.media-tile__image-shell,
+.detail-hero__media,
+.dashboard-brand-panel__mark {
+  background: var(--linear-surface-low) !important;
+  border-color: var(--linear-line) !important;
+  border-radius: 6px !important;
+}
+
+.status-inline,
+.token-row,
+.inline-actions,
+.dashboard-chip-row {
+  gap: 8px !important;
+}
+
+.inline-metrics {
+  color: var(--linear-muted) !important;
+}
+
+.toast--success {
+  border-left-color: var(--emerald) !important;
+}
+
+.toast--error {
+  border-left-color: var(--rose) !important;
+}
+
+.toast--warning {
+  border-left-color: var(--amber) !important;
+}
+
+.field-error,
+.ops-briefing-stat__value--urgent,
+.command-brief__risk--rose {
+  color: var(--rose) !important;
+}
+
+.ops-briefing-stat__value--warning,
+.command-brief__risk--amber {
+  color: var(--amber) !important;
+}
+
+.ops-briefing-stat__value--clear,
+.operational-value-signal--positive .operational-value-signal__value {
+  color: var(--emerald) !important;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c9ccd2 !important;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 6px;
+}
+
+@media (max-width: 980px) {
+  .xbar-command-main {
+    padding-inline: 16px !important;
+  }
+
+  .ops-briefing-header,
+  .panel,
+  .surface-panel,
+  .surface-hero,
+  .metric-card,
+  .command-stage,
+  .portfolio-stage,
+  .ledger-stage {
+    border-radius: 6px !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .page-header {
+    align-items: stretch;
+  }
+
+  .panel,
+  .surface-panel,
+  .surface-hero,
+  .metric-card,
+  .command-stage,
+  .portfolio-stage,
+  .ledger-stage,
+  .ops-briefing-header {
+    padding: 16px !important;
+  }
+
+  .ops-briefing-header__title,
+  .revenue-hero h1,
+  .lp-card-title {
+    font-size: clamp(1.8rem, 10vw, 2.6rem) !important;
+  }
+
+  nav[aria-label="Mobile quick navigation"],
+  body nav[class*="fixed bottom-3"] {
+    bottom: 8px !important;
+    gap: 4px !important;
+    padding: 6px !important;
+  }
+
+  nav[aria-label="Mobile quick navigation"] a,
+  nav[aria-label="Mobile quick navigation"] button {
+    min-height: 48px !important;
+    gap: 2px !important;
+    font-size: 10px !important;
+  }
+
+  nav[aria-label="Mobile quick navigation"] svg {
+    height: 16px !important;
+    width: 16px !important;
+  }
+
+  #mobile-more-menu {
+    bottom: 76px !important;
+  }
+
+  html body #root .xbar-command-main .ops-briefing-stat-row,
+  html body #root .xbar-command-main .surface-hero__stats {
+    grid-template-columns: repeat(4, minmax(112px, 1fr)) !important;
+    overflow-x: auto !important;
+    padding: 1px !important;
+    scroll-snap-type: x proximity;
+  }
+
+  html body #root .xbar-command-main .ops-briefing-stat,
+  html body #root .xbar-command-main .surface-hero__stat {
+    min-height: 48px !important;
+    min-width: 112px !important;
+    padding: 6px 12px !important;
+    scroll-snap-align: start;
+  }
+
+  html body #root .xbar-command-main .ops-briefing-stat__value,
+  html body #root .xbar-command-main .surface-hero__stat strong {
+    font-size: 1.2rem !important;
+    line-height: 1 !important;
+  }
+
+  html body #root .xbar-command-main .ops-briefing-stat__detail {
+    display: none !important;
+  }
+
+  html body #root .xbar-command-main .ops-briefing-header,
+  html body #root .xbar-command-main .surface-hero {
+    margin-bottom: 72px !important;
+  }
+}
+
+/* Final clamps for late-loaded route CSS. */
+html body #root .xbar-command-shell > aside[class*="bg-[#050b14]"] {
+  background: var(--linear-surface) !important;
+  border-color: var(--linear-line) !important;
+  color: var(--linear-text) !important;
+  box-shadow: none !important;
+}
+
+html body #root .xbar-command-shell > aside[class*="bg-[#050b14]"] > div[class*="bg-[#080f1c]"],
+html body #root .xbar-command-shell > aside[class*="bg-[#050b14]"] [class*="bg-[#08111d]"],
+html body #root .xbar-command-shell > aside[class*="bg-[#050b14]"] [class*="bg-[#0a1628]"],
+html body #root .xbar-command-shell > aside[class*="bg-[#050b14]"] [class*="bg-[#0c1e3c]"] {
+  background: var(--linear-surface-low) !important;
+  border-color: var(--linear-line) !important;
+  color: var(--linear-text) !important;
+  box-shadow: none !important;
+}
+
+html body #root .xbar-command-shell > aside[class*="bg-[#050b14]"] [class*="text-[#"],
+html body #root .xbar-command-shell > aside[class*="bg-[#050b14]"] [class*="text-white"] {
+  color: var(--linear-muted-strong) !important;
+}
+
+html body #root .xbar-command-shell > aside[class*="bg-[#050b14]"] a[aria-current="page"] {
+  background: var(--linear-surface-low) !important;
+  color: var(--linear-text) !important;
+  border-left-color: var(--linear-black) !important;
+  box-shadow: inset 2px 0 0 var(--linear-black) !important;
+}
+
+html body #root .xbar-command-main .ops-briefing-header,
+html body #root .xbar-command-main .command-center-briefing {
+  background: var(--linear-surface) !important;
+  border-color: var(--linear-line) !important;
+  color: var(--linear-text) !important;
+  box-shadow: none !important;
+}
+
+html body #root .xbar-command-main .ops-briefing-header__title,
+html body #root .xbar-command-main .command-center-briefing__copy,
+html body #root .xbar-command-main .ops-briefing-header__ranch,
+html body #root .xbar-command-main .ops-briefing-stat__value,
+html body #root .xbar-command-main .ops-briefing-stat__detail,
+html body #root .xbar-command-main .ops-briefing-stat__label {
+  color: var(--linear-text) !important;
+  text-shadow: none !important;
+}
+
+html body #root .xbar-command-main .command-center-briefing__copy,
+html body #root .xbar-command-main .ops-briefing-stat__detail,
+html body #root .xbar-command-main .ops-briefing-header__ranch,
+html body #root .xbar-command-main .ops-briefing-stat__label {
+  color: var(--linear-muted) !important;
+}
+
+html body #root .xbar-command-main .ops-briefing-stat,
+html body #root .xbar-command-main .ops-briefing-action,
+html body #root .xbar-command-main .ops-briefing-chip {
+  background: var(--linear-surface-low) !important;
+  border-color: var(--linear-line) !important;
+  color: var(--linear-text) !important;
+  box-shadow: none !important;
+}
+
+html body #root .xbar-command-main .ops-briefing-action--primary {
+  background: var(--linear-black) !important;
+  border-color: var(--linear-black) !important;
+  color: #ffffff !important;
+}
+
+html body #root .xbar-command-main .command-brief,
+html body #root .xbar-command-main .command-brief--split,
+html body #root .xbar-command-main .command-brief--compact {
+  background: var(--linear-surface) !important;
+  border: 1px solid var(--linear-line) !important;
+  color: var(--linear-text) !important;
+  box-shadow: none !important;
+}
+
+html body #root .xbar-command-main .command-brief::before,
+html body #root .xbar-command-main .command-brief::after {
+  content: none !important;
+  display: none !important;
+}
+
+html body #root .xbar-command-main .command-brief__entity,
+html body #root .xbar-command-main .command-brief__evidence-item dd,
+html body #root .xbar-command-main .command-brief__side,
+html body #root .xbar-command-main .command-brief__next,
+html body #root .xbar-command-main .command-brief__next strong {
+  color: var(--linear-text) !important;
+  text-shadow: none !important;
+}
+
+html body #root .xbar-command-main .command-brief__summary,
+html body #root .xbar-command-main .command-brief__eyebrow,
+html body #root .xbar-command-main .command-brief__evidence-item dt,
+html body #root .xbar-command-main .command-brief__disabled-reason {
+  color: var(--linear-muted) !important;
+}
+
+html body #root .xbar-command-main .command-brief__status,
+html body #root .xbar-command-main .command-brief__risk,
+html body #root .xbar-command-main .command-brief__secondary,
+html body #root .xbar-command-main .command-brief__primary:disabled {
+  background: var(--linear-surface-low) !important;
+  border-color: var(--linear-line) !important;
+  color: var(--linear-muted-strong) !important;
+  opacity: 1 !important;
+  box-shadow: none !important;
+}
+
+html body #root .xbar-command-main .command-brief__primary:not(:disabled) {
+  background: var(--linear-black) !important;
+  border-color: var(--linear-black) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+html body #root .xbar-login-shell,
+html body #root .xbar-login-shell.lp-shell,
+html body #root .xbar-login-shell .lp-frame,
+html body #root .xbar-login-shell .lp-brand,
+html body #root .xbar-login-shell .lp-auth {
+  background: var(--linear-bg) !important;
+  color: var(--linear-text) !important;
+  box-shadow: none !important;
+}
+
+html body #root .xbar-login-shell .xbar-login-noise,
+html body #root .xbar-login-shell .lp-brand::after {
+  content: none !important;
+  display: none !important;
+}
+
+html body #root .xbar-login-shell .lp-brand {
+  border-right: 1px solid var(--linear-line) !important;
+}
+
+html body #root .xbar-login-shell .lp-auth {
+  background: var(--linear-bg-raised) !important;
+}
+
+html body #root .xbar-login-shell .brand-canvas {
+  min-height: 300px !important;
+  background: var(--linear-surface) !important;
+  border: 1px solid var(--linear-line) !important;
+  border-radius: 8px !important;
+  box-shadow: var(--shadow-soft) !important;
+}
+
+html body #root .xbar-login-shell .brand-canvas__lockup {
+  opacity: 1 !important;
+  color: var(--linear-text) !important;
+  text-shadow: none !important;
+}
+
+html body #root .xbar-login-shell .lp-card,
+html body #root .xbar-login-shell .lp-feature,
+html body #root .xbar-login-shell .lp-local-mode {
+  background: var(--linear-surface) !important;
+  border-color: var(--linear-line) !important;
+  color: var(--linear-text) !important;
+  box-shadow: var(--shadow-soft) !important;
+}
+
+html body #root .xbar-login-shell .lp-local-mode {
+  border-radius: 8px !important;
+}
+
+html body #root .xbar-login-shell .lp-local-mode__heading strong,
+html body #root .xbar-login-shell .lp-local-mode__facts,
+html body #root .xbar-login-shell .lp-local-mode__facts li,
+html body #root .xbar-login-shell .lp-tagline strong,
+html body #root .xbar-login-shell .lp-tagline span {
+  color: var(--linear-text) !important;
+  text-shadow: none !important;
+}
+
+html body #root .xbar-login-shell .lp-local-mode__heading span,
+html body #root .xbar-login-shell .lp-local-mode__notice,
+html body #root .xbar-login-shell .lp-card-sub {
+  color: var(--linear-muted) !important;
+}
+
+html body #root .xbar-login-shell .lp-local-mode__facts {
+  border-top-color: var(--linear-line) !important;
+}
+
+html body #root .xbar-login-shell .lp-local-mode__facts li::before {
+  color: var(--linear-focus) !important;
+}
+
+html body #root .xbar-command-main .ownership-hero {
+  min-height: auto !important;
+  background: var(--linear-surface) !important;
+  border: 1px solid var(--linear-line) !important;
+  color: var(--linear-text) !important;
+  box-shadow: none !important;
+}
+
+html body #root .xbar-command-main .ownership-hero::after,
+html body #root .xbar-command-main .ownership-hero__media {
+  content: none !important;
+  display: none !important;
+}
+
+html body #root .xbar-command-main .ownership-hero h1,
+html body #root .xbar-command-main .ownership-hero p,
+html body #root .xbar-command-main .ownership-hero .section-eyebrow,
+html body #root .xbar-command-main .ownership-hero__proof,
+html body #root .xbar-command-main .ownership-hero__proof span,
+html body #root .xbar-command-main .ownership-hero__glass,
+html body #root .xbar-command-main .ownership-hero__glass span,
+html body #root .xbar-command-main .ownership-hero__glass strong {
+  color: var(--linear-text) !important;
+  text-shadow: none !important;
+}
+
+html body #root .xbar-command-main .ownership-hero p,
+html body #root .xbar-command-main .ownership-hero__proof span,
+html body #root .xbar-command-main .ownership-hero__glass span {
+  color: var(--linear-muted) !important;
+}
+
+html body #root .xbar-command-main .ownership-hero .button:disabled,
+html body #root .xbar-command-main .ownership-hero .button[aria-disabled='true'] {
+  background: var(--linear-surface-low) !important;
+  border-color: var(--linear-line) !important;
+  color: var(--linear-muted-strong) !important;
+  opacity: 1 !important;
+}

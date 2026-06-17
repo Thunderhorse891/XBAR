@@ -8,6 +8,7 @@ import { registerOfflineRuntime } from './lib/offlineRuntime';
 import './index.css';
 import './premiumCommandCenter.css';
 import './mobilePolish.css';
+import './linearConcept.css';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error("Root element not found.");
