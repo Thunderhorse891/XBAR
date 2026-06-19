@@ -252,7 +252,7 @@ export default function Landing() {
       {/* Nav */}
       <nav className="site-nav" aria-label="Main navigation">
         <Link to="/landing" className="site-nav-brand" aria-label="XBAR home">
-          <div className="site-nav-brand-mark" aria-hidden="true">XB</div>
+          <img src="/xbar-logo-sleek.png" alt="" className="site-nav-logo" aria-hidden="true" />
           <div>
             <div className="site-nav-brand-name">XBAR</div>
             <div className="site-nav-brand-sub">Ranch Platform</div>
@@ -274,10 +274,8 @@ export default function Landing() {
       {/* Hero */}
       <section className="site-hero" aria-labelledby="hero-heading">
         <div className="site-hero-bg" aria-hidden="true">
-          <div className="site-orb site-orb--blue" />
-          <div className="site-orb site-orb--indigo" />
-          <div className="site-orb site-orb--teal" />
-          <div className="site-hero-dots" />
+          <div className="site-hero-gradient" />
+          <div className="site-hero-grid-lines" />
         </div>
 
         <div className="site-hero-wrap">
