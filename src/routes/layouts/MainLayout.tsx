@@ -359,6 +359,11 @@ export default function MainLayout() {
           <div className="mt-1 text-[var(--muted)]">
             {expenseReceipts.length} receipts · {documents.length} files · {horses.length} horses
           </div>
+          {/* XBAR brand watermark */}
+          <div className="mt-3 flex items-center gap-2 opacity-30">
+            <img src="/xbar-logo-sleek.png" alt="" className="h-5 w-5 rounded object-cover" aria-hidden="true" />
+            <span className="text-[8px] font-black uppercase tracking-[0.3em] text-[var(--muted)]">XBAR</span>
+          </div>
         </div>
       </aside>
 

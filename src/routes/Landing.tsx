@@ -276,6 +276,8 @@ export default function Landing() {
         <div className="site-hero-bg" aria-hidden="true">
           <div className="site-hero-gradient" />
           <div className="site-hero-grid-lines" />
+          <div className="site-hero-blob site-hero-blob--blue" />
+          <div className="site-hero-blob site-hero-blob--indigo" />
         </div>
 
         <div className="site-hero-wrap">

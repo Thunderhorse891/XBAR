@@ -664,10 +664,13 @@
 .site-stat:hover { background: #FAFAFA; }
 
 .site-stat-num {
-  font-size: clamp(1.8rem, 3vw, 2.8rem);
+  font-size: clamp(2.2rem, 4vw, 3.5rem);
   font-weight: 900;
-  letter-spacing: -0.07em;
-  color: #111214;
+  letter-spacing: -0.04em;
+  background: linear-gradient(135deg, #111214 0%, #374151 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
   display: block;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -1059,6 +1062,50 @@
   border-top: 1px solid rgba(0, 0, 0, 0.05);
 }
 
+/* ── Hero watermark logo ──────────────────────────────────────────────────── */
+
+.site-hero-mark {
+  position: absolute;
+  right: -120px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 600px;
+  height: 600px;
+  opacity: 0.04;
+  pointer-events: none;
+  filter: blur(1px);
+}
+
+/* ── Animated accent blobs ────────────────────────────────────────────────── */
+
+@keyframes blobFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%       { transform: translate(20px, -15px) scale(1.04); }
+  66%       { transform: translate(-10px, 10px) scale(0.97); }
+}
+
+.site-hero-blob {
+  position: absolute;
+  border-radius: 999px;
+  pointer-events: none;
+  filter: blur(72px);
+  animation: blobFloat 20s ease-in-out infinite;
+}
+
+.site-hero-blob--blue {
+  width: 400px; height: 300px;
+  top: -80px; right: 5%;
+  background: rgba(37, 99, 235, 0.07);
+  animation-delay: -7s;
+}
+
+.site-hero-blob--indigo {
+  width: 300px; height: 250px;
+  bottom: 10%; left: -60px;
+  background: rgba(99, 102, 241, 0.05);
+  animation-delay: -13s;
+}
+
 /* ── Reduced motion ───────────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
@@ -1068,6 +1115,7 @@
   .site-ticker-track { animation: none !important; overflow-x: auto; }
   .site-hero-badge::before { animation: none !important; }
   .site-nav-cta, .site-btn-primary, .site-bento-cell, .site-testimonial { transition: none !important; }
+  .site-hero-blob { animation: none !important; }
 }
 
 /* ── Responsive ───────────────────────────────────────────────────────────── */
