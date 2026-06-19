@@ -80,10 +80,10 @@ const footerGroups = [
     ],
   },
   {
-    title: 'Support',
+    title: 'Billing',
     links: [
-      { label: 'SLA', to: 'mailto:support@xbar.app?subject=XBAR%20SLA' },
-      { label: 'Contact', to: 'mailto:support@xbar.app?subject=XBAR%20Support' },
+      { label: 'Managed checkout', to: '/subscribe' },
+      { label: 'Stripe payment links', to: '/subscribe' },
     ],
   },
 ];
@@ -94,10 +94,6 @@ function planAnchor(tier: SubscriptionTier) {
 
 function formatLimit(value: number, noun: string) {
   return `${value.toLocaleString()} ${noun}`;
-}
-
-function ExternalOrRouterLink({ to, children }: { to: string; children: string }) {
-  return to.startsWith('mailto:') ? <a href={to}>{children}</a> : <Link to={to}>{children}</Link>;
 }
 
 function HorseContour() {
@@ -198,7 +194,7 @@ export default function Subscriptions() {
     ? hasManagedIdentity || anyPaymentLink
       ? 'Secure checkout ready'
       : 'Sign in required for checkout'
-    : 'Managed billing paused';
+    : 'Billing not configured yet';
 
   const emit = (eventName: Parameters<typeof productEvent>[0], payload: Record<string, unknown>, severity: 'info' | 'warning' = 'info') => {
     void trackRuntimeEvent({ workspaceId, severity, ...productEvent(eventName, payload) });
@@ -246,7 +242,7 @@ export default function Subscriptions() {
           </div>
           <div className="subscription-hero__trust" aria-label="Subscription assurances">
             <span>Records stay intact</span>
-            <span>Stripe-secured card step</span>
+            <span>Managed checkout or Stripe links</span>
             <span>{billingReadinessLabel}</span>
           </div>
         </div>
@@ -318,28 +314,28 @@ export default function Subscriptions() {
 
       <section className="subscription-payment" aria-label="Payment details">
         <div>
-          <h2>Payment stays clean and secure.</h2>
+          <h2>Billing matches what is built today.</h2>
           <p>
-            Paid plan selections move through managed billing or the configured Stripe payment link. XBAR never
-            asks you to type raw card details into this page.
+            Paid plan selections use the billing integrations already in the code: managed checkout first,
+            then configured Stripe payment links. If neither is configured, paid plan buttons stay disabled.
           </p>
         </div>
         <div className="subscription-payment-card" aria-hidden="true">
           <span>Card step</span>
           <strong>{billingReadinessLabel}</strong>
-          <small>{trialActive ? 'Trial active until paid checkout is complete' : `${subscription.tier} account`}</small>
+          <small>{trialActive ? 'Trial can continue without billing' : `${subscription.tier} account`}</small>
         </div>
       </section>
 
-      <section className="subscription-scale" aria-label="Enterprise support">
+      <section className="subscription-scale" aria-label="Enterprise billing">
         <div>
-          <h2>Need a larger operating rollout?</h2>
+          <h2>Enterprise stays inside the same plan path.</h2>
           <p>
-            Multi-facility barns, breeding programs, and sales teams can coordinate import support, setup,
-            staff roles, and enterprise onboarding.
+            Enterprise is a paid tier in the subscription code. When managed billing or the Enterprise
+            payment link is configured, it opens checkout through the same plan card behavior.
           </p>
         </div>
-        <a href="mailto:support@xbar.app?subject=XBAR%20Enterprise%20Access">Contact solutions team</a>
+        <a href="#enterprise">Review Enterprise</a>
       </section>
     </>
   );
@@ -383,9 +379,9 @@ export default function Subscriptions() {
           <nav key={group.title} aria-label={group.title}>
             <span>{group.title}</span>
             {group.links.map((link) => (
-              <ExternalOrRouterLink key={link.label} to={link.to}>
+              <Link key={link.label} to={link.to}>
                 {link.label}
-              </ExternalOrRouterLink>
+              </Link>
             ))}
           </nav>
         ))}
