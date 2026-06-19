@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { XbarMark } from '@/components/BrandMark';
 import { productEvent, productEventNames } from '@/lib/productEvents';
 import { trackRuntimeEvent } from '@/lib/runtimeEvents';
 import { subscriptionPlans } from '@/lib/subscriptionPlans';
@@ -94,7 +95,7 @@ const signupPath = (plan?: SubscriptionTier) => `/login?mode=signup${plan ? `&pl
 function Wordmark() {
   return (
     <span className="xbar-wordmark">
-      <span className="xbar-wordmark__mark" aria-hidden="true">X</span>
+      <span className="xbar-wordmark__mark" aria-hidden="true"><XbarMark tone="mono" /></span>
       <span className="xbar-wordmark__copy">
         <strong>XBAR</strong>
         <span>Records &amp; sale readiness</span>

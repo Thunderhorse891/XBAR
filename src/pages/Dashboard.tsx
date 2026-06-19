@@ -14,10 +14,10 @@ import { CARE_SIGNAL_TONE, EXPENSE_CATEGORIES } from '@/features/dashboard/const
 import type { DashboardMenuState } from '@/features/dashboard/types';
 
 const EMPTY_PROFILE_CARDS = [
-  { label: 'Identity file', title: 'Horse No. 001', meta: 'Name, barn, owner, status', status: 'Ready to create' },
-  { label: 'Proof vault', title: 'Papers dock', meta: 'Coggins, registration, receipts', status: 'Waiting on upload' },
-  { label: 'Care timeline', title: 'Health rhythm', meta: 'Vet, dental, wormer, turnout', status: 'Activates with proof' },
-  { label: 'Buyer packet', title: 'Sale-readiness', meta: 'Profile, trust checks, packet', status: 'Builds from record' },
+  { label: 'Identity file', title: 'Horse No. 001', meta: 'Name, barn, owner, status', status: 'Ready to create', metric: '01' },
+  { label: 'Proof vault', title: 'Papers dock', meta: 'Coggins, registration, receipts', status: 'Waiting on upload', metric: '02' },
+  { label: 'Care timeline', title: 'Health rhythm', meta: 'Vet, dental, wormer, turnout', status: 'Activates with proof', metric: '03' },
+  { label: 'Buyer packet', title: 'Sale-readiness', meta: 'Profile, trust checks, packet', status: 'Builds from record', metric: '04' },
 ];
 
 const EMPTY_SETUP_STEPS = [
@@ -247,9 +247,10 @@ export default function Dashboard() {
               {EMPTY_PROFILE_CARDS.map((card, index) => (
                 <article
                   className="xbar-profile-card"
-                  style={{ '--card-offset': `${index * 76}px`, '--card-delay': `${index * -1.75}s` } as CSSProperties}
+                  style={{ '--card-index': index, '--card-delay': `${index * -3.15}s` } as CSSProperties}
                   key={card.label}
                 >
+                  <span className="xbar-profile-card__metric">{card.metric}</span>
                   <div className="xbar-profile-card__head">
                     <span>{card.label}</span>
                     <i />
@@ -257,6 +258,7 @@ export default function Dashboard() {
                   <strong>{card.title}</strong>
                   <small>{card.meta}</small>
                   <em>{card.status}</em>
+                  <span className="xbar-profile-card__rail" />
                 </article>
               ))}
             </div>

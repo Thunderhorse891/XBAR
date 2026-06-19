@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { XbarMark } from '@/components/BrandMark';
 
 export type HelpSection = {
   label: string;
@@ -36,34 +37,37 @@ export function WorkspaceHelp({
   }
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-end bg-[#2c2621]/28 p-4 backdrop-blur-[2px]" onClick={onClose} role="presentation">
+    <div className="workspace-help-overlay fixed inset-0 z-[120] flex items-center justify-end p-4" onClick={onClose} role="presentation">
       <aside
-        className="w-full max-w-[360px] rounded-[10px] border border-[#ddd3c7] bg-[linear-gradient(180deg,#fffdfa_0%,#f7f1ea_100%)] p-5 shadow-xl"
+        className="workspace-help-drawer w-full max-w-[360px] p-5"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={`${title} guide`}
       >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8f8378]">Guide</div>
-            <h2 className="mt-2 text-lg font-bold tracking-[-0.04em] text-[#201d1a]">{title}</h2>
+        <div className="workspace-help-drawer__header flex items-start justify-between gap-4">
+          <div className="workspace-help-drawer__title">
+            <span className="workspace-help-drawer__mark"><XbarMark tone="mono" /></span>
+            <div>
+              <div className="workspace-help-drawer__eyebrow text-[10px] font-semibold uppercase tracking-[0.28em]">Guide</div>
+              <h2 className="mt-2 text-lg font-bold tracking-[-0.04em]">{title}</h2>
+            </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#ddd3c7] text-[#726659] transition-all duration-150 ease-[ease] hover:border-[#3d6b4f]/30 hover:bg-[#f5efe7] hover:text-[#201d1a]"
+            className="workspace-help-drawer__close inline-flex h-9 w-9 items-center justify-center"
             aria-label="Close guide"
           >
             ×
           </button>
         </div>
 
-        <div className="mt-5 flex flex-col gap-2.5">
+        <div className="workspace-help-drawer__sections mt-5 flex flex-col gap-2.5">
           {sections.map((section) => (
-            <div key={section.label} className="rounded-md border border-[#ddd3c7] bg-[#fbf7f1] px-4 py-3">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#6c5f53]">{section.label}</div>
-              <p className="mt-1.5 text-sm leading-6 text-[#4d463f]">{section.text}</p>
+            <div key={section.label} className="workspace-help-drawer__section rounded-md px-4 py-3">
+              <div className="workspace-help-drawer__section-label text-[11px] font-semibold uppercase tracking-[0.18em]">{section.label}</div>
+              <p className="mt-1.5 text-sm leading-6">{section.text}</p>
             </div>
           ))}
         </div>
