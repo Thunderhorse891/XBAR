@@ -342,7 +342,7 @@ export default function MainLayout() {
             <span className="inline-flex min-h-[22px] items-center rounded-md border border-[var(--border)] bg-[rgba(0,0,0,0.03)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--muted)]">
               {subscription.tier}
             </span>
-            <span className="inline-flex min-h-[22px] items-center rounded-md border border-[rgba(47,141,255,0.2)] bg-[rgba(47,141,255,0.08)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#2F8DFF]">
+            <span className="inline-flex min-h-[22px] items-center rounded-md border border-[rgba(47,141,255,0.2)] bg-[rgba(47,141,255,0.08)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--blue)]">
               {cloudStatus === 'signed-in' ? 'Cloud sync' : 'Browser'}
             </span>
           </div>
@@ -374,7 +374,7 @@ export default function MainLayout() {
                   'inline-flex min-h-[22px] items-center rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em]',
                   pendingReview || pendingTransfers
                     ? 'border-[rgba(210,153,34,0.25)] bg-[rgba(210,153,34,0.08)] text-[#D29922]'
-                    : 'border-[rgba(47,141,255,0.2)] bg-[rgba(47,141,255,0.08)] text-[#2F8DFF]',
+                    : 'border-[rgba(47,141,255,0.2)] bg-[rgba(47,141,255,0.08)] text-[var(--blue)]',
                 )}
               >
                 {pendingReview || pendingTransfers ? `${pendingReview + pendingTransfers} open` : 'Ready'}
@@ -509,7 +509,7 @@ export default function MainLayout() {
                       className={classNames(
                         'flex min-h-[52px] items-center gap-2.5 rounded-lg border px-3 text-left text-[12px] font-semibold transition-colors duration-150',
                         isActive
-                          ? 'border-[rgba(47,141,255,0.25)] bg-[rgba(47,141,255,0.1)] text-[#2F8DFF]'
+                          ? 'border-[rgba(47,141,255,0.25)] bg-[rgba(47,141,255,0.1)] text-[var(--blue)]'
                           : 'border-[var(--border)] bg-[var(--surface-strong)] text-[var(--muted)] hover:border-[var(--border-strong)] hover:text-[var(--muted-strong)]',
                       )}
                       to={path}
@@ -546,7 +546,7 @@ export default function MainLayout() {
                 classNames(
                   'relative flex min-h-[60px] flex-col items-center justify-center gap-1 rounded-lg text-[10px] font-bold transition-colors duration-150',
                   isActive
-                    ? 'bg-[rgba(47,141,255,0.12)] text-[#2F8DFF]'
+                    ? 'bg-[rgba(47,141,255,0.12)] text-[var(--blue)]'
                     : 'text-[var(--muted)] hover:bg-[rgba(0,0,0,0.04)] hover:text-[var(--muted)]',
                 )
               }
@@ -565,7 +565,7 @@ export default function MainLayout() {
               'relative flex min-h-[60px] flex-col items-center justify-center gap-1 rounded-lg text-[10px] font-bold transition-colors duration-150',
               mobileMoreOpen ||
                 mobileMoreItems.some((item) => location.pathname.startsWith(item.path) && item.path !== '/')
-                ? 'bg-[rgba(47,141,255,0.12)] text-[#2F8DFF]'
+                ? 'bg-[rgba(47,141,255,0.12)] text-[var(--blue)]'
                 : 'text-[var(--muted)] hover:bg-[rgba(0,0,0,0.04)] hover:text-[var(--muted)]',
             )}
             type="button"
