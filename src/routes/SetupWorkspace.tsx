@@ -117,7 +117,7 @@ export default function SetupWorkspace() {
       <div className="premium-auth-orb premium-auth-orb--two" aria-hidden="true" />
 
       <div className="relative z-[1] mx-auto grid min-h-screen w-full max-w-[1340px] gap-6 px-4 py-5 lg:grid-cols-[0.92fr_1.08fr] lg:px-8 lg:py-8">
-        <section className="flex flex-col justify-between rounded-[30px] border border-white/10 bg-white/[0.035] p-6 shadow-[0_34px_100px_rgba(0,0,0,0.34)] backdrop-blur-xl lg:min-h-[calc(100vh-4rem)] lg:p-8">
+        <section className="flex flex-col justify-between rounded-[30px] border border-[var(--border)] bg-[linear-gradient(158deg,#EDF2FF_0%,#EEF6FF_100%)] p-6 shadow-[0_4px_24px_rgba(0,0,0,0.07)] lg:min-h-[calc(100vh-4rem)] lg:p-8">
           <div>
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-4">
@@ -125,20 +125,20 @@ export default function SetupWorkspace() {
                   <XbarMark title="XBAR logo" className="h-full w-full" />
                 </div>
                 <div>
-                  <div className="text-[1rem] font-extrabold uppercase tracking-[0.22em] text-white">XBAR</div>
-                  <div className="mt-1 text-[0.62rem] font-bold uppercase tracking-[0.3em] text-slate-400">Ranch setup</div>
+                  <div className="text-[1rem] font-extrabold uppercase tracking-[0.22em] text-[var(--text)]">XBAR</div>
+                  <div className="mt-1 text-[0.62rem] font-bold uppercase tracking-[0.3em] text-[var(--muted)]">Ranch setup</div>
                 </div>
               </div>
-              <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[0.66rem] font-bold uppercase tracking-[0.18em] text-slate-300">
+              <span className="rounded-full border border-[var(--border)] bg-[rgba(0,0,0,0.04)] px-3 py-1.5 text-[0.66rem] font-bold uppercase tracking-[0.18em] text-[var(--muted-strong)]">
                 {accessLabel}
               </span>
             </div>
 
             <div className="mt-14 max-w-[36rem]">
-              <h1 className="text-[clamp(2.6rem,7vw,5.25rem)] font-black leading-[0.88] tracking-[-0.08em] text-white">
+              <h1 className="text-[clamp(2.6rem,7vw,5.25rem)] font-black leading-[0.88] tracking-[-0.08em] text-[var(--text)]">
                 Build the ranch workspace around real records
               </h1>
-              <p className="mt-6 text-base leading-8 text-slate-300">
+              <p className="mt-6 text-base leading-8 text-[var(--muted-strong)]">
                 No fake horses. No invented documents. Start with a clean dashboard and let the operation become organized from the first entry.
               </p>
             </div>
@@ -146,14 +146,14 @@ export default function SetupWorkspace() {
 
           <div className="mt-10 grid gap-3">
             {foundationSteps.map((step, index) => (
-              <div key={step.title} className="rounded-[18px] border border-white/10 bg-black/20 px-5 py-4">
+              <div key={step.title} className="rounded-[18px] border border-[var(--border)] bg-[rgba(255,255,255,0.7)] px-5 py-4">
                 <div className="flex items-start gap-4">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-sky-300/20 bg-sky-300/10 text-xs font-extrabold text-sky-100">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[rgba(37,99,235,0.2)] bg-[rgba(37,99,235,0.08)] text-xs font-extrabold text-[#1D4ED8]">
                     {index + 1}
                   </span>
                   <div>
-                    <div className="text-sm font-extrabold text-white">{step.title}</div>
-                    <div className="mt-1 text-sm leading-6 text-slate-400">{step.body}</div>
+                    <div className="text-sm font-extrabold text-[var(--text)]">{step.title}</div>
+                    <div className="mt-1 text-sm leading-6 text-[var(--muted)]">{step.body}</div>
                   </div>
                 </div>
               </div>
@@ -163,14 +163,14 @@ export default function SetupWorkspace() {
 
         <section className="premium-setup-card">
           <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
-            <div className="rounded-[24px] border border-white/10 bg-black/20 p-5">
-              <div className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-sky-200/80">What unlocks next</div>
-              <div className="mt-3 text-2xl font-black tracking-[-0.06em] text-white">Operational clarity in one pass.</div>
+            <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-strong)] p-5">
+              <div className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-[var(--blue)]">What unlocks next</div>
+              <div className="mt-3 text-2xl font-black tracking-[-0.06em] text-[var(--text)]">Operational clarity in one pass.</div>
               <div className="mt-6 grid gap-3">
                 {workspacePreviews.map((item) => (
-                  <div key={item.label} className="rounded-[16px] border border-white/10 bg-white/[0.035] px-4 py-3">
-                    <div className="text-sm font-extrabold text-white">{item.label}</div>
-                    <div className="mt-1 text-xs leading-5 text-slate-400">{item.value}</div>
+                  <div key={item.label} className="rounded-[16px] border border-[var(--border)] bg-[rgba(0,0,0,0.02)] px-4 py-3">
+                    <div className="text-sm font-extrabold text-[var(--text)]">{item.label}</div>
+                    <div className="mt-1 text-xs leading-5 text-[var(--muted)]">{item.value}</div>
                   </div>
                 ))}
               </div>
@@ -183,15 +183,15 @@ export default function SetupWorkspace() {
 
             <form className="premium-setup-form" onSubmit={handleSubmit}>
               <div>
-                <div className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">Ranch profile</div>
-                <h2 className="mt-2 text-[clamp(2rem,4vw,3.1rem)] font-black leading-[0.95] tracking-[-0.075em] text-white">
+                <div className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-[var(--muted)]">Ranch profile</div>
+                <h2 className="mt-2 text-[clamp(2rem,4vw,3.1rem)] font-black leading-[0.95] tracking-[-0.075em] text-[var(--text)]">
                   Set the identity your team will trust.
                 </h2>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="field-stack">
-                  <span className="field-label text-slate-300">Business name <span aria-hidden="true" style={{ color: '#f87171' }}>*</span></span>
+                  <span className="field-label text-[var(--muted-strong)]">Business name <span aria-hidden="true" style={{ color: '#DC2626' }}>*</span></span>
                   <input
                     className="field-input premium-auth-input"
                     required
@@ -202,7 +202,7 @@ export default function SetupWorkspace() {
                   />
                 </label>
                 <label className="field-stack">
-                  <span className="field-label text-slate-300">Ranch name <span aria-hidden="true" style={{ color: '#f87171' }}>*</span></span>
+                  <span className="field-label text-[var(--muted-strong)]">Ranch name <span aria-hidden="true" style={{ color: '#DC2626' }}>*</span></span>
                   <input
                     className="field-input premium-auth-input"
                     required
@@ -213,7 +213,7 @@ export default function SetupWorkspace() {
                   />
                 </label>
                 <label className="field-stack">
-                  <span className="field-label text-slate-300">Ranch manager <span className="text-slate-500 font-normal">(optional)</span></span>
+                  <span className="field-label text-[var(--muted-strong)]">Ranch manager <span className="text-[var(--muted)] font-normal">(optional)</span></span>
                   <input
                     className="field-input premium-auth-input"
                     value={form.ranchManagerName}
@@ -222,7 +222,7 @@ export default function SetupWorkspace() {
                   />
                 </label>
                 <label className="field-stack">
-                  <span className="field-label text-slate-300">Ops email <span className="text-slate-500 font-normal">(optional)</span></span>
+                  <span className="field-label text-[var(--muted-strong)]">Ops email <span className="text-[var(--muted)] font-normal">(optional)</span></span>
                   <input
                     className="field-input premium-auth-input"
                     type="email"
@@ -232,7 +232,7 @@ export default function SetupWorkspace() {
                   />
                 </label>
                 <label className="field-stack">
-                  <span className="field-label text-slate-300">Default owner <span className="text-slate-500 font-normal">(optional)</span></span>
+                  <span className="field-label text-[var(--muted-strong)]">Default owner <span className="text-[var(--muted)] font-normal">(optional)</span></span>
                   <input
                     className="field-input premium-auth-input"
                     value={form.defaultOwnerName}
@@ -241,7 +241,7 @@ export default function SetupWorkspace() {
                   />
                 </label>
                 <label className="field-stack">
-                  <span className="field-label text-slate-300">Owner entity <span className="text-slate-500 font-normal">(optional)</span></span>
+                  <span className="field-label text-[var(--muted-strong)]">Owner entity <span className="text-[var(--muted)] font-normal">(optional)</span></span>
                   <input
                     className="field-input premium-auth-input"
                     value={form.defaultOwnerEntity}
@@ -250,7 +250,7 @@ export default function SetupWorkspace() {
                   />
                 </label>
                 <label className="field-stack">
-                  <span className="field-label text-slate-300">Default barn <span className="text-slate-500 font-normal">(optional)</span></span>
+                  <span className="field-label text-[var(--muted-strong)]">Default barn <span className="text-[var(--muted)] font-normal">(optional)</span></span>
                   <input
                     className="field-input premium-auth-input"
                     value={form.defaultBarn}
@@ -259,7 +259,7 @@ export default function SetupWorkspace() {
                   />
                 </label>
                 <label className="field-stack">
-                  <span className="field-label text-slate-300">Default pasture <span className="text-slate-500 font-normal">(optional)</span></span>
+                  <span className="field-label text-[var(--muted-strong)]">Default pasture <span className="text-[var(--muted)] font-normal">(optional)</span></span>
                   <input
                     className="field-input premium-auth-input"
                     value={form.defaultPasture}
@@ -269,7 +269,7 @@ export default function SetupWorkspace() {
                 </label>
               </div>
 
-              {formError ? <div className="rounded-[16px] border border-rose-300/25 bg-rose-500/10 px-4 py-3 text-sm leading-6 text-rose-100">{formError}</div> : null}
+              {formError ? <div className="rounded-[16px] border border-[rgba(220,38,38,0.2)] bg-[rgba(220,38,38,0.06)] px-4 py-3 text-sm leading-6 text-[#B91C1C]">{formError}</div> : null}
 
               <div className="flex flex-col gap-3 sm:flex-row">
                 <button className="premium-auth-button premium-auth-button--primary" type="submit" disabled={saving}>
