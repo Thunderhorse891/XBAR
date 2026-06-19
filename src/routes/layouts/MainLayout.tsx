@@ -261,7 +261,7 @@ export default function MainLayout() {
       <aside className="hidden min-h-screen flex-col gap-6 border-r border-border bg-secondary/80 px-5 py-6 text-foreground lg:flex">
         <div className="flex items-center gap-3">
           <div className="flex h-[52px] w-[52px] items-center justify-center rounded-lg border border-border bg-background p-1.5 shadow-sm">
-            <XbarMark title="XBAR logo" className="h-full w-full" />
+            <XbarMark title="XBAR logo" tone="mono" className="h-full w-full" />
           </div>
           <div className="min-w-0">
             <div className="truncate text-[1.04rem] font-extrabold uppercase tracking-[0.14em] text-foreground">{workspaceProfile.businessName || 'XBAR'}</div>
