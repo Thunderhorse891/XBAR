@@ -37,8 +37,10 @@ async function postRuntimeEventToApi(event: RuntimeEventInput) {
       body: JSON.stringify(event),
       keepalive: true,
     });
-  } catch {
-    // Ignore telemetry transport failures.
+  } catch (err) {
+    if (process.env.NODE_ENV === 'development') {
+      console.debug('[xbar telemetry] transport failed:', err);
+    }
   }
 }
 
