@@ -27,7 +27,11 @@ export default function Login() {
   const [busy, setBusy] = useState<BusyState>('');
   const authMode: AuthMode = params.get('mode') === 'signup' ? 'signup' : 'signin';
   const selectedPlan = params.get('plan') ?? '';
-  const redirectTarget = useMemo(() => (location.state as { from?: string } | null)?.from || (selectedPlan ? `/subscriptions?plan=${encodeURIComponent(selectedPlan)}` : '/'), [location.state, selectedPlan]);
+  const redirectTarget = useMemo(() => {
+    const from = (location.state as { from?: string } | null)?.from;
+    if (from) return from;
+    return selectedPlan ? `/subscribe?plan=${encodeURIComponent(selectedPlan)}` : '/subscribe';
+  }, [location.state, selectedPlan]);
   const supabaseReady = isSupabaseConfigured();
 
   const setMode = (mode: AuthMode) => {
