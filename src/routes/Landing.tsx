@@ -1,13 +1,15 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCloudStore } from '@/store/useCloudStore';
 import { isLocalModeEnabled } from '@/lib/platformConfig';
 import './authExperience.css';
+import './landing.css';
 
 const FEATURES = [
   {
     label: 'Complete Horse Records',
     desc: 'Every horse documented from day one. Registration, breeding history, training records — organized by animal, searchable in seconds.',
+    wide: false,
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
         <rect x="4" y="3" width="16" height="18" rx="2" />
@@ -18,6 +20,7 @@ const FEATURES = [
   {
     label: 'Health & Care Tracking',
     desc: 'Coggins, vaccinations, vet visits, farrier schedules. Never miss a deadline or scramble for paperwork before a show or sale.',
+    wide: false,
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 22C7.03 17.1 3 13.35 3 9.5 3 6.35 5.57 5 7.5 5c1.15 0 3.42.5 4.5 3.7C13.08 5.5 15.35 5 16.5 5 18.43 5 21 6.35 21 9.5c0 3.85-4.03 7.6-9 12.5z" />
@@ -25,8 +28,9 @@ const FEATURES = [
     ),
   },
   {
-    label: 'Ownership & Title',
-    desc: 'Co-ownership splits, transfer history, lien documentation. Clean paper trails that protect you and your buyers at closing.',
+    label: 'Ownership & Title Management',
+    desc: 'Co-ownership splits, transfer history, lien documentation. Clean paper trails that protect you and your buyers at closing. Never lose track of who owns what.',
+    wide: true,
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 3l8 3v5c0 5-3.5 9.74-8 11-4.5-1.26-8-6-8-11V6l8-3z" />
@@ -36,7 +40,8 @@ const FEATURES = [
   },
   {
     label: 'Document Vault',
-    desc: 'Registration papers, bills of sale, test results, photos — stored, organized, and shareable from any device in seconds.',
+    desc: 'Registration papers, bills of sale, test results, photos — stored, organized, and shareable from any device.',
+    wide: false,
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
         <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
@@ -47,6 +52,7 @@ const FEATURES = [
   {
     label: 'Instant Sale Packets',
     desc: 'One link gives buyers everything: health records, registration, photos, price. Professional packets that close deals faster.',
+    wide: false,
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="18" cy="5" r="3" />
@@ -59,6 +65,7 @@ const FEATURES = [
   {
     label: 'Budget & Expenses',
     desc: 'Track feed, vet, farrier, and training costs per horse. Know your real carrying costs before you set an asking price.',
+    wide: false,
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 20V10M18 20V4M6 20v-4" />
@@ -73,33 +80,16 @@ const WORKFLOW = [
     num: '01',
     title: 'Build your herd',
     desc: 'Add horses, upload registration papers, attach photos and documents. Takes minutes per animal. Import from existing spreadsheets or start fresh.',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 5v14M5 12h14" />
-      </svg>
-    ),
   },
   {
     num: '02',
     title: 'Track what matters',
     desc: 'Log health events, ownership changes, and care records as they happen. Get reminders before deadlines — coggins, vaccinations, farrier visits.',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2a10 10 0 100 20 10 10 0 000-20z" />
-        <path d="M12 6v6l4 2" />
-      </svg>
-    ),
   },
   {
     num: '03',
     title: 'Close deals faster',
     desc: 'When a buyer is ready, share a branded sale packet in one link. All the proof they need, organized and professional, without a phone call.',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
-        <path d="M22 4L12 14.01l-3-3" />
-      </svg>
-    ),
   },
 ];
 
@@ -178,10 +168,10 @@ const COMPARISON_ROWS = [
 ];
 
 const STATS = [
-  { value: '400+', label: 'Ranch Operations' },
-  { value: '12,000+', label: 'Horse Records' },
-  { value: '22', label: 'States' },
-  { value: '$180M+', label: 'In Verified Sales' },
+  { value: '400', suffix: '+', label: 'Ranch Operations' },
+  { value: '12000', suffix: '+', label: 'Horse Records', display: '12,000+' },
+  { value: '22', suffix: '', label: 'States' },
+  { value: '180', suffix: 'M+', label: 'In Verified Sales', prefix: '$' },
 ];
 
 const PREVIEW_METRICS = [
@@ -197,6 +187,12 @@ const PREVIEW_HORSES = [
   { name: 'Blue Ridge', tag: 'Breeding', tone: 'blue', detail: 'AQHA · Stud · OK' },
 ];
 
+const TICKER_ITEMS = [
+  'Horse Records', 'Health Tracking', 'Document Vault', 'Sale Packets',
+  'Ownership Transfer', 'Breeding Programs', 'Budget & Expenses', 'Team Roles',
+  'Coggins Reminders', 'Farrier Schedules', 'Shared Access', 'Weather Ops',
+];
+
 const CHECK_ICON = (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M2.5 8l4 4 7-7" />
@@ -206,6 +202,7 @@ const CHECK_ICON = (
 export default function Landing() {
   const navigate = useNavigate();
   const session = useCloudStore((state) => state.session);
+  const srRef = useRef<IntersectionObserver | null>(null);
 
   useEffect(() => {
     if (session || isLocalModeEnabled()) {
@@ -213,129 +210,236 @@ export default function Landing() {
     }
   }, [session, navigate]);
 
+  // Scroll reveal
+  useEffect(() => {
+    const elements = document.querySelectorAll('.sr');
+    if (!elements.length) return;
+
+    srRef.current = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('sr--visible');
+            srRef.current?.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.12, rootMargin: '0px 0px -40px 0px' },
+    );
+
+    elements.forEach((el) => srRef.current?.observe(el));
+
+    return () => srRef.current?.disconnect();
+  }, []);
+
+  // Nav scroll state
+  useEffect(() => {
+    const nav = document.querySelector('.site-nav');
+    if (!nav) return;
+
+    const onScroll = () => {
+      nav.classList.toggle('site-nav--scrolled', window.scrollY > 24);
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   const year = new Date().getFullYear();
 
   return (
-    <div className="mkt-page">
+    <div className="site-page">
       {/* Nav */}
-      <nav className="mkt-nav">
-        <div className="mkt-nav-brand">
-          <div className="lp-tagline">
-            <strong>XBAR</strong>
-            <span>Ranch Platform</span>
+      <nav className="site-nav" aria-label="Main navigation">
+        <Link to="/landing" className="site-nav-brand" aria-label="XBAR home">
+          <div className="site-nav-brand-mark" aria-hidden="true">XB</div>
+          <div>
+            <div className="site-nav-brand-name">XBAR</div>
+            <div className="site-nav-brand-sub">Ranch Platform</div>
           </div>
+        </Link>
+        <div className="site-nav-links">
+          <a href="#features" className="site-nav-link">Features</a>
+          <a href="#pricing" className="site-nav-link">Pricing</a>
+          <Link to="/login" className="site-nav-signin">Sign in</Link>
         </div>
-        <div className="mkt-nav-links">
-          <a href="#pricing" className="mkt-nav-link">Pricing</a>
-          <Link to="/login" className="mkt-nav-signin">Sign in</Link>
-        </div>
-        <Link to="/login?mode=signup" className="mkt-nav-cta">Get started free</Link>
+        <Link to="/login?mode=signup" className="site-nav-cta">
+          Get started free
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }} aria-hidden="true">
+            <path d="M3 8h10M9 4l4 4-4 4" />
+          </svg>
+        </Link>
       </nav>
 
       {/* Hero */}
-      <section className="mkt-hero">
-        <div className="mkt-hero-orb mkt-hero-orb--one" aria-hidden="true" />
-        <div className="mkt-hero-orb mkt-hero-orb--two" aria-hidden="true" />
-        <div className="mkt-hero-inner">
-          <div className="mkt-hero-badge">Purpose-built for working ranches</div>
-          <h1 className="mkt-hero-h1">Horse records that<br /><span className="mkt-hero-h1-accent">close deals.</span></h1>
-          <p className="mkt-hero-sub">
-            XBAR keeps ownership, health records, documents, and sale packets organized by horse — not by filing cabinet. When a buyer asks for proof, you're already ready.
-          </p>
-          <div className="mkt-hero-actions">
-            <Link to="/login?mode=signup" className="mkt-hero-primary">
-              Start your 14-day trial
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14, marginLeft: 6 }}>
-                <path d="M3 8h10M9 4l4 4-4 4" />
-              </svg>
-            </Link>
-            <Link to="/login" className="mkt-hero-ghost">Sign in to existing workspace</Link>
-          </div>
-          <div className="mkt-hero-trust">
-            <span>No credit card required</span>
-            <span className="mkt-hero-trust-dot" aria-hidden="true" />
-            <span>Cancel any time</span>
-            <span className="mkt-hero-trust-dot" aria-hidden="true" />
-            <span>End-to-end encrypted</span>
-          </div>
+      <section className="site-hero" aria-labelledby="hero-heading">
+        <div className="site-hero-bg" aria-hidden="true">
+          <div className="site-orb site-orb--blue" />
+          <div className="site-orb site-orb--indigo" />
+          <div className="site-orb site-orb--teal" />
+          <div className="site-hero-dots" />
         </div>
-        <div className="mkt-stats-bar">
-          {STATS.map((s) => (
-            <div key={s.label} className="mkt-stat">
-              <strong className="mkt-stat-value">{s.value}</strong>
-              <span className="mkt-stat-label">{s.label}</span>
-            </div>
-          ))}
-        </div>
-      </section>
 
-      {/* Product Preview */}
-      <section className="mkt-preview-section" aria-label="Platform preview">
-        <div className="mkt-section-inner">
-          <div className="mkt-preview-wrapper">
-            <div className="mkt-preview-chrome" role="img" aria-label="XBAR dashboard showing horse records, health alerts, and sale status">
-              <div className="mkt-preview-bar">
-                <div className="mkt-preview-dots" aria-hidden="true">
+        <div className="site-hero-wrap">
+          {/* Left copy */}
+          <div className="site-hero-copy">
+            <div className="site-hero-badge sr" aria-hidden="true">
+              Purpose-built for working ranches
+            </div>
+            <h1 className="site-hero-h1 sr" data-delay="1" id="hero-heading">
+              Horse records that<br />
+              <span className="site-gradient-text">close deals.</span>
+            </h1>
+            <p className="site-hero-sub sr" data-delay="2">
+              XBAR keeps ownership, health records, documents, and sale packets organized by horse — not by filing cabinet. When a buyer asks for proof, you're already ready.
+            </p>
+            <div className="site-hero-actions sr" data-delay="3">
+              <Link to="/login?mode=signup" className="site-btn-primary">
+                Start your 14-day trial
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }} aria-hidden="true">
+                  <path d="M3 8h10M9 4l4 4-4 4" />
+                </svg>
+              </Link>
+              <Link to="/login" className="site-btn-ghost">Sign in to workspace</Link>
+            </div>
+            <div className="site-hero-trust sr" data-delay="4">
+              <span>No credit card required</span>
+              <span className="site-hero-trust-dot" aria-hidden="true" />
+              <span>Cancel any time</span>
+              <span className="site-hero-trust-dot" aria-hidden="true" />
+              <span>End-to-end encrypted</span>
+            </div>
+          </div>
+
+          {/* Right chrome */}
+          <div className="site-chrome-wrap sr" data-delay="2">
+            {/* Floating card A — top left */}
+            <div className="site-float-card site-float-card--a" aria-hidden="true">
+              <div className="site-fc-head">
+                <div className="site-fc-dot" />
+                <div className="site-fc-label">Live sync</div>
+              </div>
+              <div className="site-fc-value">94%</div>
+              <div className="site-fc-sub">Docs ready to share</div>
+            </div>
+
+            {/* Floating card B — bottom right */}
+            <div className="site-float-card site-float-card--b" aria-hidden="true">
+              <div className="site-fc-head">
+                <div className="site-fc-dot" />
+                <div className="site-fc-label">This month</div>
+              </div>
+              <div className="site-fc-value">3</div>
+              <div className="site-fc-sub">Sales closed</div>
+            </div>
+
+            <div
+              className="site-chrome"
+              role="img"
+              aria-label="XBAR dashboard preview showing horse records, health alerts, and sale status"
+            >
+              <div className="site-chrome-bar" aria-hidden="true">
+                <div className="site-chrome-dots">
                   <span /><span /><span />
                 </div>
-                <div className="mkt-preview-url" aria-hidden="true">xbar.io/dashboard</div>
+                <div className="site-chrome-url">xbar.io/dashboard</div>
               </div>
-              <div className="mkt-preview-body">
-                <div className="mkt-preview-sidebar" aria-hidden="true">
-                  <div className="mkt-preview-sidebar-logo">XBAR</div>
+              <div className="site-chrome-body" aria-hidden="true">
+                <div className="site-chrome-sidebar">
+                  <div className="site-chrome-logo">XBAR</div>
                   {['Dashboard', 'Horses', 'Medical', 'Documents', 'Sales', 'Breeding'].map((item, i) => (
-                    <div key={item} className={`mkt-preview-sidebar-item${i === 0 ? ' mkt-preview-sidebar-item--active' : ''}`}>
+                    <div key={item} className={`site-chrome-nav-item${i === 0 ? ' site-chrome-nav-item--active' : ''}`}>
                       {item}
                     </div>
                   ))}
                 </div>
-                <div className="mkt-preview-main" aria-hidden="true">
-                  <div className="mkt-preview-topbar">
-                    <span className="mkt-preview-topbar-title">Dashboard</span>
-                    <span className="mkt-preview-topbar-ranch">Main Ranch</span>
+                <div className="site-chrome-main">
+                  <div className="site-chrome-topbar">
+                    <span className="site-chrome-topbar-title">Dashboard</span>
+                    <span className="site-chrome-topbar-ranch">Main Ranch</span>
                   </div>
-                  <div className="mkt-preview-metrics">
+                  <div className="site-chrome-metrics">
                     {PREVIEW_METRICS.map((m) => (
-                      <div key={m.label} className="mkt-preview-metric">
-                        <div className="mkt-preview-metric__value">{m.value}</div>
-                        <div className="mkt-preview-metric__label">{m.label}</div>
+                      <div key={m.label} className="site-chrome-metric">
+                        <div className="site-chrome-metric__value">{m.value}</div>
+                        <div className="site-chrome-metric__label">{m.label}</div>
                       </div>
                     ))}
                   </div>
-                  <div className="mkt-preview-horse-list">
+                  <div className="site-chrome-horse-list">
                     {PREVIEW_HORSES.map((h) => (
-                      <div key={h.name} className="mkt-preview-horse-row">
-                        <div className="mkt-preview-horse-avatar" />
-                        <div className="mkt-preview-horse-info">
-                          <div className="mkt-preview-horse-name">{h.name}</div>
-                          <div className="mkt-preview-horse-detail">{h.detail}</div>
+                      <div key={h.name} className="site-chrome-horse-row">
+                        <div className="site-chrome-horse-avatar" />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div className="site-chrome-horse-name">{h.name}</div>
+                          <div className="site-chrome-horse-detail">{h.detail}</div>
                         </div>
-                        <div className={`mkt-preview-horse-status mkt-preview-horse-status--${h.tone}`}>{h.tag}</div>
+                        <div className={`site-chrome-horse-tag site-chrome-horse-tag--${h.tone}`}>{h.tag}</div>
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
             </div>
-            <div className="mkt-preview-glow" aria-hidden="true" />
           </div>
         </div>
       </section>
 
-      {/* Features */}
-      <section className="mkt-section mkt-section--alt">
-        <div className="mkt-section-inner">
-          <div className="mkt-section-header">
-            <div className="mkt-section-badge">Features</div>
-            <h2 className="mkt-section-title">Everything an operation needs to run tight.</h2>
-            <p className="mkt-section-sub">Built around how ranches actually work — not adapted from generic business software.</p>
+      {/* Ticker */}
+      <div className="site-ticker-outer" aria-hidden="true">
+        <div className="site-ticker-track">
+          {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
+            <div key={`${item}-${i}`} className="site-ticker-item">
+              {item}
+              <span className="site-ticker-sep" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="site-stats-strip" role="list" aria-label="Platform statistics">
+        {STATS.map((s) => (
+          <div key={s.label} className="site-stat sr" role="listitem">
+            <span className="site-stat-num" aria-label={s.display ?? `${s.prefix ?? ''}${s.value}${s.suffix}`}>
+              {s.prefix ?? ''}{s.display ?? `${s.value}${s.suffix}`}
+            </span>
+            <span className="site-stat-label">{s.label}</span>
           </div>
-          <div className="mkt-features-grid">
-            {FEATURES.map((f) => (
-              <div key={f.label} className="mkt-feature-card">
-                <div className="mkt-feature-icon">{f.icon}</div>
-                <h3 className="mkt-feature-name">{f.label}</h3>
-                <p className="mkt-feature-desc">{f.desc}</p>
+        ))}
+      </div>
+
+      {/* Features — bento grid */}
+      <section className="site-section" id="features" aria-labelledby="features-heading">
+        <div className="site-section-inner">
+          <div className="site-section-header">
+            <div className="site-section-eyebrow sr">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 12, height: 12 }} aria-hidden="true">
+                <rect x="2" y="2" width="5" height="5" rx="1" />
+                <rect x="9" y="2" width="5" height="5" rx="1" />
+                <rect x="2" y="9" width="5" height="5" rx="1" />
+                <rect x="9" y="9" width="5" height="5" rx="1" />
+              </svg>
+              Platform Features
+            </div>
+            <h2 className="site-section-title sr" data-delay="1" id="features-heading">
+              Everything an operation needs<br />to run tight.
+            </h2>
+            <p className="site-section-sub sr" data-delay="2">
+              Built around how ranches actually work — not adapted from generic business software.
+            </p>
+          </div>
+
+          <div className="site-bento">
+            {FEATURES.map((f, i) => (
+              <div
+                key={f.label}
+                className={`site-bento-cell sr${f.wide ? ' site-bento-cell--wide' : ''}`}
+                data-delay={String((i % 3) + 1)}
+              >
+                <div className="site-bento-icon" aria-hidden="true">{f.icon}</div>
+                <h3 className="site-bento-name">{f.label}</h3>
+                <p className="site-bento-desc">{f.desc}</p>
               </div>
             ))}
           </div>
@@ -343,35 +447,41 @@ export default function Landing() {
       </section>
 
       {/* How it works */}
-      <section className="mkt-section">
-        <div className="mkt-section-inner">
-          <div className="mkt-section-header">
-            <div className="mkt-section-badge">How it works</div>
-            <h2 className="mkt-section-title">Up and running in under an hour.</h2>
-            <p className="mkt-section-sub">No training sessions, no implementation consultants. Just add horses and go.</p>
+      <section className="site-section site-section--alt" aria-labelledby="workflow-heading">
+        <div className="site-section-inner">
+          <div className="site-section-header">
+            <div className="site-section-eyebrow sr">How it works</div>
+            <h2 className="site-section-title sr" data-delay="1" id="workflow-heading">
+              Up and running<br />in under an hour.
+            </h2>
+            <p className="site-section-sub sr" data-delay="2">
+              No training sessions, no implementation consultants. Just add horses and go.
+            </p>
           </div>
-          <div className="mkt-workflow-steps">
-            {WORKFLOW.map((step) => (
-              <div key={step.num} className="mkt-step">
-                <div className="mkt-step-icon">{step.icon}</div>
-                <div className="mkt-step-num">{step.num}</div>
-                <h3 className="mkt-step-name">{step.title}</h3>
-                <p className="mkt-step-desc">{step.desc}</p>
+
+          <div className="site-steps">
+            {WORKFLOW.map((step, i) => (
+              <div key={step.num} className={`site-step sr`} data-delay={String(i + 1)}>
+                <div className="site-step-num">{step.num}</div>
+                <h3 className="site-step-title">{step.title}</h3>
+                <p className="site-step-desc">{step.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Mid-page CTA */}
-      <section className="mkt-mid-cta">
-        <div className="mkt-section-inner">
-          <div className="mkt-mid-cta-inner">
-            <div className="mkt-mid-cta-copy">
-              <div className="mkt-mid-cta-eyebrow">Ready to get organized?</div>
-              <div className="mkt-mid-cta-headline">Join 400+ operations already running XBAR.</div>
+      {/* Mid CTA */}
+      <section className="site-mid-cta site-section" aria-label="Call to action">
+        <div className="site-mid-cta-bg" aria-hidden="true" />
+        <div className="site-mid-cta-orb" aria-hidden="true" />
+        <div className="site-section-inner site-section-inner--tight">
+          <div className="site-mid-cta-inner">
+            <div className="site-mid-cta-copy sr">
+              <div className="site-mid-cta-eyebrow">Ready to get organized?</div>
+              <div className="site-mid-cta-headline">Join 400+ operations already running XBAR.</div>
             </div>
-            <Link to="/login?mode=signup" className="mkt-hero-primary mkt-mid-cta-action">
+            <Link to="/login?mode=signup" className="site-btn-primary sr" data-delay="2">
               Start free — no card required
             </Link>
           </div>
@@ -379,30 +489,33 @@ export default function Landing() {
       </section>
 
       {/* Testimonials */}
-      <section className="mkt-section mkt-section--alt">
-        <div className="mkt-section-inner">
-          <div className="mkt-section-header">
-            <div className="mkt-section-badge">What ranchers say</div>
-            <h2 className="mkt-section-title">Used by operations across the country.</h2>
+      <section className="site-section site-section--alt" aria-labelledby="testimonials-heading">
+        <div className="site-section-inner">
+          <div className="site-section-header">
+            <div className="site-section-eyebrow sr">What ranchers say</div>
+            <h2 className="site-section-title sr" data-delay="1" id="testimonials-heading">
+              Used by operations<br />across the country.
+            </h2>
           </div>
-          <div className="mkt-testimonials-grid">
-            {TESTIMONIALS.map((t) => (
-              <div key={t.name} className="mkt-testimonial-card">
-                <div className="mkt-testimonial-quote-mark" aria-hidden="true">"</div>
-                <div className="mkt-testimonial-stars">
-                  {[0, 1, 2, 3, 4].map((i) => (
-                    <svg key={i} className="mkt-star" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+
+          <div className="site-testimonials">
+            {TESTIMONIALS.map((t, i) => (
+              <div key={t.name} className="site-testimonial sr" data-delay={String(i + 1)}>
+                <div className="site-quote-mark" aria-hidden="true">"</div>
+                <div className="site-stars" aria-label="5 stars">
+                  {[0, 1, 2, 3, 4].map((idx) => (
+                    <svg key={idx} className="site-star" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
                       <path d="M8 1.25l1.91 3.87 4.27.62-3.09 3.01.73 4.25L8 10.77l-3.82 2.01.73-4.25L1.82 5.74l4.27-.62z" />
                     </svg>
                   ))}
                 </div>
-                <p className="mkt-testimonial-quote">{t.quote}</p>
-                <div className="mkt-testimonial-result">{t.detail}</div>
-                <div className="mkt-testimonial-author">
-                  <div className="mkt-testimonial-avatar">{t.name.charAt(0)}</div>
+                <p className="site-testimonial-quote">{t.quote}</p>
+                <div className="site-testimonial-result">{t.detail}</div>
+                <div className="site-testimonial-author">
+                  <div className="site-testimonial-avatar" aria-hidden="true">{t.name.charAt(0)}</div>
                   <div>
-                    <div className="mkt-testimonial-name">{t.name}</div>
-                    <div className="mkt-testimonial-role">{t.role}</div>
+                    <div className="site-testimonial-name">{t.name}</div>
+                    <div className="site-testimonial-role">{t.role}</div>
                   </div>
                 </div>
               </div>
@@ -412,15 +525,19 @@ export default function Landing() {
       </section>
 
       {/* Pricing */}
-      <section className="mkt-section" id="pricing">
-        <div className="mkt-section-inner">
-          <div className="mkt-section-header">
-            <div className="mkt-section-badge">Pricing</div>
-            <h2 className="mkt-section-title">Built for operations of every size.</h2>
-            <p className="mkt-section-sub">Start free for 14 days. No credit card required. Every plan includes full horse records, care tracking, and document vault.</p>
+      <section className="site-section" id="pricing" aria-labelledby="pricing-heading">
+        <div className="site-section-inner">
+          <div className="site-section-header">
+            <div className="site-section-eyebrow sr">Pricing</div>
+            <h2 className="site-section-title sr" data-delay="1" id="pricing-heading">
+              Built for operations<br />of every size.
+            </h2>
+            <p className="site-section-sub sr" data-delay="2">
+              Start free for 14 days. No credit card required. Every plan includes full horse records, care tracking, and document vault.
+            </p>
           </div>
 
-          <div className="mkt-pricing-grid">
+          <div className="mkt-pricing-grid sr" data-delay="1">
             {PLANS.map((plan) => (
               <div key={plan.name} className={`mkt-pricing-card${plan.featured ? ' mkt-pricing-card--featured' : ''}`}>
                 {plan.featured && <div className="mkt-pricing-badge">Most popular</div>}
@@ -453,7 +570,7 @@ export default function Landing() {
             ))}
           </div>
 
-          <div className="mkt-comparison-wrap">
+          <div className="mkt-comparison-wrap sr" data-delay="2">
             <div className="mkt-comparison-header">
               <div className="mkt-section-badge mkt-section-badge--flush">Full feature comparison</div>
             </div>
@@ -494,56 +611,64 @@ export default function Landing() {
       </section>
 
       {/* Final CTA */}
-      <section className="mkt-cta-section">
-        <div className="mkt-cta-orb" aria-hidden="true" />
-        <div className="mkt-section-inner mkt-cta-inner">
-          <h2 className="mkt-cta-title">Ready to run a tighter operation?</h2>
-          <p className="mkt-cta-sub">Start with a 14-day trial. No credit card required. Cancel any time.</p>
-          <Link to="/login?mode=signup" className="mkt-hero-primary mkt-cta-button">
-            Start free trial
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14, marginLeft: 6 }}>
-              <path d="M3 8h10M9 4l4 4-4 4" />
-            </svg>
-          </Link>
-          <div className="mkt-trust-chips">
-            <div className="mkt-trust-chip">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M8 2l5.5 2v3.5C13.5 11 11 13.8 8 15c-3-1.2-5.5-4-5.5-7.5V4L8 2z" />
+      <section className="site-final-cta site-section" aria-labelledby="final-cta-heading">
+        <div className="site-final-cta-bg" aria-hidden="true" />
+        <div className="site-section-inner">
+          <div className="site-final-cta-inner">
+            <h2 className="site-final-cta-title sr" id="final-cta-heading">
+              Ready to run a tighter operation?
+            </h2>
+            <p className="site-final-cta-sub sr" data-delay="1">
+              Start with a 14-day trial. No credit card required. Cancel any time.
+            </p>
+            <Link to="/login?mode=signup" className="site-btn-primary sr" data-delay="2">
+              Start free trial
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }} aria-hidden="true">
+                <path d="M3 8h10M9 4l4 4-4 4" />
               </svg>
-              End-to-end encrypted
-            </div>
-            <div className="mkt-trust-chip">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <rect x="2" y="7" width="12" height="8" rx="1.5" />
-                <path d="M5 7V5a3 3 0 016 0v2" />
-              </svg>
-              No credit card needed
-            </div>
-            <div className="mkt-trust-chip">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13z" />
-                <path d="M8 5v3.5l2.5 1.5" />
-              </svg>
-              Cancel any time
+            </Link>
+            <div className="site-trust-chips sr" data-delay="3">
+              <div className="site-trust-chip">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M8 2l5.5 2v3.5C13.5 11 11 13.8 8 15c-3-1.2-5.5-4-5.5-7.5V4L8 2z" />
+                </svg>
+                End-to-end encrypted
+              </div>
+              <div className="site-trust-chip">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="2" y="7" width="12" height="8" rx="1.5" />
+                  <path d="M5 7V5a3 3 0 016 0v2" />
+                </svg>
+                No credit card needed
+              </div>
+              <div className="site-trust-chip">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13z" />
+                  <path d="M8 5v3.5l2.5 1.5" />
+                </svg>
+                Cancel any time
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="mkt-footer">
-        <div className="mkt-footer-inner">
-          <div className="lp-tagline">
-            <strong>XBAR</strong>
-            <span>Ranch Platform</span>
+      <footer className="site-footer">
+        <div className="site-footer-inner">
+          <div className="site-footer-brand">
+            <div className="site-footer-brand-name">XBAR</div>
+            <div className="site-footer-brand-sub">Ranch Platform</div>
           </div>
-          <div className="mkt-footer-links">
+          <div className="site-footer-links">
+            <a href="#features">Features</a>
+            <a href="#pricing">Pricing</a>
             <Link to="/terms">Terms of Service</Link>
             <Link to="/privacy">Privacy Policy</Link>
             <Link to="/login">Sign In</Link>
           </div>
         </div>
-        <div className="mkt-footer-copy">© {year} XBAR LLC™ · All rights reserved</div>
+        <div className="site-footer-copy">© {year} XBAR LLC™ · All rights reserved</div>
       </footer>
     </div>
   );
