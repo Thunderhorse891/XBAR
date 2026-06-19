@@ -534,7 +534,7 @@ export default function HorseDetail() {
           <div className="flex shrink-0 flex-wrap gap-2 xl:flex-col">
             {saved ? (
               <a
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[rgba(80,140,255,0.4)] bg-[rgba(17,85,221,0.78)] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[rgba(17,85,221,0.95)]"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[rgba(37,99,235,0.4)] bg-[var(--blue)] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#1D4ED8]"
                 href={publicShareUrl}
                 target="_blank"
                 rel="noreferrer"
@@ -545,7 +545,7 @@ export default function HorseDetail() {
               </a>
             ) : (
               <button
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[rgba(80,140,255,0.35)] bg-[rgba(17,85,221,0.7)] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[rgba(17,85,221,0.9)] disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[rgba(37,99,235,0.35)] bg-[var(--blue)] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-40"
                 type="button"
                 onClick={() => void handleSavedHorseToggle()}
                 disabled={!canManageSharedAccess}
@@ -555,7 +555,7 @@ export default function HorseDetail() {
             )}
             {saved && (
               <button
-                className="inline-flex h-10 items-center justify-center rounded-lg border border-[rgba(148,184,224,0.18)] bg-[rgba(255,255,255,0.06)] px-5 text-sm font-semibold text-[rgba(208,228,252,0.88)] transition-all duration-150 ease-[ease] hover:bg-[rgba(255,255,255,0.1)] disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-strong)] px-5 text-sm font-semibold text-[var(--muted-strong)] transition-all duration-150 ease-[ease] hover:bg-[var(--surface-raised)] disabled:cursor-not-allowed disabled:opacity-40"
                 type="button"
                 onClick={() => void handleSavedHorseToggle()}
                 disabled={!canManageSharedAccess}
@@ -701,7 +701,7 @@ export default function HorseDetail() {
                 Hero
               </label>
               <button
-                className="inline-flex h-10 items-center justify-center rounded-md bg-[#2F8DFF] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#388bfd] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center rounded-md bg-[var(--blue)] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 onClick={() => void handleMediaUpload()}
                 disabled={!canUploadMedia || isMediaUploading || !mediaFiles.length}

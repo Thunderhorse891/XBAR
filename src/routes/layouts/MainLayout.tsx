@@ -1,7 +1,7 @@
 import type { ComponentType, SVGProps } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { XbarMark } from '@/components/BrandMark';
+
 import { CommandPalette } from '@/components/CommandPalette';
 import { RightDrawer } from '@/components/RightDrawer';
 import { WorkspaceHelp, type HelpSection } from '@/components/WorkspaceHelp';
@@ -276,8 +276,8 @@ export default function MainLayout() {
       <aside className="hidden min-h-screen flex-col gap-5 border-r border-[var(--border)] bg-[var(--bg)] px-4 py-5 text-[var(--muted)] lg:flex">
         {/* Brand lockup */}
         <div className="flex items-center gap-3 px-1">
-          <div className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[rgba(0,0,0,0.03)] p-1">
-            <XbarMark title="XBAR logo" className="h-full w-full" />
+          <div className="flex h-[44px] w-[44px] shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface-strong)]">
+            <img src="/xbar-logo-sleek.png" alt="XBAR" className="h-full w-full object-cover" />
           </div>
           <div className="min-w-0">
             <div className="truncate text-[0.96rem] font-extrabold uppercase tracking-[0.14em] text-[var(--text)]">
