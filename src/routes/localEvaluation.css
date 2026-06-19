@@ -1,1 +1,65 @@
-.lp-local-mode{display:grid;gap:16px;padding:18px;border:1px solid rgba(87,186,255,.28);border-radius:14px;background:linear-gradient(145deg,rgba(24,104,164,.15),rgba(2,6,12,.58));box-shadow:inset 0 1px 0 rgba(255,255,255,.07)}.lp-local-mode__heading{display:grid;gap:6px}.lp-local-mode__heading strong{color:#edf7ff;font-size:15px}.lp-local-mode__heading span{color:rgba(169,205,238,.68);font-size:12px;line-height:1.55}.lp-local-mode__facts{display:grid;gap:8px;margin:0;padding:14px 0 0;border-top:1px solid rgba(120,165,220,.14);list-style:none;color:rgba(190,217,242,.72);font-size:11px;line-height:1.45}.lp-local-mode__facts li::before{content:'•';margin-right:8px;color:#4dbdff}.lp-local-mode__notice{color:rgba(255,211,139,.76);font-size:10px;line-height:1.5}.lp-auth-footer{display:grid;gap:12px;margin-top:18px;text-align:center}
+.lp-local-mode {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid rgba(100, 116, 139, 0.22);
+  border-radius: 8px;
+  background:
+    linear-gradient(rgba(15, 23, 42, 0.024) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.022) 1px, transparent 1px),
+    rgba(255, 255, 255, 0.82);
+  background-size: 38px 38px, 38px 38px, auto;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.lp-local-mode__heading {
+  display: grid;
+  gap: 6px;
+}
+
+.lp-local-mode__heading strong {
+  color: #0b1120;
+  font-size: 15px;
+}
+
+.lp-local-mode__heading span {
+  color: #627086;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.lp-local-mode__facts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 14px 0 0;
+  border-top: 1px solid rgba(100, 116, 139, 0.16);
+  list-style: none;
+  color: #4b5565;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.lp-local-mode__facts li::before {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 9px;
+  border-radius: 999px;
+  background: #1e73e8;
+  vertical-align: 1px;
+}
+
+.lp-local-mode__notice {
+  color: #8a5f05;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.lp-auth-footer {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  text-align: center;
+}
