@@ -13,7 +13,10 @@ let pdfWorkerUrlPromise: Promise<string> | null = null;
 
 async function getPdfJs() {
   if (!pdfJsPromise) {
-    pdfJsPromise = import('pdfjs-dist');
+    pdfJsPromise = import('pdfjs-dist').catch((err) => {
+      pdfJsPromise = null;
+      throw err;
+    });
   }
 
   return pdfJsPromise;
@@ -26,7 +29,12 @@ async function ensurePdfWorkerConfigured() {
 
   const pdfJs = await getPdfJs();
   if (!pdfWorkerUrlPromise) {
-    pdfWorkerUrlPromise = import('pdfjs-dist/build/pdf.worker.min.mjs?url').then((module) => module.default);
+    pdfWorkerUrlPromise = import('pdfjs-dist/build/pdf.worker.min.mjs?url')
+      .then((module) => module.default)
+      .catch((err) => {
+        pdfWorkerUrlPromise = null;
+        throw err;
+      });
   }
 
   pdfJs.GlobalWorkerOptions.workerSrc = await pdfWorkerUrlPromise;
@@ -42,10 +50,30 @@ async function extractPlainText(file: File) {
 
 async function getOcrWorker() {
   if (!ocrWorkerPromise) {
-    ocrWorkerPromise = import('tesseract.js').then(async ({ createWorker }) => createWorker('eng'));
+    ocrWorkerPromise = import('tesseract.js')
+      .then(async ({ createWorker }) => createWorker('eng'))
+      .catch((err) => {
+        ocrWorkerPromise = null;
+        throw err;
+      });
   }
 
   return ocrWorkerPromise;
+}
+
+export async function terminateDocumentWorkers() {
+  if (ocrWorkerPromise) {
+    try {
+      const worker = await ocrWorkerPromise;
+      await (worker as OcrWorker & { terminate?: () => Promise<void> }).terminate?.();
+    } catch {
+      // ignore cleanup errors
+    } finally {
+      ocrWorkerPromise = null;
+    }
+  }
+  pdfJsPromise = null;
+  pdfWorkerUrlPromise = null;
 }
 
 async function runImageOcr(image: File | Blob | HTMLCanvasElement) {

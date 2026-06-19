@@ -119,6 +119,7 @@ export function CloudBootstrap() {
       hydrationKeyRef.current = '';
       autosaveUnlockedRef.current = false;
       lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
+      setAutosaveReady(false);
       setSyncState('idle');
       return;
     }
@@ -152,6 +153,7 @@ export function CloudBootstrap() {
           const imported = importWorkspaceBackup(remote.backup);
           autosaveUnlockedRef.current = imported.ok;
           lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
+          setAutosaveReady(true);
           setSyncState(imported.ok ? 'idle' : 'error', imported.ok ? 'Cloud workspace loaded.' : imported.message);
           return;
         }
@@ -168,12 +170,14 @@ export function CloudBootstrap() {
 
           autosaveUnlockedRef.current = saved.ok;
           lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
+          setAutosaveReady(true);
           setSyncState(saved.ok ? 'idle' : 'error', saved.message);
           return;
         }
 
         if (remoteHasWorkspace && localHasWorkspace) {
           autosaveUnlockedRef.current = serializeWorkspaceBackup(remote.backup) === serializeWorkspaceBackup(localBackup);
+          setAutosaveReady(true);
           setSyncState(
             autosaveUnlockedRef.current ? 'idle' : 'error',
             autosaveUnlockedRef.current
@@ -185,6 +189,7 @@ export function CloudBootstrap() {
 
         autosaveUnlockedRef.current = true;
         lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
+        setAutosaveReady(true);
         setSyncState('idle', 'Cloud workspace ready.');
         return;
       }
@@ -201,12 +206,14 @@ export function CloudBootstrap() {
 
         autosaveUnlockedRef.current = saved.ok;
         lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
+        setAutosaveReady(true);
         setSyncState(saved.ok ? 'idle' : 'error', saved.message);
         return;
       }
 
       autosaveUnlockedRef.current = !localHasWorkspace;
       lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
+      setAutosaveReady(true);
       setSyncState(localHasWorkspace ? 'error' : 'idle', remote.message);
     };
 
@@ -215,33 +222,7 @@ export function CloudBootstrap() {
     return () => {
       cancelled = true;
     };
-  }, [cloudStatus, exportWorkspaceBackup, importWorkspaceBackup, session?.user.id, setLastSyncAt, setSyncState, workspaceId]);
-
-  useEffect(() => {
-    if (cloudStatus !== 'signed-in') {
-      return;
-    }
-
-    let disposed = false;
-
-    void loadWorkspaceBackupFromCloud().then((result) => {
-      if (disposed) {
-        return;
-      }
-
-      if (result.ok) {
-        importWorkspaceBackup(result.backup);
-      }
-
-      // Unlock autosave regardless — if no cloud backup exists yet, that is fine.
-      setAutosaveReady(true);
-    });
-
-    return () => {
-      disposed = true;
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cloudStatus]);
+  }, [cloudStatus, exportWorkspaceBackup, importWorkspaceBackup, session?.user.id, setAutosaveReady, setLastSyncAt, setSyncState, workspaceId]);
 
   // Autosave — only runs after cloud pull has completed (autosaveReady === true).
   useEffect(() => {

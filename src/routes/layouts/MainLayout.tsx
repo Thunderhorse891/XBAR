@@ -76,7 +76,7 @@ const routeLabels: Record<string, string> = {
 };
 
 const routeHelp: Record<string, HelpSection[]> = {
-  'Dashboard': [
+  Dashboard: [
     { label: 'Start here', text: 'Watch care, ownership, documents, sales, weather, and spending in one place.' },
     { label: 'Next move', text: 'Open the highest-risk card first. XBAR should tell you what needs a human decision.' },
   ],
@@ -112,7 +112,7 @@ const routeHelp: Record<string, HelpSection[]> = {
     { label: 'Queue', text: 'This is the work list for due care, papers, docs, and sale follow-ups.' },
     { label: 'Confidence', text: 'A reminder should always show the source of the work.' },
   ],
-  'Equipment': [
+  Equipment: [
     { label: 'Assets', text: 'Track equipment, kits, feed supply, transport, and service work.' },
     { label: 'Field use', text: 'Keep mobile actions short and readable.' },
   ],
@@ -149,7 +149,7 @@ function classNames(...parts: Array<string | false | null | undefined>) {
 function NavSection({ title, items, badges }: { title: string; items: NavItem[]; badges: Record<string, number> }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="px-3 text-[10px] font-bold uppercase tracking-[0.22em] text-[#3d5064]">{title}</div>
+      <div className="px-3 text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--muted)]">{title}</div>
       <div className="flex flex-col gap-[1px]">
         {items.map(({ label, path, icon: Icon, badgeKey }) => {
           const badge = badgeKey ? (badges[badgeKey] ?? 0) : 0;
@@ -163,16 +163,14 @@ function NavSection({ title, items, badges }: { title: string; items: NavItem[];
                   'group flex items-center gap-3 border-l-[3px] px-3 py-[9px] text-[13px] font-medium transition-colors duration-150',
                   isActive
                     ? 'border-[#2F8DFF] bg-[rgba(47,141,255,0.1)] text-white'
-                    : 'border-transparent text-[#6b8499] hover:border-[#1e3044] hover:bg-[rgba(255,255,255,0.03)] hover:text-[#c2ccd6]',
+                    : 'border-transparent text-[#6b8499] hover:border-[#1e3044] hover:bg-[rgba(0,0,0,0.03)] hover:text-[var(--muted-strong)]',
                 )
               }
             >
               <Icon className="h-[17px] w-[17px] shrink-0" />
               <span className="flex-1">{label}</span>
               {badge > 0 ? (
-                <span className={classNames('nav-badge', badge <= 3 ? 'nav-badge--blue' : '')}>
-                  {badge}
-                </span>
+                <span className={classNames('nav-badge', badge <= 3 ? 'nav-badge--blue' : '')}>{badge}</span>
               ) : null}
             </NavLink>
           );
@@ -208,11 +206,15 @@ export default function MainLayout() {
   const canManageSettings = useCurrentRoleCapability('manageSettings');
   const canSyncCloud = useCurrentRoleCapability('syncCloud');
 
-  const visibleNavItems = useMemo(() => navItems.filter((item) => {
-    if (item.requires === 'billing') return canManageBilling;
-    if (item.requires === 'settings') return canManageSettings;
-    return true;
-  }), [canManageBilling, canManageSettings]);
+  const visibleNavItems = useMemo(
+    () =>
+      navItems.filter((item) => {
+        if (item.requires === 'billing') return canManageBilling;
+        if (item.requires === 'settings') return canManageSettings;
+        return true;
+      }),
+    [canManageBilling, canManageSettings],
+  );
 
   const sections = {
     Command: visibleNavItems.filter((item) => item.section === 'Command'),
@@ -221,7 +223,9 @@ export default function MainLayout() {
   };
   const mobilePrimaryPaths = new Set(['/', '/horses', '/documents', '/sales']);
   const mobileMoreItems = visibleNavItems.filter((item) => !mobilePrimaryPaths.has(item.path));
-  const pendingReview = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched').length;
+  const pendingReview = documents.filter(
+    (document) => document.state === 'Needs Review' || document.state === 'Matched',
+  ).length;
   const pendingTransfers = ownershipRecords.filter((record) => record.transferStatus !== 'Clear').length;
   const activeSales = salesLeads.filter((lead) => lead.stage !== 'Closed').length;
 
@@ -230,16 +234,20 @@ export default function MainLayout() {
     return board.filter((row) => row.signals.some((signal) => signal.status === 'due')).length;
   }, [horses, documents, expenseReceipts]);
 
-  const navBadges = useMemo<Record<string, number>>(() => ({
-    transfers: pendingTransfers,
-    care: careDueCount,
-    docs: pendingReview,
-    reminders: pendingTransfers + careDueCount + pendingReview,
-  }), [pendingTransfers, careDueCount, pendingReview]);
+  const navBadges = useMemo<Record<string, number>>(
+    () => ({
+      transfers: pendingTransfers,
+      care: careDueCount,
+      docs: pendingReview,
+      reminders: pendingTransfers + careDueCount + pendingReview,
+    }),
+    [pendingTransfers, careDueCount, pendingReview],
+  );
 
   const opsUrgency = pendingTransfers > 0 ? 'urgent' : careDueCount > 0 ? 'warning' : 'clear';
 
-  const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse Profile' : routeLabels[location.pathname] ?? 'Ranch';
+  const currentLabel =
+    location.pathname.startsWith('/horses/') ? 'Horse Profile' : (routeLabels[location.pathname] ?? 'Ranch');
   const helpSections = routeHelp[currentLabel] ?? routeHelp['Dashboard'];
   const accountLabel = cloudSession?.user?.email ?? currentRole;
 
@@ -263,50 +271,80 @@ export default function MainLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0D1117] lg:grid lg:grid-cols-[240px,1fr]">
+    <div className="min-h-screen bg-[var(--bg)] lg:grid lg:grid-cols-[240px,1fr]">
       {/* ── Sidebar ─────────────────────────────────────────────── */}
-      <aside className="hidden min-h-screen flex-col gap-5 border-r border-[rgba(48,54,61,0.8)] bg-[#0D1117] px-4 py-5 text-[#8B949E] lg:flex">
-
+      <aside className="hidden min-h-screen flex-col gap-5 border-r border-[var(--border)] bg-[var(--bg)] px-4 py-5 text-[var(--muted)] lg:flex">
         {/* Brand lockup */}
         <div className="flex items-center gap-3 px-1">
-          <div className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-lg border border-[rgba(48,54,61,0.9)] bg-[rgba(255,255,255,0.03)] p-1">
+          <div className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[rgba(0,0,0,0.03)] p-1">
             <XbarMark title="XBAR logo" className="h-full w-full" />
           </div>
           <div className="min-w-0">
-            <div className="truncate text-[0.96rem] font-extrabold uppercase tracking-[0.14em] text-[#E6EDF3]">{workspaceProfile.businessName || 'XBAR'}</div>
-            <div className="text-[9px] font-bold uppercase tracking-[0.22em] text-[#3d5064]">Operational Infrastructure</div>
+            <div className="truncate text-[0.96rem] font-extrabold uppercase tracking-[0.14em] text-[var(--text)]">
+              {workspaceProfile.businessName || 'XBAR'}
+            </div>
+            <div className="text-[9px] font-bold uppercase tracking-[0.22em] text-[var(--muted)]">
+              Operational Infrastructure
+            </div>
           </div>
         </div>
 
         {/* Ranch status card */}
-        <div className="rounded-xl border border-[rgba(48,54,61,0.9)] bg-[#161B22] p-3.5">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3.5">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-[9px] font-bold uppercase tracking-[0.22em] text-[#3d5064]">Ranch Status</div>
+            <div className="text-[9px] font-bold uppercase tracking-[0.22em] text-[var(--muted)]">Ranch Status</div>
             <span className={classNames('ops-pulse')}>
-              <span className={classNames('ops-pulse__dot', opsUrgency === 'urgent' ? 'ops-pulse__dot--urgent' : opsUrgency === 'warning' ? 'ops-pulse__dot--warning' : '')} />
+              <span
+                className={classNames(
+                  'ops-pulse__dot',
+                  opsUrgency === 'urgent'
+                    ? 'ops-pulse__dot--urgent'
+                    : opsUrgency === 'warning'
+                      ? 'ops-pulse__dot--warning'
+                      : '',
+                )}
+              />
             </span>
           </div>
-          <div className="mt-2 text-[0.88rem] font-bold leading-tight text-[#C2CCD6]">{workspaceProfile.ranchName || workspaceProfile.businessName || 'Primary ranch'}</div>
-          <div className="mt-0.5 text-[11px] text-[#4a6275]">{roleWorkspace.label}</div>
+          <div className="mt-2 text-[0.88rem] font-bold leading-tight text-[var(--muted-strong)]">
+            {workspaceProfile.ranchName || workspaceProfile.businessName || 'Primary ranch'}
+          </div>
+          <div className="mt-0.5 text-[11px] text-[var(--muted)]">{roleWorkspace.label}</div>
           <div className="mt-3 grid grid-cols-2 gap-1.5 text-[11px]">
-            <span className="rounded-md border border-[rgba(48,54,61,0.9)] bg-[#0D1117] px-2 py-1.5 text-[#5a7086]">{horses.length} horses</span>
-            <span className={classNames(
-              'rounded-md border px-2 py-1.5',
-              pendingTransfers > 0
-                ? 'border-[rgba(248,81,73,0.25)] bg-[rgba(248,81,73,0.08)] text-[#F85149]'
-                : 'border-[rgba(48,54,61,0.9)] bg-[#0D1117] text-[#5a7086]',
-            )}>{pendingTransfers} transfers</span>
-            <span className={classNames(
-              'rounded-md border px-2 py-1.5',
-              pendingReview > 0
-                ? 'border-[rgba(210,153,34,0.25)] bg-[rgba(210,153,34,0.08)] text-[#D29922]'
-                : 'border-[rgba(48,54,61,0.9)] bg-[#0D1117] text-[#5a7086]',
-            )}>{pendingReview} docs</span>
-            <span className="rounded-md border border-[rgba(48,54,61,0.9)] bg-[#0D1117] px-2 py-1.5 text-[#5a7086]">{activeSales} buyers</span>
+            <span className="rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-[var(--muted)]">
+              {horses.length} horses
+            </span>
+            <span
+              className={classNames(
+                'rounded-md border px-2 py-1.5',
+                pendingTransfers > 0
+                  ? 'border-[rgba(248,81,73,0.25)] bg-[rgba(248,81,73,0.08)] text-[#F85149]'
+                  : 'border-[var(--border)] bg-[var(--bg)] text-[var(--muted)]',
+              )}
+            >
+              {pendingTransfers} transfers
+            </span>
+            <span
+              className={classNames(
+                'rounded-md border px-2 py-1.5',
+                pendingReview > 0
+                  ? 'border-[rgba(210,153,34,0.25)] bg-[rgba(210,153,34,0.08)] text-[#D29922]'
+                  : 'border-[var(--border)] bg-[var(--bg)] text-[var(--muted)]',
+              )}
+            >
+              {pendingReview} docs
+            </span>
+            <span className="rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-[var(--muted)]">
+              {activeSales} buyers
+            </span>
           </div>
           <div className="mt-2.5 flex flex-wrap gap-1.5">
-            <span className="inline-flex min-h-[22px] items-center rounded-md border border-[rgba(48,54,61,0.9)] bg-[rgba(255,255,255,0.03)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#4a6275]">{subscription.tier}</span>
-            <span className="inline-flex min-h-[22px] items-center rounded-md border border-[rgba(47,141,255,0.2)] bg-[rgba(47,141,255,0.08)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#2F8DFF]">{cloudStatus === 'signed-in' ? 'Cloud sync' : 'Browser'}</span>
+            <span className="inline-flex min-h-[22px] items-center rounded-md border border-[var(--border)] bg-[rgba(0,0,0,0.03)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--muted)]">
+              {subscription.tier}
+            </span>
+            <span className="inline-flex min-h-[22px] items-center rounded-md border border-[rgba(47,141,255,0.2)] bg-[rgba(47,141,255,0.08)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#2F8DFF]">
+              {cloudStatus === 'signed-in' ? 'Cloud sync' : 'Browser'}
+            </span>
           </div>
         </div>
 
@@ -316,26 +354,29 @@ export default function MainLayout() {
         <NavSection title="Platform" items={sections.Platform} badges={navBadges} />
 
         {/* Footer */}
-        <div className="mt-auto border-t border-[rgba(48,54,61,0.6)] pt-3.5 text-[11px] text-[#3d5064]">
-          <div className="font-bold uppercase tracking-[0.12em] text-[#3d5064]">XBAR · Horse Operations</div>
-          <div className="mt-1 text-[#2e4050]">{expenseReceipts.length} receipts · {documents.length} files · {horses.length} horses</div>
+        <div className="mt-auto border-t border-[var(--sidebar-edge)] pt-3.5 text-[11px] text-[var(--muted)]">
+          <div className="font-bold uppercase tracking-[0.12em] text-[var(--muted)]">XBAR · Horse Operations</div>
+          <div className="mt-1 text-[var(--muted)]">
+            {expenseReceipts.length} receipts · {documents.length} files · {horses.length} horses
+          </div>
         </div>
       </aside>
 
       {/* ── Main content ─────────────────────────────────────────── */}
-      <div className="flex min-w-0 flex-col bg-[#0D1117]">
-
+      <div className="flex min-w-0 flex-col bg-[var(--bg)]">
         {/* Topbar */}
-        <header className="sticky top-0 z-10 border-b border-[rgba(48,54,61,0.9)] bg-[rgba(13,17,23,0.94)] backdrop-blur">
+        <header className="sticky top-0 z-10 border-b border-[var(--border)] bg-[rgba(255,255,255,0.92)] backdrop-blur">
           <div className="flex min-h-[58px] flex-wrap items-center justify-between gap-3 px-5 py-3">
             <div className="flex items-center gap-2.5">
-              <div className="text-[0.88rem] font-extrabold tracking-[0.01em] text-[#E6EDF3]">{currentLabel}</div>
-              <span className={classNames(
-                'inline-flex min-h-[22px] items-center rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em]',
-                pendingReview || pendingTransfers
-                  ? 'border-[rgba(210,153,34,0.25)] bg-[rgba(210,153,34,0.08)] text-[#D29922]'
-                  : 'border-[rgba(47,141,255,0.2)] bg-[rgba(47,141,255,0.08)] text-[#2F8DFF]',
-              )}>
+              <div className="text-[0.88rem] font-extrabold tracking-[0.01em] text-[var(--text)]">{currentLabel}</div>
+              <span
+                className={classNames(
+                  'inline-flex min-h-[22px] items-center rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em]',
+                  pendingReview || pendingTransfers
+                    ? 'border-[rgba(210,153,34,0.25)] bg-[rgba(210,153,34,0.08)] text-[#D29922]'
+                    : 'border-[rgba(47,141,255,0.2)] bg-[rgba(47,141,255,0.08)] text-[#2F8DFF]',
+                )}
+              >
                 {pendingReview || pendingTransfers ? `${pendingReview + pendingTransfers} open` : 'Ready'}
               </span>
             </div>
@@ -343,24 +384,26 @@ export default function MainLayout() {
             <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
               <button
                 type="button"
-                className="relative flex h-9 min-w-[200px] max-w-[380px] flex-1 cursor-text items-center gap-2 rounded-md border border-[rgba(56,63,72,1)] bg-[#1C2128] pl-3 pr-3 text-left text-[13px] transition-colors duration-150 hover:border-[rgba(86,93,102,1)]"
+                className="relative flex h-9 min-w-[200px] max-w-[380px] flex-1 cursor-text items-center gap-2 rounded-md border border-[var(--border-strong)] bg-[var(--surface-strong)] pl-3 pr-3 text-left text-[13px] transition-colors duration-150 hover:border-[var(--border-strong)]"
                 onClick={openCommandPalette}
                 aria-label="Open command palette"
               >
-                <SearchIcon className="h-[16px] w-[16px] shrink-0 text-[#8B949E]" aria-hidden="true" />
-                <span className="flex-1 text-[#4a6275]">Search…</span>
-                <kbd className="hidden items-center gap-0.5 rounded border border-[rgba(56,63,72,1)] bg-[rgba(255,255,255,0.04)] px-1.5 py-px text-[10px] font-bold text-[#4a6275] sm:flex">
+                <SearchIcon className="h-[16px] w-[16px] shrink-0 text-[var(--muted)]" aria-hidden="true" />
+                <span className="flex-1 text-[var(--muted)]">Search…</span>
+                <kbd className="hidden items-center gap-0.5 rounded border border-[var(--border-strong)] bg-[rgba(0,0,0,0.03)] px-1.5 py-px text-[10px] font-bold text-[var(--muted)] sm:flex">
                   ⌘K
                 </kbd>
               </button>
 
-              <div className="hidden h-9 items-center gap-2.5 rounded-md border border-[rgba(56,63,72,1)] bg-[#1C2128] px-3 text-[13px] font-semibold text-[#C2CCD6] md:inline-flex">
+              <div className="hidden h-9 items-center gap-2.5 rounded-md border border-[var(--border-strong)] bg-[var(--surface-strong)] px-3 text-[13px] font-semibold text-[var(--muted-strong)] md:inline-flex">
                 <span className="max-w-[160px] truncate">{accountLabel}</span>
-                <span className="inline-flex rounded border border-[rgba(48,54,61,0.9)] bg-[rgba(255,255,255,0.04)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[#5a7086]">{cloudSession ? currentRole : 'Browser'}</span>
+                <span className="inline-flex rounded border border-[var(--border)] bg-[rgba(0,0,0,0.03)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--muted)]">
+                  {cloudSession ? currentRole : 'Browser'}
+                </span>
               </div>
 
               <button
-                className="inline-flex h-9 items-center justify-center rounded-md border border-[rgba(56,63,72,1)] bg-[#1C2128] px-3 text-[13px] font-semibold text-[#C2CCD6] transition-colors duration-150 hover:border-[rgba(86,93,102,1)] hover:bg-[#21262D]"
+                className="inline-flex h-9 items-center justify-center rounded-md border border-[var(--border-strong)] bg-[var(--surface-strong)] px-3 text-[13px] font-semibold text-[var(--muted-strong)] transition-colors duration-150 hover:border-[var(--border-strong)] hover:bg-[var(--surface-raised)]"
                 type="button"
                 onClick={() => setHelpOpen(true)}
               >
@@ -369,7 +412,7 @@ export default function MainLayout() {
 
               {cloudSession && canSyncCloud ? (
                 <button
-                  className="inline-flex h-9 items-center justify-center rounded-md border border-[rgba(56,63,72,1)] bg-[#1C2128] px-3 text-[13px] font-semibold text-[#C2CCD6] transition-colors duration-150 hover:border-[rgba(248,81,73,0.4)] hover:bg-[rgba(248,81,73,0.08)] hover:text-[#F85149]"
+                  className="inline-flex h-9 items-center justify-center rounded-md border border-[var(--border-strong)] bg-[var(--surface-strong)] px-3 text-[13px] font-semibold text-[var(--muted-strong)] transition-colors duration-150 hover:border-[rgba(248,81,73,0.4)] hover:bg-[rgba(248,81,73,0.08)] hover:text-[#F85149]"
                   type="button"
                   onClick={() => void handleCloudSignOut()}
                 >
@@ -379,7 +422,7 @@ export default function MainLayout() {
 
               <button
                 type="button"
-                className="relative inline-flex h-9 w-9 items-center justify-center rounded-md border border-[rgba(56,63,72,1)] bg-[#1C2128] text-[#8B949E] transition-colors duration-150 hover:border-[rgba(86,93,102,1)] hover:bg-[#21262D] hover:text-[#E6EDF3]"
+                className="relative inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--border-strong)] bg-[var(--surface-strong)] text-[var(--muted)] transition-colors duration-150 hover:border-[var(--border-strong)] hover:bg-[var(--surface-raised)] hover:text-[var(--text)]"
                 onClick={() => openDrawer({ type: 'notification-centre' })}
                 aria-label="Open notification centre"
               >
@@ -393,14 +436,14 @@ export default function MainLayout() {
 
               {canUploadDocuments ? (
                 <Link
-                  className="inline-flex h-9 items-center justify-center rounded-md border border-[rgba(56,63,72,1)] bg-[#1C2128] px-3 text-[13px] font-semibold text-[#C2CCD6] transition-colors duration-150 hover:border-[rgba(86,93,102,1)] hover:bg-[#21262D]"
+                  className="inline-flex h-9 items-center justify-center rounded-md border border-[var(--border-strong)] bg-[var(--surface-strong)] px-3 text-[13px] font-semibold text-[var(--muted-strong)] transition-colors duration-150 hover:border-[var(--border-strong)] hover:bg-[var(--surface-raised)]"
                   to="/documents?upload=1"
                 >
                   Upload
                 </Link>
               ) : (
                 <button
-                  className="inline-flex h-9 cursor-not-allowed items-center justify-center rounded-md border border-[rgba(56,63,72,1)] bg-[#1C2128] px-3 text-[13px] font-semibold text-[#C2CCD6] opacity-40"
+                  className="inline-flex h-9 cursor-not-allowed items-center justify-center rounded-md border border-[var(--border-strong)] bg-[var(--surface-strong)] px-3 text-[13px] font-semibold text-[var(--muted-strong)] opacity-40"
                   type="button"
                   disabled
                 >
@@ -445,7 +488,7 @@ export default function MainLayout() {
             />
             <div
               id="mobile-more-menu"
-              className="fixed bottom-[94px] left-3 right-3 z-50 rounded-xl border border-[rgba(56,63,72,1)] bg-[#161B22] p-3 text-[#E6EDF3] shadow-2xl lg:hidden"
+              className="fixed bottom-[94px] left-3 right-3 z-50 rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] p-3 text-[var(--text)] shadow-2xl lg:hidden"
             >
               {canCreateHorse ? (
                 <Link
@@ -467,7 +510,7 @@ export default function MainLayout() {
                         'flex min-h-[52px] items-center gap-2.5 rounded-lg border px-3 text-left text-[12px] font-semibold transition-colors duration-150',
                         isActive
                           ? 'border-[rgba(47,141,255,0.25)] bg-[rgba(47,141,255,0.1)] text-[#2F8DFF]'
-                          : 'border-[rgba(48,54,61,0.9)] bg-[#1C2128] text-[#8B949E] hover:border-[rgba(56,63,72,1)] hover:text-[#C2CCD6]',
+                          : 'border-[var(--border)] bg-[var(--surface-strong)] text-[var(--muted)] hover:border-[var(--border-strong)] hover:text-[var(--muted-strong)]',
                       )}
                       to={path}
                       onClick={() => setMobileMoreOpen(false)}
@@ -484,15 +527,17 @@ export default function MainLayout() {
 
         {/* Mobile bottom nav */}
         <nav
-          className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-1.5 rounded-xl border border-[rgba(56,63,72,1)] bg-[rgba(22,27,34,0.98)] p-2 shadow-2xl backdrop-blur lg:hidden"
+          className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-1.5 rounded-xl border border-[var(--border-strong)] bg-[rgba(22,27,34,0.98)] p-2 shadow-2xl backdrop-blur lg:hidden"
           aria-label="Mobile quick navigation"
         >
-          {([
-            { label: 'Home', path: '/', icon: DashboardIcon, badge: pendingTransfers + careDueCount },
-            { label: 'Horses', path: '/horses', icon: HorsesIcon, badge: 0 },
-            { label: 'Docs', path: '/documents', icon: DocumentsIcon, badge: pendingReview },
-            { label: 'Sales', path: '/sales', icon: SalesIcon, badge: 0 },
-          ] as const).map(({ label, path, icon: Icon, badge }) => (
+          {(
+            [
+              { label: 'Home', path: '/', icon: DashboardIcon, badge: pendingTransfers + careDueCount },
+              { label: 'Horses', path: '/horses', icon: HorsesIcon, badge: 0 },
+              { label: 'Docs', path: '/documents', icon: DocumentsIcon, badge: pendingReview },
+              { label: 'Sales', path: '/sales', icon: SalesIcon, badge: 0 },
+            ] as const
+          ).map(({ label, path, icon: Icon, badge }) => (
             <NavLink
               key={label}
               to={path}
@@ -502,7 +547,7 @@ export default function MainLayout() {
                   'relative flex min-h-[60px] flex-col items-center justify-center gap-1 rounded-lg text-[10px] font-bold transition-colors duration-150',
                   isActive
                     ? 'bg-[rgba(47,141,255,0.12)] text-[#2F8DFF]'
-                    : 'text-[#4a6275] hover:bg-[rgba(255,255,255,0.04)] hover:text-[#8B949E]',
+                    : 'text-[var(--muted)] hover:bg-[rgba(0,0,0,0.04)] hover:text-[var(--muted)]',
                 )
               }
             >
@@ -518,9 +563,10 @@ export default function MainLayout() {
           <button
             className={classNames(
               'relative flex min-h-[60px] flex-col items-center justify-center gap-1 rounded-lg text-[10px] font-bold transition-colors duration-150',
-              mobileMoreOpen || mobileMoreItems.some((item) => location.pathname.startsWith(item.path) && item.path !== '/')
+              mobileMoreOpen ||
+                mobileMoreItems.some((item) => location.pathname.startsWith(item.path) && item.path !== '/')
                 ? 'bg-[rgba(47,141,255,0.12)] text-[#2F8DFF]'
-                : 'text-[#4a6275] hover:bg-[rgba(255,255,255,0.04)] hover:text-[#8B949E]',
+                : 'text-[var(--muted)] hover:bg-[rgba(0,0,0,0.04)] hover:text-[var(--muted)]',
             )}
             type="button"
             onClick={() => setMobileMoreOpen((current) => !current)}

@@ -62,11 +62,11 @@ function StatPill({
   label: string;
 }) {
   return (
-    <div className="flex min-w-[112px] flex-1 items-center gap-3 rounded-md border border-[rgba(48,54,61,0.9)] bg-[#1C2128] px-3 py-2 shadow-sm transition-all duration-150 ease-[ease] hover:border-[rgba(47,141,255,0.3)] hover:bg-[#21262D]">
-      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-[#21262D] text-[#2F8DFF] ring-1 ring-[rgba(48,54,61,0.9)]">{icon}</span>
+    <div className="flex min-w-[112px] flex-1 items-center gap-3 rounded-md border border-[var(--border)] bg-[var(--surface-strong)] px-3 py-2 shadow-sm transition-all duration-150 ease-[ease] hover:border-[rgba(37,99,235,0.25)] hover:bg-[var(--surface-raised)]">
+      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-[var(--surface-raised)] text-[var(--blue)] ring-1 ring-[var(--border)]">{icon}</span>
       <div className="min-w-0">
-        <div className="text-sm font-bold tracking-[-0.03em] text-[#E6EDF3]">{value}</div>
-        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8B949E]">{label}</div>
+        <div className="text-sm font-bold tracking-[-0.03em] text-[var(--text)]">{value}</div>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">{label}</div>
       </div>
     </div>
   );
@@ -182,12 +182,12 @@ export default function HorseDetail() {
 
   const shareBadgeStyles =
     packet.buyerProfileStatus === 'Live'
-      ? 'border border-[rgba(47,141,255,0.15)] bg-[rgba(47,141,255,0.08)] text-[#2F8DFF]'
+      ? 'border border-[rgba(47,141,255,0.15)] bg-[rgba(47,141,255,0.08)] text-[var(--blue)]'
       : packet.buyerProfileStatus === 'Blocked'
         ? 'border border-[rgba(248,81,73,0.15)] bg-[rgba(248,81,73,0.08)] text-[#F85149]'
         : packet.buyerProfileStatus === 'Needs Review'
-          ? 'border border-[rgba(139,148,158,0.15)] bg-[#1C2128] text-[#8B949E]'
-          : 'border border-[rgba(48,54,61,0.9)] bg-[#161B22] text-[#8B949E]';
+          ? 'border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--muted)]'
+          : 'border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)]';
 
   const handleSavedHorseToggle = async () => {
     if (!saved && packet.score < 40) {
@@ -449,7 +449,7 @@ export default function HorseDetail() {
       {confirmDialog}
       <Link
         to="/horses"
-        className="inline-flex w-fit items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#8B949E] transition-all duration-150 ease-[ease] hover:text-[#C2CCD6]"
+        className="inline-flex w-fit items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)] transition-all duration-150 ease-[ease] hover:text-[var(--muted-strong)]"
       >
         <ChevronLeftIcon className="h-3.5 w-3.5" />
         Horses
@@ -501,18 +501,18 @@ export default function HorseDetail() {
 
             {/* Packet readiness + quick stats */}
             <div className="mt-5 flex flex-wrap gap-3">
-              <div className="flex items-center gap-2 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.04)] px-3 py-2">
+              <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[rgba(0,0,0,0.03)] px-3 py-2">
                 <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Packet</span>
                 <span className={classNames(
                   'text-[13px] font-bold tabular-nums',
                   packet.score >= 75 ? 'text-[#5eead4]' : packet.score >= 50 ? 'text-[#fbbf24]' : 'text-[#ff8a8a]',
                 )}>{packet.score}%</span>
               </div>
-              <div className="flex items-center gap-2 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.04)] px-3 py-2">
+              <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[rgba(0,0,0,0.03)] px-3 py-2">
                 <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Docs</span>
                 <span className="text-[13px] font-bold tabular-nums text-[#e8f2ff]">{documents.length}</span>
               </div>
-              <div className="flex items-center gap-2 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.04)] px-3 py-2">
+              <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[rgba(0,0,0,0.03)] px-3 py-2">
                 <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Status</span>
                 <span className={classNames(
                   'inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-bold',
@@ -520,7 +520,7 @@ export default function HorseDetail() {
                 )}>{packet.buyerProfileStatus}</span>
               </div>
               {ownershipRecord ? (
-                <div className="flex items-center gap-2 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.04)] px-3 py-2">
+                <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[rgba(0,0,0,0.03)] px-3 py-2">
                   <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Ownership</span>
                   <span className={classNames(
                     'text-[13px] font-bold',
@@ -577,19 +577,19 @@ export default function HorseDetail() {
       </section>
 
       <section className="grid items-stretch gap-5 lg:grid-cols-2">
-        <div className="relative flex h-full flex-col overflow-hidden rounded-[10px] border border-[rgba(48,54,61,0.9)] bg-[#161B22] p-5 shadow-sm">
+        <div className="relative flex h-full flex-col overflow-hidden rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
           <div className="mb-5 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-md bg-[rgba(47,141,255,0.08)] text-[#2F8DFF]">
+              <span className="flex h-10 w-10 items-center justify-center rounded-md bg-[rgba(47,141,255,0.08)] text-[var(--blue)]">
                 <PhotoIcon className="h-5 w-5" />
               </span>
-              <div className="text-sm font-semibold tracking-[0.02em] text-[#E6EDF3]">Media Vault</div>
+              <div className="text-sm font-semibold tracking-[0.02em] text-[var(--text)]">Media Vault</div>
             </div>
             <button
               type="button"
               onClick={() => mediaInputRef.current?.click()}
               disabled={!canUploadMedia}
-              className="inline-flex h-10 items-center justify-center rounded-md border border-[#2F8DFF] px-4 text-sm font-semibold text-[#2F8DFF] transition-all duration-150 ease-[ease] hover:bg-[rgba(47,141,255,0.08)] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center rounded-md border border-[var(--blue)] px-4 text-sm font-semibold text-[var(--blue)] transition-all duration-150 ease-[ease] hover:bg-[rgba(47,141,255,0.08)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               + Upload
             </button>
@@ -616,7 +616,7 @@ export default function HorseDetail() {
               asset ? (
                 <div
                   key={asset.id}
-                  className="group relative z-10 aspect-[4/3] overflow-hidden rounded-xl border border-[rgba(48,54,61,0.9)] bg-[#1C2128]"
+                  className="group relative z-10 aspect-[4/3] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-strong)]"
                 >
                   <img
                     src={asset.url}
@@ -664,7 +664,7 @@ export default function HorseDetail() {
                 <label
                   key={`empty-${index}`}
                   htmlFor={mediaInputId}
-                  className="relative z-10 flex aspect-[4/3] cursor-pointer items-center justify-center rounded-xl border border-dashed border-[rgba(48,54,61,0.9)] bg-[#1C2128] text-xs font-semibold uppercase tracking-[0.22em] text-[#8B949E] transition-all duration-150 ease-[ease] hover:border-[#2F8DFF] hover:bg-[#21262D]"
+                  className="relative z-10 flex aspect-[4/3] cursor-pointer items-center justify-center rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-strong)] text-xs font-semibold uppercase tracking-[0.22em] text-[var(--muted)] transition-all duration-150 ease-[ease] hover:border-[var(--blue)] hover:bg-[var(--surface-raised)]"
                 >
                   + Upload
                 </label>
@@ -672,14 +672,14 @@ export default function HorseDetail() {
             )}
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[rgba(48,54,61,0.9)] bg-[#1C2128] px-4 py-3">
-            <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8B949E]">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] px-4 py-3">
+            <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
               <span>{horse.gallery.length} assets</span>
               {mediaFiles.length ? <span>{mediaFiles.length} queued</span> : null}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <select
-                className="h-10 rounded-md border border-[rgba(48,54,61,0.9)] bg-[#1C2128] px-3 text-sm font-medium text-[#E6EDF3] transition-all duration-150 ease-[ease] focus:border-[#2F8DFF] focus:outline-none"
+                className="h-10 rounded-md border border-[var(--border)] bg-[var(--surface-strong)] px-3 text-sm font-medium text-[var(--text)] transition-all duration-150 ease-[ease] focus:border-[var(--blue)] focus:outline-none"
                 value={mediaKind}
                 onChange={(event) => setMediaKind(event.target.value as GalleryAsset['kind'])}
                 disabled={!canUploadMedia}
@@ -690,10 +690,10 @@ export default function HorseDetail() {
                   </option>
                 ))}
               </select>
-              <label className="inline-flex h-10 items-center gap-2 rounded-md border border-[rgba(48,54,61,0.9)] bg-[#1C2128] px-3 text-sm font-medium text-[#E6EDF3] transition-all duration-150 ease-[ease] hover:border-[rgba(47,141,255,0.4)]">
+              <label className="inline-flex h-10 items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--surface-strong)] px-3 text-sm font-medium text-[var(--text)] transition-all duration-150 ease-[ease] hover:border-[rgba(37,99,235,0.3)]">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border-[rgba(48,54,61,0.9)] text-[#2F8DFF] focus:ring-[#2F8DFF]"
+                  className="h-4 w-4 rounded border-[var(--border)] text-[var(--blue)] focus:ring-[var(--blue)]"
                   checked={makePrimary}
                   onChange={(event) => setMakePrimary(event.target.checked)}
                   disabled={!canUploadMedia}
@@ -712,18 +712,18 @@ export default function HorseDetail() {
           </div>
         </div>
 
-        <div className="flex h-full flex-col rounded-[10px] border border-[rgba(48,54,61,0.9)] bg-[#161B22] p-5 shadow-sm">
+        <div className="flex h-full flex-col rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
           <div className="mb-5 flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-md bg-[rgba(47,141,255,0.08)] text-[#2F8DFF]">
+            <span className="flex h-10 w-10 items-center justify-center rounded-md bg-[rgba(47,141,255,0.08)] text-[var(--blue)]">
               <SharedAccessIcon className="h-5 w-5" />
             </span>
-            <div className="text-sm font-semibold tracking-[0.02em] text-[#E6EDF3]">Sale Readiness</div>
+            <div className="text-sm font-semibold tracking-[0.02em] text-[var(--text)]">Sale Readiness</div>
           </div>
 
           <ReadinessGauge value={packet.score} />
 
           <div className="mt-5">
-            <div className="mb-3 flex items-center justify-between gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8B949E]">
+            <div className="mb-3 flex items-center justify-between gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
               <span>Sale packet</span>
               <span>{salePacketReadyCount}/{packet.saleSlots.length} ready</span>
             </div>
@@ -1264,7 +1264,7 @@ export default function HorseDetail() {
             <div className="stack-item">
               <div className="stack-item__top">
                 <div className="stack-item__title">Share path</div>
-                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8B949E]">{packet.shareSlug}</span>
+                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">{packet.shareSlug}</span>
               </div>
               <div className="inline-metrics">
                 <span>{packet.sharePath}</span>
