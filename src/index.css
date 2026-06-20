@@ -4087,10 +4087,11 @@ a:focus-visible,
 }
 
 .cp-search-icon {
-  font-size: 18px;
+  width: 18px;
+  height: 18px;
   color: var(--muted);
   flex-shrink: 0;
-  user-select: none;
+  stroke-width: 1.8;
 }
 
 .cp-input {

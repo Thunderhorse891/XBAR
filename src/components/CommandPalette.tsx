@@ -22,6 +22,7 @@ import {
   MedicalIcon,
   OwnershipIcon,
   SalesIcon,
+  SearchIcon,
   SettingsIcon,
   UploadIcon,
 } from '@/components/icons';
@@ -187,7 +188,7 @@ export function CommandPalette() {
         aria-label="Command palette"
       >
         <div className="cp-search-row">
-          <span className="cp-search-icon" aria-hidden="true">⌕</span>
+          <SearchIcon className="cp-search-icon" aria-hidden="true" />
           <input
             ref={inputRef}
             className="cp-input"
