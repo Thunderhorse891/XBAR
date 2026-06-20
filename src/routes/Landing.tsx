@@ -317,14 +317,14 @@ export default function Landing() {
             {/* Floating card A — top left */}
             <div className="site-float-card site-float-card--a" aria-hidden="true">
               <div className="site-fc-head">
-                <div className="site-fc-dot" style={{ background: '#16A34A' }} />
+                <div className="site-fc-dot" style={{ background: 'var(--emerald)' }} />
                 <div className="site-fc-label">Live sync</div>
               </div>
               <div className="site-fc-value">94%</div>
               <div className="site-fc-sub">Docs ready to share</div>
               <div style={{ marginTop: '10px', display: 'flex', gap: '4px' }}>
-                <div style={{ height: '3px', flex: 1, borderRadius: '99px', background: '#16A34A', opacity: 0.9 }} />
-                <div style={{ height: '3px', width: '18%', borderRadius: '99px', background: 'rgba(0,0,0,0.08)' }} />
+                <div style={{ height: '3px', flex: 1, borderRadius: '99px', background: 'var(--emerald)', opacity: 0.9 }} />
+                <div style={{ height: '3px', width: '18%', borderRadius: '99px', background: 'var(--border)' }} />
               </div>
             </div>
 

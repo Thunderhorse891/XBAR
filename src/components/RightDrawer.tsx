@@ -318,7 +318,7 @@ function NotificationCentreContent() {
           )}
           {toasts.length > 0 && (
             <>
-              <div className="drawer-section-title" style={{ fontSize: '11px', marginTop: 8 }}>Recent activity</div>
+              <div className="drawer-section-title mt-2 text-[11px]">Recent activity</div>
               {toasts.slice(-5).reverse().map((t) => (
                 <div key={t.id} className={`callout callout--${t.tone === 'error' ? 'warning' : 'info'}`}>
                   {t.title && <strong>{t.title}: </strong>}{t.message}
