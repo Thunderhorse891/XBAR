@@ -1226,6 +1226,39 @@
   .site-hero-blob { animation: none !important; }
 }
 
+/* ── Comparison table — light theme overrides ─────────────────────────────── */
+
+.mkt-comparison-wrap {
+  background: #FFFFFF;
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+}
+
+.mkt-comparison-header {
+  border-bottom-color: rgba(0, 0, 0, 0.07);
+}
+
+.mkt-comparison-table th,
+.mkt-comparison-table td {
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+
+.mkt-comparison-table th {
+  color: rgba(60, 70, 90, 0.55);
+}
+
+.mkt-cmp-feature-col {
+  color: #374151 !important;
+}
+
+.mkt-cmp-featured-col {
+  background: rgba(37, 99, 235, 0.04);
+}
+
+.mkt-cmp-featured-col th {
+  color: #2563EB !important;
+}
+
 /* ── Pricing cards — light theme overrides ────────────────────────────────── */
 
 .mkt-pricing-card {
