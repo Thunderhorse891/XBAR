@@ -8,12 +8,16 @@
 }
 
 .ops-experience .button--primary {
-  background: linear-gradient(135deg, var(--surface-strong) 0%, rgba(47, 141, 255, 0.18) 48%, var(--blue) 100%);
+  background: linear-gradient(135deg, var(--surface-strong) 0%, rgba(37, 99, 235, 0.25) 48%, var(--blue) 100%);
   color: var(--text);
-  box-shadow: 0 14px 34px rgba(103, 148, 194, 0.2);
+  box-shadow: 0 14px 34px rgba(37, 99, 235, 0.18);
 }
 
-.ops-experience .button--primary:hover,
+.ops-experience .button--primary:hover {
+  background: linear-gradient(135deg, var(--surface-raised) 0%, rgba(37, 99, 235, 0.32) 48%, var(--blue-dark) 100%);
+  transform: translateY(-1px);
+}
+
 .ops-experience .button--ghost:hover,
 .ops-record-card:hover,
 .ops-metric-card.metric-card:hover,
@@ -38,11 +42,11 @@
   border: 1px solid rgba(37, 99, 235, 0.12);
   border-radius: 10px;
   background:
-    linear-gradient(rgba(37, 99, 235, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(37, 99, 235, 0.035) 1px, transparent 1px),
-    linear-gradient(135deg, #EDF2FF 0%, #EEF6FF 100%);
+    linear-gradient(rgba(37, 99, 235, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 99, 235, 0.055) 1px, transparent 1px),
+    linear-gradient(135deg, #E0EAFF 0%, #EBF4FF 100%);
   background-size: 52px 52px, 52px 52px, 100% 100%;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.07);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
   position: relative;
 }
 
