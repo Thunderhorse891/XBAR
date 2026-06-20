@@ -11,6 +11,13 @@ import { useUiStore } from '@/store/useUiStore';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 
+const STAGE_TONE: Record<string, 'slate' | 'blue' | 'amber' | 'emerald' | 'rose'> = {
+  New: 'slate',
+  Qualified: 'blue',
+  Offer: 'amber',
+  Closed: 'emerald',
+};
+
 export default function Sales() {
   const navigate = useNavigate();
   const horses = useXbarStore((state) => state.horses);
@@ -26,39 +33,83 @@ export default function Sales() {
   const { pushToast, openDrawer } = useUiStore((state) => ({ pushToast: state.pushToast, openDrawer: state.openDrawer }));
   const canManageSales = useCurrentRoleCapability('manageSales');
   const { confirm, dialog: confirmDialog } = useConfirm();
+  const billOfSaleRef = useRef<HTMLDivElement>(null);
+  const [showBillOfSale, setShowBillOfSale] = useState(false);
+  const [menuState, setMenuState] = useState<{ type: 'lead' | 'horse'; id: string; x: number; y: number } | null>(null);
+  const [listingQuery, setListingQuery] = useState('');
+  const [selectedLeadId, setSelectedLeadId] = useState('');
+  const [leadStage, setLeadStage] = useState<'New' | 'Qualified' | 'Offer' | 'Closed'>('New');
+  const [leadLastTouch, setLeadLastTouch] = useState(new Date().toISOString().slice(0, 10));
+  const [leadNextFollowUp, setLeadNextFollowUp] = useState('');
+  const [leadOfferAmount, setLeadOfferAmount] = useState('');
+  const [leadNotes, setLeadNotes] = useState('');
+  const [leadOutcome, setLeadOutcome] = useState<'Won' | 'Lost'>('Won');
+  const [leadError, setLeadError] = useState('');
+
   const saleHorses = useMemo(
-    () => horses.filter((horse) => horse.sale.askPrice > 0 || horse.sale.listingState === 'Buyer Review' || horse.sale.listingState === 'Market Ready'),
+    () => horses.filter((h) => h.sale.askPrice > 0 || h.sale.listingState === 'Buyer Review' || h.sale.listingState === 'Market Ready'),
     [horses],
   );
   const packetByHorseId = useMemo(
     () =>
       Object.fromEntries(
-        saleHorses.map((horse) => [
-          horse.id,
+        saleHorses.map((h) => [
+          h.id,
           buildHorsePacketCompleteness(
-            horse,
-            documents.filter((document) => document.horseId === horse.id),
-            ownershipRecords.find((record) => record.horseId === horse.id),
+            h,
+            documents.filter((d) => d.horseId === h.id),
+            ownershipRecords.find((r) => r.horseId === h.id),
           ),
         ]),
       ),
     [saleHorses, documents, ownershipRecords],
   );
-  const liveShareCount = saleHorses.filter((horse) => packetByHorseId[horse.id]?.buyerSafe).length;
-  const followUpsDue = salesLeads.filter((lead) => lead.nextFollowUp && lead.nextFollowUp <= new Date().toISOString().slice(0, 10)).length;
-  const [selectedLeadId, setSelectedLeadId] = useState(salesLeads[0]?.id ?? '');
-  const selectedLead = salesLeads.find((lead) => lead.id === selectedLeadId) ?? salesLeads[0];
-  const [leadStage, setLeadStage] = useState(selectedLead?.stage ?? 'New');
-  const [leadLastTouch, setLeadLastTouch] = useState(selectedLead?.lastTouch ?? new Date().toISOString().slice(0, 10));
-  const [leadNextFollowUp, setLeadNextFollowUp] = useState(selectedLead?.nextFollowUp ?? '');
-  const [leadOfferAmount, setLeadOfferAmount] = useState(selectedLead?.offerAmount ? String(selectedLead.offerAmount) : '');
-  const [leadNotes, setLeadNotes] = useState(selectedLead?.notes ?? '');
-  const [leadOutcome, setLeadOutcome] = useState(selectedLead?.outcome ?? 'Won');
-  const [leadError, setLeadError] = useState('');
-  const [menuState, setMenuState] = useState<{ type: 'lead' | 'horse'; id: string; x: number; y: number } | null>(null);
-  const [listingQuery, setListingQuery] = useState('');
-  const [showBillOfSale, setShowBillOfSale] = useState(false);
-  const billOfSaleRef = useRef<HTMLDivElement>(null);
+  const liveShareCount = saleHorses.filter((h) => packetByHorseId[h.id]?.buyerSafe).length;
+  const followUpsDue = salesLeads.filter((l) => l.nextFollowUp && l.nextFollowUp <= new Date().toISOString().slice(0, 10)).length;
+  const openLeads = salesLeads.filter((l) => l.stage !== 'Closed');
+  const wonLeads = salesLeads.filter((l) => l.stage === 'Closed' && l.outcome === 'Won');
+  const pipelineValue = openLeads.reduce((sum, l) => sum + (l.offerAmount ?? 0), 0);
+  const wonValue = wonLeads.reduce((sum, l) => sum + (l.offerAmount ?? 0), 0);
+  const pipelineByStage = useMemo(() => {
+    const stages = ['New', 'Qualified', 'Offer', 'Closed'] as const;
+    return stages.map((stage) => ({
+      stage,
+      count: salesLeads.filter((l) => l.stage === stage).length,
+    }));
+  }, [salesLeads]);
+
+  const channelBreakdown = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const lead of salesLeads) {
+      map.set(lead.channel, (map.get(lead.channel) ?? 0) + 1);
+    }
+    return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+  }, [salesLeads]);
+
+  const upcomingFollowUps = useMemo(
+    () =>
+      salesLeads
+        .filter((l) => l.nextFollowUp && l.stage !== 'Closed')
+        .sort((a, b) => (a.nextFollowUp ?? '').localeCompare(b.nextFollowUp ?? ''))
+        .slice(0, 5),
+    [salesLeads],
+  );
+
+  const selectedLead = salesLeads.find((l) => l.id === selectedLeadId) ?? salesLeads[0];
+  const selectedLeadHorse = horses.find((h) => h.id === selectedLead?.horseId);
+
+  useEffect(() => {
+    if (salesLeads[0] && !selectedLeadId) {
+      const first = salesLeads[0];
+      setSelectedLeadId(first.id);
+      setLeadStage(first.stage);
+      setLeadLastTouch(first.lastTouch);
+      setLeadNextFollowUp(first.nextFollowUp ?? '');
+      setLeadOfferAmount(first.offerAmount ? String(first.offerAmount) : '');
+      setLeadNotes(first.notes ?? '');
+      setLeadOutcome(first.outcome ?? 'Won');
+    }
+  }, [salesLeads, selectedLeadId]);
 
   useEffect(() => {
     if (!showBillOfSale) return;
@@ -67,13 +118,27 @@ export default function Sales() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [showBillOfSale]);
 
-  const menuLead = menuState?.type === 'lead' ? salesLeads.find((lead) => lead.id === menuState.id) : undefined;
-  const menuHorse = menuState?.type === 'horse' ? saleHorses.find((horse) => horse.id === menuState.id) : undefined;
-  const menuListing = menuHorse ? sharedListings.find((listing) => listing.horseId === menuHorse.id && listing.state !== 'Archived') : undefined;
+  function selectLead(leadId: string) {
+    const lead = salesLeads.find((l) => l.id === leadId);
+    if (!lead) return;
+    setSelectedLeadId(lead.id);
+    setLeadStage(lead.stage);
+    setLeadLastTouch(lead.lastTouch);
+    setLeadNextFollowUp(lead.nextFollowUp ?? '');
+    setLeadOfferAmount(lead.offerAmount ? String(lead.offerAmount) : '');
+    setLeadNotes(lead.notes ?? '');
+    setLeadOutcome(lead.outcome ?? 'Won');
+    setLeadError('');
+  }
+
+  const menuLead = menuState?.type === 'lead' ? salesLeads.find((l) => l.id === menuState.id) : undefined;
+  const menuHorse = menuState?.type === 'horse' ? saleHorses.find((h) => h.id === menuState.id) : undefined;
+  const menuListing = menuHorse ? sharedListings.find((l) => l.horseId === menuHorse.id && l.state !== 'Archived') : undefined;
   const menuPacket = menuHorse ? packetByHorseId[menuHorse.id] : undefined;
   const menuShareUrl = menuPacket
     ? buildPublicShareUrl(menuPacket.sharePath, menuListing?.accessMode === 'Private Token' ? menuListing.shareToken : undefined)
     : '';
+
   const menuItems = menuLead
     ? [
         ...(canManageSales
@@ -96,11 +161,7 @@ export default function Sales() {
               },
             ]
           : []),
-        {
-          id: 'open-horse',
-          label: 'Open horse profile',
-          onSelect: () => navigate(`/horses/${menuLead.horseId}`),
-        },
+        { id: 'open-horse', label: 'Open horse profile', onSelect: () => navigate(`/horses/${menuLead.horseId}`) },
         ...(canManageSales
           ? [
               {
@@ -118,24 +179,14 @@ export default function Sales() {
       ]
     : menuHorse
       ? [
-          {
-            id: 'open-horse',
-            label: 'Open horse record',
-            onSelect: () => navigate(`/horses/${menuHorse.id}`),
-          },
-          {
-            id: 'view-horse-drawer',
-            label: 'Quick view horse',
-            onSelect: () => openDrawer({ type: 'horse-detail', horseId: menuHorse.id }),
-          },
+          { id: 'open-horse', label: 'Open horse record', onSelect: () => navigate(`/horses/${menuHorse.id}`) },
+          { id: 'view-horse-drawer', label: 'Quick view horse', onSelect: () => openDrawer({ type: 'horse-detail', horseId: menuHorse.id }) },
           {
             id: 'open-profile',
             label: 'Open sale listing',
             onSelect: async () => {
               await recordSharedChannel(menuHorse.id, 'Direct Link');
-              if (typeof window !== 'undefined') {
-                window.open(menuShareUrl, '_blank', 'noopener,noreferrer');
-              }
+              if (typeof window !== 'undefined') window.open(menuShareUrl, '_blank', 'noopener,noreferrer');
             },
           },
         ]
@@ -144,6 +195,7 @@ export default function Sales() {
   return (
     <>
       {confirmDialog}
+
       <div className="surface-hero surface-hero--dark">
         <div className="surface-hero__top">
           <div>
@@ -152,16 +204,14 @@ export default function Sales() {
           </div>
           <div className="surface-hero__stats">
             <div className="surface-hero__stat"><span>Listings</span><strong>{saleHorses.length}</strong></div>
-            <div className="surface-hero__stat"><span>Open prospects</span><strong>{salesLeads.filter((lead) => lead.stage !== 'Closed').length}</strong></div>
+            <div className="surface-hero__stat"><span>Open prospects</span><strong>{openLeads.length}</strong></div>
             <div className="surface-hero__stat">
               <span>Follow-ups due</span>
               <strong className={followUpsDue ? 'text-rose' : 'text-emerald'}>{followUpsDue}</strong>
             </div>
             <div className="surface-hero__stat">
-              <span>Blockers</span>
-              <strong className={saleHorses.filter((h) => h.readiness.packetStatus === 'Needs Transfer Docs').length ? 'text-amber' : 'text-emerald'}>
-                {saleHorses.filter((h) => h.readiness.packetStatus === 'Needs Transfer Docs').length}
-              </strong>
+              <span>Pipeline value</span>
+              <strong>{formatCompactCurrency(pipelineValue)}</strong>
             </div>
           </div>
         </div>
@@ -169,13 +219,29 @@ export default function Sales() {
 
       <div className="metric-grid">
         <MetricCard label="Sale horses" value={`${saleHorses.length}`} detail="Active pricing or pending review" />
-        <MetricCard label="Prospects" value={`${salesLeads.filter((lead) => lead.stage !== 'Closed').length}`} detail="Open inquiries across all channels" tone="blue" />
-        <MetricCard label="Shared records" value={`${sharedAccess.savedHorses}`} detail="Listings open in shared access" tone="emerald" />
-        <MetricCard label="Transfer blockers" value={`${saleHorses.filter((horse) => horse.readiness.packetStatus === 'Needs Transfer Docs').length}`} detail="Listings with ownership or paperwork friction" tone="amber" />
+        <MetricCard label="Pipeline value" value={formatCompactCurrency(pipelineValue)} detail={`${openLeads.length} open lead${openLeads.length !== 1 ? 's' : ''}`} tone="blue" />
+        <MetricCard label="Won deals" value={formatCompactCurrency(wonValue)} detail={`${wonLeads.length} closed won`} tone="emerald" />
+        <MetricCard
+          label="Transfer blockers"
+          value={`${saleHorses.filter((h) => h.readiness.packetStatus === 'Needs Transfer Docs').length}`}
+          detail="Ownership or paperwork friction"
+          tone={saleHorses.some((h) => h.readiness.packetStatus === 'Needs Transfer Docs') ? 'amber' : 'slate'}
+        />
       </div>
 
+      {salesLeads.length > 0 && (
+        <div className="dash-pipeline" style={{ marginBottom: '4px' }}>
+          {pipelineByStage.map(({ stage, count }) => (
+            <div key={stage} className={`dash-pipeline__stage dash-pipeline__stage--${stage.toLowerCase()}`}>
+              <div className="dash-pipeline__count">{count}</div>
+              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text)', marginTop: '2px' }}>{stage}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Listings" title="Listings">
+        <Panel eyebrow="Listings" title="Sale horses">
           {saleHorses.length > 0 && (
             <div className="search-wrap">
               <input
@@ -189,69 +255,66 @@ export default function Sales() {
           )}
           {saleHorses.length ? (
             <div className="horse-grid">
-              {saleHorses.filter((h) => !listingQuery.trim() || h.name.toLowerCase().includes(listingQuery.toLowerCase()) || h.segment.toLowerCase().includes(listingQuery.toLowerCase())).map((horse) => (
-                <Link
-                  key={horse.id}
-                  className="horse-card horse-card--interactive"
-                  to={`/horses/${horse.id}`}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    setMenuState({ type: 'horse', id: horse.id, x: event.clientX, y: event.clientY });
-                  }}
-                >
-                  {(() => {
-                    const packet = packetByHorseId[horse.id];
-                    const sharedListing = sharedListings.find((listing) => listing.horseId === horse.id && listing.state !== 'Archived');
-                    const publicShareUrl = buildPublicShareUrl(
-                      packet.sharePath,
-                      sharedListing?.accessMode === 'Private Token' ? sharedListing.shareToken : undefined,
-                    );
-
-                    return (
-                      <>
-                        <div className="horse-card__media">
-                          <HorseMediaPreview
-                            src={horse.profileImage || horse.gallery[0]?.url}
-                            name={horse.name}
-                            imageClassName="horse-card__image"
-                            fallbackClassName="horse-card__image-fallback"
-                          />
-                          <div className="horse-card__media-copy">
-                            <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
-                          </div>
+              {saleHorses
+                .filter((h) => !listingQuery.trim() || h.name.toLowerCase().includes(listingQuery.toLowerCase()) || h.segment.toLowerCase().includes(listingQuery.toLowerCase()))
+                .map((horse) => {
+                  const packet = packetByHorseId[horse.id];
+                  const sharedListing = sharedListings.find((l) => l.horseId === horse.id && l.state !== 'Archived');
+                  const publicShareUrl = buildPublicShareUrl(
+                    packet.sharePath,
+                    sharedListing?.accessMode === 'Private Token' ? sharedListing.shareToken : undefined,
+                  );
+                  return (
+                    <Link
+                      key={horse.id}
+                      className="horse-card horse-card--interactive"
+                      to={`/horses/${horse.id}`}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        setMenuState({ type: 'horse', id: horse.id, x: event.clientX, y: event.clientY });
+                      }}
+                    >
+                      <div className="horse-card__media">
+                        <HorseMediaPreview
+                          src={horse.profileImage || horse.gallery[0]?.url}
+                          name={horse.name}
+                          imageClassName="horse-card__image"
+                          fallbackClassName="horse-card__image-fallback"
+                        />
+                        <div className="horse-card__media-copy">
+                          <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
                         </div>
-                        <div className="horse-card__body">
-                          <div className="horse-card__title">{horse.name}</div>
-                          <div className="horse-card__subtitle">{horse.sale.listingState}</div>
-                          <p className="horse-card__summary">{horse.summary}</p>
-                          <div className="inline-metrics">
-                            <span>{packet.score}% record complete</span>
-                            <span>{packet.shareSlug}</span>
-                          </div>
-                          <div className="horse-card__footer">
-                            <span>{horse.sale.watchlistCount} watchers</span>
-                            <span>{horse.sale.askPrice ? formatCompactCurrency(horse.sale.askPrice) : '—'}</span>
-                          </div>
-                          <div className="inline-actions inline-actions--card">
-                            <a
-                              className="button button--ghost button--compact"
-                              href={publicShareUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              onClick={async (event) => {
-                                event.stopPropagation();
-                                await recordSharedChannel(horse.id, 'Direct Link');
-                              }}
-                            >
-                              Open sale listing
-                            </a>
-                          </div>
+                      </div>
+                      <div className="horse-card__body">
+                        <div className="horse-card__title">{horse.name}</div>
+                        <div className="horse-card__subtitle">{horse.sale.listingState}</div>
+                        <p className="horse-card__summary">{horse.summary}</p>
+                        <div className="inline-metrics">
+                          <span>{packet.score}% complete</span>
+                          <span>{packet.shareSlug}</span>
                         </div>
-                      </>
-                    );
-                  })()}
-                </Link>
-              ))}
+                        <div className="horse-card__footer">
+                          <span>{horse.sale.watchlistCount} watchers</span>
+                          <span>{horse.sale.askPrice ? formatCompactCurrency(horse.sale.askPrice) : '—'}</span>
+                        </div>
+                        <div className="inline-actions inline-actions--card">
+                          <a
+                            className="button button--ghost button--compact"
+                            href={publicShareUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={async (event) => {
+                              event.stopPropagation();
+                              await recordSharedChannel(horse.id, 'Direct Link');
+                            }}
+                          >
+                            Open sale listing
+                          </a>
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
             </div>
           ) : (
             <EmptyState compact title="No sale horses yet" description="Move a horse into review or market ready to populate the sales board." />
@@ -262,22 +325,14 @@ export default function Sales() {
           {salesLeads.length ? (
             <div className="stack-list">
               {salesLeads.map((lead) => {
-                const horse = horses.find((item) => item.id === lead.horseId);
+                const horse = horses.find((h) => h.id === lead.horseId);
+                const isOverdue = lead.nextFollowUp && lead.nextFollowUp <= new Date().toISOString().slice(0, 10) && lead.stage !== 'Closed';
                 return (
                   <button
                     key={lead.id}
                     type="button"
                     className={`stack-item stack-item--interactive${lead.id === selectedLeadId ? ' stack-item--selected' : ''}`}
-                    onClick={() => {
-                      setSelectedLeadId(lead.id);
-                      setLeadStage(lead.stage);
-                      setLeadLastTouch(lead.lastTouch);
-                      setLeadNextFollowUp(lead.nextFollowUp ?? '');
-                      setLeadOfferAmount(lead.offerAmount ? String(lead.offerAmount) : '');
-                      setLeadNotes(lead.notes ?? '');
-                      setLeadOutcome(lead.outcome ?? 'Won');
-                      setLeadError('');
-                    }}
+                    onClick={() => selectLead(lead.id)}
                     onContextMenu={(event) => {
                       event.preventDefault();
                       setMenuState({ type: 'lead', id: lead.id, x: event.clientX, y: event.clientY });
@@ -286,18 +341,17 @@ export default function Sales() {
                     <div className="stack-item__top">
                       <div>
                         <div className="stack-item__title">{lead.name}</div>
-                        <div className="stack-item__copy">
-                          {lead.channel}{horse?.name ? ` · ${horse.name}` : ''}
-                        </div>
+                        <div className="stack-item__copy">{lead.channel}{horse?.name ? ` · ${horse.name}` : ''}</div>
                       </div>
-                      <Pill tone={lead.stage === 'Offer' ? 'emerald' : lead.stage === 'Qualified' ? 'blue' : 'amber'}>
-                        {lead.stage}
-                      </Pill>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        {isOverdue && <Pill tone="rose">Due</Pill>}
+                        <Pill tone={STAGE_TONE[lead.stage] ?? 'slate'}>{lead.stage}</Pill>
+                      </div>
                     </div>
                     <div className="inline-metrics">
-                      <span>{lead.savedListing ? 'Saved listing' : 'Not saved yet'}</span>
-                      <span>{lead.shareReady ? 'Sale link live' : 'Sale link private'}</span>
-                      <span>Last touch {formatDateLabel(lead.lastTouch)}</span>
+                      {lead.offerAmount ? <span>{formatCompactCurrency(lead.offerAmount)}</span> : null}
+                      <span>{lead.savedListing ? 'Saved listing' : 'Not saved'}</span>
+                      <span>Touched {formatDateLabel(lead.lastTouch)}</span>
                     </div>
                   </button>
                 );
@@ -310,59 +364,62 @@ export default function Sales() {
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
-        <Panel eyebrow="Lead lifecycle" title={selectedLead ? `${selectedLead.name} lead` : 'Lead'}>
+        <Panel eyebrow="Lead lifecycle" title={selectedLead ? `${selectedLead.name}` : 'Lead'}>
           {selectedLead ? (
             <>
+              {selectedLeadHorse && (
+                <div className="command-stage__support-card" style={{ marginBottom: '16px' }}>
+                  <div className="command-stage__support-label">Horse</div>
+                  <strong className="command-stage__support-title">{selectedLeadHorse.name}</strong>
+                  <div className="command-stage__support-copy">
+                    <span>{selectedLeadHorse.breed} · {selectedLeadHorse.sex} · {selectedLeadHorse.age}yr</span>
+                    <span>{selectedLeadHorse.sale.listingState}</span>
+                    {selectedLeadHorse.sale.askPrice > 0 && <span>Ask: {formatCompactCurrency(selectedLeadHorse.sale.askPrice)}</span>}
+                  </div>
+                </div>
+              )}
+
               <div className="form-grid form-grid--tight">
                 <label className="field-stack">
                   <span className="field-label">Stage</span>
-                  <select className="field-input" value={leadStage} onChange={(event) => setLeadStage(event.target.value as typeof leadStage)} disabled={!canManageSales}>
-                    {(['New', 'Qualified', 'Offer', 'Closed'] as const).map((stage) => (
-                      <option key={stage} value={stage}>
-                        {stage}
-                      </option>
-                    ))}
+                  <select className="field-input" value={leadStage} onChange={(e) => setLeadStage(e.target.value as typeof leadStage)} disabled={!canManageSales}>
+                    {(['New', 'Qualified', 'Offer', 'Closed'] as const).map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Last touch</span>
-                  <input className="field-input" type="date" value={leadLastTouch} onChange={(event) => setLeadLastTouch(event.target.value)} disabled={!canManageSales} />
+                  <input className="field-input" type="date" value={leadLastTouch} onChange={(e) => setLeadLastTouch(e.target.value)} disabled={!canManageSales} />
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Next follow-up</span>
-                  <input className="field-input" type="date" value={leadNextFollowUp} onChange={(event) => setLeadNextFollowUp(event.target.value)} disabled={!canManageSales} />
+                  <input className="field-input" type="date" value={leadNextFollowUp} onChange={(e) => setLeadNextFollowUp(e.target.value)} disabled={!canManageSales} />
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Offer amount</span>
-                  <input className="field-input" type="number" min="0" value={leadOfferAmount} onChange={(event) => setLeadOfferAmount(event.target.value)} disabled={!canManageSales} />
+                  <input className="field-input" type="number" min="0" value={leadOfferAmount} onChange={(e) => setLeadOfferAmount(e.target.value)} disabled={!canManageSales} />
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Closed outcome</span>
-                  <select className="field-input" value={leadOutcome} onChange={(event) => setLeadOutcome(event.target.value as 'Won' | 'Lost')} disabled={!canManageSales}>
+                  <select className="field-input" value={leadOutcome} onChange={(e) => setLeadOutcome(e.target.value as 'Won' | 'Lost')} disabled={!canManageSales}>
                     <option value="Won">Won</option>
                     <option value="Lost">Lost</option>
                   </select>
                 </label>
                 <label className="field-stack field-stack--wide">
                   <span className="field-label">Notes</span>
-                  <textarea className="field-textarea" rows={4} value={leadNotes} onChange={(event) => setLeadNotes(event.target.value)} disabled={!canManageSales} />
+                  <textarea className="field-textarea" rows={4} value={leadNotes} onChange={(e) => setLeadNotes(e.target.value)} disabled={!canManageSales} />
                 </label>
               </div>
+
               {leadError ? <div className="field-error">{leadError}</div> : null}
+
               <div className="inline-actions">
                 <button
                   className="button button--primary button--compact"
                   type="button"
                   onClick={() => {
-                    if (!leadLastTouch.trim()) {
-                      setLeadError('Last touch date is required.');
-                      return;
-                    }
-                    if (leadOfferAmount && Number(leadOfferAmount) < 0) {
-                      setLeadError('Offer amount cannot be negative.');
-                      return;
-                    }
-
+                    if (!leadLastTouch.trim()) { setLeadError('Last touch date is required.'); return; }
+                    if (leadOfferAmount && Number(leadOfferAmount) < 0) { setLeadError('Offer amount cannot be negative.'); return; }
                     const result = updateSalesLead(selectedLead.id, {
                       stage: leadStage,
                       lastTouch: leadLastTouch,
@@ -371,25 +428,14 @@ export default function Sales() {
                       offerAmount: leadOfferAmount ? Number(leadOfferAmount) : undefined,
                       outcome: leadStage === 'Closed' ? leadOutcome : undefined,
                     });
-
-                    pushToast({
-                      title: result.ok ? 'Lead updated' : 'Lead update blocked',
-                      message: result.message,
-                      tone: result.ok ? 'success' : 'error',
-                    });
-                    if (result.ok) {
-                      setLeadError('');
-                    }
+                    pushToast({ title: result.ok ? 'Lead updated' : 'Lead update blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                    if (result.ok) setLeadError('');
                   }}
                   disabled={!canManageSales}
                 >
-                  Save lead changes
+                  Save changes
                 </button>
-                <button
-                  className="button button--ghost button--compact"
-                  type="button"
-                  onClick={() => setShowBillOfSale(true)}
-                >
+                <button className="button button--ghost button--compact" type="button" onClick={() => setShowBillOfSale(true)}>
                   Bill of Sale
                 </button>
                 {canManageSales && (
@@ -413,26 +459,68 @@ export default function Sales() {
           )}
         </Panel>
 
-        <Panel eyebrow="Handoff" title="Handoff">
+        <Panel eyebrow="Handoff" title="Deal intelligence">
           <div className="stack-list">
             <div className="stack-item">
               <div className="stack-item__top">
-                <div className="stack-item__title">Live links</div>
+                <div className="stack-item__title">Live sale links</div>
                 <Pill tone={liveShareCount ? 'emerald' : 'amber'}>{liveShareCount}</Pill>
               </div>
+              <div className="inline-metrics"><span>{saleHorses.length - liveShareCount} not yet buyer-safe</span></div>
             </div>
             <div className="stack-item">
               <div className="stack-item__top">
-                <div className="stack-item__title">Shared records</div>
+                <div className="stack-item__title">Shared records saved</div>
                 <Pill tone={sharedAccess.savedHorses ? 'blue' : 'slate'}>{sharedAccess.savedHorses}</Pill>
               </div>
             </div>
             <div className="stack-item">
               <div className="stack-item__top">
-                <div className="stack-item__title">Follow-ups</div>
-                <Pill tone={followUpsDue ? 'amber' : 'emerald'}>{followUpsDue}</Pill>
+                <div className="stack-item__title">Follow-ups due</div>
+                <Pill tone={followUpsDue ? 'rose' : 'emerald'}>{followUpsDue}</Pill>
               </div>
             </div>
+
+            {channelBreakdown.length > 0 && (
+              <>
+                <div className="ops-section-label" style={{ paddingTop: '8px' }}>Lead sources</div>
+                {channelBreakdown.map(([channel, count]) => (
+                  <div key={channel} className="stack-item">
+                    <div className="stack-item__top">
+                      <div className="stack-item__title">{channel}</div>
+                      <Pill tone="slate">{count}</Pill>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {upcomingFollowUps.length > 0 && (
+              <>
+                <div className="ops-section-label" style={{ paddingTop: '8px' }}>Upcoming follow-ups</div>
+                {upcomingFollowUps.map((lead) => {
+                  const horse = horses.find((h) => h.id === lead.horseId);
+                  const isOverdue = lead.nextFollowUp && lead.nextFollowUp <= new Date().toISOString().slice(0, 10);
+                  return (
+                    <button
+                      key={lead.id}
+                      type="button"
+                      className="stack-item stack-item--interactive"
+                      onClick={() => selectLead(lead.id)}
+                    >
+                      <div className="stack-item__top">
+                        <div className="stack-item__title">{lead.name}</div>
+                        <Pill tone={isOverdue ? 'rose' : 'amber'}>{lead.nextFollowUp ? formatDateLabel(lead.nextFollowUp) : 'Unscheduled'}</Pill>
+                      </div>
+                      <div className="inline-metrics">
+                        <span>{horse?.name ?? 'Unassigned'}</span>
+                        <span>{lead.stage}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </>
+            )}
           </div>
         </Panel>
       </div>
@@ -467,15 +555,7 @@ export default function Sales() {
                   >
                     Print / Save PDF
                   </button>
-                  <button
-                    type="button"
-                    // eslint-disable-next-line jsx-a11y/no-autofocus
-                    autoFocus
-                    className="bos-btn"
-                    onClick={() => setShowBillOfSale(false)}
-                  >
-                    Close
-                  </button>
+                  <button type="button" autoFocus className="bos-btn" onClick={() => setShowBillOfSale(false)}>Close</button>
                 </div>
               </div>
               <div ref={billOfSaleRef} className="bos-document" style={{ fontFamily: 'Georgia, serif', fontSize: '14px', lineHeight: '1.7', color: '#111' }}>
