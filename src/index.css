@@ -143,6 +143,8 @@ a:focus-visible,
   box-shadow: 0 0 0 4px var(--blue-soft);
 }
 
+.cursor-context-menu { cursor: context-menu; }
+
 .app-shell {
   min-height: 100vh;
   display: grid;
