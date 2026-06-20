@@ -2407,6 +2407,17 @@ a:focus-visible,
 .toast__dismiss {
   color: var(--muted);
   cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  align-self: flex-start;
+  transition: color 120ms, background 120ms;
+}
+.toast__dismiss:hover {
+  color: var(--text);
+  background: var(--border);
 }
 
 .ledger-stage {
