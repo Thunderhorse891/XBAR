@@ -182,7 +182,7 @@ export function CommandPalette() {
             autoComplete="off"
             spellCheck={false}
           />
-          <kbd className="cp-esc-hint" onClick={close}>Esc</kbd>
+          <button type="button" className="cp-esc-hint" onClick={close} aria-label="Close command palette">Esc</button>
         </div>
 
         {results.length > 0 ? (
