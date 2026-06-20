@@ -5,6 +5,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { CommandPalette } from '@/components/CommandPalette';
 import { RightDrawer } from '@/components/RightDrawer';
 import { WorkspaceHelp, type HelpSection } from '@/components/WorkspaceHelp';
+import { XbarMark } from '@/components/BrandMark';
 import { useGlobalKeyboard } from '@/hooks/useGlobalKeyboard';
 import {
   AddIcon,
@@ -278,7 +279,7 @@ export default function MainLayout() {
         {/* Brand lockup */}
         <div className="flex items-center gap-3 px-1">
           <div className="flex h-[44px] w-[44px] shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-gradient-to-br from-[#E0EAFF] to-[#EBF4FF] shadow-sm">
-            <img src="/xbar-logo-sleek.png" alt="XBAR" className="h-[80%] w-[80%] object-contain" />
+            <XbarMark tone="light" className="h-[72%] w-[72%]" title="XBAR" />
           </div>
           <div className="min-w-0">
             <div className="truncate text-[0.96rem] font-extrabold uppercase tracking-[0.14em] text-[var(--text)]">
@@ -362,7 +363,7 @@ export default function MainLayout() {
           </div>
           {/* XBAR brand watermark */}
           <div className="mt-3 flex items-center gap-2 opacity-20">
-            <img src="/xbar-logo-sleek.png" alt="" className="h-6 w-6 rounded-md object-contain" aria-hidden="true" />
+            <XbarMark tone="mono" className="h-6 w-6" />
             <div>
               <div className="text-[8px] font-black uppercase tracking-[0.3em] text-[var(--muted)]">XBAR</div>
               <div className="text-[7px] font-bold uppercase tracking-[0.2em] text-[var(--muted)] opacity-70">Ranch OS</div>

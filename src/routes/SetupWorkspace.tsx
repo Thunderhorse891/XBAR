@@ -4,6 +4,7 @@ import { isStaticPreviewHost, isSupabaseConfigured } from '@/lib/platformConfig'
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useWorkspaceReady, useXbarStore } from '@/store/useXbarStore';
+import { XbarMark } from '@/components/BrandMark';
 import './authExperience.css';
 
 const foundationSteps = [
@@ -120,8 +121,8 @@ export default function SetupWorkspace() {
           <div>
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="premium-brand-mark premium-brand-mark--mobile overflow-hidden rounded-[10px]">
-                  <img src="/xbar-logo-sleek.png" alt="XBAR logo" className="h-full w-full object-cover" />
+                <div className="premium-brand-mark premium-brand-mark--mobile flex items-center justify-center overflow-hidden rounded-[10px]">
+                  <XbarMark tone="light" className="h-[72%] w-[72%]" title="XBAR" />
                 </div>
                 <div>
                   <div className="text-[1rem] font-extrabold uppercase tracking-[0.22em] text-[var(--text)]">XBAR</div>

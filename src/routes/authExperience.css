@@ -2106,8 +2106,7 @@
 }
 
 .lp-hero-logo {
-  mix-blend-mode: multiply;
-  filter: saturate(0.85) contrast(1.05);
+  opacity: 0.9;
 }
 
 .lp-tagline strong { color: #2563EB; }

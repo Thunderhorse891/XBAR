@@ -6,6 +6,7 @@ import { PedigreeChart } from '@/components/PedigreeChart';
 import { SalePacketSlots } from '@/components/SalePacketSlots';
 import { KeyValue, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
 import { ChevronLeftIcon, SharedAccessIcon } from '@/components/icons';
+import { XbarMark } from '@/components/BrandMark';
 import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { buildPublicShareUrl } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatDateLabel, formatPercent } from '@/lib/format';
@@ -462,7 +463,9 @@ export default function HorseDetail() {
         {/* Blue radial glow */}
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_50%,rgba(37,99,235,0.07),transparent_60%)]" />
         {/* XBAR watermark */}
-        <div className="pointer-events-none absolute right-[-20px] top-[-20px] h-[180px] w-[180px] rotate-[10deg] opacity-[0.045]" style={{ backgroundImage: "url('/xbar-logo-sleek.png')", backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' }} />
+        <div className="pointer-events-none absolute right-[-20px] top-[-20px] h-[180px] w-[180px] rotate-[10deg] opacity-[0.045]" aria-hidden="true">
+          <XbarMark tone="light" className="h-full w-full" />
+        </div>
 
         <div className="relative z-10 flex flex-col gap-5 p-6 xl:flex-row xl:items-end xl:justify-between xl:gap-8">
           <div className="min-w-0 flex-1">
@@ -610,7 +613,7 @@ export default function HorseDetail() {
           <div className="relative grid flex-1 grid-cols-2 gap-3">
             {!horse.gallery.length ? (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <img src={`${import.meta.env.BASE_URL}xbar-logo-sleek.png`} alt="" className="h-28 w-28 opacity-[0.15]" />
+                <XbarMark tone="mono" className="h-28 w-28 opacity-[0.15] text-[var(--muted)]" />
               </div>
             ) : null}
             {gallerySlots.map((asset, index) =>

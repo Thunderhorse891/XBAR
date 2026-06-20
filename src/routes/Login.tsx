@@ -4,6 +4,7 @@ import { isFacebookSharingConfigured, isSupabaseConfigured } from '@/lib/platfor
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
+import { XbarMark } from '@/components/BrandMark';
 import './authExperience.css';
 
 type AuthMode = 'signin' | 'signup';
@@ -210,11 +211,7 @@ export default function Login() {
 
         {/* ── Left: brand panel ── */}
         <section className="lp-brand" aria-labelledby="lp-headline">
-          <img
-            src="/xbar-logo-sleek.png"
-            alt="XBAR — Horse Management Reimagined"
-            className="lp-hero-logo"
-          />
+          <XbarMark tone="color" title="XBAR — Horse Management Reimagined" className="lp-hero-logo" />
 
           <div className="lp-tagline">
             <strong id="lp-headline">Horse Management.</strong>

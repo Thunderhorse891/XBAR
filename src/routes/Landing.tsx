@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCloudStore } from '@/store/useCloudStore';
 import { isLocalModeEnabled } from '@/lib/platformConfig';
+import { XbarMark } from '@/components/BrandMark';
 import './authExperience.css';
 import './landing.css';
 
@@ -259,7 +260,7 @@ export default function Landing() {
       {/* Nav */}
       <nav className="site-nav" aria-label="Main navigation">
         <Link to="/landing" className="site-nav-brand" aria-label="XBAR home">
-          <img src="/xbar-logo-sleek.png" alt="" className="site-nav-logo" aria-hidden="true" />
+          <XbarMark tone="light" className="site-nav-logo" />
           <div>
             <div className="site-nav-brand-name">XBAR</div>
             <div className="site-nav-brand-sub">Ranch Platform</div>
@@ -359,7 +360,7 @@ export default function Landing() {
               <div className="site-chrome-body" aria-hidden="true">
                 <div className="site-chrome-sidebar">
                   <div className="site-chrome-logo">
-                    <img src="/xbar-logo-sleek.png" alt="" aria-hidden="true" className="site-chrome-logo-img" />
+                    <XbarMark tone="color" className="site-chrome-logo-img" />
                     XBAR
                   </div>
                   {['Dashboard', 'Horses', 'Medical', 'Documents', 'Sales', 'Breeding'].map((item, i) => (
@@ -682,7 +683,7 @@ export default function Landing() {
         <div className="site-footer-inner">
           <div className="site-footer-brand">
             <div className="site-footer-brand-logo">
-              <img src="/xbar-logo-sleek.png" alt="" aria-hidden="true" />
+              <XbarMark tone="light" className="h-full w-full" />
             </div>
             <div>
               <div className="site-footer-brand-name">XBAR</div>
