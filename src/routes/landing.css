@@ -549,9 +549,9 @@
   flex-shrink: 0;
 }
 
-.site-chrome-horse-tag--emerald { background: rgba(22,163,74,0.08); color: var(--emerald); }
-.site-chrome-horse-tag--amber { background: rgba(217,119,6,0.08); color: var(--amber); }
-.site-chrome-horse-tag--blue { background: rgba(37,99,235,0.08); color: var(--blue-dark); }
+.site-chrome-horse-tag--emerald { background: var(--emerald-soft); color: var(--emerald); }
+.site-chrome-horse-tag--amber { background: var(--amber-soft); color: var(--amber); }
+.site-chrome-horse-tag--blue { background: var(--blue-soft); color: var(--blue-dark); }
 
 /* Floating cards */
 

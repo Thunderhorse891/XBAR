@@ -5,6 +5,7 @@
 
 import { useEffect, useId, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { CloseIcon } from '@/components/icons';
 import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
 import { useXbarStore } from '@/store/useXbarStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -463,7 +464,7 @@ export function RightDrawer() {
             onClick={closeAllDrawers}
             aria-label="Close drawer"
           >
-            ✕
+            <CloseIcon className="drawer-close-icon" />
           </button>
         </div>
 

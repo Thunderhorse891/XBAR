@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { CloseIcon } from '@/components/icons';
 
 export type HelpSection = {
   label: string;
@@ -57,7 +58,7 @@ export function WorkspaceHelp({
             className="help-panel__close"
             aria-label="Close guide"
           >
-            ×
+            <CloseIcon style={{ width: 18, height: 18, strokeWidth: 2 }} />
           </button>
         </div>
 

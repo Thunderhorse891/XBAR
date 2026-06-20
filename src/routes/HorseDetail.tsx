@@ -461,7 +461,7 @@ export default function HorseDetail() {
         {/* Subtle grid pattern */}
         <div className="pointer-events-none absolute inset-0 opacity-60" style={{ backgroundImage: 'linear-gradient(rgba(37,99,235,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(37,99,235,0.04) 1px, transparent 1px)', backgroundSize: '52px 52px' }} />
         {/* Blue radial glow */}
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_50%,rgba(37,99,235,0.07),transparent_60%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_50%,var(--blue-soft),transparent_60%)]" />
         {/* XBAR watermark */}
         <div className="pointer-events-none absolute right-[-20px] top-[-20px] h-[180px] w-[180px] rotate-[10deg] opacity-[0.045]" aria-hidden="true">
           <XbarMark tone="light" className="h-full w-full" />

@@ -3560,7 +3560,6 @@ a:focus-visible,
   border: 1px solid var(--border-strong);
   background: transparent;
   color: var(--muted);
-  font-size: 18px;
   cursor: pointer;
   transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
 }
@@ -3717,7 +3716,6 @@ a:focus-visible,
   border: 1px solid var(--border);
   background: transparent;
   color: var(--muted);
-  font-size: 14px;
   cursor: pointer;
   flex-shrink: 0;
   transition: color 150ms, background 150ms;
@@ -3725,6 +3723,11 @@ a:focus-visible,
 .drawer-close-btn:hover {
   color: var(--text);
   background: var(--surface-raised);
+}
+.drawer-close-icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
 }
 
 /* Body */
@@ -5274,7 +5277,7 @@ a:focus-visible,
 
 .empty-state__icon {
   width: 48px; height: 48px;
-  background: rgba(37,99,235,0.08);
+  background: var(--blue-soft);
   border-radius: 14px;
   display: inline-flex;
   align-items: center;

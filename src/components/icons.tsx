@@ -240,3 +240,24 @@ export function KeyboardIcon(props: IconProps) {
     </IconBase>
   );
 }
+
+export function CloseIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </IconBase>
+  );
+}
+
+export function RemindersIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4" />
+      <path d="M8 2v4" />
+      <path d="M3 10h18" />
+      <circle cx="12" cy="15" r="1" fill="currentColor" stroke="none" />
+    </IconBase>
+  );
+}
