@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
+import { DashboardIcon } from '@/components/icons';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { buildBudgetSummary, buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
 import { buildCommandCenter, buildFieldTools } from '@/lib/xbarGrowth';
@@ -250,6 +251,7 @@ export default function Dashboard() {
         <div className="dashboard-grid dashboard-grid--primary">
           <Panel eyebrow="Ranch" title="Start the ranch desk">
             <EmptyState
+              icon={DashboardIcon}
               title="No records yet"
               description="Create the first horse, upload a packet, or load the ranch forecast to start working."
               action={
