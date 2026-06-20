@@ -1414,3 +1414,345 @@ html body #root .xbar-command-main .ownership-hero .button[aria-disabled='true']
   color: var(--linear-muted-strong) !important;
   opacity: 1 !important;
 }
+
+/* Production visual correction pass.
+   This is a light, Linear-aligned operating surface with contained motion. */
+html body #root .xbar-command-shell {
+  background: #f6f8fb !important;
+}
+
+html body #root .xbar-command-shell > aside[class*="bg-[#050b14]"] {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 248, 252, 0.96)) !important;
+  border-right: 1px solid rgba(86, 100, 118, 0.2) !important;
+  box-shadow: 18px 0 46px rgba(15, 23, 42, 0.045), inset -1px 0 0 rgba(255, 255, 255, 0.92) !important;
+}
+
+html body #root .xbar-sidebar-brand {
+  min-height: 58px;
+  padding-bottom: 2px;
+}
+
+html body #root .xbar-sidebar-brand__mark {
+  overflow: hidden;
+  width: 48px !important;
+  height: 48px !important;
+  border: 1px solid rgba(86, 100, 118, 0.22) !important;
+  background: #ffffff !important;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
+}
+
+html body #root .xbar-sidebar-brand__mark svg {
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+}
+
+html body #root .xbar-sidebar-brand__copy div:first-child {
+  color: #0b1120 !important;
+  letter-spacing: 0.18em !important;
+}
+
+html body #root .xbar-sidebar-brand__copy div:last-child {
+  color: #526173 !important;
+  letter-spacing: 0.2em !important;
+}
+
+html body #root .xbar-command-shell > aside[class*="bg-[#050b14]"] > div:nth-child(2) {
+  border-radius: 8px !important;
+  background:
+    linear-gradient(rgba(15, 23, 42, 0.024) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.02) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(241, 245, 249, 0.82)) !important;
+  background-size: 38px 38px, 38px 38px, auto !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.96) !important;
+}
+
+html body #root .xbar-command-shell > aside[class*="bg-[#050b14]"] a.group {
+  min-height: 39px;
+  border-radius: 6px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html body #root .xbar-command-shell > aside[class*="bg-[#050b14]"] a.group:not([aria-current="page"]) {
+  border-left-color: transparent !important;
+}
+
+html body #root .xbar-command-shell > aside[class*="bg-[#050b14]"] a.group:hover {
+  background: rgba(30, 115, 232, 0.065) !important;
+  border-left-color: rgba(30, 115, 232, 0.2) !important;
+}
+
+html body #root .xbar-command-shell > aside[class*="bg-[#050b14]"] a.group[aria-current="page"] {
+  border-left-color: #1e73e8 !important;
+  background: linear-gradient(90deg, rgba(30, 115, 232, 0.14), rgba(255, 255, 255, 0.92)) !important;
+  color: #0b1120 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.96), 0 8px 22px rgba(30, 115, 232, 0.08) !important;
+}
+
+html body #root .xbar-command-topbar {
+  min-height: 64px;
+  background: rgba(255, 255, 255, 0.9) !important;
+  border-bottom: 1px solid rgba(86, 100, 118, 0.18) !important;
+  box-shadow: 0 16px 44px -38px rgba(15, 23, 42, 0.48), inset 0 -1px 0 rgba(30, 115, 232, 0.08) !important;
+}
+
+html body #root .xbar-command-topbar input,
+html body #root .xbar-command-topbar button:not([class*="bg-[#1155dd]"]),
+html body #root .xbar-command-topbar [class*="rounded-md"]:not([class*="bg-[#1155dd]"]) {
+  border-color: rgba(86, 100, 118, 0.2) !important;
+  background: linear-gradient(180deg, #ffffff, #f6f8fb) !important;
+  color: #0b1120 !important;
+}
+
+html body #root .xbar-command-topbar button[class*="bg-[#1155dd]"],
+html body #root .xbar-command-main .xbar-home-action--primary,
+html body #root .xbar-command-main .button--primary {
+  background: linear-gradient(180deg, #1f7af2, #155fc5) !important;
+  border-color: rgba(21, 95, 197, 0.74) !important;
+  color: #ffffff !important;
+  box-shadow: 0 14px 30px rgba(30, 115, 232, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
+}
+
+html body #root .xbar-command-main .commercial-pressure {
+  display: grid !important;
+  grid-template-columns: 3px minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 18px !important;
+  min-height: 74px;
+  border: 1px solid rgba(86, 100, 118, 0.2) !important;
+  border-radius: 8px !important;
+  background:
+    linear-gradient(90deg, rgba(30, 115, 232, 0.11), rgba(255, 255, 255, 0.92) 32%, rgba(255, 255, 255, 0.96)),
+    linear-gradient(rgba(15, 23, 42, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.018) 1px, transparent 1px) !important;
+  background-size: auto, 42px 42px, 42px 42px !important;
+  box-shadow: 0 16px 44px rgba(15, 23, 42, 0.055), inset 0 1px 0 rgba(255, 255, 255, 0.94) !important;
+}
+
+html body #root .xbar-command-main .commercial-pressure::before {
+  content: "";
+  width: 3px;
+  grid-column: 1;
+  align-self: stretch;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #1f7af2, rgba(30, 115, 232, 0.2));
+}
+
+html body #root .xbar-command-main .commercial-pressure > div {
+  grid-column: 2;
+  display: grid;
+  gap: 4px;
+}
+
+html body #root .xbar-command-main .commercial-pressure .button {
+  grid-column: 3;
+  width: auto !important;
+  min-width: 188px !important;
+  white-space: nowrap !important;
+}
+
+html body #root .xbar-command-main .commercial-pressure strong {
+  color: #0b1120 !important;
+  letter-spacing: -0.01em;
+}
+
+html body #root .xbar-command-main .commercial-pressure span {
+  color: #526173 !important;
+}
+
+html body #root .xbar-command-main .xbar-home-atelier {
+  border-radius: 8px !important;
+  border: 1px solid rgba(86, 100, 118, 0.2) !important;
+  background:
+    linear-gradient(rgba(15, 23, 42, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.022) 1px, transparent 1px),
+    linear-gradient(116deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.96) 48%, rgba(239, 246, 255, 0.82) 100%) !important;
+  background-size: 72px 72px, 72px 72px, auto !important;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.085), inset 0 1px 0 rgba(255, 255, 255, 0.96) !important;
+}
+
+html body #root .xbar-command-main .xbar-home-atelier__brandline {
+  color: #1e73e8 !important;
+}
+
+html body #root .xbar-command-main .xbar-home-atelier__mark {
+  border-color: rgba(86, 100, 118, 0.22) !important;
+  background: #ffffff !important;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.09) !important;
+}
+
+html body #root .xbar-command-main .xbar-home-atelier h1 {
+  max-width: 10.5ch !important;
+  color: #080f1f !important;
+  font-size: clamp(3rem, 4.9vw, 5.25rem) !important;
+  line-height: 0.94 !important;
+  letter-spacing: -0.045em !important;
+}
+
+html body #root .xbar-command-main .xbar-home-atelier p {
+  color: #526173 !important;
+}
+
+html body #root .xbar-command-main .xbar-home-atelier__chips span,
+html body #root .xbar-command-main .xbar-home-action {
+  border-color: rgba(86, 100, 118, 0.2) !important;
+  background: rgba(255, 255, 255, 0.82) !important;
+  color: #1f2937 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+html body #root .xbar-command-main .xbar-home-atelier__visual {
+  min-height: 460px !important;
+  overflow: hidden !important;
+}
+
+html body #root .xbar-command-main .xbar-profile-carousel {
+  min-height: 460px !important;
+  perspective: 1100px;
+}
+
+html body #root .xbar-command-main .xbar-profile-card {
+  left: 50% !important;
+  right: auto !important;
+  top: 50% !important;
+  width: min(334px, calc(100% - 56px)) !important;
+  min-height: 134px !important;
+  padding: 16px 17px 18px !important;
+  border-color: rgba(86, 100, 118, 0.22) !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 253, 0.93)) !important;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.13), inset 0 1px 0 rgba(255, 255, 255, 0.94) !important;
+  animation: xbar-contained-profile-cycle 13.2s cubic-bezier(0.22, 1, 0.36, 1) infinite !important;
+  animation-delay: var(--card-delay) !important;
+}
+
+html body #root .xbar-command-main .xbar-profile-card:nth-child(1) {
+  --card-x: -222px;
+  --card-y: -152px;
+  --card-scale: 0.98;
+}
+
+html body #root .xbar-command-main .xbar-profile-card:nth-child(2) {
+  --card-x: -112px;
+  --card-y: -54px;
+  --card-scale: 1;
+}
+
+html body #root .xbar-command-main .xbar-profile-card:nth-child(3) {
+  --card-x: -204px;
+  --card-y: 48px;
+  --card-scale: 0.96;
+}
+
+html body #root .xbar-command-main .xbar-profile-card:nth-child(4) {
+  --card-x: -96px;
+  --card-y: 148px;
+  --card-scale: 0.92;
+}
+
+@keyframes xbar-contained-profile-cycle {
+  0% {
+    opacity: 0;
+    filter: blur(1px);
+    transform: translate3d(calc(var(--card-x) + 46px), calc(var(--card-y) + 18px), -90px) scale(calc(var(--card-scale) - 0.04));
+  }
+  12%,
+  54% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate3d(var(--card-x), var(--card-y), 0) scale(var(--card-scale));
+  }
+  72% {
+    opacity: 0.52;
+    filter: blur(0.3px);
+    transform: translate3d(calc(var(--card-x) - 28px), calc(var(--card-y) - 10px), -54px) scale(calc(var(--card-scale) - 0.035));
+  }
+  100% {
+    opacity: 0;
+    filter: blur(1px);
+    transform: translate3d(calc(var(--card-x) - 54px), calc(var(--card-y) - 20px), -110px) scale(calc(var(--card-scale) - 0.05));
+  }
+}
+
+html body #root .xbar-command-main .xbar-home-runway div {
+  border-color: rgba(86, 100, 118, 0.2) !important;
+  background: rgba(255, 255, 255, 0.72) !important;
+}
+
+@media (max-width: 1180px) {
+  html body #root .xbar-command-main .xbar-profile-card:nth-child(1) { --card-x: -50%; --card-y: -148px; }
+  html body #root .xbar-command-main .xbar-profile-card:nth-child(2) { --card-x: -50%; --card-y: -50px; }
+  html body #root .xbar-command-main .xbar-profile-card:nth-child(3) { --card-x: -50%; --card-y: 50px; }
+  html body #root .xbar-command-main .xbar-profile-card:nth-child(4) { --card-x: -50%; --card-y: 148px; }
+}
+
+@media (max-width: 720px) {
+  html body #root .xbar-command-main {
+    padding-inline: 14px !important;
+  }
+
+  html body #root .xbar-command-main .xbar-home-atelier {
+    padding: 22px 18px 28px !important;
+    padding-bottom: 28px !important;
+  }
+
+  html body #root .xbar-command-main .commercial-pressure {
+    grid-template-columns: 1fr !important;
+    min-height: 0;
+    gap: 12px !important;
+    padding: 15px 16px !important;
+  }
+
+  html body #root .xbar-command-main .commercial-pressure::before {
+    grid-column: 1;
+    width: auto;
+    height: 3px;
+  }
+
+  html body #root .xbar-command-main .commercial-pressure > div,
+  html body #root .xbar-command-main .commercial-pressure .button {
+    grid-column: 1;
+  }
+
+  html body #root .xbar-command-main .commercial-pressure .button {
+    min-height: 42px;
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  html body #root .xbar-command-main .xbar-home-atelier__actions {
+    margin-bottom: 0 !important;
+  }
+
+  html body #root .xbar-command-main .xbar-home-atelier h1 {
+    max-width: 10ch !important;
+    font-size: clamp(2.7rem, 12.2vw, 3.45rem) !important;
+  }
+
+  html body #root .xbar-command-main .xbar-home-atelier__visual {
+    min-height: 396px !important;
+  }
+
+  html body #root .xbar-command-main .xbar-profile-carousel {
+    min-height: 386px !important;
+  }
+
+  html body #root .xbar-command-main .xbar-profile-card {
+    width: min(292px, calc(100vw - 70px)) !important;
+  }
+
+  html body #root .xbar-command-main .xbar-profile-card:nth-child(1) { --card-x: -50%; --card-y: -132px; }
+  html body #root .xbar-command-main .xbar-profile-card:nth-child(2) { --card-x: -50%; --card-y: -44px; }
+  html body #root .xbar-command-main .xbar-profile-card:nth-child(3) { --card-x: -50%; --card-y: 46px; }
+  html body #root .xbar-command-main .xbar-profile-card:nth-child(4) { --card-x: -50%; --card-y: 134px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html body #root .xbar-command-main .xbar-profile-card {
+    animation: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+    transform: translate3d(var(--card-x), var(--card-y), 0) scale(var(--card-scale)) !important;
+  }
+}

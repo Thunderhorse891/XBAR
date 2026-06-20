@@ -45,7 +45,7 @@
   aspect-ratio: 1 / 1;
   border-radius: 46px;
   border: 1px solid rgba(170, 190, 205, 0.12);
-  background: url('/brand/xbar-app-icon.svg') center / contain no-repeat;
+  background: url('/brand/xbar_public_assets/public/main%20logo.png') center / contain no-repeat;
   box-shadow: 0 38px 110px rgba(0, 0, 0, 0.52), 0 0 52px rgba(31, 157, 255, 0.12);
 }
 
