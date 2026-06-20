@@ -17,7 +17,7 @@
   height: 220px;
   z-index: 1;
   pointer-events: none;
-  background: url('/xbar-logo-sleek.png') center/contain no-repeat;
+  background: url('/brand/xbar-mark.svg') center/contain no-repeat;
   opacity: 0.06;
   transform: rotate(12deg);
 }
@@ -29,8 +29,8 @@
   z-index: 2;
   pointer-events: none;
   background:
-    linear-gradient(90deg, rgba(237, 242, 255, 0.94) 0%, rgba(238, 246, 255, 0.78) 54%, rgba(238, 246, 255, 0.5) 100%),
-    linear-gradient(0deg, rgba(237, 242, 255, 0.7), rgba(237, 242, 255, 0.18));
+    linear-gradient(90deg, rgba(224, 234, 255, 0.94) 0%, rgba(235, 244, 255, 0.78) 54%, rgba(235, 244, 255, 0.5) 100%),
+    linear-gradient(0deg, rgba(224, 234, 255, 0.7), rgba(224, 234, 255, 0.18));
 }
 
 .ownership-hero__copy {

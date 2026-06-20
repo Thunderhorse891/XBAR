@@ -974,7 +974,7 @@ a:focus-visible,
   top: -32px;
   width: 200px;
   height: 200px;
-  background: url('/xbar-logo-sleek.png') center/contain no-repeat;
+  background: url('/brand/xbar-mark.svg') center/contain no-repeat;
   opacity: 0.05;
   pointer-events: none;
   transform: rotate(10deg);
