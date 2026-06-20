@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
+import { ExpensesIcon } from '@/components/icons';
 import { buildBudgetSummary } from '@/lib/dashboardOps';
 import { formatCompactCurrency, formatCurrency, formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
@@ -99,7 +100,7 @@ export default function Expenses() {
       <div className="surface-hero surface-hero--dark">
         <div className="surface-hero__top">
           <div>
-            <span className="surface-hero__eyebrow">Budget & Expenses</span>
+            <span className="surface-hero__eyebrow">Budget &amp; Expenses</span>
             <h1 className="surface-hero__title">Expenses</h1>
             <div className="surface-hero__actions">
               <button className="button button--primary" type="button" onClick={() => document.getElementById('expense-intake')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
@@ -210,7 +211,11 @@ export default function Expenses() {
           ) : expenseReceipts.length ? (
             <EmptyState compact title="No receipts match" description="Adjust the search or category filter." />
           ) : (
-            <EmptyState title="Start with the receipts already in your truck, tack room, and inbox" description="Feed, vet, farrier, travel, and supply costs become easier to trust once every receipt has a place." />
+            <EmptyState
+              icon={ExpensesIcon}
+              title="Start with the receipts already in your truck, tack room, and inbox"
+              description="Feed, vet, farrier, travel, and supply costs become easier to trust once every receipt has a place."
+            />
           )}
         </section>
 

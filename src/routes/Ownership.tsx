@@ -5,6 +5,7 @@ import { useConfirm } from '@/components/ConfirmDialog';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Pill, SurfaceTabs } from '@/components/app-ui';
+import { OwnershipIcon } from '@/components/icons';
 import { formatDateLabel, formatDateTimeLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
@@ -347,7 +348,11 @@ export default function Ownership() {
             </div>
           ) : (
             <div className="ownership-empty-state">
-              <EmptyState title="Start by adding an owner, linking a horse, and uploading the documents that prove the record." description="Owner names, shares, and transfer notes will appear here once the first horse record exists." />
+              <EmptyState
+                icon={OwnershipIcon}
+                title="Start by adding an owner, linking a horse, and uploading the documents that prove the record."
+                description="Owner names, shares, and transfer notes will appear here once the first horse record exists."
+              />
               <Link className="button button--primary" to="/horses?new=1">Add first horse</Link>
             </div>
           )}
@@ -506,7 +511,11 @@ export default function Ownership() {
           <EmptyState compact title="No ownership rows match" description="Clear the search or choose a different transfer status." />
         ) : (
           <div className="ownership-empty-state">
-            <EmptyState title="Start by adding an owner, linking a horse, and uploading the documents that prove the record." description="The relationship table will show owner shares, sale files, and transfer status once horse records exist." />
+            <EmptyState
+              icon={OwnershipIcon}
+              title="Start by adding an owner, linking a horse, and uploading the documents that prove the record."
+              description="The relationship table will show owner shares, sale files, and transfer status once horse records exist."
+            />
             <Link className="button button--primary" to="/horses?new=1">Add first horse</Link>
           </div>
         )}
@@ -610,7 +619,7 @@ export default function Ownership() {
               </div>
             </div>
           ) : (
-            <EmptyState title="No ownership record loaded" description="Select a horse to review the transfer chain." />
+            <EmptyState icon={OwnershipIcon} title="No ownership record loaded" description="Select a horse to review the transfer chain." />
           )}
         </section>
       </div>}
