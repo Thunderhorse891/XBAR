@@ -4,6 +4,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { RequireCloudAuth } from './components/RequireCloudAuth';
 import { RequireWorkspaceSetup } from './components/RequireWorkspaceSetup';
 import { ToastViewport } from './components/ToastViewport';
+import { XbarMark } from './components/BrandMark';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
 import { isSupabaseConfigured } from './lib/platformConfig';
 import { useCloudStore } from './store/useCloudStore';
@@ -91,7 +92,14 @@ function SmartRoot() {
   }
 
   if (status === 'loading') {
-    return <div className="app-loading-shell">Checking access...</div>;
+    return (
+      <div className="app-loading-shell">
+        <div className="app-loading-shell__inner">
+          <XbarMark tone="color" className="app-loading-shell__mark" />
+          <span className="app-loading-shell__label">Checking access</span>
+        </div>
+      </div>
+    );
   }
 
   if (!session) {
@@ -132,7 +140,7 @@ export default function App() {
       <ErrorBoundary>
         <ToastViewport />
         <RouteTelemetry />
-        <Suspense fallback={<div className="app-loading-shell">Loading...</div>}>
+        <Suspense fallback={<div className="app-loading-shell"><div className="app-loading-shell__inner"><XbarMark tone="color" className="app-loading-shell__mark" /><span className="app-loading-shell__label">Loading</span></div></div>}>
           <Routes>
             <Route path="/profiles/:id" element={<BuyerProfile />} />
             <Route path="/login" element={<Login />} />

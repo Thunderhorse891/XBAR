@@ -94,9 +94,38 @@ body {
   place-items: center;
   background: var(--bg);
   color: var(--text);
-  font-size: 0.92rem;
-  letter-spacing: 0.08em;
+}
+
+.app-loading-shell__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.app-loading-shell__mark {
+  width: 48px;
+  height: 48px;
+  animation: app-loading-pulse 2s ease-in-out infinite;
+}
+
+.app-loading-shell__label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
+  color: var(--muted);
+  animation: app-loading-fade 2s ease-in-out infinite;
+}
+
+@keyframes app-loading-pulse {
+  0%, 100% { opacity: 0.5; transform: scale(0.96); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes app-loading-fade {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.75; }
 }
 
 a {
