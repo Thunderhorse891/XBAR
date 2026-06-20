@@ -3308,9 +3308,9 @@ a:focus-visible,
   gap: 8px;
 }
 
-/* Brand mark glow (color mode only) */
+/* Brand mark subtle glow — light bg safe, reduced intensity */
 .xbar-mark--glow {
-  filter: drop-shadow(0 0 8px rgba(45, 111, 255, 0.6));
+  filter: drop-shadow(0 0 5px rgba(37, 99, 235, 0.22));
 }
 
 /* Workspace help panel */
