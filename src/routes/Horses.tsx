@@ -393,23 +393,38 @@ export default function Horses() {
     }
   };
 
+  const totalHorses = horses.length;
+  const activeSales = horses.filter(h => h.status === 'Sale Prep').length;
+  const totalInsured = horses.reduce((sum, h) => sum + (h.insuredValue ?? 0), 0);
+
   return (
     <>
-      <div className="surface-hero surface-hero--dark">
-        <div className="surface-hero__top">
-          <div>
-            <span className="surface-hero__eyebrow">Horse Operations</span>
+      <div className="horses-hero">
+        <div className="horses-hero__left">
+          <div className="section-eyebrow">Roster</div>
+          <h1 className="horses-hero__title">Horse Operations</h1>
+          <p className="horses-hero__sub">Active roster, sale pipeline, and breeding program — all in one place.</p>
+        </div>
+        <div className="horses-hero__stats">
+          <div className="horses-stat">
+            <span className="horses-stat__value">{totalHorses}</span>
+            <span className="horses-stat__label">Total Horses</span>
           </div>
-          <div className="surface-hero__stats">
-            <div className="surface-hero__stat"><span>Total horses</span><strong>{horses.length}</strong></div>
-            <div className="surface-hero__stat"><span>Medical watch</span><strong className={horses.filter((h) => h.status === 'Medical Review').length ? 'text-rose' : 'text-emerald'}>{horses.filter((h) => h.status === 'Medical Review').length}</strong></div>
-            <div className="surface-hero__stat"><span>For sale</span><strong>{horses.filter((h) => h.status === 'Sale Prep').length}</strong></div>
-            <div className="surface-hero__stat"><span>Packet ready</span><strong className="text-emerald">{horses.filter((h) => h.readiness.packetStatus === 'Ready').length}</strong></div>
+          <div className="horses-stat">
+            <span className="horses-stat__value">{activeSales || '—'}</span>
+            <span className="horses-stat__label">Active Sales</span>
           </div>
-          <div className="inline-actions">
-            <Link to="/documents?upload=1" className="button button--ghost button--compact">Upload docs</Link>
-            <button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>New horse</button>
+          <div className="horses-stat">
+            <span className="horses-stat__value">{totalInsured ? formatCompactCurrency(totalInsured) : '—'}</span>
+            <span className="horses-stat__label">Total Insured</span>
           </div>
+        </div>
+      </div>
+
+      <div className="horses-toolbar">
+        <div className="inline-actions">
+          <Link to="/documents?upload=1" className="button button--ghost button--compact">Upload docs</Link>
+          <button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>New horse</button>
         </div>
       </div>
 

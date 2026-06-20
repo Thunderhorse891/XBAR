@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useConfirm } from '@/components/ConfirmDialog';
-import { PageHeader, Panel, Pill } from '@/components/app-ui';
+import { Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
 import { isBillingConfigured, isFacebookSharingConfigured, isRelationalCloudEnabled, isSupabaseConfigured, isSnapshotFallbackEnabled } from '@/lib/platformConfig';
@@ -227,10 +227,11 @@ export default function Settings() {
   return (
     <>
       {confirmDialog}
-      <PageHeader
-        eyebrow="Settings"
-        title="Settings"
-      />
+      <div className="settings-hero">
+        <div className="section-eyebrow">Workspace</div>
+        <h1 className="settings-hero__title">Settings</h1>
+        <p className="settings-hero__sub">Manage your ranch profile, team access, cloud sync, and integrations.</p>
+      </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel eyebrow="Cloud" title="Cloud">
