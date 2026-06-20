@@ -118,38 +118,45 @@ const PLANS = [
   {
     name: 'Starter',
     price: '$29',
-    desc: 'One operator, complete records.',
-    specs: ['1 seat', '250 documents', '25 GB storage'],
+    desc: 'Complete records for a solo operator or small hobby ranch.',
+    specs: ['1 seat', '500 documents', '50 GB storage'],
     featured: false,
-    cta: 'Get started',
+    cta: 'Get started free',
+    ctaHref: '/login?mode=signup',
+    highlight: ['Horse records & ownership', 'Health & care tracking', 'Document vault', 'Photo gallery & media', '14-day free trial'],
     features: [true, true, true, true, false, false, false, false, false, false],
   },
   {
     name: 'Professional',
     price: '$79',
-    desc: 'Team-ready with sale listings.',
+    desc: 'Team-ready with sale listings and branded packets.',
     specs: ['5 seats', '1,000 documents', '100 GB storage'],
     featured: true,
     cta: 'Start free trial',
+    ctaHref: '/login?mode=signup',
     highlight: ['Team roles & permissions', 'Sale listings & packets', 'Document sharing', 'Breeding program', 'Priority support'],
     features: [true, true, true, true, true, true, true, true, false, false],
   },
   {
     name: 'Ranch Ops',
     price: '$199',
-    desc: 'Full ranch management suite.',
+    desc: 'Full ranch management — assets, breeding, and full team access.',
     specs: ['20 seats', '5,000 documents', '500 GB storage'],
     featured: false,
-    cta: 'Get started',
+    cta: 'Get started free',
+    ctaHref: '/login?mode=signup',
+    highlight: ['Everything in Professional', 'Ranch assets & inventory', 'Advanced analytics', 'Multi-horse breeding tracking', 'Custom export & reporting'],
     features: [true, true, true, true, true, true, true, true, true, false],
   },
   {
     name: 'Enterprise',
     price: '$499',
-    desc: 'Multi-operation, custom integrations.',
+    desc: 'Multi-operation, dedicated support, and custom integrations.',
     specs: ['60 seats', '20,000 documents', '2.5 TB storage'],
     featured: false,
-    cta: 'Contact us',
+    cta: 'Contact sales',
+    ctaHref: 'mailto:sales@xbar.io?subject=Enterprise%20Plan%20Inquiry',
+    highlight: ['Dedicated account manager', 'Custom integrations & API', '1-hour support SLA', 'Custom branding & white-label', 'Bulk data import & migration'],
     features: [true, true, true, true, true, true, true, true, true, true],
   },
 ];
@@ -296,7 +303,7 @@ export default function Landing() {
             </p>
             <div className="site-hero-actions sr" data-delay="3">
               <Link to="/login?mode=signup" className="site-btn-primary">
-                Start your 14-day trial
+                Get started free — 14 days
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }} aria-hidden="true">
                   <path d="M3 8h10M9 4l4 4-4 4" />
                 </svg>
@@ -490,7 +497,7 @@ export default function Landing() {
               <div className="site-mid-cta-headline">Join 400+ operations already running XBAR.</div>
             </div>
             <Link to="/login?mode=signup" className="site-btn-primary sr" data-delay="2">
-              Start free — no card required
+              Get started free — no card required
             </Link>
           </div>
         </div>
@@ -558,9 +565,9 @@ export default function Landing() {
                 <ul className="mkt-pricing-specs">
                   {plan.specs.map((s) => <li key={s}>{s}</li>)}
                 </ul>
-                {'highlight' in plan && plan.highlight ? (
+                {plan.highlight ? (
                   <ul className="mkt-pricing-highlights">
-                    {(plan.highlight as string[]).map((f) => (
+                    {plan.highlight.map((f) => (
                       <li key={f}>
                         <span className="mkt-pricing-check" aria-hidden="true">{CHECK_ICON}</span>
                         {f}
@@ -568,12 +575,21 @@ export default function Landing() {
                     ))}
                   </ul>
                 ) : null}
-                <Link
-                  to="/login?mode=signup"
-                  className={`mkt-pricing-cta${plan.featured ? ' mkt-pricing-cta--primary' : ''}`}
-                >
-                  {plan.cta}
-                </Link>
+                {plan.ctaHref.startsWith('mailto') ? (
+                  <a
+                    href={plan.ctaHref}
+                    className={`mkt-pricing-cta${plan.featured ? ' mkt-pricing-cta--primary' : ''}`}
+                  >
+                    {plan.cta}
+                  </a>
+                ) : (
+                  <Link
+                    to={plan.ctaHref}
+                    className={`mkt-pricing-cta${plan.featured ? ' mkt-pricing-cta--primary' : ''}`}
+                  >
+                    {plan.cta}
+                  </Link>
+                )}
               </div>
             ))}
           </div>
@@ -630,7 +646,7 @@ export default function Landing() {
               Start with a 14-day trial. No credit card required. Cancel any time.
             </p>
             <Link to="/login?mode=signup" className="site-btn-primary sr" data-delay="2">
-              Start free trial
+              Get started free — 14 days
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }} aria-hidden="true">
                 <path d="M3 8h10M9 4l4 4-4 4" />
               </svg>
