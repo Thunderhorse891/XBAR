@@ -285,8 +285,8 @@ export default function Settings() {
             )
           ) : (
             <div className="bullet-list">
-              <div className="bullet-list__item">Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to turn on cloud auth and sync.</div>
-              <div className="bullet-list__item">Until then, this ranch data stays local to this browser.</div>
+              <div className="bullet-list__item">Cloud sync is not configured for this deployment. Contact your administrator to enable cloud authentication.</div>
+              <div className="bullet-list__item">Your ranch data is saved locally in this browser until cloud sync is enabled.</div>
             </div>
           )}
         </Panel>

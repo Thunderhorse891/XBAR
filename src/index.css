@@ -5639,3 +5639,36 @@ a:focus-visible,
 .bos-overlay {
   background: rgba(0, 0, 0, 0.30);
 }
+
+/* ── Print styles — bill of sale & legal documents ──────────────────────── */
+
+@media print {
+  .app-shell,
+  .main-layout,
+  nav,
+  .sidebar,
+  .topbar,
+  .drawer,
+  .bos-overlay,
+  .mobile-nav {
+    display: none !important;
+  }
+
+  .bos-document {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  @page {
+    margin: 1.5cm;
+    size: A4;
+  }
+}
