@@ -5,7 +5,7 @@ type BrandMarkProps = SVGProps<SVGSVGElement> & {
   tone?: 'color' | 'mono';
 };
 
-const XBAR_MAIN_LOGO_SRC = '/brand/xbar-website-icon.png.png';
+export const XBAR_MAIN_LOGO_SRC = '/brand/xbar_public_assets/public/main%20logo.png';
 
 export function XbarMark({ title, tone = 'color', ...props }: BrandMarkProps) {
   return (
@@ -18,7 +18,7 @@ export function XbarMark({ title, tone = 'color', ...props }: BrandMarkProps) {
         y="0"
         width="64"
         height="64"
-        preserveAspectRatio="xMidYMid slice"
+        preserveAspectRatio="xMidYMid meet"
       />
     </svg>
   );

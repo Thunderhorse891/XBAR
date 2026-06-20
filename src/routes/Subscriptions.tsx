@@ -12,6 +12,7 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useWorkspaceReady, useXbarStore } from '@/store/useXbarStore';
 import type { SubscriptionTier } from '@/types/xbar';
+import { XBAR_MAIN_LOGO_SRC } from '@/components/BrandMark';
 import './subscriptionExperience.css';
 
 const tiers: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
@@ -350,7 +351,7 @@ export default function Subscriptions() {
       <div className="subscription-surface-x subscription-surface-x--footer" aria-hidden="true" />
       <header className="subscription-nav">
         <Link className="subscription-brand" to="/landing" aria-label="XBAR overview">
-          <img src="/brand/xbar-mark.svg" alt="" />
+          <img src={XBAR_MAIN_LOGO_SRC} alt="" />
           <span>XBAR</span>
         </Link>
         <nav aria-label="Subscription sections">
@@ -370,7 +371,7 @@ export default function Subscriptions() {
       <footer className="subscription-footer">
         <div>
           <Link className="subscription-brand" to="/landing">
-            <img src="/brand/xbar-mark.svg" alt="" />
+            <img src={XBAR_MAIN_LOGO_SRC} alt="" />
             <span>XBAR</span>
           </Link>
           <p>Copyright 2026 XBAR LLC. Precision horse operations.</p>

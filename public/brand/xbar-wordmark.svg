@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 180" role="img" aria-labelledby="title">
   <title id="title">XBAR wordmark</title>
   <rect width="720" height="180" rx="28" fill="#050910"/>
-  <image href="xbar-mark.svg" x="46" y="34" width="112" height="112"/>
+  <image href="xbar_public_assets/public/main%20logo.png" x="46" y="34" width="112" height="112"/>
   <text x="190" y="109" fill="#f8fbff" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="70" font-weight="800" letter-spacing="15">XBAR</text>
   <text x="194" y="139" fill="#8fa5b8" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" letter-spacing="8">RANCH OPERATING SYSTEM</text>
   <path d="M195 150h378" stroke="#3f8cff" stroke-linecap="round" stroke-width="3" opacity="0.58"/>

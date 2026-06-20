@@ -283,12 +283,12 @@ export default function MainLayout() {
   return (
     <div className="xbar-command-shell min-h-screen lg:grid lg:grid-cols-[264px,1fr]">
       <aside className="hidden min-h-screen flex-col gap-6 border-r border-[#0e1e32] bg-[#050b14] px-5 py-6 text-[#c2d4e8] lg:flex">
-        <div className="flex items-center gap-3">
-          <div className="flex h-[52px] w-[52px] items-center justify-center rounded-lg border border-[#1a2e46] bg-[#050910] p-1.5 shadow-[0_14px_32px_rgba(47,141,255,0.18)]">
+        <div className="xbar-sidebar-brand flex items-center gap-3">
+          <div className="xbar-sidebar-brand__mark flex h-[52px] w-[52px] items-center justify-center rounded-lg border border-[#1a2e46] bg-[#050910] p-1.5 shadow-[0_14px_32px_rgba(47,141,255,0.18)]">
             <XbarMark title="XBAR logo" tone="mono" className="h-full w-full" />
           </div>
-          <div className="min-w-0">
-            <div className="truncate text-[1.04rem] font-extrabold uppercase tracking-[0.14em] text-white">{workspaceProfile.businessName || 'XBAR'}</div>
+          <div className="xbar-sidebar-brand__copy min-w-0">
+            <div className="text-[1.04rem] font-extrabold uppercase tracking-[0.14em] text-white">XBAR</div>
             <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#52708d]">Private ranch command</div>
           </div>
         </div>
