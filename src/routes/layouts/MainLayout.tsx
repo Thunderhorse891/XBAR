@@ -319,7 +319,7 @@ export default function MainLayout() {
               className={classNames(
                 'rounded-md border px-2 py-1.5',
                 pendingTransfers > 0
-                  ? 'border-[rgba(248,81,73,0.25)] bg-[rgba(248,81,73,0.08)] text-[#F85149]'
+                  ? 'border-[rgba(220,38,38,0.25)] bg-[var(--rose-soft)] text-[var(--rose)]'
                   : 'border-[var(--border)] bg-[var(--bg)] text-[var(--muted)]',
               )}
             >
@@ -329,7 +329,7 @@ export default function MainLayout() {
               className={classNames(
                 'rounded-md border px-2 py-1.5',
                 pendingReview > 0
-                  ? 'border-[rgba(210,153,34,0.25)] bg-[rgba(210,153,34,0.08)] text-[#D29922]'
+                  ? 'border-[rgba(217,119,6,0.25)] bg-[var(--amber-soft)] text-[var(--amber)]'
                   : 'border-[var(--border)] bg-[var(--bg)] text-[var(--muted)]',
               )}
             >
@@ -382,7 +382,7 @@ export default function MainLayout() {
                 className={classNames(
                   'inline-flex min-h-[22px] items-center rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em]',
                   pendingReview || pendingTransfers
-                    ? 'border-[rgba(210,153,34,0.25)] bg-[rgba(210,153,34,0.08)] text-[#D29922]'
+                    ? 'border-[rgba(217,119,6,0.25)] bg-[var(--amber-soft)] text-[var(--amber)]'
                     : 'border-[rgba(47,141,255,0.2)] bg-[rgba(47,141,255,0.08)] text-[var(--blue)]',
                 )}
               >

@@ -184,7 +184,7 @@ export default function HorseDetail() {
     packet.buyerProfileStatus === 'Live'
       ? 'border border-[rgba(47,141,255,0.15)] bg-[rgba(47,141,255,0.08)] text-[var(--blue)]'
       : packet.buyerProfileStatus === 'Blocked'
-        ? 'border border-[rgba(248,81,73,0.15)] bg-[rgba(248,81,73,0.08)] text-[#F85149]'
+        ? 'border border-[rgba(220,38,38,0.15)] bg-[var(--rose-soft)] text-[var(--rose)]'
         : packet.buyerProfileStatus === 'Needs Review'
           ? 'border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--muted)]'
           : 'border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)]';
