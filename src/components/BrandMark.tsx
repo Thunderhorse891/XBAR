@@ -2,14 +2,21 @@ import type { SVGProps } from 'react';
 
 type BrandMarkProps = SVGProps<SVGSVGElement> & {
   title?: string;
-  tone?: 'color' | 'mono';
+  tone?: 'color' | 'mono' | 'light';
 };
 
 export function XbarMark({ title, tone = 'color', ...props }: BrandMarkProps) {
   const mono = tone === 'mono';
+  const light = tone === 'light';
 
   return (
-    <svg viewBox="0 0 64 64" role={title ? 'img' : undefined} aria-hidden={title ? undefined : true} className={mono ? undefined : 'xbar-mark--glow'} {...props}>
+    <svg
+      viewBox="0 0 64 64"
+      role={title ? 'img' : undefined}
+      aria-hidden={title ? undefined : true}
+      className={!mono && !light ? 'xbar-mark--glow' : undefined}
+      {...props}
+    >
       {title ? <title>{title}</title> : null}
       <defs>
         <linearGradient id="xbar-mark-steel" x1="9" x2="55" y1="7" y2="58" gradientUnits="userSpaceOnUse">
@@ -31,11 +38,17 @@ export function XbarMark({ title, tone = 'color', ...props }: BrandMarkProps) {
           </feMerge>
         </filter>
       </defs>
-      <g fill="none" stroke={mono ? 'currentColor' : 'rgba(248,251,255,0.62)'} strokeWidth="1.15" vectorEffect="non-scaling-stroke">
+      {/* Decorative chevron strokes — near-white on dark, dark on light */}
+      <g
+        fill="none"
+        stroke={mono ? 'currentColor' : light ? 'rgba(0,0,0,0.15)' : 'rgba(248,251,255,0.62)'}
+        strokeWidth="1.15"
+        vectorEffect="non-scaling-stroke"
+      >
         <path d="M11 16.5 25.8 32 11 47.5" opacity="0.45" />
         <path d="M53 16.5 38.2 32 53 47.5" opacity="0.45" />
       </g>
-      <g filter={mono ? undefined : 'url(#xbar-mark-glow)'}>
+      <g filter={!mono && !light ? 'url(#xbar-mark-glow)' : undefined}>
         <path
           d="M9.5 10.5h11.8l10.9 13.9 11-13.9h11.3L39.8 31.9l15 21.6H43.1L32.2 39.2 21.3 53.5H9.6l15-21.6L9.5 10.5Z"
           fill={mono ? 'currentColor' : 'url(#xbar-mark-steel)'}
@@ -58,20 +71,21 @@ export function XbarMark({ title, tone = 'color', ...props }: BrandMarkProps) {
       <path
         d="M27.4 23.7c4.8-6.8 12.5-8 18.2-3.1-4.4.1-7.3 1.6-9.7 5.2"
         fill="none"
-        stroke={mono ? 'currentColor' : '#d9f4ff'}
+        stroke={mono ? 'currentColor' : light ? '#3D8EFF' : '#d9f4ff'}
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth="2"
         opacity="0.86"
         vectorEffect="non-scaling-stroke"
       />
-      <circle cx="45.6" cy="20.4" r="1.15" fill={mono ? 'currentColor' : '#d9f4ff'} opacity="0.9" />
+      <circle cx="45.6" cy="20.4" r="1.15" fill={mono ? 'currentColor' : light ? '#3D8EFF' : '#d9f4ff'} opacity="0.9" />
     </svg>
   );
 }
 
 export function XbarWordmark({ title = 'XBAR', tone = 'color', ...props }: BrandMarkProps) {
   const mono = tone === 'mono';
+  const light = tone === 'light';
 
   return (
     <svg viewBox="0 0 236 64" role={title ? 'img' : undefined} aria-hidden={title ? undefined : true} {...props}>
@@ -80,7 +94,7 @@ export function XbarWordmark({ title = 'XBAR', tone = 'color', ...props }: Brand
       <text
         x="82"
         y="39"
-        fill={mono ? 'currentColor' : '#f8fbff'}
+        fill={mono || light ? 'currentColor' : '#f8fbff'}
         fontFamily="'Outfit', 'Avenir Next', sans-serif"
         fontSize="28"
         fontWeight="800"

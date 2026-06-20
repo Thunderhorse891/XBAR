@@ -2,12 +2,9 @@
   margin: -4px -2px 0;
   padding: clamp(16px, 2.2vw, 28px);
   border-radius: 10px;
-  background:
-    radial-gradient(circle at 14% 6%, rgba(83, 132, 178, 0.22), transparent 28%),
-    radial-gradient(circle at 92% 2%, rgba(173, 148, 102, 0.14), transparent 26%),
-    linear-gradient(135deg, #07090d 0%, #121a24 52%, #080c12 100%);
-  color: #f8f4ec;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 28px 70px rgba(7, 12, 18, 0.2);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 .ops-experience .button--primary {
@@ -26,9 +23,9 @@
 }
 
 .ops-experience .button--ghost {
-  border-color: rgba(209, 224, 238, 0.24);
-  background: rgba(255, 255, 255, 0.06);
-  color: #f8f4ec;
+  border-color: var(--border);
+  background: var(--surface-strong);
+  color: var(--text);
 }
 
 .ops-hero {
@@ -38,12 +35,10 @@
   align-items: stretch;
   min-height: 320px;
   overflow: hidden;
-  border: 1px solid rgba(210, 226, 239, 0.17);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background:
-    linear-gradient(120deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02)),
-    rgba(10, 15, 21, 0.84);
-  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.25);
+  background: linear-gradient(135deg, #EDF2FF 0%, #EEF6FF 100%);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.07);
 }
 
 .ops-hero > div:first-child {
@@ -53,7 +48,7 @@
 .ops-hero h1 {
   max-width: 800px;
   margin: 18px 0 0;
-  color: #fffaf2;
+  color: var(--text);
   font-size: clamp(2.35rem, 5vw, 5rem);
   line-height: 0.95;
   letter-spacing: 0;
@@ -62,14 +57,14 @@
 .ops-hero p {
   max-width: 690px;
   margin: 20px 0 0;
-  color: rgba(248, 244, 236, 0.74);
+  color: var(--muted-strong);
   font-size: clamp(1rem, 1.25vw, 1.18rem);
   line-height: 1.55;
 }
 
 .ops-kicker,
 .section-eyebrow {
-  color: #a9c8e7;
+  color: var(--blue);
   font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.15em;
@@ -88,16 +83,15 @@
   align-content: end;
   gap: 8px;
   padding: 28px;
-  border-left: 1px solid rgba(210, 226, 239, 0.14);
-  background:
-    radial-gradient(circle at 50% 20%, rgba(93, 148, 203, 0.2), transparent 38%),
-    rgba(6, 10, 15, 0.78);
+  border-left: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(8px);
 }
 
 .ops-hero__ledger span,
 .ops-hero__ledger small,
 .ops-hero__mini-grid span {
-  color: rgba(248, 244, 236, 0.62);
+  color: var(--muted);
   font-size: 0.76rem;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -105,7 +99,7 @@
 }
 
 .ops-hero__ledger strong {
-  color: #fffaf2;
+  color: var(--text);
   font-size: clamp(2.4rem, 5vw, 4.8rem);
   line-height: 0.95;
 }
@@ -119,15 +113,15 @@
 
 .ops-hero__mini-grid div {
   padding: 12px;
-  border: 1px solid rgba(210, 226, 239, 0.14);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.055);
+  background: rgba(255, 255, 255, 0.7);
 }
 
 .ops-hero__mini-grid b {
   display: block;
   margin-top: 6px;
-  color: #fffaf2;
+  color: var(--text);
   font-size: 1.1rem;
 }
 
@@ -139,16 +133,16 @@
 }
 
 .ops-metric-card.metric-card {
-  border-color: rgba(210, 226, 239, 0.16);
-  background: rgba(255, 255, 255, 0.07);
-  color: #f8f4ec;
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--text);
   box-shadow: none;
   transition: transform 180ms ease, border-color 180ms ease, background-color 180ms ease;
 }
 
 .ops-metric-card.metric-card:hover {
-  border-color: rgba(152, 189, 223, 0.4);
-  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(37, 99, 235, 0.25);
+  background: var(--surface-raised);
 }
 
 .ops-workspace {
@@ -168,11 +162,11 @@
 
 .ops-panel,
 .ops-workspace--columns .panel {
-  border: 1px solid rgba(210, 226, 239, 0.16);
+  border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface);
   color: var(--text);
-  box-shadow: 0 24px 54px rgba(4, 8, 12, 0.22);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 .ops-panel {
@@ -396,7 +390,7 @@
   }
 
   .ops-hero__ledger {
-    border-top: 1px solid rgba(210, 226, 239, 0.14);
+    border-top: 1px solid var(--border);
     border-left: 0;
   }
 
