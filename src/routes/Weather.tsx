@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
+import { WeatherIcon } from '@/components/icons';
 import { loadWeatherForecast, resolveWeatherByQuery, searchWeatherLocations, type WeatherForecast, type WeatherLocationResult } from '@/lib/weather';
 import { useXbarStore } from '@/store/useXbarStore';
 
@@ -217,6 +218,7 @@ export default function Weather() {
       ) : (
         <Panel title="Forecast">
           <EmptyState
+            icon={WeatherIcon}
             title={state.status === 'loading' ? 'Loading weather' : 'No forecast yet'}
             description={state.error || 'Search for a ranch or use your current location to load weather.'}
           />
