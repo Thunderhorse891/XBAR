@@ -148,7 +148,7 @@ export default function SetupWorkspace() {
             {foundationSteps.map((step, index) => (
               <div key={step.title} className="rounded-[18px] border border-[var(--border)] bg-[rgba(255,255,255,0.7)] px-5 py-4">
                 <div className="flex items-start gap-4">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[rgba(37,99,235,0.2)] bg-[rgba(37,99,235,0.08)] text-xs font-extrabold text-[var(--blue)]">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[rgba(37,99,235,0.2)] bg-[var(--blue-soft)] text-xs font-extrabold text-[var(--blue)]">
                     {index + 1}
                   </span>
                   <div>
@@ -269,7 +269,7 @@ export default function SetupWorkspace() {
                 </label>
               </div>
 
-              {formError ? <div className="rounded-[16px] border border-[rgba(220,38,38,0.2)] bg-[rgba(220,38,38,0.05)] px-4 py-3 text-sm leading-6 text-[var(--rose)]">{formError}</div> : null}
+              {formError ? <div className="rounded-[16px] border border-[rgba(220,38,38,0.2)] bg-[var(--rose-soft)] px-4 py-3 text-sm leading-6 text-[var(--rose)]">{formError}</div> : null}
 
               <div className="flex flex-col gap-3 sm:flex-row">
                 <button className="premium-auth-button premium-auth-button--primary" type="submit" disabled={saving}>

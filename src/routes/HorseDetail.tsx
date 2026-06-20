@@ -487,7 +487,7 @@ export default function HorseDetail() {
 
             <div className="mt-4 flex flex-wrap gap-2">
               {[
-                { label: horse.segment, color: 'border-[rgba(37,99,235,0.2)] bg-[rgba(37,99,235,0.07)] text-[var(--blue)]' },
+                { label: horse.segment, color: 'border-[rgba(37,99,235,0.2)] bg-[var(--blue-soft)] text-[var(--blue)]' },
                 { label: horse.status, color: 'border-[var(--border)] bg-[var(--surface-strong)] text-[var(--muted-strong)]' },
                 horse.location.barn ? { label: horse.location.barn, color: 'border-[var(--border)] bg-[var(--surface-raised)] text-[var(--muted-strong)]' } : null,
               ].filter((x): x is { label: string; color: string } => x !== null).map(({ label, color }) => (
@@ -569,7 +569,7 @@ export default function HorseDetail() {
             )}
             {canEditHorse && (
               <button
-                className="inline-flex h-10 items-center justify-center rounded-lg border border-[rgba(var(--rose-rgb,220,38,38),0.25)] bg-transparent px-4 text-sm font-semibold text-[var(--rose)] transition-all duration-150 ease-[ease] hover:bg-[rgba(220,38,38,0.06)] disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-10 items-center justify-center rounded-lg border border-[rgba(220,38,38,0.25)] bg-transparent px-4 text-sm font-semibold text-[var(--rose)] transition-all duration-150 ease-[ease] hover:bg-[var(--rose-soft)] disabled:cursor-not-allowed disabled:opacity-40"
                 type="button"
                 onClick={() => void handleDeleteHorse()}
               >

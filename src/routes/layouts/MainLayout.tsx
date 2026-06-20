@@ -164,7 +164,7 @@ function NavSection({ title, items, badges }: { title: string; items: NavItem[];
                 classNames(
                   'group flex items-center gap-3 border-l-[3px] px-3 py-[9px] text-[13px] font-medium transition-colors duration-150 rounded-r-md',
                   isActive
-                    ? 'border-[var(--blue)] bg-[rgba(37,99,235,0.08)] text-[var(--blue-dark)]'
+                    ? 'border-[var(--blue)] bg-[var(--blue-soft)] text-[var(--blue-dark)]'
                     : 'border-transparent text-[var(--muted-strong)] hover:border-[rgba(0,0,0,0.1)] hover:bg-[rgba(0,0,0,0.04)] hover:text-[var(--text)]',
                 )
               }
