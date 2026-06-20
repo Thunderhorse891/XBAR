@@ -8,6 +8,20 @@
   isolation: isolate;
 }
 
+.ownership-hero::before {
+  content: "";
+  position: absolute;
+  right: -24px;
+  top: -24px;
+  width: 220px;
+  height: 220px;
+  z-index: 1;
+  pointer-events: none;
+  background: url('/xbar-logo-sleek.png') center/contain no-repeat;
+  opacity: 0.06;
+  transform: rotate(12deg);
+}
+
 .ownership-hero::after {
   content: "";
   position: absolute;

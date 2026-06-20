@@ -445,14 +445,14 @@ export default function Sales() {
         const sellerName = bsHorse?.owner || workspaceProfile.defaultOwnerName || workspaceProfile.businessName || 'Seller';
         const sellerEntity = bsHorse?.ownerEntity || workspaceProfile.defaultOwnerEntity || workspaceProfile.businessName || '';
         return (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 200, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px', overflowY: 'auto' }} role="presentation" onClick={() => setShowBillOfSale(false)}>
-            <div style={{ background: '#fff', color: '#111', maxWidth: '680px', width: '100%', borderRadius: '8px', boxShadow: '0 4px 32px rgba(0,0,0,0.4)' }} role="dialog" aria-modal="true" aria-label="Bill of Sale" onClick={(e) => e.stopPropagation()}>
-              <div style={{ padding: '16px 24px', borderBottom: '1px solid #e0e0e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8f8f8', borderRadius: '8px 8px 0 0' }}>
-                <strong style={{ fontSize: '15px', color: '#111' }}>Bill of Sale</strong>
-                <div style={{ display: 'flex', gap: '8px' }}>
+          <div className="bos-overlay" role="presentation" onClick={() => setShowBillOfSale(false)}>
+            <div className="bos-modal" role="dialog" aria-modal="true" aria-label="Bill of Sale" onClick={(e) => e.stopPropagation()}>
+              <div className="bos-header">
+                <span className="bos-header__title">Bill of Sale</span>
+                <div className="bos-header__actions">
                   <button
                     type="button"
-                    style={{ padding: '6px 14px', borderRadius: '6px', background: '#1a56db', color: '#fff', border: 'none', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+                    className="bos-btn bos-btn--primary"
                     onClick={() => {
                       const content = billOfSaleRef.current?.innerHTML ?? '';
                       const win = window.open('', '_blank');
@@ -470,14 +470,14 @@ export default function Sales() {
                     type="button"
                     // eslint-disable-next-line jsx-a11y/no-autofocus
                     autoFocus
-                    style={{ padding: '6px 14px', borderRadius: '6px', background: '#f0f0f0', color: '#333', border: '1px solid #ccc', fontSize: '13px', cursor: 'pointer' }}
+                    className="bos-btn"
                     onClick={() => setShowBillOfSale(false)}
                   >
                     Close
                   </button>
                 </div>
               </div>
-              <div ref={billOfSaleRef} style={{ padding: '32px', fontFamily: 'Georgia, serif', fontSize: '14px', lineHeight: '1.7', color: '#111' }}>
+              <div ref={billOfSaleRef} className="bos-document" style={{ fontFamily: 'Georgia, serif', fontSize: '14px', lineHeight: '1.7', color: '#111' }}>
                 <h1 style={{ textAlign: 'center', fontSize: '22px', margin: '0 0 4px', letterSpacing: '0.02em' }}>BILL OF SALE</h1>
                 <p style={{ textAlign: 'center', fontSize: '13px', color: '#555', marginBottom: '24px' }}>Horse sale agreement — {saleDate}</p>
 

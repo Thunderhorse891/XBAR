@@ -455,21 +455,22 @@ export default function HorseDetail() {
         Horses
       </Link>
 
-      {/* Horse Identity Hero — cinematic command file */}
-      <section className="relative overflow-hidden rounded-[18px] border border-[rgba(148,184,224,0.1)] bg-[linear-gradient(135deg,#030810_0%,#081626_55%,#091830_100%)] shadow-[0_40px_80px_rgba(0,0,0,0.18),0_12px_32px_rgba(0,0,0,0.10),inset_0_1px_0_rgba(255,255,255,0.04)]">
-        {/* Background radials */}
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_40%,rgba(34,102,238,0.14),transparent_26rem)]" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_15%,rgba(91,141,190,0.08),transparent_20rem)]" />
-        </div>
+      {/* Horse Identity Hero */}
+      <section className="horse-detail-hero">
+        {/* Subtle grid pattern */}
+        <div className="pointer-events-none absolute inset-0 opacity-60" style={{ backgroundImage: 'linear-gradient(rgba(37,99,235,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(37,99,235,0.04) 1px, transparent 1px)', backgroundSize: '52px 52px' }} />
+        {/* Blue radial glow */}
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_50%,rgba(37,99,235,0.07),transparent_60%)]" />
+        {/* XBAR watermark */}
+        <div className="pointer-events-none absolute right-[-20px] top-[-20px] h-[180px] w-[180px] rotate-[10deg] opacity-[0.045]" style={{ backgroundImage: "url('/xbar-logo-sleek.png')", backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' }} />
 
         <div className="relative z-10 flex flex-col gap-5 p-6 xl:flex-row xl:items-end xl:justify-between xl:gap-8">
           <div className="min-w-0 flex-1">
             <div className="mb-3 flex items-center gap-3">
-              <span className="text-[10px] font-bold uppercase tracking-[0.26em] text-[rgba(120,170,220,0.65)]">{horse.ownerEntity}</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.26em] text-[var(--muted)]">{horse.ownerEntity}</span>
               {hasRestrictedActions ? (
                 <span
-                  className="inline-flex h-7 w-7 items-center justify-center rounded border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.05)] text-[rgba(180,210,240,0.5)] transition-all duration-150 ease-[ease]"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded border border-[var(--border)] bg-[var(--surface-raised)] text-[var(--muted)] transition-all duration-150 ease-[ease]"
                   title={`${currentRole} access limits some profile actions.`}
                 >
                   <LockIcon className="h-3.5 w-3.5" />
@@ -477,15 +478,15 @@ export default function HorseDetail() {
               ) : null}
             </div>
 
-            <h1 className="text-[clamp(2.2rem,5vw,3.8rem)] font-extrabold leading-[0.92] tracking-[-0.07em] text-[#f0f7ff]">
+            <h1 className="text-[clamp(2.2rem,5vw,3.8rem)] font-extrabold leading-[0.92] tracking-[-0.07em] text-[var(--text)]">
               {horse.name}
             </h1>
 
             <div className="mt-4 flex flex-wrap gap-2">
               {[
-                { label: horse.segment, color: 'border-[rgba(12,111,151,0.3)] bg-[rgba(12,111,151,0.12)] text-[#7dcef0]' },
-                { label: horse.status, color: 'border-[rgba(112,129,148,0.3)] bg-[rgba(112,129,148,0.1)] text-[#a0b8cc]' },
-                horse.location.barn ? { label: horse.location.barn, color: 'border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.05)] text-[rgba(200,220,244,0.75)]' } : null,
+                { label: horse.segment, color: 'border-[rgba(37,99,235,0.2)] bg-[rgba(37,99,235,0.07)] text-[var(--blue)]' },
+                { label: horse.status, color: 'border-[var(--border)] bg-[var(--surface-strong)] text-[var(--muted-strong)]' },
+                horse.location.barn ? { label: horse.location.barn, color: 'border-[var(--border)] bg-[var(--surface-raised)] text-[var(--muted-strong)]' } : null,
               ].filter((x): x is { label: string; color: string } => x !== null).map(({ label, color }) => (
                 <span
                   key={label}
@@ -501,30 +502,30 @@ export default function HorseDetail() {
 
             {/* Packet readiness + quick stats */}
             <div className="mt-5 flex flex-wrap gap-3">
-              <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[rgba(0,0,0,0.03)] px-3 py-2">
-                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Packet</span>
+              <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 shadow-sm">
+                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--muted)]">Packet</span>
                 <span className={classNames(
                   'text-[13px] font-bold tabular-nums',
-                  packet.score >= 75 ? 'text-[#5eead4]' : packet.score >= 50 ? 'text-[#fbbf24]' : 'text-[#ff8a8a]',
+                  packet.score >= 75 ? 'text-[var(--emerald)]' : packet.score >= 50 ? 'text-[var(--amber)]' : 'text-[var(--rose)]',
                 )}>{packet.score}%</span>
               </div>
-              <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[rgba(0,0,0,0.03)] px-3 py-2">
-                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Docs</span>
-                <span className="text-[13px] font-bold tabular-nums text-[#e8f2ff]">{documents.length}</span>
+              <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 shadow-sm">
+                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--muted)]">Docs</span>
+                <span className="text-[13px] font-bold tabular-nums text-[var(--text)]">{documents.length}</span>
               </div>
-              <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[rgba(0,0,0,0.03)] px-3 py-2">
-                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Status</span>
+              <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 shadow-sm">
+                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--muted)]">Status</span>
                 <span className={classNames(
                   'inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-bold',
                   shareBadgeStyles,
                 )}>{packet.buyerProfileStatus}</span>
               </div>
               {ownershipRecord ? (
-                <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[rgba(0,0,0,0.03)] px-3 py-2">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Ownership</span>
+                <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 shadow-sm">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--muted)]">Ownership</span>
                   <span className={classNames(
                     'text-[13px] font-bold',
-                    ownershipRecord.transferStatus === 'Clear' ? 'text-[#5eead4]' : 'text-[#ff8a8a]',
+                    ownershipRecord.transferStatus === 'Clear' ? 'text-[var(--emerald)]' : 'text-[var(--rose)]',
                   )}>{ownershipRecord.transferStatus}</span>
                 </div>
               ) : null}
@@ -565,7 +566,7 @@ export default function HorseDetail() {
             )}
             {canEditHorse && (
               <button
-                className="inline-flex h-10 items-center justify-center rounded-lg border border-[rgba(255,80,80,0.3)] bg-transparent px-4 text-sm font-semibold text-[rgba(255,140,140,0.8)] transition-all duration-150 ease-[ease] hover:bg-[rgba(255,80,80,0.1)] disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-10 items-center justify-center rounded-lg border border-[rgba(var(--rose-rgb,220,38,38),0.25)] bg-transparent px-4 text-sm font-semibold text-[var(--rose)] transition-all duration-150 ease-[ease] hover:bg-[rgba(220,38,38,0.06)] disabled:cursor-not-allowed disabled:opacity-40"
                 type="button"
                 onClick={() => void handleDeleteHorse()}
               >

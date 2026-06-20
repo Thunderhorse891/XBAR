@@ -121,6 +121,7 @@ export default function RanchAssets() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Equipment</span>
+            <h1 className="surface-hero__title">Ranch Assets</h1>
           </div>
           <div className="surface-hero__stats">
             <div className="surface-hero__stat">

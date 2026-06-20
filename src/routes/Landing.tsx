@@ -278,6 +278,7 @@ export default function Landing() {
           <div className="site-hero-grid-lines" />
           <div className="site-hero-blob site-hero-blob--blue" />
           <div className="site-hero-blob site-hero-blob--indigo" />
+          <div className="site-hero-blob site-hero-blob--violet" aria-hidden="true" />
         </div>
 
         <div className="site-hero-wrap">
@@ -316,11 +317,15 @@ export default function Landing() {
             {/* Floating card A — top left */}
             <div className="site-float-card site-float-card--a" aria-hidden="true">
               <div className="site-fc-head">
-                <div className="site-fc-dot" />
+                <div className="site-fc-dot" style={{ background: '#16A34A' }} />
                 <div className="site-fc-label">Live sync</div>
               </div>
               <div className="site-fc-value">94%</div>
               <div className="site-fc-sub">Docs ready to share</div>
+              <div style={{ marginTop: '10px', display: 'flex', gap: '4px' }}>
+                <div style={{ height: '3px', flex: 1, borderRadius: '99px', background: '#16A34A', opacity: 0.9 }} />
+                <div style={{ height: '3px', width: '18%', borderRadius: '99px', background: 'rgba(0,0,0,0.08)' }} />
+              </div>
             </div>
 
             {/* Floating card B — bottom right */}
@@ -346,7 +351,10 @@ export default function Landing() {
               </div>
               <div className="site-chrome-body" aria-hidden="true">
                 <div className="site-chrome-sidebar">
-                  <div className="site-chrome-logo">XBAR</div>
+                  <div className="site-chrome-logo">
+                    <img src="/xbar-logo-sleek.png" alt="" aria-hidden="true" className="site-chrome-logo-img" />
+                    XBAR
+                  </div>
                   {['Dashboard', 'Horses', 'Medical', 'Documents', 'Sales', 'Breeding'].map((item, i) => (
                     <div key={item} className={`site-chrome-nav-item${i === 0 ? ' site-chrome-nav-item--active' : ''}`}>
                       {item}
@@ -657,8 +665,13 @@ export default function Landing() {
       <footer className="site-footer">
         <div className="site-footer-inner">
           <div className="site-footer-brand">
-            <div className="site-footer-brand-name">XBAR</div>
-            <div className="site-footer-brand-sub">Ranch Platform</div>
+            <div className="site-footer-brand-logo">
+              <img src="/xbar-logo-sleek.png" alt="" aria-hidden="true" />
+            </div>
+            <div>
+              <div className="site-footer-brand-name">XBAR</div>
+              <div className="site-footer-brand-sub">Ranch Platform</div>
+            </div>
           </div>
           <div className="site-footer-links">
             <a href="#features">Features</a>

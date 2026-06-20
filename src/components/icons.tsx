@@ -22,10 +22,10 @@ function IconBase({ children, ...props }: IconProps) {
 export function DashboardIcon(props: IconProps) {
   return (
     <IconBase {...props}>
-      <rect x="3" y="3" width="7" height="7" rx="1.5" />
-      <rect x="14" y="3" width="7" height="7" rx="1.5" />
-      <rect x="3" y="14" width="7" height="7" rx="1.5" />
-      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+      <rect x="3" y="3" width="7" height="10" rx="1.5" />
+      <rect x="14" y="3" width="7" height="5" rx="1.5" />
+      <rect x="14" y="12" width="7" height="9" rx="1.5" />
+      <rect x="3" y="17" width="7" height="4" rx="1.5" />
     </IconBase>
   );
 }
@@ -33,8 +33,12 @@ export function DashboardIcon(props: IconProps) {
 export function HorsesIcon(props: IconProps) {
   return (
     <IconBase {...props}>
-      <path d="M8 6.2c1.4-1.6 3.6-2.5 5.6-2.2 1.9.3 3.7 1.6 4.5 3.4.8 1.9.4 4.2-1 5.7l-1.7 1.8c-.6.6-1 1.5-1 2.4V20l-2-1.2L10 20v-3.1c0-.9-.3-1.8-.9-2.4l-1.5-1.6c-1.4-1.5-1.8-3.8-1.1-5.7.2-.5.4-.8.5-1Z" />
-      <path d="M10.7 7.6c.8.2 1.5.8 2 1.5" />
+      <path d="M9 4.5c1.8-1.2 4.2-1 5.8.5 1 1 1.5 2.4 1.2 3.8L15 11c-.6.8-1 1.8-1 2.8V17H10v-3c0-1-.4-2-1-2.8L8 9.5C6.8 8 6.5 6 7.5 4.5" />
+      <path d="M9 4.5c.5-.3 1-.5 1.5-.5" />
+      <path d="M15.5 4c.5.2.9.4 1.3.8" />
+      <path d="M10 17v3" />
+      <path d="M14 17v3" />
+      <circle cx="13.5" cy="6.5" r=".7" fill="currentColor" stroke="none" />
     </IconBase>
   );
 }
@@ -53,10 +57,8 @@ export function DocumentsIcon(props: IconProps) {
 export function OwnershipIcon(props: IconProps) {
   return (
     <IconBase {...props}>
-      <path d="M8.5 11.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
-      <path d="M16.5 10.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />
-      <path d="M4.5 19c0-2.8 2.5-5 5.6-5s5.4 2.2 5.4 5" />
-      <path d="M14.8 19c.2-1.6 1.7-3 3.7-3 1 0 1.9.3 2.6.9" />
+      <path d="M12 3.4 19 6v5.4c0 4.3-2.6 7.5-7 9.2-4.4-1.7-7-4.9-7-9.2V6l7-2.6Z" />
+      <path d="M9 12l2 2 4-4" />
     </IconBase>
   );
 }
@@ -64,9 +66,9 @@ export function OwnershipIcon(props: IconProps) {
 export function MedicalIcon(props: IconProps) {
   return (
     <IconBase {...props}>
-      <path d="M12 21s-6-3.9-8.2-8.2C2 9.8 3.5 6 7 6c2 0 3.1 1.2 5 3.5C13.9 7.2 15 6 17 6c3.5 0 5 3.8 3.2 6.8C18 17.1 12 21 12 21Z" />
-      <path d="M12 9v6" />
-      <path d="M9 12h6" />
+      <rect x="4" y="4" width="16" height="16" rx="3" />
+      <path d="M12 8v8" />
+      <path d="M8 12h8" />
     </IconBase>
   );
 }
@@ -74,11 +76,11 @@ export function MedicalIcon(props: IconProps) {
 export function BreedingIcon(props: IconProps) {
   return (
     <IconBase {...props}>
-      <path d="M12 5v14" />
-      <path d="M12 10c-3.3 0-5-1.7-5-5" />
-      <path d="M12 10c3.3 0 5-1.7 5-5" />
-      <path d="M12 14c-3.3 0-5 1.7-5 5" />
-      <path d="M12 14c3.3 0 5 1.7 5 5" />
+      <circle cx="8.5" cy="5.5" r="2.5" />
+      <circle cx="15.5" cy="5.5" r="2.5" />
+      <circle cx="12" cy="18" r="2.5" />
+      <path d="M8.5 8v4.5L12 15.5" />
+      <path d="M15.5 8v4.5L12 15.5" />
     </IconBase>
   );
 }
@@ -86,9 +88,9 @@ export function BreedingIcon(props: IconProps) {
 export function SalesIcon(props: IconProps) {
   return (
     <IconBase {...props}>
-      <path d="M4 17.5 10 11l4 4 6-8" />
-      <path d="M15 7h5v5" />
-      <path d="M4 20h16" />
+      <path d="M3 17 8 11.5l4 3.5 5-7" />
+      <path d="M14 8h6v5" />
+      <path d="M3 20h18" />
     </IconBase>
   );
 }
@@ -96,9 +98,19 @@ export function SalesIcon(props: IconProps) {
 export function AssetsIcon(props: IconProps) {
   return (
     <IconBase {...props}>
-      <path d="M4 8.5h16v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-9Z" />
-      <path d="M9 8.5V7a3 3 0 0 1 6 0v1.5" />
-      <path d="M9.5 13h5" />
+      <path d="M14.5 3.5c1 1 1 2.5 0 3.5L5 16.5 3.5 20.5 7.5 19 17 9.5c1-1 2.5-1 3.5 0" />
+      <path d="M12.5 5.5l6 6" />
+    </IconBase>
+  );
+}
+
+export function ExpensesIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M4 5l1.5-1.5 1.5 1.5 1.5-1.5 1.5 1.5 1.5-1.5 1.5 1.5 1.5-1.5 1.5 1.5 1.5-1.5 1 1V20l-1-1-1.5 1.5-1.5-1.5-1.5 1.5-1.5-1.5-1.5 1.5-1.5-1.5-1.5 1.5-1.5-1.5L4 20V5Z" />
+      <path d="M9 10h6" />
+      <path d="M9 13h6" />
+      <path d="M9 16h4" />
     </IconBase>
   );
 }
@@ -114,9 +126,11 @@ export function SubscriptionIcon(props: IconProps) {
 export function SharedAccessIcon(props: IconProps) {
   return (
     <IconBase {...props}>
-      <path d="M5 4.5h11a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z" />
-      <path d="M14 12H8" />
-      <path d="m11 9 3 3-3 3" />
+      <circle cx="18" cy="5" r="3" />
+      <circle cx="6" cy="12" r="3" />
+      <circle cx="18" cy="19" r="3" />
+      <path d="M8.59 13.51l6.83 3.98" />
+      <path d="M15.41 6.51L8.59 10.49" />
     </IconBase>
   );
 }
@@ -124,13 +138,8 @@ export function SharedAccessIcon(props: IconProps) {
 export function SettingsIcon(props: IconProps) {
   return (
     <IconBase {...props}>
-      <path d="M4 7h8" />
-      <path d="M4 17h16" />
-      <path d="M16 7h4" />
-      <path d="M4 12h16" />
-      <circle cx="14" cy="7" r="2" />
-      <circle cx="8" cy="12" r="2" />
-      <circle cx="13" cy="17" r="2" />
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
     </IconBase>
   );
 }
@@ -139,9 +148,9 @@ export function WeatherIcon(props: IconProps) {
   return (
     <IconBase {...props}>
       <path d="M7 16.5a3.5 3.5 0 1 1 .6-6.9A5 5 0 0 1 17 8a4 4 0 1 1 .8 7.9H7Z" />
-      <path d="M9 19.5h.01" />
-      <path d="M12 18.5l-1 3" />
-      <path d="M16 18.5l-1 3" />
+      <path d="M9 19.5v1" />
+      <path d="M12 18.5v2" />
+      <path d="M15 19.5v1" />
     </IconBase>
   );
 }
@@ -212,4 +221,3 @@ export function MarketplaceIcon(props: IconProps) {
     </IconBase>
   );
 }
-

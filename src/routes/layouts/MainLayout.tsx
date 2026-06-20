@@ -14,6 +14,7 @@ import {
   DashboardIcon,
   DocumentsIcon,
   DotsIcon,
+  ExpensesIcon,
   HorsesIcon,
   MedicalIcon,
   OwnershipIcon,
@@ -47,7 +48,7 @@ const navItems: NavItem[] = [
   { label: 'Health', path: '/medical', icon: MedicalIcon, section: 'Operations', badgeKey: 'care' },
   { label: 'Breeding', path: '/breeding', icon: BreedingIcon, section: 'Operations' },
   { label: 'Sales', path: '/sales', icon: SalesIcon, section: 'Operations' },
-  { label: 'Expenses', path: '/expenses', icon: SubscriptionIcon, section: 'Operations' },
+  { label: 'Expenses', path: '/expenses', icon: ExpensesIcon, section: 'Operations' },
   { label: 'Reminders', path: '/reminders', icon: BellIcon, section: 'Operations', badgeKey: 'reminders' },
   { label: 'Equipment', path: '/assets', icon: AssetsIcon, section: 'Operations' },
   { label: 'Weather', path: '/weather', icon: WeatherIcon, section: 'Operations' },
@@ -273,11 +274,11 @@ export default function MainLayout() {
   return (
     <div className="min-h-screen bg-[var(--bg)] lg:grid lg:grid-cols-[240px,1fr]">
       {/* ── Sidebar ─────────────────────────────────────────────── */}
-      <aside className="hidden min-h-screen flex-col gap-5 border-r border-[var(--border)] bg-[var(--bg)] px-4 py-5 text-[var(--muted)] lg:flex">
+      <aside className="hidden min-h-screen flex-col gap-5 border-r border-[var(--border)] bg-[var(--bg)] px-4 py-5 text-[var(--muted)] lg:flex" style={{ backgroundImage: 'radial-gradient(ellipse 120% 60% at 50% -10%, rgba(37,99,235,0.04) 0%, transparent 70%)' }}>
         {/* Brand lockup */}
         <div className="flex items-center gap-3 px-1">
-          <div className="flex h-[44px] w-[44px] shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface-strong)]">
-            <img src="/xbar-logo-sleek.png" alt="XBAR" className="h-full w-full object-cover" />
+          <div className="flex h-[44px] w-[44px] shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-gradient-to-br from-[#EDF2FF] to-[#EEF6FF] shadow-sm">
+            <img src="/xbar-logo-sleek.png" alt="XBAR" className="h-[80%] w-[80%] object-contain" />
           </div>
           <div className="min-w-0">
             <div className="truncate text-[0.96rem] font-extrabold uppercase tracking-[0.14em] text-[var(--text)]">
@@ -360,9 +361,12 @@ export default function MainLayout() {
             {expenseReceipts.length} receipts · {documents.length} files · {horses.length} horses
           </div>
           {/* XBAR brand watermark */}
-          <div className="mt-3 flex items-center gap-2 opacity-30">
-            <img src="/xbar-logo-sleek.png" alt="" className="h-5 w-5 rounded object-cover" aria-hidden="true" />
-            <span className="text-[8px] font-black uppercase tracking-[0.3em] text-[var(--muted)]">XBAR</span>
+          <div className="mt-3 flex items-center gap-2 opacity-20">
+            <img src="/xbar-logo-sleek.png" alt="" className="h-6 w-6 rounded-md object-contain" aria-hidden="true" />
+            <div>
+              <div className="text-[8px] font-black uppercase tracking-[0.3em] text-[var(--muted)]">XBAR</div>
+              <div className="text-[7px] font-bold uppercase tracking-[0.2em] text-[var(--muted)] opacity-70">Ranch OS</div>
+            </div>
           </div>
         </div>
       </aside>

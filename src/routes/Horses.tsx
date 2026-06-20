@@ -97,7 +97,7 @@ function HorseCard({ horse, packet, saved, canManageSharedAccess, onToggleListin
           <svg className="card-expandable__chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <polyline points="6 3 11 8 6 13" />
           </svg>
-          <div className="horse-card__media" style={{ width: 48, height: 48, borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
+          <div className="horse-card__media horse-card__thumbnail">
             <HorseMediaPreview
               src={horse.profileImage || horse.gallery[0]?.url}
               name={horse.name}
@@ -105,12 +105,12 @@ function HorseCard({ horse, packet, saved, canManageSharedAccess, onToggleListin
               fallbackClassName="horse-card__image-fallback"
             />
           </div>
-          <div style={{ minWidth: 0 }}>
+          <div className="horse-card__name-wrap">
             <div className="card-expandable__title">{horse.name}</div>
             <div className="card-expandable__meta">{horse.breed || horse.segment} · {horse.owner} · {horse.location.barn}</div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        <div className="horse-card__header-right">
           <Pill tone={statusTone[horse.status]}>{horse.status === 'Sale Prep' ? 'For Sale' : horse.status}</Pill>
           <button
             ref={headerBtnRef}
@@ -131,7 +131,7 @@ function HorseCard({ horse, packet, saved, canManageSharedAccess, onToggleListin
       {/* Expanded body */}
       <div className="card-expandable__body">
         {/* Media + core metrics */}
-        <div className="horse-card__media" style={{ height: 180, borderRadius: 0 }}>
+        <div className="horse-card__media horse-card__banner">
           <HorseMediaPreview
             src={horse.profileImage || horse.gallery[0]?.url}
             name={horse.name}
@@ -159,7 +159,7 @@ function HorseCard({ horse, packet, saved, canManageSharedAccess, onToggleListin
           </div>
 
           {/* Quick-view drawer links */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px 0 4px' }}>
+          <div className="horse-card__quick-links">
             <button
               className="button button--ghost button--compact"
               type="button"

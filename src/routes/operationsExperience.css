@@ -35,10 +35,28 @@
   align-items: stretch;
   min-height: 320px;
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(37, 99, 235, 0.12);
   border-radius: 10px;
-  background: linear-gradient(135deg, #EDF2FF 0%, #EEF6FF 100%);
+  background:
+    linear-gradient(rgba(37, 99, 235, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 99, 235, 0.035) 1px, transparent 1px),
+    linear-gradient(135deg, #EDF2FF 0%, #EEF6FF 100%);
+  background-size: 52px 52px, 52px 52px, 100% 100%;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.07);
+  position: relative;
+}
+
+.ops-hero::after {
+  content: '';
+  position: absolute;
+  right: -20px;
+  bottom: -20px;
+  width: 180px;
+  height: 180px;
+  background: url('/xbar-logo-sleek.png') center/contain no-repeat;
+  opacity: 0.05;
+  pointer-events: none;
+  transform: rotate(-8deg);
 }
 
 .ops-hero > div:first-child {

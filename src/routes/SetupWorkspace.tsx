@@ -147,7 +147,7 @@ export default function SetupWorkspace() {
             {foundationSteps.map((step, index) => (
               <div key={step.title} className="rounded-[18px] border border-[var(--border)] bg-[rgba(255,255,255,0.7)] px-5 py-4">
                 <div className="flex items-start gap-4">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[rgba(37,99,235,0.2)] bg-[rgba(37,99,235,0.08)] text-xs font-extrabold text-[#1D4ED8]">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[rgba(37,99,235,0.2)] bg-[rgba(37,99,235,0.08)] text-xs font-extrabold text-[var(--blue)]">
                     {index + 1}
                   </span>
                   <div>
@@ -190,7 +190,7 @@ export default function SetupWorkspace() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="field-stack">
-                  <span className="field-label text-[var(--muted-strong)]">Business name <span aria-hidden="true" style={{ color: '#DC2626' }}>*</span></span>
+                  <span className="field-label text-[var(--muted-strong)]">Business name <span aria-hidden="true" style={{ color: 'var(--rose)' }}>*</span></span>
                   <input
                     className="field-input premium-auth-input"
                     required
@@ -201,7 +201,7 @@ export default function SetupWorkspace() {
                   />
                 </label>
                 <label className="field-stack">
-                  <span className="field-label text-[var(--muted-strong)]">Ranch name <span aria-hidden="true" style={{ color: '#DC2626' }}>*</span></span>
+                  <span className="field-label text-[var(--muted-strong)]">Ranch name <span aria-hidden="true" style={{ color: 'var(--rose)' }}>*</span></span>
                   <input
                     className="field-input premium-auth-input"
                     required
@@ -268,7 +268,7 @@ export default function SetupWorkspace() {
                 </label>
               </div>
 
-              {formError ? <div className="rounded-[16px] border border-[rgba(220,38,38,0.2)] bg-[rgba(220,38,38,0.06)] px-4 py-3 text-sm leading-6 text-[#B91C1C]">{formError}</div> : null}
+              {formError ? <div className="rounded-[16px] border border-[rgba(220,38,38,0.2)] bg-[rgba(220,38,38,0.05)] px-4 py-3 text-sm leading-6 text-[var(--rose)]">{formError}</div> : null}
 
               <div className="flex flex-col gap-3 sm:flex-row">
                 <button className="premium-auth-button premium-auth-button--primary" type="submit" disabled={saving}>
