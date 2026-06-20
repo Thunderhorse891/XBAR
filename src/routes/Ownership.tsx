@@ -453,6 +453,8 @@ export default function Ownership() {
               <button
                 key={row.horse.id}
                 type="button"
+                role="row"
+                aria-selected={row.record?.id === selectedRecordId}
                 className={`ownership-row${row.record?.id === selectedRecordId ? ' ownership-row--selected' : ''}`}
                 onClick={() => {
                   if (row.record) {
@@ -477,23 +479,23 @@ export default function Ownership() {
                   setMenuState({ type: 'record', recordId: row.record.id, x: event.clientX, y: event.clientY });
                 }}
               >
-                <span>
+                <span role="cell">
                   <strong>{row.horse.name}</strong>
                   {row.horse.barnName ? <small>{row.horse.barnName}</small> : null}
                 </span>
-                <span>
+                <span role="cell">
                   <strong>{row.currentOwner}</strong>
                   <small>{row.horse.ownership.length} stakeholder{row.horse.ownership.length === 1 ? '' : 's'}</small>
                 </span>
-                <span>
+                <span role="cell">
                   <strong>{row.totalShare || 0}%</strong>
                   <small>{row.totalShare === 100 ? 'Balanced' : 'Needs review'}</small>
                 </span>
-                <span>
+                <span role="cell">
                   <Pill tone={transferTone(row.status)}>{row.status}</Pill>
                   {row.deadline ? <small>Due {formatDateLabel(row.deadline)}</small> : null}
                 </span>
-                <span>
+                <span role="cell">
                   <strong>{row.billOfSaleCount + row.registrationCount + row.transferDocCount} files</strong>
                   <small>{row.pendingDocuments.length ? row.pendingDocuments.slice(0, 2).join(', ') : 'Proof on file'}</small>
                 </span>
