@@ -38,6 +38,7 @@ export function SalePacketSlots({
                     type="button"
                     className="sale-packet-slot__fix"
                     title={`Go to ${slot.label} — ${slot.detail}`}
+                    aria-label={`Fix ${slot.label}`}
                     onClick={() => onFix(slot.key)}
                   >
                     Fix
