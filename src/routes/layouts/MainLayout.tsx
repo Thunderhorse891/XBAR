@@ -160,10 +160,10 @@ function NavSection({ title, items, badges }: { title: string; items: NavItem[];
               end={path === '/'}
               className={({ isActive }) =>
                 classNames(
-                  'group flex items-center gap-3 border-l-[3px] px-3 py-[9px] text-[13px] font-medium transition-colors duration-150',
+                  'group flex items-center gap-3 border-l-[3px] px-3 py-[9px] text-[13px] font-medium transition-colors duration-150 rounded-r-md',
                   isActive
-                    ? 'border-[#2F8DFF] bg-[rgba(47,141,255,0.1)] text-white'
-                    : 'border-transparent text-[#6b8499] hover:border-[#1e3044] hover:bg-[rgba(0,0,0,0.03)] hover:text-[var(--muted-strong)]',
+                    ? 'border-[var(--blue)] bg-[rgba(37,99,235,0.08)] text-[#1D4ED8]'
+                    : 'border-transparent text-[var(--muted-strong)] hover:border-[rgba(0,0,0,0.1)] hover:bg-[rgba(0,0,0,0.04)] hover:text-[var(--text)]',
                 )
               }
             >
@@ -458,7 +458,7 @@ export default function MainLayout() {
 
               {canCreateHorse ? (
                 <Link
-                  className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-[#2F8DFF] px-3 text-[13px] font-bold text-white transition-colors duration-150 hover:bg-[#388bfd]"
+                  className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-[var(--blue)] px-3 text-[13px] font-bold text-white transition-colors duration-150 hover:bg-[#1D4ED8]"
                   to="/horses?new=1"
                 >
                   <AddIcon className="h-[14px] w-[14px]" />
@@ -466,7 +466,7 @@ export default function MainLayout() {
                 </Link>
               ) : (
                 <button
-                  className="inline-flex h-9 cursor-not-allowed items-center justify-center gap-1.5 rounded-md bg-[#2F8DFF] px-3 text-[13px] font-bold text-white opacity-40"
+                  className="inline-flex h-9 cursor-not-allowed items-center justify-center gap-1.5 rounded-md bg-[var(--blue)] px-3 text-[13px] font-bold text-white opacity-40"
                   type="button"
                   disabled
                 >
@@ -497,7 +497,7 @@ export default function MainLayout() {
             >
               {canCreateHorse ? (
                 <Link
-                  className="mb-2 flex min-h-[48px] w-full items-center gap-3 rounded-lg bg-[#2F8DFF] px-3 text-left text-[13px] font-bold text-white"
+                  className="mb-2 flex min-h-[48px] w-full items-center gap-3 rounded-lg bg-[var(--blue)] px-3 text-left text-[13px] font-bold text-white"
                   to="/horses?new=1"
                   onClick={() => setMobileMoreOpen(false)}
                 >
@@ -532,7 +532,7 @@ export default function MainLayout() {
 
         {/* Mobile bottom nav */}
         <nav
-          className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-1.5 rounded-xl border border-[var(--border-strong)] bg-[rgba(22,27,34,0.98)] p-2 shadow-2xl backdrop-blur lg:hidden"
+          className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-1.5 rounded-xl border border-[var(--border)] bg-[rgba(255,255,255,0.95)] p-2 shadow-[0_8px_30px_rgba(0,0,0,0.12)] backdrop-blur lg:hidden"
           aria-label="Mobile quick navigation"
         >
           {(
