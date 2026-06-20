@@ -15,6 +15,13 @@ import type { ExpenseCategory } from '@/types/xbar';
 import { CARE_SIGNAL_TONE, EXPENSE_CATEGORIES } from '@/features/dashboard/constants';
 import type { DashboardMenuState } from '@/features/dashboard/types';
 
+const STAGE_TONE: Record<string, string> = {
+  New: 'slate',
+  Qualified: 'blue',
+  Offer: 'amber',
+  Closed: 'emerald',
+};
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const pushToast = useUiStore((state) => state.pushToast);
@@ -48,14 +55,14 @@ export default function Dashboard() {
     uploadedBy: roleWorkspace.label,
   });
 
-  const reviewQueue = useMemo(() => documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched'), [documents]);
+  const reviewQueue = useMemo(() => documents.filter((d) => d.state === 'Needs Review' || d.state === 'Matched'), [documents]);
   const transferGaps = useMemo(() => buildTransferGapRows(horses, ownershipRecords, documents), [horses, ownershipRecords, documents]);
   const careBoard = useMemo(() => buildCareBoardRows(horses, documents, expenseReceipts), [horses, documents, expenseReceipts]);
   const budgetSummary = useMemo(() => buildBudgetSummary(expenseReceipts), [expenseReceipts]);
-  const careDueCount = useMemo(() => careBoard.filter((row) => row.signals.some((signal) => signal.status === 'due')).length, [careBoard]);
-  const cogginsWatchCount = useMemo(() => careBoard.filter((row) => row.signals.some((signal) => signal.key === 'coggins' && signal.status !== 'clear')).length, [careBoard]);
-  const qualifiedBuyerCount = useMemo(() => salesLeads.filter((lead) => lead.stage === 'Qualified' || lead.stage === 'Offer').length, [salesLeads]);
-  const feedReserveAsset = useMemo(() => ranchAssets.find((asset) => asset.category === 'Feed & Supply'), [ranchAssets]);
+  const careDueCount = useMemo(() => careBoard.filter((r) => r.signals.some((s) => s.status === 'due')).length, [careBoard]);
+  const cogginsWatchCount = useMemo(() => careBoard.filter((r) => r.signals.some((s) => s.key === 'coggins' && s.status !== 'clear')).length, [careBoard]);
+  const qualifiedBuyerCount = useMemo(() => salesLeads.filter((l) => l.stage === 'Qualified' || l.stage === 'Offer').length, [salesLeads]);
+  const feedReserveAsset = useMemo(() => ranchAssets.find((a) => a.category === 'Feed & Supply'), [ranchAssets]);
   const recentBatches = useMemo(() => intakeBatches.slice(0, 4), [intakeBatches]);
   const commandCenter = useMemo(
     () => buildCommandCenter({ horses, documents, ownershipRecords, salesLeads, ranchAssets, intakeBatches }),
@@ -64,6 +71,62 @@ export default function Dashboard() {
   const fieldTools = useMemo(
     () => buildFieldTools({ horses, documents, ownershipRecords, salesLeads, sharedAccess }),
     [horses, documents, ownershipRecords, salesLeads, sharedAccess],
+  );
+
+  const portfolioValue = useMemo(
+    () => horses.reduce((sum, h) => sum + (h.sale?.askPrice ?? 0), 0),
+    [horses],
+  );
+  const activePipelineValue = useMemo(
+    () => salesLeads.filter((l) => l.stage === 'Offer' || l.stage === 'Qualified').reduce((sum, l) => sum + (l.offerAmount ?? 0), 0),
+    [salesLeads],
+  );
+  const closedValue = useMemo(
+    () => salesLeads.filter((l) => l.stage === 'Closed' && l.outcome === 'Won').reduce((sum, l) => sum + (l.offerAmount ?? 0), 0),
+    [salesLeads],
+  );
+  const pipelineByStage = useMemo(() => {
+    const stages = ['New', 'Qualified', 'Offer', 'Closed'] as const;
+    return stages.map((stage) => {
+      const leads = salesLeads.filter((l) => l.stage === stage);
+      return { stage, count: leads.length, value: leads.reduce((sum, l) => sum + (l.offerAmount ?? 0), 0) };
+    });
+  }, [salesLeads]);
+
+  const herdHealthScore = useMemo(() => {
+    if (!horses.length) return 100;
+    const dueCount = careBoard.filter((r) => r.signals.some((s) => s.status === 'due')).length;
+    return Math.round(((horses.length - dueCount) / horses.length) * 100);
+  }, [horses, careBoard]);
+
+  const herdStatusGrid = useMemo(
+    () =>
+      horses
+        .map((horse) => {
+          const careRow = careBoard.find((r) => r.horseId === horse.id);
+          const transferIssue = transferGaps.find((g) => g.horseId === horse.id);
+          const urgency = careRow
+            ? careRow.signals.some((s) => s.status === 'due')
+              ? 'urgent'
+              : 'watch'
+            : transferIssue
+              ? 'watch'
+              : 'clear';
+          return {
+            horseId: horse.id,
+            name: horse.barnName || horse.name,
+            status: horse.status,
+            segment: horse.segment,
+            urgency,
+            signals: careRow?.signals ?? [],
+            transferIssue: Boolean(transferIssue),
+          };
+        })
+        .sort((a, b) => {
+          const rank = { urgent: 0, watch: 1, clear: 2 } as const;
+          return rank[a.urgency as keyof typeof rank] - rank[b.urgency as keyof typeof rank] || a.name.localeCompare(b.name);
+        }),
+    [horses, careBoard, transferGaps],
   );
 
   useEffect(() => {
@@ -80,9 +143,7 @@ export default function Dashboard() {
 
     void resolveWeatherByQuery(ranchQuery)
       .then((forecast) => {
-        if (!cancelled) {
-          setWeather(forecast);
-        }
+        if (!cancelled) setWeather(forecast);
       })
       .catch((error) => {
         if (!cancelled) {
@@ -91,116 +152,60 @@ export default function Dashboard() {
         }
       })
       .finally(() => {
-        if (!cancelled) {
-          setWeatherLoading(false);
-        }
+        if (!cancelled) setWeatherLoading(false);
       });
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [workspaceProfile.ranchName]);
 
-  const menuHorse = menuState?.type === 'horse' ? horses.find((horse) => horse.id === menuState.id) : undefined;
-  const menuRecord = menuState?.type === 'record' ? ownershipRecords.find((record) => record.id === menuState.id) : undefined;
-  const menuLead = menuState?.type === 'lead' ? salesLeads.find((lead) => lead.id === menuState.id) : undefined;
-  const menuExpense = menuState?.type === 'expense' ? expenseReceipts.find((receipt) => receipt.id === menuState.id) : undefined;
-  const menuRecordHorse = horses.find((horse) => horse.id === menuRecord?.horseId);
-  const menuLeadHorse = horses.find((horse) => horse.id === menuLead?.horseId);
-  const menuExpenseHorse = horses.find((horse) => horse.id === menuExpense?.horseId);
+  const menuHorse = menuState?.type === 'horse' ? horses.find((h) => h.id === menuState.id) : undefined;
+  const menuRecord = menuState?.type === 'record' ? ownershipRecords.find((r) => r.id === menuState.id) : undefined;
+  const menuLead = menuState?.type === 'lead' ? salesLeads.find((l) => l.id === menuState.id) : undefined;
+  const menuExpense = menuState?.type === 'expense' ? expenseReceipts.find((r) => r.id === menuState.id) : undefined;
+  const menuRecordHorse = horses.find((h) => h.id === menuRecord?.horseId);
+  const menuLeadHorse = horses.find((h) => h.id === menuLead?.horseId);
+  const menuExpenseHorse = horses.find((h) => h.id === menuExpense?.horseId);
+
   const menuItems = menuHorse
     ? [
-        {
-          id: 'quick-view-horse',
-          label: 'Quick view horse',
-          onSelect: () => openDrawer({ type: 'horse-detail', horseId: menuHorse.id }),
-        },
-        {
-          id: 'open-horse',
-          label: 'Open horse profile',
-          onSelect: () => navigate(`/horses/${menuHorse.id}`),
-        },
-        {
-          id: 'open-profile',
-          label: 'Open sale profile',
-          onSelect: () => navigate(`/profiles/${menuHorse.id}`),
-        },
+        { id: 'quick-view-horse', label: 'Quick view horse', onSelect: () => openDrawer({ type: 'horse-detail', horseId: menuHorse.id }) },
+        { id: 'open-horse', label: 'Open horse profile', onSelect: () => navigate(`/horses/${menuHorse.id}`) },
+        { id: 'open-profile', label: 'Open sale profile', onSelect: () => navigate(`/profiles/${menuHorse.id}`) },
       ]
     : menuRecord
       ? [
-          {
-            id: 'open-ownership',
-            label: 'Open ownership',
-            onSelect: () => navigate('/ownership'),
-          },
+          { id: 'open-ownership', label: 'Open ownership', onSelect: () => navigate('/ownership') },
           ...(menuRecordHorse
             ? [
-                {
-                  id: 'quick-view-record-horse',
-                  label: 'Quick view horse',
-                  onSelect: () => openDrawer({ type: 'horse-detail', horseId: menuRecordHorse.id }),
-                },
-                {
-                  id: 'open-record-horse',
-                  label: 'Open horse profile',
-                  onSelect: () => navigate(`/horses/${menuRecordHorse.id}`),
-                },
+                { id: 'quick-view-record-horse', label: 'Quick view horse', onSelect: () => openDrawer({ type: 'horse-detail', horseId: menuRecordHorse.id }) },
+                { id: 'open-record-horse', label: 'Open horse profile', onSelect: () => navigate(`/horses/${menuRecordHorse.id}`) },
               ]
             : []),
         ]
       : menuLead
         ? [
-            {
-              id: 'open-sales',
-              label: 'Open sales board',
-              onSelect: () => navigate('/sales'),
-            },
+            { id: 'open-sales', label: 'Open sales board', onSelect: () => navigate('/sales') },
             ...(menuLeadHorse
               ? [
-                  {
-                    id: 'quick-view-lead-horse',
-                    label: 'Quick view horse',
-                    onSelect: () => openDrawer({ type: 'horse-detail', horseId: menuLeadHorse.id }),
-                  },
-                  {
-                    id: 'open-lead-horse',
-                    label: 'Open horse profile',
-                    onSelect: () => navigate(`/horses/${menuLeadHorse.id}`),
-                  },
+                  { id: 'quick-view-lead-horse', label: 'Quick view horse', onSelect: () => openDrawer({ type: 'horse-detail', horseId: menuLeadHorse.id }) },
+                  { id: 'open-lead-horse', label: 'Open horse profile', onSelect: () => navigate(`/horses/${menuLeadHorse.id}`) },
                 ]
               : []),
           ]
         : menuExpense
           ? [
-              {
-                id: 'open-budget',
-                label: 'Open dashboard',
-                onSelect: () => navigate('/'),
-              },
+              { id: 'open-budget', label: 'Open dashboard', onSelect: () => navigate('/') },
               ...(menuExpenseHorse
                 ? [
-                    {
-                      id: 'quick-view-expense-horse',
-                      label: 'Quick view horse',
-                      onSelect: () => openDrawer({ type: 'horse-financial', horseId: menuExpenseHorse.id }),
-                    },
-                    {
-                      id: 'open-expense-horse',
-                      label: 'Open horse profile',
-                      onSelect: () => navigate(`/horses/${menuExpenseHorse.id}`),
-                    },
+                    { id: 'quick-view-expense-horse', label: 'Quick view horse', onSelect: () => openDrawer({ type: 'horse-financial', horseId: menuExpenseHorse.id }) },
+                    { id: 'open-expense-horse', label: 'Open horse profile', onSelect: () => navigate(`/horses/${menuExpenseHorse.id}`) },
                   ]
                 : []),
             ]
           : [];
+
   const hasWorkspaceData = Boolean(
-    horses.length ||
-    documents.length ||
-    ownershipRecords.length ||
-    expenseReceipts.length ||
-    salesLeads.length ||
-    intakeBatches.length ||
-    ranchAssets.length,
+    horses.length || documents.length || ownershipRecords.length || expenseReceipts.length || salesLeads.length || intakeBatches.length || ranchAssets.length,
   );
 
   if (!hasWorkspaceData) {
@@ -241,7 +246,7 @@ export default function Dashboard() {
               <span className="ops-briefing-stat__detail">Tracked automatically</span>
             </div>
             <div className="ops-briefing-stat">
-              <span className="ops-briefing-stat__label">Buyers</span>
+              <span className="ops-briefing-stat__label">Pipeline</span>
               <span className="ops-briefing-stat__value">0</span>
               <span className="ops-briefing-stat__detail">Share a listing to start</span>
             </div>
@@ -256,18 +261,10 @@ export default function Dashboard() {
               description="Create the first horse, upload a packet, or load the ranch forecast to start working."
               action={
                 <div className="inline-actions">
-                  <Link to="/horses?new=1" className="button button--primary button--compact">
-                    Create horse
-                  </Link>
-                  <Link to="/documents?upload=1" className="button button--ghost button--compact">
-                    Bulk upload
-                  </Link>
-                  <Link to="/settings" className="button button--ghost button--compact">
-                    Settings
-                  </Link>
-                  <Link to="/weather" className="button button--ghost button--compact">
-                    Weather
-                  </Link>
+                  <Link to="/horses?new=1" className="button button--primary button--compact">Create horse</Link>
+                  <Link to="/documents?upload=1" className="button button--ghost button--compact">Bulk upload</Link>
+                  <Link to="/settings" className="button button--ghost button--compact">Settings</Link>
+                  <Link to="/weather" className="button button--ghost button--compact">Weather</Link>
                 </div>
               }
             />
@@ -322,14 +319,7 @@ export default function Dashboard() {
       tone: result.ok ? 'success' : 'error',
     });
     if (result.ok) {
-      setReceiptDraft((current) => ({
-        ...current,
-        horseId: '',
-        title: '',
-        vendor: '',
-        amount: '',
-        notes: '',
-      }));
+      setReceiptDraft((c) => ({ ...c, horseId: '', title: '', vendor: '', amount: '', notes: '' }));
       setReceiptFile(null);
     }
     setSavingReceipt(false);
@@ -350,6 +340,7 @@ export default function Dashboard() {
             </h1>
             <div className="ops-briefing-header__chips">
               <span className="ops-briefing-chip">{roleWorkspace.label}</span>
+              <span className="ops-briefing-chip">{horses.length} horse{horses.length !== 1 ? 's' : ''}</span>
               <span className={transferGaps.length ? 'ops-briefing-chip ops-briefing-chip--urgent' : 'ops-briefing-chip ops-briefing-chip--success'}>
                 {transferGaps.length} transfer{transferGaps.length !== 1 ? 's' : ''} pending
               </span>
@@ -363,6 +354,7 @@ export default function Dashboard() {
           </div>
           <div className="ops-briefing-header__actions">
             <Link to="/horses?new=1" className="ops-briefing-action ops-briefing-action--primary">New horse</Link>
+            <Link to="/sales" className="ops-briefing-action">Pipeline</Link>
             <Link to="/documents" className="ops-briefing-action">Review docs</Link>
             <Link to="/weather" className="ops-briefing-action">Weather</Link>
           </div>
@@ -389,13 +381,54 @@ export default function Dashboard() {
             </span>
             <span className="ops-briefing-stat__detail">{reviewQueue.length ? 'waiting review' : 'queue clear'}</span>
           </Link>
-          <Link to="/expenses" className="ops-briefing-stat ops-briefing-stat--clickable" title="Open expense ledger">
-            <span className="ops-briefing-stat__label">Month spend</span>
-            <span className="ops-briefing-stat__value">{formatCompactCurrency(budgetSummary.total)}</span>
-            <span className="ops-briefing-stat__detail">{qualifiedBuyerCount} active lead{qualifiedBuyerCount !== 1 ? 's' : ''}</span>
+          <Link to="/sales" className="ops-briefing-stat ops-briefing-stat--clickable" title="Open sales pipeline">
+            <span className="ops-briefing-stat__label">Pipeline</span>
+            <span className="ops-briefing-stat__value">{qualifiedBuyerCount}</span>
+            <span className="ops-briefing-stat__detail">active lead{qualifiedBuyerCount !== 1 ? 's' : ''}</span>
           </Link>
         </div>
       </div>
+
+      <Panel
+        eyebrow="Revenue"
+        title="Portfolio intelligence"
+        action={<Link to="/sales" className="button button--ghost button--compact">Sales board</Link>}
+      >
+        <div className="dash-revenue-rail">
+          <div className="dash-revenue-cell dash-revenue-cell--blue">
+            <div className="dash-revenue-cell__label">Portfolio value</div>
+            <div className="dash-revenue-cell__value">{formatCompactCurrency(portfolioValue)}</div>
+            <div className="dash-revenue-cell__sub">{horses.length} horse{horses.length !== 1 ? 's' : ''} on books</div>
+          </div>
+          <div className="dash-revenue-cell dash-revenue-cell--amber">
+            <div className="dash-revenue-cell__label">Active pipeline</div>
+            <div className="dash-revenue-cell__value">{formatCompactCurrency(activePipelineValue)}</div>
+            <div className="dash-revenue-cell__sub">{qualifiedBuyerCount} qualified + offer lead{qualifiedBuyerCount !== 1 ? 's' : ''}</div>
+          </div>
+          <div className="dash-revenue-cell dash-revenue-cell--emerald">
+            <div className="dash-revenue-cell__label">Closed · won</div>
+            <div className="dash-revenue-cell__value">{formatCompactCurrency(closedValue)}</div>
+            <div className="dash-revenue-cell__sub">{salesLeads.filter((l) => l.stage === 'Closed' && l.outcome === 'Won').length} deal{salesLeads.filter((l) => l.stage === 'Closed' && l.outcome === 'Won').length !== 1 ? 's' : ''} closed</div>
+          </div>
+        </div>
+
+        {salesLeads.length > 0 && (
+          <div style={{ marginTop: '16px' }}>
+            <div className="ops-section-label" style={{ marginBottom: '8px' }}>Sales pipeline</div>
+            <div className="dash-pipeline">
+              {pipelineByStage.map(({ stage, count, value }) => (
+                <Link key={stage} to="/sales" className={`dash-pipeline__stage dash-pipeline__stage--${stage.toLowerCase()}`}>
+                  <div className="dash-pipeline__count">{count}</div>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text)', marginTop: '2px' }}>{stage}</div>
+                  {value > 0 && (
+                    <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: '4px' }}>{formatCompactCurrency(value)}</div>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+      </Panel>
 
       <section className="command-stage command-stage--two-col">
         <div className="command-stage__rail">
@@ -433,9 +466,7 @@ export default function Dashboard() {
           </div>
           <div className="command-stage__support-card">
             <div className="command-stage__support-label">Upload</div>
-            <strong className="command-stage__support-title">
-              {recentBatches[0]?.label ?? 'No batch yet'}
-            </strong>
+            <strong className="command-stage__support-title">{recentBatches[0]?.label ?? 'No batch yet'}</strong>
             <div className="command-stage__support-copy">
               <span>{recentBatches[0] ? `${recentBatches[0].processedCount}/${recentBatches[0].fileCount} logged` : 'Upload the first packet.'}</span>
               <span>{reviewQueue.length} waiting on review</span>
@@ -489,6 +520,56 @@ export default function Dashboard() {
         />
       </div>
 
+      <Panel
+        eyebrow="Herd"
+        title="At a glance"
+        meta={
+          <Pill tone={herdHealthScore >= 90 ? 'emerald' : herdHealthScore >= 70 ? 'amber' : 'rose'}>
+            {herdHealthScore}% current
+          </Pill>
+        }
+        action={<Link to="/medical" className="button button--ghost button--compact">Care board</Link>}
+      >
+        <div className="dash-health-bar" style={{ marginBottom: '16px' }}>
+          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', whiteSpace: 'nowrap' }}>Herd health</span>
+          <div className="dash-health-bar__track">
+            <div
+              className={`dash-health-bar__fill${herdHealthScore < 80 ? ' dash-health-bar__fill--warn' : ''}`}
+              style={{ width: `${herdHealthScore}%` }}
+            />
+          </div>
+          <span style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--text)', whiteSpace: 'nowrap' }}>{herdHealthScore}%</span>
+        </div>
+
+        {herdStatusGrid.length > 0 ? (
+          <div className="dash-herd-grid">
+            {herdStatusGrid.map((h) => (
+              <button
+                key={h.horseId}
+                type="button"
+                className={`dash-herd-card dash-herd-card--${h.urgency}`}
+                onClick={() => openDrawer({ type: 'horse-health', horseId: h.horseId })}
+                title={`${h.name} — ${h.urgency}`}
+              >
+                <div className="dash-herd-card__name">{h.name}</div>
+                <div className="dash-herd-card__status">{h.status}{h.segment ? ` · ${h.segment}` : ''}</div>
+                <div className="dash-herd-card__signals">
+                  {h.signals.length > 0
+                    ? h.signals.map((sig) => (
+                        <span key={sig.key} className={`dash-signal-dot dash-signal-dot--${sig.status}`} title={`${sig.label}: ${sig.status}`} />
+                      ))
+                    : h.transferIssue
+                      ? <span className="dash-signal-dot dash-signal-dot--watch" title="Transfer issue" />
+                      : <span className="dash-signal-dot dash-signal-dot--clear" title="All clear" />}
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <EmptyState compact title="No horses yet" description="Add horses to see the herd health grid." />
+        )}
+      </Panel>
+
       <div>
         <div className="ops-section-label">Command center</div>
         <div className="ops-cmd">
@@ -510,11 +591,7 @@ export default function Dashboard() {
           <Panel
             title="Transfer issues"
             meta={<Pill tone={transferGaps.length ? 'rose' : 'emerald'}>{transferGaps.length ? 'Needs action' : 'Clear'}</Pill>}
-            action={
-              <Link to="/ownership" className="button button--ghost button--compact">
-                Ownership
-              </Link>
-            }
+            action={<Link to="/ownership" className="button button--ghost button--compact">Ownership</Link>}
           >
             {transferGaps.length ? (
               <div className="stack-list">
@@ -526,9 +603,7 @@ export default function Dashboard() {
                     onContextMenu={(event) => {
                       event.preventDefault();
                       const record = ownershipRecords.find((item) => item.horseId === gap.horseId);
-                      if (record) {
-                        setMenuState({ type: 'record', id: record.id, x: event.clientX, y: event.clientY });
-                      }
+                      if (record) setMenuState({ type: 'record', id: record.id, x: event.clientX, y: event.clientY });
                     }}
                   >
                     <div className="stack-item__top">
@@ -537,9 +612,7 @@ export default function Dashboard() {
                     </div>
                     <div className="dashboard-chip-row">
                       {gap.reasons.slice(0, 3).map((reason) => (
-                        <Pill key={reason} tone="amber">
-                          {reason}
-                        </Pill>
+                        <Pill key={reason} tone="amber">{reason}</Pill>
                       ))}
                     </div>
                     <div className="inline-metrics">
@@ -559,12 +632,8 @@ export default function Dashboard() {
             meta={<Pill tone={careDueCount ? 'amber' : 'emerald'}>{careDueCount ? 'Due now' : 'Current'}</Pill>}
             action={
               <div className="inline-actions">
-                <Link to="/weather" className="button button--ghost button--compact">
-                  Weather
-                </Link>
-                <Link to="/medical" className="button button--ghost button--compact">
-                  Medical
-                </Link>
+                <Link to="/weather" className="button button--ghost button--compact">Weather</Link>
+                <Link to="/medical" className="button button--ghost button--compact">Medical</Link>
               </div>
             }
           >
@@ -593,12 +662,9 @@ export default function Dashboard() {
                       ))}
                     </div>
                     <div className="inline-metrics">
-                      {row.signals
-                        .filter((signal) => signal.status !== 'clear')
-                        .slice(0, 2)
-                        .map((signal) => (
-                          <span key={signal.key}>{signal.detail}</span>
-                        ))}
+                      {row.signals.filter((s) => s.status !== 'clear').slice(0, 2).map((signal) => (
+                        <span key={signal.key}>{signal.detail}</span>
+                      ))}
                     </div>
                   </button>
                 ))}
@@ -665,26 +731,26 @@ export default function Dashboard() {
                     ? { type: 'horse-financial', horseId: receipt.horseId }
                     : null;
                   return (
-                  <button
-                    key={receipt.id}
-                    type="button"
-                    className="stack-item stack-item--interactive"
-                    onClick={() => drawerTarget ? openDrawer(drawerTarget) : navigate('/expenses')}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      setMenuState({ type: 'expense', id: receipt.id, x: event.clientX, y: event.clientY });
-                    }}
-                  >
-                    <div className="stack-item__top">
-                      <div className="stack-item__title">{receipt.title}</div>
-                      <Pill tone="blue">{formatCurrency(receipt.amount)}</Pill>
-                    </div>
-                    <div className="inline-metrics">
-                      <span>{receipt.category}</span>
-                      <span>{receipt.vendor}</span>
-                      <span>{formatDateLabel(receipt.receiptDate)}</span>
-                    </div>
-                  </button>
+                    <button
+                      key={receipt.id}
+                      type="button"
+                      className="stack-item stack-item--interactive"
+                      onClick={() => (drawerTarget ? openDrawer(drawerTarget) : navigate('/expenses'))}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        setMenuState({ type: 'expense', id: receipt.id, x: event.clientX, y: event.clientY });
+                      }}
+                    >
+                      <div className="stack-item__top">
+                        <div className="stack-item__title">{receipt.title}</div>
+                        <Pill tone="blue">{formatCurrency(receipt.amount)}</Pill>
+                      </div>
+                      <div className="inline-metrics">
+                        <span>{receipt.category}</span>
+                        <span>{receipt.vendor}</span>
+                        <span>{formatDateLabel(receipt.receiptDate)}</span>
+                      </div>
+                    </button>
                   );
                 })}
               </div>
@@ -721,14 +787,10 @@ export default function Dashboard() {
                 <select
                   className="field-input"
                   value={receiptDraft.category}
-                  onChange={(event) => setReceiptDraft((current) => ({ ...current, category: event.target.value as ExpenseCategory }))}
+                  onChange={(e) => setReceiptDraft((c) => ({ ...c, category: e.target.value as ExpenseCategory }))}
                   disabled={!canManageBudget || savingReceipt}
                 >
-                  {EXPENSE_CATEGORIES.map((category) => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ))}
+                  {EXPENSE_CATEGORIES.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
                 </select>
               </label>
 
@@ -737,15 +799,11 @@ export default function Dashboard() {
                 <select
                   className="field-input"
                   value={receiptDraft.horseId}
-                  onChange={(event) => setReceiptDraft((current) => ({ ...current, horseId: event.target.value }))}
+                  onChange={(e) => setReceiptDraft((c) => ({ ...c, horseId: e.target.value }))}
                   disabled={!canManageBudget || savingReceipt}
                 >
                   <option value="">Ranch-wide</option>
-                  {horses.map((horse) => (
-                    <option key={horse.id} value={horse.id}>
-                      {horse.name}
-                    </option>
-                  ))}
+                  {horses.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
                 </select>
               </label>
 
@@ -756,7 +814,7 @@ export default function Dashboard() {
                   required
                   aria-required="true"
                   value={receiptDraft.title}
-                  onChange={(event) => setReceiptDraft((current) => ({ ...current, title: event.target.value }))}
+                  onChange={(e) => setReceiptDraft((c) => ({ ...c, title: e.target.value }))}
                   placeholder="Dental float"
                   disabled={!canManageBudget || savingReceipt}
                 />
@@ -767,7 +825,7 @@ export default function Dashboard() {
                 <input
                   className="field-input"
                   value={receiptDraft.vendor}
-                  onChange={(event) => setReceiptDraft((current) => ({ ...current, vendor: event.target.value }))}
+                  onChange={(e) => setReceiptDraft((c) => ({ ...c, vendor: e.target.value }))}
                   placeholder="Rolling Plains Vet"
                   disabled={!canManageBudget || savingReceipt}
                 />
@@ -783,7 +841,7 @@ export default function Dashboard() {
                   min="0"
                   step="0.01"
                   value={receiptDraft.amount}
-                  onChange={(event) => setReceiptDraft((current) => ({ ...current, amount: event.target.value }))}
+                  onChange={(e) => setReceiptDraft((c) => ({ ...c, amount: e.target.value }))}
                   placeholder="240.00"
                   disabled={!canManageBudget || savingReceipt}
                 />
@@ -795,7 +853,7 @@ export default function Dashboard() {
                   className="field-input"
                   type="date"
                   value={receiptDraft.receiptDate}
-                  onChange={(event) => setReceiptDraft((current) => ({ ...current, receiptDate: event.target.value }))}
+                  onChange={(e) => setReceiptDraft((c) => ({ ...c, receiptDate: e.target.value }))}
                   disabled={!canManageBudget || savingReceipt}
                 />
               </label>
@@ -805,7 +863,7 @@ export default function Dashboard() {
                 <input
                   className="field-input"
                   value={receiptDraft.uploadedBy}
-                  onChange={(event) => setReceiptDraft((current) => ({ ...current, uploadedBy: event.target.value }))}
+                  onChange={(e) => setReceiptDraft((c) => ({ ...c, uploadedBy: e.target.value }))}
                   disabled={!canManageBudget || savingReceipt}
                 />
               </label>
@@ -816,7 +874,7 @@ export default function Dashboard() {
                   className="field-input"
                   type="file"
                   accept=".pdf,image/*"
-                  onChange={(event) => setReceiptFile(event.target.files?.[0] ?? null)}
+                  onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)}
                   disabled={!canManageBudget || savingReceipt}
                 />
               </label>
@@ -826,7 +884,7 @@ export default function Dashboard() {
                 <textarea
                   className="field-textarea"
                   value={receiptDraft.notes}
-                  onChange={(event) => setReceiptDraft((current) => ({ ...current, notes: event.target.value }))}
+                  onChange={(e) => setReceiptDraft((c) => ({ ...c, notes: e.target.value }))}
                   rows={3}
                   placeholder="Optional note for feed reserve, wormer pack, or dental work."
                   disabled={!canManageBudget || savingReceipt}
@@ -864,7 +922,7 @@ export default function Dashboard() {
             ))}
 
             {salesLeads.slice(0, 3).map((lead) => {
-              const horse = horses.find((item) => item.id === lead.horseId);
+              const horse = horses.find((h) => h.id === lead.horseId);
               return (
                 <Link
                   key={lead.id}
@@ -877,9 +935,7 @@ export default function Dashboard() {
                 >
                   <div className="stack-item__top">
                     <div className="stack-item__title">{lead.name}</div>
-                    <Pill tone={lead.stage === 'Offer' ? 'emerald' : lead.stage === 'Qualified' ? 'blue' : 'amber'}>
-                      {lead.stage}
-                    </Pill>
+                    <Pill tone={STAGE_TONE[lead.stage] ?? 'slate'}>{lead.stage}</Pill>
                   </div>
                   <div className="inline-metrics">
                     <span>{horse?.name ?? 'Unassigned'}</span>
@@ -893,7 +949,13 @@ export default function Dashboard() {
         </Panel>
       </div>
 
-      <ContextMenu open={Boolean(menuItems.length)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
+      <ContextMenu
+        open={Boolean(menuItems.length)}
+        x={menuState?.x ?? 0}
+        y={menuState?.y ?? 0}
+        items={menuItems}
+        onClose={() => setMenuState(null)}
+      />
     </>
   );
 }
