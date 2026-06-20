@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
 import { MetricCard, Panel, Pill, ProgressBar } from '@/components/app-ui';
+import { MarketplaceIcon } from '@/components/icons';
 import { sanitizeHorseForBuyerView } from '@/lib/publicShare';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
@@ -255,6 +256,7 @@ export default function Marketplace() {
           <EmptyState compact title="No horses match this filter" description="Adjust the sex or breed filter to see more listings." />
         ) : (
           <EmptyState
+            icon={MarketplaceIcon}
             title="No horses listed for sale"
             description="Set a horse's listing state to Market Ready on its profile to show it here."
           />

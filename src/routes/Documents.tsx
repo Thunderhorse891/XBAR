@@ -5,6 +5,7 @@ import { useConfirm } from '@/components/ConfirmDialog';
 import { ContextMenu } from '@/components/ContextMenu';
 import { MetricCard, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
 import { EmptyState } from '@/components/EmptyState';
+import { DocumentsIcon } from '@/components/icons';
 import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { formatDateTimeLabel } from '@/lib/format';
 import { buildDocumentTrustProfile } from '@/lib/xbarPhaseTwo';
@@ -647,6 +648,7 @@ export default function Documents() {
           </div>
         ) : (
           <EmptyState
+            icon={DocumentsIcon}
             title="Review queue is clear"
             description="Nothing is waiting."
           />

@@ -5,7 +5,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
 import { SalePacketSlots } from '@/components/SalePacketSlots';
 import { Pill, ProgressBar, SurfaceTabs } from '@/components/app-ui';
-import { DotsIcon } from '@/components/icons';
+import { DotsIcon, HorsesIcon } from '@/components/icons';
 import { buildPublicShareUrl } from '@/lib/facebookSharing';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
 import { useCardState } from '@/hooks/useCardState';
@@ -590,6 +590,7 @@ export default function Horses() {
         </div>
         ) : (
           <EmptyState
+            icon={HorsesIcon}
             title="No horses match this view"
             description="Adjust filters, clear search, or add a horse."
             action={
@@ -646,6 +647,7 @@ export default function Horses() {
         </div>
       ) : (
         <EmptyState
+          icon={HorsesIcon}
           title="No horses match this registry view"
           description="Adjust filters, clear search, or add a horse."
           action={

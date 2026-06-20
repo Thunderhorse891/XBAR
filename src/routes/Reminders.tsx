@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
+import { BellIcon } from '@/components/icons';
 import { buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
 import { formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
@@ -203,7 +204,7 @@ export default function Reminders() {
         ) : reminders.length ? (
           <EmptyState compact title="No reminders match" description="Adjust the search or filter." />
         ) : (
-          <EmptyState title="No urgent work in the queue" description="When care records age, transfer files go missing, documents need approval, or buyers need follow-up, the work will land here." />
+          <EmptyState icon={BellIcon} title="No urgent work in the queue" description="When care records age, transfer files go missing, documents need approval, or buyers need follow-up, the work will land here." />
         )}
       </section>
 

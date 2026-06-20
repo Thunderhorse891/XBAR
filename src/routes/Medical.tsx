@@ -4,6 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
+import { MedicalIcon } from '@/components/icons';
 import { formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCloudStore } from '@/store/useCloudStore';
@@ -404,7 +405,7 @@ export default function Medical() {
             <p className="text-muted">No events match "{timelineQuery}".</p>
           );
         })() : (
-          <EmptyState title="No medical timeline yet" description="Create a care event to start the timeline." />
+          <EmptyState icon={MedicalIcon} title="No medical timeline yet" description="Create a care event to start the timeline." />
         )}
       </Panel>
 
