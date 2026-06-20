@@ -4591,6 +4591,15 @@ a:focus-visible,
 
 .horse-card__media-bottom {
   background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.35) 50%, rgba(0, 0, 0, 0.65) 100%);
+  color: #FFFFFF;
+}
+
+.horse-card__media-bottom .horse-card__kicker {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.horse-card__media-bottom .horse-card__subtitle {
+  color: rgba(255, 255, 255, 0.68);
 }
 
 .horse-card .button--ghost {
