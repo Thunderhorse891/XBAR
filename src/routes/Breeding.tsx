@@ -103,8 +103,9 @@ export default function Breeding() {
                   className="stack-item stack-item--interactive"
                   role="button"
                   tabIndex={0}
+                  aria-label={`Open breeding record for ${horse.name}`}
                   onClick={() => openDrawer({ type: 'horse-breeding', horseId: horse.id })}
-                  onKeyDown={(e) => e.key === 'Enter' && openDrawer({ type: 'horse-breeding', horseId: horse.id })}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDrawer({ type: 'horse-breeding', horseId: horse.id }); } }}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     setMenuState({ horseId: horse.id, x: event.clientX, y: event.clientY });

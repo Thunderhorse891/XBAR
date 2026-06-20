@@ -277,7 +277,7 @@ export default function MainLayout() {
       <aside className="hidden min-h-screen flex-col gap-5 border-r border-[var(--border)] bg-[var(--bg)] px-4 py-5 text-[var(--muted)] lg:flex" style={{ backgroundImage: 'radial-gradient(ellipse 120% 60% at 50% -10%, rgba(37,99,235,0.04) 0%, transparent 70%)' }}>
         {/* Brand lockup */}
         <div className="flex items-center gap-3 px-1">
-          <div className="flex h-[44px] w-[44px] shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-gradient-to-br from-[#EDF2FF] to-[#EEF6FF] shadow-sm">
+          <div className="flex h-[44px] w-[44px] shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-gradient-to-br from-[#E0EAFF] to-[#EBF4FF] shadow-sm">
             <img src="/xbar-logo-sleek.png" alt="XBAR" className="h-[80%] w-[80%] object-contain" />
           </div>
           <div className="min-w-0">

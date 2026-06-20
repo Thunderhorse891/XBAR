@@ -445,7 +445,7 @@ export default function Documents() {
               <span className="field-label">Horse</span>
               <button
                 type="button"
-                    className={`button button--ghost button--compact justify-start ${createHorseFromBatch ? 'border-[rgba(46,160,67,0.4)] bg-[rgba(46,160,67,0.1)] text-[var(--emerald)]' : ''}`}
+                    className={`button button--ghost button--compact justify-start ${createHorseFromBatch ? 'border-[rgba(22,163,74,0.4)] bg-[var(--emerald-soft)] text-[var(--emerald)]' : ''}`}
                 onClick={() => setCreateHorseFromBatch((current) => !current)}
                 disabled={!canUploadDocuments || Boolean(horseId)}
               >

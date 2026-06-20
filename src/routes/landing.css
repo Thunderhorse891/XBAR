@@ -65,7 +65,7 @@
   border-radius: 9px;
   object-fit: contain;
   flex-shrink: 0;
-  background: linear-gradient(135deg, #EDF2FF 0%, #EEF6FF 100%);
+  background: linear-gradient(135deg, #E0EAFF 0%, #EBF4FF 100%);
   padding: 3px;
 }
 
@@ -1131,7 +1131,7 @@
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #EDF2FF 0%, #EEF6FF 100%);
+  background: linear-gradient(135deg, #E0EAFF 0%, #EBF4FF 100%);
   border: 1px solid rgba(0, 0, 0, 0.07);
   padding: 3px;
   display: flex;

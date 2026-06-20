@@ -2063,7 +2063,7 @@
 .xbar-login-noise { opacity: 0; }
 
 .xbar-login-brand-panel {
-  background: linear-gradient(158deg, #EDF2FF 0%, #EEF6FF 60%, #F0F7FF 100%);
+  background: linear-gradient(158deg, #E0EAFF 0%, #EBF4FF 60%, #ECF5FF 100%);
   border-color: rgba(0, 0, 0, 0.07);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
   color: #111214;
@@ -2097,7 +2097,7 @@
 }
 
 .lp-brand {
-  background: linear-gradient(158deg, #EDF2FF 0%, #EEF6FF 100%);
+  background: linear-gradient(158deg, #E0EAFF 0%, #EBF4FF 100%);
   border-right: 1px solid rgba(0, 0, 0, 0.07);
 }
 
@@ -2235,7 +2235,7 @@
 .premium-auth-orb { opacity: 0; }
 
 .premium-setup-card {
-  background: linear-gradient(158deg, #EDF2FF 0%, #EEF6FF 100%);
+  background: linear-gradient(158deg, #E0EAFF 0%, #EBF4FF 100%);
   border-color: rgba(0, 0, 0, 0.07);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
 }

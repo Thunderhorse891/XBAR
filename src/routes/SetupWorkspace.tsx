@@ -116,7 +116,7 @@ export default function SetupWorkspace() {
       <div className="premium-auth-orb premium-auth-orb--two" aria-hidden="true" />
 
       <div className="relative z-[1] mx-auto grid min-h-screen w-full max-w-[1340px] gap-6 px-4 py-5 lg:grid-cols-[0.92fr_1.08fr] lg:px-8 lg:py-8">
-        <section className="flex flex-col justify-between rounded-[30px] border border-[var(--border)] bg-[linear-gradient(158deg,#EDF2FF_0%,#EEF6FF_100%)] p-6 shadow-[0_4px_24px_rgba(0,0,0,0.07)] lg:min-h-[calc(100vh-4rem)] lg:p-8">
+        <section className="flex flex-col justify-between rounded-[30px] border border-[var(--border)] bg-[linear-gradient(158deg,#E0EAFF_0%,#EBF4FF_100%)] p-6 shadow-[0_4px_24px_rgba(0,0,0,0.07)] lg:min-h-[calc(100vh-4rem)] lg:p-8">
           <div>
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-4">

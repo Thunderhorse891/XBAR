@@ -124,8 +124,9 @@ export default function Medical() {
                   className="stack-item stack-item--interactive"
                   role="button"
                   tabIndex={0}
+                  aria-label={`Open health record for ${horse.name}`}
                   onClick={() => openDrawer({ type: 'horse-health', horseId: horse.id })}
-                  onKeyDown={(e) => e.key === 'Enter' && openDrawer({ type: 'horse-health', horseId: horse.id })}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDrawer({ type: 'horse-health', horseId: horse.id }); } }}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     setMenuState({ horseId: horse.id, x: event.clientX, y: event.clientY });

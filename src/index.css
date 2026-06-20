@@ -4126,12 +4126,11 @@ a:focus-visible,
 }
 
 .cp-item-icon {
-  font-size: 14px;
-  width: 20px;
-  text-align: center;
-  color: var(--muted);
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
-  user-select: none;
+  color: var(--muted);
+  stroke-width: 1.6;
 }
 
 .cp-item-label {
@@ -4886,7 +4885,7 @@ a:focus-visible,
 /* ── Surface hero dark variant — light mode equivalent ───────────────────── */
 
 .surface-hero--dark {
-  background: linear-gradient(135deg, #EDF2FF 0%, #EEF6FF 100%);
+  background: linear-gradient(135deg, #E0EAFF 0%, #EBF4FF 100%);
   border-color: rgba(37, 99, 235, 0.12);
   color: var(--text);
 }
@@ -5495,7 +5494,7 @@ a:focus-visible,
   overflow: hidden;
   border-radius: 14px;
   border: 1px solid var(--border);
-  background: linear-gradient(135deg, #EDF2FF 0%, #EEF6FF 100%);
+  background: linear-gradient(135deg, #E0EAFF 0%, #EBF4FF 100%);
   box-shadow:
     0 0 0 1px rgba(37, 99, 235, 0.06),
     0 8px 32px rgba(0, 0, 0, 0.07),
@@ -5508,7 +5507,7 @@ a:focus-visible,
   background:
     linear-gradient(rgba(37, 99, 235, 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(37, 99, 235, 0.035) 1px, transparent 1px),
-    linear-gradient(135deg, #EDF2FF 0%, #EEF6FF 100%);
+    linear-gradient(135deg, #E0EAFF 0%, #EBF4FF 100%);
   background-size: 52px 52px, 52px 52px, 100% 100%;
   border-color: rgba(37, 99, 235, 0.12);
   box-shadow:

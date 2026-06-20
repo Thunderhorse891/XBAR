@@ -3,10 +3,30 @@
  * Triggered by ⌘K or / from anywhere in the app.
  */
 
+import type { ComponentType, SVGProps } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
+import {
+  AddIcon,
+  AssetsIcon,
+  BellIcon,
+  BreedingIcon,
+  DashboardIcon,
+  DocumentsIcon,
+  ExpensesIcon,
+  HorsesIcon,
+  KeyboardIcon,
+  MarketplaceIcon,
+  MedicalIcon,
+  OwnershipIcon,
+  SalesIcon,
+  SettingsIcon,
+  UploadIcon,
+} from '@/components/icons';
+
+type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
 
 type ResultItem = {
   id: string;
@@ -14,7 +34,7 @@ type ResultItem = {
   sublabel?: string;
   category: string;
   action: () => void;
-  icon?: string;
+  icon?: IconComponent;
 };
 
 function scoreMatch(text: string, query: string): number {
@@ -60,24 +80,24 @@ export function CommandPalette() {
     const q = query.trim();
 
     const staticActions: ResultItem[] = [
-      { id: 'nav-dashboard', label: 'Go to Dashboard', category: 'Navigation', icon: '⊞', action: () => { navigate('/'); close(); } },
-      { id: 'nav-horses', label: 'Go to Horses', category: 'Navigation', icon: '◉', action: () => { navigate('/horses'); close(); } },
-      { id: 'nav-health', label: 'Go to Health & Care', category: 'Navigation', icon: '♥', action: () => { navigate('/medical'); close(); } },
-      { id: 'nav-breeding', label: 'Go to Breeding', category: 'Navigation', icon: '◎', action: () => { navigate('/breeding'); close(); } },
-      { id: 'nav-documents', label: 'Go to Documents', category: 'Navigation', icon: '▣', action: () => { navigate('/documents'); close(); } },
-      { id: 'nav-expenses', label: 'Go to Expenses', category: 'Navigation', icon: '$', action: () => { navigate('/expenses'); close(); } },
-      { id: 'nav-sales', label: 'Go to Sales', category: 'Navigation', icon: '◇', action: () => { navigate('/sales'); close(); } },
-      { id: 'nav-ownership', label: 'Go to Ownership', category: 'Navigation', icon: '◈', action: () => { navigate('/ownership'); close(); } },
-      { id: 'nav-marketplace', label: 'Go to Marketplace', category: 'Navigation', icon: '◆', action: () => { navigate('/marketplace'); close(); } },
-      { id: 'nav-reminders', label: 'Go to Reminders', category: 'Navigation', icon: '◔', action: () => { navigate('/reminders'); close(); } },
-      { id: 'nav-assets', label: 'Go to Ranch Assets', category: 'Navigation', icon: '⬡', action: () => { navigate('/assets'); close(); } },
-      { id: 'nav-settings', label: 'Go to Settings', category: 'Navigation', icon: '⚙', action: () => { navigate('/settings'); close(); } },
-      { id: 'action-upload', label: 'Upload documents', category: 'Action', icon: '↑', action: () => { navigate('/documents?upload=1'); close(); } },
-      { id: 'action-new-horse', label: 'Add new horse', category: 'Action', icon: '+', action: () => { navigate('/horses?new=1'); close(); } },
-      { id: 'action-log-expense', label: 'Log an expense', category: 'Action', icon: '$', action: () => { navigate('/expenses'); close(); } },
-      { id: 'action-add-care', label: 'Add care event', category: 'Action', icon: '♥', action: () => { navigate('/medical'); close(); } },
-      { id: 'drawer-notifications', label: 'Notification centre', category: 'System', icon: '◉', action: () => { openDrawer({ type: 'notification-centre' }); close(); } },
-      { id: 'drawer-shortcuts', label: 'Keyboard shortcuts', category: 'System', icon: '⌨', action: () => { openDrawer({ type: 'keyboard-shortcuts' }); close(); } },
+      { id: 'nav-dashboard', label: 'Go to Dashboard', category: 'Navigation', icon: DashboardIcon, action: () => { navigate('/'); close(); } },
+      { id: 'nav-horses', label: 'Go to Horses', category: 'Navigation', icon: HorsesIcon, action: () => { navigate('/horses'); close(); } },
+      { id: 'nav-health', label: 'Go to Health & Care', category: 'Navigation', icon: MedicalIcon, action: () => { navigate('/medical'); close(); } },
+      { id: 'nav-breeding', label: 'Go to Breeding', category: 'Navigation', icon: BreedingIcon, action: () => { navigate('/breeding'); close(); } },
+      { id: 'nav-documents', label: 'Go to Documents', category: 'Navigation', icon: DocumentsIcon, action: () => { navigate('/documents'); close(); } },
+      { id: 'nav-expenses', label: 'Go to Expenses', category: 'Navigation', icon: ExpensesIcon, action: () => { navigate('/expenses'); close(); } },
+      { id: 'nav-sales', label: 'Go to Sales', category: 'Navigation', icon: SalesIcon, action: () => { navigate('/sales'); close(); } },
+      { id: 'nav-ownership', label: 'Go to Ownership', category: 'Navigation', icon: OwnershipIcon, action: () => { navigate('/ownership'); close(); } },
+      { id: 'nav-marketplace', label: 'Go to Marketplace', category: 'Navigation', icon: MarketplaceIcon, action: () => { navigate('/marketplace'); close(); } },
+      { id: 'nav-reminders', label: 'Go to Reminders', category: 'Navigation', icon: BellIcon, action: () => { navigate('/reminders'); close(); } },
+      { id: 'nav-assets', label: 'Go to Ranch Assets', category: 'Navigation', icon: AssetsIcon, action: () => { navigate('/assets'); close(); } },
+      { id: 'nav-settings', label: 'Go to Settings', category: 'Navigation', icon: SettingsIcon, action: () => { navigate('/settings'); close(); } },
+      { id: 'action-upload', label: 'Upload documents', category: 'Action', icon: UploadIcon, action: () => { navigate('/documents?upload=1'); close(); } },
+      { id: 'action-new-horse', label: 'Add new horse', category: 'Action', icon: AddIcon, action: () => { navigate('/horses?new=1'); close(); } },
+      { id: 'action-log-expense', label: 'Log an expense', category: 'Action', icon: ExpensesIcon, action: () => { navigate('/expenses'); close(); } },
+      { id: 'action-add-care', label: 'Add care event', category: 'Action', icon: MedicalIcon, action: () => { navigate('/medical'); close(); } },
+      { id: 'drawer-notifications', label: 'Notification centre', category: 'System', icon: BellIcon, action: () => { openDrawer({ type: 'notification-centre' }); close(); } },
+      { id: 'drawer-shortcuts', label: 'Keyboard shortcuts', category: 'System', icon: KeyboardIcon, action: () => { openDrawer({ type: 'keyboard-shortcuts' }); close(); } },
     ];
 
     const horseItems: ResultItem[] = horses.map((h) => ({
@@ -85,7 +105,7 @@ export function CommandPalette() {
       label: h.name,
       sublabel: `${h.breed || h.segment} · ${h.sex} · ${h.status}`,
       category: 'Horse',
-      icon: '◉',
+      icon: HorsesIcon,
       action: () => { openDrawer({ type: 'horse-detail', horseId: h.id }); close(); },
     }));
 
@@ -94,7 +114,7 @@ export function CommandPalette() {
       label: d.title,
       sublabel: `${d.type} · ${d.state}`,
       category: 'Document',
-      icon: '▤',
+      icon: DocumentsIcon,
       action: () => { openDrawer({ type: 'document-preview', documentId: d.id }); close(); },
     }));
 
@@ -200,6 +220,7 @@ export function CommandPalette() {
                   {items.map((item) => {
                     const idx = flatIdx++;
                     const isActive = idx === activeIdx;
+                    const Icon = item.icon;
                     return (
                       <li
                         key={item.id}
@@ -210,7 +231,7 @@ export function CommandPalette() {
                         onMouseEnter={() => setActiveIdx(idx)}
                         onClick={item.action}
                       >
-                        {item.icon && <span className="cp-item-icon" aria-hidden="true">{item.icon}</span>}
+                        {Icon && <Icon className="cp-item-icon" />}
                         <span className="cp-item-label">{item.label}</span>
                         {item.sublabel && <span className="cp-item-sub">{item.sublabel}</span>}
                         <span className="cp-item-category">{item.category}</span>
