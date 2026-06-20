@@ -2740,19 +2740,19 @@ a:focus-visible,
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #34d399;
-  box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.25);
+  background: var(--emerald);
+  box-shadow: 0 0 0 2px var(--emerald-soft);
 }
 
 .ops-pulse__dot--urgent {
-  background: #f87171;
-  box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.25);
+  background: var(--rose);
+  box-shadow: 0 0 0 2px var(--rose-soft);
   animation: pulse-urgent 2s ease infinite;
 }
 
 .ops-pulse__dot--warning {
-  background: #fbbf24;
-  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.25);
+  background: var(--amber);
+  box-shadow: 0 0 0 2px var(--amber-soft);
 }
 
 @keyframes pulse-urgent {
@@ -5148,12 +5148,6 @@ a:focus-visible,
 @media (prefers-reduced-motion: reduce) {
   .shell-content { animation: none; }
 }
-
-/* ── Ops pulse — light ───────────────────────────────────────────────────── */
-
-.ops-pulse__dot { background: #16A34A; box-shadow: 0 0 0 2px rgba(22,163,74,0.2); }
-.ops-pulse__dot--urgent { background: #DC2626; box-shadow: 0 0 0 2px rgba(220,38,38,0.2); }
-.ops-pulse__dot--warning { background: #D97706; box-shadow: 0 0 0 2px rgba(217,119,6,0.2); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    PREMIUM MOTION SYSTEM
