@@ -2321,14 +2321,15 @@ a:focus-visible,
 }
 
 .empty-state {
-  padding: 18px;
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-lg);
-  background: var(--surface-strong);
+  padding: 48px 32px;
+  border: 1px dashed rgba(0,0,0,0.10);
+  border-radius: 16px;
+  background: linear-gradient(135deg, #F9FAFB 0%, #F3F4F6 100%);
   display: flex;
   flex-direction: column;
   gap: 8px;
-  align-items: flex-start;
+  align-items: center;
+  text-align: center;
 }
 
 .empty-state--compact {
@@ -4870,14 +4871,6 @@ a:focus-visible,
   background: rgba(37, 99, 235, 0.04);
 }
 
-/* ── Empty state — light ─────────────────────────────────────────────────── */
-
-.empty-state {
-  border: 1px dashed rgba(0, 0, 0, 0.12);
-  background: #FAFAFA;
-  border-radius: 12px;
-}
-
 /* ── Field tools — light ─────────────────────────────────────────────────── */
 
 .field-tool-card {
@@ -5269,16 +5262,6 @@ a:focus-visible,
   border-color: rgba(37,99,235,0.18);
   box-shadow: 0 6px 24px rgba(0,0,0,0.08);
   transform: translateY(-2px);
-}
-
-/* ── Premium empty state ─────────────────────────────────────────────────── */
-
-.empty-state {
-  background: linear-gradient(135deg, #F9FAFB 0%, #F3F4F6 100%);
-  border: 1px dashed rgba(0,0,0,0.10);
-  border-radius: 16px;
-  text-align: center;
-  padding: 48px 32px;
 }
 
 .empty-state__icon {
