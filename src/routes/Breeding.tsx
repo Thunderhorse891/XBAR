@@ -61,6 +61,7 @@ export default function Breeding() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Breeding Program</span>
+            <h1 className="surface-hero__title">Breeding &amp; Foaling</h1>
           </div>
           <div className="surface-hero__stats">
             <div className="surface-hero__stat">

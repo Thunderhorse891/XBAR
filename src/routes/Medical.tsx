@@ -84,6 +84,7 @@ export default function Medical() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Health & Care</span>
+            <h1 className="surface-hero__title">Medical</h1>
           </div>
           <div className="surface-hero__stats">
             <div className="surface-hero__stat">
@@ -264,7 +265,7 @@ export default function Medical() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Next up" title="Cadence">
+        <Panel eyebrow="Recent care" title="Care history">
           {medicalEvents.length ? (
             <div className="stack-list">
               {medicalEvents.slice(0, 5).map((event) => (

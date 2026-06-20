@@ -117,6 +117,7 @@ export default function Weather() {
   return (
     <>
       <PageHeader
+        eyebrow="Ranch tools"
         title="Weather"
         actions={
           <button className="button button--ghost button--compact" type="button" onClick={handleUseMyLocation} disabled={searching}>

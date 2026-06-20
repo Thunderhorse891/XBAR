@@ -154,7 +154,7 @@ export default function Subscriptions() {
                   <div className="stack-item__title">{tier}</div>
                   <Pill tone={current ? 'blue' : 'slate'}>{current ? 'Current' : 'Available'}</Pill>
                 </div>
-                <p className="field-hint" style={{ margin: '0 0 4px' }}>{tierDescriptions[tier]}</p>
+                <p className="field-hint field-hint--tight">{tierDescriptions[tier]}</p>
                 <div className="inline-metrics">
                   <span>{formatCurrency(config.monthlyRate)}/mo</span>
                   <span>{config.limits.seatLimit} seats</span>

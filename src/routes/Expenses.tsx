@@ -100,6 +100,7 @@ export default function Expenses() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Budget & Expenses</span>
+            <h1 className="surface-hero__title">Expenses</h1>
             <div className="surface-hero__actions">
               <button className="button button--primary" type="button" onClick={() => document.getElementById('expense-intake')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
                 Log receipt

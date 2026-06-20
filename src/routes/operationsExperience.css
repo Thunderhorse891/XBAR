@@ -371,23 +371,23 @@
   height: 11px;
   margin-top: 7px;
   border-radius: 999px;
-  background: #7d95aa;
-  box-shadow: 0 0 0 4px rgba(125, 149, 170, 0.15);
+  background: var(--muted);
+  box-shadow: 0 0 0 4px rgba(60, 70, 90, 0.12);
 }
 
 .ops-timeline-dot--due {
-  background: #b84c55;
-  box-shadow: 0 0 0 4px rgba(184, 76, 85, 0.15);
+  background: var(--rose);
+  box-shadow: 0 0 0 4px rgba(225, 29, 72, 0.12);
 }
 
 .ops-timeline-dot--watch {
-  background: #b38535;
-  box-shadow: 0 0 0 4px rgba(179, 133, 53, 0.15);
+  background: var(--amber);
+  box-shadow: 0 0 0 4px rgba(217, 119, 6, 0.12);
 }
 
 .ops-timeline-dot--clear {
-  background: #3e8664;
-  box-shadow: 0 0 0 4px rgba(62, 134, 100, 0.15);
+  background: var(--emerald);
+  box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.12);
 }
 
 .ops-link-list {

@@ -315,6 +315,7 @@ export default function Documents() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Document Vault</span>
+            <h1 className="surface-hero__title">Documents</h1>
           </div>
           <div className="surface-hero__stats">
             <div className="surface-hero__stat"><span>Total files</span><strong>{documents.length}</strong></div>

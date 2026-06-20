@@ -637,7 +637,7 @@ export default function HorseDetail() {
                         <button
                           type="button"
                           title="Approve photo"
-                          className="inline-flex h-7 items-center gap-1 rounded-md bg-[#14532d]/80 px-2.5 text-[11px] font-semibold text-white backdrop-blur-sm hover:bg-[#14532d]"
+                          className="inline-flex h-7 items-center gap-1 rounded-md bg-[rgba(22,163,74,0.85)] px-2.5 text-[11px] font-semibold text-white backdrop-blur-sm hover:bg-[rgba(22,163,74,0.96)]"
                           onClick={() => {
                             const result = setGalleryAssetStatus(horse.id, asset.id, 'Approved');
                             pushToast({ title: result.ok ? 'Photo approved' : 'Error', message: result.message, tone: result.ok ? 'success' : 'error' });
@@ -649,7 +649,7 @@ export default function HorseDetail() {
                       <button
                         type="button"
                         title="Remove photo"
-                        className="inline-flex h-7 items-center gap-1 rounded-md bg-[#7f1d1d]/80 px-2.5 text-[11px] font-semibold text-white backdrop-blur-sm hover:bg-[#7f1d1d]"
+                        className="inline-flex h-7 items-center gap-1 rounded-md bg-[rgba(220,38,38,0.85)] px-2.5 text-[11px] font-semibold text-white backdrop-blur-sm hover:bg-[rgba(220,38,38,0.96)]"
                         onClick={async () => {
                           if (!await confirm('Remove photo', `Remove "${asset.label}" from the gallery? This cannot be undone.`)) return;
                           const result = removeGalleryAsset(horse.id, asset.id);

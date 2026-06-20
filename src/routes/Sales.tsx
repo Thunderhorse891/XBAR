@@ -148,6 +148,7 @@ export default function Sales() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Sales & Transfers</span>
+            <h1 className="surface-hero__title">Sales</h1>
           </div>
           <div className="surface-hero__stats">
             <div className="surface-hero__stat"><span>Listings</span><strong>{saleHorses.length}</strong></div>
