@@ -163,7 +163,7 @@ function NavSection({ title, items, badges }: { title: string; items: NavItem[];
                 classNames(
                   'group flex items-center gap-3 border-l-[3px] px-3 py-[9px] text-[13px] font-medium transition-colors duration-150 rounded-r-md',
                   isActive
-                    ? 'border-[var(--blue)] bg-[rgba(37,99,235,0.08)] text-[#1D4ED8]'
+                    ? 'border-[var(--blue)] bg-[rgba(37,99,235,0.08)] text-[var(--blue-dark)]'
                     : 'border-transparent text-[var(--muted-strong)] hover:border-[rgba(0,0,0,0.1)] hover:bg-[rgba(0,0,0,0.04)] hover:text-[var(--text)]',
                 )
               }
@@ -421,7 +421,7 @@ export default function MainLayout() {
 
               {cloudSession && canSyncCloud ? (
                 <button
-                  className="inline-flex h-9 items-center justify-center rounded-md border border-[var(--border-strong)] bg-[var(--surface-strong)] px-3 text-[13px] font-semibold text-[var(--muted-strong)] transition-colors duration-150 hover:border-[rgba(248,81,73,0.4)] hover:bg-[rgba(248,81,73,0.08)] hover:text-[#F85149]"
+                  className="inline-flex h-9 items-center justify-center rounded-md border border-[var(--border-strong)] bg-[var(--surface-strong)] px-3 text-[13px] font-semibold text-[var(--muted-strong)] transition-colors duration-150 hover:border-[rgba(220,38,38,0.4)] hover:bg-[var(--rose-soft)] hover:text-[var(--rose)]"
                   type="button"
                   onClick={() => void handleCloudSignOut()}
                 >
@@ -437,7 +437,7 @@ export default function MainLayout() {
               >
                 <BellIcon className="h-[16px] w-[16px]" />
                 {pendingReview + pendingTransfers ? (
-                  <span className="absolute right-0.5 top-0.5 min-w-[16px] rounded-full bg-[#F85149] px-1 py-px text-center text-[9px] font-bold text-white">
+                  <span className="absolute right-0.5 top-0.5 min-w-[16px] rounded-full bg-[var(--rose)] px-1 py-px text-center text-[9px] font-bold text-white">
                     {pendingReview + pendingTransfers}
                   </span>
                 ) : null}
@@ -462,7 +462,7 @@ export default function MainLayout() {
 
               {canCreateHorse ? (
                 <Link
-                  className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-[var(--blue)] px-3 text-[13px] font-bold text-white transition-colors duration-150 hover:bg-[#1D4ED8]"
+                  className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-[var(--blue)] px-3 text-[13px] font-bold text-white transition-colors duration-150 hover:bg-[var(--blue-dark)]"
                   to="/horses?new=1"
                 >
                   <AddIcon className="h-[14px] w-[14px]" />
@@ -563,7 +563,7 @@ export default function MainLayout() {
               <Icon className="h-[17px] w-[17px]" />
               <span>{label}</span>
               {badge > 0 ? (
-                <span className="absolute right-1.5 top-1.5 min-w-[15px] rounded-full bg-[#F85149] px-1 py-px text-center text-[9px] font-bold text-white">
+                <span className="absolute right-1.5 top-1.5 min-w-[15px] rounded-full bg-[var(--rose)] px-1 py-px text-center text-[9px] font-bold text-white">
                   {badge}
                 </span>
               ) : null}
@@ -585,7 +585,7 @@ export default function MainLayout() {
             <DotsIcon className="h-[17px] w-[17px]" />
             <span>More</span>
             {pendingTransfers + careDueCount > 0 ? (
-              <span className="absolute right-1.5 top-1.5 min-w-[15px] rounded-full bg-[#F85149] px-1 py-px text-center text-[9px] font-bold text-white">
+              <span className="absolute right-1.5 top-1.5 min-w-[15px] rounded-full bg-[var(--rose)] px-1 py-px text-center text-[9px] font-bold text-white">
                 {pendingTransfers + careDueCount}
               </span>
             ) : null}

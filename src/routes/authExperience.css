@@ -2166,7 +2166,7 @@
 .lp-options { color: rgba(107, 114, 128, 0.7); }
 
 .lp-forgot { color: #2563EB; }
-.lp-forgot:hover { color: #1D4ED8; }
+.lp-forgot:hover { color: var(--blue-dark); }
 
 .lp-btn-primary {
   background: #111214;
@@ -2204,7 +2204,7 @@
 
 .lp-mode-switch { color: rgba(107, 114, 128, 0.65); }
 .lp-mode-switch button { color: #2563EB; }
-.lp-mode-switch button:hover { color: #1D4ED8; }
+.lp-mode-switch button:hover { color: var(--blue-dark); }
 
 .lp-footer { color: rgba(107, 114, 128, 0.55); }
 .lp-footer a { color: rgba(37, 99, 235, 0.7); }
@@ -2213,7 +2213,7 @@
 .lp-invite-banner {
   background: rgba(37, 99, 235, 0.06);
   border: 1px solid rgba(37, 99, 235, 0.18);
-  color: #1D4ED8;
+  color: var(--blue-dark);
   border-radius: 7px;
   padding: 10px 12px;
   font-size: 12px;

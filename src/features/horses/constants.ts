@@ -9,8 +9,8 @@ export function classNames(...parts: Array<string | false | null | undefined>) {
 }
 
 export const shareBadgeStyleMap = {
-  live: 'border border-[rgba(37,99,235,0.25)] bg-[rgba(37,99,235,0.08)] text-[#1D4ED8]',
-  blocked: 'border border-[rgba(220,38,38,0.25)] bg-[rgba(220,38,38,0.07)] text-[#B91C1C]',
-  needsReview: 'border border-[rgba(217,119,6,0.25)] bg-[rgba(217,119,6,0.08)] text-[#B45309]',
+  live: 'border border-[rgba(37,99,235,0.25)] bg-[rgba(37,99,235,0.08)] text-[var(--blue-dark)]',
+  blocked: 'border border-[rgba(220,38,38,0.25)] bg-[rgba(220,38,38,0.07)] text-[var(--rose)]',
+  needsReview: 'border border-[rgba(217,119,6,0.25)] bg-[rgba(217,119,6,0.08)] text-[var(--amber)]',
   default: 'border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--muted)]',
 } as const;

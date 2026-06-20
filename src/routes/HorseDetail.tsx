@@ -535,7 +535,7 @@ export default function HorseDetail() {
           <div className="flex shrink-0 flex-wrap gap-2 xl:flex-col">
             {saved ? (
               <a
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[rgba(37,99,235,0.4)] bg-[var(--blue)] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#1D4ED8]"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[rgba(37,99,235,0.4)] bg-[var(--blue)] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[var(--blue-dark)]"
                 href={publicShareUrl}
                 target="_blank"
                 rel="noreferrer"
@@ -546,7 +546,7 @@ export default function HorseDetail() {
               </a>
             ) : (
               <button
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[rgba(37,99,235,0.35)] bg-[var(--blue)] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[rgba(37,99,235,0.35)] bg-[var(--blue)] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[var(--blue-dark)] disabled:cursor-not-allowed disabled:opacity-40"
                 type="button"
                 onClick={() => void handleSavedHorseToggle()}
                 disabled={!canManageSharedAccess}
@@ -702,7 +702,7 @@ export default function HorseDetail() {
                 Hero
               </label>
               <button
-                className="inline-flex h-10 items-center justify-center rounded-md bg-[var(--blue)] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center rounded-md bg-[var(--blue)] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[var(--blue-dark)] disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 onClick={() => void handleMediaUpload()}
                 disabled={!canUploadMedia || isMediaUploading || !mediaFiles.length}
