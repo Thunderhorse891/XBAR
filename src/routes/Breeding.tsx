@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CommandBrief } from '@/components/CommandBrief';
 import { ConfirmActionDialog } from '@/components/ConfirmActionDialog';
@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { DocumentBlock, Timeline } from '@/components/InteractionSystem';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { buildBreedingRevenueProfile, emptyBreedingEconomics } from '@/lib/breedingRevenue';
+import { buildBreedingProgram, type MareStatus } from '@/lib/breedingIntelligence';
 import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
 import { breedingRevenueGate } from '@/lib/subscriptionGates';
 import { useCloudStore } from '@/store/useCloudStore';
@@ -50,6 +51,8 @@ export default function Breeding() {
   const addEventFormRef = useRef<HTMLDivElement | null>(null);
   const milestoneCount = breedingHorses.reduce((sum, horse) => sum + horse.breedingTimeline.length, 0);
   const blockedHorses = breedingHorses.filter((horse) => horse.readiness.packetStatus !== 'Ready');
+  const program = useMemo(() => buildBreedingProgram(horses), [horses]);
+  const programEdge = program.overdueCheckCount > 0 ? 'rose' : program.nearTerm > 0 ? 'amber' : 'blue';
   const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
   const menuHorse = breedingHorses.find((horse) => horse.id === menuState?.horseId);
   const menuItems = menuHorse
@@ -104,6 +107,67 @@ export default function Breeding() {
         <MetricCard label="Live milestones" value={`${milestoneCount}`} detail="Timeline entries currently supporting the program" tone="blue" />
         <MetricCard label="Missing records" value={`${blockedHorses.length}`} detail="Horses still missing packet elements or imagery" tone="amber" />
       </div>
+
+      <Panel
+        eyebrow="Breeding intelligence"
+        title="Foaling forecast & program value"
+        description="Gestation, pregnancy checks, and live-foal guarantees computed from each mare's breeding timeline. Every mare carries her next action."
+        edge={programEdge}
+      >
+        {program.maresTracked ? (
+          <>
+            <div className="inline-metrics" style={{ marginBottom: 14 }}>
+              <span>{program.inFoal} confirmed in foal</span>
+              <span>{program.nearTerm} near term</span>
+              <span>{program.overdueCheckCount} overdue checks</span>
+              <span>Projected foal value {formatCompactCurrency(program.projectedProgramValue)}</span>
+              <span>Projected margin {formatCompactCurrency(program.projectedProgramMargin)}</span>
+            </div>
+            <div className="stack-list">
+              {program.mares.map((mareState) => {
+                const tone: Record<MareStatus, 'blue' | 'amber' | 'rose' | 'slate'> = {
+                  open: 'slate', 'bred-awaiting-check': 'amber', 'in-foal': 'blue', 'near-term': 'amber',
+                  'foaled-live': 'blue', 'foaled-loss': 'rose', 'not-breeding': 'slate',
+                };
+                return (
+                  <div
+                    key={mareState.horseId}
+                    className="stack-item stack-item--interactive"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => navigate(`/horses/${mareState.horseId}`)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/horses/${mareState.horseId}`); } }}
+                  >
+                    <div className="stack-item__top">
+                      <div>
+                        <div className="stack-item__title">{mareState.horseName}{mareState.mateName ? ` × ${mareState.mateName}` : ''}</div>
+                        <div className="stack-item__copy">{mareState.actionLabel}</div>
+                      </div>
+                      <div className="status-inline">
+                        {mareState.overdueCheckpoints.length ? <Pill tone="rose">{mareState.overdueCheckpoints.length} overdue</Pill> : null}
+                        {mareState.guarantee === 'rebreed-owed' ? <Pill tone="rose">rebreed owed</Pill> : mareState.guarantee === 'covered' ? <Pill tone="blue">LFG covered</Pill> : null}
+                        <Pill tone={tone[mareState.status]}>{mareState.statusLabel}</Pill>
+                      </div>
+                    </div>
+                    <div className="inline-metrics">
+                      {mareState.expectedFoalingDate ? <span>Due {formatDateLabel(mareState.expectedFoalingDate)}{typeof mareState.daysToFoaling === 'number' ? ` (${mareState.daysToFoaling}d)` : ''}</span> : null}
+                      {mareState.foalingWindowStart && mareState.foalingWindowEnd ? <span>Window {formatDateLabel(mareState.foalingWindowStart)} – {formatDateLabel(mareState.foalingWindowEnd)}</span> : null}
+                      {mareState.nextCheckpoint ? <span>Next: {mareState.nextCheckpoint.label}</span> : null}
+                      {mareState.projectedFoalValue ? <span>Foal value {formatCompactCurrency(mareState.projectedFoalValue)}</span> : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <EmptyState
+            compact
+            title="No mares in the breeding cycle yet"
+            description="Log a breeding event on a mare and XBAR forecasts her foaling window, schedules the pregnancy checks, and tracks the live-foal guarantee."
+          />
+        )}
+      </Panel>
 
       <div className="dashboard-grid dashboard-grid--primary">
         <Panel eyebrow="Breeding Board" title="Board">
