@@ -90,6 +90,20 @@ const questions = [
   },
 ];
 
+const intelligenceBars = [
+  { label: 'Proof readiness', value: '92%', detail: 'approved records' },
+  { label: 'Buyer momentum', value: '78%', detail: 'warm leads moving' },
+  { label: 'Care confidence', value: '86%', detail: 'holds visible' },
+  { label: 'Margin clarity', value: '64%', detail: 'costs connected' },
+];
+
+const showcaseHorseCards = [
+  { name: 'Silver Mesa', role: 'Sale prospect', proof: '18 docs', signal: 'Packet ready', value: '$48k ask' },
+  { name: 'Blue Hancock', role: 'Rope horse', proof: '12 docs', signal: 'Farrier due', value: '$32k insured' },
+  { name: 'Mesa Drift', role: 'Broodmare', proof: '24 docs', signal: 'Foal window', value: 'May 14' },
+  { name: 'Copper Line', role: 'Prospect', proof: '9 docs', signal: 'Buyer room', value: '3 inquiries' },
+];
+
 const signupPath = (plan?: SubscriptionTier) => `/login?mode=signup${plan ? `&plan=${encodeURIComponent(plan)}` : ''}`;
 
 function Wordmark() {
@@ -152,6 +166,76 @@ function CommandPreview() {
   );
 }
 
+function RevenueIntelligenceShowcase() {
+  const carouselCards = [...showcaseHorseCards, ...showcaseHorseCards];
+
+  return (
+    <section className="revenue-intelligence-showcase" aria-labelledby="revenue-intelligence-title">
+      <div className="revenue-intelligence-showcase__copy">
+        <p className="revenue-kicker">Command-grade conversion system</p>
+        <h2 id="revenue-intelligence-title">A buyer, proof, care, and revenue engine on one surface.</h2>
+        <p>
+          XBAR turns the public promise into the actual product: live operational graphs, horse cards, proof status,
+          buyer movement, and plan pressure that point operators toward the next paid-value action.
+        </p>
+        <div className="revenue-intelligence-showcase__actions">
+          <Link className="public-action public-action--primary" to={signupPath('Professional')}>
+            Build my command center
+          </Link>
+          <Link className="public-action" to="#pricing-heading">
+            Compare plans
+          </Link>
+        </div>
+      </div>
+
+      <div className="revenue-command-visual" aria-label="XBAR intelligence preview">
+        <div className="revenue-command-visual__top">
+          <span>XBAR operating graph</span>
+          <strong>Revenue confidence rising</strong>
+        </div>
+        <svg className="revenue-command-visual__line" viewBox="0 0 420 140" aria-hidden="true">
+          <path d="M16 110H404" />
+          <path d="M16 72H404" />
+          <path d="M16 34H404" />
+          <polyline points="16,104 78,82 138,88 202,58 266,64 328,34 404,42" />
+        </svg>
+        <div className="revenue-command-visual__bars">
+          {intelligenceBars.map((item) => (
+            <div className="revenue-command-bar" key={item.label}>
+              <div><span>{item.label}</span><strong>{item.value}</strong></div>
+              <i><span style={{ width: item.value }} /></i>
+              <small>{item.detail}</small>
+            </div>
+          ))}
+        </div>
+        <div className="revenue-moving-boxes" aria-hidden="true">
+          <span>Proof approved</span>
+          <span>Buyer viewed packet</span>
+          <span>Checkout ready</span>
+        </div>
+      </div>
+
+      <div className="revenue-horse-carousel" aria-label="Animated premium horse cards">
+        <div className="revenue-horse-carousel__track">
+          {carouselCards.map((card, index) => (
+            <article className="revenue-horse-card" key={`${card.name}-${index}`}>
+              <div>
+                <span>{card.role}</span>
+                <strong>{card.name}</strong>
+              </div>
+              <dl>
+                <div><dt>Proof</dt><dd>{card.proof}</dd></div>
+                <div><dt>Signal</dt><dd>{card.signal}</dd></div>
+                <div><dt>Value</dt><dd>{card.value}</dd></div>
+              </dl>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function Landing() {
   const navigate = useNavigate();
   const session = useCloudStore((state) => state.session);
@@ -206,6 +290,8 @@ export default function Landing() {
         </div>
         <CommandPreview />
       </section>
+
+      <RevenueIntelligenceShowcase />
 
       <section className="revenue-section" aria-labelledby="pipeline-heading">
         <div className="revenue-section__header">

@@ -4,6 +4,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { XbarMark } from '@/components/BrandMark';
 import { CommercialPressureBanner } from '@/components/CommercialPressureBanner';
 import { WorkspaceHelp, type HelpSection } from '@/components/WorkspaceHelp';
+import { XbarIntelligenceRail } from '@/components/XbarIntelligenceRail';
 import {
   AddIcon,
   AssetsIcon,
@@ -394,6 +395,7 @@ export default function MainLayout() {
             <ShellHorseMotif className="xbar-shell-horse-line" />
           </div>
           <CommercialPressureBanner />
+          <XbarIntelligenceRail />
           <div className="xbar-route-transition" key={location.pathname}>
             <Outlet />
           </div>
