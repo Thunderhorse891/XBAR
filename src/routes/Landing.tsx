@@ -108,7 +108,9 @@ function CommandPreview() {
   return (
     <figure className="command-brief revenue-console" aria-label="Example XBAR horse record showing verified ownership, a compliance deadline, document review status, and sale packet readiness">
       <div className="revenue-console__top">
-        <span className="premium-brand-mark revenue-console__mark" aria-hidden="true" />
+        <span className="revenue-console__mark" aria-hidden="true">
+          <XbarMark tone="mono" />
+        </span>
         <div className="revenue-console__head">
           <p className="revenue-kicker">Operational record</p>
           <strong>Smart Lena Bar &middot; 2019 mare</strong>

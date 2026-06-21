@@ -36,7 +36,7 @@
   background:
     radial-gradient(ellipse at 65% 18%, rgba(45, 140, 255, 0.22), transparent 28rem),
     linear-gradient(90deg, rgba(6, 10, 16, 0.25), rgba(6, 10, 16, 0.10) 42%, rgba(6, 10, 16, 0.46)),
-    url('/brand/xbar-login-hero.png'),
+    url('/brand/xbar-login-hero.svg'),
     linear-gradient(145deg, #060a10 0%, #0b1422 52%, #03060b 100%);
   background-size: cover;
   background-position: center;

@@ -1756,3 +1756,954 @@ html body #root .xbar-command-main .xbar-home-runway div {
     transform: translate3d(var(--card-x), var(--card-y), 0) scale(var(--card-scale)) !important;
   }
 }
+
+/* Public conversion upgrade pass.
+   Additive polish over the Linear layer: light, precise, brand-native. */
+html body #root .revenue-landing {
+  --xbar-public-ink: #0c1017;
+  --xbar-public-muted: #5b6471;
+  --xbar-public-line: rgba(79, 91, 108, 0.2);
+  --xbar-public-blue: #1d67d8;
+  --xbar-public-surface: rgba(255, 255, 255, 0.92);
+  position: relative !important;
+  isolation: isolate !important;
+  overflow: hidden !important;
+  background:
+    linear-gradient(rgba(15, 23, 42, 0.026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.022) 1px, transparent 1px),
+    radial-gradient(circle at 18% 4%, rgba(29, 103, 216, 0.075), transparent 23rem),
+    linear-gradient(180deg, #ffffff 0%, #f7f9fc 48%, #f1f5f9 100%) !important;
+  background-size: 84px 84px, 84px 84px, auto, auto !important;
+  color: var(--xbar-public-ink) !important;
+}
+
+html body #root .revenue-landing::before,
+html body #root .revenue-landing::after {
+  content: "" !important;
+  position: absolute !important;
+  z-index: -1 !important;
+  display: block !important;
+  pointer-events: none !important;
+}
+
+html body #root .revenue-landing::before {
+  top: 88px !important;
+  right: -360px !important;
+  width: 980px !important;
+  height: 620px !important;
+  background:
+    linear-gradient(52deg, transparent 42%, rgba(12, 16, 23, 0.046) 42.6%, rgba(12, 16, 23, 0.046) 48.2%, transparent 48.8%),
+    linear-gradient(-52deg, transparent 42%, rgba(29, 103, 216, 0.035) 42.6%, rgba(29, 103, 216, 0.035) 48.2%, transparent 48.8%);
+  opacity: 0.92 !important;
+  transform: rotate(-2deg) !important;
+}
+
+html body #root .revenue-landing::after {
+  left: -260px !important;
+  bottom: 16% !important;
+  width: 740px !important;
+  height: 420px !important;
+  border: 1px solid rgba(12, 16, 23, 0.055) !important;
+  transform: rotate(45deg) !important;
+}
+
+html body #root .revenue-nav {
+  min-height: 68px !important;
+  border-bottom: 1px solid var(--xbar-public-line) !important;
+  background: rgba(255, 255, 255, 0.88) !important;
+  box-shadow: 0 18px 54px -44px rgba(15, 23, 42, 0.52) !important;
+  backdrop-filter: blur(22px) saturate(1.1) !important;
+}
+
+html body #root .revenue-nav .xbar-wordmark {
+  gap: 12px !important;
+}
+
+html body #root .revenue-nav .xbar-wordmark__mark {
+  width: 44px !important;
+  height: 44px !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(79, 91, 108, 0.26) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.1) !important;
+}
+
+html body #root .revenue-nav .xbar-wordmark__mark svg {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+html body #root .revenue-landing .xbar-wordmark__copy strong {
+  color: var(--xbar-public-ink) !important;
+  font-size: 15px !important;
+  font-weight: 800 !important;
+}
+
+html body #root .revenue-landing .xbar-wordmark__copy span {
+  color: var(--xbar-public-muted) !important;
+  font-size: 11px !important;
+}
+
+html body #root .revenue-hero {
+  position: relative !important;
+  grid-template-columns: minmax(0, 0.92fr) minmax(440px, 0.92fr) !important;
+  min-height: 690px !important;
+  max-width: 1320px !important;
+  gap: 74px !important;
+  align-items: center !important;
+  padding-top: 72px !important;
+  padding-bottom: 76px !important;
+  background: transparent !important;
+}
+
+html body #root .revenue-hero::after {
+  content: "" !important;
+  position: absolute !important;
+  top: 82px !important;
+  right: 44px !important;
+  z-index: 0 !important;
+  display: block !important;
+  width: 640px !important;
+  height: 360px !important;
+  pointer-events: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg%20viewBox='0%200%20620%20360'%20xmlns='http://www.w3.org/2000/svg'%3E%3Cg%20fill='none'%20stroke='%23111318'%20stroke-width='1.35'%20stroke-linecap='round'%20stroke-linejoin='round'%20stroke-opacity='.16'%3E%3Cpath%20d='M77%20218c58-82%20126-132%20205-150%2042-9%2083-5%20124%2012%2024%2010%2046%2024%2066%2042l58%2052'/%3E%3Cpath%20d='M184%20162c34-36%2078-53%20132-51%2027%201%2054%209%2082%2023'/%3E%3Cpath%20d='M300%2092c19%2034%2022%2069%208%20106-11%2030-31%2053-61%2070'/%3E%3Cpath%20d='M412%20138c35%2021%2060%2049%2075%2084'/%3E%3Cpath%20d='M122%20223c42%2012%2085%2013%20131%203%2040-9%2079-26%20119-51'/%3E%3Cpath%20d='M204%20257c-12%2034-31%2058-58%2073'/%3E%3Cpath%20d='M356%20222c18%2037%2018%2072%201%20105'/%3E%3Ccircle%20cx='454'%20cy='127'%20r='4'/%3E%3C/g%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-size: contain !important;
+  opacity: 0.34 !important;
+}
+
+html body #root .revenue-hero > * {
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+html body #root .revenue-kicker {
+  color: var(--xbar-public-blue) !important;
+  font-size: 11px !important;
+  font-weight: 850 !important;
+  letter-spacing: 0.12em !important;
+}
+
+html body #root .revenue-hero h1 {
+  max-width: 13.5ch !important;
+  color: var(--xbar-public-ink) !important;
+  font-size: 4.85rem !important;
+  line-height: 0.96 !important;
+  letter-spacing: 0 !important;
+  text-wrap: balance !important;
+}
+
+html body #root .revenue-hero__lead {
+  max-width: 615px !important;
+  color: var(--xbar-public-muted) !important;
+  font-size: 18px !important;
+  line-height: 1.64 !important;
+}
+
+html body #root .public-action {
+  min-height: 42px !important;
+  border: 1px solid rgba(79, 91, 108, 0.24) !important;
+  border-radius: 7px !important;
+  background: rgba(255, 255, 255, 0.86) !important;
+  color: #141922 !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.94), 0 10px 24px -20px rgba(15, 23, 42, 0.45) !important;
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background 180ms ease !important;
+}
+
+html body #root .public-action:hover {
+  transform: translateY(-1px) !important;
+  border-color: rgba(29, 103, 216, 0.46) !important;
+  box-shadow: 0 16px 34px -24px rgba(15, 23, 42, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.96) !important;
+}
+
+html body #root .public-action--primary {
+  background: linear-gradient(180deg, #171a20, #05070a) !important;
+  border-color: #05070a !important;
+  color: #ffffff !important;
+  box-shadow: 0 16px 34px -22px rgba(15, 23, 42, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+}
+
+html body #root .revenue-proof-line {
+  gap: 10px 16px !important;
+}
+
+html body #root .revenue-proof-line li {
+  color: var(--xbar-public-muted) !important;
+}
+
+html body #root .revenue-proof-line li::before {
+  color: var(--xbar-public-blue) !important;
+}
+
+html body #root .revenue-console {
+  position: relative !important;
+  overflow: hidden !important;
+  max-width: 548px !important;
+  border: 1px solid rgba(146, 160, 178, 0.38) !important;
+  border-radius: 8px !important;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(145deg, #171c24 0%, #0a0e14 56%, #07090d 100%) !important;
+  background-size: 42px 42px, 42px 42px, auto !important;
+  color: #f8fbff !important;
+  box-shadow: 0 28px 72px -34px rgba(15, 23, 42, 0.76), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+  animation: xbarConsoleLift 820ms cubic-bezier(0.22, 1, 0.36, 1) both !important;
+}
+
+html body #root .revenue-console::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  display: block !important;
+  pointer-events: none !important;
+  background:
+    linear-gradient(52deg, transparent 40%, rgba(255, 255, 255, 0.045) 40.6%, rgba(255, 255, 255, 0.045) 46.2%, transparent 46.8%),
+    radial-gradient(circle at 88% 10%, rgba(64, 149, 255, 0.16), transparent 15rem) !important;
+  opacity: 0.92 !important;
+}
+
+html body #root .revenue-console > * {
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+html body #root .revenue-console__top {
+  border-bottom-color: rgba(213, 226, 242, 0.13) !important;
+}
+
+html body #root .revenue-console__mark {
+  display: inline-flex !important;
+  width: 48px !important;
+  height: 48px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(213, 226, 242, 0.18) !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+}
+
+html body #root .revenue-console__mark svg {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+html body #root .revenue-console__head strong {
+  color: #f8fbff !important;
+  font-size: 16px !important;
+}
+
+html body #root .revenue-console__row {
+  border-bottom-color: rgba(213, 226, 242, 0.1) !important;
+  animation: xbarConsoleRow 720ms cubic-bezier(0.22, 1, 0.36, 1) both !important;
+  animation-delay: calc(var(--row-index, 0) * 70ms) !important;
+}
+
+html body #root .revenue-console__row:nth-child(1) { --row-index: 1; }
+html body #root .revenue-console__row:nth-child(2) { --row-index: 2; }
+html body #root .revenue-console__row:nth-child(3) { --row-index: 3; }
+html body #root .revenue-console__row:nth-child(4) { --row-index: 4; }
+html body #root .revenue-console__row:nth-child(5) { --row-index: 5; }
+
+html body #root .revenue-console__row dt {
+  color: rgba(196, 213, 232, 0.74) !important;
+}
+
+html body #root .revenue-console__row dd {
+  color: rgba(239, 246, 255, 0.86) !important;
+}
+
+html body #root .revenue-console__audit {
+  border-color: rgba(213, 226, 242, 0.14) !important;
+  background: rgba(255, 255, 255, 0.045) !important;
+  color: rgba(239, 246, 255, 0.76) !important;
+}
+
+html body #root .revenue-chip {
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.075) !important;
+  color: rgba(239, 246, 255, 0.88) !important;
+}
+
+html body #root .revenue-chip--blue {
+  border-color: rgba(85, 164, 255, 0.46) !important;
+  color: #ddecff !important;
+}
+
+html body #root .revenue-chip--amber {
+  border-color: rgba(229, 167, 74, 0.48) !important;
+  color: #ffe3b3 !important;
+}
+
+html body #root .revenue-section {
+  position: relative !important;
+  max-width: 1320px !important;
+  background: transparent !important;
+}
+
+html body #root .revenue-section__header {
+  align-items: end !important;
+  border-bottom: 1px solid rgba(79, 91, 108, 0.14) !important;
+  padding-bottom: 20px !important;
+}
+
+html body #root .revenue-section h2,
+html body #root .revenue-cta h2 {
+  max-width: 18ch !important;
+  color: var(--xbar-public-ink) !important;
+  font-size: 3rem !important;
+  line-height: 1.02 !important;
+  letter-spacing: 0 !important;
+  text-wrap: balance !important;
+}
+
+html body #root .revenue-section__header > p,
+html body #root .revenue-pain__copy p,
+html body #root .revenue-cta > p:not(.revenue-kicker) {
+  color: var(--xbar-public-muted) !important;
+  font-size: 15px !important;
+  line-height: 1.62 !important;
+}
+
+html body #root .revenue-section--bordered {
+  max-width: none !important;
+  border-block: 1px solid rgba(79, 91, 108, 0.14) !important;
+  background:
+    linear-gradient(120deg, rgba(255, 255, 255, 0.86), rgba(247, 249, 252, 0.72)),
+    linear-gradient(rgba(15, 23, 42, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.016) 1px, transparent 1px) !important;
+  background-size: auto, 78px 78px, 78px 78px !important;
+}
+
+html body #root .revenue-section__inner {
+  background: transparent !important;
+}
+
+html body #root .revenue-pipeline {
+  gap: 0 !important;
+  border: 1px solid rgba(79, 91, 108, 0.17) !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  background: rgba(255, 255, 255, 0.72) !important;
+  box-shadow: 0 22px 56px -42px rgba(15, 23, 42, 0.48) !important;
+}
+
+html body #root .revenue-pipeline__step {
+  min-height: 214px !important;
+  border: 0 !important;
+  border-right: 1px solid rgba(79, 91, 108, 0.15) !important;
+  border-radius: 0 !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 251, 254, 0.86)) !important;
+  box-shadow: none !important;
+  transition: transform 180ms ease, background 180ms ease, box-shadow 180ms ease !important;
+}
+
+html body #root .revenue-pipeline__step:last-child {
+  border-right: 0 !important;
+}
+
+html body #root .revenue-pipeline__step:hover {
+  z-index: 2 !important;
+  background: #ffffff !important;
+  box-shadow: 0 18px 34px -28px rgba(15, 23, 42, 0.48) !important;
+  transform: translateY(-3px) !important;
+}
+
+html body #root .revenue-pipeline__index {
+  color: rgba(29, 103, 216, 0.86) !important;
+}
+
+html body #root .revenue-pillar,
+html body #root .revenue-trust-card,
+html body #root .revenue-faq,
+html body #root .revenue-plan,
+html body #root .revenue-pain {
+  border: 1px solid rgba(79, 91, 108, 0.17) !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  box-shadow: 0 18px 48px -40px rgba(15, 23, 42, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.96) !important;
+}
+
+html body #root .revenue-pillar,
+html body #root .revenue-trust-card,
+html body #root .revenue-faq,
+html body #root .revenue-plan {
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease !important;
+}
+
+html body #root .revenue-pillar:hover,
+html body #root .revenue-trust-card:hover,
+html body #root .revenue-faq:hover,
+html body #root .revenue-plan:hover {
+  border-color: rgba(29, 103, 216, 0.32) !important;
+  box-shadow: 0 24px 58px -38px rgba(15, 23, 42, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.96) !important;
+  transform: translateY(-3px) !important;
+}
+
+html body #root .revenue-pain {
+  background:
+    linear-gradient(116deg, rgba(255, 255, 255, 0.94), rgba(247, 250, 253, 0.86)),
+    linear-gradient(52deg, transparent 48%, rgba(12, 16, 23, 0.038) 48.5%, rgba(12, 16, 23, 0.038) 52.5%, transparent 53%) !important;
+}
+
+html body #root .revenue-plan-grid {
+  align-items: stretch !important;
+}
+
+html body #root .revenue-plan {
+  min-height: 486px !important;
+  padding: 24px !important;
+}
+
+html body #root .revenue-plan--featured {
+  border-color: rgba(12, 16, 23, 0.56) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 248, 253, 0.96)) !important;
+  box-shadow: 0 28px 68px -42px rgba(15, 23, 42, 0.64), inset 0 0 0 1px rgba(12, 16, 23, 0.78) !important;
+}
+
+html body #root .revenue-plan__badge {
+  top: 16px !important;
+  right: 16px !important;
+  border-radius: 4px !important;
+  background: #0c1017 !important;
+  color: #ffffff !important;
+  letter-spacing: 0.08em !important;
+}
+
+html body #root .revenue-plan h3 {
+  color: var(--xbar-public-ink) !important;
+  font-size: 20px !important;
+}
+
+html body #root .revenue-plan__fit,
+html body #root .revenue-plan li,
+html body #root .revenue-pillar p,
+html body #root .revenue-trust-card p,
+html body #root .revenue-faq p {
+  color: var(--xbar-public-muted) !important;
+}
+
+html body #root .revenue-plan__price {
+  color: var(--xbar-public-ink) !important;
+  font-size: 3.1rem !important;
+  letter-spacing: 0 !important;
+}
+
+html body #root .revenue-plan li::before {
+  color: var(--xbar-public-blue) !important;
+}
+
+html body #root .revenue-cta {
+  overflow: hidden !important;
+  border: 1px solid rgba(79, 91, 108, 0.2) !important;
+  border-radius: 8px !important;
+  background:
+    linear-gradient(52deg, transparent 43%, rgba(12, 16, 23, 0.045) 43.6%, rgba(12, 16, 23, 0.045) 49.5%, transparent 50.1%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 249, 253, 0.92)) !important;
+  box-shadow: 0 22px 60px -44px rgba(15, 23, 42, 0.56), inset 0 1px 0 rgba(255, 255, 255, 0.96) !important;
+}
+
+html body #root .revenue-footer {
+  background: rgba(255, 255, 255, 0.78) !important;
+}
+
+/* Login surface: light, brand-native, not a pasted app icon. */
+html body #root .xbar-login-shell,
+html body #root .xbar-login-shell.lp-shell {
+  position: relative !important;
+  overflow: hidden !important;
+  background:
+    linear-gradient(rgba(15, 23, 42, 0.026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.022) 1px, transparent 1px),
+    linear-gradient(180deg, #ffffff 0%, #f7f9fc 100%) !important;
+  background-size: 82px 82px, 82px 82px, auto !important;
+}
+
+html body #root .xbar-login-shell .lp-frame {
+  position: relative !important;
+  grid-template-columns: minmax(420px, 1.02fr) minmax(420px, 0.98fr) !important;
+  background: transparent !important;
+}
+
+html body #root .xbar-login-shell .lp-brand {
+  position: relative !important;
+  justify-content: center !important;
+  gap: 22px !important;
+  padding: 54px !important;
+  border-right: 1px solid rgba(79, 91, 108, 0.17) !important;
+  background:
+    linear-gradient(128deg, rgba(255, 255, 255, 0.96), rgba(244, 248, 252, 0.78)),
+    linear-gradient(52deg, transparent 42%, rgba(12, 16, 23, 0.042) 42.6%, rgba(12, 16, 23, 0.042) 48.2%, transparent 48.8%) !important;
+}
+
+html body #root .xbar-login-shell .lp-brand::before {
+  content: "" !important;
+  position: absolute !important;
+  right: -180px !important;
+  bottom: 12% !important;
+  z-index: 0 !important;
+  display: block !important;
+  width: 560px !important;
+  height: 320px !important;
+  pointer-events: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg%20viewBox='0%200%20620%20360'%20xmlns='http://www.w3.org/2000/svg'%3E%3Cg%20fill='none'%20stroke='%23111318'%20stroke-width='1.4'%20stroke-linecap='round'%20stroke-linejoin='round'%20stroke-opacity='.14'%3E%3Cpath%20d='M77%20218c58-82%20126-132%20205-150%2042-9%2083-5%20124%2012%2024%2010%2046%2024%2066%2042l58%2052'/%3E%3Cpath%20d='M184%20162c34-36%2078-53%20132-51%2027%201%2054%209%2082%2023'/%3E%3Cpath%20d='M300%2092c19%2034%2022%2069%208%20106-11%2030-31%2053-61%2070'/%3E%3Cpath%20d='M122%20223c42%2012%2085%2013%20131%203%2040-9%2079-26%20119-51'/%3E%3C/g%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-size: contain !important;
+  opacity: 0.35 !important;
+}
+
+html body #root .xbar-login-shell .lp-brand > * {
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+html body #root .xbar-login-shell .brand-canvas {
+  min-height: 360px !important;
+  width: min(100%, 620px) !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(79, 91, 108, 0.18) !important;
+  border-radius: 8px !important;
+  background:
+    linear-gradient(rgba(15, 23, 42, 0.026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.022) 1px, transparent 1px),
+    linear-gradient(140deg, rgba(255, 255, 255, 0.98), rgba(240, 245, 251, 0.86)) !important;
+  background-size: 66px 66px, 66px 66px, auto !important;
+  box-shadow: 0 28px 72px -54px rgba(15, 23, 42, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.96) !important;
+}
+
+html body #root .xbar-login-shell .brand-canvas::before,
+html body #root .xbar-login-shell .brand-canvas::after {
+  content: "" !important;
+  position: absolute !important;
+  display: block !important;
+  pointer-events: none !important;
+}
+
+html body #root .xbar-login-shell .brand-canvas::before {
+  inset: -18% -24% auto auto !important;
+  width: 520px !important;
+  height: 520px !important;
+  background:
+    linear-gradient(52deg, transparent 44%, rgba(12, 16, 23, 0.055) 44.8%, rgba(12, 16, 23, 0.055) 50.6%, transparent 51.4%),
+    linear-gradient(-52deg, transparent 44%, rgba(29, 103, 216, 0.04) 44.8%, rgba(29, 103, 216, 0.04) 50.6%, transparent 51.4%) !important;
+}
+
+html body #root .xbar-login-shell .brand-canvas::after {
+  left: 30px !important;
+  right: 30px !important;
+  bottom: 28px !important;
+  height: 1px !important;
+  background: linear-gradient(90deg, transparent, rgba(79, 91, 108, 0.32), transparent) !important;
+}
+
+html body #root .xbar-login-shell .brand-canvas__lockup {
+  gap: 14px !important;
+  transform: translateY(-4px) !important;
+}
+
+html body #root .xbar-login-shell .brand-canvas__mark {
+  width: 72px !important;
+  height: 72px !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(79, 91, 108, 0.24) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  box-shadow: 0 16px 34px -24px rgba(15, 23, 42, 0.56) !important;
+}
+
+html body #root .xbar-login-shell .brand-canvas__mark svg {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+html body #root .xbar-login-shell .brand-canvas__bar {
+  color: #0c1017 !important;
+  font-size: 16px !important;
+  font-weight: 850 !important;
+}
+
+html body #root .xbar-login-shell .lp-tagline strong,
+html body #root .xbar-login-shell .lp-tagline span {
+  color: #0c1017 !important;
+  text-shadow: none !important;
+}
+
+html body #root .xbar-login-shell .lp-features {
+  width: min(100%, 620px) !important;
+  border: 1px solid rgba(79, 91, 108, 0.17) !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, 0.78) !important;
+  box-shadow: 0 14px 38px -32px rgba(15, 23, 42, 0.5) !important;
+}
+
+html body #root .xbar-login-shell .lp-feature {
+  min-height: 58px !important;
+  border-right-color: rgba(79, 91, 108, 0.14) !important;
+  color: #29313d !important;
+  font-size: 10px !important;
+}
+
+html body #root .xbar-login-shell .lp-auth {
+  padding: 46px !important;
+  background:
+    radial-gradient(circle at 18% 10%, rgba(29, 103, 216, 0.06), transparent 22rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 249, 253, 0.9)) !important;
+}
+
+html body #root .xbar-login-shell .lp-card {
+  width: min(100%, 500px) !important;
+  padding: 36px !important;
+  border: 1px solid rgba(79, 91, 108, 0.2) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  box-shadow: 0 28px 70px -48px rgba(15, 23, 42, 0.66), inset 0 1px 0 rgba(255, 255, 255, 0.96) !important;
+}
+
+html body #root .xbar-login-shell .lp-card::before {
+  content: "" !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 24px !important;
+  right: 24px !important;
+  display: block !important;
+  width: auto !important;
+  height: 1px !important;
+  background: linear-gradient(90deg, transparent, rgba(29, 103, 216, 0.48), transparent) !important;
+  box-shadow: none !important;
+}
+
+html body #root .xbar-login-shell .lp-card-label {
+  color: #1d67d8 !important;
+  font-size: 11px !important;
+  letter-spacing: 0.1em !important;
+  text-shadow: none !important;
+}
+
+html body #root .xbar-login-shell .lp-card-title {
+  color: #0c1017 !important;
+  font-size: 2.2rem !important;
+  line-height: 1.04 !important;
+}
+
+html body #root .xbar-login-shell .lp-card-sub {
+  color: #5b6471 !important;
+  font-size: 14px !important;
+}
+
+html body #root .xbar-login-shell .lp-input,
+html body #root .xbar-login-shell .lp-input-wrap {
+  border-color: rgba(79, 91, 108, 0.22) !important;
+  border-radius: 7px !important;
+  background: #ffffff !important;
+  color: #0c1017 !important;
+  box-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.03) !important;
+}
+
+html body #root .xbar-login-shell .lp-btn-primary,
+html body #root .xbar-login-shell .lp-btn-enter {
+  border-radius: 7px !important;
+  background: linear-gradient(180deg, #171a20, #05070a) !important;
+  color: #ffffff !important;
+  box-shadow: 0 16px 34px -22px rgba(15, 23, 42, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+}
+
+html body #root .xbar-login-shell .lp-btn-social {
+  border-color: rgba(79, 91, 108, 0.2) !important;
+  border-radius: 7px !important;
+  background: rgba(255, 255, 255, 0.86) !important;
+  color: #141922 !important;
+}
+
+html body #root .xbar-login-shell .lp-local-mode {
+  border-color: rgba(79, 91, 108, 0.18) !important;
+  border-radius: 8px !important;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 253, 0.92)) !important;
+}
+
+/* First workspace hero and horse profile carousel refinement. */
+html body #root .xbar-command-main .xbar-home-atelier {
+  grid-template-columns: minmax(0, 0.9fr) minmax(420px, 0.82fr) !important;
+  gap: 44px !important;
+  overflow: hidden !important;
+  border-radius: 8px !important;
+}
+
+html body #root .xbar-command-main .xbar-home-atelier::after {
+  content: "" !important;
+  position: absolute !important;
+  right: -220px !important;
+  top: 34px !important;
+  display: block !important;
+  width: 620px !important;
+  height: 620px !important;
+  pointer-events: none !important;
+  background:
+    linear-gradient(52deg, transparent 43%, rgba(12, 16, 23, 0.038) 43.7%, rgba(12, 16, 23, 0.038) 49.8%, transparent 50.5%),
+    linear-gradient(-52deg, transparent 43%, rgba(29, 103, 216, 0.032) 43.7%, rgba(29, 103, 216, 0.032) 49.8%, transparent 50.5%) !important;
+}
+
+html body #root .xbar-command-main .xbar-home-atelier h1 {
+  max-width: 11ch !important;
+  font-size: 4.35rem !important;
+  line-height: 0.96 !important;
+  letter-spacing: 0 !important;
+  text-wrap: balance !important;
+}
+
+html body #root .xbar-command-main .xbar-home-atelier__visual {
+  min-height: 500px !important;
+}
+
+html body #root .xbar-command-main .xbar-profile-carousel {
+  min-height: 500px !important;
+  perspective: 1200px !important;
+}
+
+html body #root .xbar-command-main .xbar-profile-card {
+  width: min(342px, calc(100% - 48px)) !important;
+  min-height: 142px !important;
+  border-radius: 8px !important;
+  animation: xbarPremiumProfileCycle 14s cubic-bezier(0.22, 1, 0.36, 1) infinite !important;
+  animation-delay: var(--card-delay) !important;
+}
+
+html body #root .xbar-command-main .xbar-profile-card::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  display: block !important;
+  border-radius: inherit !important;
+  background: linear-gradient(112deg, transparent 0 36%, rgba(255, 255, 255, 0.78) 48%, transparent 62%) !important;
+  opacity: 0 !important;
+  transform: translateX(-46%) !important;
+  animation: xbarPremiumCardSheen 14s cubic-bezier(0.22, 1, 0.36, 1) infinite !important;
+  animation-delay: var(--card-delay) !important;
+  pointer-events: none !important;
+}
+
+html body #root .xbar-command-main .xbar-profile-card:nth-child(1) {
+  --card-x: -248px;
+  --card-y: -164px;
+  --card-scale: 0.96;
+}
+
+html body #root .xbar-command-main .xbar-profile-card:nth-child(2) {
+  --card-x: -106px;
+  --card-y: -58px;
+  --card-scale: 1;
+}
+
+html body #root .xbar-command-main .xbar-profile-card:nth-child(3) {
+  --card-x: -230px;
+  --card-y: 58px;
+  --card-scale: 0.97;
+}
+
+html body #root .xbar-command-main .xbar-profile-card:nth-child(4) {
+  --card-x: -86px;
+  --card-y: 166px;
+  --card-scale: 0.93;
+}
+
+@keyframes xbarConsoleLift {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes xbarConsoleRow {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes xbarPremiumProfileCycle {
+  0% {
+    opacity: 0;
+    filter: blur(1px);
+    transform: translate3d(calc(var(--card-x) + 68px), calc(var(--card-y) + 18px), -130px) rotateY(-16deg) scale(calc(var(--card-scale) - 0.045));
+  }
+  11%,
+  48% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate3d(var(--card-x), var(--card-y), 0) rotateY(0deg) scale(var(--card-scale));
+  }
+  66% {
+    opacity: 0.56;
+    filter: blur(0.2px);
+    transform: translate3d(calc(var(--card-x) - 34px), calc(var(--card-y) - 8px), -80px) rotateY(11deg) scale(calc(var(--card-scale) - 0.03));
+  }
+  100% {
+    opacity: 0;
+    filter: blur(1px);
+    transform: translate3d(calc(var(--card-x) - 70px), calc(var(--card-y) - 20px), -150px) rotateY(18deg) scale(calc(var(--card-scale) - 0.052));
+  }
+}
+
+@keyframes xbarPremiumCardSheen {
+  0%,
+  17%,
+  60%,
+  100% {
+    opacity: 0;
+    transform: translateX(-46%);
+  }
+  28%,
+  46% {
+    opacity: 0.5;
+    transform: translateX(42%);
+  }
+}
+
+@media (max-width: 1120px) {
+  html body #root .revenue-hero,
+  html body #root .xbar-login-shell .lp-frame,
+  html body #root .xbar-command-main .xbar-home-atelier {
+    grid-template-columns: 1fr !important;
+  }
+
+  html body #root .revenue-hero {
+    min-height: auto !important;
+    gap: 40px !important;
+  }
+
+  html body #root .revenue-console {
+    justify-self: start !important;
+  }
+
+  html body #root .xbar-login-shell .lp-brand {
+    min-height: auto !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid rgba(79, 91, 108, 0.17) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  html body #root .revenue-nav {
+    min-height: auto !important;
+    padding: 10px 14px !important;
+  }
+
+  html body #root .revenue-nav__actions {
+    gap: 6px !important;
+  }
+
+  html body #root .revenue-nav__actions .public-action {
+    min-height: 38px !important;
+    padding-inline: 10px !important;
+    font-size: 12px !important;
+  }
+
+  html body #root .revenue-hero {
+    padding: 42px 18px 52px !important;
+  }
+
+  html body #root .revenue-hero h1,
+  html body #root .xbar-command-main .xbar-home-atelier h1 {
+    font-size: 3.05rem !important;
+    line-height: 0.98 !important;
+  }
+
+  html body #root .revenue-section h2,
+  html body #root .revenue-cta h2 {
+    font-size: 2.35rem !important;
+  }
+
+  html body #root .revenue-console {
+    max-width: none !important;
+  }
+
+  html body #root .revenue-console__row {
+    grid-template-columns: 88px minmax(0, 1fr) !important;
+  }
+
+  html body #root .revenue-pipeline {
+    display: grid !important;
+    border-radius: 8px !important;
+  }
+
+  html body #root .revenue-pipeline__step {
+    min-height: 0 !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid rgba(79, 91, 108, 0.15) !important;
+  }
+
+  html body #root .xbar-login-shell .lp-brand,
+  html body #root .xbar-login-shell .lp-auth {
+    padding: 22px 16px !important;
+  }
+
+  html body #root .xbar-login-shell .brand-canvas {
+    min-height: 270px !important;
+  }
+
+  html body #root .xbar-login-shell .lp-card {
+    padding: 24px 20px !important;
+  }
+
+  html body #root .xbar-login-shell .lp-card-title {
+    font-size: 1.86rem !important;
+  }
+
+  html body #root .xbar-command-main .xbar-profile-card:nth-child(1) { --card-x: -50%; --card-y: -142px; }
+  html body #root .xbar-command-main .xbar-profile-card:nth-child(2) { --card-x: -50%; --card-y: -48px; }
+  html body #root .xbar-command-main .xbar-profile-card:nth-child(3) { --card-x: -50%; --card-y: 50px; }
+  html body #root .xbar-command-main .xbar-profile-card:nth-child(4) { --card-x: -50%; --card-y: 148px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html body #root .revenue-console,
+  html body #root .revenue-console__row,
+  html body #root .xbar-command-main .xbar-profile-card,
+  html body #root .xbar-command-main .xbar-profile-card::before {
+    animation: none !important;
+  }
+}
+
+/* Console contrast rescue after global light-surface rules. */
+html body #root main.revenue-landing .revenue-console .revenue-console__rows {
+  overflow: hidden !important;
+  border: 1px solid rgba(213, 226, 242, 0.11) !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, 0.035) !important;
+}
+
+html body #root main.revenue-landing .revenue-console .revenue-console__row {
+  background: rgba(255, 255, 255, 0.02) !important;
+  border-color: rgba(213, 226, 242, 0.1) !important;
+  padding-inline: 12px !important;
+}
+
+html body #root main.revenue-landing .revenue-console .revenue-console__row:nth-child(even) {
+  background: rgba(255, 255, 255, 0.045) !important;
+}
+
+html body #root main.revenue-landing .revenue-console .revenue-console__row dt {
+  color: rgba(187, 209, 235, 0.82) !important;
+}
+
+html body #root main.revenue-landing .revenue-console .revenue-console__row dd {
+  color: rgba(248, 251, 255, 0.9) !important;
+}
+
+html body #root main.revenue-landing .revenue-console .revenue-console__row .revenue-chip {
+  background: rgba(7, 12, 20, 0.54) !important;
+}
