@@ -99,7 +99,7 @@ export default function Reminders() {
       <section className="priority-briefing" aria-labelledby="revenue-title">
         <div className="priority-briefing__heading">
           <div>
-            <span className="ops-kicker">Revenue intelligence</span>
+            <span className="ops-kicker">Sale Readiness</span>
             <h2 id="revenue-title">Sale value blocked by paperwork</h2>
           </div>
           <p>

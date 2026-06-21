@@ -14,32 +14,32 @@ import { CARE_SIGNAL_TONE, EXPENSE_CATEGORIES } from '@/features/dashboard/const
 import type { DashboardMenuState } from '@/features/dashboard/types';
 
 const EMPTY_PROFILE_CARDS = [
-  { label: 'Identity file', title: 'Horse No. 001', meta: 'Name, barn, owner, status', status: 'Ready to create', metric: '01' },
-  { label: 'Proof vault', title: 'Papers dock', meta: 'Coggins, registration, receipts', status: 'Waiting on upload', metric: '02' },
-  { label: 'Care timeline', title: 'Health rhythm', meta: 'Vet, dental, wormer, turnout', status: 'Activates with proof', metric: '03' },
-  { label: 'Buyer packet', title: 'Sale-readiness', meta: 'Profile, trust checks, packet', status: 'Builds from record', metric: '04' },
+  { label: 'Horse Record', title: 'Name, barn, owner, status', meta: 'Start with the basic file.', status: 'Ready', metric: '01' },
+  { label: 'Documents', title: 'Registration, Coggins, receipts', meta: 'Upload documents when they are available.', status: 'Next', metric: '02' },
+  { label: 'Health', title: 'Vet, dental, worming, turnout', meta: 'Track care history from one place.', status: 'Planned', metric: '03' },
+  { label: 'Sales', title: 'Photos, notes, buyer details', meta: 'Prepare sale materials when needed.', status: 'Optional', metric: '04' },
 ];
 
 const EMPTY_SETUP_STEPS = [
   {
     number: '01',
-    title: 'Create the horse file',
-    body: 'Give XBAR one living record to organize around: identity, barn, owner, and status.',
-    action: 'Add a horse',
+    title: 'Add a horse',
+    body: 'Create the first horse record with name, barn, owner, and status.',
+    action: 'Add Horse',
     path: '/horses?new=1',
   },
   {
     number: '02',
-    title: 'Dock the proof',
-    body: 'Upload Coggins, registration, health papers, contracts, and receipts so gaps become visible.',
-    action: 'Upload papers',
+    title: 'Upload documents',
+    body: 'Add Coggins, registration, health papers, contracts, and receipts.',
+    action: 'Upload Documents',
     path: '/documents?upload=1',
   },
   {
     number: '03',
-    title: 'Set the operating context',
-    body: 'Connect weather, costs, and care cadence before buyer activity begins.',
-    action: 'Open settings',
+    title: 'Set up the ranch',
+    body: 'Confirm barn, pasture, owner, weather, and account settings.',
+    action: 'Settings',
     path: '/settings',
   },
 ];
@@ -105,7 +105,7 @@ export default function Dashboard() {
     : careDueCount
       ? 'Clear the care holds'
       : reviewQueue.length
-        ? 'Approve proof waiting in the vault'
+        ? 'Review documents waiting in the queue'
         : qualifiedBuyerCount
           ? 'Move qualified buyers forward'
           : 'Prepare the next buyer-ready horse record';
@@ -222,21 +222,21 @@ export default function Dashboard() {
           <div className="xbar-home-atelier__copy">
             <div className="xbar-home-atelier__brandline">
               <span className="xbar-home-atelier__mark"><XbarMark tone="mono" /></span>
-              <span>Your barn</span>
+              <span>Your Barn</span>
             </div>
             <h1 id="xbar-home-title">Add your first horse.</h1>
             <p>
               Create a record for your first horse and upload its papers. XBAR keeps health, ownership, buyers, weather, and costs organized around it.
             </p>
             <div className="xbar-home-atelier__chips" aria-label="First workspace modules">
-              <span>Horse records</span>
-              <span>Proof vault</span>
-              <span>Care timeline</span>
-              <span>Buyer packet</span>
+              <span>Horse Records</span>
+              <span>Documents</span>
+              <span>Health</span>
+              <span>Sales</span>
             </div>
             <div className="xbar-home-atelier__actions">
-              <Link to="/horses?new=1" className="xbar-home-action xbar-home-action--primary">Add a horse</Link>
-              <Link to="/documents?upload=1" className="xbar-home-action">Upload papers</Link>
+              <Link to="/horses?new=1" className="xbar-home-action xbar-home-action--primary">Add Horse</Link>
+              <Link to="/documents?upload=1" className="xbar-home-action">Upload Documents</Link>
               <Link to="/settings" className="xbar-home-action">Settings</Link>
             </div>
           </div>
@@ -266,7 +266,7 @@ export default function Dashboard() {
 
           <div className="xbar-home-runway" aria-label="Empty workspace counters">
             <div><span>Horses</span><strong>0</strong><small>none yet</small></div>
-            <div><span>Papers</span><strong>0</strong><small>none uploaded</small></div>
+            <div><span>Documents</span><strong>0</strong><small>none uploaded</small></div>
             <div><span>Transfers</span><strong>0</strong><small>none pending</small></div>
             <div><span>Buyers</span><strong>0</strong><small>no activity yet</small></div>
           </div>
@@ -275,10 +275,10 @@ export default function Dashboard() {
         <section className="xbar-setup-flow" aria-label="First setup sequence">
           <div className="xbar-setup-flow__header">
             <div>
-              <span>First useful outcome</span>
+              <span>Get Started</span>
               <h2>Create the first horse record</h2>
             </div>
-            <p>XBAR stops feeling empty the moment one horse file has identity, proof, and operating context attached.</p>
+            <p>XBAR becomes useful as soon as one horse has a record, documents, and care details attached.</p>
           </div>
 
           <div className="xbar-setup-flow__grid">
@@ -296,8 +296,8 @@ export default function Dashboard() {
 
           <div className="xbar-system-strip">
             <div>
-              <span>Operating sequence</span>
-              <strong>Horse record → proof vault → care timeline → buyer packet</strong>
+              <span>Setup</span>
+              <strong>Horse Record → Documents → Health → Sales</strong>
             </div>
             <HorseContour className="xbar-system-strip__horse" />
             <div className="xbar-system-strip__ticks" aria-hidden="true">
@@ -321,10 +321,10 @@ export default function Dashboard() {
             <h1 className="ops-briefing-header__title">
               {urgencyCount > 0
                 ? `${urgencyCount} control point${urgencyCount === 1 ? '' : 's'} need a decision.`
-                : 'Ranch command is clear.'}
+                : 'Home is clear.'}
             </h1>
             <p className="command-center-briefing__copy">
-              Private command view for horse files, proof, care, ownership, buyers, field conditions, and operating cost.
+              A private view of horse files, documents, care, ownership, buyers, field conditions, and operating cost.
             </p>
             <div className="ops-briefing-header__chips">
               <span className="ops-briefing-chip">{roleWorkspace.label}</span>
@@ -344,13 +344,13 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="command-center-next-move">
-          <span>Highest-value move</span>
+          <span>Next Step</span>
           <strong>{nextMove}</strong>
-          <em>{urgencyCount > 0 ? 'XBAR is surfacing the first visible blocker.' : 'Use the clear window to strengthen buyer readiness or documents.'}</em>
+          <em>{urgencyCount > 0 ? 'Start with the item most likely to block work.' : 'Use the clear window to strengthen buyer readiness or documents.'}</em>
         </div>
         <div className="ops-briefing-stat-row">
           <button type="button" className="ops-briefing-stat ops-briefing-stat--clickable" onClick={() => navigate('/ownership')} title="Open title and transfer">
-            <span className="ops-briefing-stat__label">Proof gaps</span>
+            <span className="ops-briefing-stat__label">Document gaps</span>
             <span className={`ops-briefing-stat__value${transferGaps.length ? ' ops-briefing-stat__value--urgent' : ' ops-briefing-stat__value--clear'}`}>{transferGaps.length}</span>
             <span className="ops-briefing-stat__detail">{transferGaps.length ? 'need resolution' : 'all clear'}</span>
           </button>
@@ -360,7 +360,7 @@ export default function Dashboard() {
             <span className="ops-briefing-stat__detail">{careDueCount ? 'horses overdue' : 'care current'}</span>
           </button>
           <button type="button" className="ops-briefing-stat ops-briefing-stat--clickable" onClick={() => navigate('/documents')} title="Documents waiting on review">
-            <span className="ops-briefing-stat__label">Proof queue</span>
+            <span className="ops-briefing-stat__label">Document queue</span>
             <span className={`ops-briefing-stat__value${reviewQueue.length ? ' ops-briefing-stat__value--warning' : ''}`}>{reviewQueue.length}</span>
             <span className="ops-briefing-stat__detail">{reviewQueue.length ? 'waiting review' : 'queue clear'}</span>
           </button>
@@ -374,7 +374,7 @@ export default function Dashboard() {
 
       <section className="command-stage command-stage--two-col command-center-stage">
         <div className="command-stage__rail">
-          <MetricCard label="Proof gaps" value={String(transferGaps.length + reviewQueue.length)} tone={transferGaps.length ? 'rose' : reviewQueue.length ? 'amber' : 'emerald'} onClick={() => navigate(transferGaps.length ? '/ownership' : '/documents')} title="Open proof controls" />
+          <MetricCard label="Document gaps" value={String(transferGaps.length + reviewQueue.length)} tone={transferGaps.length ? 'rose' : reviewQueue.length ? 'amber' : 'emerald'} onClick={() => navigate(transferGaps.length ? '/ownership' : '/documents')} title="Open document controls" />
           <MetricCard label="Care holds" value={String(careDueCount)} tone={careDueCount ? 'amber' : 'emerald'} onClick={() => navigate('/medical')} title="Open care status" />
           <MetricCard label="Operating spend" value={formatCompactCurrency(budgetSummary.total)} tone="blue" onClick={() => navigate('/expenses')} title="Open operating ledger" />
         </div>
@@ -389,7 +389,7 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="command-stage__support-card">
-            <div className="command-stage__support-label">Proof intake</div>
+            <div className="command-stage__support-label">Document intake</div>
             <strong className="command-stage__support-title">{recentBatches[0]?.label ?? 'No batch yet'}</strong>
             <div className="command-stage__support-copy">
               <span>{recentBatches[0] ? `${recentBatches[0].processedCount}/${recentBatches[0].fileCount} logged` : 'Upload the first packet.'}</span>
@@ -408,7 +408,7 @@ export default function Dashboard() {
       </section>
 
       <div className="metric-grid metric-grid--dashboard">
-        <MetricCard label="Proof queue" value={String(reviewQueue.length)} tone={reviewQueue.length ? 'blue' : 'slate'} onClick={() => navigate('/documents')} title="Proof files waiting on review" />
+        <MetricCard label="Document queue" value={String(reviewQueue.length)} tone={reviewQueue.length ? 'blue' : 'slate'} onClick={() => navigate('/documents')} title="Documents waiting on review" />
         <MetricCard label="Coggins watch" value={String(cogginsWatchCount)} tone={cogginsWatchCount ? 'amber' : 'emerald'} onClick={() => navigate('/medical')} title="Horses missing or aging Coggins" />
         <MetricCard label="Feed spend" value={formatCompactCurrency(budgetSummary.feed)} tone="blue" onClick={() => navigate('/expenses')} title="Feed, bedding, and supplement spend this month" />
         <MetricCard label="Health spend" value={formatCompactCurrency(budgetSummary.health)} tone="slate" onClick={() => navigate('/expenses')} title="Health-related spend this month" />
@@ -438,7 +438,7 @@ export default function Dashboard() {
                 ))}
               </div>
             ) : (
-              <EmptyState compact title="Transfer proof clear" description="No horse records are waiting on transfer papers." />
+              <EmptyState compact title="Transfer documents clear" description="No horse records are waiting on transfer papers." />
             )}
           </Panel>
 
@@ -465,7 +465,7 @@ export default function Dashboard() {
                 ))}
               </div>
             ) : (
-              <EmptyState compact title="No care holds" description="Care status appears once horse records and proof records exist." />
+              <EmptyState compact title="No care holds" description="Care status appears once horse records and documents exist." />
             )}
           </Panel>
         </div>
@@ -488,7 +488,7 @@ export default function Dashboard() {
             )}
           </Panel>
 
-          <Panel title="Proof queue" meta={<Pill tone={reviewQueue.length ? 'amber' : 'emerald'}>{reviewQueue.length ? 'Active' : 'Clear'}</Pill>} surfaceId="command-work-queue" action={<Link to="/documents" className="button button--ghost button--compact">Documents</Link>}>
+          <Panel title="Document queue" meta={<Pill tone={reviewQueue.length ? 'amber' : 'emerald'}>{reviewQueue.length ? 'Active' : 'Clear'}</Pill>} surfaceId="command-work-queue" action={<Link to="/documents" className="button button--ghost button--compact">Documents</Link>}>
             <div className="stack-list">
               {reviewQueue.slice(0, 5).map((document) => (
                 <Link key={document.id} to="/documents" className="stack-item stack-item--interactive">
@@ -502,7 +502,7 @@ export default function Dashboard() {
                   <div className="inline-metrics"><span>{batch.processedCount}/{batch.fileCount} logged</span><span>{batch.needsReviewCount} review</span></div>
                 </Link>
               ))}
-              {!reviewQueue.length && !recentBatches.length ? <EmptyState compact title="Proof queue clear" description="No documents are waiting on review." /> : null}
+              {!reviewQueue.length && !recentBatches.length ? <EmptyState compact title="Document queue clear" description="No documents are waiting on review." /> : null}
             </div>
           </Panel>
         </div>

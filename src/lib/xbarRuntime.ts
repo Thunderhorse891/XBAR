@@ -30,7 +30,7 @@ export const subscriptionTierConfig: Record<
     sharedAccessEnabled: false,
     featureFlags: [
       'Keep clean records — horses, care, documents, expenses, reminders',
-      'Proof vault with OCR intake and review',
+      'Documents with OCR intake and review',
       '1 team seat',
       '250 document capacity · 25 GB storage',
     ],

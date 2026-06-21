@@ -29,7 +29,7 @@ import './confirmActionDialog.css';
  * sales lead) with the next money action offered.
  */
 
-const STEPS = ['Horse', 'Release gate', 'Proof', 'Buyer', 'Generate'] as const;
+const STEPS = ['Horse', 'Release gate', 'Documents', 'Buyer', 'Generate'] as const;
 
 type BuyerPacketForm = {
   buyerName: string;
@@ -195,7 +195,7 @@ export function SalePacketWizard({
       >
         <DialogHeader>
           <DialogTitle className="confirm-dialog__title">Sale packet generator</DialogTitle>
-          <DialogDescription>Build a legally gated proof packet, open the buyer deal room, and protect margin.</DialogDescription>
+          <DialogDescription>Build a legally gated buyer packet, open the buyer deal room, and protect margin.</DialogDescription>
         </DialogHeader>
         <div style={{ display: 'flex', gap: 6, marginTop: 12 }} aria-label={`Step ${step + 1} of ${STEPS.length}`}>
           {STEPS.map((label, index) => (
@@ -279,7 +279,7 @@ export function SalePacketWizard({
               )}
               {economics && (
                 <div className="confirm-dialog__proof" style={{ marginTop: 14 }}>
-                  <strong>Pricing intelligence:</strong> cost to date {formatCompactCurrency(economics.costToDate)} · burn {formatCompactCurrency(economics.monthlyBurn)}/mo ·
+                  <strong>Pricing:</strong> cost to date {formatCompactCurrency(economics.costToDate)} · burn {formatCompactCurrency(economics.monthlyBurn)}/mo ·
                   break-even {formatCompactCurrency(economics.breakEvenPrice)} · <strong>do not discount below {formatCompactCurrency(economics.safeDiscountFloor)}</strong>
                   {economics.askPrice > 0 ? <> · margin at ask {formatCompactCurrency(economics.projectedMargin)} ({economics.marginPercent}%)</> : ' · set an asking price on the horse record'}
                 </div>
@@ -292,7 +292,7 @@ export function SalePacketWizard({
               {readyDocs.length === 0 && (
                 <p style={{ fontSize: 14, color: '#303842' }}>
                   No approved documents for this horse yet.{' '}
-                  <button type="button" className="button button--ghost button--compact" onClick={() => { close(); navigate(`/documents?upload=1&horse=${effectiveHorseId}`); }}>Upload proof now</button>
+                  <button type="button" className="button button--ghost button--compact" onClick={() => { close(); navigate(`/documents?upload=1&horse=${effectiveHorseId}`); }}>Upload Documents</button>
                 </p>
               )}
               {readyDocs.length > 0 ? (

@@ -4,7 +4,6 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { XbarMark } from '@/components/BrandMark';
 import { CommercialPressureBanner } from '@/components/CommercialPressureBanner';
 import { WorkspaceHelp, type HelpSection } from '@/components/WorkspaceHelp';
-import { XbarIntelligenceRail } from '@/components/XbarIntelligenceRail';
 import {
   AddIcon,
   AssetsIcon,
@@ -28,7 +27,7 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
 
-type NavSectionName = 'Command' | 'Operations' | 'Control';
+type NavSectionName = 'Home' | 'Work' | 'Account';
 
 type NavItem = {
   label: string;
@@ -40,26 +39,26 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { label: 'Home', path: '/', icon: DashboardIcon, section: 'Command' },
-  { label: 'My Horses', path: '/horses', icon: HorsesIcon, section: 'Command' },
-  { label: 'Ownership', path: '/ownership', icon: OwnershipIcon, section: 'Command', badgeKey: 'transfers' },
-  { label: 'Documents', path: '/documents', icon: DocumentsIcon, section: 'Command', badgeKey: 'docs' },
-  { label: 'Document Library', path: '/document-library', icon: DocumentsIcon, section: 'Command' },
-  { label: 'Health', path: '/medical', icon: MedicalIcon, section: 'Operations', badgeKey: 'care' },
-  { label: 'Breeding', path: '/breeding', icon: BreedingIcon, section: 'Operations' },
-  { label: 'Sales', path: '/sales', icon: SalesIcon, section: 'Operations' },
-  { label: 'Expenses', path: '/expenses', icon: SubscriptionIcon, section: 'Operations' },
-  { label: 'Reminders', path: '/reminders', icon: BellIcon, section: 'Operations', badgeKey: 'reminders' },
-  { label: 'Equipment', path: '/assets', icon: AssetsIcon, section: 'Operations' },
-  { label: 'Weather', path: '/weather', icon: WeatherIcon, section: 'Operations' },
-  { label: 'Listings', path: '/shared-access', icon: SharedAccessIcon, section: 'Control' },
-  { label: 'Plan & Billing', path: '/subscriptions', icon: SubscriptionIcon, section: 'Control', requires: 'billing' },
-  { label: 'Settings', path: '/settings', icon: SettingsIcon, section: 'Control', requires: 'settings' },
+  { label: 'Home', path: '/', icon: DashboardIcon, section: 'Home' },
+  { label: 'Horses', path: '/horses', icon: HorsesIcon, section: 'Home' },
+  { label: 'Ownership', path: '/ownership', icon: OwnershipIcon, section: 'Home', badgeKey: 'transfers' },
+  { label: 'Documents', path: '/documents', icon: DocumentsIcon, section: 'Home', badgeKey: 'docs' },
+  { label: 'Document Library', path: '/document-library', icon: DocumentsIcon, section: 'Home' },
+  { label: 'Health', path: '/medical', icon: MedicalIcon, section: 'Work', badgeKey: 'care' },
+  { label: 'Breeding', path: '/breeding', icon: BreedingIcon, section: 'Work' },
+  { label: 'Sales', path: '/sales', icon: SalesIcon, section: 'Work' },
+  { label: 'Expenses', path: '/expenses', icon: SubscriptionIcon, section: 'Work' },
+  { label: 'Reminders', path: '/reminders', icon: BellIcon, section: 'Work', badgeKey: 'reminders' },
+  { label: 'Equipment', path: '/assets', icon: AssetsIcon, section: 'Work' },
+  { label: 'Weather', path: '/weather', icon: WeatherIcon, section: 'Work' },
+  { label: 'Listings', path: '/shared-access', icon: SharedAccessIcon, section: 'Account' },
+  { label: 'Plan & Billing', path: '/subscriptions', icon: SubscriptionIcon, section: 'Account', requires: 'billing' },
+  { label: 'Settings', path: '/settings', icon: SettingsIcon, section: 'Account', requires: 'settings' },
 ];
 
 const routeLabels: Record<string, string> = {
   '/': 'Home',
-  '/horses': 'My Horses',
+  '/horses': 'Horses',
   '/documents': 'Documents',
   '/document-library': 'Document Library',
   '/ownership': 'Ownership',
@@ -77,19 +76,19 @@ const routeLabels: Record<string, string> = {
 
 const routeHelp: Record<string, HelpSection[]> = {
   'Home': [
-    { label: 'Daily brief', text: 'Start with the highest-risk decision: transfer proof, care holds, document review, buyer movement, or spending.' },
-    { label: 'Command shape', text: 'Every section should answer entity, status, evidence, risk, and next action.' },
+    { label: 'Daily Work', text: 'Start with transfers, care holds, document review, buyer movement, or spending.' },
+    { label: 'Records', text: 'Each section keeps status, documents, risk, and next action visible.' },
   ],
-  'My Horses': [
+  'Horses': [
     { label: 'Horse file', text: 'Each horse should read like a horse record: identity, ownership, care, documents, sales, and history.' },
     { label: 'Confirmed data', text: 'Unknown should remain unknown until verified by a source record.' },
   ],
   'Ownership': [
-    { label: 'Proof chain', text: 'Use this area for owners, percentages, sale status, transfer blockers, and source documents.' },
-    { label: 'Control', text: 'No sale or transfer should move without visible proof gaps resolved.' },
+    { label: 'Ownership', text: 'Use this area for owners, percentages, sale status, transfer blockers, and source documents.' },
+    { label: 'Transfers', text: 'No sale or transfer should move without required documents resolved.' },
   ],
   'Documents': [
-    { label: 'Vault', text: 'Upload first. Assign, approve, and keep the document chain clean.' },
+    { label: 'Documents', text: 'Upload first. Assign, approve, and keep the document chain clean.' },
     { label: 'Release discipline', text: 'Only approved ready-to-share files should reach buyer packets.' },
   ],
   'Document Library': [
@@ -101,7 +100,7 @@ const routeHelp: Record<string, HelpSection[]> = {
     { label: 'Source dates', text: 'Do not guess due dates. Use records the operation can verify.' },
   ],
   'Breeding': [
-    { label: 'Program', text: 'Track pairings, milestones, contracts, foaling windows, and proof.' },
+    { label: 'Program', text: 'Track pairings, milestones, contracts, foaling windows, and documents.' },
     { label: 'Decisions', text: 'Breeding movement should connect back to files and history.' },
   ],
   'Sales': [
@@ -130,13 +129,13 @@ const routeHelp: Record<string, HelpSection[]> = {
   ],
   'Listings': [
     { label: 'Release', text: 'Buyer links need approved, sanitized records only.' },
-    { label: 'Proof', text: 'Preview before making any horse public.' },
+    { label: 'Review', text: 'Preview before making any horse public.' },
   ],
   'Settings': [
     { label: 'Control', text: 'Manage ranch defaults, members, sync, and backups.' },
     { label: 'Recovery', text: 'Use backups before large imports or cloud changes.' },
   ],
-  'Horse Command File': [
+  'Horse': [
     { label: 'Horse record', text: 'Identity, care, ownership, documents, sales, and history should read as one record.' },
     { label: 'Missing data', text: 'Unknown should stay unknown until verified.' },
   ],
@@ -147,9 +146,9 @@ function classNames(...parts: Array<string | false | null | undefined>) {
 }
 
 const sectionDisplayNames: Record<NavSectionName, string> = {
-  Command: 'My Barn',
-  Operations: 'Daily Work',
-  Control: 'Account',
+  Home: 'Home',
+  Work: 'Daily Work',
+  Account: 'Account',
 };
 
 function routeSurfaceSlug(label: string) {
@@ -240,9 +239,9 @@ export default function MainLayout() {
   }), [canManageBilling, canManageSettings]);
 
   const sections = {
-    Command: visibleNavItems.filter((item) => item.section === 'Command'),
-    Operations: visibleNavItems.filter((item) => item.section === 'Operations'),
-    Control: visibleNavItems.filter((item) => item.section === 'Control'),
+    Home: visibleNavItems.filter((item) => item.section === 'Home'),
+    Work: visibleNavItems.filter((item) => item.section === 'Work'),
+    Account: visibleNavItems.filter((item) => item.section === 'Account'),
   };
   const mobilePrimaryPaths = new Set(['/', '/horses', '/documents', '/sales']);
   const mobileMoreItems = visibleNavItems.filter((item) => !mobilePrimaryPaths.has(item.path));
@@ -262,9 +261,9 @@ export default function MainLayout() {
     reminders: pendingTransfers + careDueCount + pendingReview,
   }), [pendingTransfers, careDueCount, pendingReview]);
   const opsUrgency = pendingTransfers > 0 ? 'urgent' : careDueCount > 0 ? 'warning' : 'clear';
-  const commandState = opsUrgency === 'urgent' ? 'Action required' : opsUrgency === 'warning' ? 'Watch active' : 'Command clear';
+  const commandState = opsUrgency === 'urgent' ? 'Action required' : opsUrgency === 'warning' ? 'Needs review' : 'All clear';
   const localStatus = cloudStatus === 'signed-in' ? 'Cloud sync connected' : 'Local browser workspace';
-  const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse Command File' : routeLabels[location.pathname] ?? 'Ranch';
+  const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse' : routeLabels[location.pathname] ?? 'Ranch';
   const routeSlug = routeSurfaceSlug(currentLabel);
   const helpSections = routeHelp[currentLabel] ?? routeHelp['Home'];
   const accountLabel = cloudSession?.user?.email ?? currentRole;
@@ -290,13 +289,13 @@ export default function MainLayout() {
           </div>
           <div className="xbar-sidebar-brand__copy min-w-0">
             <div className="text-[1.04rem] font-extrabold uppercase tracking-[0.14em] text-white">XBAR</div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#52708d]">Private ranch command</div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#52708d]">Horse records</div>
           </div>
         </div>
 
         <div className="rounded-[14px] border border-[#162436] bg-[#080f1c] p-4 shadow-[0_12px_28px_rgba(0,0,0,0.36)]">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#536d88]">Operating status</div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#536d88]">Ranch Status</div>
             <span className={classNames('ops-pulse', opsUrgency !== 'clear' ? '' : '')}>
               <span className={classNames('ops-pulse__dot', opsUrgency === 'urgent' ? 'ops-pulse__dot--urgent' : opsUrgency === 'warning' ? 'ops-pulse__dot--warning' : '')} />
             </span>
@@ -306,7 +305,7 @@ export default function MainLayout() {
           <div className="mt-3 grid grid-cols-2 gap-1.5 text-xs">
             <span className="rounded border border-[#142030] bg-[#08111d] px-2 py-1.5 text-[#6e8da6]">{horses.length} files</span>
             <span className={classNames('rounded border px-2 py-1.5', pendingTransfers > 0 ? 'border-[#5a1a1a] bg-[#1a0808] text-[#ff8a8a]' : 'border-[#142030] bg-[#08111d] text-[#6e8da6]')}>{pendingTransfers} transfers</span>
-            <span className={classNames('rounded border px-2 py-1.5', pendingReview > 0 ? 'border-[#4a3800] bg-[#191000] text-[#fbbf24]' : 'border-[#142030] bg-[#08111d] text-[#6e8da6]')}>{pendingReview} proof</span>
+            <span className={classNames('rounded border px-2 py-1.5', pendingReview > 0 ? 'border-[#4a3800] bg-[#191000] text-[#fbbf24]' : 'border-[#142030] bg-[#08111d] text-[#6e8da6]')}>{pendingReview} docs</span>
             <span className="rounded border border-[#142030] bg-[#08111d] px-2 py-1.5 text-[#6e8da6]">{activeSales} buyers</span>
           </div>
           <div className="mt-2.5 flex flex-wrap gap-1.5">
@@ -315,12 +314,12 @@ export default function MainLayout() {
           </div>
         </div>
 
-        <NavSection title="Command" items={sections.Command} badges={navBadges} />
-        <NavSection title="Operations" items={sections.Operations} badges={navBadges} />
-        <NavSection title="Control" items={sections.Control} badges={navBadges} />
+        <NavSection title="Home" items={sections.Home} badges={navBadges} />
+        <NavSection title="Work" items={sections.Work} badges={navBadges} />
+        <NavSection title="Account" items={sections.Account} badges={navBadges} />
 
         <div className="mt-auto border-t border-[#0a1624] pt-4 text-xs text-[#3d5870]">
-          <div className="font-semibold uppercase tracking-[0.12em] text-[#4a6880]">Local command workspace</div>
+          <div className="font-semibold uppercase tracking-[0.12em] text-[#4a6880]">Workspace</div>
           <div className="mt-1 text-[#2e4560]">{expenseReceipts.length} receipts · {documents.length} documents · {horses.length} horse records</div>
         </div>
       </aside>
@@ -331,7 +330,7 @@ export default function MainLayout() {
             <div className="flex items-center gap-3">
               <div className="text-[0.98rem] font-extrabold tracking-[0.01em] text-[#e9f2ff]">{currentLabel}</div>
               <span className={classNames('inline-flex min-h-[24px] items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]', pendingReview || pendingTransfers ? 'border-[#314159] bg-[#111b2a] text-[#f0c76e]' : 'border-[#1e3b5d] bg-[#0b1c30] text-[#65a6ff]')}>
-                {pendingReview || pendingTransfers ? `${pendingReview + pendingTransfers} open` : 'Control clear'}
+                {pendingReview || pendingTransfers ? `${pendingReview + pendingTransfers} open` : 'All clear'}
               </span>
             </div>
 
@@ -343,7 +342,7 @@ export default function MainLayout() {
                   onChange={(event) => setSearch(event.target.value)}
                   onKeyDown={handleSearch}
                   onFocus={() => setCommandPaletteOpen(true)}
-                  placeholder="Find horse record, proof, buyer, or action"
+                  placeholder="Search horses, documents, buyers, or tasks"
                   aria-label="Open XBAR search"
                   className="h-10 w-full rounded-md border border-[#1d3047] bg-[#0b1625] pl-10 pr-4 text-sm text-[#e9f2ff] transition-all duration-150 ease-[ease] placeholder:text-[#677f98] focus:border-[#4d94ff] focus:outline-none"
                 />
@@ -356,7 +355,7 @@ export default function MainLayout() {
               </div>
 
               <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#1d3047] bg-[#0b1625] px-4 text-sm font-semibold text-[#d9e6f5] transition-all duration-150 ease-[ease] hover:border-[#4d94ff] hover:bg-[#0f2033]" type="button" onClick={() => setHelpOpen(true)}>
-                Guide
+                Help
               </button>
 
               {cloudSession && canSyncCloud ? (
@@ -365,18 +364,18 @@ export default function MainLayout() {
                 </button>
               ) : null}
 
-              <button className="relative inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#1d3047] bg-[#0b1625] text-[#d9e6f5] transition-all duration-150 ease-[ease] hover:border-[#4d94ff] hover:bg-[#0f2033]" type="button" onClick={() => navigate('/reminders')} aria-label="Open action queue">
+              <button className="relative inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#1d3047] bg-[#0b1625] text-[#d9e6f5] transition-all duration-150 ease-[ease] hover:border-[#4d94ff] hover:bg-[#0f2033]" type="button" onClick={() => navigate('/reminders')} aria-label="Open reminders">
                 <BellIcon className="h-[18px] w-[18px]" />
                 {pendingReview + pendingTransfers ? <span className="absolute right-0.5 top-0.5 min-w-[18px] rounded-full bg-[#CC3333] px-1.5 py-0.5 text-[10px] font-bold text-white">{pendingReview + pendingTransfers}</span> : null}
               </button>
 
               <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#1d3047] bg-[#0b1625] px-4 text-sm font-semibold text-[#d9e6f5] transition-all duration-150 ease-[ease] hover:border-[#4d94ff] hover:bg-[#0f2033] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={() => navigate('/documents?upload=1')} disabled={!canUploadDocuments}>
-                Upload proof
+                Upload Documents
               </button>
 
               <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#1155dd] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#0d44b0] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={() => navigate('/horses?new=1')} disabled={!canCreateHorse}>
                 <AddIcon className="h-[16px] w-[16px]" />
-                New file
+                Add Horse
               </button>
             </div>
           </div>
@@ -395,7 +394,6 @@ export default function MainLayout() {
             <ShellHorseMotif className="xbar-shell-horse-line" />
           </div>
           <CommercialPressureBanner />
-          <XbarIntelligenceRail />
           <div className="xbar-route-transition" key={location.pathname}>
             <Outlet />
           </div>
@@ -428,10 +426,10 @@ export default function MainLayout() {
 
         <nav className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-2 rounded-lg border border-[#1d3047] bg-[#07101d] p-2 text-[#d9e6f5] shadow-lg lg:hidden" aria-label="Mobile quick navigation">
           {([
-            { label: 'Command', path: '/', icon: DashboardIcon, badge: pendingTransfers + careDueCount },
-            { label: 'Files', path: '/horses', icon: HorsesIcon, badge: 0 },
-            { label: 'Proof', path: '/documents', icon: DocumentsIcon, badge: pendingReview },
-            { label: 'Buyers', path: '/sales', icon: SalesIcon, badge: 0 },
+            { label: 'Home', path: '/', icon: DashboardIcon, badge: pendingTransfers + careDueCount },
+            { label: 'Horses', path: '/horses', icon: HorsesIcon, badge: 0 },
+            { label: 'Documents', path: '/documents', icon: DocumentsIcon, badge: pendingReview },
+            { label: 'Sales', path: '/sales', icon: SalesIcon, badge: 0 },
           ] as const).map(({ label, path, icon: Icon, badge }) => (
             <NavLink key={label} to={path} end={path === '/'} className={({ isActive }) => classNames('relative flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]', isActive ? 'bg-[#0d2040] text-white' : 'text-[#798ca3] hover:bg-[#0b1625] hover:text-[#d9e6f5]')}>
               <Icon className="h-[18px] w-[18px]" />

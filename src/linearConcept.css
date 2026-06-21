@@ -2707,3 +2707,36 @@ html body #root main.revenue-landing .revenue-console .revenue-console__row dd {
 html body #root main.revenue-landing .revenue-console .revenue-console__row .revenue-chip {
   background: rgba(7, 12, 20, 0.54) !important;
 }
+
+/* Final production override: plain workspace surface, no moving Home cards. */
+html body #root .xbar-command-main {
+  background: #f6f8fb !important;
+  background-image: none !important;
+}
+
+html body #root .xbar-command-main .xbar-home-atelier {
+  background: #ffffff !important;
+  background-image: none !important;
+}
+
+html body #root .xbar-command-main .xbar-home-atelier::before,
+html body #root .xbar-command-main .xbar-home-atelier::after {
+  content: none !important;
+  display: none !important;
+}
+
+html body #root .xbar-command-main .xbar-home-atelier__visual,
+html body #root .xbar-command-main .xbar-profile-carousel {
+  min-height: auto !important;
+}
+
+html body #root .xbar-command-main .xbar-profile-card,
+html body #root .xbar-command-main .xbar-profile-card:nth-child(1),
+html body #root .xbar-command-main .xbar-profile-card:nth-child(2),
+html body #root .xbar-command-main .xbar-profile-card:nth-child(3),
+html body #root .xbar-command-main .xbar-profile-card:nth-child(4),
+html body #root .xbar-command-main .xbar-profile-card::before,
+html body #root .xbar-command-main .xbar-profile-card::after {
+  animation: none !important;
+  transform: none !important;
+}

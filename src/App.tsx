@@ -16,6 +16,7 @@ import './routes/metalBrandSystem.css';
 import './routes/commandCenterLocal.css';
 import './routes/premiumOperatingSystem.css';
 import './routes/premiumSaasExperience.css';
+import './routes/productionFinal.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Breeding = lazy(() => import('./routes/Breeding'));
@@ -51,7 +52,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/documents': 'Documents',
   '/expenses': 'Expenses',
   '/follow-ups': 'Buyer Follow-ups',
-  '/horses': 'My Horses',
+  '/horses': 'Horses',
   '/landing': 'Ranch Platform',
   '/login': 'Login',
   '/medical': 'Health',
@@ -73,7 +74,7 @@ function useHashRouting() {
 
 function routeTitle(path: string) {
   if (path.startsWith('/profiles/')) return 'XBAR | Listings';
-  if (path.startsWith('/horses/')) return 'XBAR | Horse Command File';
+  if (path.startsWith('/horses/')) return 'XBAR | Horse';
   return `XBAR | ${ROUTE_LABELS[path] ?? 'Ranch'}`;
 }
 
@@ -107,7 +108,7 @@ export default function App() {
         <InteractionShell />
         <SubscriptionEnforcement />
         <RouteTelemetry />
-        <Suspense fallback={<div className="app-loading-shell">Loading XBAR Command...</div>}>
+        <Suspense fallback={<div className="app-loading-shell">Loading XBAR...</div>}>
           <Routes>
             <Route path="/profiles/:id" element={<BuyerProfile />} />
             <Route path="/landing" element={<Landing />} />

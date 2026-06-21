@@ -221,8 +221,8 @@ export default function Ownership() {
       title: horse.name,
       description:
         verified === requirements.length && requirements.length > 0
-          ? 'Every proof requirement is verified.'
-          : `${verified} of ${requirements.length} proof requirements verified.`,
+          ? 'Every ownership requirement is verified.'
+          : `${verified} of ${requirements.length} ownership requirements verified.`,
       facts: [
         { label: 'Legal owner', value: record.legalOwner },
         { label: 'Transfer', value: record.transferStatus },
@@ -256,7 +256,7 @@ export default function Ownership() {
     setMenuState({ type: 'section', sectionId, x: event.clientX, y: event.clientY });
   };
 
-  // ---- Proof chain actions ---------------------------------------------------
+  // ---- Ownership document actions -------------------------------------------
   const linkableDocuments = selectedRecord
     ? documents.filter((document) => document.horseId === selectedRecord.horseId || !document.horseId)
     : [];
@@ -264,19 +264,19 @@ export default function Ownership() {
   const handleLinkProof = (requirementId: string, documentId: string) => {
     if (!selectedRecord || !documentId) return;
     const result = linkOwnershipProof(selectedRecord.id, requirementId, documentId);
-    pushToast({ title: result.ok ? 'Proof linked' : 'Link blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+    pushToast({ title: result.ok ? 'Document linked' : 'Link blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
   };
 
   const handleVerifyProof = (requirementId: string) => {
     if (!selectedRecord) return;
     const result = verifyOwnershipProof(selectedRecord.id, requirementId, currentRole);
-    pushToast({ title: result.ok ? 'Proof verified' : 'Verify blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+    pushToast({ title: result.ok ? 'Document verified' : 'Verify blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
   };
 
   const handleUnlinkProof = (requirementId: string) => {
     if (!selectedRecord) return;
     const result = unlinkOwnershipProof(selectedRecord.id, requirementId);
-    pushToast({ title: result.ok ? 'Proof unlinked' : 'Unlink blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+    pushToast({ title: result.ok ? 'Document unlinked' : 'Unlink blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
   };
 
   // ---- Transfer status -------------------------------------------------------
@@ -377,7 +377,7 @@ export default function Ownership() {
         ) : null}
         {requirement.status === 'linked' ? (
           <button className="button button--primary button--compact" type="button" onClick={() => handleVerifyProof(requirement.id)} disabled={!canManageOwnership}>
-            Verify proof
+            Verify document
           </button>
         ) : null}
         {requirement.status !== 'missing' ? (
@@ -396,10 +396,10 @@ export default function Ownership() {
         entity="Ownership & Transfer Registry"
         variant="split"
         status={heroStatus}
-        summary="Every transfer is proven by linked, verified documents. Clear is earned, never typed."
+        summary="Every transfer is supported by linked, verified documents. Clear status requires completed records."
         evidence={[
           { label: 'Records', value: `${records.length}` },
-          { label: 'Proofs verified', value: `${proofTotals.verified} / ${proofTotals.total}` },
+          { label: 'Documents verified', value: `${proofTotals.verified} / ${proofTotals.total}` },
           { label: 'Transfers pending', value: `${pendingTransfers.length}` },
           { label: 'Next deadline', value: nextDeadline ? formatDateLabel(nextDeadline) : 'None pending' },
         ]}
@@ -455,7 +455,7 @@ export default function Ownership() {
                 <span>Current owner</span>
                 <span>Share</span>
                 <span>Status</span>
-                <span>Proof</span>
+                <span>Documents</span>
               </div>
               {filteredRows.map((row) => {
                 const rowRecord = row.record ? normalizeOwnershipRecord(row.record) : undefined;
@@ -506,7 +506,7 @@ export default function Ownership() {
                         {rowRecord ? (
                           <>
                             <strong>{verifiedCount} / {requirements.length} verified</strong>
-                            <small>{verifiedCount === requirements.length ? 'Proof chain complete' : 'Proof chain open'}</small>
+                            <small>{verifiedCount === requirements.length ? 'Documents complete' : 'Documents open'}</small>
                           </>
                         ) : (
                           <>
@@ -533,7 +533,7 @@ export default function Ownership() {
             <EmptyState compact title="No ownership rows match" description="Clear the search or choose a different transfer status." />
           ) : (
             <div className="ownership-empty-state">
-              <EmptyState title="Start by adding a horse, then prove its ownership." description="The registry shows owner shares, transfer status, and the proof chain once horse records exist." />
+              <EmptyState title="Start by adding a horse, then add ownership documents." description="The registry shows owner shares, transfer status, and the ownership document checklist once horse records exist." />
               <button className="button button--primary" type="button" onClick={() => navigate('/horses?new=1')}>
                 Go to horses
               </button>
@@ -553,17 +553,17 @@ export default function Ownership() {
               </div>
 
               <div className="ownership-subsection">
-                <h3 className="ownership-subsection__title">Proof chain</h3>
+                <h3 className="ownership-subsection__title">Ownership Documents</h3>
                 <div className="ownership-proof-list">{(selectedRecord.proofRequirements ?? []).map(renderProofRow)}</div>
               </div>
 
-              <div className="ownership-confidence" aria-label={`Proof-backed confidence ${selectedRecord.confidence}%`}>
+              <div className="ownership-confidence" aria-label={`Document-backed confidence ${selectedRecord.confidence}%`}>
                 <div className="ownership-confidence__caption">
-                  <span>Proof-backed confidence</span>
+                  <span>Document-backed confidence</span>
                   <strong>{selectedRecord.confidence}%</strong>
                 </div>
                 <ProgressBar value={selectedRecord.confidence} tone={selectedRecord.confidence >= 100 ? 'blue' : selectedRecord.confidence >= 50 ? 'amber' : 'rose'} />
-                <small>Computed from linked and verified proof. Not editable.</small>
+                <small>Computed from linked and verified documents. Not editable.</small>
               </div>
 
               <div className="ownership-subsection">
@@ -581,7 +581,7 @@ export default function Ownership() {
                     </button>
                   ))}
                 </div>
-                <p className="ownership-status-hint">Clear requires every proof requirement to be verified and opens a signed confirmation.</p>
+                <p className="ownership-status-hint">Clear requires every ownership document requirement to be verified and opens a signed confirmation.</p>
                 {statusError ? <div className="field-error">{statusError}</div> : null}
               </div>
 
@@ -618,7 +618,7 @@ export default function Ownership() {
                     ))}
                   </div>
                 ) : (
-                  <EmptyState compact title="No audit events yet" description="Proof links, verifications, and status changes are recorded here." />
+                  <EmptyState compact title="No audit events yet" description="Document links, verifications, and status changes are recorded here." />
                 )}
 
                 <div className="ownership-note-box">

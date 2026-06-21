@@ -14,7 +14,7 @@ export const planOutcomes: Record<SubscriptionTier, string[]> = {
   'Ranch Ops': [
     'Run care, breeding, assets, reminders, and spend in one rhythm',
     'Support a working ranch team with substantially more capacity',
-    'Keep the full operation visible from one command center',
+    'Keep the full operation visible from one dashboard',
   ],
   Enterprise: [
     'Scale the same operating system across up to 60 team seats',
