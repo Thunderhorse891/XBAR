@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { XbarMark } from '@/components/BrandMark';
 import { productEvent, productEventNames } from '@/lib/productEvents';
 import { trackRuntimeEvent } from '@/lib/runtimeEvents';
 import { subscriptionPlans } from '@/lib/subscriptionPlans';
@@ -94,7 +95,7 @@ const signupPath = (plan?: SubscriptionTier) => `/login?mode=signup${plan ? `&pl
 function Wordmark() {
   return (
     <span className="xbar-wordmark">
-      <span className="xbar-wordmark__mark" aria-hidden="true">X</span>
+      <span className="xbar-wordmark__mark" aria-hidden="true"><XbarMark tone="mono" /></span>
       <span className="xbar-wordmark__copy">
         <strong>XBAR</strong>
         <span>Records &amp; sale readiness</span>
@@ -107,7 +108,9 @@ function CommandPreview() {
   return (
     <figure className="command-brief revenue-console" aria-label="Example XBAR horse record showing verified ownership, a compliance deadline, document review status, and sale packet readiness">
       <div className="revenue-console__top">
-        <span className="premium-brand-mark revenue-console__mark" aria-hidden="true" />
+        <span className="revenue-console__mark" aria-hidden="true">
+          <XbarMark tone="mono" />
+        </span>
         <div className="revenue-console__head">
           <p className="revenue-kicker">Operational record</p>
           <strong>Smart Lena Bar &middot; 2019 mare</strong>

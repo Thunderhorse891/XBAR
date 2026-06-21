@@ -1,7 +1,8 @@
-import { type FormEvent, useEffect, useState } from 'react';
+import { type CSSProperties, type FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
+import { XbarMark } from '@/components/BrandMark';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { buildBudgetSummary, buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
 import { formatCompactCurrency, formatCurrency, formatDateLabel } from '@/lib/format';
@@ -11,6 +12,52 @@ import { useUiStore } from '@/store/useUiStore';
 import type { ExpenseCategory } from '@/types/xbar';
 import { CARE_SIGNAL_TONE, EXPENSE_CATEGORIES } from '@/features/dashboard/constants';
 import type { DashboardMenuState } from '@/features/dashboard/types';
+
+const EMPTY_PROFILE_CARDS = [
+  { label: 'Identity file', title: 'Horse No. 001', meta: 'Name, barn, owner, status', status: 'Ready to create', metric: '01' },
+  { label: 'Proof vault', title: 'Papers dock', meta: 'Coggins, registration, receipts', status: 'Waiting on upload', metric: '02' },
+  { label: 'Care timeline', title: 'Health rhythm', meta: 'Vet, dental, wormer, turnout', status: 'Activates with proof', metric: '03' },
+  { label: 'Buyer packet', title: 'Sale-readiness', meta: 'Profile, trust checks, packet', status: 'Builds from record', metric: '04' },
+];
+
+const EMPTY_SETUP_STEPS = [
+  {
+    number: '01',
+    title: 'Create the horse file',
+    body: 'Give XBAR one living record to organize around: identity, barn, owner, and status.',
+    action: 'Add a horse',
+    path: '/horses?new=1',
+  },
+  {
+    number: '02',
+    title: 'Dock the proof',
+    body: 'Upload Coggins, registration, health papers, contracts, and receipts so gaps become visible.',
+    action: 'Upload papers',
+    path: '/documents?upload=1',
+  },
+  {
+    number: '03',
+    title: 'Set the operating context',
+    body: 'Connect weather, costs, and care cadence before buyer activity begins.',
+    action: 'Open settings',
+    path: '/settings',
+  },
+];
+
+function HorseContour({ className = '' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 560 270" fill="none" aria-hidden="true">
+      <path d="M26 183c49-38 102-57 159-57 32 0 54 9 80 26 21 14 43 20 72 17 46-5 78-26 111-57 18-17 37-30 61-35 12-2 22 1 28 11 6 12-2 26-19 35-19 10-39 17-58 23-15 5-28 13-39 24-17 17-35 34-60 44-38 15-81 10-119-3-35-12-67-13-104-4-41 10-76 7-112-24Z" />
+      <path d="M179 126c10-31 31-54 61-66 32-13 71-9 101 10 23 15 40 38 58 60" />
+      <path d="M247 65c-9-22-6-42 9-54 17 22 20 42 8 60" />
+      <path d="M314 66c9-19 25-29 47-28-1 25-14 40-39 44" />
+      <path d="M118 190c-14 16-24 34-29 55" />
+      <path d="M202 205c-6 18-10 35-10 52" />
+      <path d="M371 207c5 18 15 34 30 48" />
+      <path d="M438 177c20 17 33 38 38 64" />
+    </svg>
+  );
+}
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -170,59 +217,97 @@ export default function Dashboard() {
   if (!hasWorkspaceData) {
     return (
       <>
-        <div className="ops-briefing-header command-center-briefing">
-          <div className="ops-briefing-header__top">
-            <div className="ops-briefing-header__left">
-              <div className="ops-briefing-header__ranch">Your barn</div>
-              <h1 className="ops-briefing-header__title">Add your first horse.</h1>
-              <p className="command-center-briefing__copy">
-                Create a record for your first horse and upload its papers. XBAR keeps health, ownership, buyers, weather, and costs organized around it.
-              </p>
-              <div className="ops-briefing-header__chips">
-                <span className="ops-briefing-chip">Horse records</span>
-                <span className="ops-briefing-chip">Papers</span>
-                <span className="ops-briefing-chip">Costs</span>
-                <span className="ops-briefing-chip">Weather</span>
-              </div>
+        <section className="xbar-home-atelier xbar-home-briefing" aria-labelledby="xbar-home-title">
+          <div className="xbar-home-atelier__x" aria-hidden="true" />
+          <div className="xbar-home-atelier__copy">
+            <div className="xbar-home-atelier__brandline">
+              <span className="xbar-home-atelier__mark"><XbarMark tone="mono" /></span>
+              <span>Your barn</span>
             </div>
-            <div className="ops-briefing-header__actions">
-              <Link to="/horses?new=1" className="ops-briefing-action ops-briefing-action--primary">Add a horse</Link>
-              <Link to="/documents?upload=1" className="ops-briefing-action">Upload papers</Link>
-              <Link to="/settings" className="ops-briefing-action">Settings</Link>
+            <h1 id="xbar-home-title">Add your first horse.</h1>
+            <p>
+              Create a record for your first horse and upload its papers. XBAR keeps health, ownership, buyers, weather, and costs organized around it.
+            </p>
+            <div className="xbar-home-atelier__chips" aria-label="First workspace modules">
+              <span>Horse records</span>
+              <span>Proof vault</span>
+              <span>Care timeline</span>
+              <span>Buyer packet</span>
+            </div>
+            <div className="xbar-home-atelier__actions">
+              <Link to="/horses?new=1" className="xbar-home-action xbar-home-action--primary">Add a horse</Link>
+              <Link to="/documents?upload=1" className="xbar-home-action">Upload papers</Link>
+              <Link to="/settings" className="xbar-home-action">Settings</Link>
             </div>
           </div>
-          <div className="ops-briefing-stat-row">
-            <div className="ops-briefing-stat"><span className="ops-briefing-stat__label">Horses</span><span className="ops-briefing-stat__value ops-briefing-stat__value--clear">0</span><span className="ops-briefing-stat__detail">none yet</span></div>
-            <div className="ops-briefing-stat"><span className="ops-briefing-stat__label">Papers</span><span className="ops-briefing-stat__value">0</span><span className="ops-briefing-stat__detail">none uploaded</span></div>
-            <div className="ops-briefing-stat"><span className="ops-briefing-stat__label">Transfers</span><span className="ops-briefing-stat__value ops-briefing-stat__value--clear">0</span><span className="ops-briefing-stat__detail">none pending</span></div>
-            <div className="ops-briefing-stat"><span className="ops-briefing-stat__label">Buyers</span><span className="ops-briefing-stat__value">0</span><span className="ops-briefing-stat__detail">no activity yet</span></div>
-          </div>
-        </div>
 
-        <div className="dashboard-grid dashboard-grid--primary">
-          <Panel eyebrow="First move" title="Create the first horse record">
-            <EmptyState
-              title="No horse records yet"
-              description="Add the first horse, then attach proof. The system becomes useful when every decision points back to a file."
-              action={
-                <div className="inline-actions">
-                  <Link to="/horses?new=1" className="button button--primary button--compact">Create file</Link>
-                  <Link to="/documents?upload=1" className="button button--ghost button--compact">Upload proof</Link>
-                  <Link to="/weather" className="button button--ghost button--compact">Field conditions</Link>
+          <div className="xbar-home-atelier__visual" aria-hidden="true">
+            <HorseContour className="xbar-home-atelier__horse" />
+            <div className="xbar-profile-carousel">
+              {EMPTY_PROFILE_CARDS.map((card, index) => (
+                <article
+                  className="xbar-profile-card"
+                  style={{ '--card-index': index, '--card-delay': `${index * -3.15}s` } as CSSProperties}
+                  key={card.label}
+                >
+                  <span className="xbar-profile-card__metric">{card.metric}</span>
+                  <div className="xbar-profile-card__head">
+                    <span>{card.label}</span>
+                    <i />
+                  </div>
+                  <strong>{card.title}</strong>
+                  <small>{card.meta}</small>
+                  <em>{card.status}</em>
+                  <span className="xbar-profile-card__rail" />
+                </article>
+              ))}
+            </div>
+          </div>
+
+          <div className="xbar-home-runway" aria-label="Empty workspace counters">
+            <div><span>Horses</span><strong>0</strong><small>none yet</small></div>
+            <div><span>Papers</span><strong>0</strong><small>none uploaded</small></div>
+            <div><span>Transfers</span><strong>0</strong><small>none pending</small></div>
+            <div><span>Buyers</span><strong>0</strong><small>no activity yet</small></div>
+          </div>
+        </section>
+
+        <section className="xbar-setup-flow" aria-label="First setup sequence">
+          <div className="xbar-setup-flow__header">
+            <div>
+              <span>First useful outcome</span>
+              <h2>Create the first horse record</h2>
+            </div>
+            <p>XBAR stops feeling empty the moment one horse file has identity, proof, and operating context attached.</p>
+          </div>
+
+          <div className="xbar-setup-flow__grid">
+            {EMPTY_SETUP_STEPS.map((step, index) => (
+              <Link className="xbar-sequence-card" to={step.path} key={step.number} style={{ '--step-delay': `${index * 90}ms` } as CSSProperties}>
+                <span className="xbar-sequence-card__number">{step.number}</span>
+                <div>
+                  <strong>{step.title}</strong>
+                  <p>{step.body}</p>
                 </div>
-              }
-            />
-          </Panel>
+                <em>{step.action}</em>
+              </Link>
+            ))}
+          </div>
 
-          <Panel eyebrow="Operating sequence" title="What to build first">
-            <div className="stack-list">
-              <div className="stack-item"><div className="stack-item__title">Horse record</div><div className="stack-item__copy">One horse gives the system something to organize around: identity, barn, owner, and status.</div></div>
-              <div className="stack-item"><div className="stack-item__title">Proof vault</div><div className="stack-item__copy">Upload Coggins, registration, health papers, contracts, and receipts so gaps are visible.</div></div>
-              <div className="stack-item"><div className="stack-item__title">Operating ledger</div><div className="stack-item__copy">Log feed, wormer, dental, and vet costs while context is fresh.</div></div>
-              <div className="stack-item"><div className="stack-item__title">Field conditions</div><div className="stack-item__copy">Set ranch location and use weather for turnout, hauling, and breeding windows.</div></div>
+          <div className="xbar-system-strip">
+            <div>
+              <span>Operating sequence</span>
+              <strong>Horse record → proof vault → care timeline → buyer packet</strong>
             </div>
-          </Panel>
-        </div>
+            <HorseContour className="xbar-system-strip__horse" />
+            <div className="xbar-system-strip__ticks" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+              <i />
+            </div>
+          </div>
+        </section>
       </>
     );
   }

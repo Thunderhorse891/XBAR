@@ -15,6 +15,7 @@ import './routes/xbarCommandSystem.css';
 import './routes/metalBrandSystem.css';
 import './routes/commandCenterLocal.css';
 import './routes/premiumOperatingSystem.css';
+import './routes/premiumSaasExperience.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Breeding = lazy(() => import('./routes/Breeding'));
@@ -60,6 +61,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/settings': 'Settings',
   '/setup': 'Setup',
   '/shared-access': 'Listings',
+  '/subscribe': 'Choose Plan',
   '/subscriptions': 'Plan & Billing',
   '/weather': 'Weather',
 };
@@ -112,6 +114,7 @@ export default function App() {
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/subscribe" element={<RequireCloudAuth><Subscriptions /></RequireCloudAuth>} />
             <Route path="/setup" element={<RequireCloudAuth><SetupWorkspace /></RequireCloudAuth>} />
             <Route path="/" element={<RequireCloudAuth><RequireWorkspaceSetup><MainLayout /></RequireWorkspaceSetup></RequireCloudAuth>}>
               <Route index element={<Dashboard />} />
