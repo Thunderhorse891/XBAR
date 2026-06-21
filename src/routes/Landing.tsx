@@ -282,31 +282,42 @@ export default function Landing() {
         </nav>
       </header>
 
-      <section className="revenue-hero" aria-labelledby="hero-heading">
-        <div className="revenue-hero__copy">
-          <p className="revenue-kicker">Built for performance horse operations</p>
-          <h1 id="hero-heading">Clean records. Ownership integrity. Faster sale readiness.</h1>
-          <p className="revenue-hero__lead">
-            XBAR turns scattered paperwork, ownership details, and horse documentation into trusted, buyer-ready digital records &mdash; with OCR-assisted intake, compliance deadlines, and watermarked sale packets in one system.
+      <section className="revenue-hero revenue-hero--editorial" aria-labelledby="hero-heading">
+        <p className="revenue-kicker">Equine operations, elevated</p>
+        <h1 id="hero-heading">
+          <span>One record per horse.</span>
+          <span>Ownership you can prove.</span>
+          <span>Sales that close.</span>
+        </h1>
+        <p className="revenue-hero__lead">
+          XBAR turns scattered paperwork, ownership details, and horse documentation into trusted, buyer-ready digital records &mdash; OCR-assisted intake, compliance deadlines, and watermarked sale packets in one quiet, deliberate system.
+        </p>
+        <div className="revenue-hero__actions">
+          <Link className="public-action public-action--primary" to={signupPath('Professional')} onClick={() => trackPlan('Professional')}>
+            Create your workspace
+          </Link>
+          <Link className="public-action" to="/login" onClick={() => trackCta('hero', '/login')}>
+            Sign in
+          </Link>
+        </div>
+        <ul className="revenue-proof-line revenue-proof-line--center">
+          <li>Local-first</li>
+          <li>Human-reviewed</li>
+          <li>Watermarked sharing</li>
+        </ul>
+      </section>
+
+      <section className="revenue-reveal" aria-labelledby="reveal-heading">
+        <div className="revenue-reveal__copy">
+          <p className="revenue-kicker">The record itself</p>
+          <h2 id="reveal-heading">Every horse, resolved to a single source of truth.</h2>
+          <p>
+            Ownership, transfer status, compliance, documents, and sale readiness &mdash; verified by a
+            person, audit-logged, and ready to share the moment a buyer asks.
           </p>
-          <div className="revenue-hero__actions">
-            <Link className="public-action public-action--primary" to={signupPath('Professional')} onClick={() => trackPlan('Professional')}>
-              Create your workspace
-            </Link>
-            <Link className="public-action" to="/login" onClick={() => trackCta('hero', '/login')}>
-              Sign in
-            </Link>
-          </div>
-          <ul className="revenue-proof-line">
-            <li>Local-first workspace</li>
-            <li>Human review before records are final</li>
-            <li>Records stay intact across plans</li>
-          </ul>
         </div>
         <CommandPreview />
       </section>
-
-      <RevenueIntelligenceShowcase />
 
       <section className="revenue-section" aria-labelledby="pipeline-heading">
         <div className="revenue-section__header">
@@ -406,6 +417,8 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      <RevenueIntelligenceShowcase />
 
       <section className="revenue-section" aria-labelledby="pricing-heading">
         <div className="revenue-section__header">

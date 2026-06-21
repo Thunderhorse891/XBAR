@@ -757,3 +757,119 @@
     align-items: flex-start;
   }
 }
+
+/* ═══════════════════════════════════════════════
+   EDITORIAL LUXURY LAYER
+   Centered display-serif hero, generous whitespace, and a single
+   product reveal as payoff — so the marketing surface reads as a
+   premium publication, not a product dashboard.
+═══════════════════════════════════════════════ */
+
+/* Display-serif headings across the public marketing surface. */
+.revenue-section h2,
+.revenue-cta h2 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+/* ── Editorial hero ──────────────────────────── */
+.revenue-hero--editorial {
+  display: block;
+  text-align: center;
+  max-width: 1000px;
+  padding-top: clamp(76px, 11vw, 176px);
+  padding-bottom: clamp(40px, 6vw, 80px);
+}
+
+.revenue-hero--editorial .revenue-kicker {
+  margin-bottom: 24px;
+}
+
+.revenue-hero--editorial h1 {
+  max-width: none;
+  margin: 0 auto;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(2.7rem, 6.6vw, 5.8rem);
+  line-height: 1.015;
+  letter-spacing: -0.022em;
+  color: #0d1420;
+}
+
+.revenue-hero--editorial h1 span {
+  display: block;
+}
+
+.revenue-hero--editorial h1 span:nth-child(2) {
+  color: #1b2632;
+}
+
+.revenue-hero--editorial h1 span:nth-child(3) {
+  color: #1466d8;
+}
+
+.revenue-hero--editorial .revenue-hero__lead {
+  margin: 30px auto 0;
+  max-width: 650px;
+  font-size: clamp(16.5px, 1.7vw, 20px);
+}
+
+.revenue-hero--editorial .revenue-hero__actions {
+  justify-content: center;
+  margin-top: 38px;
+}
+
+.revenue-proof-line--center {
+  justify-content: center;
+  margin-top: 36px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ── Product reveal (the one dark module, as payoff) ── */
+.revenue-reveal {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.92fr);
+  align-items: center;
+  gap: clamp(36px, 6vw, 88px);
+  max-width: 1240px;
+  margin: auto;
+  padding: clamp(36px, 6vw, 88px) clamp(20px, 5vw, 72px) clamp(60px, 9vw, 120px);
+}
+
+.revenue-reveal__copy h2 {
+  margin: 16px 0 0;
+  font-family: var(--font-display);
+  font-weight: 500;
+  color: #0d1420;
+  font-size: clamp(1.95rem, 3.4vw, 3rem);
+  line-height: 1.07;
+  letter-spacing: -0.018em;
+  max-width: 15ch;
+}
+
+.revenue-reveal__copy p {
+  margin: 20px 0 0;
+  max-width: 46ch;
+  color: #46586d;
+  font-size: clamp(15px, 1.5vw, 17px);
+  line-height: 1.66;
+}
+
+.revenue-reveal .revenue-console {
+  justify-self: end;
+}
+
+@media (max-width: 1020px) {
+  .revenue-reveal {
+    grid-template-columns: 1fr;
+    text-align: left;
+  }
+
+  .revenue-reveal .revenue-console {
+    justify-self: stretch;
+    max-width: 640px;
+  }
+}
