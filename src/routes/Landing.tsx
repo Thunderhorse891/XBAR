@@ -56,6 +56,21 @@ const painPoints = [
   'Internal handoffs create delays and risk',
 ];
 
+const segments = [
+  {
+    title: 'Breeding & broodmare programs',
+    copy: 'Keep registration papers, foaling history, and ownership structure attached to each animal so breeding decisions and transfers never stall on missing paperwork.',
+  },
+  {
+    title: 'Sale barns & consignors',
+    copy: 'Turn approved records into watermarked, buyer-ready sale packets and shared profiles in one click — present documentation that closes faster and protects your reputation.',
+  },
+  {
+    title: 'Trainers, ranches & multi-horse operations',
+    copy: 'Give a whole team one trusted record per horse — care status, documents, compliance deadlines, and buyer movement — without losing history in folders and group texts.',
+  },
+];
+
 const trustPoints = [
   {
     title: 'Source-record discipline',
@@ -267,31 +282,42 @@ export default function Landing() {
         </nav>
       </header>
 
-      <section className="revenue-hero" aria-labelledby="hero-heading">
-        <div className="revenue-hero__copy">
-          <p className="revenue-kicker">Built for performance horse operations</p>
-          <h1 id="hero-heading">Clean records. Ownership integrity. Faster sale readiness.</h1>
-          <p className="revenue-hero__lead">
-            XBAR turns scattered paperwork, ownership details, and horse documentation into trusted, buyer-ready digital records &mdash; with OCR-assisted intake, compliance deadlines, and watermarked sale packets in one system.
+      <section className="revenue-hero revenue-hero--editorial" aria-labelledby="hero-heading">
+        <p className="revenue-kicker">Equine operations, elevated</p>
+        <h1 id="hero-heading">
+          <span>One record per horse.</span>
+          <span>Ownership you can prove.</span>
+          <span>Sales that close.</span>
+        </h1>
+        <p className="revenue-hero__lead">
+          XBAR turns scattered paperwork, ownership details, and horse documentation into trusted, buyer-ready digital records &mdash; OCR-assisted intake, compliance deadlines, and watermarked sale packets in one quiet, deliberate system.
+        </p>
+        <div className="revenue-hero__actions">
+          <Link className="public-action public-action--primary" to={signupPath('Professional')} onClick={() => trackPlan('Professional')}>
+            Create your workspace
+          </Link>
+          <Link className="public-action" to="/login" onClick={() => trackCta('hero', '/login')}>
+            Sign in
+          </Link>
+        </div>
+        <ul className="revenue-proof-line revenue-proof-line--center">
+          <li>Local-first</li>
+          <li>Human-reviewed</li>
+          <li>Watermarked sharing</li>
+        </ul>
+      </section>
+
+      <section className="revenue-reveal" aria-labelledby="reveal-heading">
+        <div className="revenue-reveal__copy">
+          <p className="revenue-kicker">The record itself</p>
+          <h2 id="reveal-heading">Every horse, resolved to a single source of truth.</h2>
+          <p>
+            Ownership, transfer status, compliance, documents, and sale readiness &mdash; verified by a
+            person, audit-logged, and ready to share the moment a buyer asks.
           </p>
-          <div className="revenue-hero__actions">
-            <Link className="public-action public-action--primary" to={signupPath('Professional')} onClick={() => trackPlan('Professional')}>
-              Create your workspace
-            </Link>
-            <Link className="public-action" to="/login" onClick={() => trackCta('hero', '/login')}>
-              Sign in
-            </Link>
-          </div>
-          <ul className="revenue-proof-line">
-            <li>Local-first workspace</li>
-            <li>Human review before records are final</li>
-            <li>Records stay intact across plans</li>
-          </ul>
         </div>
         <CommandPreview />
       </section>
-
-      <RevenueIntelligenceShowcase />
 
       <section className="revenue-section" aria-labelledby="pipeline-heading">
         <div className="revenue-section__header">
@@ -371,6 +397,28 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      <section className="revenue-section revenue-section--bordered" aria-labelledby="segments-heading">
+        <div className="revenue-section__inner">
+          <div className="revenue-section__header">
+            <div>
+              <p className="revenue-kicker">Who it's for</p>
+              <h2 id="segments-heading">Built for the operations where paperwork decides the deal.</h2>
+            </div>
+            <p>From a single broodmare program to a multi-rider barn, XBAR gives every horse one record your team and your buyers can trust.</p>
+          </div>
+          <div className="revenue-trust-grid">
+            {segments.map((segment) => (
+              <article className="revenue-trust-card" key={segment.title}>
+                <h3>{segment.title}</h3>
+                <p>{segment.copy}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <RevenueIntelligenceShowcase />
 
       <section className="revenue-section" aria-labelledby="pricing-heading">
         <div className="revenue-section__header">

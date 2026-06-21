@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Outfit:wght@400;500;600;700;800;900&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -60,6 +60,8 @@
   --input: 210 8% 80%;
   --ring: 211 62% 41%;
   --radius: 0.625rem;
+  /* Editorial display face for premium marketing surfaces (public pages only). */
+  --font-display: 'Fraunces', 'Times New Roman', Georgia, serif;
 }
 
 * {

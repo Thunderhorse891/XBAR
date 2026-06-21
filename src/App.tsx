@@ -78,6 +78,50 @@ function routeTitle(path: string) {
   return `XBAR | ${ROUTE_LABELS[path] ?? 'Ranch'}`;
 }
 
+const DEFAULT_META_DESCRIPTION =
+  'XBAR turns scattered horse paperwork into trusted, buyer-ready digital records — OCR-assisted intake, ownership integrity, compliance deadlines, and watermarked sale packets in one command system.';
+
+// Distinct titles and descriptions for the publicly indexable routes. These
+// compound the static SEO in index.html so each crawlable page presents its
+// own snippet in search and social results instead of the shared default.
+const PUBLIC_ROUTE_META: Record<string, { title: string; description: string }> = {
+  '/landing': {
+    title: 'XBAR — Clean records, ownership integrity, faster sale readiness',
+    description: DEFAULT_META_DESCRIPTION,
+  },
+  '/login': {
+    title: 'Sign in or create your workspace | XBAR',
+    description:
+      'Sign in to XBAR or create a local-first workspace for horse records, ownership, documents, and sale-ready buyer packets.',
+  },
+  '/privacy': {
+    title: 'Privacy Policy | XBAR',
+    description: 'How XBAR handles workspace data, document storage, and account information.',
+  },
+  '/terms': {
+    title: 'Terms of Service | XBAR',
+    description: 'The terms that govern use of the XBAR equine operations platform.',
+  },
+};
+
+function setMetaDescription(content: string) {
+  if (typeof document === 'undefined') return;
+  let tag = document.querySelector('meta[name="description"]');
+  if (!tag) {
+    tag = document.createElement('meta');
+    tag.setAttribute('name', 'description');
+    document.head.appendChild(tag);
+  }
+  tag.setAttribute('content', content);
+}
+
+function applyRouteMeta(path: string) {
+  if (typeof document === 'undefined') return;
+  const meta = PUBLIC_ROUTE_META[path];
+  document.title = meta ? meta.title : routeTitle(path);
+  setMetaDescription(meta ? meta.description : DEFAULT_META_DESCRIPTION);
+}
+
 function RouteTelemetry() {
   const location = useLocation();
   const workspaceId = useCloudStore((state) => state.workspaceId);
@@ -92,7 +136,7 @@ function RouteTelemetry() {
   }, [location.pathname, location.search, workspaceId]);
 
   useEffect(() => {
-    document.title = routeTitle(location.pathname);
+    applyRouteMeta(location.pathname);
   }, [location.pathname]);
 
   return null;
