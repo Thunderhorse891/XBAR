@@ -169,7 +169,7 @@
   border-radius: 28px;
   padding: 18px;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(225, 233, 243, 0.82)),
+    linear-gradient(135deg, rgba(20, 21, 23, 0.72), rgba(225, 233, 243, 0.82)),
     rgba(238, 244, 250, 0.9);
   box-shadow: 0 28px 90px rgba(25, 36, 49, 0.13);
 }
@@ -206,11 +206,11 @@
 .xbar-command-main .table-shell {
   border: 1px solid rgba(63, 75, 90, 0.16);
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(236, 242, 248, 0.86)),
+    linear-gradient(145deg, rgba(20, 21, 23, 0.92), rgba(236, 242, 248, 0.86)),
     rgba(245, 248, 252, 0.9);
   box-shadow:
     0 18px 48px rgba(34, 45, 59, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+    inset 0 1px 0 rgba(20, 21, 23, 0.72);
 }
 
 .xbar-command-main .panel {
@@ -218,7 +218,7 @@
 }
 
 .xbar-command-main .panel__title {
-  color: #07101a;
+  color: var(--xbar-ink);
   font-size: clamp(1.15rem, 1.6vw, 1.75rem);
   letter-spacing: -0.045em;
 }
@@ -325,15 +325,15 @@
 .xbar-command-main .field-textarea,
 .xbar-command-main .field-select {
   border-color: rgba(63, 75, 90, 0.22);
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  background: rgba(20, 21, 23, 0.72);
+  box-shadow: inset 0 1px 0 rgba(20, 21, 23, 0.7);
 }
 
 .xbar-command-main .button--primary,
 .xbar-command-main .ops-briefing-action--primary {
   border-color: rgba(47, 141, 255, 0.72);
   background: linear-gradient(180deg, #5eb0ff 0%, #2f8dff 48%, #176cd3 100%);
-  color: #02050a;
+  color: var(--xbar-ink);
   box-shadow: 0 16px 32px rgba(47, 141, 255, 0.28);
 }
 
@@ -351,14 +351,14 @@
   padding: 14px 16px;
   border: 1px solid rgba(217, 119, 6, 0.34);
   border-radius: 12px;
-  background: linear-gradient(135deg, rgba(255, 249, 235, 0.98), rgba(255, 255, 255, 0.96));
+  background: linear-gradient(135deg, rgba(34, 28, 16, 0.98), rgba(20, 21, 23, 0.96));
   box-shadow: var(--shadow-soft);
 }
 
 .commercial-pressure > div { display: grid; gap: 3px; }
 .commercial-pressure strong { color: #7a4705; }
 .commercial-pressure span { color: var(--muted-strong); font-size: 0.82rem; }
-.commercial-pressure--blocked { border-color: rgba(191, 64, 64, 0.42); background: linear-gradient(135deg, #fff3f3, #fff); }
+.commercial-pressure--blocked { border-color: rgba(191, 64, 64, 0.42); background: linear-gradient(135deg, #241214, #0f1011); }
 .commercial-pressure--blocked strong { color: var(--rose); }
 
 @media (max-width: 1100px) {
@@ -389,15 +389,15 @@
 
 /* XBAR light atelier: a native product surface, not a generic dashboard. */
 .xbar-command-shell {
-  background: #f7f9fc !important;
+  background: #141517 !important;
 }
 
 .xbar-command-shell > aside {
-  color: #111827 !important;
+  color: var(--xbar-ink) !important;
   border-right: 1px solid rgba(98, 116, 137, 0.18) !important;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 251, 0.94)) !important;
-  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.86), 14px 0 36px rgba(27, 39, 54, 0.05) !important;
+    linear-gradient(180deg, rgba(20, 21, 23, 0.92), rgba(244, 247, 251, 0.94)) !important;
+  box-shadow: inset -1px 0 0 rgba(20, 21, 23, 0.86), 14px 0 36px rgba(27, 39, 54, 0.05) !important;
 }
 
 .xbar-command-shell aside > div:first-child > div:first-child::before,
@@ -407,23 +407,23 @@
 
 .xbar-command-shell aside > div:first-child > div:first-child,
 .xbar-command-shell .brand-lockup__mark {
-  color: #101827 !important;
-  background: linear-gradient(180deg, #ffffff, #eef3f8) !important;
+  color: var(--xbar-ink) !important;
+  background: linear-gradient(180deg, #0f1011, #141517) !important;
   border: 1px solid rgba(98, 116, 137, 0.24) !important;
   border-radius: 8px !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 10px 26px rgba(31, 41, 55, 0.08) !important;
+  box-shadow: inset 0 1px 0 rgba(20, 21, 23, 0.95), 0 10px 26px rgba(31, 41, 55, 0.08) !important;
 }
 
 .xbar-command-shell aside > div:first-child > div:first-child > svg,
 .xbar-command-shell .brand-lockup__mark > svg,
 .xbar-command-shell .premium-brand-mark > svg {
   opacity: 1 !important;
-  color: #111827 !important;
+  color: var(--xbar-ink) !important;
   filter: none !important;
 }
 
 .xbar-command-shell aside :is([class*="text-white"], [class*="text-[#ddeaf8]"], [class*="text-[#e9f2ff]"], [class*="text-foreground"]) {
-  color: #111827 !important;
+  color: var(--xbar-ink) !important;
 }
 
 .xbar-command-shell aside :is([class*="text-[#52708d]"], [class*="text-[#536d88]"], [class*="text-[#6f8aa5]"], [class*="text-[#4a6880]"], [class*="text-[#3d5870]"], [class*="text-muted-foreground"]) {
@@ -432,8 +432,8 @@
 
 .xbar-command-shell aside :is([class*="bg-[#080f1c]"], [class*="bg-[#08111d]"], [class*="bg-[#0a1628]"], [class*="bg-card"], [class*="bg-background"]) {
   border-color: rgba(98, 116, 137, 0.18) !important;
-  background: rgba(255, 255, 255, 0.72) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+  background: rgba(20, 21, 23, 0.72) !important;
+  box-shadow: inset 0 1px 0 rgba(20, 21, 23, 0.8) !important;
 }
 
 .xbar-command-shell aside a,
@@ -444,25 +444,25 @@
 .xbar-command-shell aside a:hover,
 .xbar-command-shell aside button:hover {
   background: rgba(30, 115, 232, 0.07) !important;
-  color: #0d1420 !important;
+  color: var(--xbar-ink) !important;
 }
 
 .xbar-command-topbar {
   border-bottom: 1px solid rgba(98, 116, 137, 0.18) !important;
-  background: rgba(255, 255, 255, 0.82) !important;
-  color: #111827 !important;
+  background: rgba(20, 21, 23, 0.82) !important;
+  color: var(--xbar-ink) !important;
   box-shadow: 0 16px 36px -30px rgba(31, 41, 55, 0.34), inset 0 -1px 0 rgba(30, 115, 232, 0.08) !important;
   backdrop-filter: blur(18px) saturate(1.08) !important;
 }
 
 .xbar-command-topbar :is([class*="text-[#e9f2ff]"], [class*="text-[#d9e6f5]"], [class*="text-white"]) {
-  color: #111827 !important;
+  color: var(--xbar-ink) !important;
 }
 
 .xbar-command-topbar input {
   border-color: rgba(98, 116, 137, 0.22) !important;
-  background: #ffffff !important;
-  color: #111827 !important;
+  background: #0f1011 !important;
+  color: var(--xbar-ink) !important;
   box-shadow: inset 0 1px 2px rgba(31, 41, 55, 0.06) !important;
 }
 
@@ -472,9 +472,9 @@
 
 .xbar-command-topbar :is(button, [class*="role"], [class*="bg-[#0b1625]"], [class*="bg-[#111b2a]"], [class*="bg-[#0b1c30]"]) {
   border-color: rgba(98, 116, 137, 0.2) !important;
-  background: linear-gradient(180deg, #ffffff, #f1f5f9) !important;
-  color: #111827 !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88) !important;
+  background: linear-gradient(180deg, #0f1011, #141517) !important;
+  color: var(--xbar-ink) !important;
+  box-shadow: inset 0 1px 0 rgba(20, 21, 23, 0.88) !important;
 }
 
 .xbar-command-topbar button[class*="bg-[#1155dd]"] {
@@ -487,7 +487,7 @@
   background:
     linear-gradient(rgba(17, 24, 39, 0.026) 1px, transparent 1px),
     linear-gradient(90deg, rgba(17, 24, 39, 0.024) 1px, transparent 1px),
-    linear-gradient(180deg, #f8fafc 0%, #f3f6fa 46%, #eef3f8 100%) !important;
+    linear-gradient(180deg, #141517 0%, #f3f6fa 46%, #141517 100%) !important;
   background-size: 72px 72px, 72px 72px, auto !important;
 }
 
@@ -495,10 +495,10 @@
   border: 1px solid rgba(98, 116, 137, 0.18) !important;
   border-radius: 8px !important;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(244, 248, 252, 0.94)),
-    #ffffff !important;
-  color: #111827 !important;
-  box-shadow: 0 24px 60px rgba(31, 41, 55, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+    linear-gradient(135deg, rgba(20, 21, 23, 0.96), rgba(244, 248, 252, 0.94)),
+    #0f1011 !important;
+  color: var(--xbar-ink) !important;
+  box-shadow: 0 24px 60px rgba(31, 41, 55, 0.08), inset 0 1px 0 rgba(20, 21, 23, 0.9) !important;
 }
 
 .xbar-command-main .ops-briefing-header::before {
@@ -524,7 +524,7 @@
 .xbar-command-main .ops-briefing-header__title,
 .xbar-command-main .ops-briefing-stat__value,
 .xbar-command-main .command-center-next-move strong {
-  color: #111827 !important;
+  color: var(--xbar-ink) !important;
 }
 
 .xbar-command-main .ops-briefing-header__ranch,
@@ -543,9 +543,9 @@
 .xbar-command-main .ops-briefing-chip,
 .xbar-command-main .ops-briefing-action {
   border-color: rgba(98, 116, 137, 0.18) !important;
-  background: rgba(255, 255, 255, 0.78) !important;
-  color: #111827 !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86) !important;
+  background: rgba(20, 21, 23, 0.78) !important;
+  color: var(--xbar-ink) !important;
+  box-shadow: inset 0 1px 0 rgba(20, 21, 23, 0.86) !important;
 }
 
 .xbar-command-main .ops-briefing-action--primary {
@@ -569,9 +569,9 @@
   background:
     linear-gradient(rgba(17, 24, 39, 0.032) 1px, transparent 1px),
     linear-gradient(90deg, rgba(17, 24, 39, 0.028) 1px, transparent 1px),
-    linear-gradient(135deg, #ffffff 0%, #f8fafc 54%, #f1f5f9 100%);
+    linear-gradient(135deg, #0f1011 0%, #141517 54%, #141517 100%);
   background-size: 68px 68px, 68px 68px, auto;
-  box-shadow: 0 28px 72px rgba(31, 41, 55, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  box-shadow: 0 28px 72px rgba(31, 41, 55, 0.1), inset 0 1px 0 rgba(20, 21, 23, 0.95);
 }
 
 .xbar-home-atelier::before {
@@ -606,7 +606,7 @@
   height: 100%;
   background: linear-gradient(180deg, rgba(15, 23, 42, 0.065), rgba(30, 115, 232, 0.04), rgba(15, 23, 42, 0.035));
   border: 1px solid rgba(15, 23, 42, 0.035);
-  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.6);
+  box-shadow: inset 1px 0 0 rgba(20, 21, 23, 0.6);
 }
 
 .xbar-home-atelier__x::before {
@@ -644,11 +644,11 @@
   width: 31px;
   height: 31px;
   place-items: center;
-  color: #111827;
+  color: var(--xbar-ink);
   border: 1px solid rgba(98, 116, 137, 0.2);
   border-radius: 7px;
-  background: #ffffff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  background: #0f1011;
+  box-shadow: inset 0 1px 0 rgba(20, 21, 23, 0.95);
 }
 
 .xbar-home-atelier__mark svg {
@@ -659,7 +659,7 @@
 .xbar-home-atelier h1 {
   max-width: 700px;
   margin: 0;
-  color: #0b1120 !important;
+  color: var(--xbar-ink) !important;
   font-size: clamp(3rem, 7vw, 7.25rem);
   font-weight: 800;
   line-height: 0.88;
@@ -688,9 +688,9 @@
   align-items: center;
   border: 1px solid rgba(98, 116, 137, 0.18);
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(20, 21, 23, 0.72);
   color: #374151;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  box-shadow: inset 0 1px 0 rgba(20, 21, 23, 0.82);
 }
 
 .xbar-home-atelier__chips span {
@@ -709,7 +709,7 @@
 .xbar-home-action {
   justify-content: center;
   padding: 0 16px;
-  color: #111827;
+  color: var(--xbar-ink);
   font-size: 0.86rem;
   font-weight: 750;
   text-decoration: none;
@@ -719,7 +719,7 @@
 .xbar-home-action:hover {
   transform: translateY(-1px);
   border-color: rgba(30, 115, 232, 0.44);
-  box-shadow: 0 14px 28px rgba(31, 41, 55, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  box-shadow: 0 14px 28px rgba(31, 41, 55, 0.08), inset 0 1px 0 rgba(20, 21, 23, 0.95);
 }
 
 .xbar-home-action--primary {
@@ -778,8 +778,8 @@
   padding: 17px;
   border: 1px solid rgba(98, 116, 137, 0.2);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 24px 56px rgba(31, 41, 55, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  background: rgba(20, 21, 23, 0.9);
+  box-shadow: 0 24px 56px rgba(31, 41, 55, 0.12), inset 0 1px 0 rgba(20, 21, 23, 0.92);
   backdrop-filter: blur(14px);
   animation: xbar-card-cycle 10s cubic-bezier(0.22, 1, 0.36, 1) infinite;
   animation-delay: var(--card-delay);
@@ -821,7 +821,7 @@
 
 .xbar-profile-card strong {
   display: block;
-  color: #0b1120;
+  color: var(--xbar-ink);
   font-size: 1.14rem;
   letter-spacing: -0.03em;
 }
@@ -859,11 +859,11 @@
   align-content: center;
   gap: 4px;
   padding: 16px 18px;
-  background: rgba(255, 255, 255, 0.78);
+  background: rgba(20, 21, 23, 0.78);
 }
 
 .xbar-home-runway strong {
-  color: #0b1120;
+  color: var(--xbar-ink);
   font-size: 2rem;
   line-height: 1;
   letter-spacing: -0.05em;
@@ -889,7 +889,7 @@
 
 .xbar-setup-flow__header h2 {
   margin: 7px 0 0;
-  color: #0b1120 !important;
+  color: var(--xbar-ink) !important;
   font-size: clamp(1.55rem, 3vw, 2.5rem);
   letter-spacing: -0.05em;
   line-height: 1;
@@ -921,9 +921,9 @@
   border: 1px solid rgba(98, 116, 137, 0.18);
   border-radius: 8px;
   background:
-    linear-gradient(140deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 253, 0.92)),
-    #ffffff;
-  box-shadow: 0 20px 54px rgba(31, 41, 55, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    linear-gradient(140deg, rgba(20, 21, 23, 0.98), rgba(247, 250, 253, 0.92)),
+    #0f1011;
+  box-shadow: 0 20px 54px rgba(31, 41, 55, 0.07), inset 0 1px 0 rgba(20, 21, 23, 0.9);
   animation: xbar-sequence-in 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: var(--step-delay);
 }
@@ -943,12 +943,12 @@
 .xbar-sequence-card:hover {
   transform: translateY(-2px);
   border-color: rgba(30, 115, 232, 0.4);
-  box-shadow: 0 26px 68px rgba(31, 41, 55, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  box-shadow: 0 26px 68px rgba(31, 41, 55, 0.1), inset 0 1px 0 rgba(20, 21, 23, 0.95);
 }
 
 .xbar-sequence-card strong {
   display: block;
-  color: #0b1120;
+  color: var(--xbar-ink);
   font-size: 1.2rem;
   letter-spacing: -0.035em;
 }
@@ -989,7 +989,7 @@
   background:
     linear-gradient(rgba(17, 24, 39, 0.03) 1px, transparent 1px),
     linear-gradient(90deg, rgba(17, 24, 39, 0.028) 1px, transparent 1px),
-    rgba(255, 255, 255, 0.78);
+    rgba(20, 21, 23, 0.78);
   background-size: 58px 58px, 58px 58px, auto;
   box-shadow: 0 18px 50px rgba(31, 41, 55, 0.06);
 }
@@ -997,7 +997,7 @@
 .xbar-system-strip strong {
   display: block;
   margin-top: 8px;
-  color: #111827;
+  color: var(--xbar-ink);
   font-size: clamp(1.15rem, 2.1vw, 1.85rem);
   letter-spacing: -0.04em;
   line-height: 1.08;
