@@ -51,6 +51,12 @@ const segments: SegmentFilter[] = ['All', 'Sale Prospect', 'Broodmare', 'Stud', 
 const horseSegments: HorseSegment[] = ['Broodmare', 'Stud', 'Show String', 'Sale Prospect', 'Young Stock', 'Retired'];
 const horseStatuses: HorseStatus[] = ['In Training', 'Broodmare Program', 'Sale Prep', 'Medical Review', 'Pasture', 'Retired'];
 const horseSexes: HorseSex[] = ['Mare', 'Stud', 'Gelding', 'Filly', 'Colt'];
+const portfolioFallbackCards = [
+  { title: 'Horse No. 001', meta: 'Identity, owner, barn', status: 'Ready to create', metric: '01' },
+  { title: 'Proof vault', meta: 'Coggins, papers, receipts', status: 'Waiting on upload', metric: '02' },
+  { title: 'Care timeline', meta: 'Vet, dental, wormer', status: 'Activates with proof', metric: '03' },
+  { title: 'Buyer packet', meta: 'Profile and release checks', status: 'Builds from record', metric: '04' },
+];
 
 export default function Horses() {
   const navigate = useNavigate();
@@ -119,6 +125,14 @@ export default function Horses() {
   const buyerReadyCount = horses.filter((horse) => horse.readiness.packetStatus === 'Ready').length;
   const salePrepCount = horses.filter((horse) => horse.status === 'Sale Prep' || horse.segment === 'Sale Prospect').length;
   const proofGapCount = commandPackets.reduce((sum, item) => sum + item.packet.saleSlots.filter((slot) => slot.status !== 'ready').length, 0);
+  const proofReadinessScore = commandPackets.length
+    ? Math.round(commandPackets.reduce((sum, item) => sum + item.packet.score, 0) / commandPackets.length)
+    : 0;
+  const portfolioSignals = [
+    { label: 'Proof readiness', value: proofReadinessScore, detail: `${proofGapCount} open gaps` },
+    { label: 'Buyer-ready files', value: salePrepCount ? Math.round((buyerReadyCount / salePrepCount) * 100) : 0, detail: `${buyerReadyCount}/${salePrepCount || 0} sale files` },
+    { label: 'Medical clarity', value: horses.length ? Math.round(((horses.length - medicalWatchCount) / horses.length) * 100) : 0, detail: `${medicalWatchCount} watch files` },
+  ];
 
   const handleSavedHorseToggle = async (horseId: string) => {
     const horse = horses.find((item) => item.id === horseId);
@@ -242,6 +256,48 @@ export default function Horses() {
           </div>
         </div>
       </div>
+
+      <section className="portfolio-signal-deck" aria-label="Horse portfolio intelligence">
+        <div className="portfolio-signal-deck__copy">
+          <span>Horse card intelligence</span>
+          <strong>Every card now reads like a decision surface.</strong>
+          <p>Proof, owner, location, buyer release, medical posture, and sale readiness stay visible before anyone opens a record.</p>
+        </div>
+        <div className="portfolio-signal-deck__bars">
+          {portfolioSignals.map((signal) => (
+            <div className="portfolio-signal-bar" key={signal.label}>
+              <div><span>{signal.label}</span><strong>{formatPercent(signal.value)}</strong></div>
+              <i><span style={{ width: formatPercent(signal.value) }} /></i>
+              <small>{signal.detail}</small>
+            </div>
+          ))}
+        </div>
+        <div className="portfolio-mini-carousel" aria-label="Premium horse card carousel">
+          {(commandPackets.length ? commandPackets.slice(0, 4) : portfolioFallbackCards).map((item, index) => {
+            const isHorse = 'horse' in item;
+            const title = isHorse ? item.horse.name : item.title;
+            const meta = isHorse ? `${item.horse.segment} | ${item.horse.location.barn}` : item.meta;
+            const status = isHorse ? item.packet.buyerProfileStatus : item.status;
+            const metric = isHorse ? formatPercent(item.packet.score) : item.metric;
+            return (
+              <button
+                type="button"
+                className="portfolio-mini-card"
+                key={`${title}-${index}`}
+                disabled={!isHorse}
+                onClick={() => {
+                  if (isHorse) navigate(`/horses/${item.horse.id}`);
+                }}
+              >
+                <span>{metric}</span>
+                <strong>{title}</strong>
+                <small>{meta}</small>
+                <em>{status}</em>
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
       {createOpen ? (
         <section className="panel">
