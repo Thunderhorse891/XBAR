@@ -56,6 +56,21 @@ const painPoints = [
   'Internal handoffs create delays and risk',
 ];
 
+const segments = [
+  {
+    title: 'Breeding & broodmare programs',
+    copy: 'Keep registration papers, foaling history, and ownership structure attached to each animal so breeding decisions and transfers never stall on missing paperwork.',
+  },
+  {
+    title: 'Sale barns & consignors',
+    copy: 'Turn approved records into watermarked, buyer-ready sale packets and shared profiles in one click — present documentation that closes faster and protects your reputation.',
+  },
+  {
+    title: 'Trainers, ranches & multi-horse operations',
+    copy: 'Give a whole team one trusted record per horse — care status, documents, compliance deadlines, and buyer movement — without losing history in folders and group texts.',
+  },
+];
+
 const trustPoints = [
   {
     title: 'Source-record discipline',
@@ -366,6 +381,26 @@ export default function Landing() {
               <article className="revenue-trust-card" key={point.title}>
                 <h3>{point.title}</h3>
                 <p>{point.copy}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="revenue-section revenue-section--bordered" aria-labelledby="segments-heading">
+        <div className="revenue-section__inner">
+          <div className="revenue-section__header">
+            <div>
+              <p className="revenue-kicker">Who it's for</p>
+              <h2 id="segments-heading">Built for the operations where paperwork decides the deal.</h2>
+            </div>
+            <p>From a single broodmare program to a multi-rider barn, XBAR gives every horse one record your team and your buyers can trust.</p>
+          </div>
+          <div className="revenue-trust-grid">
+            {segments.map((segment) => (
+              <article className="revenue-trust-card" key={segment.title}>
+                <h3>{segment.title}</h3>
+                <p>{segment.copy}</p>
               </article>
             ))}
           </div>
