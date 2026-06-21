@@ -139,7 +139,7 @@ function HorseProfileCarousel() {
                   <dd>{card.owner}</dd>
                 </div>
                 <div>
-                  <dt>Proof</dt>
+                  <dt>Documents</dt>
                   <dd>{card.documents}</dd>
                 </div>
                 <div>
@@ -157,7 +157,7 @@ function HorseProfileCarousel() {
       </div>
       <div className="subscription-floating-box subscription-floating-box--one">
         <span>Records locked</span>
-        <strong>Proof vault synced</strong>
+        <strong>Documents synced</strong>
       </div>
       <div className="subscription-floating-box subscription-floating-box--two">
         <span>Buyer action</span>

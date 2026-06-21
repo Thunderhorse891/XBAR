@@ -64,8 +64,8 @@ export function assessRevenueAtRisk(
 
     const record = ownershipRecords.find((item) => item.horseId === horse.id);
     if (!record) {
-      blockers.push('No ownership record — proof chain not started');
-      actionLabel = `Start proof chain for ${horse.name}`;
+      blockers.push('No ownership record — ownership documents not started');
+      actionLabel = `Start ownership documents for ${horse.name}`;
       actionRoute = '/ownership';
     } else {
       const normalized = normalizeOwnershipRecord(record);
@@ -73,10 +73,10 @@ export function assessRevenueAtRisk(
       if (normalized.transferStatus !== 'Clear') {
         blockers.push(
           unverified.length
-            ? `Transfer ${normalized.transferStatus.toLowerCase()} — ${unverified.length} proof${unverified.length === 1 ? '' : 's'} unverified`
+            ? `Transfer ${normalized.transferStatus.toLowerCase()} — ${unverified.length} document${unverified.length === 1 ? '' : 's'} unverified`
             : `Transfer status ${normalized.transferStatus} — ready to mark Clear`,
         );
-        actionLabel = unverified.length ? `Verify proofs for ${horse.name}` : `Mark ${horse.name} transfer Clear`;
+        actionLabel = unverified.length ? `Verify documents for ${horse.name}` : `Mark ${horse.name} transfer Clear`;
         actionRoute = '/ownership';
       }
     }

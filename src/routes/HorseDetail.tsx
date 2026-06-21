@@ -726,7 +726,7 @@ export default function HorseDetail() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Ownership proof" title="Proof chain">
+        <Panel eyebrow="Ownership" title="Ownership Documents">
           {normalizedOwnership ? (
             <>
               <div className="stack-list">
@@ -747,12 +747,12 @@ export default function HorseDetail() {
                 ))}
               </div>
               <p className="panel__description" style={{ marginTop: 10 }}>
-                Proof-backed confidence: {normalizedOwnership.confidence}% · transfer status {normalizedOwnership.transferStatus}.
-                Proof linking and verification are managed in the Ownership registry.
+                Document-backed confidence: {normalizedOwnership.confidence}% · transfer status {normalizedOwnership.transferStatus}.
+                Document linking and verification are managed in the Ownership registry.
               </p>
             </>
           ) : (
-            <p className="panel__description">No ownership record yet — open the Ownership registry to initialize the proof chain.</p>
+            <p className="panel__description">No ownership record yet — open the Ownership registry to initialize the document checklist.</p>
           )}
           <div className="inline-actions">
             <Link className="button button--ghost button--compact" to="/ownership">

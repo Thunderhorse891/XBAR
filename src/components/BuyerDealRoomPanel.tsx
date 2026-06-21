@@ -22,7 +22,7 @@ export function BuyerDealRoomPanel({ compact = false }: { compact?: boolean }) {
     <Panel
       eyebrow="Buyer Deal Room"
       title="Deal pressure"
-      description={compact ? undefined : 'Buyer-facing intent by horse: unanswered questions and proof requests, packet downloads, open offers, latest deal status, and the next seller action.'}
+      description={compact ? undefined : 'Buyer activity by horse: unanswered questions, document requests, packet downloads, open offers, latest status, and the next seller action.'}
       meta={<Pill tone={activeQuestionCount ? 'amber' : highestOffer || packetDownloadCount ? 'blue' : 'slate'}>{activeQuestionCount ? `${activeQuestionCount} response needed` : highestOffer ? 'Offer pressure' : packetDownloadCount ? `${packetDownloadCount} packet download${packetDownloadCount === 1 ? '' : 's'}` : 'Quiet'}</Pill>}
       action={<Link className="button button--ghost button--compact" to="/sales">Sales</Link>}
     >
@@ -52,7 +52,7 @@ export function BuyerDealRoomPanel({ compact = false }: { compact?: boolean }) {
         <div className="stack-list">
           <div className="stack-item">
             <div className="stack-item__title">No buyer pressure yet</div>
-            <div className="stack-item__copy">Share a buyer packet or move a lead into offer status to activate deal-room intelligence.</div>
+            <div className="stack-item__copy">Share a buyer packet or move a lead into offer status to start buyer follow-up tracking.</div>
           </div>
         </div>
       )}

@@ -35,7 +35,7 @@ function createHorseFormDefaults(params: {
   };
 }
 
-type ViewMode = 'My Horses' | 'Registry Matrix';
+type ViewMode = 'Horses' | 'Registry Matrix';
 type SegmentFilter = 'All' | HorseSegment;
 
 const statusTone: Record<HorseStatus, 'blue' | 'slate' | 'amber' | 'rose' | 'emerald'> = {
@@ -52,10 +52,10 @@ const horseSegments: HorseSegment[] = ['Broodmare', 'Stud', 'Show String', 'Sale
 const horseStatuses: HorseStatus[] = ['In Training', 'Broodmare Program', 'Sale Prep', 'Medical Review', 'Pasture', 'Retired'];
 const horseSexes: HorseSex[] = ['Mare', 'Stud', 'Gelding', 'Filly', 'Colt'];
 const portfolioFallbackCards = [
-  { title: 'Horse No. 001', meta: 'Identity, owner, barn', status: 'Ready to create', metric: '01' },
-  { title: 'Proof vault', meta: 'Coggins, papers, receipts', status: 'Waiting on upload', metric: '02' },
-  { title: 'Care timeline', meta: 'Vet, dental, wormer', status: 'Activates with proof', metric: '03' },
-  { title: 'Buyer packet', meta: 'Profile and release checks', status: 'Builds from record', metric: '04' },
+  { title: 'Horse Record', meta: 'Name, owner, barn', status: 'Ready', metric: '01' },
+  { title: 'Documents', meta: 'Coggins, papers, receipts', status: 'Next', metric: '02' },
+  { title: 'Health', meta: 'Vet, dental, wormer', status: 'Planned', metric: '03' },
+  { title: 'Sales', meta: 'Profile and release checks', status: 'Optional', metric: '04' },
 ];
 
 export default function Horses() {
@@ -73,7 +73,7 @@ export default function Horses() {
   const canCreateHorse = useCurrentRoleCapability('createHorse');
   const canManageSharedAccess = useCurrentRoleCapability('manageSharedAccess');
   const [searchParams, setSearchParams] = useSearchParams();
-  const [viewMode, setViewMode] = useState<ViewMode>('My Horses');
+  const [viewMode, setViewMode] = useState<ViewMode>('Horses');
   const [segmentFilter, setSegmentFilter] = useState<SegmentFilter>('All');
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [formErrors, setFormErrors] = useState<Partial<Record<'name' | 'barnName' | 'owner' | 'ownerEntity' | 'barn' | 'pasture', string>>>({});
@@ -129,7 +129,7 @@ export default function Horses() {
     ? Math.round(commandPackets.reduce((sum, item) => sum + item.packet.score, 0) / commandPackets.length)
     : 0;
   const portfolioSignals = [
-    { label: 'Proof readiness', value: proofReadinessScore, detail: `${proofGapCount} open gaps` },
+    { label: 'Document readiness', value: proofReadinessScore, detail: `${proofGapCount} open gaps` },
     { label: 'Buyer-ready files', value: salePrepCount ? Math.round((buyerReadyCount / salePrepCount) * 100) : 0, detail: `${buyerReadyCount}/${salePrepCount || 0} sale files` },
     { label: 'Medical clarity', value: horses.length ? Math.round(((horses.length - medicalWatchCount) / horses.length) * 100) : 0, detail: `${medicalWatchCount} watch files` },
   ];
@@ -155,9 +155,9 @@ export default function Horses() {
     );
     openRightDrawer({
       id: `horse-${horse.id}`,
-      eyebrow: 'Command File',
+      eyebrow: 'Horse Record',
       title: horse.name,
-      description: `${horse.segment} in ${horse.location.barn}. Open the horse record for identity, care, ownership, proof, buyer movement, and operating history.`,
+      description: `${horse.segment} in ${horse.location.barn}. Open the horse record for identity, care, ownership, documents, buyer movement, and operating history.`,
       facts: [
         { label: 'Status', value: horse.status },
         { label: 'Legal owner', value: horse.owner },
@@ -238,30 +238,30 @@ export default function Horses() {
       <div className="surface-hero surface-hero--dark command-files-hero">
         <div className="surface-hero__top">
           <div>
-            <span className="surface-hero__eyebrow">My Horses</span>
-            <h1>Horse files with identity, proof, risk, and buyer readiness.</h1>
+            <span className="surface-hero__eyebrow">Horses</span>
+            <h1>Horse records with identity, documents, care, and sales readiness.</h1>
             <p className="command-center-briefing__copy">
-              Each file connects legal owner, location, care posture, release evidence, sales readiness, buyer packet status, and next operational action.
+              Each file connects legal owner, location, care status, documents, sales readiness, buyer packet status, and next action.
             </p>
           </div>
           <div className="surface-hero__stats">
             <div className="surface-hero__stat"><span>Horse records</span><strong>{horses.length}</strong></div>
             <div className="surface-hero__stat"><span>Care holds</span><strong style={{ color: medicalWatchCount ? 'var(--rose)' : 'var(--emerald)' }}>{medicalWatchCount}</strong></div>
             <div className="surface-hero__stat"><span>Buyer ready</span><strong>{buyerReadyCount}/{salePrepCount}</strong></div>
-            <div className="surface-hero__stat"><span>Proof gaps</span><strong style={{ color: proofGapCount ? 'var(--amber)' : 'var(--emerald)' }}>{proofGapCount}</strong></div>
+            <div className="surface-hero__stat"><span>Document gaps</span><strong style={{ color: proofGapCount ? 'var(--amber)' : 'var(--emerald)' }}>{proofGapCount}</strong></div>
           </div>
           <div className="inline-actions" style={{ marginTop: '16px' }}>
-            <Link to="/documents?upload=1" className="button button--ghost button--compact">Upload proof</Link>
-            <button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>Add horse</button>
+            <Link to="/documents?upload=1" className="button button--ghost button--compact">Upload Documents</Link>
+            <button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>Add Horse</button>
           </div>
         </div>
       </div>
 
-      <section className="portfolio-signal-deck" aria-label="Horse portfolio intelligence">
+      <section className="portfolio-signal-deck" aria-label="Horse portfolio overview">
         <div className="portfolio-signal-deck__copy">
-          <span>Horse card intelligence</span>
-          <strong>Every card now reads like a decision surface.</strong>
-          <p>Proof, owner, location, buyer release, medical posture, and sale readiness stay visible before anyone opens a record.</p>
+          <span>Horse Cards</span>
+          <strong>Every card shows the details that matter.</strong>
+          <p>Documents, owner, location, buyer release, medical status, and sale readiness stay visible before anyone opens a record.</p>
         </div>
         <div className="portfolio-signal-deck__bars">
           {portfolioSignals.map((signal) => (
@@ -272,7 +272,7 @@ export default function Horses() {
             </div>
           ))}
         </div>
-        <div className="portfolio-mini-carousel" aria-label="Premium horse card carousel">
+        <div className="portfolio-mini-carousel" aria-label="Horse card preview">
           {(commandPackets.length ? commandPackets.slice(0, 4) : portfolioFallbackCards).map((item, index) => {
             const isHorse = 'horse' in item;
             const title = isHorse ? item.horse.name : item.title;
@@ -327,13 +327,13 @@ export default function Horses() {
 
       <section className="portfolio-toolbar">
         <div className="portfolio-toolbar__controls">
-          <SurfaceTabs items={['My Horses', 'Registry Matrix']} active={viewMode} onChange={(mode) => setViewMode(mode as ViewMode)} />
+          <SurfaceTabs items={['Horses', 'Registry Matrix']} active={viewMode} onChange={(mode) => setViewMode(mode as ViewMode)} />
           <SurfaceTabs items={segments} active={segmentFilter} onChange={(segment) => setSegmentFilter(segment as SegmentFilter)} className="surface-tabs--wrap" />
         </div>
-        <input value={search} onChange={(event) => setSearch(event.target.value)} className="field-input field-input--wide" placeholder="Search horse record, owner, AQHA, barn, proof context" aria-label="Search horse records" />
+        <input value={search} onChange={(event) => setSearch(event.target.value)} className="field-input field-input--wide" placeholder="Search horse record, owner, AQHA, barn, or documents" aria-label="Search horse records" />
       </section>
 
-      {viewMode === 'My Horses' ? (
+      {viewMode === 'Horses' ? (
         filtered.length ? (
           <div className="horse-grid">
             {filtered.map((horse) => {
@@ -374,7 +374,7 @@ export default function Horses() {
                     {showSaleSignals ? (
                       <div className="horse-card__readiness"><div className="horse-card__readiness-head"><span>Buyer readiness</span><strong>{formatPercent(packet.score)}</strong></div><ProgressBar value={packet.score} tone={packet.tone} /></div>
                     ) : (
-                      <div className="horse-card__readiness horse-card__readiness--meta"><div className="horse-card__readiness-head"><span>Operating posture</span><strong>{horse.status === 'Sale Prep' ? 'Buyer Prep' : horse.status}</strong></div><div className="inline-metrics"><span>{horse.gallery.length} media assets</span><span>{packet.readyCount} proof clear</span><span>{horse.location.barn}</span></div></div>
+                      <div className="horse-card__readiness horse-card__readiness--meta"><div className="horse-card__readiness-head"><span>Operating posture</span><strong>{horse.status === 'Sale Prep' ? 'Buyer Prep' : horse.status}</strong></div><div className="inline-metrics"><span>{horse.gallery.length} media assets</span><span>{packet.readyCount} documents ready</span><span>{horse.location.barn}</span></div></div>
                     )}
 
                     <div className="horse-card__packet">
@@ -383,7 +383,7 @@ export default function Horses() {
                     </div>
 
                     <div className="horse-card__footer">
-                      <div className="status-inline">{saved ? <Pill tone="blue">Buyer packet live</Pill> : <Pill tone={openProofSlots ? 'amber' : 'emerald'}>{openProofSlots ? `${openProofSlots} proof gaps` : 'Proof clear'}</Pill>}<span>{showSaleSignals ? `${horse.sale.watchlistCount} watching` : `${horse.sale.inquiryCount} leads`}</span></div>
+                      <div className="status-inline">{saved ? <Pill tone="blue">Buyer packet live</Pill> : <Pill tone={openProofSlots ? 'amber' : 'emerald'}>{openProofSlots ? `${openProofSlots} document gaps` : 'Documents clear'}</Pill>}<span>{showSaleSignals ? `${horse.sale.watchlistCount} watching` : `${horse.sale.inquiryCount} leads`}</span></div>
                       <div className="inline-actions inline-actions--card">
                         <button className="button button--ghost button--compact" type="button" onClick={(event) => { event.stopPropagation(); openHorseDetails(horse); }}>Quick review</button>
                         <button className="button button--ghost button--compact" type="button" onClick={async (event) => { event.stopPropagation(); await handleSavedHorseToggle(horse.id); }} disabled={!canManageSharedAccess}>{saved ? 'Hold packet' : 'Stage packet'}</button>
@@ -401,7 +401,7 @@ export default function Horses() {
       ) : filtered.length ? (
         <div className="table-shell">
           <table className="data-table">
-            <thead><tr><th>Horse record</th><th>Program</th><th>Legal owner</th><th>Location</th><th>Proof</th><th>Readiness</th><th>Status</th></tr></thead>
+            <thead><tr><th>Horse record</th><th>Program</th><th>Legal owner</th><th>Location</th><th>Documents</th><th>Readiness</th><th>Status</th></tr></thead>
             <tbody>
               {filtered.map((horse) => (
                 <tr key={horse.id} className="table-row--interactive" tabIndex={0} aria-label={`Open ${horse.name} horse record`} title="Press Enter to open. Press Shift+F10 for actions." onClick={() => navigate(`/horses/${horse.id}`)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigate(`/horses/${horse.id}`); } if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) { event.preventDefault(); const bounds = event.currentTarget.getBoundingClientRect(); openHorseMenu(horse.id, bounds.left + 32, bounds.top + 32); } }} onContextMenu={(event) => { event.preventDefault(); openHorseMenu(horse.id, event.clientX, event.clientY); }}>

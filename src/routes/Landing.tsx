@@ -21,7 +21,7 @@ const pipeline = [
   { step: 'Upload', copy: 'Bring in registration papers, transfer forms, vet records, and media.' },
   { step: 'Local OCR', copy: 'Documents are read on-device so intake keeps pace with real paperwork volume.' },
   { step: 'Human review', copy: 'Nothing becomes part of the record until a person verifies it.' },
-  { step: 'Ownership proof', copy: 'Approved documents link into each horse’s ownership proof chain.' },
+  { step: 'Ownership review', copy: 'Approved documents link into each horse ownership record.' },
   { step: 'Watermarked sharing', copy: 'Approved records bundle into watermarked sale packets for buyers.' },
 ];
 
@@ -34,7 +34,7 @@ const pillars = [
   {
     title: 'Ownership integrity',
     copy: 'Track legal owner, co-owner structure, transfer status, and compliance deadlines before paperwork blocks a sale.',
-    details: ['Ownership proof chain per horse', 'Transfer status and deadlines surfaced', 'Every change lands in the audit log'],
+    details: ['Ownership documents per horse', 'Transfer status and deadlines surfaced', 'Every change lands in the audit log'],
   },
   {
     title: 'Faster sale readiness',
@@ -63,7 +63,7 @@ const trustPoints = [
   },
   {
     title: 'Audit-logged operations',
-    copy: 'Proof links, verifications, and status changes are recorded, so your team always knows who changed what and when.',
+    copy: 'Document links, verifications, and status changes are recorded, so your team always knows who changed what and when.',
   },
   {
     title: 'Controlled buyer access',
@@ -91,15 +91,15 @@ const questions = [
 ];
 
 const intelligenceBars = [
-  { label: 'Proof readiness', value: '92%', detail: 'approved records' },
+  { label: 'Document readiness', value: '92%', detail: 'approved records' },
   { label: 'Buyer momentum', value: '78%', detail: 'warm leads moving' },
   { label: 'Care confidence', value: '86%', detail: 'holds visible' },
   { label: 'Margin clarity', value: '64%', detail: 'costs connected' },
 ];
 
 const showcaseHorseCards = [
-  { name: 'Silver Mesa', role: 'Sale prospect', proof: '18 docs', signal: 'Packet ready', value: '$48k ask' },
-  { name: 'Blue Hancock', role: 'Rope horse', proof: '12 docs', signal: 'Farrier due', value: '$32k insured' },
+  { name: 'Silver Mesa', role: 'Sale Prospect', proof: '18 docs', signal: 'Packet ready', value: '$48k ask' },
+  { name: 'Blue Hancock', role: 'Rope Horse', proof: '12 docs', signal: 'Farrier due', value: '$32k insured' },
   { name: 'Mesa Drift', role: 'Broodmare', proof: '24 docs', signal: 'Foal window', value: 'May 14' },
   { name: 'Copper Line', role: 'Prospect', proof: '9 docs', signal: 'Buyer room', value: '3 inquiries' },
 ];
@@ -129,7 +129,7 @@ function CommandPreview() {
           <p className="revenue-kicker">Operational record</p>
           <strong>Smart Lena Bar &middot; 2019 mare</strong>
         </div>
-        <span className="revenue-chip revenue-chip--blue">Proof chain complete</span>
+        <span className="revenue-chip revenue-chip--blue">Documents complete</span>
       </div>
       <dl className="revenue-console__rows">
         <div className="revenue-console__row">
@@ -172,15 +172,15 @@ function RevenueIntelligenceShowcase() {
   return (
     <section className="revenue-intelligence-showcase" aria-labelledby="revenue-intelligence-title">
       <div className="revenue-intelligence-showcase__copy">
-        <p className="revenue-kicker">Command-grade conversion system</p>
-        <h2 id="revenue-intelligence-title">A buyer, proof, care, and revenue engine on one surface.</h2>
+        <p className="revenue-kicker">Horse operations dashboard</p>
+        <h2 id="revenue-intelligence-title">Horse records, documents, care, and sales in one place.</h2>
         <p>
-          XBAR turns the public promise into the actual product: live operational graphs, horse cards, proof status,
-          buyer movement, and plan pressure that point operators toward the next paid-value action.
+          XBAR keeps the daily work visible with clear charts, horse cards, document status,
+          buyer movement, and plan details that help operators decide what to do next.
         </p>
         <div className="revenue-intelligence-showcase__actions">
           <Link className="public-action public-action--primary" to={signupPath('Professional')}>
-            Build my command center
+            Create Account
           </Link>
           <Link className="public-action" to="#pricing-heading">
             Compare plans
@@ -188,10 +188,10 @@ function RevenueIntelligenceShowcase() {
         </div>
       </div>
 
-      <div className="revenue-command-visual" aria-label="XBAR intelligence preview">
+      <div className="revenue-command-visual" aria-label="XBAR dashboard preview">
         <div className="revenue-command-visual__top">
-          <span>XBAR operating graph</span>
-          <strong>Revenue confidence rising</strong>
+          <span>Monthly Snapshot</span>
+          <strong>Records improving</strong>
         </div>
         <svg className="revenue-command-visual__line" viewBox="0 0 420 140" aria-hidden="true">
           <path d="M16 110H404" />
@@ -209,7 +209,7 @@ function RevenueIntelligenceShowcase() {
           ))}
         </div>
         <div className="revenue-moving-boxes" aria-hidden="true">
-          <span>Proof approved</span>
+          <span>Documents approved</span>
           <span>Buyer viewed packet</span>
           <span>Checkout ready</span>
         </div>
@@ -224,7 +224,7 @@ function RevenueIntelligenceShowcase() {
                 <strong>{card.name}</strong>
               </div>
               <dl>
-                <div><dt>Proof</dt><dd>{card.proof}</dd></div>
+                <div><dt>Documents</dt><dd>{card.proof}</dd></div>
                 <div><dt>Signal</dt><dd>{card.signal}</dd></div>
                 <div><dt>Value</dt><dd>{card.value}</dd></div>
               </dl>
@@ -297,9 +297,9 @@ export default function Landing() {
         <div className="revenue-section__header">
           <div>
             <p className="revenue-kicker">One path for every document</p>
-            <h2 id="pipeline-heading">From paperwork to proof, in five steps.</h2>
+            <h2 id="pipeline-heading">From paperwork to ready records, in five steps.</h2>
           </div>
-          <p>Every file moves through one pipeline: upload, local OCR, human review, ownership proof, then watermarked sharing. No shortcuts, no untracked copies.</p>
+          <p>Every file moves through one pipeline: upload, local OCR, human review, ownership review, then watermarked sharing. No shortcuts, no untracked copies.</p>
         </div>
         <ol className="revenue-pipeline">
           {pipeline.map((item, index) => (

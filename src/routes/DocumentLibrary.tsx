@@ -242,12 +242,12 @@ export default function DocumentLibrary() {
           <div>
             <span className="surface-hero__eyebrow">Sale Packet Generator</span>
             <h1 className="surface-hero__title">Generate PDF-ready buyer packets before cloud is live</h1>
-            <p className="surface-hero__copy">Select a horse, see release blockers, choose included proof, add XBAR disclaimer and watermark, export the packet, and log the generation locally.</p>
+            <p className="surface-hero__copy">Select a horse, see release blockers, choose included documents, add the XBAR disclaimer and watermark, export the packet, and log the generation locally.</p>
           </div>
           <div className="surface-hero__stats">
             <div className="surface-hero__stat"><span>Packet score</span><strong>{localSalePacket?.packetScore ?? 0}%</strong></div>
             <div className="surface-hero__stat"><span>Blockers</span><strong>{localSalePacket?.blockers.length ?? 0}</strong></div>
-            <div className="surface-hero__stat"><span>Included proof</span><strong>{selectedDocumentIds.length}</strong></div>
+            <div className="surface-hero__stat"><span>Included documents</span><strong>{selectedDocumentIds.length}</strong></div>
             <div className="surface-hero__stat"><span>Legal docs</span><strong>{legalDocuments.length}</strong></div>
           </div>
         </div>
@@ -255,7 +255,7 @@ export default function DocumentLibrary() {
 
       <div className="metric-grid">
         <MetricCard label="Release gate" value={localSalePacket?.releaseStatus ?? 'Pending'} detail={localSalePacket?.blockers[0] ?? 'No hard blocker flagged'} tone={localSalePacket?.blockers.length ? 'rose' : 'emerald'} />
-        <MetricCard label="Buyer proof" value={`${selectedDocumentIds.length}/${buyerSafeProof.length}`} detail="Ready records selected for packet" tone="blue" />
+        <MetricCard label="Buyer documents" value={`${selectedDocumentIds.length}/${buyerSafeProof.length}`} detail="Ready records selected for packet" tone="blue" />
         <MetricCard label="Watermark" value="XBAR" detail="Disclaimer and trademark notice included" tone="slate" />
         <MetricCard label="Export" value="HTML/PDF" detail="Download then print to PDF" tone="emerald" />
       </div>
@@ -288,13 +288,13 @@ export default function DocumentLibrary() {
               <Link key={blocker} to={blocker.includes('Title') ? '/ownership' : blocker.includes('Care') ? '/medical' : '/documents'} className="stack-item stack-item--interactive">
                 <div className="stack-item__top"><div className="stack-item__title">{blocker}</div><Pill tone="rose">Fix</Pill></div>
               </Link>
-            )) : <div className="stack-item"><div className="stack-item__title">Release gate clear</div><div className="stack-item__copy">No hard blocker flagged. Review warnings and proof before sending.</div></div>}
+            )) : <div className="stack-item"><div className="stack-item__title">Release gate clear</div><div className="stack-item__copy">No hard blocker flagged. Review warnings and documents before sending.</div></div>}
             {localSalePacket?.warnings.slice(0, 4).map((warning) => <div key={warning} className="stack-item"><div className="stack-item__title">Warning</div><div className="stack-item__copy">{warning}</div></div>)}
           </div>
         </Panel>
       </div>
 
-      <Panel title="3. Select included proof" meta={<Pill tone="blue">{selectedDocumentIds.length} selected</Pill>}>
+      <Panel title="3. Select included documents" meta={<Pill tone="blue">{selectedDocumentIds.length} selected</Pill>}>
         {buyerSafeProof.length ? (
           <div className="stack-list">
             {buyerSafeProof.map((document) => (
@@ -309,12 +309,12 @@ export default function DocumentLibrary() {
               </button>
             ))}
           </div>
-        ) : <EmptyState compact title="No verified proof available" description="Approve registration, Coggins, transfer, bill of sale, media, or vet records in Proof Vault before generating a premium packet." action={<Link to="/documents?upload=1" className="button button--primary button--compact">Upload proof</Link>} />}
+        ) : <EmptyState compact title="No approved documents available" description="Approve registration, Coggins, transfer, bill of sale, media, or vet records before generating a premium packet." action={<Link to="/documents?upload=1" className="button button--primary button--compact">Upload Documents</Link>} />}
       </Panel>
 
       <Panel title="4. Generate and log packet" meta={<Pill tone="slate">XBAR watermark + disclaimer</Pill>}>
         <div className="stack-list">
-          <div className="stack-item"><div className="stack-item__title">PDF-ready output</div><div className="stack-item__copy">The packet opens as branded HTML with XBAR watermark, buyer verification disclaimer, release blockers, proof list, and seller review section. Use browser print to save as PDF.</div></div>
+          <div className="stack-item"><div className="stack-item__title">PDF-ready output</div><div className="stack-item__copy">The packet opens as branded HTML with XBAR watermark, buyer verification disclaimer, release blockers, document list, and seller review section. Use browser print to save as PDF.</div></div>
           <div className="stack-item"><div className="stack-item__title">Local packet log</div><div className="stack-item__copy">Preview/export events are saved in local browser storage under {localSalePacketLogKey}. Cloud audit can replace this later.</div></div>
         </div>
         <div className="inline-actions">
