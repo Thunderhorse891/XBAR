@@ -51,12 +51,6 @@ const segments: SegmentFilter[] = ['All', 'Sale Prospect', 'Broodmare', 'Stud', 
 const horseSegments: HorseSegment[] = ['Broodmare', 'Stud', 'Show String', 'Sale Prospect', 'Young Stock', 'Retired'];
 const horseStatuses: HorseStatus[] = ['In Training', 'Broodmare Program', 'Sale Prep', 'Medical Review', 'Pasture', 'Retired'];
 const horseSexes: HorseSex[] = ['Mare', 'Stud', 'Gelding', 'Filly', 'Colt'];
-const portfolioFallbackCards = [
-  { title: 'Horse Record', meta: 'Name, owner, barn', status: 'Ready', metric: '01' },
-  { title: 'Documents', meta: 'Coggins, papers, receipts', status: 'Next', metric: '02' },
-  { title: 'Health', meta: 'Vet, dental, wormer', status: 'Planned', metric: '03' },
-  { title: 'Sales', meta: 'Profile and release checks', status: 'Optional', metric: '04' },
-];
 
 export default function Horses() {
   const navigate = useNavigate();
@@ -125,14 +119,6 @@ export default function Horses() {
   const buyerReadyCount = horses.filter((horse) => horse.readiness.packetStatus === 'Ready').length;
   const salePrepCount = horses.filter((horse) => horse.status === 'Sale Prep' || horse.segment === 'Sale Prospect').length;
   const proofGapCount = commandPackets.reduce((sum, item) => sum + item.packet.saleSlots.filter((slot) => slot.status !== 'ready').length, 0);
-  const proofReadinessScore = commandPackets.length
-    ? Math.round(commandPackets.reduce((sum, item) => sum + item.packet.score, 0) / commandPackets.length)
-    : 0;
-  const portfolioSignals = [
-    { label: 'Document readiness', value: proofReadinessScore, detail: `${proofGapCount} open gaps` },
-    { label: 'Buyer-ready files', value: salePrepCount ? Math.round((buyerReadyCount / salePrepCount) * 100) : 0, detail: `${buyerReadyCount}/${salePrepCount || 0} sale files` },
-    { label: 'Medical clarity', value: horses.length ? Math.round(((horses.length - medicalWatchCount) / horses.length) * 100) : 0, detail: `${medicalWatchCount} watch files` },
-  ];
 
   const handleSavedHorseToggle = async (horseId: string) => {
     const horse = horses.find((item) => item.id === horseId);
@@ -257,49 +243,6 @@ export default function Horses() {
         </div>
       </div>
 
-      <section className="portfolio-signal-deck" aria-label="Horse portfolio overview">
-        <div className="portfolio-signal-deck__copy">
-          <span>Horse Cards</span>
-          <strong>Every card shows the details that matter.</strong>
-          <p>Documents, owner, location, buyer release, medical status, and sale readiness stay visible before anyone opens a record.</p>
-        </div>
-        <div className="portfolio-signal-deck__bars">
-          {portfolioSignals.map((signal) => (
-            <div className="portfolio-signal-bar" key={signal.label}>
-              <div><span>{signal.label}</span><strong>{formatPercent(signal.value)}</strong></div>
-              <i><span style={{ width: formatPercent(signal.value) }} /></i>
-              <small>{signal.detail}</small>
-            </div>
-          ))}
-        </div>
-        <div className="portfolio-mini-carousel" aria-label="Horse card preview">
-          {(commandPackets.length ? commandPackets.slice(0, 4) : portfolioFallbackCards).map((item, index) => {
-            const isHorse = 'horse' in item;
-            const title = isHorse ? item.horse.name : item.title;
-            const meta = isHorse ? `${item.horse.segment} | ${item.horse.location.barn}` : item.meta;
-            const status = isHorse ? item.packet.buyerProfileStatus : item.status;
-            const metric = isHorse ? formatPercent(item.packet.score) : item.metric;
-            return (
-              <button
-                type="button"
-                className="portfolio-mini-card xb-reveal"
-                style={{ '--xb-reveal-index': index } as CSSProperties}
-                key={`${title}-${index}`}
-                disabled={!isHorse}
-                onClick={() => {
-                  if (isHorse) navigate(`/horses/${item.horse.id}`);
-                }}
-              >
-                <span>{metric}</span>
-                <strong>{title}</strong>
-                <small>{meta}</small>
-                <em>{status}</em>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
       {createOpen ? (
         <section className="panel">
           <div className="panel__header">
@@ -337,7 +280,7 @@ export default function Horses() {
       {viewMode === 'Horses' ? (
         filtered.length ? (
           <div className="horse-grid">
-            {filtered.map((horse) => {
+            {filtered.map((horse, index) => {
               const saved = sharedListings.some((listing) => listing.horseId === horse.id && listing.state !== 'Archived');
               const packet = buildHorsePacketCompleteness(
                 horse,
@@ -349,7 +292,7 @@ export default function Horses() {
               const showSaleSignals = horse.segment === 'Sale Prospect' || horse.status === 'Sale Prep';
               const openProofSlots = packet.saleSlots.filter((slot) => slot.status !== 'ready').length;
               return (
-                <div key={horse.id} className="horse-card horse-card--interactive" role="group" aria-label={`Open ${horse.name} horse record`} title="Select the card to open the horse record. Use Quick review or the actions menu for alternatives." onClick={() => navigate(`/horses/${horse.id}`)} onContextMenu={(event) => { event.preventDefault(); openHorseMenu(horse.id, event.clientX, event.clientY); }}>
+                <div key={horse.id} className="horse-card horse-card--interactive xb-reveal" style={{ '--xb-reveal-index': index % 4 } as CSSProperties} role="group" aria-label={`Open ${horse.name} horse record`} title="Select the card to open the horse record. Use Quick review or the actions menu for alternatives." onClick={() => navigate(`/horses/${horse.id}`)} onContextMenu={(event) => { event.preventDefault(); openHorseMenu(horse.id, event.clientX, event.clientY); }}>
                   <div className="horse-card__media">
                     <HorseMediaPreview src={horse.profileImage || horse.gallery[0]?.url} name={horse.name} imageClassName="horse-card__image" fallbackClassName="horse-card__image-fallback" />
                     <div className="horse-card__media-top">
