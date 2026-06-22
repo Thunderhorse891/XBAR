@@ -13,6 +13,7 @@ import './linearConcept.css';
 import './revolutionaryExperience.css';
 // XBAR design system — imported last so it is the final authority for the app shell.
 import './styles/xbarSystem.css';
+import './styles/xbarModules.css';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error("Root element not found.");

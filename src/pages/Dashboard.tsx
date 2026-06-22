@@ -1,17 +1,10 @@
-import { type CSSProperties, type FormEvent, useEffect, useState } from 'react';
+import { type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ContextMenu } from '@/components/ContextMenu';
-import { EmptyState } from '@/components/EmptyState';
 import { XbarMark } from '@/components/BrandMark';
-import { MetricCard, Panel, Pill } from '@/components/app-ui';
-import { buildBudgetSummary, buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
-import { formatCompactCurrency, formatCurrency, formatDateLabel } from '@/lib/format';
-import { resolveWeatherByQuery, type WeatherForecast } from '@/lib/weather';
-import { useCurrentRoleCapability, useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
-import { useUiStore } from '@/store/useUiStore';
-import type { ExpenseCategory } from '@/types/xbar';
-import { CARE_SIGNAL_TONE, EXPENSE_CATEGORIES } from '@/features/dashboard/constants';
-import type { DashboardMenuState } from '@/features/dashboard/types';
+import { buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
+import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
+import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
+import { useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
 
 const EMPTY_PROFILE_CARDS = [
   { label: 'Horse Record', title: 'Name, barn, owner, status', meta: 'Start with the basic file.', status: 'Ready', metric: '01' },
@@ -21,27 +14,9 @@ const EMPTY_PROFILE_CARDS = [
 ];
 
 const EMPTY_SETUP_STEPS = [
-  {
-    number: '01',
-    title: 'Add a horse',
-    body: 'Create the first horse record with name, barn, owner, and status.',
-    action: 'Add Horse',
-    path: '/horses?new=1',
-  },
-  {
-    number: '02',
-    title: 'Upload documents',
-    body: 'Add Coggins, registration, health papers, contracts, and receipts.',
-    action: 'Upload Documents',
-    path: '/documents?upload=1',
-  },
-  {
-    number: '03',
-    title: 'Set up the ranch',
-    body: 'Confirm barn, pasture, owner, weather, and account settings.',
-    action: 'Settings',
-    path: '/settings',
-  },
+  { number: '01', title: 'Add a horse', body: 'Create the first horse record with name, barn, owner, and status.', action: 'Add Horse', path: '/horses?new=1' },
+  { number: '02', title: 'Upload documents', body: 'Add Coggins, registration, health papers, contracts, and receipts.', action: 'Upload Documents', path: '/documents?upload=1' },
+  { number: '03', title: 'Set up the ranch', body: 'Confirm barn, pasture, owner, weather, and account settings.', action: 'Settings', path: '/settings' },
 ];
 
 function HorseContour({ className = '' }: { className?: string }) {
@@ -59,160 +34,21 @@ function HorseContour({ className = '' }: { className?: string }) {
   );
 }
 
+type Tone = 'emerald' | 'amber' | 'rose' | 'blue' | 'slate';
+
 export default function Dashboard() {
   const navigate = useNavigate();
-  const pushToast = useUiStore((state) => state.pushToast);
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
   const salesLeads = useXbarStore((state) => state.salesLeads);
-  const intakeBatches = useXbarStore((state) => state.intakeBatches);
-  const ranchAssets = useXbarStore((state) => state.ranchAssets);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
-  const addExpenseReceipt = useXbarStore((state) => state.addExpenseReceipt);
   const roleWorkspace = useCurrentRoleWorkspace();
-  const canManageBudget = useCurrentRoleCapability('manageAssets');
-  const [menuState, setMenuState] = useState<DashboardMenuState | null>(null);
-  const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  const [savingReceipt, setSavingReceipt] = useState(false);
-  const [weather, setWeather] = useState<WeatherForecast | null>(null);
-  const [weatherLoading, setWeatherLoading] = useState(false);
-  const [weatherError, setWeatherError] = useState<string | null>(null);
-  const [receiptDraft, setReceiptDraft] = useState({
-    horseId: '',
-    title: '',
-    category: 'Feed' as ExpenseCategory,
-    vendor: '',
-    amount: '',
-    receiptDate: new Date().toISOString().slice(0, 10),
-    notes: '',
-    uploadedBy: roleWorkspace.label,
-  });
 
-  const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched');
-  const transferGaps = buildTransferGapRows(horses, ownershipRecords, documents);
-  const careBoard = buildCareBoardRows(horses, documents, expenseReceipts);
-  const budgetSummary = buildBudgetSummary(expenseReceipts);
-  const careDueCount = careBoard.filter((row) => row.signals.some((signal) => signal.status === 'due')).length;
-  const cogginsWatchCount = careBoard.filter((row) => row.signals.some((signal) => signal.key === 'coggins' && signal.status !== 'clear')).length;
-  const qualifiedBuyerCount = salesLeads.filter((lead) => lead.stage === 'Qualified' || lead.stage === 'Offer').length;
-  const feedReserveAsset = ranchAssets.find((asset) => asset.category === 'Feed & Supply');
-  const recentBatches = intakeBatches.slice(0, 4);
-  const urgencyCount = transferGaps.length + careDueCount + reviewQueue.length;
-  const nextMove = transferGaps.length
-    ? 'Resolve title and transfer blockers'
-    : careDueCount
-      ? 'Clear the care holds'
-      : reviewQueue.length
-        ? 'Review documents waiting in the queue'
-        : qualifiedBuyerCount
-          ? 'Move qualified buyers forward'
-          : 'Prepare the next buyer-ready horse record';
-  const nextMovePath = transferGaps.length
-    ? '/ownership'
-    : careDueCount
-      ? '/medical'
-      : reviewQueue.length
-        ? '/documents'
-        : qualifiedBuyerCount
-          ? '/sales'
-          : '/horses';
-
-  useEffect(() => {
-    const ranchQuery = workspaceProfile.ranchName.trim();
-    if (!ranchQuery) {
-      setWeather(null);
-      setWeatherError('Set the ranch location in Settings.');
-      return;
-    }
-
-    let cancelled = false;
-    setWeatherLoading(true);
-    setWeatherError(null);
-
-    void resolveWeatherByQuery(ranchQuery)
-      .then((forecast) => {
-        if (!cancelled) setWeather(forecast);
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setWeather(null);
-          setWeatherError(error instanceof Error ? error.message : 'Field conditions could not load.');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setWeatherLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [workspaceProfile.ranchName]);
-
-  const menuHorse = menuState?.type === 'horse' ? horses.find((horse) => horse.id === menuState.id) : undefined;
-  const menuRecord = menuState?.type === 'record' ? ownershipRecords.find((record) => record.id === menuState.id) : undefined;
-  const menuLead = menuState?.type === 'lead' ? salesLeads.find((lead) => lead.id === menuState.id) : undefined;
-  const menuExpense = menuState?.type === 'expense' ? expenseReceipts.find((receipt) => receipt.id === menuState.id) : undefined;
-  const menuRecordHorse = horses.find((horse) => horse.id === menuRecord?.horseId);
-  const menuLeadHorse = horses.find((horse) => horse.id === menuLead?.horseId);
-  const menuExpenseHorse = horses.find((horse) => horse.id === menuExpense?.horseId);
-  const menuItems = menuHorse
-    ? [
-        { id: 'open-horse', label: 'Open horse record', onSelect: () => navigate(`/horses/${menuHorse.id}`) },
-        { id: 'open-profile', label: 'Open buyer packet', onSelect: () => navigate(`/profiles/${menuHorse.id}`) },
-      ]
-    : menuRecord
-      ? [
-          { id: 'open-ownership', label: 'Open title & transfer', onSelect: () => navigate('/ownership') },
-          ...(menuRecordHorse ? [{ id: 'open-record-horse', label: 'Open horse record', onSelect: () => navigate(`/horses/${menuRecordHorse.id}`) }] : []),
-        ]
-      : menuLead
-        ? [
-            { id: 'open-sales', label: 'Open buyer desk', onSelect: () => navigate('/sales') },
-            ...(menuLeadHorse ? [{ id: 'open-lead-horse', label: 'Open horse record', onSelect: () => navigate(`/horses/${menuLeadHorse.id}`) }] : []),
-          ]
-        : menuExpense
-          ? [
-              { id: 'open-ledger', label: 'Open operating ledger', onSelect: () => navigate('/expenses') },
-              ...(menuExpenseHorse ? [{ id: 'open-expense-horse', label: 'Open horse record', onSelect: () => navigate(`/horses/${menuExpenseHorse.id}`) }] : []),
-            ]
-          : [];
   const hasWorkspaceData = Boolean(
-    horses.length ||
-    documents.length ||
-    ownershipRecords.length ||
-    expenseReceipts.length ||
-    salesLeads.length ||
-    intakeBatches.length ||
-    ranchAssets.length,
+    horses.length || documents.length || ownershipRecords.length || expenseReceipts.length || salesLeads.length,
   );
-
-  async function handleReceiptSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSavingReceipt(true);
-    const result = await addExpenseReceipt({
-      horseId: receiptDraft.horseId || undefined,
-      title: receiptDraft.title,
-      category: receiptDraft.category,
-      vendor: receiptDraft.vendor,
-      amount: Number(receiptDraft.amount),
-      receiptDate: receiptDraft.receiptDate,
-      notes: receiptDraft.notes,
-      uploadedBy: receiptDraft.uploadedBy,
-      file: receiptFile,
-    });
-    pushToast({
-      title: result.ok ? 'Receipt logged' : 'Receipt blocked',
-      message: result.message,
-      tone: result.ok ? 'success' : 'error',
-    });
-    if (result.ok) {
-      setReceiptDraft((current) => ({ ...current, horseId: '', title: '', vendor: '', amount: '', notes: '' }));
-      setReceiptFile(null);
-    }
-    setSavingReceipt(false);
-  }
 
   if (!hasWorkspaceData) {
     return (
@@ -245,16 +81,9 @@ export default function Dashboard() {
             <HorseContour className="xbar-home-atelier__horse" />
             <div className="xbar-profile-carousel">
               {EMPTY_PROFILE_CARDS.map((card, index) => (
-                <article
-                  className="xbar-profile-card"
-                  style={{ '--card-index': index, '--card-delay': `${index * -3.15}s` } as CSSProperties}
-                  key={card.label}
-                >
+                <article className="xbar-profile-card" style={{ '--card-index': index, '--card-delay': `${index * -3.15}s` } as CSSProperties} key={card.label}>
                   <span className="xbar-profile-card__metric">{card.metric}</span>
-                  <div className="xbar-profile-card__head">
-                    <span>{card.label}</span>
-                    <i />
-                  </div>
+                  <div className="xbar-profile-card__head"><span>{card.label}</span><i /></div>
                   <strong>{card.title}</strong>
                   <small>{card.meta}</small>
                   <em>{card.status}</em>
@@ -274,290 +103,222 @@ export default function Dashboard() {
 
         <section className="xbar-setup-flow" aria-label="First setup sequence">
           <div className="xbar-setup-flow__header">
-            <div>
-              <span>Get Started</span>
-              <h2>Create the first horse record</h2>
-            </div>
+            <div><span>Get Started</span><h2>Create the first horse record</h2></div>
             <p>XBAR becomes useful as soon as one horse has a record, documents, and care details attached.</p>
           </div>
-
           <div className="xbar-setup-flow__grid">
             {EMPTY_SETUP_STEPS.map((step, index) => (
               <Link className="xbar-sequence-card" to={step.path} key={step.number} style={{ '--step-delay': `${index * 90}ms` } as CSSProperties}>
                 <span className="xbar-sequence-card__number">{step.number}</span>
-                <div>
-                  <strong>{step.title}</strong>
-                  <p>{step.body}</p>
-                </div>
+                <div><strong>{step.title}</strong><p>{step.body}</p></div>
                 <em>{step.action}</em>
               </Link>
             ))}
-          </div>
-
-          <div className="xbar-system-strip">
-            <div>
-              <span>Setup</span>
-              <strong>Horse Record → Documents → Health → Sales</strong>
-            </div>
-            <HorseContour className="xbar-system-strip__horse" />
-            <div className="xbar-system-strip__ticks" aria-hidden="true">
-              <i />
-              <i />
-              <i />
-              <i />
-            </div>
           </div>
         </section>
       </>
     );
   }
 
+  // ---- derivations ------------------------------------------------------
+  const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched');
+  const transferGaps = buildTransferGapRows(horses, ownershipRecords, documents);
+  const careBoard = buildCareBoardRows(horses, documents, expenseReceipts);
+  const careDueCount = careBoard.filter((row) => row.signals.some((signal) => signal.status === 'due')).length;
+  const blockedIds = new Set(transferGaps.map((gap) => gap.horseId));
+
+  const commandPackets = horses.map((horse) => ({
+    horse,
+    packet: buildHorsePacketCompleteness(
+      horse,
+      documents.filter((document) => document.horseId === horse.id),
+      ownershipRecords.find((record) => record.horseId === horse.id),
+    ),
+  }));
+  const documentsMissing = commandPackets.reduce((sum, item) => sum + item.packet.saleSlots.filter((slot) => slot.status !== 'ready').length, 0);
+  const packetReadiness = commandPackets.length
+    ? Math.round(commandPackets.reduce((sum, item) => sum + item.packet.score, 0) / commandPackets.length)
+    : 0;
+
+  type LaneKey = 'ready' | 'review' | 'blocked';
+  const lanes: Record<LaneKey, typeof horses> = { ready: [], review: [], blocked: [] };
+  horses.forEach((horse) => {
+    const key: LaneKey = blockedIds.has(horse.id) || (horse.readiness.blockers?.length ?? 0) > 0
+      ? 'blocked'
+      : horse.readiness.packetStatus === 'Ready'
+        ? 'ready'
+        : 'review';
+    lanes[key].push(horse);
+  });
+
+  const openDeals = salesLeads.filter((lead) => lead.stage === 'Offer' || lead.stage === 'Qualified');
+  const revenueAtRisk = openDeals.filter((lead) => blockedIds.has(lead.horseId)).reduce((sum, lead) => sum + (lead.offerAmount ?? 0), 0);
+  const offersOut = salesLeads.filter((lead) => lead.stage === 'Offer').length;
+
+  const urgencyCount = transferGaps.length + careDueCount + reviewQueue.length;
+  const nextMove = transferGaps.length
+    ? 'Resolve the title and transfer blockers'
+    : careDueCount
+      ? 'Clear the care holds that are due'
+      : reviewQueue.length
+        ? 'Review the documents waiting in the queue'
+        : openDeals.length
+          ? 'Move qualified buyers toward an offer'
+          : 'Prepare the next buyer-ready horse record';
+  const nextMovePath = transferGaps.length ? '/ownership' : careDueCount ? '/medical' : reviewQueue.length ? '/documents' : openDeals.length ? '/sales' : '/horses';
+
+  const kpis: { label: string; value: string; hint: string; tone: Tone; path: string }[] = [
+    { label: 'Sale ready', value: String(lanes.ready.length), hint: `of ${horses.length} assets`, tone: 'emerald', path: '/horses' },
+    { label: 'Needs review', value: String(reviewQueue.length), hint: 'documents', tone: reviewQueue.length ? 'amber' : 'slate', path: '/documents' },
+    { label: 'Blocked', value: String(lanes.blocked.length), hint: 'release holds', tone: lanes.blocked.length ? 'rose' : 'slate', path: '/ownership' },
+    { label: 'Revenue at risk', value: formatCompactCurrency(revenueAtRisk), hint: `${openDeals.length} open deals`, tone: revenueAtRisk ? 'rose' : 'slate', path: '/sales' },
+    { label: 'Documents missing', value: String(documentsMissing), hint: 'across packets', tone: documentsMissing ? 'amber' : 'emerald', path: '/documents' },
+  ];
+
+  const priorityActions: { key: string; tone: Tone; label: string; reason: string; action: string; path: string }[] = [
+    ...transferGaps.map((gap) => ({ key: `tg-${gap.horseId}`, tone: 'rose' as Tone, label: `Resolve transfer blockers · ${gap.horseName}`, reason: gap.reasons.slice(0, 2).join(' · ') || `${gap.pendingCount} documents pending`, action: 'Ownership', path: '/ownership' })),
+    ...careBoard.filter((row) => row.signals.some((signal) => signal.status === 'due')).map((row) => ({ key: `care-${row.horseId}`, tone: 'amber' as Tone, label: `Clear care holds · ${row.horseName}`, reason: row.signals.filter((signal) => signal.status !== 'clear').slice(0, 2).map((signal) => signal.label).join(' · ') || 'Care due', action: 'Health', path: '/medical' })),
+    ...reviewQueue.slice(0, 3).map((document) => ({ key: `doc-${document.id}`, tone: 'blue' as Tone, label: `Review ${document.title}`, reason: `${document.type} · waiting in queue`, action: 'Documents', path: '/documents' })),
+  ].slice(0, 5);
+
+  const activity = horses
+    .flatMap((horse) => (horse.activity ?? []).map((event) => ({ ...event, horseName: horse.name })))
+    .sort((a, b) => (a.date < b.date ? 1 : -1))
+    .slice(0, 6);
+
+  const ranch = workspaceProfile.ranchName || workspaceProfile.businessName || 'Ranch operations';
+
   return (
-    <>
-      <div className="ops-briefing-header command-center-briefing">
-        <div className="ops-briefing-header__top">
-          <div className="ops-briefing-header__left">
-            <div className="ops-briefing-header__ranch">{workspaceProfile.ranchName || workspaceProfile.businessName || 'Ranch Operations'} · {roleWorkspace.label}</div>
-            <h1 className="ops-briefing-header__title">
-              {urgencyCount > 0
-                ? `${urgencyCount} control point${urgencyCount === 1 ? '' : 's'} need a decision.`
-                : 'Home is clear.'}
-            </h1>
-            <p className="command-center-briefing__copy">
-              A private view of horse files, documents, care, ownership, buyers, field conditions, and operating cost.
-            </p>
-            <div className="ops-briefing-header__chips">
-              <span className="ops-briefing-chip">{roleWorkspace.label}</span>
-              <span className={transferGaps.length ? 'ops-briefing-chip ops-briefing-chip--urgent' : 'ops-briefing-chip ops-briefing-chip--success'}>
-                {transferGaps.length} transfer{transferGaps.length !== 1 ? 's' : ''} pending
-              </span>
-              <span className={careDueCount ? 'ops-briefing-chip ops-briefing-chip--warning' : 'ops-briefing-chip ops-briefing-chip--success'}>
-                {careDueCount} care due
-              </span>
-              {weather ? <span className="ops-briefing-chip">{weather.current.temperatureF}°F · {weather.current.weatherLabel}</span> : null}
-            </div>
-          </div>
-          <div className="ops-briefing-header__actions">
-            <button type="button" className="ops-briefing-action ops-briefing-action--primary" onClick={() => navigate(nextMovePath)}>Open next move</button>
-            <Link to="/documents" className="ops-briefing-action">Documents</Link>
-            <Link to="/weather" className="ops-briefing-action">Weather</Link>
+    <div className="xbx">
+      {/* HERO FOCAL MODULE */}
+      <section className="xbx-hero xb-reveal">
+        <div className="xbx-hero__main">
+          <div className="xbx-eyebrow">{ranch} · {roleWorkspace.label}</div>
+          <h1 className="xbx-hero__title">
+            {urgencyCount > 0 ? `${urgencyCount} control point${urgencyCount === 1 ? '' : 's'} need a decision.` : 'Your barn is clear.'}
+          </h1>
+          <p className="xbx-hero__lead">
+            {urgencyCount > 0
+              ? 'Start with the items most likely to block a sale or hold up a transfer. XBAR keeps the proof trail intact while you clear them.'
+              : 'Use the clear window to strengthen buyer readiness, refresh documents, and prepare the next sale packet.'}
+          </p>
+          <div className="xbx-hero__actions">
+            <button type="button" className="xbx-btn xbx-btn--primary" onClick={() => navigate(nextMovePath)}>Open next move</button>
+            <Link to="/horses" className="xbx-btn">View horses</Link>
           </div>
         </div>
-        <div className="command-center-next-move">
-          <span>Next Step</span>
-          <strong>{nextMove}</strong>
-          <em>{urgencyCount > 0 ? 'Start with the item most likely to block work.' : 'Use the clear window to strengthen buyer readiness or documents.'}</em>
-        </div>
-        <div className="ops-briefing-stat-row">
-          <button type="button" className="ops-briefing-stat ops-briefing-stat--clickable" onClick={() => navigate('/ownership')} title="Open title and transfer">
-            <span className="ops-briefing-stat__label">Document gaps</span>
-            <span className={`ops-briefing-stat__value${transferGaps.length ? ' ops-briefing-stat__value--urgent' : ' ops-briefing-stat__value--clear'}`}>{transferGaps.length}</span>
-            <span className="ops-briefing-stat__detail">{transferGaps.length ? 'need resolution' : 'all clear'}</span>
-          </button>
-          <button type="button" className="ops-briefing-stat ops-briefing-stat--clickable" onClick={() => navigate('/medical')} title="Open care status">
-            <span className="ops-briefing-stat__label">Care holds</span>
-            <span className={`ops-briefing-stat__value${careDueCount ? ' ops-briefing-stat__value--warning' : ' ops-briefing-stat__value--clear'}`}>{careDueCount}</span>
-            <span className="ops-briefing-stat__detail">{careDueCount ? 'horses overdue' : 'care current'}</span>
-          </button>
-          <button type="button" className="ops-briefing-stat ops-briefing-stat--clickable" onClick={() => navigate('/documents')} title="Documents waiting on review">
-            <span className="ops-briefing-stat__label">Document queue</span>
-            <span className={`ops-briefing-stat__value${reviewQueue.length ? ' ops-briefing-stat__value--warning' : ''}`}>{reviewQueue.length}</span>
-            <span className="ops-briefing-stat__detail">{reviewQueue.length ? 'waiting review' : 'queue clear'}</span>
-          </button>
-          <button type="button" className="ops-briefing-stat ops-briefing-stat--clickable" onClick={() => navigate('/expenses')} title="Open operating ledger">
-            <span className="ops-briefing-stat__label">Month spend</span>
-            <span className="ops-briefing-stat__value">{formatCompactCurrency(budgetSummary.total)}</span>
-            <span className="ops-briefing-stat__detail">{qualifiedBuyerCount} qualified buyer{qualifiedBuyerCount !== 1 ? 's' : ''}</span>
-          </button>
-        </div>
-      </div>
+        <aside className="xbx-focus">
+          <div className="xbx-focus__label">Next decision</div>
+          <div className="xbx-focus__headline">{nextMove}</div>
+          <ul className="xbx-focus__points">
+            <li><span className={`xbx-dot xbx-dot--${transferGaps.length ? 'rose' : 'emerald'}`} />{transferGaps.length} title &amp; transfer holds</li>
+            <li><span className={`xbx-dot xbx-dot--${careDueCount ? 'amber' : 'emerald'}`} />{careDueCount} care holds due</li>
+            <li><span className={`xbx-dot xbx-dot--${reviewQueue.length ? 'amber' : 'emerald'}`} />{reviewQueue.length} documents in review</li>
+          </ul>
+          <button type="button" className="xbx-focus__cta" onClick={() => navigate(nextMovePath)}>Resolve now →</button>
+        </aside>
+      </section>
 
-      <section className="command-stage command-stage--two-col command-center-stage">
-        <div className="command-stage__rail">
-          <MetricCard label="Document gaps" value={String(transferGaps.length + reviewQueue.length)} tone={transferGaps.length ? 'rose' : reviewQueue.length ? 'amber' : 'emerald'} onClick={() => navigate(transferGaps.length ? '/ownership' : '/documents')} title="Open document controls" />
-          <MetricCard label="Care holds" value={String(careDueCount)} tone={careDueCount ? 'amber' : 'emerald'} onClick={() => navigate('/medical')} title="Open care status" />
-          <MetricCard label="Operating spend" value={formatCompactCurrency(budgetSummary.total)} tone="blue" onClick={() => navigate('/expenses')} title="Open operating ledger" />
-        </div>
+      {/* KPI STRIP */}
+      <section className="xbx-kpis xb-reveal">
+        {kpis.map((kpi, index) => (
+          <button key={kpi.label} type="button" className={`xbx-kpi xbx-kpi--${kpi.tone}`} style={{ '--xb-reveal-index': index } as CSSProperties} onClick={() => navigate(kpi.path)}>
+            <span className="xbx-kpi__label">{kpi.label}</span>
+            <span className="xbx-kpi__value">{kpi.value}</span>
+            <span className="xbx-kpi__hint">{kpi.hint}</span>
+          </button>
+        ))}
+      </section>
 
-        <div className="command-stage__support">
-          <div className="command-stage__support-card">
-            <div className="command-stage__support-label">Feed room</div>
-            <strong className="command-stage__support-title">{feedReserveAsset?.name ?? 'Not logged'}</strong>
-            <div className="command-stage__support-copy">
-              <span>{feedReserveAsset?.notes ?? 'Add feed receipts to start reserve tracking.'}</span>
-              {feedReserveAsset?.nextService ? <span>Service {formatDateLabel(feedReserveAsset.nextService)}</span> : <span>No service date</span>}
+      {/* SALE READINESS RAIL */}
+      <section className="xbx-rail xb-reveal">
+        <header className="xbx-section-head">
+          <div><div className="xbx-eyebrow">Sale readiness</div><h2>Where every horse stands.</h2></div>
+          <Link to="/horses" className="xbx-link">All horses →</Link>
+        </header>
+        <div className="xbx-lanes">
+          {([['ready', 'Ready', 'emerald'], ['review', 'Needs review', 'amber'], ['blocked', 'Blocked', 'rose']] as [LaneKey, string, Tone][]).map(([key, label, tone]) => (
+            <div className={`xbx-lane xbx-lane--${tone}`} key={key}>
+              <div className="xbx-lane__head"><span className={`xbx-dot xbx-dot--${tone}`} />{label}<em>{lanes[key].length}</em></div>
+              <div className="xbx-lane__items">
+                {lanes[key].slice(0, 6).map((horse) => (
+                  <button key={horse.id} type="button" className="xbx-asset-chip" onClick={() => navigate(`/horses/${horse.id}`)}>
+                    <strong>{horse.name}</strong>
+                    <span>{horse.location.barn} · {Math.round(horse.readiness.score)}%</span>
+                  </button>
+                ))}
+                {!lanes[key].length ? <p className="xbx-lane__empty">None</p> : null}
+              </div>
             </div>
-          </div>
-          <div className="command-stage__support-card">
-            <div className="command-stage__support-label">Document intake</div>
-            <strong className="command-stage__support-title">{recentBatches[0]?.label ?? 'No batch yet'}</strong>
-            <div className="command-stage__support-copy">
-              <span>{recentBatches[0] ? `${recentBatches[0].processedCount}/${recentBatches[0].fileCount} logged` : 'Upload the first packet.'}</span>
-              <span>{reviewQueue.length} waiting on review</span>
-            </div>
-          </div>
-          <div className="command-stage__support-card">
-            <div className="command-stage__support-label">Field conditions</div>
-            <strong className="command-stage__support-title">{weatherLoading ? 'Loading...' : weather ? `${weather.current.temperatureF}°F · ${weather.current.weatherLabel}` : 'Forecast offline'}</strong>
-            <div className="command-stage__support-copy">
-              <span>{weather ? `${weather.today.rainChance}% rain · ${weather.current.windMph} mph wind · UV ${weather.today.uvIndex}` : weatherError || 'Open Weather and set the ranch location.'}</span>
-              <span>{weather ? weather.notes.turnout : 'Use weather to plan turnout, hauling, and breeding work.'}</span>
-            </div>
-          </div>
+          ))}
         </div>
       </section>
 
-      <div className="metric-grid metric-grid--dashboard">
-        <MetricCard label="Document queue" value={String(reviewQueue.length)} tone={reviewQueue.length ? 'blue' : 'slate'} onClick={() => navigate('/documents')} title="Documents waiting on review" />
-        <MetricCard label="Coggins watch" value={String(cogginsWatchCount)} tone={cogginsWatchCount ? 'amber' : 'emerald'} onClick={() => navigate('/medical')} title="Horses missing or aging Coggins" />
-        <MetricCard label="Feed spend" value={formatCompactCurrency(budgetSummary.feed)} tone="blue" onClick={() => navigate('/expenses')} title="Feed, bedding, and supplement spend this month" />
-        <MetricCard label="Health spend" value={formatCompactCurrency(budgetSummary.health)} tone="slate" onClick={() => navigate('/expenses')} title="Health-related spend this month" />
-      </div>
-
-      <div className="dashboard-board">
-        <div className="dashboard-board__main">
-          <Panel title="Title & transfer holds" meta={<Pill tone={transferGaps.length ? 'rose' : 'emerald'}>{transferGaps.length ? 'Action required' : 'Clear'}</Pill>} surfaceId="command-transfer-issues" style={{ order: transferGaps.length ? 0 : 2 }} action={<Link to="/ownership" className="button button--ghost button--compact">Ownership</Link>}>
-            {transferGaps.length ? (
-              <div className="stack-list">
-                {transferGaps.slice(0, 6).map((gap) => (
-                  <button
-                    key={gap.horseId}
-                    type="button"
-                    className="stack-item stack-item--interactive"
-                    onClick={() => navigate(`/horses/${gap.horseId}`)}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      const record = ownershipRecords.find((item) => item.horseId === gap.horseId);
-                      if (record) setMenuState({ type: 'record', id: record.id, x: event.clientX, y: event.clientY });
-                    }}
-                  >
-                    <div className="stack-item__top"><div className="stack-item__title">{gap.horseName}</div><Pill tone={gap.transferStatus === 'Clear' ? 'emerald' : 'rose'}>{gap.transferStatus}</Pill></div>
-                    <div className="dashboard-chip-row">{gap.reasons.slice(0, 3).map((reason) => <Pill key={reason} tone="amber">{reason}</Pill>)}</div>
-                    <div className="inline-metrics"><span>{gap.pendingCount} blockers</span><span>{gap.dueDate ? `Due ${formatDateLabel(gap.dueDate)}` : 'No deadline'}</span></div>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <EmptyState compact title="Transfer documents clear" description="No horse records are waiting on transfer papers." />
-            )}
-          </Panel>
-
-          <Panel title="Care holds" meta={<Pill tone={careDueCount ? 'amber' : 'emerald'}>{careDueCount ? 'Due now' : 'Current'}</Pill>} surfaceId="command-care-board" style={{ order: careDueCount ? 0 : 2 }} action={<div className="inline-actions"><Link to="/weather" className="button button--ghost button--compact">Weather</Link><Link to="/medical" className="button button--ghost button--compact">Health</Link></div>}>
-            {careBoard.length ? (
-              <div className="stack-list">
-                {careBoard.slice(0, 6).map((row) => (
-                  <button
-                    key={row.horseId}
-                    type="button"
-                    className="stack-item stack-item--interactive"
-                    onClick={() => navigate(`/horses/${row.horseId}`)}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      setMenuState({ type: 'horse', id: row.horseId, x: event.clientX, y: event.clientY });
-                    }}
-                  >
-                    <div className="stack-item__top"><div className="stack-item__title">{row.horseName}</div><Pill tone={row.priority >= 4 ? 'rose' : 'amber'}>{row.priority >= 4 ? 'Hot' : 'Watch'}</Pill></div>
-                    <div className="dashboard-chip-row">{row.signals.map((signal) => <Pill key={signal.key} tone={CARE_SIGNAL_TONE[signal.status]}>{signal.label} {signal.status === 'clear' ? 'ok' : signal.status}</Pill>)}</div>
-                    <div className="inline-metrics">
-                      {row.signals.filter((signal) => signal.status !== 'clear').slice(0, 2).map((signal) => <span key={signal.key}>{signal.detail}</span>)}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <EmptyState compact title="No care holds" description="Care status appears once horse records and documents exist." />
-            )}
-          </Panel>
-        </div>
-
-        <div className="dashboard-board__side">
-          <Panel title="Operating ledger" meta={<Pill tone="blue">{budgetSummary.receiptCount} receipts</Pill>} surfaceId="command-budget" action={<button type="button" className="button button--ghost button--compact" onClick={() => document.getElementById('dashboard-receipt-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Add receipt</button>}>
-            <div className="dashboard-budget-strip">
-              <div className="ledger-stat"><span className="ledger-stat__label">Month</span><strong className="ledger-stat__value">{formatCompactCurrency(budgetSummary.total)}</strong></div>
-              <div className="ledger-stat"><span className="ledger-stat__label">Feed</span><strong className="ledger-stat__value">{formatCompactCurrency(budgetSummary.feed)}</strong></div>
-              <div className="ledger-stat"><span className="ledger-stat__label">Health</span><strong className="ledger-stat__value">{formatCompactCurrency(budgetSummary.health)}</strong></div>
-            </div>
-            {budgetSummary.categories.length ? (
-              <div className="stack-list">
-                {budgetSummary.categories.slice(0, 4).map((category) => (
-                  <div key={category.category} className="stack-item"><div className="stack-item__top"><div className="stack-item__title">{category.category}</div><Pill tone="slate">{formatCurrency(category.amount)}</Pill></div></div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState compact title="No receipts this month" description="Upload feed and care receipts to start the ledger view." />
-            )}
-          </Panel>
-
-          <Panel title="Document queue" meta={<Pill tone={reviewQueue.length ? 'amber' : 'emerald'}>{reviewQueue.length ? 'Active' : 'Clear'}</Pill>} surfaceId="command-work-queue" action={<Link to="/documents" className="button button--ghost button--compact">Documents</Link>}>
-            <div className="stack-list">
-              {reviewQueue.slice(0, 5).map((document) => (
-                <Link key={document.id} to="/documents" className="stack-item stack-item--interactive">
-                  <div className="stack-item__top"><div className="stack-item__title">{document.title}</div><Pill tone="amber">{document.state}</Pill></div>
-                  <div className="inline-metrics"><span>{document.type}</span><span>{formatDateLabel(document.uploadedAt)}</span></div>
-                </Link>
+      {/* BOARD: priority actions + intelligence */}
+      <section className="xbx-board">
+        <div className="xbx-priority xb-reveal">
+          <header className="xbx-section-head"><div><div className="xbx-eyebrow">Priority actions</div><h2>What to fix first.</h2></div></header>
+          {priorityActions.length ? (
+            <ol className="xbx-actions">
+              {priorityActions.map((item, index) => (
+                <li key={item.key} className="xbx-action xb-reveal" style={{ '--xb-reveal-index': index } as CSSProperties}>
+                  <span className="xbx-action__rank">{String(index + 1).padStart(2, '0')}</span>
+                  <span className={`xbx-action__bar xbx-action__bar--${item.tone}`} />
+                  <div className="xbx-action__body"><strong>{item.label}</strong><span>{item.reason}</span></div>
+                  <button type="button" className="xbx-action__cta" onClick={() => navigate(item.path)}>{item.action} →</button>
+                </li>
               ))}
-              {recentBatches.map((batch) => (
-                <Link key={batch.id} to="/documents" className="stack-item stack-item--interactive">
-                  <div className="stack-item__top"><div className="stack-item__title">{batch.label}</div><Pill tone={batch.state === 'Completed' ? 'emerald' : batch.state === 'Reviewing' ? 'amber' : 'blue'}>{batch.state}</Pill></div>
-                  <div className="inline-metrics"><span>{batch.processedCount}/{batch.fileCount} logged</span><span>{batch.needsReviewCount} review</span></div>
-                </Link>
-              ))}
-              {!reviewQueue.length && !recentBatches.length ? <EmptyState compact title="Document queue clear" description="No documents are waiting on review." /> : null}
-            </div>
-          </Panel>
-        </div>
-      </div>
-
-      <div className="dashboard-board dashboard-board--lower">
-        <Panel title="Log receipt" meta={<Pill tone={canManageBudget ? 'blue' : 'slate'}>{canManageBudget ? 'Enabled' : 'Read only'}</Pill>} surfaceId="command-receipt-intake">
-          <form id="dashboard-receipt-form" className="dashboard-receipt-form" onSubmit={handleReceiptSubmit}>
-            <div className="form-grid form-grid--tight">
-              <label className="field-stack"><span className="field-label">Category</span><select className="field-input" value={receiptDraft.category} onChange={(event) => setReceiptDraft((current) => ({ ...current, category: event.target.value as ExpenseCategory }))} disabled={!canManageBudget || savingReceipt}>{EXPENSE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}</select></label>
-              <label className="field-stack"><span className="field-label">Horse record</span><select className="field-input" value={receiptDraft.horseId} onChange={(event) => setReceiptDraft((current) => ({ ...current, horseId: event.target.value }))} disabled={!canManageBudget || savingReceipt}><option value="">Ranch-wide</option>{horses.map((horse) => <option key={horse.id} value={horse.id}>{horse.name}</option>)}</select></label>
-              <label className="field-stack"><span className="field-label">Receipt label</span><input className="field-input" value={receiptDraft.title} onChange={(event) => setReceiptDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Dental float" disabled={!canManageBudget || savingReceipt} /></label>
-              <label className="field-stack"><span className="field-label">Vendor</span><input className="field-input" value={receiptDraft.vendor} onChange={(event) => setReceiptDraft((current) => ({ ...current, vendor: event.target.value }))} placeholder="Rolling Plains Vet" disabled={!canManageBudget || savingReceipt} /></label>
-              <label className="field-stack"><span className="field-label">Amount</span><input className="field-input" type="number" min="0" step="0.01" value={receiptDraft.amount} onChange={(event) => setReceiptDraft((current) => ({ ...current, amount: event.target.value }))} placeholder="240.00" disabled={!canManageBudget || savingReceipt} /></label>
-              <label className="field-stack"><span className="field-label">Receipt date</span><input className="field-input" type="date" value={receiptDraft.receiptDate} onChange={(event) => setReceiptDraft((current) => ({ ...current, receiptDate: event.target.value }))} disabled={!canManageBudget || savingReceipt} /></label>
-              <label className="field-stack"><span className="field-label">Uploaded by</span><input className="field-input" value={receiptDraft.uploadedBy} onChange={(event) => setReceiptDraft((current) => ({ ...current, uploadedBy: event.target.value }))} disabled={!canManageBudget || savingReceipt} /></label>
-              <label className="field-stack"><span className="field-label">Receipt file</span><input className="field-input" type="file" accept=".pdf,image/*" onChange={(event) => setReceiptFile(event.target.files?.[0] ?? null)} disabled={!canManageBudget || savingReceipt} /></label>
-              <label className="field-stack field-stack--wide"><span className="field-label">Notes</span><textarea className="field-textarea" value={receiptDraft.notes} onChange={(event) => setReceiptDraft((current) => ({ ...current, notes: event.target.value }))} rows={3} placeholder="Optional note for feed reserve, wormer pack, or dental work." disabled={!canManageBudget || savingReceipt} /></label>
-            </div>
-            <div className="inline-actions">
-              <button type="submit" className="button button--primary" disabled={!canManageBudget || savingReceipt}>{savingReceipt ? 'Logging...' : 'Log receipt'}</button>
-              {receiptFile ? <Pill tone="slate">{receiptFile.name}</Pill> : null}
-            </div>
-          </form>
-        </Panel>
-
-        <Panel title="Buyer desk" meta={<Pill tone={salesLeads.length ? 'blue' : 'slate'}>{salesLeads.length ? 'Active' : 'Quiet'}</Pill>} surfaceId="command-buyer-desk" action={<Link to="/sales" className="button button--ghost button--compact">Sales</Link>}>
-          {salesLeads.length ? (
-            <div className="stack-list">
-              {salesLeads.slice(0, 5).map((lead) => {
-                const horse = horses.find((item) => item.id === lead.horseId);
-                return (
-                  <button
-                    key={lead.id}
-                    type="button"
-                    className="stack-item stack-item--interactive"
-                    onClick={() => navigate('/sales')}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      setMenuState({ type: 'lead', id: lead.id, x: event.clientX, y: event.clientY });
-                    }}
-                  >
-                    <div className="stack-item__top"><div className="stack-item__title">{lead.name}</div><Pill tone={lead.stage === 'Offer' ? 'emerald' : lead.stage === 'Qualified' ? 'blue' : 'amber'}>{lead.stage}</Pill></div>
-                    <div className="inline-metrics"><span>{horse?.name ?? 'Unassigned'}</span><span>{lead.channel}</span><span>{formatDateLabel(lead.lastTouch)}</span></div>
-                  </button>
-                );
-              })}
-            </div>
+            </ol>
           ) : (
-            <EmptyState compact title="No buyer movement" description="Buyer activity appears here once leads are attached to horse records." />
+            <div className="xbx-clear"><strong>Nothing is blocking work.</strong><span>Every horse, document, and transfer is current.</span></div>
           )}
-        </Panel>
-      </div>
+        </div>
 
-      <ContextMenu open={Boolean(menuItems.length)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
-    </>
+        <aside className="xbx-intel xb-reveal">
+          <div className="xbx-intel__head"><div className="xbx-eyebrow">Intelligence</div></div>
+          <div className="xbx-intel__block">
+            <span className="xbx-intel__label">Buyer deals</span>
+            <strong className="xbx-intel__value">{openDeals.length} open</strong>
+            <span className="xbx-intel__meta">{offersOut} at offer · {formatCompactCurrency(revenueAtRisk)} exposed</span>
+          </div>
+          <div className="xbx-intel__block">
+            <span className="xbx-intel__label">Document risk</span>
+            <strong className="xbx-intel__value">{documentsMissing} missing</strong>
+            <span className="xbx-intel__meta">{reviewQueue.length} awaiting review</span>
+          </div>
+          <div className="xbx-intel__block">
+            <span className="xbx-intel__label">Release blockers</span>
+            <strong className="xbx-intel__value">{transferGaps.length}</strong>
+            <span className="xbx-intel__meta">title &amp; transfer</span>
+          </div>
+          <div className="xbx-intel__block xbx-intel__block--meter">
+            <span className="xbx-intel__label">Packet readiness</span>
+            <strong className="xbx-intel__value">{packetReadiness}%</strong>
+            <div className="xbx-meter"><i style={{ width: `${packetReadiness}%` }} /></div>
+          </div>
+        </aside>
+      </section>
+
+      {/* ACTIVITY TRAIL */}
+      <section className="xbx-trail xb-reveal">
+        <header className="xbx-section-head"><div><div className="xbx-eyebrow">Recent asset activity</div><h2>The proof trail.</h2></div></header>
+        {activity.length ? (
+          <ul className="xbx-timeline">
+            {activity.map((event) => (
+              <li key={event.id} className="xbx-tl">
+                <span className="xbx-tl__node" />
+                <div className="xbx-tl__body">
+                  <div className="xbx-tl__top"><strong>{event.title}</strong><time>{formatDateLabel(event.date)}</time></div>
+                  <span className="xbx-tl__meta">{event.horseName} · {event.category}{event.owner ? ` · ${event.owner}` : ''}</span>
+                  {event.summary ? <p>{event.summary}</p> : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="xbx-clear"><strong>No recorded activity yet.</strong><span>Document uploads, transfers, and care events appear here as a verifiable trail.</span></div>
+        )}
+      </section>
+    </div>
   );
 }
