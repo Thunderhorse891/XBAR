@@ -327,17 +327,14 @@ export default function Landing() {
         </ul>
       </section>
 
-      <section className="revenue-reveal" aria-labelledby="reveal-heading">
-        <div className="revenue-reveal__copy">
+      <section className="revenue-statement" aria-labelledby="reveal-heading">
+        <div className="revenue-statement__inner">
           <p className="revenue-kicker">The record itself</p>
           <h2 id="reveal-heading">Every horse, resolved to a single source of truth.</h2>
-          <p>
+          <p className="revenue-statement__lead">
             Ownership, transfer status, compliance, documents, and sale readiness &mdash; verified by a
             person, audit-logged, and ready to share the moment a buyer asks.
           </p>
-        </div>
-        <div className="revenue-photo revenue-photo--feature" role="img" aria-label="Placeholder for a photograph of horses or ranch operations">
-          <span className="revenue-photo__tag">Ranch photo &mdash; swap in your image</span>
         </div>
       </section>
 

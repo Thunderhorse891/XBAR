@@ -1102,6 +1102,88 @@ html body #root .revenue-hero--wrap .revenue-hero::after {
   opacity: 0 !important;
 }
 
+/* ── Body depth — override the flat concept-layer card surfaces so the
+   white sections read as machined panels, not empty voids. ── */
+html body #root .revenue-pillar,
+html body #root .revenue-pipeline__step,
+html body #root .revenue-trust-card,
+html body #root .revenue-faq,
+html body #root .revenue-plan {
+  background: linear-gradient(180deg, #ffffff 0%, #eaf1fa 100%) !important;
+  border: 1px solid rgba(96, 124, 154, 0.30) !important;
+  border-radius: 16px !important;
+  box-shadow:
+    0 24px 50px -32px rgba(17, 33, 60, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92) !important;
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+html body #root .revenue-pillar:hover,
+html body #root .revenue-trust-card:hover,
+html body #root .revenue-plan:hover {
+  transform: translateY(-3px);
+  border-color: rgba(29, 103, 216, 0.42) !important;
+  box-shadow:
+    0 34px 64px -30px rgba(17, 33, 60, 0.52),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
+}
+
+/* ── Dark statement band — rhythm anchor between white sections ── */
+html body #root .revenue-statement {
+  position: relative;
+  overflow: hidden;
+  margin: 0;
+  padding: clamp(72px, 10vw, 132px) clamp(20px, 5vw, 72px);
+  background:
+    radial-gradient(70% 140% at 50% -20%, rgba(38, 122, 246, 0.26), transparent 60%),
+    linear-gradient(180deg, #0b111b 0%, #070b12 100%);
+  border-top: 1px solid rgba(120, 150, 190, 0.16);
+  border-bottom: 1px solid rgba(120, 150, 190, 0.16);
+  text-align: center;
+}
+
+html body #root .revenue-statement::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(60% 80% at 50% 50%, #000, transparent 78%);
+  mask-image: radial-gradient(60% 80% at 50% 50%, #000, transparent 78%);
+  pointer-events: none;
+}
+
+.revenue-statement__inner {
+  position: relative;
+  z-index: 1;
+  max-width: 880px;
+  margin: auto;
+}
+
+html body #root .revenue-statement h2 {
+  max-width: 20ch;
+  margin: 0 auto;
+  color: #f4f8fd;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 4.4vw, 3.5rem);
+  line-height: 1.06;
+  letter-spacing: -0.025em;
+}
+
+html body #root .revenue-statement .revenue-kicker {
+  color: #62a8ff;
+}
+
+.revenue-statement__lead {
+  max-width: 60ch;
+  margin: 22px auto 0;
+  color: #aab8cb;
+  font-size: clamp(16px, 1.8vw, 19px);
+  line-height: 1.65;
+}
+
 /* Light product stage glows like a screen against the dark hero. */
 .revenue-hero--wrap .revenue-hero__stage {
   background:
