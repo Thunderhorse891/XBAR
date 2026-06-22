@@ -873,3 +873,151 @@
     max-width: 640px;
   }
 }
+
+/* ═══════════════════════════════════════════════
+   COMPETITOR-GRADE SHOWCASE LAYER
+   Product-on-stage hero, honest trust bar, and swappable
+   photography slots — premium operations-platform composition
+   (AgriWebb / Samsara bar) rendered in the XBAR palette.
+═══════════════════════════════════════════════ */
+
+/* Serif display headline across all hero variants. */
+.revenue-hero h1 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.026em;
+}
+
+.revenue-hero--showcase h1 span {
+  display: block;
+}
+
+.revenue-hero--showcase h1 span:nth-child(3) {
+  color: #1466d8;
+}
+
+/* Premium product stage: the dark command module floats on a light,
+   glowing platform — the confident centerpiece competitors lead with. */
+.revenue-hero__stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(20px, 3vw, 44px);
+  border-radius: 26px;
+  background:
+    radial-gradient(120% 120% at 72% 8%, rgba(45, 140, 255, 0.20), transparent 58%),
+    linear-gradient(165deg, #ffffff 0%, #e9f1fa 100%);
+  border: 1px solid rgba(96, 124, 154, 0.22);
+  box-shadow:
+    0 44px 90px -42px rgba(17, 21, 27, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+.revenue-hero__stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(60% 40% at 50% 0%, rgba(255, 255, 255, 0.6), transparent 70%);
+  pointer-events: none;
+}
+
+.revenue-hero__stage .revenue-console {
+  position: relative;
+  z-index: 1;
+  justify-self: stretch;
+  max-width: 100%;
+  width: 100%;
+}
+
+/* Honest trust bar — no fabricated logos; real product guarantees. */
+.revenue-trustbar {
+  max-width: 1320px;
+  margin: auto;
+  padding: 26px clamp(20px, 5vw, 72px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 30px;
+  border-top: 1px solid rgba(96, 124, 154, 0.18);
+  border-bottom: 1px solid rgba(96, 124, 154, 0.18);
+}
+
+.revenue-trustbar p {
+  margin: 0;
+  color: #0d1420;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.revenue-trustbar ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+  margin: 0 0 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.revenue-trustbar li {
+  position: relative;
+  padding-left: 17px;
+  color: #5a6b7f;
+  font-size: 11.5px;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.revenue-trustbar li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #1466d8;
+}
+
+/* Swappable photography slot — clearly a placeholder, in palette. */
+.revenue-photo {
+  position: relative;
+  border-radius: 22px;
+  border: 1px solid rgba(96, 124, 154, 0.28);
+  background:
+    repeating-linear-gradient(45deg, rgba(120, 150, 185, 0.05) 0 14px, transparent 14px 28px),
+    linear-gradient(165deg, #1b2330 0%, #0d141d 100%);
+  box-shadow:
+    0 34px 74px -42px rgba(17, 21, 27, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.revenue-photo--feature {
+  min-height: clamp(280px, 34vw, 420px);
+}
+
+.revenue-photo__tag {
+  position: absolute;
+  left: 18px;
+  bottom: 16px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  background: rgba(8, 14, 22, 0.72);
+  border: 1px solid rgba(120, 165, 220, 0.32);
+  color: #9fc2ec;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 1020px) {
+  .revenue-trustbar ul {
+    margin-left: 0;
+  }
+}

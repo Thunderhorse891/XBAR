@@ -282,28 +282,46 @@ export default function Landing() {
         </nav>
       </header>
 
-      <section className="revenue-hero revenue-hero--editorial" aria-labelledby="hero-heading">
-        <p className="revenue-kicker">Equine operations, elevated</p>
-        <h1 id="hero-heading">
-          <span>One record per horse.</span>
-          <span>Ownership you can prove.</span>
-          <span>Sales that close.</span>
-        </h1>
-        <p className="revenue-hero__lead">
-          XBAR turns scattered paperwork, ownership details, and horse documentation into trusted, buyer-ready digital records &mdash; OCR-assisted intake, compliance deadlines, and watermarked sale packets in one quiet, deliberate system.
-        </p>
-        <div className="revenue-hero__actions">
-          <Link className="public-action public-action--primary" to={signupPath('Professional')} onClick={() => trackPlan('Professional')}>
-            Create your workspace
-          </Link>
-          <Link className="public-action" to="/login" onClick={() => trackCta('hero', '/login')}>
-            Sign in
-          </Link>
+      <section className="revenue-hero revenue-hero--showcase" aria-labelledby="hero-heading">
+        <div className="revenue-hero__copy">
+          <p className="revenue-kicker">Ranch &amp; equine operations platform</p>
+          <h1 id="hero-heading">
+            <span>One record per horse.</span>
+            <span>Ownership you can prove.</span>
+            <span>Sales that close.</span>
+          </h1>
+          <p className="revenue-hero__lead">
+            XBAR turns scattered paperwork, ownership, and horse documentation into trusted,
+            buyer-ready digital records &mdash; OCR-assisted intake, compliance deadlines, and
+            watermarked sale packets in one operating system.
+          </p>
+          <div className="revenue-hero__actions">
+            <Link className="public-action public-action--primary" to={signupPath('Professional')} onClick={() => trackPlan('Professional')}>
+              Create your workspace
+            </Link>
+            <a className="public-action" href="#how-it-works" onClick={() => trackCta('hero', '#how-it-works')}>
+              See how it works
+            </a>
+          </div>
+          <ul className="revenue-proof-line">
+            <li>Local-first</li>
+            <li>Human-reviewed</li>
+            <li>Watermarked packets</li>
+            <li>Audit-logged</li>
+          </ul>
         </div>
-        <ul className="revenue-proof-line revenue-proof-line--center">
-          <li>Local-first</li>
-          <li>Human-reviewed</li>
-          <li>Watermarked sharing</li>
+        <div className="revenue-hero__stage">
+          <CommandPreview />
+        </div>
+      </section>
+
+      <section className="revenue-trustbar" aria-label="How XBAR protects your records">
+        <p>Built for performance horse &amp; ranch operations</p>
+        <ul>
+          <li>Source-record discipline</li>
+          <li>Human review before final</li>
+          <li>Buyer-safe sharing</li>
+          <li>Every change audit-logged</li>
         </ul>
       </section>
 
@@ -316,10 +334,12 @@ export default function Landing() {
             person, audit-logged, and ready to share the moment a buyer asks.
           </p>
         </div>
-        <CommandPreview />
+        <div className="revenue-photo revenue-photo--feature" role="img" aria-label="Placeholder for a photograph of horses or ranch operations">
+          <span className="revenue-photo__tag">Ranch photo &mdash; swap in your image</span>
+        </div>
       </section>
 
-      <section className="revenue-section" aria-labelledby="pipeline-heading">
+      <section className="revenue-section" id="how-it-works" aria-labelledby="pipeline-heading">
         <div className="revenue-section__header">
           <div>
             <p className="revenue-kicker">One path for every document</p>
