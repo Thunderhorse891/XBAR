@@ -282,38 +282,40 @@ export default function Landing() {
         </nav>
       </header>
 
-      <section className="revenue-hero revenue-hero--showcase" aria-labelledby="hero-heading">
-        <div className="revenue-hero__copy">
-          <p className="revenue-kicker">Ranch &amp; equine operations platform</p>
-          <h1 id="hero-heading">
-            <span>One record per horse.</span>
-            <span>Ownership you can prove.</span>
-            <span>Sales that close.</span>
-          </h1>
-          <p className="revenue-hero__lead">
-            XBAR turns scattered paperwork, ownership, and horse documentation into trusted,
-            buyer-ready digital records &mdash; OCR-assisted intake, compliance deadlines, and
-            watermarked sale packets in one operating system.
-          </p>
-          <div className="revenue-hero__actions">
-            <Link className="public-action public-action--primary" to={signupPath('Professional')} onClick={() => trackPlan('Professional')}>
-              Create your workspace
-            </Link>
-            <a className="public-action" href="#how-it-works" onClick={() => trackCta('hero', '#how-it-works')}>
-              See how it works
-            </a>
+      <div className="revenue-hero--wrap">
+        <section className="revenue-hero revenue-hero--showcase" aria-labelledby="hero-heading">
+          <div className="revenue-hero__copy">
+            <p className="revenue-kicker">Ranch &amp; equine operations platform</p>
+            <h1 id="hero-heading">
+              <span>One record per horse.</span>
+              <span>Ownership you can prove.</span>
+              <span>Sales that close.</span>
+            </h1>
+            <p className="revenue-hero__lead">
+              XBAR turns scattered paperwork, ownership, and horse documentation into trusted,
+              buyer-ready digital records &mdash; OCR-assisted intake, compliance deadlines, and
+              watermarked sale packets in one operating system.
+            </p>
+            <div className="revenue-hero__actions">
+              <Link className="public-action public-action--primary" to={signupPath('Professional')} onClick={() => trackPlan('Professional')}>
+                Create your workspace
+              </Link>
+              <a className="public-action" href="#how-it-works" onClick={() => trackCta('hero', '#how-it-works')}>
+                See how it works
+              </a>
+            </div>
+            <ul className="revenue-proof-line">
+              <li>Local-first</li>
+              <li>Human-reviewed</li>
+              <li>Watermarked packets</li>
+              <li>Audit-logged</li>
+            </ul>
           </div>
-          <ul className="revenue-proof-line">
-            <li>Local-first</li>
-            <li>Human-reviewed</li>
-            <li>Watermarked packets</li>
-            <li>Audit-logged</li>
-          </ul>
-        </div>
-        <div className="revenue-hero__stage">
-          <CommandPreview />
-        </div>
-      </section>
+          <div className="revenue-hero__stage">
+            <CommandPreview />
+          </div>
+        </section>
+      </div>
 
       <section className="revenue-trustbar" aria-label="How XBAR protects your records">
         <p>Built for performance horse &amp; ranch operations</p>

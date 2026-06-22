@@ -1021,3 +1021,95 @@
     margin-left: 0;
   }
 }
+
+/* ═══════════════════════════════════════════════
+   DEEP HERO — full-bleed graphite stage with glow.
+   First impression carries real depth instead of a white void.
+═══════════════════════════════════════════════ */
+.revenue-hero--wrap {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(78% 120% at 80% -12%, rgba(38, 122, 246, 0.38), transparent 58%),
+    radial-gradient(60% 95% at 4% 116%, rgba(38, 122, 246, 0.14), transparent 60%),
+    linear-gradient(168deg, #0d1420 0%, #0a0f18 54%, #06090f 100%);
+  border-bottom: 1px solid rgba(120, 150, 190, 0.16);
+}
+
+.revenue-hero--wrap::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 58px 58px;
+  -webkit-mask-image: radial-gradient(72% 70% at 50% 28%, #000, transparent 82%);
+  mask-image: radial-gradient(72% 70% at 50% 28%, #000, transparent 82%);
+  pointer-events: none;
+}
+
+.revenue-hero--wrap .revenue-hero {
+  position: relative;
+  z-index: 1;
+}
+
+.revenue-hero--wrap .revenue-hero h1 {
+  color: #f4f8fd;
+}
+
+.revenue-hero--wrap .revenue-hero__lead {
+  color: #a9b8cb;
+}
+
+.revenue-hero--wrap .revenue-kicker {
+  color: #62a8ff;
+}
+
+.revenue-hero--wrap .revenue-proof-line {
+  color: #8294aa;
+}
+
+.revenue-hero--wrap .revenue-hero--showcase h1 span:nth-child(3) {
+  color: #6cb0ff;
+}
+
+/* Override the globally-loaded concept layers (linearConcept.css /
+   revolutionaryExperience.css) that force light-ink hero type with
+   !important. Matched specificity so the deep hero actually renders. */
+html body #root .revenue-hero--wrap .revenue-hero h1 {
+  color: #f4f8fd !important;
+  font-family: var(--font-display) !important;
+  font-size: clamp(2.7rem, 5vw, 4.7rem) !important;
+  line-height: 1.0 !important;
+  letter-spacing: -0.022em !important;
+  max-width: 18ch !important;
+}
+
+html body #root .revenue-hero--wrap .revenue-hero h1 span:nth-child(3) {
+  color: #6cb0ff !important;
+}
+
+html body #root .revenue-hero--wrap .revenue-hero__lead {
+  color: #aab8cb !important;
+}
+
+html body #root .revenue-hero--wrap .revenue-kicker {
+  color: #62a8ff !important;
+}
+
+html body #root .revenue-hero--wrap .revenue-hero::after {
+  opacity: 0 !important;
+}
+
+/* Light product stage glows like a screen against the dark hero. */
+.revenue-hero--wrap .revenue-hero__stage {
+  background:
+    radial-gradient(120% 120% at 70% 6%, rgba(80, 160, 255, 0.28), transparent 56%),
+    linear-gradient(165deg, #f4f9ff 0%, #dfeaf8 100%);
+  border-color: rgba(150, 185, 225, 0.35);
+  box-shadow:
+    0 60px 120px -50px rgba(0, 18, 48, 0.8),
+    0 0 0 1px rgba(120, 165, 220, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
