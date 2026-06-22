@@ -73,6 +73,23 @@
   --shadow: var(--xb-shadow);
   --shadow-soft: var(--xb-shadow-soft);
 
+  /* ---- shadcn/ui theme tokens (HSL) so Card/Badge/Tabs/Dialog flip to dark ---- */
+  --background: 216 24% 6%;
+  --foreground: 40 12% 90%;
+  --card: 215 20% 10%;
+  --card-foreground: 40 12% 90%;
+  --popover: 215 22% 9%;
+  --popover-foreground: 40 12% 90%;
+  --secondary: 214 16% 16%;
+  --secondary-foreground: 40 10% 86%;
+  --muted-token: 214 16% 14%;
+  --muted-foreground: 213 9% 64%;
+  --accent: 215 55% 18%;
+  --accent-foreground: 213 100% 82%;
+  --border-token: 213 15% 21%;
+  --input: 213 15% 24%;
+  --ring: 216 100% 66%;
+
   color: var(--xb-ink);
 }
 
@@ -637,6 +654,61 @@ html body #root .xbar-command-main .xbar-profile-card__metric { color: var(--xb-
 }
 .xbar-command-main .xbar-system-strip span { color: var(--xb-sand) !important; }
 .xbar-command-main .xbar-system-strip strong { color: var(--xb-ink) !important; }
+
+/* ============================================================================
+   DASHBOARD — remaining light bands (next-step, stat row, ledger boxes)
+   ========================================================================== */
+html body #root .xbar-command-main .command-center-next-move {
+  background: rgba(255, 255, 255, 0.025) !important;
+  border: 1px solid var(--xb-line) !important;
+}
+html body #root .xbar-command-main .ops-briefing-stat-row {
+  background: transparent !important;
+}
+html body #root .xbar-command-main .ops-briefing-stat {
+  background: rgba(255, 255, 255, 0.025) !important;
+  border: 1px solid var(--xb-line) !important;
+}
+html body #root .xbar-command-main .ops-briefing-stat__value { color: var(--xb-ink) !important; }
+html body #root .xbar-command-main :is(.dashboard-budget-strip, .ledger-stat) {
+  background: rgba(255, 255, 255, 0.025) !important;
+  border: 1px solid var(--xb-line) !important;
+  border-radius: var(--xb-r-sm) !important;
+}
+
+/* ============================================================================
+   HAND-BUILT LIGHT PANELS (Horse Profile etc.) → graphite.
+   Targets the specific hardcoded Tailwind arbitrary values used in markup.
+   ========================================================================== */
+.xbar-command-main [class*="bg-[linear-gradient(180deg,#ffffff"],
+.xbar-command-main [class*="bg-[#ffffff]"],
+.xbar-command-main [class*="bg-[#fff]"],
+.xbar-command-main [class*="bg-[#f3f7fb]"],
+.xbar-command-main [class*="bg-[#f8fafc]"] {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)), var(--xb-panel) !important;
+  border-color: var(--xb-line) !important;
+}
+.xbar-command-main [class*="border-[#d8e1ea]"],
+.xbar-command-main [class*="border-[#dde"],
+.xbar-command-main [class*="border-[#e2e8f0]"],
+.xbar-command-main [class*="border-[#e5e7eb]"] {
+  border-color: var(--xb-line) !important;
+}
+.xbar-command-main [class*="text-[#201d1a]"],
+.xbar-command-main [class*="text-[#202225]"],
+.xbar-command-main [class*="text-[#111827]"],
+.xbar-command-main [class*="text-[#0f172a]"] {
+  color: var(--xb-ink) !important;
+}
+.xbar-command-main [class*="text-[#7a8c9a]"],
+.xbar-command-main [class*="text-[#64748b]"],
+.xbar-command-main [class*="text-[#6b7280]"] {
+  color: var(--xb-ink-soft) !important;
+}
+.xbar-command-main [class*="bg-[#edf6fa]"],
+.xbar-command-main [class*="bg-[#eff6ff]"] {
+  background: var(--xb-blue-soft) !important;
+}
 
 /* generic empty states inside the app */
 .xbar-command-main .empty-state {
