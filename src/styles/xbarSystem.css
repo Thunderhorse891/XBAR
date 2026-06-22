@@ -1,0 +1,649 @@
+/* ============================================================================
+   XBAR design system — premium dark operations app.
+   Loaded LAST so it is the single authority for the logged-in app shell.
+   Direction: graphite/gunmetal surfaces, warm-white type, muted steel/sand
+   secondary text, thin electric-blue accents, red reserved for blockers.
+   The landing (.revenue-*) is intentionally untouched; everything here is
+   scoped under .xbar-command-shell.
+   ========================================================================== */
+
+.xbar-command-shell {
+  /* ---- graphite surfaces ---- */
+  --xb-bg: #0a0d12;
+  --xb-bg-deep: #070a0e;
+  --xb-shell: #090c11;
+  --xb-sidebar: #0b0e13;
+  --xb-panel: #13171e;
+  --xb-panel-2: #171c25;
+  --xb-raise: #1b212b;
+  --xb-line: rgba(178, 190, 206, 0.10);
+  --xb-line-2: rgba(178, 190, 206, 0.17);
+  --xb-line-3: rgba(178, 190, 206, 0.26);
+
+  /* ---- type ---- */
+  --xb-ink: #edeae3;            /* warm white */
+  --xb-ink-soft: #aab2bd;       /* steel */
+  --xb-ink-dim: #7c848e;
+  --xb-sand: #b8ab94;           /* muted sand — secondary eyebrows */
+
+  /* ---- accents ---- */
+  --xb-blue: #4d94ff;
+  --xb-blue-strong: #2f80ff;
+  --xb-blue-soft: rgba(77, 148, 255, 0.13);
+  --xb-emerald: #4cb98c;
+  --xb-emerald-soft: rgba(76, 185, 140, 0.13);
+  --xb-amber: #d8a657;
+  --xb-amber-soft: rgba(216, 166, 87, 0.13);
+  --xb-red: #ef5f57;
+  --xb-red-soft: rgba(239, 95, 87, 0.13);
+
+  /* ---- depth ---- */
+  --xb-shadow: 0 26px 60px -34px rgba(0, 0, 0, 0.88), 0 8px 22px -14px rgba(0, 0, 0, 0.6);
+  --xb-shadow-soft: 0 4px 16px -8px rgba(0, 0, 0, 0.6);
+  --xb-r-lg: 14px;
+  --xb-r: 12px;
+  --xb-r-sm: 9px;
+  --xb-r-xs: 7px;
+
+  /* ---- remap the legacy light tokens so every token-based component
+          inside the shell flips to graphite automatically ---- */
+  --bg: var(--xb-bg);
+  --bg-deep: var(--xb-bg-deep);
+  --surface: var(--xb-panel);
+  --surface-strong: var(--xb-panel-2);
+  --sidebar: var(--xb-sidebar);
+  --sidebar-edge: var(--xb-line);
+  --text: var(--xb-ink);
+  --muted: var(--xb-ink-soft);
+  --muted-strong: #c8cfd8;
+  --border: var(--xb-line);
+  --border-strong: var(--xb-line-2);
+  --blue: var(--xb-blue);
+  --blue-soft: var(--xb-blue-soft);
+  --brand-blue: var(--xb-blue);
+  --brand-electric: var(--xb-blue);
+  --slate: var(--xb-ink-soft);
+  --slate-soft: rgba(154, 163, 173, 0.13);
+  --emerald: var(--xb-emerald);
+  --emerald-soft: var(--xb-emerald-soft);
+  --amber: var(--xb-amber);
+  --amber-soft: var(--xb-amber-soft);
+  --rose: var(--xb-red);
+  --rose-soft: var(--xb-red-soft);
+  --shadow: var(--xb-shadow);
+  --shadow-soft: var(--xb-shadow-soft);
+
+  color: var(--xb-ink);
+}
+
+/* ============================================================================
+   SHELL — beat the late light layers (premiumSaasExperience / productionFinal).
+   ========================================================================== */
+html body #root .xbar-command-shell {
+  background:
+    radial-gradient(120% 80% at 100% -10%, rgba(77, 148, 255, 0.10), transparent 46%),
+    linear-gradient(180deg, #0a0d12 0%, #080a0f 100%) !important;
+  color: var(--xb-ink);
+}
+
+html body #root .xbar-command-shell > aside {
+  background: linear-gradient(180deg, #0c1016 0%, #080b10 100%) !important;
+  border-right: 1px solid var(--xb-line) !important;
+  color: var(--xb-ink-soft) !important;
+}
+
+html body #root .xbar-command-main {
+  background:
+    linear-gradient(90deg, rgba(178, 190, 206, 0.025) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(178, 190, 206, 0.025) 1px, transparent 1px),
+    radial-gradient(120% 70% at 18% -8%, rgba(77, 148, 255, 0.07), transparent 42%),
+    linear-gradient(180deg, #0c1016 0%, #090c11 60%, #080a0f 100%) !important;
+  background-size: 46px 46px, 46px 46px, auto, auto !important;
+  background-image:
+    linear-gradient(90deg, rgba(178, 190, 206, 0.025) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(178, 190, 206, 0.025) 1px, transparent 1px),
+    radial-gradient(120% 70% at 18% -8%, rgba(77, 148, 255, 0.07), transparent 42%),
+    linear-gradient(180deg, #0c1016 0%, #090c11 60%, #080a0f 100%) !important;
+}
+
+html body #root .xbar-command-topbar {
+  background: linear-gradient(180deg, rgba(12, 16, 22, 0.92), rgba(9, 12, 17, 0.92)) !important;
+  border-bottom: 1px solid var(--xb-line) !important;
+  backdrop-filter: blur(18px);
+}
+
+/* ---- sidebar: undo the light-card override, restore the command center ---- */
+html body #root .xbar-command-shell aside :is([class*="bg-[#080f1c]"], [class*="bg-[#08111d]"], [class*="bg-[#0a1628]"], [class*="bg-[#050910]"], [class*="bg-card"], [class*="bg-background"]) {
+  background: rgba(255, 255, 255, 0.026) !important;
+  border-color: var(--xb-line) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+}
+
+html body #root .xbar-command-shell aside :is([class*="text-[#52708d]"], [class*="text-[#536d88]"], [class*="text-[#6f8aa5]"], [class*="text-[#4a6880]"], [class*="text-[#3d5870]"], [class*="text-[#2e4560]"], [class*="text-muted-foreground"]) {
+  color: var(--xb-ink-dim) !important;
+}
+
+html body #root .xbar-command-shell aside a,
+html body #root .xbar-command-shell aside button {
+  color: var(--xb-ink-soft) !important;
+}
+
+html body #root .xbar-command-shell aside a:hover,
+html body #root .xbar-command-shell aside button:hover {
+  background: var(--xb-blue-soft) !important;
+  color: var(--xb-ink) !important;
+}
+
+/* active nav item — thin electric-blue accent */
+html body #root .xbar-command-shell aside a[aria-current="page"],
+html body #root .xbar-command-shell aside a.active {
+  background: linear-gradient(90deg, rgba(77, 148, 255, 0.16), rgba(77, 148, 255, 0.04)) !important;
+  color: var(--xb-ink) !important;
+  box-shadow: inset 2px 0 0 var(--xb-blue) !important;
+}
+
+/* topbar search + chips read on graphite */
+html body #root .xbar-command-topbar input {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-color: var(--xb-line-2) !important;
+  color: var(--xb-ink) !important;
+}
+html body #root .xbar-command-topbar input:focus {
+  border-color: var(--xb-blue) !important;
+  box-shadow: 0 0 0 3px var(--xb-blue-soft) !important;
+}
+
+/* ============================================================================
+   PAGE HEADER / TYPOGRAPHY
+   ========================================================================== */
+.xbar-command-main .page-header,
+.xbar-command-main .ops-briefing-header {
+  color: var(--xb-ink);
+}
+.xbar-command-main .eyebrow,
+.xbar-command-main .page-header__copy .eyebrow,
+.xbar-command-main .panel__eyebrow,
+.xbar-command-main .surface-hero__eyebrow,
+.xbar-command-main .ops-briefing-header__ranch {
+  color: var(--xb-sand) !important;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.xbar-command-main .page-title,
+.xbar-command-main .ops-briefing-header__title,
+.xbar-command-main h1,
+.xbar-command-main h2 {
+  color: var(--xb-ink) !important;
+  letter-spacing: -0.018em;
+}
+.xbar-command-main .page-description,
+.xbar-command-main .command-center-briefing__copy {
+  color: var(--xb-ink-soft) !important;
+}
+
+/* ============================================================================
+   PANELS / CARDS — layered graphite with hairline borders + depth
+   ========================================================================== */
+.xbar-command-main .panel,
+.xbar-command-main .command-stage__support-card,
+.xbar-command-main .dashboard-board__main > *,
+.xbar-command-main .dashboard-board__side > * {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.022), rgba(255, 255, 255, 0)) ,
+    var(--xb-panel) !important;
+  border: 1px solid var(--xb-line) !important;
+  border-radius: var(--xb-r) !important;
+  box-shadow: var(--xb-shadow) !important;
+  color: var(--xb-ink);
+}
+
+.xbar-command-main .panel__title {
+  color: var(--xb-ink) !important;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.xbar-command-main .panel__header {
+  border-bottom: 1px solid var(--xb-line);
+  padding-bottom: 14px;
+}
+.xbar-command-main .panel__display-controls button {
+  color: var(--xb-ink-dim) !important;
+  border: 1px solid var(--xb-line) !important;
+  background: transparent !important;
+  border-radius: var(--xb-r-xs) !important;
+}
+.xbar-command-main .panel__display-controls button:hover {
+  color: var(--xb-ink) !important;
+  border-color: var(--xb-line-2) !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+/* ============================================================================
+   METRIC CARDS — precise KPI tiles
+   ========================================================================== */
+.xbar-command-main .metric-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)) ,
+    var(--xb-panel) !important;
+  border: 1px solid var(--xb-line) !important;
+  border-radius: var(--xb-r) !important;
+  box-shadow: var(--xb-shadow-soft) !important;
+  position: relative;
+  overflow: hidden;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+.xbar-command-main .metric-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 2px;
+  background: var(--xb-line-2);
+  transition: background 160ms ease;
+}
+.xbar-command-main .metric-card--blue::before { background: var(--xb-blue); }
+.xbar-command-main .metric-card--rose::before { background: var(--xb-red); }
+.xbar-command-main .metric-card--amber::before { background: var(--xb-amber); }
+.xbar-command-main .metric-card--emerald::before { background: var(--xb-emerald); }
+.xbar-command-main .metric-card--slate::before { background: var(--xb-ink-dim); }
+.xbar-command-main .metric-card__label {
+  color: var(--xb-ink-dim) !important;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+.xbar-command-main .metric-card__value {
+  color: var(--xb-ink) !important;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.xbar-command-main .metric-card__detail { color: var(--xb-ink-soft) !important; }
+.xbar-command-main .metric-card--interactive:hover {
+  transform: translateY(-2px);
+  border-color: var(--xb-line-2) !important;
+  box-shadow: var(--xb-shadow) !important;
+}
+.xbar-command-main .interactive-cue { color: var(--xb-ink-dim) !important; }
+
+/* ============================================================================
+   BRIEFING HEADER (dashboard hero) — executive surface
+   ========================================================================== */
+.xbar-command-main .ops-briefing-header,
+.xbar-command-main .command-center-briefing {
+  background:
+    radial-gradient(90% 130% at 88% -30%, rgba(77, 148, 255, 0.14), transparent 55%),
+    linear-gradient(168deg, #11161e 0%, #0c1016 60%, #0a0d12 100%) !important;
+  border: 1px solid var(--xb-line-2) !important;
+  border-radius: var(--xb-r-lg) !important;
+  box-shadow: var(--xb-shadow) !important;
+}
+.xbar-command-main .command-center-next-move {
+  background: rgba(255, 255, 255, 0.022) !important;
+  border: 1px solid var(--xb-line) !important;
+  border-radius: var(--xb-r) !important;
+}
+.xbar-command-main .command-center-next-move span { color: var(--xb-sand) !important; }
+.xbar-command-main .command-center-next-move strong { color: var(--xb-ink) !important; }
+.xbar-command-main .command-center-next-move em { color: var(--xb-ink-soft) !important; }
+
+.xbar-command-main .ops-briefing-stat {
+  background: rgba(255, 255, 255, 0.022) !important;
+  border: 1px solid var(--xb-line) !important;
+  border-radius: var(--xb-r) !important;
+  transition: transform 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+.xbar-command-main .ops-briefing-stat:hover {
+  transform: translateY(-2px);
+  border-color: var(--xb-line-2) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+.xbar-command-main .ops-briefing-stat__label { color: var(--xb-ink-dim) !important; }
+.xbar-command-main .ops-briefing-stat__value { color: var(--xb-ink) !important; font-variant-numeric: tabular-nums; }
+.xbar-command-main .ops-briefing-stat__value--urgent { color: var(--xb-red) !important; }
+.xbar-command-main .ops-briefing-stat__value--warning { color: var(--xb-amber) !important; }
+.xbar-command-main .ops-briefing-stat__value--clear { color: var(--xb-emerald) !important; }
+.xbar-command-main .ops-briefing-stat__detail { color: var(--xb-ink-soft) !important; }
+
+/* ============================================================================
+   CHIPS / PILLS / BADGES
+   ========================================================================== */
+.xbar-command-main .pill,
+.xbar-command-main .ops-briefing-chip {
+  border-radius: 999px !important;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border: 1px solid var(--xb-line-2) !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  color: var(--xb-ink-soft) !important;
+}
+.xbar-command-main .pill--blue,  .xbar-command-main .ops-briefing-chip:not(.ops-briefing-chip--urgent):not(.ops-briefing-chip--warning):not(.ops-briefing-chip--success) {
+  background: var(--xb-blue-soft) !important; border-color: rgba(77, 148, 255, 0.32) !important; color: #9cc4ff !important;
+}
+.xbar-command-main .pill--emerald, .xbar-command-main .ops-briefing-chip--success {
+  background: var(--xb-emerald-soft) !important; border-color: rgba(76, 185, 140, 0.32) !important; color: #7fd6b1 !important;
+}
+.xbar-command-main .pill--amber, .xbar-command-main .ops-briefing-chip--warning {
+  background: var(--xb-amber-soft) !important; border-color: rgba(216, 166, 87, 0.32) !important; color: #e7c184 !important;
+}
+.xbar-command-main .pill--rose, .xbar-command-main .ops-briefing-chip--urgent {
+  background: var(--xb-red-soft) !important; border-color: rgba(239, 95, 87, 0.34) !important; color: #ff9189 !important;
+}
+.xbar-command-main .pill--slate {
+  background: var(--xb-slate-soft, rgba(154,163,173,0.12)) !important; border-color: var(--xb-line-2) !important; color: var(--xb-ink-soft) !important;
+}
+
+/* ============================================================================
+   STACK LISTS / ROWS
+   ========================================================================== */
+.xbar-command-main .stack-item {
+  background: rgba(255, 255, 255, 0.018) !important;
+  border: 1px solid var(--xb-line) !important;
+  border-radius: var(--xb-r-sm) !important;
+  color: var(--xb-ink-soft);
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+.xbar-command-main .stack-item--interactive:hover {
+  border-color: var(--xb-line-2) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  transform: translateX(2px);
+}
+.xbar-command-main .stack-item__title { color: var(--xb-ink) !important; font-weight: 600; }
+.xbar-command-main .inline-metrics span,
+.xbar-command-main .command-stage__support-copy span { color: var(--xb-ink-dim) !important; }
+.xbar-command-main .ledger-stat__label { color: var(--xb-ink-dim) !important; }
+.xbar-command-main .ledger-stat__value { color: var(--xb-ink) !important; font-variant-numeric: tabular-nums; }
+.xbar-command-main .command-stage__support-label { color: var(--xb-sand) !important; }
+.xbar-command-main .command-stage__support-title { color: var(--xb-ink) !important; }
+
+/* ============================================================================
+   BUTTONS
+   ========================================================================== */
+.xbar-command-main .button--primary,
+.xbar-command-main .ops-briefing-action--primary {
+  background: linear-gradient(180deg, #4d94ff, #2f80ff) !important;
+  border: 1px solid rgba(120, 175, 255, 0.5) !important;
+  color: #04111f !important;
+  font-weight: 650;
+  box-shadow: 0 10px 26px -12px rgba(77, 148, 255, 0.7) !important;
+}
+.xbar-command-main .button--primary:hover,
+.xbar-command-main .ops-briefing-action--primary:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+.xbar-command-main .button--ghost,
+.xbar-command-main .ops-briefing-action,
+.xbar-command-main .button--secondary {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid var(--xb-line-2) !important;
+  color: var(--xb-ink) !important;
+}
+.xbar-command-main .button--ghost:hover,
+.xbar-command-main .ops-briefing-action:hover {
+  border-color: var(--xb-blue) !important;
+  background: var(--xb-blue-soft) !important;
+}
+
+/* ============================================================================
+   FORM FIELDS
+   ========================================================================== */
+.xbar-command-main .field-input,
+.xbar-command-main .field-textarea,
+.xbar-command-main select.field-input {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid var(--xb-line-2) !important;
+  color: var(--xb-ink) !important;
+  border-radius: var(--xb-r-sm) !important;
+}
+.xbar-command-main .field-input:focus,
+.xbar-command-main .field-textarea:focus {
+  border-color: var(--xb-blue) !important;
+  box-shadow: 0 0 0 3px var(--xb-blue-soft) !important;
+  outline: none !important;
+}
+.xbar-command-main .field-label { color: var(--xb-ink-dim) !important; }
+
+/* ============================================================================
+   SURFACE HERO (used by Horses + other list screens)
+   ========================================================================== */
+.xbar-command-main .surface-hero,
+.xbar-command-main .surface-hero--dark {
+  background:
+    radial-gradient(90% 130% at 90% -30%, rgba(77, 148, 255, 0.13), transparent 55%),
+    linear-gradient(168deg, #11161e 0%, #0c1016 62%, #0a0d12 100%) !important;
+  border: 1px solid var(--xb-line-2) !important;
+  border-radius: var(--xb-r-lg) !important;
+  box-shadow: var(--xb-shadow) !important;
+  color: var(--xb-ink);
+}
+.xbar-command-main .surface-hero h1,
+.xbar-command-main .surface-hero__stat strong { color: var(--xb-ink) !important; }
+.xbar-command-main .surface-hero__stat span { color: var(--xb-ink-dim) !important; }
+
+/* progress */
+.xbar-command-main .progress-track { background: rgba(255, 255, 255, 0.06) !important; }
+.xbar-command-main .progress-bar--blue { background: var(--xb-blue) !important; }
+.xbar-command-main .progress-bar--emerald { background: var(--xb-emerald) !important; }
+.xbar-command-main .progress-bar--amber { background: var(--xb-amber) !important; }
+.xbar-command-main .progress-bar--rose { background: var(--xb-red) !important; }
+
+/* key-value */
+.xbar-command-main .key-value__label { color: var(--xb-ink-dim) !important; }
+.xbar-command-main .key-value__value { color: var(--xb-ink) !important; }
+
+/* ============================================================================
+   MOTION — restrained scroll reveal. Respects reduced-motion.
+   ========================================================================== */
+.xb-reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 560ms cubic-bezier(0.22, 0.61, 0.36, 1),
+              transform 560ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition-delay: calc(var(--xb-reveal-index, 0) * 70ms);
+  will-change: opacity, transform;
+}
+.xb-reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+.xb-reveal--scale {
+  transform: translateY(20px) scale(0.985);
+}
+.xb-reveal--scale.is-visible {
+  transform: none;
+}
+[data-parallax] {
+  will-change: transform;
+}
+/* sticky product explanation column */
+.xb-sticky {
+  position: sticky;
+  top: 88px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .xb-reveal,
+  .xb-reveal--scale {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  [data-parallax] {
+    transform: none !important;
+  }
+}
+
+/* ============================================================================
+   HORSES — surface hero copy readability + portfolio deck on graphite
+   ========================================================================== */
+html body #root .xbar-command-main .surface-hero :is(h1, h2) {
+  color: #f6fbff !important;
+}
+html body #root .xbar-command-main .surface-hero p,
+html body #root .xbar-command-main .surface-hero .command-center-briefing__copy {
+  color: var(--xb-ink-soft) !important;
+}
+html body #root .xbar-command-main .portfolio-mini-card {
+  color: var(--xb-ink-soft) !important;
+}
+html body #root .xbar-command-main .portfolio-mini-card strong { color: var(--xb-ink) !important; }
+html body #root .xbar-command-main .portfolio-mini-card small,
+html body #root .xbar-command-main .portfolio-mini-card em { color: var(--xb-ink-dim) !important; }
+html body #root .xbar-command-main .portfolio-mini-card span { color: var(--xb-blue) !important; }
+
+.xbar-command-main .portfolio-signal-deck {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.022), rgba(255, 255, 255, 0)),
+    var(--xb-panel) !important;
+  border: 1px solid var(--xb-line) !important;
+  border-radius: var(--xb-r) !important;
+  box-shadow: var(--xb-shadow) !important;
+}
+.xbar-command-main .portfolio-signal-deck__copy span { color: var(--xb-sand) !important; }
+.xbar-command-main .portfolio-signal-deck__copy strong { color: var(--xb-ink) !important; }
+.xbar-command-main .portfolio-signal-deck__copy p { color: var(--xb-ink-soft) !important; }
+
+.xbar-command-main .portfolio-signal-bar {
+  background: rgba(255, 255, 255, 0.02) !important;
+  border: 1px solid var(--xb-line) !important;
+  border-radius: var(--xb-r-sm) !important;
+}
+.xbar-command-main .portfolio-signal-bar > div span { color: var(--xb-ink-dim) !important; }
+.xbar-command-main .portfolio-signal-bar > div strong { color: var(--xb-ink) !important; font-variant-numeric: tabular-nums; }
+.xbar-command-main .portfolio-signal-bar small { color: var(--xb-ink-dim) !important; }
+.xbar-command-main .portfolio-signal-bar i {
+  background: rgba(255, 255, 255, 0.07) !important;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.xbar-command-main .portfolio-signal-bar i span { background: var(--xb-blue) !important; }
+
+.xbar-command-main .portfolio-mini-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
+    var(--xb-panel-2) !important;
+  border: 1px solid var(--xb-line) !important;
+  border-radius: var(--xb-r-sm) !important;
+  box-shadow: var(--xb-shadow-soft) !important;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+.xbar-command-main .portfolio-mini-card:hover:not(:disabled) {
+  transform: translateY(-3px);
+  border-color: var(--xb-line-2) !important;
+  box-shadow: var(--xb-shadow) !important;
+}
+.xbar-command-main .portfolio-mini-card span { color: var(--xb-blue) !important; font-variant-numeric: tabular-nums; }
+.xbar-command-main .portfolio-mini-card strong { color: var(--xb-ink) !important; }
+.xbar-command-main .portfolio-mini-card small { color: var(--xb-ink-dim) !important; }
+.xbar-command-main .portfolio-mini-card em { color: var(--xb-ink-soft) !important; font-style: normal; }
+
+.xbar-command-main .portfolio-toolbar {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
+    var(--xb-panel) !important;
+  border: 1px solid var(--xb-line) !important;
+  border-radius: var(--xb-r) !important;
+  box-shadow: var(--xb-shadow-soft) !important;
+}
+
+/* surface tabs */
+.xbar-command-main .surface-tabs {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid var(--xb-line) !important;
+  border-radius: 999px !important;
+}
+.xbar-command-main .surface-tab { color: var(--xb-ink-soft) !important; }
+.xbar-command-main .surface-tab--active,
+.xbar-command-main .surface-tab[data-state="active"] {
+  background: var(--xb-blue-soft) !important;
+  color: var(--xb-ink) !important;
+  box-shadow: inset 0 0 0 1px rgba(77, 148, 255, 0.4) !important;
+}
+
+/* ============================================================================
+   FIRST-RUN EMPTY STATE (Add your first horse) — premium graphite
+   ========================================================================== */
+html body #root .xbar-command-main .xbar-home-atelier {
+  background:
+    radial-gradient(80% 120% at 92% -20%, rgba(77, 148, 255, 0.12), transparent 52%),
+    linear-gradient(165deg, #11161e 0%, #0c1016 60%, #0a0d12 100%) !important;
+  border: 1px solid var(--xb-line-2) !important;
+  border-radius: var(--xb-r-lg) !important;
+  box-shadow: var(--xb-shadow) !important;
+}
+html body #root .xbar-command-main .xbar-home-atelier h1 { color: var(--xb-ink) !important; letter-spacing: -0.02em; }
+html body #root .xbar-command-main .xbar-home-atelier__copy p { color: var(--xb-ink-soft) !important; }
+.xbar-command-main .xbar-home-atelier__brandline span { color: var(--xb-sand) !important; }
+.xbar-command-main .xbar-home-atelier__chips span {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid var(--xb-line-2) !important;
+  color: var(--xb-ink-soft) !important;
+}
+.xbar-command-main .xbar-home-action {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid var(--xb-line-2) !important;
+  color: var(--xb-ink) !important;
+  border-radius: var(--xb-r-sm) !important;
+}
+.xbar-command-main .xbar-home-action:hover { border-color: var(--xb-blue) !important; background: var(--xb-blue-soft) !important; }
+.xbar-command-main .xbar-home-action--primary {
+  background: linear-gradient(180deg, #4d94ff, #2f80ff) !important;
+  color: #04111f !important;
+  border-color: rgba(120, 175, 255, 0.5) !important;
+}
+html body #root .xbar-command-main .xbar-profile-card,
+html body #root .xbar-command-main .xbar-profile-card:nth-child(1),
+html body #root .xbar-command-main .xbar-profile-card:nth-child(2),
+html body #root .xbar-command-main .xbar-profile-card:nth-child(3),
+html body #root .xbar-command-main .xbar-profile-card:nth-child(4) {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0)), var(--xb-panel-2) !important;
+  border: 1px solid var(--xb-line) !important;
+  border-radius: var(--xb-r-sm) !important;
+  box-shadow: var(--xb-shadow-soft) !important;
+}
+html body #root .xbar-command-main .xbar-profile-card :is(strong, span) { color: var(--xb-ink) !important; }
+html body #root .xbar-command-main .xbar-profile-card small { color: var(--xb-ink-dim) !important; }
+html body #root .xbar-command-main .xbar-profile-card em { color: var(--xb-blue) !important; font-style: normal; }
+html body #root .xbar-command-main .xbar-profile-card__metric { color: var(--xb-ink-dim) !important; }
+.xbar-command-main .xbar-home-runway > div {
+  background: rgba(255, 255, 255, 0.022) !important;
+  border: 1px solid var(--xb-line) !important;
+  border-radius: var(--xb-r-sm) !important;
+}
+.xbar-command-main .xbar-home-runway strong { color: var(--xb-ink) !important; }
+.xbar-command-main .xbar-home-runway span,
+.xbar-command-main .xbar-home-runway small { color: var(--xb-ink-dim) !important; }
+
+/* setup flow */
+.xbar-command-main .xbar-setup-flow__header span { color: var(--xb-sand) !important; }
+.xbar-command-main .xbar-setup-flow__header h2 { color: var(--xb-ink) !important; }
+.xbar-command-main .xbar-setup-flow__header p { color: var(--xb-ink-soft) !important; }
+.xbar-command-main .xbar-sequence-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)), var(--xb-panel) !important;
+  border: 1px solid var(--xb-line) !important;
+  border-radius: var(--xb-r) !important;
+  box-shadow: var(--xb-shadow-soft) !important;
+  transition: transform 160ms ease, border-color 160ms ease;
+}
+.xbar-command-main .xbar-sequence-card:hover { transform: translateY(-3px); border-color: var(--xb-line-2) !important; }
+.xbar-command-main .xbar-sequence-card__number { color: var(--xb-blue) !important; }
+.xbar-command-main .xbar-sequence-card strong { color: var(--xb-ink) !important; }
+.xbar-command-main .xbar-sequence-card p { color: var(--xb-ink-soft) !important; }
+.xbar-command-main .xbar-sequence-card em { color: var(--xb-ink-dim) !important; font-style: normal; }
+.xbar-command-main .xbar-system-strip {
+  background: rgba(255, 255, 255, 0.022) !important;
+  border: 1px solid var(--xb-line) !important;
+  border-radius: var(--xb-r) !important;
+}
+.xbar-command-main .xbar-system-strip span { color: var(--xb-sand) !important; }
+.xbar-command-main .xbar-system-strip strong { color: var(--xb-ink) !important; }
+
+/* generic empty states inside the app */
+.xbar-command-main .empty-state {
+  border: 1px dashed var(--xb-line-2) !important;
+  border-radius: var(--xb-r) !important;
+  background: rgba(255, 255, 255, 0.015) !important;
+  color: var(--xb-ink-soft) !important;
+}
+.xbar-command-main .empty-state h3,
+.xbar-command-main .empty-state strong { color: var(--xb-ink) !important; }

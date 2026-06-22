@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { type CSSProperties, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { XbarMark } from '@/components/BrandMark';
 import { productEvent, productEventNames } from '@/lib/productEvents';
@@ -185,8 +185,8 @@ function RevenueIntelligenceShowcase() {
   const carouselCards = [...showcaseHorseCards, ...showcaseHorseCards];
 
   return (
-    <section className="revenue-intelligence-showcase" aria-labelledby="revenue-intelligence-title">
-      <div className="revenue-intelligence-showcase__copy">
+    <section className="revenue-intelligence-showcase xb-reveal" aria-labelledby="revenue-intelligence-title">
+      <div className="revenue-intelligence-showcase__copy xb-sticky">
         <p className="revenue-kicker">Horse operations dashboard</p>
         <h2 id="revenue-intelligence-title">Horse records, documents, care, and sales in one place.</h2>
         <p>
@@ -203,7 +203,7 @@ function RevenueIntelligenceShowcase() {
         </div>
       </div>
 
-      <div className="revenue-command-visual" aria-label="XBAR dashboard preview">
+      <div className="revenue-command-visual xb-reveal xb-reveal--scale" aria-label="XBAR dashboard preview" data-parallax="0.04">
         <div className="revenue-command-visual__top">
           <span>Monthly Snapshot</span>
           <strong>Records improving</strong>
@@ -292,9 +292,8 @@ export default function Landing() {
               <span>Sales that close.</span>
             </h1>
             <p className="revenue-hero__lead">
-              XBAR turns scattered paperwork, ownership, and horse documentation into trusted,
-              buyer-ready digital records &mdash; OCR-assisted intake, compliance deadlines, and
-              watermarked sale packets in one operating system.
+              One trusted record for every horse &mdash; ownership, health, documents, and
+              buyer-ready sale packets in a single system.
             </p>
             <div className="revenue-hero__actions">
               <Link className="public-action public-action--primary" to={signupPath('Professional')} onClick={() => trackPlan('Professional')}>
@@ -311,7 +310,7 @@ export default function Landing() {
               <li>Audit-logged</li>
             </ul>
           </div>
-          <div className="revenue-hero__stage">
+          <div className="revenue-hero__stage xb-reveal xb-reveal--scale" data-parallax="0.05">
             <CommandPreview />
           </div>
         </section>
@@ -328,7 +327,7 @@ export default function Landing() {
       </section>
 
       <section className="revenue-statement" aria-labelledby="reveal-heading">
-        <div className="revenue-statement__inner">
+        <div className="revenue-statement__inner xb-reveal">
           <p className="revenue-kicker">The record itself</p>
           <h2 id="reveal-heading">Every horse, resolved to a single source of truth.</h2>
           <p className="revenue-statement__lead">
@@ -339,7 +338,7 @@ export default function Landing() {
       </section>
 
       <section className="revenue-section" id="how-it-works" aria-labelledby="pipeline-heading">
-        <div className="revenue-section__header">
+        <div className="revenue-section__header xb-reveal">
           <div>
             <p className="revenue-kicker">One path for every document</p>
             <h2 id="pipeline-heading">From paperwork to ready records, in five steps.</h2>
@@ -348,7 +347,7 @@ export default function Landing() {
         </div>
         <ol className="revenue-pipeline">
           {pipeline.map((item, index) => (
-            <li className="revenue-pipeline__step" key={item.step}>
+            <li className="revenue-pipeline__step xb-reveal" key={item.step} style={{ '--xb-reveal-index': index } as CSSProperties}>
               <span className="revenue-pipeline__index">{String(index + 1).padStart(2, '0')}</span>
               <strong>{item.step}</strong>
               <p>{item.copy}</p>
@@ -359,7 +358,7 @@ export default function Landing() {
 
       <section className="revenue-section revenue-section--bordered" aria-labelledby="pillars-heading">
         <div className="revenue-section__inner">
-          <div className="revenue-section__header">
+          <div className="revenue-section__header xb-reveal">
             <div>
               <p className="revenue-kicker">What operators pay for</p>
               <h2 id="pillars-heading">Built around the workflows that cost horse businesses time and money.</h2>
@@ -367,8 +366,8 @@ export default function Landing() {
             <p>XBAR is not trying to be every kind of horse software. It is designed to solve the record, paperwork, and buyer-confidence problems that directly affect operations and sales.</p>
           </div>
           <div className="revenue-pillars">
-            {pillars.map((pillar) => (
-              <article className="revenue-pillar" key={pillar.title}>
+            {pillars.map((pillar, index) => (
+              <article className="revenue-pillar xb-reveal" key={pillar.title} style={{ '--xb-reveal-index': index } as CSSProperties}>
                 <h3>{pillar.title}</h3>
                 <p>{pillar.copy}</p>
                 <ul>
@@ -383,7 +382,7 @@ export default function Landing() {
       </section>
 
       <section className="revenue-section" aria-labelledby="pain-heading">
-        <div className="revenue-pain">
+        <div className="revenue-pain xb-reveal">
           <div className="revenue-pain__copy">
             <p className="revenue-kicker">Why now</p>
             <h2 id="pain-heading">Most horse businesses still run critical records through email, folders, binders, and memory.</h2>
@@ -399,7 +398,7 @@ export default function Landing() {
 
       <section className="revenue-section revenue-section--bordered" aria-labelledby="trust-heading">
         <div className="revenue-section__inner">
-          <div className="revenue-section__header">
+          <div className="revenue-section__header xb-reveal">
             <div>
               <p className="revenue-kicker">Trust is a product feature</p>
               <h2 id="trust-heading">Designed for records people rely on.</h2>
@@ -407,8 +406,8 @@ export default function Landing() {
             <p>Horse operations need software that is clear about what is known, what is missing, and what can safely be shared.</p>
           </div>
           <div className="revenue-trust-grid">
-            {trustPoints.map((point) => (
-              <article className="revenue-trust-card" key={point.title}>
+            {trustPoints.map((point, index) => (
+              <article className="revenue-trust-card xb-reveal" key={point.title} style={{ '--xb-reveal-index': index } as CSSProperties}>
                 <h3>{point.title}</h3>
                 <p>{point.copy}</p>
               </article>
@@ -419,7 +418,7 @@ export default function Landing() {
 
       <section className="revenue-section revenue-section--bordered" aria-labelledby="segments-heading">
         <div className="revenue-section__inner">
-          <div className="revenue-section__header">
+          <div className="revenue-section__header xb-reveal">
             <div>
               <p className="revenue-kicker">Who it's for</p>
               <h2 id="segments-heading">Built for the operations where paperwork decides the deal.</h2>
@@ -427,8 +426,8 @@ export default function Landing() {
             <p>From a single broodmare program to a multi-rider barn, XBAR gives every horse one record your team and your buyers can trust.</p>
           </div>
           <div className="revenue-trust-grid">
-            {segments.map((segment) => (
-              <article className="revenue-trust-card" key={segment.title}>
+            {segments.map((segment, index) => (
+              <article className="revenue-trust-card xb-reveal" key={segment.title} style={{ '--xb-reveal-index': index } as CSSProperties}>
                 <h3>{segment.title}</h3>
                 <p>{segment.copy}</p>
               </article>
@@ -440,7 +439,7 @@ export default function Landing() {
       <RevenueIntelligenceShowcase />
 
       <section className="revenue-section" aria-labelledby="pricing-heading">
-        <div className="revenue-section__header">
+        <div className="revenue-section__header xb-reveal">
           <div>
             <p className="revenue-kicker">Pricing</p>
             <h2 id="pricing-heading">Built for operations where paperwork has real financial consequences.</h2>
@@ -448,11 +447,11 @@ export default function Landing() {
           <p>Every plan protects the core horse record. Higher levels add collaboration, shared access, and substantially more document and storage capacity.</p>
         </div>
         <div className="revenue-plan-grid">
-          {tiers.map((tier) => {
+          {tiers.map((tier, index) => {
             const plan = subscriptionPlans[tier];
             const featured = tier === 'Professional';
             return (
-              <article className={`revenue-plan${featured ? ' revenue-plan--featured' : ''}`} key={tier}>
+              <article className={`revenue-plan xb-reveal${featured ? ' revenue-plan--featured' : ''}`} key={tier} style={{ '--xb-reveal-index': index } as CSSProperties}>
                 {featured && <span className="revenue-plan__badge">Most chosen</span>}
                 <h3>{tier}</h3>
                 <p className="revenue-plan__fit">{planFit[tier]}</p>
@@ -480,15 +479,15 @@ export default function Landing() {
 
       <section className="revenue-section revenue-section--bordered" aria-labelledby="faq-heading">
         <div className="revenue-section__inner">
-          <div className="revenue-section__header">
+          <div className="revenue-section__header xb-reveal">
             <div>
               <p className="revenue-kicker">Before you commit</p>
               <h2 id="faq-heading">Clear answers for an essential workspace.</h2>
             </div>
           </div>
           <div className="revenue-faq-grid">
-            {questions.map((item) => (
-              <article className="revenue-faq" key={item.question}>
+            {questions.map((item, index) => (
+              <article className="revenue-faq xb-reveal" key={item.question} style={{ '--xb-reveal-index': index } as CSSProperties}>
                 <h3>{item.question}</h3>
                 <p>{item.answer}</p>
               </article>

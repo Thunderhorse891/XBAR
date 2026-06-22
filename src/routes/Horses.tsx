@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { type CSSProperties, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ContextMenu';
 import { ActionMenuButton } from '@/components/InteractionSystem';
@@ -239,9 +239,9 @@ export default function Horses() {
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Horses</span>
-            <h1>Horse records with identity, documents, care, and sales readiness.</h1>
+            <h1>Every horse. One trusted record.</h1>
             <p className="command-center-briefing__copy">
-              Each file connects legal owner, location, care status, documents, sales readiness, buyer packet status, and next action.
+              Ownership, care, documents, and sale readiness &mdash; clear at a glance, before anyone opens a file.
             </p>
           </div>
           <div className="surface-hero__stats">
@@ -282,7 +282,8 @@ export default function Horses() {
             return (
               <button
                 type="button"
-                className="portfolio-mini-card"
+                className="portfolio-mini-card xb-reveal"
+                style={{ '--xb-reveal-index': index } as CSSProperties}
                 key={`${title}-${index}`}
                 disabled={!isHorse}
                 onClick={() => {
