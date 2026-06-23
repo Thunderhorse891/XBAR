@@ -198,48 +198,65 @@ export default function Dashboard() {
 
   return (
     <div className="xbx">
-      {/* HERO — editorial composition with embedded graphite intelligence */}
+      {/* HERO — full-bleed split product surface with integrated intelligence */}
       <section className="xbx-hero xb-reveal">
-        <div className="xbx-hero__atmos" aria-hidden="true">
-          <HorseContour className="xbx-hero__horse" />
-          <span className="xbx-hero__x" />
-        </div>
-        <div className="xbx-hero__main">
-          <div className="xbx-eyebrow">Ranch operations · {ranch}</div>
-          <h1 className="xbx-hero__title">
-            {urgencyCount > 0 ? `${urgencyCount} control point${urgencyCount === 1 ? '' : 's'} need a decision.` : 'Your barn is clear.'}
-          </h1>
-          <p className="xbx-hero__lead">
-            {urgencyCount > 0
-              ? 'Start with the items most likely to block a sale or hold up a transfer. XBAR keeps the proof trail intact while you clear them.'
-              : 'Use the clear window to strengthen buyer readiness, refresh documents, and prepare the next sale packet.'}
-          </p>
-          <div className="xbx-hero__actions">
-            <button type="button" className="xbx-btn xbx-btn--primary" onClick={() => navigate(nextMovePath)}>Open next move</button>
-            <Link to="/horses" className="xbx-btn">View the herd</Link>
+        <div className="xbx-hero__face">
+          <div className="xbx-hero__atmos" aria-hidden="true">
+            <svg className="xbx-hero__xmark" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet">
+              <path d="M40 32 L160 168 M160 32 L40 168" />
+            </svg>
+            <HorseContour className="xbx-hero__horse" />
+          </div>
+          <div className="xbx-hero__main">
+            <div className="xbx-hero__tagrow">
+              <span className="xbx-hero__brandtag">XBAR</span>
+              <span className="xbx-hero__eyebrow">Ranch operations · {ranch}</span>
+            </div>
+            <h1 className="xbx-hero__title">
+              {urgencyCount > 0 ? `${urgencyCount} control point${urgencyCount === 1 ? '' : 's'} need a decision today.` : 'Your barn is clear today.'}
+            </h1>
+            <p className="xbx-hero__lead">
+              {urgencyCount > 0
+                ? 'These are the horses, documents, and transfers most likely to hold up a sale right now. Clear them — XBAR keeps the proof trail intact.'
+                : 'Every horse, document, and transfer is current. Use the clear window to prepare the next buyer-ready packet.'}
+            </p>
+            <div className="xbx-hero__actions">
+              <button type="button" className="xbx-btn xbx-btn--primary" onClick={() => navigate(nextMovePath)}>Open next move</button>
+              <Link to="/horses" className="xbx-btn">View the herd</Link>
+            </div>
+            <div className="xbx-hero__trust">
+              <span><strong>{horses.length}</strong> horses managed</span><i />
+              <span><strong>{packetReadiness}%</strong> sale ready</span><i />
+              <span><strong>{transferGaps.length}</strong> release blockers</span>
+            </div>
           </div>
         </div>
 
-        <div className="xbx-intelpod">
-          <div className="xbx-intelpod__head"><span>Operational intelligence</span><i className="xbx-live" /></div>
-          <div className="xbx-score">
+        <div className="xbx-hero__intel">
+          <div className="xbx-hero__intel-head"><span>Today's sale readiness</span><i className="xbx-live" /></div>
+          <div className="xbx-readiness">
             <div className="xbx-score__ring" style={{ '--val': packetReadiness } as CSSProperties}>
               <span className="xbx-score__pct">{packetReadiness}<i>%</i></span>
             </div>
-            <div className="xbx-score__copy">
-              <strong>Sale Readiness Score</strong>
-              <span>{lanes.ready.length} of {horses.length} horses buyer-ready</span>
+            <div className="xbx-readiness__copy">
+              <strong>{lanes.ready.length} of {horses.length}</strong>
+              <span>horses buyer-ready</span>
             </div>
           </div>
-          <div className="xbx-intelpod__risks">
-            <div className="xbx-risk"><span className={`xbx-dot xbx-dot--${transferGaps.length ? 'rose' : 'emerald'}`} /><span className="xbx-risk__label">Release blockers</span><strong>{transferGaps.length}</strong></div>
-            <div className="xbx-risk"><span className={`xbx-dot xbx-dot--${documentsMissing ? 'amber' : 'emerald'}`} /><span className="xbx-risk__label">Document risk</span><strong>{documentsMissing}</strong></div>
-            <div className="xbx-risk"><span className="xbx-dot xbx-dot--blue" /><span className="xbx-risk__label">Buyer deals open</span><strong>{openDeals.length}</strong></div>
+          <div className="xbx-readbar" aria-hidden="true">
+            <span className="xbx-readbar__seg xbx-readbar__seg--ready" style={{ flexGrow: lanes.ready.length || 0.04 } as CSSProperties} />
+            <span className="xbx-readbar__seg xbx-readbar__seg--review" style={{ flexGrow: lanes.review.length || 0.04 } as CSSProperties} />
+            <span className="xbx-readbar__seg xbx-readbar__seg--blocked" style={{ flexGrow: lanes.blocked.length || 0.04 } as CSSProperties} />
           </div>
-          <button type="button" className="xbx-intelpod__resolve" onClick={() => navigate(nextMovePath)}>
-            <span className="xbx-intelpod__nextlabel">Next decision</span>
-            <span className="xbx-intelpod__nextval">{nextMove}</span>
-            <span className="xbx-intelpod__go">Resolve now →</span>
+          <div className="xbx-readlegend">
+            <span><i className="xbx-dot xbx-dot--emerald" />Ready <strong>{lanes.ready.length}</strong></span>
+            <span><i className="xbx-dot xbx-dot--amber" />Review <strong>{lanes.review.length}</strong></span>
+            <span><i className="xbx-dot xbx-dot--rose" />Blocked <strong>{lanes.blocked.length}</strong></span>
+          </div>
+          <button type="button" className="xbx-hero__resolve" onClick={() => navigate(nextMovePath)}>
+            <span className="xbx-hero__resolve-label">Next decision</span>
+            <span className="xbx-hero__resolve-val">{nextMove}</span>
+            <span className="xbx-hero__resolve-go">Resolve now →</span>
           </button>
         </div>
       </section>

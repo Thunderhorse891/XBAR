@@ -593,3 +593,101 @@
   .xbar-command-main .xbx-intelpod { margin-top: 4px; }
   .xbar-command-main .xbx-deals, .xbar-command-main .xbx-intel { position: static; }
 }
+
+/* ============================================================================
+   DASHBOARD HERO v3 — full-bleed split product surface (light editorial face +
+   integrated graphite sale-readiness intelligence), oversized X brand mark.
+   ========================================================================== */
+.xbar-command-main .xbx-hero {
+  display: grid;
+  grid-template-columns: 1.62fr 0.94fr;
+  gap: 0;
+  padding: 0;
+  align-items: stretch;
+  border-radius: 26px;
+  border: 1px solid var(--xb-line);
+  overflow: hidden;
+  background: #fff;
+  box-shadow: var(--xb-shadow);
+}
+.xbar-command-main .xbx-hero::before { content: none; }
+
+.xbar-command-main .xbx-hero__face {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(48px, 5vw, 92px) clamp(40px, 4vw, 76px);
+  background: linear-gradient(176deg, #fffdf9 0%, #f4f1ea 100%);
+}
+.xbar-command-main .xbx-hero__atmos { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.xbar-command-main .xbx-hero__xmark { position: absolute; right: -7%; top: -26%; width: min(540px, 64%); height: auto; color: #20242b; opacity: 0.05; }
+.xbar-command-main .xbx-hero__xmark path { stroke: currentColor; stroke-width: 13; stroke-linecap: round; fill: none; }
+.xbar-command-main .xbx-hero__horse { position: absolute; left: -5%; bottom: -20%; width: min(440px, 50%); height: auto; color: #5b5345; opacity: 0.08; }
+.xbar-command-main .xbx-hero__horse path { fill: none; stroke: currentColor; stroke-width: 1.4; }
+.xbar-command-main .xbx-hero__main { position: relative; z-index: 1; }
+
+.xbar-command-main .xbx-hero__tagrow { display: flex; align-items: center; gap: 14px; }
+.xbar-command-main .xbx-hero__brandtag { font-weight: 800; letter-spacing: 0.2em; font-size: 0.86rem; color: var(--xb-ink); padding: 5px 11px 4px; border: 1.5px solid var(--xb-ink); border-radius: 7px; }
+.xbar-command-main .xbx-hero__eyebrow { font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--xb-sand); font-weight: 600; }
+.xbar-command-main .xbx-hero__title {
+  margin: 26px 0 0;
+  font-size: clamp(2.9rem, 5vw, 4.7rem);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  font-weight: 680;
+  color: var(--xb-ink);
+  max-width: 16ch;
+}
+.xbar-command-main .xbx-hero__lead { margin: 24px 0 34px; max-width: 50ch; font-size: 1.1rem; line-height: 1.6; color: var(--xb-ink-soft); }
+.xbar-command-main .xbx-hero__trust { display: flex; align-items: center; gap: 18px; margin-top: 36px; font-size: 0.84rem; color: var(--xb-ink-soft); flex-wrap: wrap; }
+.xbar-command-main .xbx-hero__trust strong { color: var(--xb-ink); font-weight: 700; }
+.xbar-command-main .xbx-hero__trust i { width: 1px; height: 26px; background: var(--xb-line-2); }
+
+/* integrated dark intelligence column */
+.xbar-command-main .xbx-hero__intel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: clamp(34px, 3vw, 48px) clamp(30px, 2.6vw, 42px);
+  color: var(--xb-on-dark);
+  background:
+    radial-gradient(95% 50% at 100% 0%, rgba(47, 111, 224, 0.24), transparent 62%),
+    linear-gradient(168deg, #1c2430 0%, #141a23 58%, #0e131a 100%);
+}
+.xbar-command-main .xbx-hero__intel::before { content: ''; position: absolute; left: 0; top: 8%; bottom: 8%; width: 1px; background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.16), transparent); }
+.xbar-command-main .xbx-hero__intel-head { display: flex; align-items: center; justify-content: space-between; font-size: 0.68rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--xb-on-dark-sand); font-weight: 600; }
+.xbar-command-main .xbx-readiness { display: flex; align-items: center; gap: 18px; }
+.xbar-command-main .xbx-readiness__copy strong { display: block; font-size: 1.55rem; font-weight: 680; color: #fff; letter-spacing: -0.02em; line-height: 1; }
+.xbar-command-main .xbx-readiness__copy span { font-size: 0.82rem; color: var(--xb-on-dark-soft); }
+.xbar-command-main .xbx-hero__intel .xbx-score__ring { width: 88px; height: 88px; }
+.xbar-command-main .xbx-hero__intel .xbx-score__ring::before { background: #141a23; }
+.xbar-command-main .xbx-hero__intel .xbx-score__pct { font-size: 1.5rem; }
+
+.xbar-command-main .xbx-readbar { display: flex; gap: 4px; height: 12px; }
+.xbar-command-main .xbx-readbar__seg { border-radius: 3px; min-width: 7px; }
+.xbar-command-main .xbx-readbar__seg--ready { background: var(--xb-emerald); }
+.xbar-command-main .xbx-readbar__seg--review { background: var(--xb-amber); }
+.xbar-command-main .xbx-readbar__seg--blocked { background: var(--xb-red); }
+.xbar-command-main .xbx-readlegend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 0.82rem; color: var(--xb-on-dark-soft); }
+.xbar-command-main .xbx-readlegend span { display: flex; align-items: center; gap: 7px; }
+.xbar-command-main .xbx-readlegend strong { color: #fff; font-variant-numeric: tabular-nums; }
+
+.xbar-command-main .xbx-hero__resolve {
+  margin-top: auto; display: flex; flex-direction: column; gap: 3px; text-align: left; cursor: pointer;
+  padding: 16px 18px; border-radius: 13px;
+  border: 1px solid rgba(47, 111, 224, 0.42);
+  background: rgba(47, 111, 224, 0.16);
+  transition: background 150ms ease, transform 150ms ease;
+}
+.xbar-command-main .xbx-hero__resolve:hover { background: rgba(47, 111, 224, 0.26); transform: translateY(-1px); }
+.xbar-command-main .xbx-hero__resolve-label { font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase; font-weight: 700; color: #6fa3ff; }
+.xbar-command-main .xbx-hero__resolve-val { color: #fff; font-weight: 600; font-size: 0.96rem; line-height: 1.25; }
+.xbar-command-main .xbx-hero__resolve-go { color: #6fa3ff; font-weight: 650; font-size: 0.82rem; margin-top: 3px; }
+
+@media (max-width: 1080px) {
+  .xbar-command-main .xbx-hero { grid-template-columns: 1fr; }
+  .xbar-command-main .xbx-hero__intel::before { display: none; }
+}
