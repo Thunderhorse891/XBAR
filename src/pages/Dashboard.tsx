@@ -4,7 +4,7 @@ import { XbarMark } from '@/components/BrandMark';
 import { buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
-import { useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
+import { useXbarStore } from '@/store/useXbarStore';
 
 const EMPTY_PROFILE_CARDS = [
   { label: 'Horse Record', title: 'Name, barn, owner, status', meta: 'Start with the basic file.', status: 'Ready', metric: '01' },
@@ -44,7 +44,6 @@ export default function Dashboard() {
   const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
   const salesLeads = useXbarStore((state) => state.salesLeads);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
-  const roleWorkspace = useCurrentRoleWorkspace();
 
   const hasWorkspaceData = Boolean(
     horses.length || documents.length || ownershipRecords.length || expenseReceipts.length || salesLeads.length,
@@ -153,7 +152,6 @@ export default function Dashboard() {
 
   const openDeals = salesLeads.filter((lead) => lead.stage === 'Offer' || lead.stage === 'Qualified');
   const revenueAtRisk = openDeals.filter((lead) => blockedIds.has(lead.horseId)).reduce((sum, lead) => sum + (lead.offerAmount ?? 0), 0);
-  const offersOut = salesLeads.filter((lead) => lead.stage === 'Offer').length;
 
   const urgencyCount = transferGaps.length + careDueCount + reviewQueue.length;
   const nextMove = transferGaps.length
@@ -175,11 +173,21 @@ export default function Dashboard() {
     { label: 'Documents missing', value: String(documentsMissing), hint: 'across packets', tone: documentsMissing ? 'amber' : 'emerald', path: '/documents' },
   ];
 
-  const priorityActions: { key: string; tone: Tone; label: string; reason: string; action: string; path: string }[] = [
-    ...transferGaps.map((gap) => ({ key: `tg-${gap.horseId}`, tone: 'rose' as Tone, label: `Resolve transfer blockers · ${gap.horseName}`, reason: gap.reasons.slice(0, 2).join(' · ') || `${gap.pendingCount} documents pending`, action: 'Ownership', path: '/ownership' })),
-    ...careBoard.filter((row) => row.signals.some((signal) => signal.status === 'due')).map((row) => ({ key: `care-${row.horseId}`, tone: 'amber' as Tone, label: `Clear care holds · ${row.horseName}`, reason: row.signals.filter((signal) => signal.status !== 'clear').slice(0, 2).map((signal) => signal.label).join(' · ') || 'Care due', action: 'Health', path: '/medical' })),
-    ...reviewQueue.slice(0, 3).map((document) => ({ key: `doc-${document.id}`, tone: 'blue' as Tone, label: `Review ${document.title}`, reason: `${document.type} · waiting in queue`, action: 'Documents', path: '/documents' })),
+  const priorityActions: { key: string; tone: Tone; severity: string; horse: string; problem: string; impact: string; detail: string; action: string; path: string }[] = [
+    ...transferGaps.map((gap) => ({ key: `tg-${gap.horseId}`, tone: 'rose' as Tone, severity: 'Critical', horse: gap.horseName, problem: 'Title & transfer blocked', impact: 'Sale cannot close until ownership clears', detail: gap.reasons.slice(0, 2).join(' · ') || `${gap.pendingCount} documents pending`, action: 'Open ownership', path: '/ownership' })),
+    ...careBoard.filter((row) => row.signals.some((signal) => signal.status === 'due')).map((row) => ({ key: `care-${row.horseId}`, tone: 'amber' as Tone, severity: 'High', horse: row.horseName, problem: 'Care hold due', impact: 'Welfare risk and lost buyer trust', detail: row.signals.filter((signal) => signal.status !== 'clear').slice(0, 2).map((signal) => signal.label).join(' · ') || 'Care due', action: 'Open health', path: '/medical' })),
+    ...reviewQueue.slice(0, 3).map((document) => ({ key: `doc-${document.id}`, tone: 'blue' as Tone, severity: 'Medium', horse: horses.find((horse) => horse.id === document.horseId)?.name ?? 'Document queue', problem: `Review ${document.title}`, impact: 'Buyer packet stays incomplete', detail: `${document.type} · waiting in queue`, action: 'Open documents', path: '/documents' })),
   ].slice(0, 5);
+
+  const stageOrder = ['New', 'Qualified', 'Offer', 'Closed'] as const;
+  const dealsByStage = stageOrder.map((stage) => ({ stage, count: salesLeads.filter((lead) => lead.stage === stage).length }));
+  const dealValue = salesLeads.reduce((sum, lead) => sum + (lead.offerAmount ?? 0), 0);
+
+  const laneAction: Record<LaneKey, string> = {
+    ready: 'Stage buyer packets',
+    review: 'Clear documents & vet review',
+    blocked: 'Resolve ownership holds',
+  };
 
   const activity = horses
     .flatMap((horse) => (horse.activity ?? []).map((event) => ({ ...event, horseName: horse.name })))
@@ -190,10 +198,14 @@ export default function Dashboard() {
 
   return (
     <div className="xbx">
-      {/* HERO FOCAL MODULE */}
+      {/* HERO — editorial composition with embedded graphite intelligence */}
       <section className="xbx-hero xb-reveal">
+        <div className="xbx-hero__atmos" aria-hidden="true">
+          <HorseContour className="xbx-hero__horse" />
+          <span className="xbx-hero__x" />
+        </div>
         <div className="xbx-hero__main">
-          <div className="xbx-eyebrow">{ranch} · {roleWorkspace.label}</div>
+          <div className="xbx-eyebrow">Ranch operations · {ranch}</div>
           <h1 className="xbx-hero__title">
             {urgencyCount > 0 ? `${urgencyCount} control point${urgencyCount === 1 ? '' : 's'} need a decision.` : 'Your barn is clear.'}
           </h1>
@@ -204,19 +216,32 @@ export default function Dashboard() {
           </p>
           <div className="xbx-hero__actions">
             <button type="button" className="xbx-btn xbx-btn--primary" onClick={() => navigate(nextMovePath)}>Open next move</button>
-            <Link to="/horses" className="xbx-btn">View horses</Link>
+            <Link to="/horses" className="xbx-btn">View the herd</Link>
           </div>
         </div>
-        <aside className="xbx-focus">
-          <div className="xbx-focus__label">Next decision</div>
-          <div className="xbx-focus__headline">{nextMove}</div>
-          <ul className="xbx-focus__points">
-            <li><span className={`xbx-dot xbx-dot--${transferGaps.length ? 'rose' : 'emerald'}`} />{transferGaps.length} title &amp; transfer holds</li>
-            <li><span className={`xbx-dot xbx-dot--${careDueCount ? 'amber' : 'emerald'}`} />{careDueCount} care holds due</li>
-            <li><span className={`xbx-dot xbx-dot--${reviewQueue.length ? 'amber' : 'emerald'}`} />{reviewQueue.length} documents in review</li>
-          </ul>
-          <button type="button" className="xbx-focus__cta" onClick={() => navigate(nextMovePath)}>Resolve now →</button>
-        </aside>
+
+        <div className="xbx-intelpod">
+          <div className="xbx-intelpod__head"><span>Operational intelligence</span><i className="xbx-live" /></div>
+          <div className="xbx-score">
+            <div className="xbx-score__ring" style={{ '--val': packetReadiness } as CSSProperties}>
+              <span className="xbx-score__pct">{packetReadiness}<i>%</i></span>
+            </div>
+            <div className="xbx-score__copy">
+              <strong>Sale Readiness Score</strong>
+              <span>{lanes.ready.length} of {horses.length} horses buyer-ready</span>
+            </div>
+          </div>
+          <div className="xbx-intelpod__risks">
+            <div className="xbx-risk"><span className={`xbx-dot xbx-dot--${transferGaps.length ? 'rose' : 'emerald'}`} /><span className="xbx-risk__label">Release blockers</span><strong>{transferGaps.length}</strong></div>
+            <div className="xbx-risk"><span className={`xbx-dot xbx-dot--${documentsMissing ? 'amber' : 'emerald'}`} /><span className="xbx-risk__label">Document risk</span><strong>{documentsMissing}</strong></div>
+            <div className="xbx-risk"><span className="xbx-dot xbx-dot--blue" /><span className="xbx-risk__label">Buyer deals open</span><strong>{openDeals.length}</strong></div>
+          </div>
+          <button type="button" className="xbx-intelpod__resolve" onClick={() => navigate(nextMovePath)}>
+            <span className="xbx-intelpod__nextlabel">Next decision</span>
+            <span className="xbx-intelpod__nextval">{nextMove}</span>
+            <span className="xbx-intelpod__go">Resolve now →</span>
+          </button>
+        </div>
       </section>
 
       {/* KPI STRIP */}
@@ -237,35 +262,47 @@ export default function Dashboard() {
           <Link to="/horses" className="xbx-link">All horses →</Link>
         </header>
         <div className="xbx-lanes">
-          {([['ready', 'Ready', 'emerald'], ['review', 'Needs review', 'amber'], ['blocked', 'Blocked', 'rose']] as [LaneKey, string, Tone][]).map(([key, label, tone]) => (
+          {([['ready', 'Ready', 'emerald', '/horses'], ['review', 'Needs review', 'amber', '/documents'], ['blocked', 'Blocked', 'rose', '/ownership']] as [LaneKey, string, Tone, string][]).map(([key, label, tone, path]) => (
             <div className={`xbx-lane xbx-lane--${tone}`} key={key}>
               <div className="xbx-lane__head"><span className={`xbx-dot xbx-dot--${tone}`} />{label}<em>{lanes[key].length}</em></div>
               <div className="xbx-lane__items">
-                {lanes[key].slice(0, 6).map((horse) => (
+                {lanes[key].slice(0, 5).map((horse) => (
                   <button key={horse.id} type="button" className="xbx-asset-chip" onClick={() => navigate(`/horses/${horse.id}`)}>
-                    <strong>{horse.name}</strong>
-                    <span>{horse.location.barn} · {Math.round(horse.readiness.score)}%</span>
+                    <span className="xbx-asset-chip__id">{horse.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span>
+                    <span className="xbx-asset-chip__body">
+                      <strong>{horse.name}</strong>
+                      <span>{horse.location.barn} · {horse.owner}</span>
+                    </span>
+                    <span className="xbx-asset-chip__score">{Math.round(horse.readiness.score)}%</span>
                   </button>
                 ))}
-                {!lanes[key].length ? <p className="xbx-lane__empty">None</p> : null}
+                {!lanes[key].length ? <p className="xbx-lane__empty">No horses in this lane.</p> : null}
               </div>
+              <button type="button" className="xbx-lane__action" onClick={() => navigate(path)}>{laneAction[key]} →</button>
             </div>
           ))}
         </div>
       </section>
 
-      {/* BOARD: priority actions + intelligence */}
+      {/* BOARD: priority actions intelligence + buyer deal status */}
       <section className="xbx-board">
         <div className="xbx-priority xb-reveal">
           <header className="xbx-section-head"><div><div className="xbx-eyebrow">Priority actions</div><h2>What to fix first.</h2></div></header>
           {priorityActions.length ? (
             <ol className="xbx-actions">
               {priorityActions.map((item, index) => (
-                <li key={item.key} className="xbx-action xb-reveal" style={{ '--xb-reveal-index': index } as CSSProperties}>
-                  <span className="xbx-action__rank">{String(index + 1).padStart(2, '0')}</span>
-                  <span className={`xbx-action__bar xbx-action__bar--${item.tone}`} />
-                  <div className="xbx-action__body"><strong>{item.label}</strong><span>{item.reason}</span></div>
-                  <button type="button" className="xbx-action__cta" onClick={() => navigate(item.path)}>{item.action} →</button>
+                <li key={item.key} className={`xbx-pa xbx-pa--${item.tone} xb-reveal`} style={{ '--xb-reveal-index': index } as CSSProperties}>
+                  <span className="xbx-pa__rank">{String(index + 1).padStart(2, '0')}</span>
+                  <div className="xbx-pa__body">
+                    <div className="xbx-pa__top">
+                      <span className={`xbx-sev xbx-sev--${item.tone}`}>{item.severity}</span>
+                      <span className="xbx-pa__horse">{item.horse}</span>
+                    </div>
+                    <strong className="xbx-pa__problem">{item.problem}</strong>
+                    <span className="xbx-pa__detail">{item.detail}</span>
+                    <span className="xbx-pa__impact"><i className="xbx-pa__impact-rule" />{item.impact}</span>
+                  </div>
+                  <button type="button" className="xbx-pa__cta" onClick={() => navigate(item.path)}>{item.action} →</button>
                 </li>
               ))}
             </ol>
@@ -274,29 +311,26 @@ export default function Dashboard() {
           )}
         </div>
 
-        <aside className="xbx-intel xb-reveal">
-          <div className="xbx-intel__head"><div className="xbx-eyebrow">Intelligence</div></div>
-          <div className="xbx-intel__block">
-            <span className="xbx-intel__label">Buyer deals</span>
-            <strong className="xbx-intel__value">{openDeals.length} open</strong>
-            <span className="xbx-intel__meta">{offersOut} at offer · {formatCompactCurrency(revenueAtRisk)} exposed</span>
+        <div className="xbx-deals xb-reveal">
+          <div className="xbx-deals__head"><div className="xbx-eyebrow">Buyer deal status</div><h3>Pipeline</h3></div>
+          <div className="xbx-deals__hero">
+            <strong>{openDeals.length}</strong>
+            <span>active deals · {formatCompactCurrency(dealValue)} in play</span>
           </div>
-          <div className="xbx-intel__block">
-            <span className="xbx-intel__label">Document risk</span>
-            <strong className="xbx-intel__value">{documentsMissing} missing</strong>
-            <span className="xbx-intel__meta">{reviewQueue.length} awaiting review</span>
+          <div className="xbx-deals__stages">
+            {dealsByStage.map((entry) => (
+              <button key={entry.stage} type="button" className="xbx-deals__stage" onClick={() => navigate('/sales')}>
+                <span className="xbx-deals__stage-label">{entry.stage}</span>
+                <span className="xbx-deals__stage-count">{entry.count}</span>
+              </button>
+            ))}
           </div>
-          <div className="xbx-intel__block">
-            <span className="xbx-intel__label">Release blockers</span>
-            <strong className="xbx-intel__value">{transferGaps.length}</strong>
-            <span className="xbx-intel__meta">title &amp; transfer</span>
+          <div className="xbx-deals__risk">
+            <span className="xbx-dot xbx-dot--rose" />
+            <span>{formatCompactCurrency(revenueAtRisk)} exposed behind release blockers</span>
           </div>
-          <div className="xbx-intel__block xbx-intel__block--meter">
-            <span className="xbx-intel__label">Packet readiness</span>
-            <strong className="xbx-intel__value">{packetReadiness}%</strong>
-            <div className="xbx-meter"><i style={{ width: `${packetReadiness}%` }} /></div>
-          </div>
-        </aside>
+          <button type="button" className="xbx-deals__cta" onClick={() => navigate('/sales')}>Open sales pipeline →</button>
+        </div>
       </section>
 
       {/* ACTIVITY TRAIL */}
@@ -305,11 +339,11 @@ export default function Dashboard() {
         {activity.length ? (
           <ul className="xbx-timeline">
             {activity.map((event) => (
-              <li key={event.id} className="xbx-tl">
+              <li key={event.id} className={`xbx-tl xbx-tl--${event.category.toLowerCase()}`}>
                 <span className="xbx-tl__node" />
                 <div className="xbx-tl__body">
-                  <div className="xbx-tl__top"><strong>{event.title}</strong><time>{formatDateLabel(event.date)}</time></div>
-                  <span className="xbx-tl__meta">{event.horseName} · {event.category}{event.owner ? ` · ${event.owner}` : ''}</span>
+                  <div className="xbx-tl__top"><span className="xbx-tl__cat">{event.category}</span><strong>{event.title}</strong><time>{formatDateLabel(event.date)}</time></div>
+                  <span className="xbx-tl__meta">{event.horseName}{event.owner ? ` · ${event.owner}` : ''}</span>
                   {event.summary ? <p>{event.summary}</p> : null}
                 </div>
               </li>

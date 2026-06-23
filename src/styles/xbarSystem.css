@@ -132,6 +132,21 @@ html body #root .xbar-command-topbar input:focus {
 /* ============================================================================
    SIDEBAR — light, premium brand presence + refined nav
    ========================================================================== */
+/* ============================================================================
+   TYPEFACE — crisp neutral sans for the entire logged-in app (Linear/Vercel).
+   Editorial serif (Fraunces) is reserved for the marketing/landing surfaces.
+   ========================================================================== */
+.xbar-command-shell {
+  --xb-font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+.xbar-command-shell,
+.xbar-command-shell *:not(code):not(kbd):not(pre):not(.xbar-side__wordmark) {
+  font-family: var(--xb-font-sans) !important;
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+}
+.xbar-side__wordmark { font-family: var(--xb-font-sans) !important; }
+
 .xbar-command-main { min-width: 0; }
 
 .xbar-side {
