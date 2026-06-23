@@ -165,29 +165,33 @@ export default function Dashboard() {
           : 'Prepare the next buyer-ready horse record';
   const nextMovePath = transferGaps.length ? '/ownership' : careDueCount ? '/medical' : reviewQueue.length ? '/documents' : openDeals.length ? '/sales' : '/horses';
 
-  const kpis: { label: string; value: string; hint: string; tone: Tone; path: string }[] = [
-    { label: 'Sale ready', value: String(lanes.ready.length), hint: `of ${horses.length} assets`, tone: 'emerald', path: '/horses' },
-    { label: 'Needs review', value: String(reviewQueue.length), hint: 'documents', tone: reviewQueue.length ? 'amber' : 'slate', path: '/documents' },
-    { label: 'Blocked', value: String(lanes.blocked.length), hint: 'release holds', tone: lanes.blocked.length ? 'rose' : 'slate', path: '/ownership' },
-    { label: 'Revenue at risk', value: formatCompactCurrency(revenueAtRisk), hint: `${openDeals.length} open deals`, tone: revenueAtRisk ? 'rose' : 'slate', path: '/sales' },
-    { label: 'Documents missing', value: String(documentsMissing), hint: 'across packets', tone: documentsMissing ? 'amber' : 'emerald', path: '/documents' },
-  ];
-
   const priorityActions: { key: string; tone: Tone; severity: string; horse: string; problem: string; impact: string; detail: string; action: string; path: string }[] = [
     ...transferGaps.map((gap) => ({ key: `tg-${gap.horseId}`, tone: 'rose' as Tone, severity: 'Critical', horse: gap.horseName, problem: 'Title & transfer blocked', impact: 'Sale cannot close until ownership clears', detail: gap.reasons.slice(0, 2).join(' · ') || `${gap.pendingCount} documents pending`, action: 'Open ownership', path: '/ownership' })),
     ...careBoard.filter((row) => row.signals.some((signal) => signal.status === 'due')).map((row) => ({ key: `care-${row.horseId}`, tone: 'amber' as Tone, severity: 'High', horse: row.horseName, problem: 'Care hold due', impact: 'Welfare risk and lost buyer trust', detail: row.signals.filter((signal) => signal.status !== 'clear').slice(0, 2).map((signal) => signal.label).join(' · ') || 'Care due', action: 'Open health', path: '/medical' })),
     ...reviewQueue.slice(0, 3).map((document) => ({ key: `doc-${document.id}`, tone: 'blue' as Tone, severity: 'Medium', horse: horses.find((horse) => horse.id === document.horseId)?.name ?? 'Document queue', problem: `Review ${document.title}`, impact: 'Buyer packet stays incomplete', detail: `${document.type} · waiting in queue`, action: 'Open documents', path: '/documents' })),
   ].slice(0, 5);
 
-  const stageOrder = ['New', 'Qualified', 'Offer', 'Closed'] as const;
-  const dealsByStage = stageOrder.map((stage) => ({ stage, count: salesLeads.filter((lead) => lead.stage === stage).length }));
-  const dealValue = salesLeads.reduce((sum, lead) => sum + (lead.offerAmount ?? 0), 0);
-
-  const laneAction: Record<LaneKey, string> = {
-    ready: 'Stage buyer packets',
-    review: 'Clear documents & vet review',
-    blocked: 'Resolve ownership holds',
+  const laneMeta: Record<LaneKey, { label: string; tone: Tone; action: string; path: string }> = {
+    ready: { label: 'Ready', tone: 'emerald', action: 'Stage buyer packets', path: '/horses' },
+    review: { label: 'Needs review', tone: 'amber', action: 'Clear documents & vet review', path: '/documents' },
+    blocked: { label: 'Blocked', tone: 'rose', action: 'Resolve ownership holds', path: '/ownership' },
   };
+
+  // Document Risk Map — aggregate missing release-evidence slots by type
+  const docRiskMap = (() => {
+    const counts = new Map<string, number>();
+    commandPackets.forEach((item) => item.packet.saleSlots.forEach((slot) => {
+      if (slot.status !== 'ready') counts.set(slot.label, (counts.get(slot.label) ?? 0) + 1);
+    }));
+    return [...counts.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count).slice(0, 6);
+  })();
+
+  // Ownership confidence
+  const clearTitle = horses.filter((horse) => !blockedIds.has(horse.id)).length;
+  const ownershipConfidence = horses.length ? Math.round((clearTitle / horses.length) * 100) : 0;
+
+  const buyerSafe = lanes.ready.length;
+  const buyerSafePct = horses.length ? Math.round((buyerSafe / horses.length) * 100) : 0;
 
   const activity = horses
     .flatMap((horse) => (horse.activity ?? []).map((event) => ({ ...event, horseName: horse.name })))
@@ -261,115 +265,150 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* KPI STRIP */}
-      <section className="xbx-kpis xb-reveal">
-        {kpis.map((kpi, index) => (
-          <button key={kpi.label} type="button" className={`xbx-kpi xbx-kpi--${kpi.tone}`} style={{ '--xb-reveal-index': index } as CSSProperties} onClick={() => navigate(kpi.path)}>
-            <span className="xbx-kpi__label">{kpi.label}</span>
-            <span className="xbx-kpi__value">{kpi.value}</span>
-            <span className="xbx-kpi__hint">{kpi.hint}</span>
-          </button>
-        ))}
-      </section>
+      {/* EDITORIAL STAGE — asymmetric main column + sticky intelligence rail */}
+      <div className="xbx-stage">
+        <main className="xbx-stage__main">
 
-      {/* SALE READINESS RAIL */}
-      <section className="xbx-rail xb-reveal">
-        <header className="xbx-section-head">
-          <div><div className="xbx-eyebrow">Sale readiness</div><h2>Where every horse stands.</h2></div>
-          <Link to="/horses" className="xbx-link">All horses →</Link>
-        </header>
-        <div className="xbx-lanes">
-          {([['ready', 'Ready', 'emerald', '/horses'], ['review', 'Needs review', 'amber', '/documents'], ['blocked', 'Blocked', 'rose', '/ownership']] as [LaneKey, string, Tone, string][]).map(([key, label, tone, path]) => (
-            <div className={`xbx-lane xbx-lane--${tone}`} key={key}>
-              <div className="xbx-lane__head"><span className={`xbx-dot xbx-dot--${tone}`} />{label}<em>{lanes[key].length}</em></div>
-              <div className="xbx-lane__items">
-                {lanes[key].slice(0, 5).map((horse) => (
-                  <button key={horse.id} type="button" className="xbx-asset-chip" onClick={() => navigate(`/horses/${horse.id}`)}>
-                    <span className="xbx-asset-chip__id">{horse.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span>
-                    <span className="xbx-asset-chip__body">
-                      <strong>{horse.name}</strong>
-                      <span>{horse.location.barn} · {horse.owner}</span>
-                    </span>
-                    <span className="xbx-asset-chip__score">{Math.round(horse.readiness.score)}%</span>
+          {/* SALE READINESS BOARD */}
+          <section className="xbx-section xb-reveal">
+            <header className="xbx-section-head">
+              <div><div className="xbx-eyebrow">Sale readiness board</div><h2>Where every horse stands.</h2></div>
+              <Link to="/horses" className="xbx-link">All horses →</Link>
+            </header>
+            <div className="xbx-lanes">
+              {(['ready', 'review', 'blocked'] as LaneKey[]).map((key) => {
+                const meta = laneMeta[key];
+                return (
+                  <div className={`xbx-lane xbx-lane--${meta.tone}`} key={key}>
+                    <div className="xbx-lane__head"><span className={`xbx-dot xbx-dot--${meta.tone}`} />{meta.label}<em>{lanes[key].length}</em></div>
+                    <div className="xbx-lane__items">
+                      {lanes[key].slice(0, 5).map((horse) => {
+                        const packet = commandPackets.find((item) => item.horse.id === horse.id)?.packet;
+                        const missing = packet ? packet.saleSlots.filter((slot) => slot.status !== 'ready').length : 0;
+                        const isBlocked = blockedIds.has(horse.id);
+                        return (
+                          <button key={horse.id} type="button" className="xbx-acard" onClick={() => navigate(`/horses/${horse.id}`)}>
+                            <span className="xbx-acard__id">{horse.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span>
+                            <span className="xbx-acard__body">
+                              <strong>{horse.name}</strong>
+                              <span className="xbx-acard__owner">{horse.ownerEntity || horse.owner}</span>
+                              <span className="xbx-acard__chips">
+                                <i className={`xbx-mchip xbx-mchip--${missing ? 'amber' : 'emerald'}`}>{missing ? `${missing} docs` : 'Docs clear'}</i>
+                                <i className={`xbx-mchip xbx-mchip--${isBlocked ? 'rose' : 'emerald'}`}>{isBlocked ? 'Release held' : 'Releasable'}</i>
+                              </span>
+                            </span>
+                            <span className="xbx-acard__score">{Math.round(horse.readiness.score)}<i>%</i></span>
+                          </button>
+                        );
+                      })}
+                      {!lanes[key].length ? <p className="xbx-lane__empty">No horses in this lane.</p> : null}
+                    </div>
+                    <button type="button" className="xbx-lane__action" onClick={() => navigate(meta.path)}>{meta.action} →</button>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* PRIORITY ACTIONS INTELLIGENCE */}
+          <section className="xbx-section xbx-priority xb-reveal">
+            <header className="xbx-section-head"><div><div className="xbx-eyebrow">Priority actions intelligence</div><h2>What to fix first.</h2></div></header>
+            {priorityActions.length ? (
+              <ol className="xbx-actions">
+                {priorityActions.map((item, index) => (
+                  <li key={item.key} className={`xbx-pa xbx-pa--${item.tone} xb-reveal`} style={{ '--xb-reveal-index': index } as CSSProperties}>
+                    <span className="xbx-pa__rank">{String(index + 1).padStart(2, '0')}</span>
+                    <div className="xbx-pa__body">
+                      <div className="xbx-pa__top">
+                        <span className={`xbx-sev xbx-sev--${item.tone}`}>{item.severity}</span>
+                        <span className="xbx-pa__horse">{item.horse}</span>
+                      </div>
+                      <strong className="xbx-pa__problem">{item.problem}</strong>
+                      <span className="xbx-pa__detail">{item.detail}</span>
+                      <span className="xbx-pa__impact"><i className="xbx-pa__impact-rule" />{item.impact}</span>
+                    </div>
+                    <button type="button" className="xbx-pa__cta" onClick={() => navigate(item.path)}>{item.action} →</button>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <div className="xbx-clear"><strong>Nothing is blocking work.</strong><span>Every horse, document, and transfer is current.</span></div>
+            )}
+          </section>
+
+          {/* HORSE ASSET TIMELINE */}
+          <section className="xbx-section xbx-trail xb-reveal">
+            <header className="xbx-section-head"><div><div className="xbx-eyebrow">Horse asset timeline</div><h2>The proof trail.</h2></div></header>
+            {activity.length ? (
+              <ul className="xbx-timeline">
+                {activity.map((event) => (
+                  <li key={event.id} className={`xbx-tl xbx-tl--${event.category.toLowerCase()}`}>
+                    <span className="xbx-tl__node" />
+                    <div className="xbx-tl__body">
+                      <div className="xbx-tl__top"><span className="xbx-tl__cat">{event.category}</span><strong>{event.title}</strong><time>{formatDateLabel(event.date)}</time></div>
+                      <span className="xbx-tl__meta">{event.horseName}{event.owner ? ` · ${event.owner}` : ''}</span>
+                      {event.summary ? <p>{event.summary}</p> : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="xbx-clear"><strong>No recorded activity yet.</strong><span>Document uploads, transfers, and care events appear here as a verifiable trail.</span></div>
+            )}
+          </section>
+        </main>
+
+        {/* STICKY INTELLIGENCE RAIL — signature micro-modules */}
+        <div className="xbx-irail">
+          <section className="xbx-mod xbx-mod--blocker xb-reveal">
+            <div className="xbx-mod__head"><span className="xbx-mod__ey">Release blockers</span><span className={`xbx-mod__big ${transferGaps.length ? 'xbx-mod__big--rose' : 'xbx-mod__big--ok'}`}>{transferGaps.length}</span></div>
+            <div className="xbx-mod__rows">
+              {transferGaps.length ? transferGaps.slice(0, 4).map((gap) => (
+                <button key={gap.horseId} type="button" className="xbx-mod__row" onClick={() => navigate('/ownership')}>
+                  <span className="xbx-mod__row-main">{gap.horseName}</span>
+                  <span className="xbx-mod__row-sub">{gap.reasons[0] ?? `${gap.pendingCount} documents pending`}</span>
+                </button>
+              )) : <p className="xbx-mod__clear">Titles are clear. Nothing is holding a release.</p>}
+            </div>
+            {revenueAtRisk ? <div className="xbx-mod__foot"><span className="xbx-dot xbx-dot--rose" />{formatCompactCurrency(revenueAtRisk)} exposed behind blockers</div> : null}
+          </section>
+
+          <section className="xbx-mod xbx-mod--docrisk xb-reveal">
+            <div className="xbx-mod__head"><span className="xbx-mod__ey">Document risk map</span><span className={`xbx-mod__big ${documentsMissing ? 'xbx-mod__big--amber' : 'xbx-mod__big--ok'}`}>{documentsMissing}</span></div>
+            {docRiskMap.length ? (
+              <div className="xbx-docmap">
+                {docRiskMap.map((entry) => (
+                  <button key={entry.label} type="button" className="xbx-docmap__cell" onClick={() => navigate('/documents')}>
+                    <span className="xbx-docmap__label">{entry.label}</span>
+                    <span className="xbx-docmap__count">{entry.count}</span>
                   </button>
                 ))}
-                {!lanes[key].length ? <p className="xbx-lane__empty">No horses in this lane.</p> : null}
               </div>
-              <button type="button" className="xbx-lane__action" onClick={() => navigate(path)}>{laneAction[key]} →</button>
+            ) : <p className="xbx-mod__clear">Every required document is on file.</p>}
+          </section>
+
+          <section className="xbx-mod xbx-mod--chain xb-reveal">
+            <div className="xbx-mod__head"><span className="xbx-mod__ey">Ownership confidence</span><span className="xbx-mod__big">{ownershipConfidence}<i>%</i></span></div>
+            <div className="xbx-chain">
+              <div className="xbx-chain__node"><i />Breeder</div>
+              <div className="xbx-chain__link" />
+              <div className="xbx-chain__node xbx-chain__node--active"><i />Owner</div>
+              <div className={`xbx-chain__link ${transferGaps.length ? 'xbx-chain__link--risk' : ''}`} />
+              <div className={`xbx-chain__node ${transferGaps.length ? 'xbx-chain__node--risk' : 'xbx-chain__node--active'}`}><i />Transfer</div>
             </div>
-          ))}
-        </div>
-      </section>
+            <p className="xbx-mod__note">{clearTitle} of {horses.length} horses hold clear title{transferGaps.length ? ` · ${transferGaps.length} mid-transfer` : ''}.</p>
+          </section>
 
-      {/* BOARD: priority actions intelligence + buyer deal status */}
-      <section className="xbx-board">
-        <div className="xbx-priority xb-reveal">
-          <header className="xbx-section-head"><div><div className="xbx-eyebrow">Priority actions</div><h2>What to fix first.</h2></div></header>
-          {priorityActions.length ? (
-            <ol className="xbx-actions">
-              {priorityActions.map((item, index) => (
-                <li key={item.key} className={`xbx-pa xbx-pa--${item.tone} xb-reveal`} style={{ '--xb-reveal-index': index } as CSSProperties}>
-                  <span className="xbx-pa__rank">{String(index + 1).padStart(2, '0')}</span>
-                  <div className="xbx-pa__body">
-                    <div className="xbx-pa__top">
-                      <span className={`xbx-sev xbx-sev--${item.tone}`}>{item.severity}</span>
-                      <span className="xbx-pa__horse">{item.horse}</span>
-                    </div>
-                    <strong className="xbx-pa__problem">{item.problem}</strong>
-                    <span className="xbx-pa__detail">{item.detail}</span>
-                    <span className="xbx-pa__impact"><i className="xbx-pa__impact-rule" />{item.impact}</span>
-                  </div>
-                  <button type="button" className="xbx-pa__cta" onClick={() => navigate(item.path)}>{item.action} →</button>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <div className="xbx-clear"><strong>Nothing is blocking work.</strong><span>Every horse, document, and transfer is current.</span></div>
-          )}
+          <section className="xbx-mod xbx-mod--proof xb-reveal">
+            <div className="xbx-mod__head"><span className="xbx-mod__ey">Buyer-safe proof</span></div>
+            <div className="xbx-proof">
+              <div className="xbx-proof__shield" style={{ '--val': buyerSafePct } as CSSProperties}><span>{buyerSafePct}<i>%</i></span></div>
+              <div className="xbx-proof__copy"><strong>{buyerSafe} of {horses.length} buyer-safe</strong><span>packets verified end to end</span></div>
+            </div>
+            <button type="button" className="xbx-mod__cta" onClick={() => navigate('/documents')}>Open packet review →</button>
+          </section>
         </div>
-
-        <div className="xbx-deals xb-reveal">
-          <div className="xbx-deals__head"><div className="xbx-eyebrow">Buyer deal status</div><h3>Pipeline</h3></div>
-          <div className="xbx-deals__hero">
-            <strong>{openDeals.length}</strong>
-            <span>active deals · {formatCompactCurrency(dealValue)} in play</span>
-          </div>
-          <div className="xbx-deals__stages">
-            {dealsByStage.map((entry) => (
-              <button key={entry.stage} type="button" className="xbx-deals__stage" onClick={() => navigate('/sales')}>
-                <span className="xbx-deals__stage-label">{entry.stage}</span>
-                <span className="xbx-deals__stage-count">{entry.count}</span>
-              </button>
-            ))}
-          </div>
-          <div className="xbx-deals__risk">
-            <span className="xbx-dot xbx-dot--rose" />
-            <span>{formatCompactCurrency(revenueAtRisk)} exposed behind release blockers</span>
-          </div>
-          <button type="button" className="xbx-deals__cta" onClick={() => navigate('/sales')}>Open sales pipeline →</button>
-        </div>
-      </section>
-
-      {/* ACTIVITY TRAIL */}
-      <section className="xbx-trail xb-reveal">
-        <header className="xbx-section-head"><div><div className="xbx-eyebrow">Recent asset activity</div><h2>The proof trail.</h2></div></header>
-        {activity.length ? (
-          <ul className="xbx-timeline">
-            {activity.map((event) => (
-              <li key={event.id} className={`xbx-tl xbx-tl--${event.category.toLowerCase()}`}>
-                <span className="xbx-tl__node" />
-                <div className="xbx-tl__body">
-                  <div className="xbx-tl__top"><span className="xbx-tl__cat">{event.category}</span><strong>{event.title}</strong><time>{formatDateLabel(event.date)}</time></div>
-                  <span className="xbx-tl__meta">{event.horseName}{event.owner ? ` · ${event.owner}` : ''}</span>
-                  {event.summary ? <p>{event.summary}</p> : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div className="xbx-clear"><strong>No recorded activity yet.</strong><span>Document uploads, transfers, and care events appear here as a verifiable trail.</span></div>
-        )}
-      </section>
+      </div>
     </div>
   );
 }
