@@ -25,7 +25,7 @@ import {
 import { buildCareBoardRows } from '@/lib/dashboardOps';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
-import { useCurrentRoleCapability, useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
+import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 
 type NavSectionName = 'Home' | 'Work' | 'Account';
 
@@ -217,10 +217,8 @@ export default function MainLayout() {
   const horses = useXbarStore((state) => state.horses);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
-  const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const cloudSession = useCloudStore((state) => state.session);
   const signOutCloud = useCloudStore((state) => state.signOut);
-  const roleWorkspace = useCurrentRoleWorkspace();
   const pushToast = useUiStore((state) => state.pushToast);
   const setCommandPaletteOpen = useUiStore((state) => state.setCommandPaletteOpen);
   const canCreateHorse = useCurrentRoleCapability('createHorse');
@@ -256,7 +254,6 @@ export default function MainLayout() {
     docs: pendingReview,
     reminders: pendingTransfers + careDueCount + pendingReview,
   }), [pendingTransfers, careDueCount, pendingReview]);
-  const opsUrgency = pendingTransfers > 0 ? 'urgent' : careDueCount > 0 ? 'warning' : 'clear';
   const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse' : routeLabels[location.pathname] ?? 'Ranch';
   const routeSlug = routeSurfaceSlug(currentLabel);
   const helpSections = routeHelp[currentLabel] ?? routeHelp['Home'];
@@ -284,15 +281,6 @@ export default function MainLayout() {
             <span className="xbar-side__tag">Horse Records</span>
           </div>
         </div>
-
-        <button type="button" className="xbar-side__workspace" onClick={() => navigate('/settings')} title="Workspace settings">
-          <span className="xbar-side__ws-badge">{(workspaceProfile.ranchName || workspaceProfile.businessName || 'R').charAt(0).toUpperCase()}</span>
-          <span className="xbar-side__ws-copy">
-            <span className="xbar-side__ws-name">{workspaceProfile.ranchName || workspaceProfile.businessName || 'Primary ranch'}</span>
-            <span className="xbar-side__ws-meta">{roleWorkspace.label}</span>
-          </span>
-          <span className={classNames('xbar-side__ws-dot', opsUrgency === 'urgent' ? 'xbar-side__ws-dot--urgent' : opsUrgency === 'warning' ? 'xbar-side__ws-dot--warning' : 'xbar-side__ws-dot--clear')} />
-        </button>
 
         <div className="xbar-side__scroll">
           <NavSection title="Home" items={sections.Home} badges={navBadges} />

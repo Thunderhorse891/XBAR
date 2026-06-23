@@ -5,6 +5,7 @@ import { buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
 import { useXbarStore } from '@/store/useXbarStore';
+import '@/styles/xbarFlagship.css';
 
 const EMPTY_PROFILE_CARDS = [
   { label: 'Horse Record', title: 'Name, barn, owner, status', meta: 'Start with the basic file.', status: 'Ready', metric: '01' },
@@ -200,215 +201,220 @@ export default function Dashboard() {
 
   const ranch = workspaceProfile.ranchName || workspaceProfile.businessName || 'Ranch operations';
 
+  const dealByHorse = new Map(salesLeads.map((lead) => [lead.horseId, lead] as const));
+  const packetByHorse = new Map(commandPackets.map((item) => [item.horse.id, item.packet] as const));
+  const enrichHorse = (horse: (typeof horses)[number]) => {
+    const packet = packetByHorse.get(horse.id);
+    const missing = packet ? packet.saleSlots.filter((slot) => slot.status !== 'ready').length : 0;
+    const deal = dealByHorse.get(horse.id);
+    const lastEvent = [...(horse.activity ?? [])].sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+    return {
+      missing,
+      buyerStage: deal?.stage ?? null,
+      isBlocked: blockedIds.has(horse.id),
+      release: blockedIds.has(horse.id) ? 'Release held' : 'Releasable',
+      lastProof: lastEvent?.title ?? 'No recorded events',
+      lastProofCat: lastEvent?.category ?? '',
+      lastProofDate: lastEvent ? formatDateLabel(lastEvent.date) : '',
+      score: Math.round(horse.readiness.score),
+      monogram: horse.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
+      entity: horse.ownerEntity || horse.owner,
+    };
+  };
+
+  const headline = urgencyCount > 0 ? `${urgencyCount} decision${urgencyCount === 1 ? '' : 's'} protect your sale today.` : 'Every horse is sale-ready today.';
+
   return (
-    <div className="xbx">
-      {/* HERO — full-bleed split product surface with integrated intelligence */}
-      <section className="xbx-hero xb-reveal">
-        <div className="xbx-hero__face">
-          <div className="xbx-hero__atmos" aria-hidden="true">
-            <svg className="xbx-hero__xmark" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet">
-              <path d="M40 32 L160 168 M160 32 L40 168" />
-            </svg>
-            <HorseContour className="xbx-hero__horse" />
+    <div className="xbf">
+      {/* ============ OPENING SURFACE — full-bleed editorial, flat ============ */}
+      <header className="xbf-open xbf-reveal">
+        <div className="xbf-open__atmos" aria-hidden="true">
+          <svg className="xbf-open__x" viewBox="0 0 240 240" preserveAspectRatio="xMidYMid meet"><path d="M44 36 L196 204 M196 36 L44 204" /></svg>
+          <HorseContour className="xbf-open__horse" />
+        </div>
+        <div className="xbf-open__inner">
+          <div className="xbf-open__brandline">
+            <span className="xbf-open__mark"><XbarMark tone="mono" /></span>
+            <span className="xbf-open__brand">XBAR</span>
+            <span className="xbf-open__sep" />
+            <span className="xbf-open__kicker">Sale-readiness operating surface — {ranch}</span>
           </div>
-          <div className="xbx-hero__main">
-            <div className="xbx-hero__tagrow">
-              <span className="xbx-hero__brandtag">XBAR</span>
-              <span className="xbx-hero__eyebrow">Ranch operations · {ranch}</span>
+          <div className="xbf-open__grid">
+            <div className="xbf-open__lead">
+              <h1 className="xbf-open__title">{headline}</h1>
+              <p className="xbf-open__sub">
+                {urgencyCount > 0
+                  ? 'XBAR ranks the horses, documents, and transfers most likely to hold up a sale — and keeps an audit-grade proof trail as you clear them.'
+                  : 'Documents, ownership, and care are current across the herd. Stage the next buyer packet while the window is clear.'}
+              </p>
+              <div className="xbf-open__cta">
+                <button type="button" className="xbf-btn xbf-btn--primary" title={nextMove} onClick={() => navigate(nextMovePath)}>Open next move</button>
+                <Link to="/horses" className="xbf-btn">View the herd</Link>
+              </div>
             </div>
-            <h1 className="xbx-hero__title">
-              {urgencyCount > 0 ? `${urgencyCount} control point${urgencyCount === 1 ? '' : 's'} need a decision today.` : 'Your barn is clear today.'}
-            </h1>
-            <p className="xbx-hero__lead">
-              {urgencyCount > 0
-                ? 'These are the horses, documents, and transfers most likely to hold up a sale right now. Clear them — XBAR keeps the proof trail intact.'
-                : 'Every horse, document, and transfer is current. Use the clear window to prepare the next buyer-ready packet.'}
-            </p>
-            <div className="xbx-hero__actions">
-              <button type="button" className="xbx-btn xbx-btn--primary" onClick={() => navigate(nextMovePath)}>Open next move</button>
-              <Link to="/horses" className="xbx-btn">View the herd</Link>
+            <div className="xbf-open__score">
+              <div className="xbf-ring" style={{ '--val': packetReadiness } as CSSProperties}><span>{packetReadiness}<i>%</i></span></div>
+              <div className="xbf-open__score-copy">
+                <span className="xbf-open__score-label">Today's sale readiness</span>
+                <strong>{lanes.ready.length} of {horses.length} buyer-ready</strong>
+                <div className="xbf-open__segbar" aria-hidden="true">
+                  <span className="xbf-seg xbf-seg--ready" style={{ flexGrow: lanes.ready.length || 0.05 } as CSSProperties} />
+                  <span className="xbf-seg xbf-seg--review" style={{ flexGrow: lanes.review.length || 0.05 } as CSSProperties} />
+                  <span className="xbf-seg xbf-seg--blocked" style={{ flexGrow: lanes.blocked.length || 0.05 } as CSSProperties} />
+                </div>
+              </div>
             </div>
-            <div className="xbx-hero__trust">
-              <span><strong>{horses.length}</strong> horses managed</span><i />
-              <span><strong>{packetReadiness}%</strong> sale ready</span><i />
-              <span><strong>{transferGaps.length}</strong> release blockers</span>
-            </div>
+          </div>
+          <div className="xbf-open__ribbon">
+            <button type="button" className="xbf-stat" onClick={() => navigate('/horses')}><span>Buyer-ready</span><strong>{lanes.ready.length}<i>/{horses.length}</i></strong></button>
+            <button type="button" className="xbf-stat" onClick={() => navigate('/ownership')}><span>Release blockers</span><strong className={transferGaps.length ? 'xbf-rose' : ''}>{transferGaps.length}</strong></button>
+            <button type="button" className="xbf-stat" onClick={() => navigate('/documents')}><span>Documents missing</span><strong className={documentsMissing ? 'xbf-amber' : ''}>{documentsMissing}</strong></button>
+            <button type="button" className="xbf-stat" onClick={() => navigate('/ownership')}><span>Ownership confidence</span><strong>{ownershipConfidence}<i>%</i></strong></button>
+            <button type="button" className="xbf-stat" onClick={() => navigate('/sales')}><span>Open deals</span><strong>{openDeals.length}</strong></button>
           </div>
         </div>
+      </header>
 
-        <div className="xbx-hero__intel">
-          <div className="xbx-hero__intel-head"><span>Today's sale readiness</span><i className="xbx-live" /></div>
-          <div className="xbx-readiness">
-            <div className="xbx-score__ring" style={{ '--val': packetReadiness } as CSSProperties}>
-              <span className="xbx-score__pct">{packetReadiness}<i>%</i></span>
+      {/* ============ SPLIT OPERATIONAL LAYOUT ============ */}
+      <div className="xbf-split">
+        <main className="xbf-main">
+          {/* SALE READINESS BOARD — horizontal lane bands */}
+          <section className="xbf-block xbf-reveal">
+            <div className="xbf-block__head">
+              <div><span className="xbf-ey">Sale readiness board</span><h2>Where every horse stands.</h2></div>
+              <Link to="/horses" className="xbf-link">All horses →</Link>
             </div>
-            <div className="xbx-readiness__copy">
-              <strong>{lanes.ready.length} of {horses.length}</strong>
-              <span>horses buyer-ready</span>
-            </div>
-          </div>
-          <div className="xbx-readbar" aria-hidden="true">
-            <span className="xbx-readbar__seg xbx-readbar__seg--ready" style={{ flexGrow: lanes.ready.length || 0.04 } as CSSProperties} />
-            <span className="xbx-readbar__seg xbx-readbar__seg--review" style={{ flexGrow: lanes.review.length || 0.04 } as CSSProperties} />
-            <span className="xbx-readbar__seg xbx-readbar__seg--blocked" style={{ flexGrow: lanes.blocked.length || 0.04 } as CSSProperties} />
-          </div>
-          <div className="xbx-readlegend">
-            <span><i className="xbx-dot xbx-dot--emerald" />Ready <strong>{lanes.ready.length}</strong></span>
-            <span><i className="xbx-dot xbx-dot--amber" />Review <strong>{lanes.review.length}</strong></span>
-            <span><i className="xbx-dot xbx-dot--rose" />Blocked <strong>{lanes.blocked.length}</strong></span>
-          </div>
-          <button type="button" className="xbx-hero__resolve" onClick={() => navigate(nextMovePath)}>
-            <span className="xbx-hero__resolve-label">Next decision</span>
-            <span className="xbx-hero__resolve-val">{nextMove}</span>
-            <span className="xbx-hero__resolve-go">Resolve now →</span>
-          </button>
-        </div>
-      </section>
-
-      {/* EDITORIAL STAGE — asymmetric main column + sticky intelligence rail */}
-      <div className="xbx-stage">
-        <main className="xbx-stage__main">
-
-          {/* SALE READINESS BOARD */}
-          <section className="xbx-section xb-reveal">
-            <header className="xbx-section-head">
-              <div><div className="xbx-eyebrow">Sale readiness board</div><h2>Where every horse stands.</h2></div>
-              <Link to="/horses" className="xbx-link">All horses →</Link>
-            </header>
-            <div className="xbx-lanes">
+            <div className="xbf-lanes">
               {(['ready', 'review', 'blocked'] as LaneKey[]).map((key) => {
                 const meta = laneMeta[key];
                 return (
-                  <div className={`xbx-lane xbx-lane--${meta.tone}`} key={key}>
-                    <div className="xbx-lane__head"><span className={`xbx-dot xbx-dot--${meta.tone}`} />{meta.label}<em>{lanes[key].length}</em></div>
-                    <div className="xbx-lane__items">
-                      {lanes[key].slice(0, 5).map((horse) => {
-                        const packet = commandPackets.find((item) => item.horse.id === horse.id)?.packet;
-                        const missing = packet ? packet.saleSlots.filter((slot) => slot.status !== 'ready').length : 0;
-                        const isBlocked = blockedIds.has(horse.id);
-                        return (
-                          <button key={horse.id} type="button" className="xbx-acard" onClick={() => navigate(`/horses/${horse.id}`)}>
-                            <span className="xbx-acard__id">{horse.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span>
-                            <span className="xbx-acard__body">
-                              <strong>{horse.name}</strong>
-                              <span className="xbx-acard__owner">{horse.ownerEntity || horse.owner}</span>
-                              <span className="xbx-acard__chips">
-                                <i className={`xbx-mchip xbx-mchip--${missing ? 'amber' : 'emerald'}`}>{missing ? `${missing} docs` : 'Docs clear'}</i>
-                                <i className={`xbx-mchip xbx-mchip--${isBlocked ? 'rose' : 'emerald'}`}>{isBlocked ? 'Release held' : 'Releasable'}</i>
-                              </span>
-                            </span>
-                            <span className="xbx-acard__score">{Math.round(horse.readiness.score)}<i>%</i></span>
-                          </button>
-                        );
-                      })}
-                      {!lanes[key].length ? <p className="xbx-lane__empty">No horses in this lane.</p> : null}
+                  <section className={`xbf-lane xbf-lane--${meta.tone}`} key={key}>
+                    <div className="xbf-lane__rail">
+                      <span className={`xbf-dot xbf-dot--${meta.tone}`} />
+                      <span className="xbf-lane__label">{meta.label}</span>
+                      <em>{lanes[key].length}</em>
+                      <button type="button" className="xbf-lane__act" onClick={() => navigate(meta.path)}>{meta.action} →</button>
                     </div>
-                    <button type="button" className="xbx-lane__action" onClick={() => navigate(meta.path)}>{meta.action} →</button>
-                  </div>
+                    <div className="xbf-lane__cards">
+                      {lanes[key].length ? lanes[key].slice(0, 6).map((horse) => {
+                        const x = enrichHorse(horse);
+                        return (
+                          <article key={horse.id} className="xbf-hcard" role="button" tabIndex={0} onClick={() => navigate(`/horses/${horse.id}`)} onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/horses/${horse.id}`); }}>
+                            <header className="xbf-hcard__head">
+                              <span className="xbf-hcard__mono">{x.monogram}</span>
+                              <div className="xbf-hcard__id"><strong>{horse.name}</strong><span>{x.entity}</span></div>
+                              <span className="xbf-hcard__score">{x.score}<i>%</i></span>
+                            </header>
+                            <div className="xbf-hcard__states">
+                              <span className={`xbf-tag xbf-tag--${x.missing ? 'amber' : 'emerald'}`}>{x.missing ? `${x.missing} docs missing` : 'Docs complete'}</span>
+                              <span className={`xbf-tag xbf-tag--${x.isBlocked ? 'rose' : 'emerald'}`}>{x.release}</span>
+                              <span className={`xbf-tag xbf-tag--${x.buyerStage ? 'blue' : 'slate'}`}>{x.buyerStage ? `Buyer: ${x.buyerStage}` : 'No active buyer'}</span>
+                            </div>
+                            <footer className="xbf-hcard__foot">
+                              <span className="xbf-hcard__proof">{x.lastProofCat ? <i className={`xbf-pdot xbf-pdot--${x.lastProofCat.toLowerCase()}`} /> : null}{x.lastProof}{x.lastProofDate ? ` · ${x.lastProofDate}` : ''}</span>
+                              <span className="xbf-hcard__open">Open →</span>
+                            </footer>
+                          </article>
+                        );
+                      }) : <p className="xbf-lane__empty">No horses in this lane.</p>}
+                    </div>
+                  </section>
                 );
               })}
             </div>
           </section>
 
           {/* PRIORITY ACTIONS INTELLIGENCE */}
-          <section className="xbx-section xbx-priority xb-reveal">
-            <header className="xbx-section-head"><div><div className="xbx-eyebrow">Priority actions intelligence</div><h2>What to fix first.</h2></div></header>
+          <section className="xbf-block xbf-reveal">
+            <div className="xbf-block__head"><div><span className="xbf-ey">Priority actions intelligence</span><h2>What protects money today.</h2></div></div>
             {priorityActions.length ? (
-              <ol className="xbx-actions">
+              <ol className="xbf-pa">
                 {priorityActions.map((item, index) => (
-                  <li key={item.key} className={`xbx-pa xbx-pa--${item.tone} xb-reveal`} style={{ '--xb-reveal-index': index } as CSSProperties}>
-                    <span className="xbx-pa__rank">{String(index + 1).padStart(2, '0')}</span>
-                    <div className="xbx-pa__body">
-                      <div className="xbx-pa__top">
-                        <span className={`xbx-sev xbx-sev--${item.tone}`}>{item.severity}</span>
-                        <span className="xbx-pa__horse">{item.horse}</span>
-                      </div>
-                      <strong className="xbx-pa__problem">{item.problem}</strong>
-                      <span className="xbx-pa__detail">{item.detail}</span>
-                      <span className="xbx-pa__impact"><i className="xbx-pa__impact-rule" />{item.impact}</span>
+                  <li key={item.key} className={`xbf-pa__item xbf-pa__item--${item.tone} xbf-reveal`} style={{ '--xbf-i': index } as CSSProperties}>
+                    <span className="xbf-pa__rank">{String(index + 1).padStart(2, '0')}</span>
+                    <div className="xbf-pa__body">
+                      <div className="xbf-pa__top"><span className={`xbf-sev xbf-sev--${item.tone}`}>{item.severity}</span><span className="xbf-pa__horse">{item.horse}</span></div>
+                      <strong className="xbf-pa__problem">{item.problem}</strong>
+                      <span className="xbf-pa__detail">{item.detail}</span>
+                      <span className="xbf-pa__impact"><i />{item.impact}</span>
                     </div>
-                    <button type="button" className="xbx-pa__cta" onClick={() => navigate(item.path)}>{item.action} →</button>
+                    <button type="button" className="xbf-pa__cta" onClick={() => navigate(item.path)}>{item.action} →</button>
                   </li>
                 ))}
               </ol>
-            ) : (
-              <div className="xbx-clear"><strong>Nothing is blocking work.</strong><span>Every horse, document, and transfer is current.</span></div>
-            )}
-          </section>
-
-          {/* HORSE ASSET TIMELINE */}
-          <section className="xbx-section xbx-trail xb-reveal">
-            <header className="xbx-section-head"><div><div className="xbx-eyebrow">Horse asset timeline</div><h2>The proof trail.</h2></div></header>
-            {activity.length ? (
-              <ul className="xbx-timeline">
-                {activity.map((event) => (
-                  <li key={event.id} className={`xbx-tl xbx-tl--${event.category.toLowerCase()}`}>
-                    <span className="xbx-tl__node" />
-                    <div className="xbx-tl__body">
-                      <div className="xbx-tl__top"><span className="xbx-tl__cat">{event.category}</span><strong>{event.title}</strong><time>{formatDateLabel(event.date)}</time></div>
-                      <span className="xbx-tl__meta">{event.horseName}{event.owner ? ` · ${event.owner}` : ''}</span>
-                      {event.summary ? <p>{event.summary}</p> : null}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="xbx-clear"><strong>No recorded activity yet.</strong><span>Document uploads, transfers, and care events appear here as a verifiable trail.</span></div>
-            )}
+            ) : <div className="xbf-clear"><strong>Nothing is blocking a sale.</strong><span>Every horse, document, and transfer is current.</span></div>}
           </section>
         </main>
 
-        {/* STICKY INTELLIGENCE RAIL — signature micro-modules */}
-        <div className="xbx-irail">
-          <section className="xbx-mod xbx-mod--blocker xb-reveal">
-            <div className="xbx-mod__head"><span className="xbx-mod__ey">Release blockers</span><span className={`xbx-mod__big ${transferGaps.length ? 'xbx-mod__big--rose' : 'xbx-mod__big--ok'}`}>{transferGaps.length}</span></div>
-            <div className="xbx-mod__rows">
+        {/* ============ GRAPHITE INTELLIGENCE RAIL ============ */}
+        <aside className="xbf-rail">
+          <div className="xbf-rail__title">Intelligence</div>
+
+          <section className="xbf-imod xbf-imod--blocker xbf-reveal">
+            <div className="xbf-imod__head"><span className="xbf-imod__ey">Release blockers</span><span className={`xbf-imod__n ${transferGaps.length ? 'xbf-rose' : 'xbf-ok'}`}>{transferGaps.length}</span></div>
+            <div className="xbf-imod__rows">
               {transferGaps.length ? transferGaps.slice(0, 4).map((gap) => (
-                <button key={gap.horseId} type="button" className="xbx-mod__row" onClick={() => navigate('/ownership')}>
-                  <span className="xbx-mod__row-main">{gap.horseName}</span>
-                  <span className="xbx-mod__row-sub">{gap.reasons[0] ?? `${gap.pendingCount} documents pending`}</span>
+                <button key={gap.horseId} type="button" className="xbf-irow" onClick={() => navigate('/ownership')}>
+                  <span className="xbf-irow__a">{gap.horseName}</span>
+                  <span className="xbf-irow__b">{gap.reasons[0] ?? `${gap.pendingCount} documents pending`}</span>
                 </button>
-              )) : <p className="xbx-mod__clear">Titles are clear. Nothing is holding a release.</p>}
+              )) : <p className="xbf-imod__clear">Titles are clear. Nothing is holding a release.</p>}
             </div>
-            {revenueAtRisk ? <div className="xbx-mod__foot"><span className="xbx-dot xbx-dot--rose" />{formatCompactCurrency(revenueAtRisk)} exposed behind blockers</div> : null}
+            {revenueAtRisk ? <div className="xbf-imod__foot"><span className="xbf-dot xbf-dot--rose" />{formatCompactCurrency(revenueAtRisk)} exposed behind blockers</div> : null}
           </section>
 
-          <section className="xbx-mod xbx-mod--docrisk xb-reveal">
-            <div className="xbx-mod__head"><span className="xbx-mod__ey">Document risk map</span><span className={`xbx-mod__big ${documentsMissing ? 'xbx-mod__big--amber' : 'xbx-mod__big--ok'}`}>{documentsMissing}</span></div>
+          <section className="xbf-imod xbf-imod--doc xbf-reveal">
+            <div className="xbf-imod__head"><span className="xbf-imod__ey">Document risk map</span><span className={`xbf-imod__n ${documentsMissing ? 'xbf-amber' : 'xbf-ok'}`}>{documentsMissing}</span></div>
             {docRiskMap.length ? (
-              <div className="xbx-docmap">
+              <div className="xbf-docmap">
                 {docRiskMap.map((entry) => (
-                  <button key={entry.label} type="button" className="xbx-docmap__cell" onClick={() => navigate('/documents')}>
-                    <span className="xbx-docmap__label">{entry.label}</span>
-                    <span className="xbx-docmap__count">{entry.count}</span>
-                  </button>
+                  <button key={entry.label} type="button" className="xbf-docmap__c" onClick={() => navigate('/documents')}><span>{entry.label}</span><strong>{entry.count}</strong></button>
                 ))}
               </div>
-            ) : <p className="xbx-mod__clear">Every required document is on file.</p>}
+            ) : <p className="xbf-imod__clear">Every required document is on file.</p>}
           </section>
 
-          <section className="xbx-mod xbx-mod--chain xb-reveal">
-            <div className="xbx-mod__head"><span className="xbx-mod__ey">Ownership confidence</span><span className="xbx-mod__big">{ownershipConfidence}<i>%</i></span></div>
-            <div className="xbx-chain">
-              <div className="xbx-chain__node"><i />Breeder</div>
-              <div className="xbx-chain__link" />
-              <div className="xbx-chain__node xbx-chain__node--active"><i />Owner</div>
-              <div className={`xbx-chain__link ${transferGaps.length ? 'xbx-chain__link--risk' : ''}`} />
-              <div className={`xbx-chain__node ${transferGaps.length ? 'xbx-chain__node--risk' : 'xbx-chain__node--active'}`}><i />Transfer</div>
+          <section className="xbf-imod xbf-imod--packet xbf-reveal">
+            <div className="xbf-imod__head"><span className="xbf-imod__ey">Buyer packet status</span></div>
+            <div className="xbf-packet">
+              <div className="xbf-ring xbf-ring--dark" style={{ '--val': buyerSafePct } as CSSProperties}><span>{buyerSafePct}<i>%</i></span></div>
+              <div className="xbf-packet__copy"><strong>{buyerSafe} of {horses.length} buyer-safe</strong><span>{Math.max(horses.length - buyerSafe, 0)} packets still need proof</span></div>
             </div>
-            <p className="xbx-mod__note">{clearTitle} of {horses.length} horses hold clear title{transferGaps.length ? ` · ${transferGaps.length} mid-transfer` : ''}.</p>
+            <button type="button" className="xbf-imod__cta" onClick={() => navigate('/documents')}>Open packet review →</button>
           </section>
 
-          <section className="xbx-mod xbx-mod--proof xb-reveal">
-            <div className="xbx-mod__head"><span className="xbx-mod__ey">Buyer-safe proof</span></div>
-            <div className="xbx-proof">
-              <div className="xbx-proof__shield" style={{ '--val': buyerSafePct } as CSSProperties}><span>{buyerSafePct}<i>%</i></span></div>
-              <div className="xbx-proof__copy"><strong>{buyerSafe} of {horses.length} buyer-safe</strong><span>packets verified end to end</span></div>
+          <section className="xbf-imod xbf-imod--chain xbf-reveal">
+            <div className="xbf-imod__head"><span className="xbf-imod__ey">Ownership confidence</span><span className="xbf-imod__n">{ownershipConfidence}<i>%</i></span></div>
+            <div className="xbf-chain">
+              <div className="xbf-chain__n xbf-chain__n--on"><i />Breeder</div>
+              <div className="xbf-chain__l" />
+              <div className="xbf-chain__n xbf-chain__n--on"><i />Owner</div>
+              <div className={`xbf-chain__l ${transferGaps.length ? 'xbf-chain__l--risk' : ''}`} />
+              <div className={`xbf-chain__n ${transferGaps.length ? 'xbf-chain__n--risk' : 'xbf-chain__n--on'}`}><i />Transfer</div>
             </div>
-            <button type="button" className="xbx-mod__cta" onClick={() => navigate('/documents')}>Open packet review →</button>
+            <p className="xbf-imod__note">{clearTitle} of {horses.length} hold clear title{transferGaps.length ? ` · ${transferGaps.length} mid-transfer` : ''}.</p>
           </section>
-        </div>
+        </aside>
       </div>
+
+      {/* ============ ASSET TIMELINE ============ */}
+      <section className="xbf-block xbf-reveal">
+        <div className="xbf-block__head"><div><span className="xbf-ey">Horse asset timeline</span><h2>The proof trail.</h2></div></div>
+        {activity.length ? (
+          <ul className="xbf-tl">
+            {activity.map((event) => (
+              <li key={event.id} className={`xbf-tl__i xbf-tl__i--${event.category.toLowerCase()}`}>
+                <span className="xbf-tl__node" />
+                <div className="xbf-tl__body">
+                  <div className="xbf-tl__top"><span className="xbf-tl__cat">{event.category}</span><strong>{event.title}</strong><time>{formatDateLabel(event.date)}</time></div>
+                  <span className="xbf-tl__meta">{event.horseName}{event.owner ? ` · ${event.owner}` : ''}</span>
+                  {event.summary ? <p>{event.summary}</p> : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : <div className="xbf-clear"><strong>No recorded activity yet.</strong><span>Document uploads, transfers, and care events appear here as a verifiable trail.</span></div>}
+      </section>
     </div>
   );
 }
