@@ -8,45 +8,59 @@
    ========================================================================== */
 
 .xbar-command-shell {
-  /* ---- graphite surfaces ---- */
-  --xb-bg: #0a0d12;
-  --xb-bg-deep: #070a0e;
-  --xb-shell: #090c11;
-  --xb-sidebar: #0b0e13;
-  --xb-panel: #13171e;
-  --xb-panel-2: #171c25;
-  --xb-raise: #1b212b;
-  --xb-line: rgba(178, 190, 206, 0.10);
-  --xb-line-2: rgba(178, 190, 206, 0.17);
-  --xb-line-3: rgba(178, 190, 206, 0.26);
+  /* ---- light-first editorial surfaces ---- */
+  --xb-bg: #f6f5f2;             /* warm off-white canvas */
+  --xb-bg-deep: #efeee9;
+  --xb-shell: #f4f3ef;
+  --xb-sidebar: #ffffff;
+  --xb-panel: #ffffff;
+  --xb-panel-2: #faf9f6;
+  --xb-panel-soft: #f4f3ef;     /* sand-tinted secondary panel */
+  --xb-raise: #ffffff;
+  --xb-fill: rgba(28, 33, 42, 0.032);     /* subtle dark-on-light fill */
+  --xb-fill-2: rgba(28, 33, 42, 0.06);
+  --xb-line: rgba(28, 33, 42, 0.10);
+  --xb-line-2: rgba(28, 33, 42, 0.15);
+  --xb-line-3: rgba(28, 33, 42, 0.22);
 
   /* ---- type ---- */
-  --xb-ink: #edeae3;            /* warm white */
-  --xb-ink-soft: #aab2bd;       /* steel */
-  --xb-ink-dim: #7c848e;
-  --xb-sand: #b8ab94;           /* muted sand — secondary eyebrows */
+  --xb-ink: #1a1d22;            /* graphite near-black */
+  --xb-ink-soft: #565d67;       /* slate */
+  --xb-ink-dim: #868d97;
+  --xb-sand: #94855f;           /* muted sand — eyebrows (reads on light) */
+
+  /* ---- selective DARK feature modules ---- */
+  --xb-dark: #12161d;
+  --xb-dark-2: #171d27;
+  --xb-dark-3: #1d2531;
+  --xb-dark-line: rgba(255, 255, 255, 0.10);
+  --xb-dark-line-2: rgba(255, 255, 255, 0.17);
+  --xb-on-dark: #f1efe9;        /* warm white on graphite */
+  --xb-on-dark-soft: #aeb6c1;   /* steel on graphite */
+  --xb-on-dark-dim: #7f8893;
+  --xb-on-dark-sand: #c3b594;
 
   /* ---- accents ---- */
-  --xb-blue: #4d94ff;
-  --xb-blue-strong: #2f80ff;
-  --xb-blue-soft: rgba(77, 148, 255, 0.13);
-  --xb-emerald: #4cb98c;
-  --xb-emerald-soft: rgba(76, 185, 140, 0.13);
-  --xb-amber: #d8a657;
-  --xb-amber-soft: rgba(216, 166, 87, 0.13);
-  --xb-red: #ef5f57;
-  --xb-red-soft: rgba(239, 95, 87, 0.13);
+  --xb-blue: #2f6fe0;
+  --xb-blue-strong: #2560cc;
+  --xb-blue-soft: rgba(47, 111, 224, 0.10);
+  --xb-emerald: #2f9e6f;
+  --xb-emerald-soft: rgba(47, 158, 111, 0.12);
+  --xb-amber: #b9822f;
+  --xb-amber-soft: rgba(185, 130, 47, 0.13);
+  --xb-red: #d8453c;
+  --xb-red-soft: rgba(216, 69, 60, 0.11);
 
-  /* ---- depth ---- */
-  --xb-shadow: 0 26px 60px -34px rgba(0, 0, 0, 0.88), 0 8px 22px -14px rgba(0, 0, 0, 0.6);
-  --xb-shadow-soft: 0 4px 16px -8px rgba(0, 0, 0, 0.6);
-  --xb-r-lg: 14px;
-  --xb-r: 12px;
-  --xb-r-sm: 9px;
-  --xb-r-xs: 7px;
+  /* ---- depth (soft, light-theme shadows) ---- */
+  --xb-shadow: 0 24px 50px -32px rgba(24, 32, 51, 0.30), 0 6px 18px -12px rgba(24, 32, 51, 0.14);
+  --xb-shadow-soft: 0 2px 10px -6px rgba(24, 32, 51, 0.14);
+  --xb-shadow-dark: 0 30px 64px -34px rgba(0, 0, 0, 0.7), 0 10px 26px -16px rgba(0, 0, 0, 0.5);
+  --xb-r-lg: 18px;
+  --xb-r: 14px;
+  --xb-r-sm: 10px;
+  --xb-r-xs: 8px;
 
-  /* ---- remap the legacy light tokens so every token-based component
-          inside the shell flips to graphite automatically ---- */
+  /* ---- remap legacy tokens to the light palette ---- */
   --bg: var(--xb-bg);
   --bg-deep: var(--xb-bg-deep);
   --surface: var(--xb-panel);
@@ -55,7 +69,7 @@
   --sidebar-edge: var(--xb-line);
   --text: var(--xb-ink);
   --muted: var(--xb-ink-soft);
-  --muted-strong: #c8cfd8;
+  --muted-strong: #3a4049;
   --border: var(--xb-line);
   --border-strong: var(--xb-line-2);
   --blue: var(--xb-blue);
@@ -63,7 +77,7 @@
   --brand-blue: var(--xb-blue);
   --brand-electric: var(--xb-blue);
   --slate: var(--xb-ink-soft);
-  --slate-soft: rgba(154, 163, 173, 0.13);
+  --slate-soft: rgba(86, 93, 103, 0.10);
   --emerald: var(--xb-emerald);
   --emerald-soft: var(--xb-emerald-soft);
   --amber: var(--xb-amber);
@@ -73,23 +87,6 @@
   --shadow: var(--xb-shadow);
   --shadow-soft: var(--xb-shadow-soft);
 
-  /* ---- shadcn/ui theme tokens (HSL) so Card/Badge/Tabs/Dialog flip to dark ---- */
-  --background: 216 24% 6%;
-  --foreground: 40 12% 90%;
-  --card: 215 20% 10%;
-  --card-foreground: 40 12% 90%;
-  --popover: 215 22% 9%;
-  --popover-foreground: 40 12% 90%;
-  --secondary: 214 16% 16%;
-  --secondary-foreground: 40 10% 86%;
-  --muted-token: 214 16% 14%;
-  --muted-foreground: 213 9% 64%;
-  --accent: 215 55% 18%;
-  --accent-foreground: 213 100% 82%;
-  --border-token: 213 15% 21%;
-  --input: 213 15% 24%;
-  --ring: 216 100% 66%;
-
   color: var(--xb-ink);
 }
 
@@ -98,70 +95,32 @@
    ========================================================================== */
 html body #root .xbar-command-shell {
   background:
-    radial-gradient(120% 80% at 100% -10%, rgba(77, 148, 255, 0.10), transparent 46%),
-    linear-gradient(180deg, #0a0d12 0%, #080a0f 100%) !important;
+    radial-gradient(120% 80% at 100% -10%, rgba(47, 111, 224, 0.05), transparent 46%),
+    linear-gradient(180deg, #f6f5f2 0%, #f1f0ec 100%) !important;
   color: var(--xb-ink);
 }
 
 html body #root .xbar-command-shell > aside {
-  background: linear-gradient(180deg, #0c1016 0%, #080b10 100%) !important;
+  background: var(--xb-sidebar) !important;
   border-right: 1px solid var(--xb-line) !important;
   color: var(--xb-ink-soft) !important;
 }
 
 html body #root .xbar-command-main {
   background:
-    linear-gradient(90deg, rgba(178, 190, 206, 0.025) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(178, 190, 206, 0.025) 1px, transparent 1px),
-    radial-gradient(120% 70% at 18% -8%, rgba(77, 148, 255, 0.07), transparent 42%),
-    linear-gradient(180deg, #0c1016 0%, #090c11 60%, #080a0f 100%) !important;
-  background-size: 46px 46px, 46px 46px, auto, auto !important;
-  background-image:
-    linear-gradient(90deg, rgba(178, 190, 206, 0.025) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(178, 190, 206, 0.025) 1px, transparent 1px),
-    radial-gradient(120% 70% at 18% -8%, rgba(77, 148, 255, 0.07), transparent 42%),
-    linear-gradient(180deg, #0c1016 0%, #090c11 60%, #080a0f 100%) !important;
+    radial-gradient(120% 70% at 18% -8%, rgba(47, 111, 224, 0.04), transparent 42%),
+    linear-gradient(180deg, #f6f5f2 0%, #f3f2ee 100%) !important;
 }
 
 html body #root .xbar-command-topbar {
-  background: linear-gradient(180deg, rgba(12, 16, 22, 0.92), rgba(9, 12, 17, 0.92)) !important;
+  background: rgba(255, 255, 255, 0.86) !important;
   border-bottom: 1px solid var(--xb-line) !important;
-  backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px) saturate(1.1);
 }
 
-/* ---- sidebar: undo the light-card override, restore the command center ---- */
-html body #root .xbar-command-shell aside :is([class*="bg-[#080f1c]"], [class*="bg-[#08111d]"], [class*="bg-[#0a1628]"], [class*="bg-[#050910]"], [class*="bg-card"], [class*="bg-background"]) {
-  background: rgba(255, 255, 255, 0.026) !important;
-  border-color: var(--xb-line) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
-}
-
-html body #root .xbar-command-shell aside :is([class*="text-[#52708d]"], [class*="text-[#536d88]"], [class*="text-[#6f8aa5]"], [class*="text-[#4a6880]"], [class*="text-[#3d5870]"], [class*="text-[#2e4560]"], [class*="text-muted-foreground"]) {
-  color: var(--xb-ink-dim) !important;
-}
-
-html body #root .xbar-command-shell aside a,
-html body #root .xbar-command-shell aside button {
-  color: var(--xb-ink-soft) !important;
-}
-
-html body #root .xbar-command-shell aside a:hover,
-html body #root .xbar-command-shell aside button:hover {
-  background: var(--xb-blue-soft) !important;
-  color: var(--xb-ink) !important;
-}
-
-/* active nav item — thin electric-blue accent */
-html body #root .xbar-command-shell aside a[aria-current="page"],
-html body #root .xbar-command-shell aside a.active {
-  background: linear-gradient(90deg, rgba(77, 148, 255, 0.16), rgba(77, 148, 255, 0.04)) !important;
-  color: var(--xb-ink) !important;
-  box-shadow: inset 2px 0 0 var(--xb-blue) !important;
-}
-
-/* topbar search + chips read on graphite */
+/* topbar search + chips on light */
 html body #root .xbar-command-topbar input {
-  background: rgba(255, 255, 255, 0.03) !important;
+  background: var(--xb-fill) !important;
   border-color: var(--xb-line-2) !important;
   color: var(--xb-ink) !important;
 }
@@ -169,6 +128,101 @@ html body #root .xbar-command-topbar input:focus {
   border-color: var(--xb-blue) !important;
   box-shadow: 0 0 0 3px var(--xb-blue-soft) !important;
 }
+
+/* ============================================================================
+   SIDEBAR — light, premium brand presence + refined nav
+   ========================================================================== */
+.xbar-command-main { min-width: 0; }
+
+.xbar-side {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  min-height: 100vh;
+  padding: 26px 18px;
+  background: var(--xb-sidebar);
+  border-right: 1px solid var(--xb-line);
+}
+.xbar-side__brand { display: flex; align-items: center; gap: 13px; padding: 2px 6px 0; }
+.xbar-side__mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 46px;
+  width: 46px;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #1b222d, #0e1218);
+  color: #fff;
+  padding: 9px;
+  box-shadow: 0 10px 24px -12px rgba(24, 32, 51, 0.5);
+}
+.xbar-side__mark svg { height: 100%; width: 100%; }
+.xbar-side__wordmark { font-size: 1.55rem; font-weight: 760; letter-spacing: 0.04em; color: var(--xb-ink); line-height: 1; }
+.xbar-side__tag { display: block; font-size: 0.62rem; font-weight: 600; letter-spacing: 0.26em; text-transform: uppercase; color: var(--xb-ink-dim); margin-top: 5px; }
+
+/* refined workspace switcher (replaces the Ranch Status box) */
+.xbar-side__workspace {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 11px 13px;
+  border-radius: 12px;
+  border: 1px solid var(--xb-line);
+  background: var(--xb-panel-2);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+.xbar-side__workspace:hover { border-color: var(--xb-line-2); background: #fff; }
+.xbar-side__ws-badge {
+  display: flex; align-items: center; justify-content: center;
+  height: 34px; width: 34px; flex: none;
+  border-radius: 9px;
+  background: var(--xb-blue-soft);
+  color: var(--xb-blue);
+  font-weight: 700; font-size: 0.86rem;
+}
+.xbar-side__ws-copy { min-width: 0; flex: 1; }
+.xbar-side__ws-name { font-size: 0.9rem; font-weight: 640; color: var(--xb-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xbar-side__ws-meta { font-size: 0.72rem; color: var(--xb-ink-dim); margin-top: 1px; }
+.xbar-side__ws-dot { width: 7px; height: 7px; border-radius: 999px; flex: none; }
+.xbar-side__ws-dot--clear { background: var(--xb-emerald); }
+.xbar-side__ws-dot--warning { background: var(--xb-amber); }
+.xbar-side__ws-dot--urgent { background: var(--xb-red); }
+
+.xbar-side__scroll { display: flex; flex-direction: column; gap: 22px; flex: 1; min-height: 0; }
+.xbar-side__foot { display: flex; align-items: center; gap: 9px; padding: 12px 8px 2px; border-top: 1px solid var(--xb-line); color: var(--xb-ink-dim); font-size: 0.74rem; }
+
+/* nav sections + items (light) */
+html body #root .xbar-command-shell aside a,
+html body #root .xbar-command-shell aside button { color: var(--xb-ink-soft); }
+html body #root .xbar-command-shell aside a:hover {
+  background: var(--xb-fill) !important;
+  color: var(--xb-ink) !important;
+}
+html body #root .xbar-command-shell aside a[aria-current="page"],
+html body #root .xbar-command-shell aside a.active {
+  background: var(--xb-blue-soft) !important;
+  color: var(--xb-blue-strong) !important;
+  box-shadow: inset 2px 0 0 var(--xb-blue) !important;
+}
+
+/* ---- topbar: neutralize hardcoded dark Tailwind → light ---- */
+html body #root .xbar-command-topbar :is(
+  [class*="bg-[#0b1625]"], [class*="bg-[#101d2d]"], [class*="bg-[#111b2a]"], [class*="bg-[#0b1c30]"], [class*="bg-[#0f2033]"]
+) {
+  background: var(--xb-fill) !important;
+  border-color: var(--xb-line-2) !important;
+}
+html body #root .xbar-command-topbar :is(
+  [class*="border-[#1d3047]"], [class*="border-[#243952]"], [class*="border-[#314159]"], [class*="border-[#1e3b5d]"], [class*="border-[#122033]"]
+) { border-color: var(--xb-line-2) !important; }
+html body #root .xbar-command-topbar :is([class*="text-[#e9f2ff]"], [class*="text-[#d9e6f5]"]) { color: var(--xb-ink) !important; }
+html body #root .xbar-command-topbar :is([class*="text-[#748ba4]"], [class*="text-[#7f9bb6]"], [class*="text-[#677f98]"]) { color: var(--xb-ink-dim) !important; }
+html body #root .xbar-command-topbar :is([class*="text-[#65a6ff]"]) { color: var(--xb-blue) !important; }
+html body #root .xbar-command-topbar :is([class*="text-[#f0c76e]"]) { color: var(--xb-amber) !important; }
+html body #root .xbar-command-topbar button:hover { border-color: var(--xb-blue) !important; }
 
 /* ============================================================================
    PAGE HEADER / TYPOGRAPHY
@@ -435,8 +489,10 @@ html body #root .xbar-command-topbar input:focus {
   color: var(--xb-ink);
 }
 .xbar-command-main .surface-hero h1,
-.xbar-command-main .surface-hero__stat strong { color: var(--xb-ink) !important; }
-.xbar-command-main .surface-hero__stat span { color: var(--xb-ink-dim) !important; }
+.xbar-command-main .surface-hero__stat strong { color: var(--xb-on-dark) !important; }
+.xbar-command-main .surface-hero__stat span { color: var(--xb-on-dark-dim) !important; }
+.xbar-command-main .surface-hero__eyebrow,
+.xbar-command-main .surface-hero .eyebrow { color: var(--xb-on-dark-sand) !important; }
 
 /* progress */
 .xbar-command-main .progress-track { background: rgba(255, 255, 255, 0.06) !important; }
@@ -588,18 +644,18 @@ html body #root .xbar-command-main .xbar-home-atelier {
   border-radius: var(--xb-r-lg) !important;
   box-shadow: var(--xb-shadow) !important;
 }
-html body #root .xbar-command-main .xbar-home-atelier h1 { color: var(--xb-ink) !important; letter-spacing: -0.02em; }
-html body #root .xbar-command-main .xbar-home-atelier__copy p { color: var(--xb-ink-soft) !important; }
-.xbar-command-main .xbar-home-atelier__brandline span { color: var(--xb-sand) !important; }
+html body #root .xbar-command-main .xbar-home-atelier h1 { color: var(--xb-on-dark) !important; letter-spacing: -0.02em; }
+html body #root .xbar-command-main .xbar-home-atelier__copy p { color: var(--xb-on-dark-soft) !important; }
+.xbar-command-main .xbar-home-atelier__brandline span { color: var(--xb-on-dark-sand) !important; }
 .xbar-command-main .xbar-home-atelier__chips span {
-  background: rgba(255, 255, 255, 0.04) !important;
-  border: 1px solid var(--xb-line-2) !important;
-  color: var(--xb-ink-soft) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid var(--xb-dark-line-2) !important;
+  color: var(--xb-on-dark-soft) !important;
 }
 .xbar-command-main .xbar-home-action {
-  background: rgba(255, 255, 255, 0.04) !important;
-  border: 1px solid var(--xb-line-2) !important;
-  color: var(--xb-ink) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid var(--xb-dark-line-2) !important;
+  color: var(--xb-on-dark) !important;
   border-radius: var(--xb-r-sm) !important;
 }
 .xbar-command-main .xbar-home-action:hover { border-color: var(--xb-blue) !important; background: var(--xb-blue-soft) !important; }
@@ -623,13 +679,13 @@ html body #root .xbar-command-main .xbar-profile-card small { color: var(--xb-in
 html body #root .xbar-command-main .xbar-profile-card em { color: var(--xb-blue) !important; font-style: normal; }
 html body #root .xbar-command-main .xbar-profile-card__metric { color: var(--xb-ink-dim) !important; }
 .xbar-command-main .xbar-home-runway > div {
-  background: rgba(255, 255, 255, 0.022) !important;
-  border: 1px solid var(--xb-line) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid var(--xb-dark-line) !important;
   border-radius: var(--xb-r-sm) !important;
 }
-.xbar-command-main .xbar-home-runway strong { color: var(--xb-ink) !important; }
+.xbar-command-main .xbar-home-runway strong { color: var(--xb-on-dark) !important; }
 .xbar-command-main .xbar-home-runway span,
-.xbar-command-main .xbar-home-runway small { color: var(--xb-ink-dim) !important; }
+.xbar-command-main .xbar-home-runway small { color: var(--xb-on-dark-dim) !important; }
 
 /* setup flow */
 .xbar-command-main .xbar-setup-flow__header span { color: var(--xb-sand) !important; }

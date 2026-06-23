@@ -213,14 +213,11 @@ export default function MainLayout() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const currentRole = useXbarStore((state) => state.currentRole);
-  const subscription = useXbarStore((state) => state.subscription);
   const documents = useXbarStore((state) => state.documents);
   const horses = useXbarStore((state) => state.horses);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
-  const salesLeads = useXbarStore((state) => state.salesLeads);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
-  const cloudStatus = useCloudStore((state) => state.status);
   const cloudSession = useCloudStore((state) => state.session);
   const signOutCloud = useCloudStore((state) => state.signOut);
   const roleWorkspace = useCurrentRoleWorkspace();
@@ -247,7 +244,6 @@ export default function MainLayout() {
   const mobileMoreItems = visibleNavItems.filter((item) => !mobilePrimaryPaths.has(item.path));
   const pendingReview = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched').length;
   const pendingTransfers = ownershipRecords.filter((record) => record.transferStatus !== 'Clear').length;
-  const activeSales = salesLeads.filter((lead) => lead.stage !== 'Closed').length;
 
   const careDueCount = useMemo(() => {
     const board = buildCareBoardRows(horses, documents, expenseReceipts);
@@ -261,8 +257,6 @@ export default function MainLayout() {
     reminders: pendingTransfers + careDueCount + pendingReview,
   }), [pendingTransfers, careDueCount, pendingReview]);
   const opsUrgency = pendingTransfers > 0 ? 'urgent' : careDueCount > 0 ? 'warning' : 'clear';
-  const commandState = opsUrgency === 'urgent' ? 'Action required' : opsUrgency === 'warning' ? 'Needs review' : 'All clear';
-  const localStatus = cloudStatus === 'signed-in' ? 'Cloud sync connected' : 'Local browser workspace';
   const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse' : routeLabels[location.pathname] ?? 'Ranch';
   const routeSlug = routeSurfaceSlug(currentLabel);
   const helpSections = routeHelp[currentLabel] ?? routeHelp['Home'];
@@ -282,45 +276,28 @@ export default function MainLayout() {
 
   return (
     <div className="xbar-command-shell min-h-screen lg:grid lg:grid-cols-[264px,1fr]">
-      <aside className="hidden min-h-screen flex-col gap-6 border-r border-[#0e1e32] bg-[#050b14] px-5 py-6 text-[#c2d4e8] lg:flex">
-        <div className="xbar-sidebar-brand flex items-center gap-3">
-          <div className="xbar-sidebar-brand__mark flex h-[52px] w-[52px] items-center justify-center rounded-lg border border-[#1a2e46] bg-[#050910] p-1.5 shadow-[0_14px_32px_rgba(47,141,255,0.18)]">
-            <XbarMark title="XBAR logo" tone="mono" className="h-full w-full" />
-          </div>
-          <div className="xbar-sidebar-brand__copy min-w-0">
-            <div className="text-[1.04rem] font-extrabold uppercase tracking-[0.14em] text-white">XBAR</div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#52708d]">Horse records</div>
+      <aside className="xbar-side hidden lg:flex">
+        <div className="xbar-side__brand">
+          <span className="xbar-side__mark"><XbarMark title="XBAR logo" tone="mono" /></span>
+          <div className="min-w-0">
+            <div className="xbar-side__wordmark">XBAR</div>
+            <span className="xbar-side__tag">Horse Records</span>
           </div>
         </div>
 
-        <div className="rounded-[14px] border border-[#162436] bg-[#080f1c] p-4 shadow-[0_12px_28px_rgba(0,0,0,0.36)]">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#536d88]">Ranch Status</div>
-            <span className={classNames('ops-pulse', opsUrgency !== 'clear' ? '' : '')}>
-              <span className={classNames('ops-pulse__dot', opsUrgency === 'urgent' ? 'ops-pulse__dot--urgent' : opsUrgency === 'warning' ? 'ops-pulse__dot--warning' : '')} />
-            </span>
-          </div>
-          <div className="mt-2 text-[0.96rem] font-bold leading-tight text-[#ddeaf8]">{workspaceProfile.ranchName || workspaceProfile.businessName || 'Primary ranch'}</div>
-          <div className="mt-0.5 text-xs text-[#6f8aa5]">{commandState} · {roleWorkspace.label}</div>
-          <div className="mt-3 grid grid-cols-2 gap-1.5 text-xs">
-            <span className="rounded border border-[#142030] bg-[#08111d] px-2 py-1.5 text-[#6e8da6]">{horses.length} files</span>
-            <span className={classNames('rounded border px-2 py-1.5', pendingTransfers > 0 ? 'border-[#5a1a1a] bg-[#1a0808] text-[#ff8a8a]' : 'border-[#142030] bg-[#08111d] text-[#6e8da6]')}>{pendingTransfers} transfers</span>
-            <span className={classNames('rounded border px-2 py-1.5', pendingReview > 0 ? 'border-[#4a3800] bg-[#191000] text-[#fbbf24]' : 'border-[#142030] bg-[#08111d] text-[#6e8da6]')}>{pendingReview} docs</span>
-            <span className="rounded border border-[#142030] bg-[#08111d] px-2 py-1.5 text-[#6e8da6]">{activeSales} buyers</span>
-          </div>
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
-            <span className="inline-flex min-h-[24px] items-center rounded-full border border-[#1a2e46] bg-[#0a1628] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#7e98b2]">{subscription.tier}</span>
-            <span className="inline-flex min-h-[24px] items-center rounded-full border border-[#1a3a6a] bg-[#0c1e3c] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#65a6ff]">{localStatus}</span>
-          </div>
-        </div>
+        <button type="button" className="xbar-side__workspace" onClick={() => navigate('/settings')} title="Workspace settings">
+          <span className="xbar-side__ws-badge">{(workspaceProfile.ranchName || workspaceProfile.businessName || 'R').charAt(0).toUpperCase()}</span>
+          <span className="xbar-side__ws-copy">
+            <span className="xbar-side__ws-name">{workspaceProfile.ranchName || workspaceProfile.businessName || 'Primary ranch'}</span>
+            <span className="xbar-side__ws-meta">{roleWorkspace.label}</span>
+          </span>
+          <span className={classNames('xbar-side__ws-dot', opsUrgency === 'urgent' ? 'xbar-side__ws-dot--urgent' : opsUrgency === 'warning' ? 'xbar-side__ws-dot--warning' : 'xbar-side__ws-dot--clear')} />
+        </button>
 
-        <NavSection title="Home" items={sections.Home} badges={navBadges} />
-        <NavSection title="Work" items={sections.Work} badges={navBadges} />
-        <NavSection title="Account" items={sections.Account} badges={navBadges} />
-
-        <div className="mt-auto border-t border-[#0a1624] pt-4 text-xs text-[#3d5870]">
-          <div className="font-semibold uppercase tracking-[0.12em] text-[#4a6880]">Workspace</div>
-          <div className="mt-1 text-[#2e4560]">{expenseReceipts.length} receipts · {documents.length} documents · {horses.length} horse records</div>
+        <div className="xbar-side__scroll">
+          <NavSection title="Home" items={sections.Home} badges={navBadges} />
+          <NavSection title="Work" items={sections.Work} badges={navBadges} />
+          <NavSection title="Account" items={sections.Account} badges={navBadges} />
         </div>
       </aside>
 
