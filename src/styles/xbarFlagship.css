@@ -169,14 +169,20 @@ html body #root .xbar-command-main.xbar-route-home {
 /* ---------------------------------------------------------------------------
    GRAPHITE INTELLIGENCE RAIL — dark = high-value intelligence
    --------------------------------------------------------------------------- */
-.xbar-command-main .xbf-rail { position: sticky; top: 84px; display: flex; flex-direction: column; gap: 16px; }
-.xbar-command-main .xbf-rail__title { font-size: 0.68rem; letter-spacing: 0.2em; text-transform: uppercase; font-weight: 700; color: var(--xb-ink-dim); padding: 0 2px 2px; }
-.xbar-command-main .xbf-imod {
-  position: relative; padding: 20px; border-radius: 16px;
+.xbar-command-main .xbf-rail {
+  position: sticky; top: 84px; display: flex; flex-direction: column; gap: 0;
+  padding: 8px 22px 22px;
+  border-radius: 20px;
   border: 1px solid var(--xb-dark-line);
-  background: radial-gradient(95% 55% at 100% 0%, rgba(47, 111, 224, 0.16), transparent 62%), linear-gradient(168deg, #1c2430 0%, #12171f 100%);
+  background: radial-gradient(90% 32% at 100% 0%, rgba(47, 111, 224, 0.16), transparent 60%), linear-gradient(170deg, #1c2430 0%, #12171f 64%, #0e131a 100%);
   box-shadow: var(--xb-shadow-dark); color: var(--xb-on-dark);
 }
+.xbar-command-main .xbf-rail__title { font-size: 0.66rem; letter-spacing: 0.22em; text-transform: uppercase; font-weight: 700; color: var(--xb-on-dark-dim); padding: 18px 2px 6px; }
+.xbar-command-main .xbf-imod {
+  position: relative; padding: 20px 2px; border: none; border-radius: 0; background: none; box-shadow: none;
+  border-top: 1px solid var(--xb-dark-line); color: var(--xb-on-dark);
+}
+.xbar-command-main .xbf-rail__title + .xbf-imod { border-top: none; padding-top: 6px; }
 .xbar-command-main .xbf-imod__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .xbar-command-main .xbf-imod__ey { font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; color: var(--xb-on-dark-sand); padding-top: 5px; }
 .xbar-command-main .xbf-imod--blocker .xbf-imod__ey { color: #ff9e96; }
@@ -258,9 +264,7 @@ html body #root .xbar-command-main.xbar-route-home {
 
 @media (max-width: 1120px) {
   .xbar-command-main .xbf-split { grid-template-columns: 1fr; }
-  .xbar-command-main .xbf-rail { position: static; flex-direction: row; flex-wrap: wrap; }
-  .xbar-command-main .xbf-rail__title { width: 100%; }
-  .xbar-command-main .xbf-rail > .xbf-imod { flex: 1 1 250px; }
+  .xbar-command-main .xbf-rail { position: static; }
   .xbar-command-main .xbf-open__grid { grid-template-columns: 1fr; }
   .xbar-command-main .xbf-open__ribbon { grid-template-columns: repeat(2, 1fr); }
 }
