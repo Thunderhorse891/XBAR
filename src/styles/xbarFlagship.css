@@ -20,28 +20,33 @@ html body #root .xbar-command-main.xbar-route-home {
 .xbar-command-main .xbf-open {
   position: relative;
   margin: -20px -24px 0;
-  padding: clamp(46px, 5vw, 92px) clamp(28px, 4vw, 72px) 0;
+  padding: clamp(56px, 6vw, 116px) clamp(28px, 4vw, 80px) 0;
+  min-height: 64vh;
+  display: flex;
+  align-items: center;
   overflow: hidden;
-  background: linear-gradient(177deg, #fbf7ef 0%, #f3eee2 100%);
+  background:
+    radial-gradient(140% 100% at 86% 0%, rgba(120, 96, 54, 0.06), transparent 52%),
+    linear-gradient(177deg, #fcf8f1 0%, #f1ebdf 100%);
   border-bottom: 1px solid var(--xb-line);
 }
 .xbar-command-main .xbf-open__atmos { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
-.xbar-command-main .xbf-open__x { position: absolute; right: 4%; top: -30%; width: min(620px, 50%); height: auto; color: #1f242c; opacity: 0.05; }
-.xbar-command-main .xbf-open__x path { stroke: currentColor; stroke-width: 12; stroke-linecap: round; fill: none; }
-.xbar-command-main .xbf-open__horse { position: absolute; right: 8%; bottom: -14%; width: min(420px, 34%); height: auto; color: #6a5f4c; opacity: 0.09; }
-.xbar-command-main .xbf-open__horse path { fill: none; stroke: currentColor; stroke-width: 1.3; }
-.xbar-command-main .xbf-open__inner { position: relative; z-index: 1; max-width: 1360px; margin: 0 auto; }
+.xbar-command-main .xbf-open__x { position: absolute; right: -6%; top: -22%; width: min(880px, 62%); height: auto; color: #1f242c; opacity: 0.06; }
+.xbar-command-main .xbf-open__x path { stroke: currentColor; stroke-width: 9; stroke-linecap: round; fill: none; }
+.xbar-command-main .xbf-open__horse { position: absolute; left: -4%; bottom: -22%; width: min(620px, 46%); height: auto; color: #6a5f4c; opacity: 0.08; }
+.xbar-command-main .xbf-open__horse path { fill: none; stroke: currentColor; stroke-width: 1.1; }
+.xbar-command-main .xbf-open__inner { position: relative; z-index: 1; max-width: 1360px; margin: 0 auto; width: 100%; padding-bottom: clamp(40px, 4vw, 72px); }
 
-.xbar-command-main .xbf-open__brandline { display: flex; align-items: center; gap: 13px; }
-.xbar-command-main .xbf-open__mark { width: 30px; height: 30px; display: grid; place-items: center; }
+.xbar-command-main .xbf-open__brandline { display: flex; align-items: center; gap: 15px; }
+.xbar-command-main .xbf-open__mark { width: 36px; height: 36px; display: grid; place-items: center; }
 .xbar-command-main .xbf-open__mark svg { width: 100%; height: 100%; }
-.xbar-command-main .xbf-open__brand { font-size: 1.18rem; font-weight: 800; letter-spacing: 0.16em; color: var(--xb-ink); }
-.xbar-command-main .xbf-open__sep { width: 1px; height: 18px; background: var(--xb-line-2); }
-.xbar-command-main .xbf-open__kicker { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--xb-sand); }
+.xbar-command-main .xbf-open__brand { font-size: 1.4rem; font-weight: 800; letter-spacing: 0.18em; color: var(--xb-ink); }
+.xbar-command-main .xbf-open__sep { width: 1px; height: 20px; background: var(--xb-line-2); }
+.xbar-command-main .xbf-open__kicker { font-size: 0.74rem; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--xb-sand); }
 
-.xbar-command-main .xbf-open__grid { display: grid; grid-template-columns: 1.5fr 0.95fr; gap: clamp(32px, 4vw, 72px); align-items: center; margin-top: clamp(28px, 3vw, 48px); }
-.xbar-command-main .xbf-open__title { margin: 0; font-size: clamp(2.7rem, 4.8vw, 4.6rem); line-height: 0.95; letter-spacing: -0.04em; font-weight: 690; color: var(--xb-ink); max-width: 17ch; }
-.xbar-command-main .xbf-open__sub { margin: 22px 0 30px; max-width: 52ch; font-size: 1.08rem; line-height: 1.6; color: var(--xb-ink-soft); }
+.xbar-command-main .xbf-open__grid { display: grid; grid-template-columns: 1.42fr 0.92fr; gap: clamp(36px, 4.5vw, 88px); align-items: center; margin-top: clamp(36px, 4vw, 64px); }
+.xbar-command-main .xbf-open__title { margin: 0; font-size: clamp(3.1rem, 5.6vw, 5.6rem); line-height: 0.93; letter-spacing: -0.045em; font-weight: 700; color: var(--xb-ink); max-width: 15ch; }
+.xbar-command-main .xbf-open__sub { margin: 26px 0 34px; max-width: 50ch; font-size: 1.14rem; line-height: 1.62; color: var(--xb-ink-soft); }
 .xbar-command-main .xbf-open__cta { display: flex; gap: 12px; flex-wrap: wrap; }
 
 .xbar-command-main .xbf-btn { display: inline-flex; align-items: center; height: 46px; padding: 0 24px; border-radius: 11px; font-weight: 630; font-size: 0.92rem; border: 1px solid var(--xb-line-2); background: #fff; color: var(--xb-ink); cursor: pointer; transition: transform 150ms ease, border-color 150ms ease, background 150ms ease; }
