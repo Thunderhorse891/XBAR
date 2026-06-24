@@ -12,22 +12,21 @@ import {
   Gauge,
   Home,
   LayoutDashboard,
-  Leaf,
   type LucideIcon,
   Map,
-  Move,
   Plus,
   Rocket,
+  Search,
   Settings as SettingsIcon,
   ShieldCheck,
   Sparkles,
   Stethoscope,
   Sprout,
-  Upload,
   Users,
   Wheat,
 } from 'lucide-react';
 import { ProgressRing, QuickCreateMenu } from '@/components/saas';
+import { GlobalCreateDrawer, createActions, type CreateKey } from '@/components/saas/flows';
 import { buildCareBoardRows } from '@/lib/dashboardOps';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -67,7 +66,7 @@ const navGroups: NavGroup[] = [
   {
     heading: 'Records',
     items: [
-      { label: 'Documents Vault', path: '/documents', icon: FolderOpen, badgeKey: 'docs' },
+      { label: 'Documents Vault', path: '/documents-vault', icon: FolderOpen, badgeKey: 'docs' },
       { label: 'Ownership Chain', path: '/ownership', icon: ShieldCheck, badgeKey: 'transfers' },
       { label: 'Equipment', path: '/assets', icon: Boxes },
       { label: 'Expenses', path: '/expenses', icon: Coins },
@@ -96,6 +95,7 @@ export default function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mode, setMode] = useState<'ops' | 'buyer'>('ops');
+  const [createAction, setCreateAction] = useState<CreateKey | null>(null);
 
   const documents = useXbarStore((state) => state.documents);
   const horses = useXbarStore((state) => state.horses);
@@ -136,22 +136,14 @@ export default function MainLayout() {
     if (next === 'buyer') navigate('/buyer-deal-room');
   }
 
-  function toast(message: string) {
-    pushToast({ title: 'Quick create', message, tone: 'success' });
+  function handleSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      const q = (e.target as HTMLInputElement).value.trim();
+      if (q) navigate(`/horses?search=${encodeURIComponent(q)}`);
+    }
   }
 
-  const createItems = [
-    { label: 'Add Animal', icon: <Home size={15} />, onSelect: () => navigate('/horses?new=1') },
-    { label: 'Add Task', icon: <ClipboardList size={15} />, onSelect: () => toast('New task drawer opened') },
-    { label: 'Upload Document', icon: <Upload size={15} />, onSelect: () => navigate('/documents?upload=1') },
-    { label: 'Add Health Record', icon: <Stethoscope size={15} />, onSelect: () => navigate('/medical') },
-    { label: 'Move Animals', icon: <Move size={15} />, onSelect: () => toast('Move animals drawer opened') },
-    { label: 'Add Expense', icon: <Coins size={15} />, onSelect: () => navigate('/expenses') },
-    { label: 'Create Sale Packet', icon: <FileText size={15} />, onSelect: () => navigate('/sale-packet-studio') },
-    { label: 'Invite Buyer', icon: <Users size={15} />, onSelect: () => navigate('/buyer-deal-room') },
-    { label: 'Add Equipment', icon: <Boxes size={15} />, onSelect: () => navigate('/assets') },
-    { label: 'Report Pasture Issue', icon: <Leaf size={15} />, onSelect: () => toast('Pasture issue reported') },
-  ];
+  const createItems = createActions.map((label) => ({ label, onSelect: () => setCreateAction(label) }));
 
   return (
     <div className="xs-shell">
@@ -224,6 +216,11 @@ export default function MainLayout() {
             </span>
           </div>
 
+          <label className="xs-search">
+            <Search size={15} className="xs-search__icon" />
+            <input className="xs-search__input" placeholder="Search animals, documents, buyers, deals…" onKeyDown={handleSearchKey} aria-label="Search" />
+          </label>
+
           <div className="xs-topbar__spacer" />
 
           <div className="xs-topbar__right">
@@ -261,6 +258,8 @@ export default function MainLayout() {
         <main className="xs-page">
           <Outlet />
         </main>
+
+        <GlobalCreateDrawer action={createAction} onClose={() => setCreateAction(null)} />
 
         <nav className="xs-mobilebar" aria-label="Mobile navigation">
           {mobileItems.map(({ label, path, icon: Icon }) => {

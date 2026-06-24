@@ -29,6 +29,7 @@ const TodayWork = lazy(() => import('./routes/TodayWork'));
 const HerdGroups = lazy(() => import('./routes/HerdGroups'));
 const Pastures = lazy(() => import('./routes/Pastures'));
 const FeedInventory = lazy(() => import('./routes/FeedInventory'));
+const DocumentsVault = lazy(() => import('./routes/DocumentsVault'));
 const Breeding = lazy(() => import('./routes/Breeding'));
 const BuyerProfile = lazy(() => import('./routes/BuyerProfile'));
 const DocumentLibrary = lazy(() => import('./routes/DocumentLibrary'));
@@ -61,6 +62,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/herd-groups': 'Herd Groups',
   '/pastures': 'Pastures & Locations',
   '/feed': 'Feed & Inventory',
+  '/documents-vault': 'Documents Vault',
   '/sales-pipeline': 'Sales Pipeline',
   '/buyer-deal-room': 'Buyer Deal Room',
   '/sale-packet-studio': 'Sale Packet Studio',
@@ -187,6 +189,7 @@ export default function App() {
               <Route path="herd-groups" element={<HerdGroups />} />
               <Route path="pastures" element={<Pastures />} />
               <Route path="feed" element={<FeedInventory />} />
+              <Route path="documents-vault" element={<DocumentsVault />} />
               <Route path="sales-pipeline" element={<SalesPipeline />} />
               <Route path="buyer-deal-room" element={<BuyerDealRoom />} />
               <Route path="sale-packet-studio" element={<SalePacketStudio />} />

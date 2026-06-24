@@ -1,10 +1,9 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
-test('creates a fresh workspace and lands on the operations dashboard', async ({ page }) => {
+async function bootstrapWorkspace(page: Page) {
   await page.addInitScript(async () => {
     window.localStorage.clear();
     window.sessionStorage.clear();
-
     if (indexedDB.databases) {
       const databases = await indexedDB.databases();
       await Promise.all(
@@ -37,22 +36,94 @@ test('creates a fresh workspace and lands on the operations dashboard', async ({
       await page.goto('/#/setup');
     }
   }
-
   await expect(setupHeading).toBeVisible({ timeout: 10_000 });
 
   await page.getByLabel('Business name').fill('XBAR Holdings');
-  await page.getByLabel('Ranch name').fill('Blue River Ranch');
+  await page.getByLabel('Ranch name').fill('Thunder Horse Ranch');
   await page.getByLabel('Ranch manager').fill('Erin Wyrick');
   await page.getByLabel('Ops email').fill('ops@xbar.test');
-  await page.getByLabel('Default owner').fill('Blue River Ranch');
-  await page.getByLabel('Owner entity').fill('Blue River Ranch LLC');
+  await page.getByLabel('Default owner').fill('Thunder Horse Ranch');
+  await page.getByLabel('Owner entity').fill('Thunder Horse Ranch LLC');
   await page.getByLabel('Default barn').fill('Barn A');
   await page.getByLabel('Default pasture').fill('North Pasture');
-
   await page.getByRole('button', { name: 'Create workspace' }).click();
 
   await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
-  await expect(page.getByRole('heading', { name: 'XBAR Command Center', exact: true })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole('heading', { name: "Today's Work" }).first()).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText('XBAR Intelligence')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: 'XBAR Operations Console' })).toBeVisible({ timeout: 15_000 });
+}
+
+test('creates a workspace and lands on the operations console', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await expect(page.getByRole('heading', { name: "Today's Work — Work Queue" })).toBeVisible();
+  await expect(page.getByText('XBAR Intelligence')).toBeVisible();
+});
+
+test('global Create opens a real create drawer with fields', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Add Animal' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Add Animal' });
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByText('Name', { exact: true })).toBeVisible();
+  await expect(drawer.getByRole('button', { name: 'Add Animal' })).toBeVisible();
+});
+
+test('clicking a task opens the task drawer; revenue blocker launches the resolve flow', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await page.locator('.xs-task--click').first().click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  await page.getByRole('button', { name: 'Clear Blocker' }).first().click();
+  const wizard = page.getByRole('dialog', { name: 'Resolve Blocker' });
+  await expect(wizard).toBeVisible();
+  await expect(wizard.getByText('Health certificate expiration date missing')).toBeVisible();
+  await wizard.getByRole('button', { name: 'Continue' }).click();
+  await expect(wizard.getByText('Add the missing field')).toBeVisible();
+});
+
+test('animal profile opens with tabs', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await page.locator('.xs-animal').first().click();
+  const drawer = page.getByRole('dialog');
+  await expect(drawer).toBeVisible();
+  await expect(drawer.locator('.xs-dtab', { hasText: /^Sale Readiness$/ })).toBeVisible();
+  await drawer.locator('.xs-dtab', { hasText: /^Health$/ }).click();
+  await expect(drawer.getByText('Health certificate')).toBeVisible();
+});
+
+test('sale packet studio is a stepper wizard', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await page.getByRole('link', { name: 'Sale Packet Studio', exact: true }).click();
+  await expect(page.locator('.xs-stepper')).toBeVisible();
+  await expect(page.locator('.xs-select')).toBeVisible(); // step 1: animal select
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByText('Choose packet type')).toBeVisible(); // step 2 content
+});
+
+test('buyer deal room opens a buyer detail drawer', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await page.getByRole('link', { name: 'Buyer Deal Rooms', exact: true }).click();
+  await page.getByText('Marlow Ranch Partners').first().click();
+  const drawer = page.getByRole('dialog', { name: 'Marlow Ranch Partners' });
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByRole('button', { name: 'Mark Offer Received' })).toBeVisible();
+});
+
+test('documents vault opens a document drawer', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await page.getByRole('link', { name: 'Documents Vault', exact: true }).click();
+  await page.locator('.xs-table tbody tr').first().click();
+  const drawer = page.getByRole('dialog');
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByRole('button', { name: 'Mark Buyer-Safe' })).toBeVisible();
+});
+
+test('pasture location opens a detail drawer', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await page.getByRole('link', { name: 'Pastures & Locations', exact: true }).click();
+  await page.locator('.xs-grid-2 .xs-card').first().click();
+  const drawer = page.getByRole('dialog');
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByText('Animals currently here')).toBeVisible();
 });
