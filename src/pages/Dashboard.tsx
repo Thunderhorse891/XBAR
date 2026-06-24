@@ -169,16 +169,6 @@ export default function Dashboard() {
   const revenueAtRisk = openDeals.filter((lead) => blockedIds.has(lead.horseId)).reduce((sum, lead) => sum + (lead.offerAmount ?? 0), 0);
 
   const urgencyCount = transferGaps.length + careDueCount + reviewQueue.length;
-  const nextMove = transferGaps.length
-    ? 'Resolve the title and transfer blockers'
-    : careDueCount
-      ? 'Clear the care holds that are due'
-      : reviewQueue.length
-        ? 'Review the documents waiting in the queue'
-        : openDeals.length
-          ? 'Move qualified buyers toward an offer'
-          : 'Prepare the next buyer-ready horse record';
-  const nextMovePath = transferGaps.length ? '/ownership' : careDueCount ? '/medical' : reviewQueue.length ? '/documents' : openDeals.length ? '/sales' : '/horses';
 
 
   const laneMeta: Record<LaneKey, { label: string; tone: Tone; action: string; path: string }> = {
@@ -235,6 +225,29 @@ export default function Dashboard() {
   (['ready', 'review', 'blocked'] as LaneKey[]).forEach((key) => lanes[key].forEach((horse) => laneOfHorse.set(horse.id, key)));
   const statementDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
+  const nameOf = (horseId: string | undefined) => horses.find((horse) => horse.id === horseId)?.name ?? 'Unassigned asset';
+
+  const indexLines: { n: string; label: string; value: string; tone?: Tone }[] = [
+    { n: '01', label: 'Portfolio readiness', value: `${packetReadiness}%` },
+    { n: '02', label: 'Release blockers', value: String(transferGaps.length), tone: transferGaps.length ? 'rose' : undefined },
+    { n: '03', label: 'Documents outstanding', value: String(documentsMissing), tone: documentsMissing ? 'amber' : undefined },
+    { n: '04', label: 'Ownership confidence', value: `${ownershipConfidence}%` },
+    { n: '05', label: 'Capital exposed', value: formatCompactCurrency(revenueAtRisk) },
+  ];
+
+  const findings = ([
+    ...transferGaps.map((gap) => ({ title: `${gap.horseName} — transfer incomplete`, detail: gap.reasons[0] ?? `${gap.pendingCount} required documents pending`, tone: 'rose' as Tone })),
+    ...careBoard.filter((row) => row.signals.some((signal) => signal.status === 'due')).map((row) => ({ title: `${row.horseName} — care hold due`, detail: row.signals.filter((signal) => signal.status !== 'clear').slice(0, 2).map((signal) => signal.label).join(', ') || 'Care item due before listing', tone: 'amber' as Tone })),
+    ...reviewQueue.slice(0, 2).map((document) => ({ title: `${nameOf(document.horseId)} — ${document.title} awaiting review`, detail: `${document.type} not yet cleared for the buyer packet`, tone: 'amber' as Tone })),
+  ]).slice(0, 6).map((finding, index) => ({ ...finding, ref: String.fromCharCode(65 + index) }));
+
+  const reportActions: { title: string; impact: string; action: string; path: string }[] = [];
+  if (transferGaps.length) reportActions.push({ title: 'Resolve title & transfer blockers', impact: `Releases ${formatCompactCurrency(revenueAtRisk || 0)} and clears ${transferGaps.length} sale${transferGaps.length === 1 ? '' : 's'} held by missing proof.`, action: 'Open ownership', path: '/ownership' });
+  if (reviewQueue.length) reportActions.push({ title: 'Clear the document review queue', impact: `${reviewQueue.length} document${reviewQueue.length === 1 ? '' : 's'} between you and a buyer-safe packet.`, action: 'Open documents', path: '/documents' });
+  if (careDueCount) reportActions.push({ title: 'Clear care holds that are due', impact: 'Protects welfare and the buyer trust a sale depends on.', action: 'Open health', path: '/medical' });
+  if (openDeals.length) reportActions.push({ title: 'Advance qualified buyers toward offer', impact: `${openDeals.length} open deal${openDeals.length === 1 ? '' : 's'} ready to move once records are clean.`, action: 'Open sales', path: '/sales' });
+  if (!reportActions.length) reportActions.push({ title: 'Prepare the next buyer-ready packet', impact: 'The portfolio is current — use the clear window to get ahead.', action: 'Open horses', path: '/horses' });
+
   return (
     <div className="xbs">
       {/* MASTHEAD */}
@@ -247,7 +260,7 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="xbs-mast__doc">
-          <div className="xbs-mast__title">Statement of Sale Readiness</div>
+          <div className="xbs-mast__title">Sale-Readiness Report</div>
           <div className="xbs-mast__period" ref={periodRef}>
             <span className="xbs-mast__asof">As of {statementDate} ·</span>
             <button type="button" className="xbs-drop__btn" aria-haspopup="listbox" aria-expanded={periodOpen} onClick={() => setPeriodOpen((open) => !open)}>
@@ -268,40 +281,57 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* SUMMARY FIGURES */}
-      <section className="xbs-summary">
-        <div className="xbs-fig">
-          <span className="xbs-fig__label">Portfolio readiness</span>
-          <span className="xbs-fig__val">{packetReadiness}<i>%</i></span>
-          <span className="xbs-fig__sub">{lanes.ready.length} of {horses.length} assets buyer-ready</span>
-        </div>
-        <div className="xbs-fig xbs-fig--divide">
-          <span className="xbs-fig__label">Release blockers</span>
-          <span className={`xbs-fig__val${transferGaps.length ? ' xbs-fig__val--rose' : ''}`}>{transferGaps.length}</span>
-          <span className="xbs-fig__sub">{transferGaps.length ? 'assets cannot transfer yet' : 'titles are clear to release'}</span>
-        </div>
-        <div className="xbs-fig xbs-fig--divide">
-          <span className="xbs-fig__label">Capital exposed</span>
-          <span className="xbs-fig__val">{formatCompactCurrency(revenueAtRisk)}</span>
-          <span className="xbs-fig__sub">behind unresolved blockers</span>
-        </div>
-        <div className="xbs-fig xbs-fig--divide">
-          <span className="xbs-fig__label">Documents outstanding</span>
-          <span className={`xbs-fig__val${documentsMissing ? ' xbs-fig__val--amber' : ''}`}>{documentsMissing}</span>
-          <span className="xbs-fig__sub">across active sale packets</span>
-        </div>
+      {/* INDEX / SUMMARY */}
+      <section className="xbr-index">
+        {indexLines.map((line) => (
+          <div className="xbr-ix" key={line.n}>
+            <span className="xbr-ix__n">{line.n}</span>
+            <span className="xbr-ix__label">{line.label}</span>
+            <span className="xbr-ix__lead" aria-hidden="true" />
+            <span className={`xbr-ix__val${line.tone ? ` xbr-ix__val--${line.tone}` : ''}`}>{line.value}</span>
+          </div>
+        ))}
       </section>
 
-      {/* ADVISORY */}
-      <section className="xbs-advisory">
-        <span className="xbs-kicker">Advisory</span>
-        <p className="xbs-advisory__lead">{headline}</p>
-        <p className="xbs-advisory__body">
+      {/* ASSESSMENT */}
+      <section className="xbs-sec xbr-assess">
+        <span className="xbs-kicker">Assessment</span>
+        <p className="xbr-assess__lead">{headline}</p>
+        <p className="xbr-assess__body">
           {urgencyCount > 0
-            ? `${transferGaps.length ? `${transferGaps.length} ${transferGaps.length === 1 ? 'asset is' : 'assets are'} blocked from transfer because required proof is missing — until that clears, no sale can close` : reviewQueue.length ? `${reviewQueue.length} document${reviewQueue.length === 1 ? '' : 's'} are waiting for review before the packet is buyer-safe` : `${careDueCount} care hold${careDueCount === 1 ? '' : 's'} are due and should be cleared before listing`}. We recommend resolving the highest-exposure item first.`
+            ? `${transferGaps.length ? `${transferGaps.length} ${transferGaps.length === 1 ? 'asset is' : 'assets are'} blocked from transfer because required proof is missing — until that clears, no sale can close` : reviewQueue.length ? `${reviewQueue.length} document${reviewQueue.length === 1 ? '' : 's'} are waiting for review before the packet is buyer-safe` : `${careDueCount} care hold${careDueCount === 1 ? '' : 's'} are due and should be cleared before listing`}. The findings and recommended actions below are ordered by exposure.`
             : 'Documents, ownership, and care are current across the portfolio. This is the window to prepare the next buyer-ready packet.'}
         </p>
-        <button type="button" className="xbs-advisory__cta" onClick={() => navigate(nextMovePath)}>{nextMove} <span aria-hidden="true">→</span></button>
+      </section>
+
+      {/* FINDINGS */}
+      <section className="xbs-sec">
+        <div className="xbs-sec__head"><h2>Findings</h2><span className="xbs-sec__meta">{findings.length ? `${findings.length} flagged` : 'none'}</span></div>
+        {findings.length ? (
+          <div className="xbr-finds">
+            {findings.map((finding) => (
+              <div className="xbr-find" key={finding.ref}>
+                <span className="xbr-find__ref">{finding.ref}</span>
+                <div className="xbr-find__body"><strong>{finding.title}</strong><span>{finding.detail}</span></div>
+                <span className={`xbr-find__mk xbr-find__mk--${finding.tone}`} />
+              </div>
+            ))}
+          </div>
+        ) : <p className="xbs-empty">No exceptions. Every asset, document, and transfer is current.</p>}
+      </section>
+
+      {/* RECOMMENDED ACTIONS */}
+      <section className="xbs-sec">
+        <div className="xbs-sec__head"><h2>Recommended actions</h2><span className="xbs-sec__meta">in priority order</span></div>
+        <ol className="xbr-rec">
+          {reportActions.map((item, index) => (
+            <li className="xbr-rec__i" key={item.title}>
+              <span className="xbr-rec__n">{index + 1}</span>
+              <div className="xbr-rec__body"><strong>{item.title}</strong><span>{item.impact}</span></div>
+              <button type="button" className="xbr-rec__cta" onClick={() => navigate(item.path)}>{item.action} <span aria-hidden="true">→</span></button>
+            </li>
+          ))}
+        </ol>
       </section>
 
       {/* HOLDINGS LEDGER */}
