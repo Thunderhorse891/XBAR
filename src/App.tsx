@@ -25,6 +25,10 @@ const SalesPipeline = lazy(() => import('./routes/SalesPipeline'));
 const BuyerDealRoom = lazy(() => import('./routes/BuyerDealRoom'));
 const SalePacketStudio = lazy(() => import('./routes/SalePacketStudio'));
 const Reports = lazy(() => import('./routes/Reports'));
+const TodayWork = lazy(() => import('./routes/TodayWork'));
+const HerdGroups = lazy(() => import('./routes/HerdGroups'));
+const Pastures = lazy(() => import('./routes/Pastures'));
+const FeedInventory = lazy(() => import('./routes/FeedInventory'));
 const Breeding = lazy(() => import('./routes/Breeding'));
 const BuyerProfile = lazy(() => import('./routes/BuyerProfile'));
 const DocumentLibrary = lazy(() => import('./routes/DocumentLibrary'));
@@ -51,8 +55,12 @@ const Terms = lazy(() => import('./routes/Terms'));
 const Weather = lazy(() => import('./routes/Weather'));
 
 const ROUTE_LABELS: Record<string, string> = {
-  '/': 'Home',
+  '/': 'Command Center',
   '/getting-started': 'Getting Started',
+  '/today': "Today's Work",
+  '/herd-groups': 'Herd Groups',
+  '/pastures': 'Pastures & Locations',
+  '/feed': 'Feed & Inventory',
   '/sales-pipeline': 'Sales Pipeline',
   '/buyer-deal-room': 'Buyer Deal Room',
   '/sale-packet-studio': 'Sale Packet Studio',
@@ -175,6 +183,10 @@ export default function App() {
             <Route path="/" element={<RequireCloudAuth><RequireWorkspaceSetup><MainLayout /></RequireWorkspaceSetup></RequireCloudAuth>}>
               <Route index element={<Dashboard />} />
               <Route path="getting-started" element={<GettingStarted />} />
+              <Route path="today" element={<TodayWork />} />
+              <Route path="herd-groups" element={<HerdGroups />} />
+              <Route path="pastures" element={<Pastures />} />
+              <Route path="feed" element={<FeedInventory />} />
               <Route path="sales-pipeline" element={<SalesPipeline />} />
               <Route path="buyer-deal-room" element={<BuyerDealRoom />} />
               <Route path="sale-packet-studio" element={<SalePacketStudio />} />

@@ -180,3 +180,186 @@ export const subscriptionPlanCards = [
 ];
 
 export const operationalTasks = ['Resolve release blocker', 'Prepare sale packet', 'Review buyer access'];
+
+/* ===========================================================================
+   Command Center — operational ranch data
+   =========================================================================== */
+
+export const ranchSeason = { label: 'Sale Season', tone: 'brass' as ChipTone };
+export const ranchWeather = { tempF: 88, label: 'Hot · dry', risk: 'Heat watch', tone: 'warning' as ChipTone };
+
+export const commandMetrics = {
+  tasksDueToday: 12,
+  overdueTasks: 3,
+  animalsNeedAttention: 4,
+  medicalHolds: 1,
+  revenueBlocked: 35000,
+  activeBuyers: 2,
+  documentsExpiring: 15,
+  healthCerts: 7,
+  coggins: 5,
+  foalRegs: 3,
+  activeSaleProspects: 8,
+  buyerDealRooms: 4,
+};
+
+export type TaskPriority = 'Revenue Blocker' | 'High' | 'Medium' | 'Normal' | 'Planned';
+export type WorkTask = {
+  id: string;
+  title: string;
+  linkedType: 'Animal' | 'Pasture' | 'Document' | 'Sale Packet' | 'Herd Group' | 'Equipment';
+  linkedName: string;
+  priority: TaskPriority;
+  assignee: string;
+  due: string;
+  status: 'Open' | 'Review' | 'Blocking Release' | 'Planned';
+  category: 'Animal Care' | 'Pasture' | 'Feed' | 'Documents' | 'Sales' | 'Equipment';
+  overdue?: boolean;
+};
+
+export const todayTasks: WorkTask[] = [
+  { id: 't1', title: 'Add missing health certificate expiration date', linkedType: 'Sale Packet', linkedName: 'RHA Pine Barrel Prospect', priority: 'Revenue Blocker', assignee: 'Erin W.', due: 'Now', status: 'Blocking Release', category: 'Sales', overdue: true },
+  { id: 't2', title: 'Check north pasture water trough', linkedType: 'Pasture', linkedName: 'North Pasture', priority: 'High', assignee: 'Cody R.', due: 'Today', status: 'Open', category: 'Pasture' },
+  { id: 't3', title: 'Give evening medication', linkedType: 'Animal', linkedName: 'RHA Pine Barrel Prospect', priority: 'High', assignee: 'Erin W.', due: '6:00 PM', status: 'Open', category: 'Animal Care' },
+  { id: 't4', title: 'Upload new Coggins document', linkedType: 'Document', linkedName: 'THR Stone Mesa', priority: 'Medium', assignee: 'Erin W.', due: 'Today', status: 'Review', category: 'Documents' },
+  { id: 't5', title: 'Repair south gate latch', linkedType: 'Equipment', linkedName: 'South Trap Gate', priority: 'High', assignee: 'Cody R.', due: 'Today', status: 'Open', category: 'Equipment', overdue: true },
+  { id: 't6', title: 'Move mares to South Trap', linkedType: 'Herd Group', linkedName: 'Mares', priority: 'Normal', assignee: 'Cody R.', due: 'Tomorrow', status: 'Planned', category: 'Pasture' },
+  { id: 't7', title: 'Log morning hay feeding', linkedType: 'Herd Group', linkedName: 'Sale Prospects', priority: 'Normal', assignee: 'Cody R.', due: 'Today', status: 'Open', category: 'Feed' },
+  { id: 't8', title: 'Preg check — Copper Belle', linkedType: 'Animal', linkedName: 'Copper Belle', priority: 'Medium', assignee: 'Dr. Hale', due: 'Today', status: 'Open', category: 'Animal Care', overdue: true },
+];
+
+export const workboardTabs = ['All', 'Overdue', 'Animal Care', 'Pasture', 'Feed', 'Documents', 'Sales', 'Equipment'] as const;
+
+export type WatchAnimal = {
+  id: string;
+  name: string;
+  species: string;
+  sex: string;
+  age: string;
+  location: string;
+  group: 'Medical Hold' | 'Due for Care' | 'Breeding Window' | 'Sale Prospect' | 'Missing Records';
+  status: string;
+  tone: ChipTone;
+  next: string;
+};
+
+export const watchAnimals: WatchAnimal[] = [
+  { id: 'rha-pine-barrel-prospect', name: 'RHA Pine Barrel Prospect', species: 'Horse', sex: 'Mare', age: '6 yr', location: 'Main Barn', group: 'Sale Prospect', status: 'Sale Review', tone: 'warning', next: 'Add health certificate expiration date' },
+  { id: 'thr-stone-mesa', name: 'THR Stone Mesa', species: 'Horse', sex: 'Gelding', age: '4 yr', location: 'Quarantine Pen', group: 'Medical Hold', status: 'Medical Hold', tone: 'danger', next: 'Clear withdrawal period · re-test Coggins' },
+  { id: 'copper-belle', name: 'Copper Belle', species: 'Horse', sex: 'Mare', age: '9 yr', location: 'Foaling Pen', group: 'Breeding Window', status: 'Preg check due', tone: 'info', next: 'Schedule preg check with Dr. Hale' },
+  { id: 'thr-juniper-ledge', name: 'THR Juniper Ledge', species: 'Horse', sex: 'Mare', age: '5 yr', location: 'North Pasture', group: 'Missing Records', status: 'Records incomplete', tone: 'warning', next: 'Bill of sale unsigned' },
+];
+
+export type HerdGroup = {
+  id: string;
+  name: string;
+  count: number;
+  location: string;
+  openTasks: number;
+  nextEvent: string;
+  smart?: boolean;
+};
+
+export const herdGroups: HerdGroup[] = [
+  { id: 'mares', name: 'Mares', count: 14, location: 'North Pasture', openTasks: 3, nextEvent: 'Move to South Trap' },
+  { id: 'studs', name: 'Studs', count: 3, location: 'Stud Pen', openTasks: 1, nextEvent: 'Breeding record review' },
+  { id: 'foals', name: 'Foals', count: 5, location: 'Foaling Pen', openTasks: 2, nextEvent: '3 need registration' },
+  { id: 'sale', name: 'Sale Prospects', count: 8, location: 'Main Barn', openTasks: 4, nextEvent: '1 release blocked' },
+  { id: 'medical', name: 'Medical Hold', count: 1, location: 'Quarantine Pen', openTasks: 2, nextEvent: 'Withdrawal active', smart: true },
+  { id: 'docs30', name: 'Docs expiring · 30d', count: 6, location: 'Mixed', openTasks: 6, nextEvent: 'Renew certs & Coggins', smart: true },
+];
+
+export type Pasture = {
+  id: string;
+  name: string;
+  animals: number;
+  openTasks: number;
+  water: 'OK' | 'Check' | 'Issue';
+  fence: 'OK' | 'Check' | 'Issue';
+  grazing: 'Good' | 'Moderate' | 'Heavy';
+  rainfall: string;
+};
+
+export const pastures: Pasture[] = [
+  { id: 'north', name: 'North Pasture', animals: 14, openTasks: 2, water: 'Check', fence: 'OK', grazing: 'Moderate', rainfall: '0.0" / 7d' },
+  { id: 'south', name: 'South Pasture', animals: 9, openTasks: 1, water: 'OK', fence: 'Issue', grazing: 'Good', rainfall: '0.2" / 7d' },
+  { id: 'main', name: 'Main Barn', animals: 8, openTasks: 3, water: 'OK', fence: 'OK', grazing: 'Heavy', rainfall: '—' },
+  { id: 'foaling', name: 'Foaling Pen', animals: 5, openTasks: 1, water: 'OK', fence: 'OK', grazing: 'Good', rainfall: '—' },
+];
+
+export const healthCompliance = {
+  overdue: 3,
+  expiringDocs: 15,
+  medicalHolds: 1,
+  upcoming: 6,
+  missingRecords: 2,
+  items: [
+    { label: 'Coggins expired — Stone Mesa', tone: 'danger' as ChipTone, detail: 'Re-test before release' },
+    { label: 'Health cert expiration missing — Pine Barrel', tone: 'danger' as ChipTone, detail: 'Blocks $35k sale' },
+    { label: 'Vaccines due — Mares (4)', tone: 'warning' as ChipTone, detail: 'Spring booster' },
+    { label: 'Farrier due — Sale Prospects (3)', tone: 'warning' as ChipTone, detail: 'Trim cycle' },
+  ],
+};
+
+export const feedInventory = {
+  feedCostMonth: 4820,
+  lowStock: [
+    { name: 'Coastal hay', level: 'Low', detail: '6 days left', tone: 'danger' as ChipTone },
+    { name: 'Alfalfa cubes', level: 'Reorder', detail: '12 days left', tone: 'warning' as ChipTone },
+    { name: 'Mineral supplement', level: 'OK', detail: '5 weeks left', tone: 'success' as ChipTone },
+  ],
+  nextReorder: 'Coastal hay — Thu',
+  costPerAnimalDay: 4.1,
+};
+
+export const equipment = {
+  serviceDue: 2,
+  broken: 1,
+  workOrders: 3,
+  items: [
+    { name: 'Stock trailer (24ft)', status: 'Service due', detail: 'Bearings · 400 mi over', tone: 'warning' as ChipTone },
+    { name: 'South Trap gate', status: 'Broken', detail: 'Latch failed', tone: 'danger' as ChipTone },
+    { name: 'Ranch UTV', status: 'OK', detail: 'Serviced last week', tone: 'success' as ChipTone },
+  ],
+};
+
+export const financialSnapshot = {
+  monthExpenses: 11240,
+  feedCost: 4820,
+  healthCost: 2360,
+  openSaleValue: 84000,
+  projectedMargin: 38,
+  rows: [
+    { label: 'Feed', value: 4820 },
+    { label: 'Vet & health', value: 2360 },
+    { label: 'Farrier', value: 640 },
+    { label: 'Labor', value: 2100 },
+    { label: 'Equipment', value: 1320 },
+  ],
+};
+
+export const nextBestAction = {
+  title: 'Clear release blocker for RHA Pine Barrel Prospect',
+  reason: 'A $35,000 sale target is blocked by a missing health certificate expiration date.',
+  to: '/sale-packet-studio',
+};
+
+export const commandRisk = [
+  '15 documents expire soon',
+  '3 animals have overdue care',
+  '1 pasture issue open (South fence)',
+];
+
+export const commandRevenue = [
+  '$35,000 target sale blocked',
+  '2 active buyers',
+  '1 offer below target',
+];
+
+export const commandActivity = [
+  { label: 'Buyer downloaded packet', time: '12m ago' },
+  { label: 'Coggins uploaded — Stone Mesa', time: '1h ago' },
+  { label: 'Task completed — AM feeding', time: '2h ago' },
+  { label: 'Horse moved to Quarantine', time: '4h ago' },
+  { label: 'Offer recorded — $20,000', time: 'Yesterday' },
+];

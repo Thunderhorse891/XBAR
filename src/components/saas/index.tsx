@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
-import type { ChipTone } from '@/data/xbarSaasMock';
+import type { ChipTone, TaskPriority } from '@/data/xbarSaasMock';
 
 /* ------------------------------------------------------------------ Chips */
 export function StatusChip({ tone, children }: { tone: ChipTone; children: ReactNode }) {
@@ -10,6 +10,131 @@ export function StatusChip({ tone, children }: { tone: ChipTone; children: React
       <span className="xs-chip__dot" aria-hidden="true" />
       {children}
     </span>
+  );
+}
+
+const priorityTone: Record<TaskPriority, ChipTone> = {
+  'Revenue Blocker': 'danger',
+  High: 'warning',
+  Medium: 'info',
+  Normal: 'neutral',
+  Planned: 'neutral',
+};
+
+export function PriorityChip({ priority }: { priority: TaskPriority }) {
+  return <StatusChip tone={priorityTone[priority]}>{priority}</StatusChip>;
+}
+
+/* ----------------------------------------------------------- Action button */
+export function ActionButton({
+  children,
+  onClick,
+  variant = 'default',
+  size,
+  block,
+  disabled,
+  icon,
+}: {
+  children: ReactNode;
+  onClick?: () => void;
+  variant?: 'default' | 'primary' | 'brass' | 'ghost';
+  size?: 'sm';
+  block?: boolean;
+  disabled?: boolean;
+  icon?: ReactNode;
+}) {
+  const cls = [
+    'xs-btn',
+    variant !== 'default' ? `xs-btn--${variant}` : '',
+    size === 'sm' ? 'xs-btn--sm' : '',
+    block ? 'xs-btn--block' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  return (
+    <button type="button" className={cls} onClick={onClick} disabled={disabled}>
+      {icon}
+      {children}
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------- Filter tabs */
+export function FilterTabs({
+  tabs,
+  active,
+  onChange,
+}: {
+  tabs: readonly string[];
+  active: string;
+  onChange: (tab: string) => void;
+}) {
+  return (
+    <div className="xs-tabs" role="tablist">
+      {tabs.map((tab) => (
+        <button
+          key={tab}
+          type="button"
+          role="tab"
+          aria-selected={active === tab}
+          className={`xs-tab${active === tab ? ' xs-tab--active' : ''}`}
+          onClick={() => onChange(tab)}
+        >
+          {tab}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------- Quick create menu */
+export function QuickCreateMenu({
+  trigger,
+  items,
+}: {
+  trigger: (open: () => void) => ReactNode;
+  items: { label: string; icon?: ReactNode; onSelect: () => void }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onEsc);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onEsc);
+    };
+  }, [open]);
+
+  return (
+    <div className="xs-menu" ref={ref}>
+      {trigger(() => setOpen((v) => !v))}
+      {open ? (
+        <div className="xs-menu__pop" role="menu">
+          {items.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              className="xs-menu__item"
+              onClick={() => {
+                setOpen(false);
+                item.onSelect();
+              }}
+            >
+              {item.icon ? <span className="xs-menu__icon">{item.icon}</span> : null}
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

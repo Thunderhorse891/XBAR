@@ -1,221 +1,460 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowUpRight,
-  CalendarClock,
-  ChevronRight,
+  AlertTriangle,
+  ArrowRight,
+  Camera,
+  CheckCircle2,
+  ClipboardList,
+  Coins,
+  Droplets,
   FileWarning,
+  HeartPulse,
+  ListChecks,
+  MapPin,
+  Move,
+  Plus,
   Sparkles,
-  Users,
-  X,
+  StickyNote,
+  Timer,
+  Tractor,
+  TrendingUp,
+  Upload,
+  Wheat,
 } from 'lucide-react';
 import { HorsesIcon } from '@/components/icons';
-import { Card, MetricRow, ReadinessChart, SlideOverDrawer, StatusChip } from '@/components/saas';
+import {
+  ActionButton,
+  Card,
+  FilterTabs,
+  PriorityChip,
+  SlideOverDrawer,
+  StatusChip,
+} from '@/components/saas';
+import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import {
-  activity30d,
-  dashboardMetrics,
-  documentExpiry,
-  intelligenceRail,
-  pipelineFeature,
-  readinessSegments,
-  stateToTone,
-  topReleaseItems,
+  commandActivity,
+  commandMetrics,
+  commandRevenue,
+  commandRisk,
+  equipment,
+  feedInventory,
+  financialSnapshot,
+  healthCompliance,
+  nextBestAction,
+  pastures,
+  todayTasks,
+  watchAnimals,
+  workboardTabs,
   xbarRanch,
+  type WatchAnimal,
+  type WorkTask,
 } from '@/data/xbarSaasMock';
 
-function formatUsd(n: number) {
-  return `$${n.toLocaleString('en-US')}`;
-}
+const usd = (n: number) => `$${n.toLocaleString('en-US')}`;
+const usdK = (n: number) => `$${(n / 1000).toLocaleString('en-US', { maximumFractionDigits: 1 })}k`;
+
+const groupOrder: WatchAnimal['group'][] = ['Medical Hold', 'Sale Prospect', 'Breeding Window', 'Missing Records', 'Due for Care'];
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const horses = useXbarStore((state) => state.horses);
+  const pushToast = useUiStore((state) => state.pushToast);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
-  const [bannerOpen, setBannerOpen] = useState(true);
-  const [releaseDrawer, setReleaseDrawer] = useState<(typeof topReleaseItems)[number] | null>(null);
 
   const ranchName = workspaceProfile.ranchName || workspaceProfile.businessName || xbarRanch.name;
-  const horseCount = horses.length || dashboardMetrics.horses;
-  const docExpiringCount = documentExpiry.total;
+  const [tasks, setTasks] = useState<WorkTask[]>(todayTasks);
+  const [tab, setTab] = useState<string>('All');
+  const [animal, setAnimal] = useState<WatchAnimal | null>(null);
+  const [blockerOpen, setBlockerOpen] = useState(false);
 
-  const metrics = [
-    { icon: <HorsesIcon width={18} height={18} />, value: horseCount, label: 'Horses', to: '/horses' },
-    { icon: <Users size={18} />, value: dashboardMetrics.activeSaleProspects, label: 'Active Sale Prospects', to: '/sales-pipeline' },
-    { icon: <FileWarning size={18} />, value: docExpiringCount, label: 'Documents Expiring', to: '/documents' },
-    { icon: <Users size={18} />, value: dashboardMetrics.buyerDealRooms, label: 'Buyer Deal Rooms', to: '/buyer-deal-room' },
-    { icon: <Sparkles size={18} />, value: `${dashboardMetrics.readinessScore}%`, label: 'Readiness Score', to: '/reports' },
-  ];
+  const filteredTasks = useMemo(() => {
+    if (tab === 'All') return tasks;
+    if (tab === 'Overdue') return tasks.filter((t) => t.overdue);
+    return tasks.filter((t) => t.category === tab);
+  }, [tasks, tab]);
 
-  const step = pipelineFeature.currentStep;
+  function markDone(id: string) {
+    const done = tasks.find((t) => t.id === id);
+    setTasks((cur) => cur.filter((t) => t.id !== id));
+    pushToast({ title: 'Task completed', message: done ? done.title : 'Marked done', tone: 'success' });
+  }
+  function quick(message: string) {
+    pushToast({ title: 'Logged', message, tone: 'success' });
+  }
 
   return (
     <>
       <div className="xs-page__head">
         <div>
           <div className="xs-eyebrow">{ranchName}</div>
-          <h1 className="xs-title">Dashboard</h1>
-          <p className="xs-subtitle">Ranch operations and sale-readiness overview across active transaction assets.</p>
+          <h1 className="xs-title">XBAR Command Center</h1>
+          <p className="xs-subtitle">Daily ranch work, sale readiness, records, and operational risk.</p>
+        </div>
+        <div className="xs-field">
+          <button type="button" className="xs-fieldbtn" onClick={() => quick('Note captured to the ranch log')}>
+            <StickyNote size={15} /> Add Note
+          </button>
+          <button type="button" className="xs-fieldbtn" onClick={() => quick('Photo queued for upload')}>
+            <Camera size={15} /> Add Photo
+          </button>
+          <button type="button" className="xs-fieldbtn" onClick={() => quick('Pasture issue reported')}>
+            <AlertTriangle size={15} /> Report Issue
+          </button>
         </div>
       </div>
 
-      {bannerOpen ? (
-        <div className="xs-banner">
-          <span className="xs-banner__icon">
-            <Sparkles size={18} />
-          </span>
-          <div className="xs-banner__body">
-            <div className="xs-banner__title">Review the new XBAR Sale Packet Studio</div>
-            <div className="xs-banner__sub">Assemble buyer-ready packets, verify Buyer-Safe Proof, and resolve release blockers in one place.</div>
+      {/* ----------------------------------------------------- Priority strip */}
+      <div className="xs-strip">
+        <article className="xs-prio xs-prio--brass">
+          <div className="xs-prio__head">
+            <span className="xs-prio__icon"><ClipboardList size={20} /></span>
+            <span className="xs-prio__label">Today's Work</span>
           </div>
-          <button type="button" className="xs-btn xs-btn--primary xs-btn--sm" onClick={() => navigate('/sale-packet-studio')}>
-            Open Studio
-          </button>
-          <button type="button" className="xs-iconbtn" aria-label="Dismiss" onClick={() => setBannerOpen(false)}>
-            <X size={15} />
-          </button>
-        </div>
-      ) : null}
+          <div className="xs-prio__big">
+            <span className="xs-prio__num">{commandMetrics.tasksDueToday}</span>
+            <span className="xs-prio__unit">tasks due</span>
+          </div>
+          <div className="xs-prio__sub"><span><strong>{commandMetrics.overdueTasks}</strong> overdue</span></div>
+          <ActionButton variant="primary" block onClick={() => document.getElementById('xs-workboard')?.scrollIntoView({ behavior: 'smooth' })}>
+            Open Work Board
+          </ActionButton>
+        </article>
 
-      <div className="xs-dash">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Top grid: metric stack | readiness | activity */}
-          <div className="xs-grid-top">
-            <div className="xs-metricstack">
-              {metrics.map((m) => (
-                <MetricRow key={m.label} icon={m.icon} value={m.value} label={m.label} onClick={() => navigate(m.to)} />
+        <article className="xs-prio xs-prio--warning">
+          <div className="xs-prio__head">
+            <span className="xs-prio__icon"><HorsesIcon width={20} height={20} /></span>
+            <span className="xs-prio__label">Animal Watchlist</span>
+          </div>
+          <div className="xs-prio__big">
+            <span className="xs-prio__num">{commandMetrics.animalsNeedAttention}</span>
+            <span className="xs-prio__unit">need attention</span>
+          </div>
+          <div className="xs-prio__sub"><span><strong>{commandMetrics.medicalHolds}</strong> medical hold</span></div>
+          <ActionButton variant="primary" block onClick={() => document.getElementById('xs-watchlist')?.scrollIntoView({ behavior: 'smooth' })}>
+            Review Animals
+          </ActionButton>
+        </article>
+
+        <article className="xs-prio xs-prio--danger">
+          <div className="xs-prio__head">
+            <span className="xs-prio__icon"><Coins size={20} /></span>
+            <span className="xs-prio__label">Revenue Blockers</span>
+          </div>
+          <div className="xs-prio__big">
+            <span className="xs-prio__num">1</span>
+            <span className="xs-prio__unit">sale blocked</span>
+          </div>
+          <div className="xs-prio__sub"><span><strong>{usd(commandMetrics.revenueBlocked)}</strong> target affected</span></div>
+          <ActionButton variant="primary" block onClick={() => setBlockerOpen(true)}>
+            Clear Blocker
+          </ActionButton>
+        </article>
+
+        <article className="xs-prio xs-prio--olive">
+          <div className="xs-prio__head">
+            <span className="xs-prio__icon"><FileWarning size={20} /></span>
+            <span className="xs-prio__label">Documents Expiring</span>
+          </div>
+          <div className="xs-prio__big">
+            <span className="xs-prio__num">{commandMetrics.documentsExpiring}</span>
+            <span className="xs-prio__unit">expiring soon</span>
+          </div>
+          <div className="xs-prio__sub">
+            <span><strong>{commandMetrics.healthCerts}</strong> health certs</span>
+            <span><strong>{commandMetrics.coggins}</strong> Coggins</span>
+            <span><strong>{commandMetrics.foalRegs}</strong> foal regs</span>
+          </div>
+          <ActionButton variant="primary" block onClick={() => navigate('/documents')}>
+            Open Vault
+          </ActionButton>
+        </article>
+      </div>
+
+      <div className="xs-cc-rows">
+        {/* ------------------------------------------ Row 1: work board + rail */}
+        <div className="xs-r-8-4">
+          <Card>
+            <div id="xs-workboard" />
+            <div className="xs-work__bar">
+              <div>
+                <h2 className="xs-card__title">Today's Work</h2>
+                <div className="xs-card__sub">{filteredTasks.length} of {tasks.length} shown · assigned across the crew</div>
+              </div>
+              <div className="xs-work__actions">
+                <ActionButton size="sm" onClick={() => quick('Bulk update applied')}>Bulk Update</ActionButton>
+                <ActionButton variant="primary" size="sm" icon={<Plus size={15} />} onClick={() => quick('New task added')}>Add Task</ActionButton>
+              </div>
+            </div>
+            <FilterTabs tabs={workboardTabs} active={tab} onChange={setTab} />
+            <div style={{ marginTop: 8 }}>
+              {filteredTasks.length === 0 ? (
+                <div className="xs-empty">Nothing in this lane. Clear work shows here.</div>
+              ) : (
+                filteredTasks.map((t) => (
+                  <div key={t.id} className={`xs-task${t.priority === 'Revenue Blocker' ? ' xs-task--blocker' : ''}`}>
+                    <PriorityChip priority={t.priority} />
+                    <div>
+                      <div className="xs-task__title">{t.title}</div>
+                      <div className="xs-task__meta">
+                        <span>{t.linkedType}: {t.linkedName}</span>
+                        <span>· {t.assignee}</span>
+                        <span>· {t.status}</span>
+                      </div>
+                    </div>
+                    <div className="xs-task__right">
+                      <span className={`xs-task__due${t.due === 'Now' ? ' xs-task__due--now' : ''}`}>{t.due}</span>
+                      <div className="xs-task__quick">
+                        <button type="button" className="xs-quickbtn" title="Mark done" onClick={() => markDone(t.id)}><CheckCircle2 size={15} /></button>
+                        <button type="button" className="xs-quickbtn" title="Add note" onClick={() => quick(`Note added to "${t.title}"`)}><StickyNote size={15} /></button>
+                        <button type="button" className="xs-quickbtn" title="Snooze" onClick={() => quick(`Snoozed "${t.title}"`)}><Timer size={15} /></button>
+                        <button type="button" className="xs-quickbtn" title="Open linked record" onClick={() => navigate(t.category === 'Sales' ? '/sales-pipeline' : t.category === 'Documents' ? '/documents' : '/horses')}><ArrowRight size={15} /></button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </Card>
+
+          <IntelligenceRail navigate={navigate} onQuick={quick} />
+        </div>
+
+        {/* --------------------------- Row 2: watchlist + pasture + health */}
+        <div className="xs-r-5-4-3">
+          <Card link="All animals" onLink={() => navigate('/horses')}>
+            <div id="xs-watchlist" />
+            <h2 className="xs-card__title" style={{ marginBottom: 2 }}>Animal Watchlist</h2>
+            <div className="xs-card__sub" style={{ marginBottom: 10 }}>Animals that need a decision, not a head count</div>
+            {groupOrder
+              .filter((g) => watchAnimals.some((a) => a.group === g))
+              .map((g) => (
+                <div key={g}>
+                  <div className="xs-watch__group">{g}</div>
+                  {watchAnimals.filter((a) => a.group === g).map((a) => (
+                    <button key={a.id} type="button" className="xs-animal" onClick={() => setAnimal(a)}>
+                      <span className="xs-animal__avatar"><HorsesIcon width={20} height={20} /></span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span className="xs-animal__name">{a.name}</span>
+                        <span className="xs-animal__meta">{a.species} · {a.sex} · {a.age} · {a.location}</span>
+                        <span className="xs-animal__next">Next: <b>{a.next}</b></span>
+                      </span>
+                      <StatusChip tone={a.tone}>{a.status}</StatusChip>
+                    </button>
+                  ))}
+                </div>
+              ))}
+          </Card>
+
+          <Card link="View map" onLink={() => quick('Map view coming soon')}>
+            <h2 className="xs-card__title" style={{ marginBottom: 2 }}>Pastures & Locations</h2>
+            <div className="xs-card__sub" style={{ marginBottom: 12 }}>{pastures.length} active locations · {pastures.reduce((s, p) => s + p.animals, 0)} animals placed</div>
+            <div className="xs-pgrid">
+              {pastures.map((p) => (
+                <div key={p.id} className="xs-pcard">
+                  <div className="xs-pcard__name">{p.name}</div>
+                  <div className="xs-pcard__count">{p.animals} animals · {p.openTasks} tasks · {p.rainfall}</div>
+                  <div className="xs-pcard__tags">
+                    <span className={`xs-ptag xs-ptag--${p.water === 'OK' ? 'ok' : p.water === 'Check' ? 'check' : 'issue'}`}>Water {p.water}</span>
+                    <span className={`xs-ptag xs-ptag--${p.fence === 'OK' ? 'ok' : p.fence === 'Check' ? 'check' : 'issue'}`}>Fence {p.fence}</span>
+                    <span className="xs-ptag xs-ptag--check">{p.grazing} graze</span>
+                  </div>
+                </div>
               ))}
             </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <ActionButton size="sm" icon={<Move size={14} />} onClick={() => quick('Move animals drawer opened')}>Move Animals</ActionButton>
+              <ActionButton size="sm" icon={<AlertTriangle size={14} />} onClick={() => quick('Pasture issue reported')}>Report Issue</ActionButton>
+            </div>
+          </Card>
 
-            <Card title="Sale Readiness" subtitle="Transaction confidence across active sale assets" link="Open readiness report" onLink={() => navigate('/reports')}>
-              <div className="xs-readiness">
-                <div>
-                  <ReadinessChart score={dashboardMetrics.readinessScore} segments={readinessSegments} mark={<HorsesIcon width={26} height={26} />} />
-                  <div className="xs-legend">
-                    {readinessSegments.map((seg) => (
-                      <span key={seg.label} className="xs-legend__item">
-                        <span className="xs-legend__swatch" style={{ background: seg.tone }} /> {seg.label} · {seg.value}
-                      </span>
-                    ))}
-                  </div>
+          <Card link="Health" onLink={() => navigate('/medical')}>
+            <h2 className="xs-card__title" style={{ marginBottom: 2 }}>Health & Compliance</h2>
+            <div className="xs-card__sub" style={{ marginBottom: 12 }}>Records that gate care and release</div>
+            <div className="xs-statgrid">
+              <div className="xs-stattile"><div className="xs-stattile__num xs-stattile__num--danger">{healthCompliance.overdue}</div><div className="xs-stattile__label">Overdue care</div></div>
+              <div className="xs-stattile"><div className="xs-stattile__num xs-stattile__num--warning">{healthCompliance.expiringDocs}</div><div className="xs-stattile__label">Expiring docs</div></div>
+              <div className="xs-stattile"><div className="xs-stattile__num xs-stattile__num--danger">{healthCompliance.medicalHolds}</div><div className="xs-stattile__label">Medical holds</div></div>
+              <div className="xs-stattile"><div className="xs-stattile__num">{healthCompliance.upcoming}</div><div className="xs-stattile__label">Upcoming care</div></div>
+            </div>
+            <div className="xs-mlist">
+              {healthCompliance.items.map((it) => (
+                <div key={it.label} className="xs-mrow">
+                  <span className="xs-mrow__main">
+                    <span className="xs-mrow__title">{it.label}</span>
+                    <span className="xs-mrow__detail">{it.detail}</span>
+                  </span>
+                  <StatusChip tone={it.tone}>{it.tone === 'danger' ? 'Blocker' : 'Due'}</StatusChip>
                 </div>
-                <div>
-                  <div className="xs-card__sub" style={{ marginBottom: 6, fontWeight: 600 }}>Top Release Items</div>
-                  <div className="xs-readiness-list">
-                    {topReleaseItems.map((item) => (
-                      <button key={item.label} type="button" className="xs-readiness-row" onClick={() => setReleaseDrawer(item)}>
-                        <span className="xs-readiness-row__label">{item.label}</span>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                          <StatusChip tone={stateToTone[item.state]}>{item.state}</StatusChip>
-                          <ChevronRight size={15} className="xs-muted" />
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </Card>
-
-            <Card title="Activity" subtitle="Last 30 days vs previous">
-              <div className="xs-activity">
-                {activity30d.map((a) => (
-                  <button key={a.label} type="button" className="xs-activity__row" onClick={() => navigate(a.to)}>
-                    <span className="xs-activity__num">{a.num}</span>
-                    <span className="xs-activity__label">{a.label}</span>
-                    <span className="xs-activity__delta">{a.delta}</span>
-                  </button>
-                ))}
-              </div>
-            </Card>
-          </div>
-
-          {/* Bottom grid: pipeline | document expiry */}
-          <div className="xs-grid-bottom">
-            <Card title="Sales Pipeline" link="Open pipeline" onLink={() => navigate('/sales-pipeline')}>
-              <div className="xs-pipeline__head">
-                <div className="xs-pipeline__name">{pipelineFeature.name}</div>
-                <StatusChip tone="warning">Offer received</StatusChip>
-              </div>
-              <div className="xs-stepbar">
-                {pipelineFeature.steps.map((label, i) => (
-                  <div key={label} className="xs-step">
-                    <div className={`xs-step__bar${i < step ? ' xs-step__bar--done' : i === step ? ' xs-step__bar--current' : ''}`} />
-                    <div className={`xs-step__label${i === step ? ' xs-step__label--current' : ''}`}>{label}</div>
-                  </div>
-                ))}
-              </div>
-              <div className="xs-pipeline__stats">
-                <div>
-                  <div className="xs-stat__value">{formatUsd(pipelineFeature.currentOffer)}</div>
-                  <div className="xs-stat__label">Current offer</div>
-                </div>
-                <div>
-                  <div className="xs-stat__value">{formatUsd(pipelineFeature.targetPrice)}</div>
-                  <div className="xs-stat__label">Target sale price</div>
-                </div>
-                <div>
-                  <div className="xs-stat__value">{pipelineFeature.daysActive}</div>
-                  <div className="xs-stat__label">Days active</div>
-                </div>
-                <div style={{ marginLeft: 'auto', alignSelf: 'center' }}>
-                  <button type="button" className="xs-btn xs-btn--primary xs-btn--sm" onClick={() => navigate('/sales-pipeline')}>
-                    Update Deal
-                  </button>
-                </div>
-              </div>
-            </Card>
-
-            <Card title="Document Expiry">
-              <div className="xs-bigstat">
-                <span className="xs-bigstat__num">{documentExpiry.total}</span>
-                <span className="xs-bigstat__txt">expiring soon</span>
-              </div>
-              <div className="xs-breakdown">
-                {documentExpiry.breakdown.map((row) => (
-                  <div key={row.label} className="xs-breakdown__row">
-                    <span>{row.label}</span>
-                    <span className="xs-breakdown__count">{row.count}</span>
-                  </div>
-                ))}
-              </div>
-              <button type="button" className="xs-btn xs-btn--block" onClick={() => navigate('/documents')}>
-                View All Documents
-              </button>
-            </Card>
-          </div>
+              ))}
+            </div>
+          </Card>
         </div>
 
-        {/* Intelligence rail */}
-        <IntelligenceRail navigate={navigate} />
+        {/* ----------------------------- Row 3: sales pipeline + documents */}
+        <div className="xs-r-6-6">
+          <Card link="Open pipeline" onLink={() => navigate('/sales-pipeline')}>
+            <h2 className="xs-card__title" style={{ marginBottom: 2 }}>Sales Pipeline</h2>
+            <div className="xs-card__sub" style={{ marginBottom: 12 }}>{commandMetrics.activeSaleProspects} active prospects · {usd(financialSnapshot.openSaleValue)} open value</div>
+            <div className="xs-task xs-task--blocker">
+              <PriorityChip priority="Revenue Blocker" />
+              <div>
+                <div className="xs-task__title">RHA Pine Barrel Prospect</div>
+                <div className="xs-task__meta">
+                  <span>Target {usd(35000)}</span>
+                  <span>· Offer {usd(20000)}</span>
+                  <span>· Release blocked</span>
+                </div>
+              </div>
+              <div className="xs-task__right">
+                <ActionButton size="sm" variant="primary" onClick={() => setBlockerOpen(true)}>Clear blocker</ActionButton>
+              </div>
+            </div>
+            <div className="xs-mlist" style={{ marginTop: 4 }}>
+              <div className="xs-mrow">
+                <span className="xs-mrow__main"><span className="xs-mrow__title">THR Copper Canyon</span><span className="xs-mrow__detail">Offer {usd(28000)} · Release ready</span></span>
+                <StatusChip tone="success">Ready</StatusChip>
+              </div>
+              <div className="xs-mrow">
+                <span className="xs-mrow__main"><span className="xs-mrow__title">THR Juniper Ledge</span><span className="xs-mrow__detail">Packet ready · buyer invited</span></span>
+                <StatusChip tone="warning">Review</StatusChip>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <ActionButton size="sm" onClick={() => navigate('/sale-packet-studio')}>Create Packet</ActionButton>
+              <ActionButton size="sm" onClick={() => navigate('/buyer-deal-room')}>Invite Buyer</ActionButton>
+            </div>
+          </Card>
+
+          <Card link="Open vault" onLink={() => navigate('/documents')}>
+            <h2 className="xs-card__title" style={{ marginBottom: 2 }}>Documents & Proof Engine</h2>
+            <div className="xs-card__sub" style={{ marginBottom: 12 }}>Buyer-safe proof, expirations, and review queue</div>
+            <div className="xs-statgrid">
+              <div className="xs-stattile"><div className="xs-stattile__num xs-stattile__num--warning">{commandMetrics.documentsExpiring}</div><div className="xs-stattile__label">Expiring soon</div></div>
+              <div className="xs-stattile"><div className="xs-stattile__num xs-stattile__num--danger">2</div><div className="xs-stattile__label">Missing data</div></div>
+              <div className="xs-stattile"><div className="xs-stattile__num">24</div><div className="xs-stattile__label">Buyer-safe</div></div>
+              <div className="xs-stattile"><div className="xs-stattile__num">3</div><div className="xs-stattile__label">In review</div></div>
+            </div>
+            <div className="xs-mlist">
+              <div className="xs-mrow">
+                <span className="xs-mrow__main"><span className="xs-mrow__title">Health cert — Pine Barrel</span><span className="xs-mrow__detail">Expiration date missing</span></span>
+                <StatusChip tone="danger">Missing</StatusChip>
+              </div>
+              <div className="xs-mrow">
+                <span className="xs-mrow__main"><span className="xs-mrow__title">Coggins — Stone Mesa</span><span className="xs-mrow__detail">Expires in 14 days</span></span>
+                <StatusChip tone="warning">Expiring</StatusChip>
+              </div>
+            </div>
+            <ActionButton size="sm" block icon={<Upload size={14} />} onClick={() => navigate('/documents?upload=1')} >Upload Document</ActionButton>
+          </Card>
+        </div>
+
+        {/* ------------------------ Row 4: feed + equipment + financial */}
+        <div className="xs-r-4-4-4">
+          <Card link="Inventory" onLink={() => navigate('/expenses')}>
+            <h2 className="xs-card__title" style={{ marginBottom: 2 }}>Feed & Inventory</h2>
+            <div className="xs-card__sub" style={{ marginBottom: 12 }}>{usd(feedInventory.feedCostMonth)}/mo · {usd(feedInventory.costPerAnimalDay)}/animal-day</div>
+            <div className="xs-mlist">
+              {feedInventory.lowStock.map((f) => (
+                <div key={f.name} className="xs-mrow">
+                  <span className="xs-mrow__main"><span className="xs-mrow__title">{f.name}</span><span className="xs-mrow__detail">{f.detail}</span></span>
+                  <StatusChip tone={f.tone}>{f.level}</StatusChip>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <ActionButton size="sm" icon={<Wheat size={14} />} onClick={() => quick('Feed logged')}>Log Feed</ActionButton>
+              <ActionButton size="sm" onClick={() => quick(`Reorder started: ${feedInventory.nextReorder}`)}>Reorder</ActionButton>
+            </div>
+          </Card>
+
+          <Card link="Equipment" onLink={() => navigate('/assets')}>
+            <h2 className="xs-card__title" style={{ marginBottom: 2 }}>Equipment & Maintenance</h2>
+            <div className="xs-card__sub" style={{ marginBottom: 12 }}>{equipment.serviceDue} service due · {equipment.broken} broken · {equipment.workOrders} work orders</div>
+            <div className="xs-mlist">
+              {equipment.items.map((e) => (
+                <div key={e.name} className="xs-mrow">
+                  <span className="xs-mrow__main"><span className="xs-mrow__title">{e.name}</span><span className="xs-mrow__detail">{e.detail}</span></span>
+                  <StatusChip tone={e.tone}>{e.status}</StatusChip>
+                </div>
+              ))}
+            </div>
+            <ActionButton size="sm" block icon={<Tractor size={14} />} onClick={() => quick('Work order created')}>Create Work Order</ActionButton>
+          </Card>
+
+          <Card link="Reports" onLink={() => navigate('/reports')}>
+            <h2 className="xs-card__title" style={{ marginBottom: 2 }}>Financial Snapshot</h2>
+            <div className="xs-card__sub" style={{ marginBottom: 12 }}>{usd(financialSnapshot.monthExpenses)} this month · {financialSnapshot.projectedMargin}% projected margin</div>
+            {financialSnapshot.rows.map((r) => {
+              const max = Math.max(...financialSnapshot.rows.map((x) => x.value));
+              return (
+                <div key={r.label} className="xs-finbar">
+                  <span className="xs-finbar__label">{r.label}</span>
+                  <span className="xs-finbar__track"><span className="xs-finbar__fill" style={{ width: `${(r.value / max) * 100}%` }} /></span>
+                  <span className="xs-finbar__val">{usdK(r.value)}</span>
+                </div>
+              );
+            })}
+            <ActionButton size="sm" block icon={<TrendingUp size={14} />} onClick={() => navigate('/expenses')}>Add Expense</ActionButton>
+          </Card>
+        </div>
       </div>
 
+      {/* --------------------------------------------------------- Drawers */}
       <SlideOverDrawer
-        open={Boolean(releaseDrawer)}
-        title={releaseDrawer?.label ?? ''}
-        subtitle="Release readiness detail"
-        onClose={() => setReleaseDrawer(null)}
+        open={blockerOpen}
+        title="Revenue Blocker"
+        subtitle="RHA Pine Barrel Prospect · $35,000 target"
+        onClose={() => setBlockerOpen(false)}
         footer={
           <>
-            <button type="button" className="xs-btn" onClick={() => setReleaseDrawer(null)}>
-              Close
-            </button>
-            <button type="button" className="xs-btn xs-btn--primary" onClick={() => navigate('/sale-packet-studio')}>
-              Open in Studio
-            </button>
+            <ActionButton onClick={() => setBlockerOpen(false)}>Close</ActionButton>
+            <ActionButton variant="primary" onClick={() => { setBlockerOpen(false); navigate('/sale-packet-studio'); }}>Open in Studio</ActionButton>
           </>
         }
       >
-        {releaseDrawer ? (
+        <StatusChip tone="danger">Blocking Release</StatusChip>
+        <p style={{ fontSize: 14, lineHeight: 1.6, margin: 0 }}>
+          Health certificate expiration date is missing. The packet cannot reach a buyer-safe release state until this is resolved.
+        </p>
+        <div className="xs-railcard">
+          <div className="xs-railcard__label">Impact</div>
+          <div className="xs-railrow"><span className="xs-railrow__label">Target sale</span><span className="xs-railrow__value">{usd(35000)}</span></div>
+          <div className="xs-railrow"><span className="xs-railrow__label">Current offer</span><span className="xs-railrow__value">{usd(20000)}</span></div>
+          <div className="xs-railrow"><span className="xs-railrow__label">Active buyers</span><span className="xs-railrow__value">{commandMetrics.activeBuyers}</span></div>
+        </div>
+        <ActionButton variant="brass" block icon={<Upload size={15} />} onClick={() => { setBlockerOpen(false); navigate('/documents?upload=1'); }}>Upload health certificate</ActionButton>
+      </SlideOverDrawer>
+
+      <SlideOverDrawer
+        open={Boolean(animal)}
+        title={animal?.name ?? ''}
+        subtitle={animal ? `${animal.species} · ${animal.sex} · ${animal.age} · ${animal.location}` : ''}
+        onClose={() => setAnimal(null)}
+        footer={
+          animal ? (
+            <>
+              <ActionButton onClick={() => { quick(`Task added for ${animal.name}`); }}>Add Task</ActionButton>
+              <ActionButton variant="primary" onClick={() => { setAnimal(null); navigate('/horses'); }}>Open Profile</ActionButton>
+            </>
+          ) : null
+        }
+      >
+        {animal ? (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <StatusChip tone={stateToTone[releaseDrawer.state]}>{releaseDrawer.state}</StatusChip>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <StatusChip tone={animal.tone}>{animal.status}</StatusChip>
+              <span className="xs-chip xs-chip--neutral">{animal.group}</span>
             </div>
-            <p style={{ fontSize: 14, lineHeight: 1.6, margin: 0 }}>{releaseDrawer.detail}</p>
-            <hr className="xs-divider" />
-            <div className="xs-card__sub" style={{ fontWeight: 600 }}>What this controls</div>
-            <p className="xs-muted" style={{ fontSize: 13, lineHeight: 1.6, margin: 0 }}>
-              Release items gate whether an asset can move to a buyer. Clear every item to reach a buyer-safe release state.
-            </p>
+            <div className="xs-nba">
+              <div className="xs-nba__label"><Sparkles size={13} /> Next required action</div>
+              <div className="xs-nba__title">{animal.next}</div>
+            </div>
+            <div className="xs-field">
+              <button type="button" className="xs-fieldbtn" onClick={() => quick(`Health event added for ${animal.name}`)}><HeartPulse size={15} /> Add Health Event</button>
+              <button type="button" className="xs-fieldbtn" onClick={() => quick(`${animal.name} moved`)}><Move size={15} /> Move Animal</button>
+              <button type="button" className="xs-fieldbtn" onClick={() => { setAnimal(null); navigate('/sale-packet-studio'); }}><ListChecks size={15} /> Start Sale Packet</button>
+            </div>
           </>
         ) : null}
       </SlideOverDrawer>
@@ -223,85 +462,81 @@ export default function Dashboard() {
   );
 }
 
-function IntelligenceRail({ navigate }: { navigate: ReturnType<typeof useNavigate> }) {
+/* --------------------------------------------------------- Intelligence rail */
+function IntelligenceRail({
+  navigate,
+  onQuick,
+}: {
+  navigate: ReturnType<typeof useNavigate>;
+  onQuick: (m: string) => void;
+}) {
+  const quickCreate = [
+    { label: 'Add Task', icon: <Plus size={15} />, run: () => onQuick('New task added') },
+    { label: 'Add Animal', icon: <HorsesIcon width={15} height={15} />, run: () => navigate('/horses?new=1') },
+    { label: 'Upload Document', icon: <Upload size={15} />, run: () => navigate('/documents?upload=1') },
+    { label: 'Move Animals', icon: <Move size={15} />, run: () => onQuick('Move animals drawer opened') },
+    { label: 'Create Sale Packet', icon: <ListChecks size={15} />, run: () => navigate('/sale-packet-studio') },
+    { label: 'Invite Buyer', icon: <MapPin size={15} />, run: () => navigate('/buyer-deal-room') },
+  ];
+
   return (
     <div className="xs-rail">
-      <div className="xs-rail__title">
-        <Sparkles size={13} /> XBAR Intelligence Rail
+      <div className="xs-rail__title"><Sparkles size={13} /> XBAR Intelligence</div>
+
+      <div className="xs-nba">
+        <div className="xs-nba__label"><Sparkles size={13} /> Next best action</div>
+        <div className="xs-nba__title">{nextBestAction.title}</div>
+        <div className="xs-nba__reason">{nextBestAction.reason}</div>
+        <ActionButton variant="brass" size="sm" icon={<ArrowRight size={14} />} onClick={() => navigate(nextBestAction.to)}>Resolve now</ActionButton>
       </div>
 
       <div className="xs-railcard">
-        <div className="xs-railcard__label">Transaction Command</div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>Status</span>
-          <StatusChip tone="success">{intelligenceRail.status}</StatusChip>
-        </div>
-        <div className="xs-rail__actions">
-          <button type="button" className="xs-btn xs-btn--primary xs-btn--block" onClick={() => navigate('/sale-packet-studio')}>
-            Prepare for Release
-          </button>
-          <div className="xs-rail__secondary">
-            <button type="button" className="xs-btn" onClick={() => navigate('/sale-packet-studio')}>
-              Share Packet
-            </button>
-            <button type="button" className="xs-btn" onClick={() => navigate('/buyer-deal-room')}>
-              Open Deal Room
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="xs-railcard">
-        <div className="xs-railcard__label">Release Status</div>
-        {intelligenceRail.release.map((row) => (
-          <div key={row.label} className="xs-railrow">
-            <span className="xs-railrow__label">{row.label}</span>
-            <span className="xs-railrow__value">
-              <StatusChip tone={row.tone}>{row.value}</StatusChip>
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <div className="xs-railcard">
-        <div className="xs-railcard__label">Next Action</div>
-        <div className="xs-nextaction">
-          <div className="xs-nextaction__title">{intelligenceRail.nextAction.title}</div>
-          <div className="xs-nextaction__detail">{intelligenceRail.nextAction.detail}</div>
-          <button type="button" className="xs-btn xs-btn--brass xs-btn--sm" style={{ alignSelf: 'flex-start', marginTop: 4 }} onClick={() => navigate('/sale-packet-studio')}>
-            Open <ArrowUpRight size={14} />
-          </button>
-        </div>
-      </div>
-
-      <div className="xs-railcard">
-        <div className="xs-railcard__label">Recent Activity</div>
+        <div className="xs-railcard__label">Risk</div>
         <div className="xs-feed">
-          {intelligenceRail.recentActivity.map((row) => (
-            <div key={row.label} className="xs-feed__row">
+          {commandRisk.map((r) => (
+            <div key={r} className="xs-feed__row"><AlertTriangle size={14} className="xs-muted" /><span style={{ flex: 1 }}>{r}</span></div>
+          ))}
+        </div>
+      </div>
+
+      <div className="xs-railcard">
+        <div className="xs-railcard__label">Revenue</div>
+        <div className="xs-feed">
+          {commandRevenue.map((r) => (
+            <div key={r} className="xs-feed__row"><Coins size={14} className="xs-muted" /><span style={{ flex: 1 }}>{r}</span></div>
+          ))}
+        </div>
+      </div>
+
+      <div className="xs-railcard">
+        <div className="xs-railcard__label">Recent activity</div>
+        <div className="xs-feed">
+          {commandActivity.map((a) => (
+            <div key={a.label} className="xs-feed__row">
               <span className="xs-feed__dot" />
-              <span style={{ flex: 1 }}>
-                {row.label}
-                <div className="xs-feed__time">{row.time}</div>
-              </span>
+              <span style={{ flex: 1 }}>{a.label}<div className="xs-feed__time">{a.time}</div></span>
             </div>
           ))}
         </div>
       </div>
 
       <div className="xs-railcard">
-        <div className="xs-railcard__label">Document Expiry</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-          <CalendarClock size={16} className="xs-muted" />
-          <strong>{documentExpiry.total}</strong> documents expiring soon
-        </div>
-        <div className="xs-docchips">
-          {documentExpiry.breakdown.map((row) => (
-            <div key={row.label} className="xs-docchip">
-              <div className="xs-docchip__num">{row.count}</div>
-              <div className="xs-docchip__label">{row.label}</div>
-            </div>
+        <div className="xs-railcard__label">Quick create</div>
+        <div className="xs-qc-grid">
+          {quickCreate.map((q) => (
+            <button key={q.label} type="button" className="xs-btn xs-btn--sm" onClick={q.run} style={{ justifyContent: 'flex-start' }}>
+              {q.icon}{q.label}
+            </button>
           ))}
+        </div>
+      </div>
+
+      <div className="xs-railcard">
+        <div className="xs-railcard__label">Field capture</div>
+        <div className="xs-field">
+          <button type="button" className="xs-fieldbtn" onClick={() => onQuick('Note captured')}><StickyNote size={15} /> Note</button>
+          <button type="button" className="xs-fieldbtn" onClick={() => onQuick('Photo queued')}><Camera size={15} /> Photo</button>
+          <button type="button" className="xs-fieldbtn" onClick={() => onQuick('Water trough issue reported')}><Droplets size={15} /> Issue</button>
         </div>
       </div>
     </div>

@@ -5,54 +5,72 @@ import {
   Boxes,
   ChevronDown,
   CircleHelp,
+  ClipboardList,
+  Coins,
   FileText,
   FolderOpen,
   Gauge,
   Home,
   LayoutDashboard,
+  Leaf,
   type LucideIcon,
+  Map,
+  Move,
+  Plus,
   Rocket,
-  Send,
   Settings as SettingsIcon,
   ShieldCheck,
   Sparkles,
   Stethoscope,
+  Sprout,
+  Upload,
   Users,
+  Wheat,
 } from 'lucide-react';
-import { ProgressRing } from '@/components/saas';
+import { ProgressRing, QuickCreateMenu } from '@/components/saas';
 import { buildCareBoardRows } from '@/lib/dashboardOps';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
-import { operationalTasks, xbarRanch } from '@/data/xbarSaasMock';
+import { ranchSeason, ranchWeather, xbarRanch } from '@/data/xbarSaasMock';
 
 type NavItem = { label: string; path: string; icon: LucideIcon; badgeKey?: 'docs' | 'transfers' | 'care' };
 type NavGroup = { heading: string; items: NavItem[] };
 
 const navGroups: NavGroup[] = [
   {
-    heading: 'Workspace',
+    heading: 'Operations',
     items: [
-      { label: 'Getting Started', path: '/getting-started', icon: Rocket },
-      { label: 'Dashboard', path: '/', icon: LayoutDashboard },
-      { label: 'Horses', path: '/horses', icon: Home },
+      { label: 'Command Center', path: '/', icon: LayoutDashboard },
+      { label: "Today's Work", path: '/today', icon: ClipboardList },
+      { label: 'Animals', path: '/horses', icon: Home },
+      { label: 'Herd Groups', path: '/herd-groups', icon: Users },
+      { label: 'Pastures & Locations', path: '/pastures', icon: Map },
+    ],
+  },
+  {
+    heading: 'Care',
+    items: [
+      { label: 'Health & Care', path: '/medical', icon: Stethoscope, badgeKey: 'care' },
+      { label: 'Breeding & Foaling', path: '/breeding', icon: Sprout },
+      { label: 'Feed & Inventory', path: '/feed', icon: Wheat },
     ],
   },
   {
     heading: 'Transactions',
     items: [
       { label: 'Sales Pipeline', path: '/sales-pipeline', icon: Gauge },
-      { label: 'Buyer Deal Room', path: '/buyer-deal-room', icon: Users },
+      { label: 'Buyer Deal Rooms', path: '/buyer-deal-room', icon: Users },
       { label: 'Sale Packet Studio', path: '/sale-packet-studio', icon: FileText },
     ],
   },
   {
     heading: 'Records',
     items: [
-      { label: 'Documents', path: '/documents', icon: FolderOpen, badgeKey: 'docs' },
-      { label: 'Health & Care', path: '/medical', icon: Stethoscope, badgeKey: 'care' },
+      { label: 'Documents Vault', path: '/documents', icon: FolderOpen, badgeKey: 'docs' },
       { label: 'Ownership Chain', path: '/ownership', icon: ShieldCheck, badgeKey: 'transfers' },
-      { label: 'Assets & Equipment', path: '/assets', icon: Boxes },
+      { label: 'Equipment', path: '/assets', icon: Boxes },
+      { label: 'Expenses', path: '/expenses', icon: Coins },
     ],
   },
   {
@@ -64,21 +82,20 @@ const navGroups: NavGroup[] = [
   },
 ];
 
-const whatsNew = ['Release Blocker detection', 'Buyer Deal Room', 'Sale Packet Studio'];
+const whatsNew = ['Release Blocker detection', 'Buyer Deal Rooms', 'Sale Packet Studio'];
 
 const mobileItems: { label: string; path: string; icon: LucideIcon }[] = [
   { label: 'Home', path: '/', icon: LayoutDashboard },
-  { label: 'Horses', path: '/horses', icon: Home },
+  { label: 'Work', path: '/today', icon: ClipboardList },
+  { label: 'Animals', path: '/horses', icon: Home },
   { label: 'Pipeline', path: '/sales-pipeline', icon: Gauge },
   { label: 'Docs', path: '/documents', icon: FolderOpen },
-  { label: 'Studio', path: '/sale-packet-studio', icon: FileText },
 ];
 
 export default function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mode, setMode] = useState<'ops' | 'buyer'>('ops');
-  const [taskIndex] = useState(0);
 
   const documents = useXbarStore((state) => state.documents);
   const horses = useXbarStore((state) => state.horses);
@@ -105,10 +122,7 @@ export default function MainLayout() {
 
   const ranchName = workspaceProfile.ranchName || workspaceProfile.businessName || xbarRanch.name;
   const planTier = subscription?.tier || xbarRanch.plan;
-  const accountInitials = (cloudSession?.user?.email ?? currentRole ?? 'XB')
-    .replace(/@.*/, '')
-    .slice(0, 2)
-    .toUpperCase();
+  const accountInitials = (cloudSession?.user?.email ?? currentRole ?? 'XB').replace(/@.*/, '').slice(0, 2).toUpperCase();
   const setupProgress = xbarRanch.setupProgress;
 
   async function handleSignOut() {
@@ -122,6 +136,23 @@ export default function MainLayout() {
     if (next === 'buyer') navigate('/buyer-deal-room');
   }
 
+  function toast(message: string) {
+    pushToast({ title: 'Quick create', message, tone: 'success' });
+  }
+
+  const createItems = [
+    { label: 'Add Animal', icon: <Home size={15} />, onSelect: () => navigate('/horses?new=1') },
+    { label: 'Add Task', icon: <ClipboardList size={15} />, onSelect: () => toast('New task drawer opened') },
+    { label: 'Upload Document', icon: <Upload size={15} />, onSelect: () => navigate('/documents?upload=1') },
+    { label: 'Add Health Record', icon: <Stethoscope size={15} />, onSelect: () => navigate('/medical') },
+    { label: 'Move Animals', icon: <Move size={15} />, onSelect: () => toast('Move animals drawer opened') },
+    { label: 'Add Expense', icon: <Coins size={15} />, onSelect: () => navigate('/expenses') },
+    { label: 'Create Sale Packet', icon: <FileText size={15} />, onSelect: () => navigate('/sale-packet-studio') },
+    { label: 'Invite Buyer', icon: <Users size={15} />, onSelect: () => navigate('/buyer-deal-room') },
+    { label: 'Add Equipment', icon: <Boxes size={15} />, onSelect: () => navigate('/assets') },
+    { label: 'Report Pasture Issue', icon: <Leaf size={15} />, onSelect: () => toast('Pasture issue reported') },
+  ];
+
   return (
     <div className="xs-shell">
       {/* ---------------------------------------------------------- Sidebar */}
@@ -130,58 +161,53 @@ export default function MainLayout() {
           <span className="xs-workspace__logo">{xbarRanch.initials}</span>
           <span className="xs-workspace__body">
             <span className="xs-workspace__name">{ranchName}</span>
-            <span className="xs-workspace__plan">
-              <Sparkles size={11} /> {planTier}
-            </span>
+            <span className="xs-workspace__plan"><Sparkles size={11} /> {planTier}</span>
           </span>
           <ChevronDown size={16} className="xs-workspace__chev" />
+        </button>
+
+        <button type="button" className="xs-setupbar" onClick={() => navigate('/getting-started')}>
+          <ProgressRing value={setupProgress} size={32} />
+          <span className="xs-setupbar__body">
+            <span className="xs-setupbar__top">{setupProgress}% Ranch setup</span>
+            <span className="xs-setupbar__sub">Finish onboarding</span>
+          </span>
         </button>
 
         <nav className="xs-nav" aria-label="Primary">
           {navGroups.map((group) => (
             <div key={group.heading}>
               <div className="xs-nav__section">{group.heading}</div>
-              {group.items
-                .filter((item) => item.path !== '/subscriptions' || canManageBilling)
-                .map((item) => {
-                  const Icon = item.icon;
-                  const badge = item.badgeKey ? badges[item.badgeKey] ?? 0 : 0;
-                  return (
-                    <NavLink
-                      key={item.path}
-                      to={item.path}
-                      end={item.path === '/'}
-                      className={({ isActive }) => `xs-nav__item${isActive ? ' xs-nav__item--active' : ''}`}
-                    >
-                      <Icon size={17} className="xs-nav__icon" />
-                      <span className="xs-nav__label">{item.label}</span>
-                      {badge > 0 ? <span className="xs-nav__badge">{badge}</span> : null}
-                    </NavLink>
-                  );
-                })}
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const badge = item.badgeKey ? badges[item.badgeKey] ?? 0 : 0;
+                return (
+                  <NavLink key={item.path} to={item.path} end={item.path === '/'} className={({ isActive }) => `xs-nav__item${isActive ? ' xs-nav__item--active' : ''}`}>
+                    <Icon size={17} className="xs-nav__icon" />
+                    <span className="xs-nav__label">{item.label}</span>
+                    {badge > 0 ? <span className="xs-nav__badge">{badge}</span> : null}
+                  </NavLink>
+                );
+              })}
             </div>
           ))}
         </nav>
 
         <div className="xs-sidebar__footer">
-          <div className="xs-whatsnew">
-            <div className="xs-whatsnew__title">
-              <Sparkles size={13} /> What's New
-            </div>
-            <div className="xs-whatsnew__list">
-              {whatsNew.map((item) => (
-                <div key={item} className="xs-whatsnew__row">
-                  <span className="xs-whatsnew__dot" /> {item}
-                </div>
-              ))}
-            </div>
-          </div>
           <div className="xs-ranchcard">
             <span className="xs-ranchcard__avatar">{xbarRanch.initials}</span>
             <span>
               <div className="xs-ranchcard__name">{ranchName}</div>
               <div className="xs-ranchcard__meta">{xbarRanch.id}</div>
             </span>
+          </div>
+          <div className="xs-whatsnew">
+            <div className="xs-whatsnew__title"><Sparkles size={13} /> What's New</div>
+            <div className="xs-whatsnew__list">
+              {whatsNew.map((item) => (
+                <div key={item} className="xs-whatsnew__row"><span className="xs-whatsnew__dot" /> {item}</div>
+              ))}
+            </div>
           </div>
           <div className="xs-version">XBAR Platform · v2.0</div>
         </div>
@@ -191,31 +217,29 @@ export default function MainLayout() {
       <div className="xs-main">
         <header className="xs-topbar">
           <div className="xs-topbar__left">
-            <button type="button" className="xs-pill" onClick={() => navigate('/getting-started')}>
-              <span className="xs-pill__dot" />
-              <span>
-                <span className="xs-pill__label">Operational task</span>
-                <span style={{ display: 'block', fontWeight: 600 }}>{operationalTasks[taskIndex]}</span>
-              </span>
-            </button>
-            <button type="button" className="xs-setuppill" onClick={() => navigate('/getting-started')}>
-              <ProgressRing value={setupProgress} />
-              <span className="xs-setuppill__num">{setupProgress}%</span>
-              <span className="xs-setuppill__txt">Ranch setup</span>
-            </button>
+            <span className="xs-seasonchip"><Sparkles size={14} /> {ranchSeason.label}</span>
+            <span className="xs-weatherchip">
+              {ranchWeather.tempF}°F · {ranchWeather.label}
+              <span className="xs-weatherchip__risk">· {ranchWeather.risk}</span>
+            </span>
           </div>
 
           <div className="xs-topbar__spacer" />
 
           <div className="xs-topbar__right">
             <div className="xs-toggle" role="tablist" aria-label="Workspace mode">
-              <button type="button" className={`xs-toggle__btn${mode === 'ops' ? ' xs-toggle__btn--active' : ''}`} onClick={() => handleMode('ops')}>
-                Ranch Ops
-              </button>
-              <button type="button" className={`xs-toggle__btn${mode === 'buyer' ? ' xs-toggle__btn--active' : ''}`} onClick={() => handleMode('buyer')}>
-                Buyer Portal
-              </button>
+              <button type="button" className={`xs-toggle__btn${mode === 'ops' ? ' xs-toggle__btn--active' : ''}`} onClick={() => handleMode('ops')}>Ranch Ops</button>
+              <button type="button" className={`xs-toggle__btn${mode === 'buyer' ? ' xs-toggle__btn--active' : ''}`} onClick={() => handleMode('buyer')}>Buyer Portal</button>
             </div>
+
+            <QuickCreateMenu
+              items={createItems}
+              trigger={(open) => (
+                <button type="button" className="xs-btn xs-btn--primary" onClick={open}>
+                  <Plus size={15} /> Create
+                </button>
+              )}
+            />
 
             <button type="button" className="xs-iconbtn" aria-label="Notifications" onClick={() => navigate('/reminders')}>
               <Bell size={17} />
@@ -224,16 +248,9 @@ export default function MainLayout() {
             <button type="button" className="xs-iconbtn" aria-label="Help" onClick={() => setCommandPaletteOpen(true)}>
               <CircleHelp size={17} />
             </button>
-            <button type="button" className="xs-iconbtn" aria-label="Share" onClick={() => navigate('/buyer-deal-room')}>
-              <Send size={16} />
-            </button>
 
-            <button type="button" className="xs-btn" onClick={() => navigate('/settings')}>
-              <Users size={15} /> Invite Team
-            </button>
-            <button type="button" className="xs-btn xs-btn--brass" onClick={() => navigate('/subscriptions')}>
-              <Rocket size={15} /> Upgrade
-            </button>
+            <button type="button" className="xs-btn" onClick={() => navigate('/settings')}><Users size={15} /> Invite Team</button>
+            <button type="button" className="xs-btn xs-btn--brass" onClick={() => navigate(canManageBilling ? '/subscriptions' : '/getting-started')}><Rocket size={15} /> Upgrade</button>
 
             <button type="button" className="xs-avatar" aria-label="Account" title={cloudSession?.user?.email ?? 'Account'} onClick={() => (cloudSession ? void handleSignOut() : navigate('/settings'))}>
               {accountInitials}
