@@ -33,6 +33,8 @@ import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import { ranchSeason, ranchWeather, xbarRanch } from '@/data/xbarSaasMock';
 
+const XBAR_ICON = '/brand/xbar_public_assets/public/brand/xbar-app-icon-512.png';
+
 type NavItem = { label: string; path: string; icon: LucideIcon; badgeKey?: 'docs' | 'transfers' | 'care' };
 type NavGroup = { heading: string; items: NavItem[] };
 
@@ -149,6 +151,14 @@ export default function MainLayout() {
     <div className="xs-shell">
       {/* ---------------------------------------------------------- Sidebar */}
       <aside className="xs-sidebar">
+        <div className="xs-brand">
+          <img className="xs-brand__tile" src={XBAR_ICON} alt="XBAR" />
+          <span>
+            <span className="xs-brand__word">XBAR</span>
+            <span className="xs-brand__sub">Operations</span>
+          </span>
+        </div>
+
         <button type="button" className="xs-workspace" onClick={() => navigate('/settings')}>
           <span className="xs-workspace__logo">{xbarRanch.initials}</span>
           <span className="xs-workspace__body">
@@ -186,6 +196,7 @@ export default function MainLayout() {
         </nav>
 
         <div className="xs-sidebar__footer">
+          <img className="xs-sidebar__wm" src={XBAR_ICON} alt="" aria-hidden="true" />
           <div className="xs-ranchcard">
             <span className="xs-ranchcard__avatar">{xbarRanch.initials}</span>
             <span>

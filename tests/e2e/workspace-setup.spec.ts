@@ -101,13 +101,12 @@ test('sale packet studio is a stepper wizard', async ({ page }) => {
   await expect(page.getByText('Choose packet type')).toBeVisible(); // step 2 content
 });
 
-test('buyer deal room opens a buyer detail drawer', async ({ page }) => {
+test('buyer deal room is a master-detail workspace', async ({ page }) => {
   await bootstrapWorkspace(page);
   await page.getByRole('link', { name: 'Buyer Deal Rooms', exact: true }).click();
-  await page.getByText('Marlow Ranch Partners').first().click();
-  const drawer = page.getByRole('dialog', { name: 'Marlow Ranch Partners' });
-  await expect(drawer).toBeVisible();
-  await expect(drawer.getByRole('button', { name: 'Mark Offer Received' })).toBeVisible();
+  await page.locator('.xs-mdrow', { hasText: 'Cedar Hollow Equine' }).click();
+  await expect(page.locator('.xs-detailhead__name')).toHaveText('Cedar Hollow Equine');
+  await expect(page.getByRole('button', { name: 'Prepare Release' })).toBeVisible();
 });
 
 test('documents vault opens a document drawer', async ({ page }) => {
