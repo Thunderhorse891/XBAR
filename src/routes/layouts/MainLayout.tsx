@@ -30,7 +30,7 @@ import { GlobalCreateDrawer, createActions, type CreateKey } from '@/components/
 import { buildCareBoardRows } from '@/lib/dashboardOps';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
-import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
+import { useXbarStore } from '@/store/useXbarStore';
 import { ranchSeason, ranchWeather, xbarRanch } from '@/data/xbarSaasMock';
 
 const XBAR_ICON = '/brand/xbar_public_assets/public/brand/xbar-app-icon-512.png';
@@ -44,7 +44,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Command Center', path: '/', icon: LayoutDashboard },
       { label: "Today's Work", path: '/today', icon: ClipboardList },
-      { label: 'Animals', path: '/horses', icon: Home },
+      { label: 'Animals', path: '/animals', icon: Home },
       { label: 'Herd Groups', path: '/herd-groups', icon: Users },
       { label: 'Pastures & Locations', path: '/pastures', icon: Map },
     ],
@@ -52,8 +52,8 @@ const navGroups: NavGroup[] = [
   {
     heading: 'Care',
     items: [
-      { label: 'Health & Care', path: '/medical', icon: Stethoscope, badgeKey: 'care' },
-      { label: 'Breeding & Foaling', path: '/breeding', icon: Sprout },
+      { label: 'Health & Care', path: '/health-care', icon: Stethoscope, badgeKey: 'care' },
+      { label: 'Breeding & Foaling', path: '/breeding-foaling', icon: Sprout },
       { label: 'Feed & Inventory', path: '/feed', icon: Wheat },
     ],
   },
@@ -63,22 +63,23 @@ const navGroups: NavGroup[] = [
       { label: 'Sales Pipeline', path: '/sales-pipeline', icon: Gauge },
       { label: 'Buyer Deal Rooms', path: '/buyer-deal-room', icon: Users },
       { label: 'Sale Packet Studio', path: '/sale-packet-studio', icon: FileText },
+      { label: 'Ownership Chain', path: '/ownership-chain', icon: ShieldCheck, badgeKey: 'transfers' },
     ],
   },
   {
     heading: 'Records',
     items: [
       { label: 'Documents Vault', path: '/documents-vault', icon: FolderOpen, badgeKey: 'docs' },
-      { label: 'Ownership Chain', path: '/ownership', icon: ShieldCheck, badgeKey: 'transfers' },
-      { label: 'Equipment', path: '/assets', icon: Boxes },
+      { label: 'Equipment', path: '/equipment', icon: Boxes },
       { label: 'Expenses', path: '/expenses', icon: Coins },
+      { label: 'Reports', path: '/reports', icon: Gauge },
     ],
   },
   {
     heading: 'Account',
     items: [
-      { label: 'Reports', path: '/reports', icon: Gauge },
       { label: 'Settings', path: '/settings', icon: SettingsIcon },
+      { label: 'Subscription', path: '/plans', icon: Rocket },
     ],
   },
 ];
@@ -88,7 +89,7 @@ const whatsNew = ['Release Blocker detection', 'Buyer Deal Rooms', 'Sale Packet 
 const mobileItems: { label: string; path: string; icon: LucideIcon }[] = [
   { label: 'Home', path: '/', icon: LayoutDashboard },
   { label: 'Work', path: '/today', icon: ClipboardList },
-  { label: 'Animals', path: '/horses', icon: Home },
+  { label: 'Animals', path: '/animals', icon: Home },
   { label: 'Pipeline', path: '/sales-pipeline', icon: Gauge },
   { label: 'Docs', path: '/documents', icon: FolderOpen },
 ];
@@ -110,7 +111,6 @@ export default function MainLayout() {
   const signOutCloud = useCloudStore((state) => state.signOut);
   const pushToast = useUiStore((state) => state.pushToast);
   const setCommandPaletteOpen = useUiStore((state) => state.setCommandPaletteOpen);
-  const canManageBilling = useCurrentRoleCapability('manageBilling');
 
   const pendingReview = documents.filter((d) => d.state === 'Needs Review' || d.state === 'Matched').length;
   const pendingTransfers = ownershipRecords.filter((r) => r.transferStatus !== 'Clear').length;
@@ -258,7 +258,7 @@ export default function MainLayout() {
             </button>
 
             <button type="button" className="xs-btn" onClick={() => navigate('/settings')}><Users size={15} /> Invite Team</button>
-            <button type="button" className="xs-btn xs-btn--brass" onClick={() => navigate(canManageBilling ? '/subscriptions' : '/getting-started')}><Rocket size={15} /> Upgrade</button>
+            <button type="button" className="xs-btn xs-btn--brass" onClick={() => navigate('/plans')}><Rocket size={15} /> Upgrade</button>
 
             <button type="button" className="xs-avatar" aria-label="Account" title={cloudSession?.user?.email ?? 'Account'} onClick={() => (cloudSession ? void handleSignOut() : navigate('/settings'))}>
               {accountInitials}

@@ -357,10 +357,8 @@ const animalTabs = ['Overview', 'Health', 'Documents', 'Ownership', 'Breeding', 
 
 export function AnimalProfileDrawer({ animal, onClose, onStartPacket }: { animal: WatchAnimal | null; onClose: () => void; onStartPacket: () => void }) {
   const navigate = useNavigate();
-  const pushToast = useUiStore((s) => s.pushToast);
   const [tab, setTab] = useState<string>('Overview');
   if (!animal) return null;
-  const toast = (m: string) => pushToast({ title: animal.name, message: m, tone: 'success' });
 
   return (
     <SlideOverDrawer
@@ -370,7 +368,7 @@ export function AnimalProfileDrawer({ animal, onClose, onStartPacket }: { animal
       onClose={onClose}
       footer={
         <>
-          <ActionButton onClick={() => toast('Task added')}>Add Task</ActionButton>
+          <ActionButton onClick={() => { const to = `/animals/${animal.id}`; onClose(); navigate(to); }}>Open Full Profile</ActionButton>
           <ActionButton variant="primary" onClick={onStartPacket}>Start Sale Packet</ActionButton>
         </>
       }

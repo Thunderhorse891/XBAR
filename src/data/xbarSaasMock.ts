@@ -363,3 +363,81 @@ export const commandActivity = [
   { label: 'Horse moved to Quarantine', time: '4h ago' },
   { label: 'Offer recorded — $20,000', time: 'Yesterday' },
 ];
+
+/* ===========================================================================
+   Extended object data — roster, pipeline, health, ownership, equipment, breeding
+   =========================================================================== */
+
+export type RosterAnimal = {
+  id: string;
+  name: string;
+  species: string;
+  sex: string;
+  age: string;
+  location: string;
+  group: string;
+  status: string;
+  tone: ChipTone;
+  readiness: number;
+  saleStatus: ReadinessState;
+  next: string;
+};
+
+export const rosterAnimals: RosterAnimal[] = [
+  { id: 'rha-pine-barrel-prospect', name: 'RHA Pine Barrel Prospect', species: 'Horse', sex: 'Mare', age: '6 yr', location: 'Main Barn', group: 'Sale Prospect', status: 'Sale Review', tone: 'warning', readiness: 94, saleStatus: 'Review', next: 'Add health certificate expiration date' },
+  { id: 'thr-copper-canyon', name: 'THR Copper Canyon', species: 'Horse', sex: 'Gelding', age: '7 yr', location: 'Main Barn', group: 'Sale Prospect', status: 'Release ready', tone: 'success', readiness: 100, saleStatus: 'Ready', next: 'Share packet to buyer' },
+  { id: 'thr-juniper-ledge', name: 'THR Juniper Ledge', species: 'Horse', sex: 'Mare', age: '5 yr', location: 'North Pasture', group: 'Sale Prospect', status: 'Records incomplete', tone: 'warning', readiness: 88, saleStatus: 'Review', next: 'Sign bill of sale' },
+  { id: 'thr-stone-mesa', name: 'THR Stone Mesa', species: 'Horse', sex: 'Gelding', age: '4 yr', location: 'Quarantine Pen', group: 'Medical Hold', status: 'Medical Hold', tone: 'danger', readiness: 61, saleStatus: 'Hold', next: 'Clear withdrawal · re-test Coggins' },
+  { id: 'copper-belle', name: 'Copper Belle', species: 'Horse', sex: 'Mare', age: '9 yr', location: 'Foaling Pen', group: 'Breeding', status: 'Preg check due', tone: 'info', readiness: 0, saleStatus: 'Hold', next: 'Schedule preg check' },
+  { id: 'rojo', name: 'Rojo', species: 'Horse', sex: 'Stud', age: '11 yr', location: 'Stud Pen', group: 'Studs', status: 'Active', tone: 'success', readiness: 0, saleStatus: 'Hold', next: 'Breeding record review' },
+];
+
+export const animalGroups = ['All', 'Sale Prospect', 'Medical Hold', 'Breeding', 'Studs'] as const;
+
+export const pipelineStages: { id: string; label: string; deals: { id: string; horse: string; price: number; offer: number | null; tone: ChipTone; note: string }[] }[] = [
+  { id: 'prospect', label: 'Prospect', deals: [{ id: 'p1', horse: 'Copper Belle', price: 18000, offer: null, tone: 'neutral', note: 'Evaluating' }] },
+  { id: 'packet', label: 'Packet Ready', deals: [{ id: 'p2', horse: 'THR Juniper Ledge', price: 22000, offer: null, tone: 'warning', note: 'Bill of sale unsigned' }] },
+  { id: 'invited', label: 'Buyer Invited', deals: [{ id: 'p3', horse: 'High Plains — Copper Canyon', price: 30000, offer: null, tone: 'info', note: '3 buyer views' }] },
+  { id: 'room', label: 'Deal Room', deals: [{ id: 'p4', horse: 'THR Copper Canyon', price: 30000, offer: 28000, tone: 'success', note: 'Release ready' }] },
+  { id: 'offer', label: 'Offer / Blocked', deals: [{ id: 'p5', horse: 'RHA Pine Barrel Prospect', price: 35000, offer: 20000, tone: 'danger', note: 'Release blocked' }] },
+  { id: 'release', label: 'Release Ready', deals: [] },
+  { id: 'closed', label: 'Closed', deals: [{ id: 'p6', horse: 'THR Willow Creek', price: 16500, offer: 16500, tone: 'success', note: 'Sold · Apr' }] },
+];
+
+export const healthRecords = [
+  { id: 'h1', animal: 'RHA Pine Barrel Prospect', type: 'Health certificate', date: '—', status: 'Blocker', tone: 'danger' as ChipTone, detail: 'Expiration date missing' },
+  { id: 'h2', animal: 'THR Stone Mesa', type: 'Coggins', date: '2026-07-08', status: 'Expiring', tone: 'warning' as ChipTone, detail: 'Re-test before release' },
+  { id: 'h3', animal: 'Mares (4)', type: 'Vaccines', date: 'Due', status: 'Due', tone: 'warning' as ChipTone, detail: 'Spring booster' },
+  { id: 'h4', animal: 'Sale Prospects (3)', type: 'Farrier', date: 'Due', status: 'Due', tone: 'warning' as ChipTone, detail: 'Trim cycle' },
+  { id: 'h5', animal: 'THR Copper Canyon', type: 'Dental', date: '2026-05-20', status: 'Current', tone: 'success' as ChipTone, detail: 'Float complete' },
+  { id: 'h6', animal: 'Copper Belle', type: 'Vet visit', date: '2026-06-22', status: 'Current', tone: 'success' as ChipTone, detail: 'Preg check scheduled' },
+];
+
+export const ownershipChain = [
+  { id: 'o1', animal: 'RHA Pine Barrel Prospect', owner: 'Thunder Horse Ranch', proof: 'Registration + 2 transfers', status: 'Clear', tone: 'success' as ChipTone },
+  { id: 'o2', animal: 'THR Copper Canyon', owner: 'Thunder Horse Ranch', proof: 'Registration + bill of sale', status: 'Clear', tone: 'success' as ChipTone },
+  { id: 'o3', animal: 'THR Juniper Ledge', owner: 'Thunder Horse Ranch', proof: 'Bill of sale unsigned', status: 'Review', tone: 'warning' as ChipTone },
+  { id: 'o4', animal: 'THR Stone Mesa', owner: 'Pending transfer', proof: 'Prior owner release missing', status: 'Gap Detected', tone: 'danger' as ChipTone },
+];
+
+export const equipmentList = [
+  { id: 'e1', name: 'Stock trailer (24ft)', type: 'Trailer', location: 'Equipment Yard', status: 'Service due', tone: 'warning' as ChipTone, detail: 'Bearings · 400 mi over' },
+  { id: 'e2', name: 'South Trap gate', type: 'Gate', location: 'South Pasture', status: 'Broken', tone: 'danger' as ChipTone, detail: 'Latch failed' },
+  { id: 'e3', name: 'Ranch UTV', type: 'UTV', location: 'Main Barn', status: 'OK', tone: 'success' as ChipTone, detail: 'Serviced last week' },
+  { id: 'e4', name: 'Kubota tractor', type: 'Tractor', location: 'Equipment Yard', status: 'OK', tone: 'success' as ChipTone, detail: 'Next service Aug' },
+  { id: 'e5', name: 'Water trough — North', type: 'Water trough', location: 'North Pasture', status: 'Check', tone: 'warning' as ChipTone, detail: 'Float sticking' },
+];
+
+export const breedingRecords = [
+  { id: 'b1', mare: 'Copper Belle', stud: 'Rojo', method: 'Live cover', stage: 'Preg check due', due: '2027-04-12', tone: 'warning' as ChipTone },
+  { id: 'b2', mare: 'THR Juniper Ledge', stud: 'External AI', method: 'AI', stage: 'Open', due: '—', tone: 'neutral' as ChipTone },
+  { id: 'b3', mare: 'Sage', stud: 'Rojo', method: 'Live cover', stage: 'Confirmed in foal', due: '2027-03-02', tone: 'success' as ChipTone },
+];
+
+export const expenseRows = [
+  { id: 'x1', date: '2026-06-22', desc: 'Coastal hay — 60 bales', category: 'Feed', animal: 'Ranch-wide', amount: 1080 },
+  { id: 'x2', date: '2026-06-20', desc: 'Vet — preg check', category: 'Vet & health', animal: 'Copper Belle', amount: 240 },
+  { id: 'x3', date: '2026-06-18', desc: 'Farrier — trim cycle', category: 'Farrier', animal: 'Sale Prospects', amount: 360 },
+  { id: 'x4', date: '2026-06-15', desc: 'Trailer bearings', category: 'Equipment', animal: 'Stock trailer', amount: 420 },
+  { id: 'x5', date: '2026-06-12', desc: 'Coggins lab fees', category: 'Vet & health', animal: 'THR Stone Mesa', amount: 95 },
+];

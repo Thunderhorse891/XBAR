@@ -126,3 +126,28 @@ test('pasture location opens a detail drawer', async ({ page }) => {
   await expect(drawer).toBeVisible();
   await expect(drawer.getByText('Animals currently here')).toBeVisible();
 });
+
+test('animals roster opens a full animal profile object page with tabs', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await page.getByRole('link', { name: 'Animals', exact: true }).click();
+  await expect(page.locator('.xs-table tbody tr').first()).toBeVisible();
+  await page.locator('.xs-table tbody tr').first().click();
+  await expect(page).toHaveURL(/\/animals\//);
+  await expect(page.locator('.xs-objhead__name')).toBeVisible();
+  await page.locator('.xs-tabbar__tab', { hasText: 'Sale Readiness' }).click();
+  await expect(page.getByText('Buyer-safe proof')).toBeVisible();
+});
+
+test('sales pipeline renders a kanban board', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await page.getByRole('link', { name: 'Sales Pipeline', exact: true }).click();
+  await expect(page.locator('.xs-kanban')).toBeVisible();
+  await expect(page.locator('.xs-kcol').first()).toBeVisible();
+});
+
+test('plans page shows plan cards', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  await page.getByRole('button', { name: 'Upgrade' }).click();
+  await expect(page.getByRole('heading', { name: 'Plans & Upgrade' })).toBeVisible();
+  await expect(page.locator('.xs-plancard')).toHaveCount(5);
+});

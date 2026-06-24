@@ -30,6 +30,13 @@ const HerdGroups = lazy(() => import('./routes/HerdGroups'));
 const Pastures = lazy(() => import('./routes/Pastures'));
 const FeedInventory = lazy(() => import('./routes/FeedInventory'));
 const DocumentsVault = lazy(() => import('./routes/DocumentsVault'));
+const Animals = lazy(() => import('./routes/Animals'));
+const AnimalProfile = lazy(() => import('./routes/AnimalProfile'));
+const HealthCare = lazy(() => import('./routes/HealthCare'));
+const OwnershipChain = lazy(() => import('./routes/OwnershipChain'));
+const EquipmentPage = lazy(() => import('./routes/Equipment'));
+const BreedingFoaling = lazy(() => import('./routes/BreedingFoaling'));
+const Plans = lazy(() => import('./routes/Plans'));
 const Breeding = lazy(() => import('./routes/Breeding'));
 const BuyerProfile = lazy(() => import('./routes/BuyerProfile'));
 const DocumentLibrary = lazy(() => import('./routes/DocumentLibrary'));
@@ -63,6 +70,12 @@ const ROUTE_LABELS: Record<string, string> = {
   '/pastures': 'Pastures & Locations',
   '/feed': 'Feed & Inventory',
   '/documents-vault': 'Documents Vault',
+  '/animals': 'Animals',
+  '/health-care': 'Health & Care',
+  '/ownership-chain': 'Ownership Chain',
+  '/equipment': 'Equipment',
+  '/breeding-foaling': 'Breeding & Foaling',
+  '/plans': 'Plans',
   '/sales-pipeline': 'Sales Pipeline',
   '/buyer-deal-room': 'Buyer Deal Room',
   '/sale-packet-studio': 'Sale Packet Studio',
@@ -194,10 +207,15 @@ export default function App() {
               <Route path="buyer-deal-room" element={<BuyerDealRoom />} />
               <Route path="sale-packet-studio" element={<SalePacketStudio />} />
               <Route path="reports" element={<Reports />} />
+              <Route path="animals" element={<Animals />} />
+              <Route path="animals/:id" element={<AnimalProfile />} />
+              <Route path="health-care" element={<HealthCare />} />
+              <Route path="ownership-chain" element={<OwnershipChain />} />
+              <Route path="equipment" element={<EquipmentPage />} />
+              <Route path="breeding-foaling" element={<BreedingFoaling />} />
+              <Route path="plans" element={<Plans />} />
               <Route path="horses" element={<Horses />} />
               <Route path="horses/:id" element={<HorseDetail />} />
-              <Route path="health-care" element={<Medical />} />
-              <Route path="ownership-chain" element={<Ownership />} />
               <Route path="assets-equipment" element={<RanchAssets />} />
               <Route path="documents" element={<Documents />} />
               <Route path="document-library" element={<DocumentLibrary />} />
