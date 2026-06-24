@@ -52,7 +52,7 @@ test('creates a fresh workspace and lands on the operations dashboard', async ({
   await page.getByRole('button', { name: 'Create workspace' }).click();
 
   await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
-  await expect(page.getByRole('heading', { name: 'Add your first horse.', exact: true })).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator('[aria-label="Empty workspace counters"]')).toContainText('Horses', { timeout: 15_000 });
-  await expect(page.getByRole('heading', { name: 'Create the first horse record' })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: 'Sale Readiness' })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('XBAR Intelligence Rail')).toBeVisible({ timeout: 15_000 });
 });

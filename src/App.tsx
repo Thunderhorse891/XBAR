@@ -17,8 +17,14 @@ import './routes/commandCenterLocal.css';
 import './routes/premiumOperatingSystem.css';
 import './routes/premiumSaasExperience.css';
 import './routes/productionFinal.css';
+import './styles/xbarSaas.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
+const GettingStarted = lazy(() => import('./routes/GettingStarted'));
+const SalesPipeline = lazy(() => import('./routes/SalesPipeline'));
+const BuyerDealRoom = lazy(() => import('./routes/BuyerDealRoom'));
+const SalePacketStudio = lazy(() => import('./routes/SalePacketStudio'));
+const Reports = lazy(() => import('./routes/Reports'));
 const Breeding = lazy(() => import('./routes/Breeding'));
 const BuyerProfile = lazy(() => import('./routes/BuyerProfile'));
 const DocumentLibrary = lazy(() => import('./routes/DocumentLibrary'));
@@ -46,6 +52,11 @@ const Weather = lazy(() => import('./routes/Weather'));
 
 const ROUTE_LABELS: Record<string, string> = {
   '/': 'Home',
+  '/getting-started': 'Getting Started',
+  '/sales-pipeline': 'Sales Pipeline',
+  '/buyer-deal-room': 'Buyer Deal Room',
+  '/sale-packet-studio': 'Sale Packet Studio',
+  '/reports': 'Reports',
   '/assets': 'Equipment',
   '/breeding': 'Breeding',
   '/document-library': 'Document Library',
@@ -163,8 +174,16 @@ export default function App() {
             <Route path="/setup" element={<RequireCloudAuth><SetupWorkspace /></RequireCloudAuth>} />
             <Route path="/" element={<RequireCloudAuth><RequireWorkspaceSetup><MainLayout /></RequireWorkspaceSetup></RequireCloudAuth>}>
               <Route index element={<Dashboard />} />
+              <Route path="getting-started" element={<GettingStarted />} />
+              <Route path="sales-pipeline" element={<SalesPipeline />} />
+              <Route path="buyer-deal-room" element={<BuyerDealRoom />} />
+              <Route path="sale-packet-studio" element={<SalePacketStudio />} />
+              <Route path="reports" element={<Reports />} />
               <Route path="horses" element={<Horses />} />
               <Route path="horses/:id" element={<HorseDetail />} />
+              <Route path="health-care" element={<Medical />} />
+              <Route path="ownership-chain" element={<Ownership />} />
+              <Route path="assets-equipment" element={<RanchAssets />} />
               <Route path="documents" element={<Documents />} />
               <Route path="document-library" element={<DocumentLibrary />} />
               <Route path="weather" element={<Weather />} />
