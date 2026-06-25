@@ -281,7 +281,7 @@ export default function MainLayout() {
   };
 
   return (
-    <div className="xbar-command-shell min-h-screen lg:grid lg:grid-cols-[264px,1fr]">
+    <div className={classNames('xbar-command-shell min-h-screen lg:grid lg:grid-cols-[264px,1fr]', `xbar-shell-${routeSlug}`)}>
       <aside className="hidden min-h-screen flex-col gap-6 border-r border-[#0e1e32] bg-[#050b14] px-5 py-6 text-[#c2d4e8] lg:flex">
         <div className="xbar-sidebar-brand flex items-center gap-3">
           <div className="xbar-sidebar-brand__mark flex h-[52px] w-[52px] items-center justify-center rounded-lg border border-[#1a2e46] bg-[#050910] p-1.5 shadow-[0_14px_32px_rgba(47,141,255,0.18)]">
