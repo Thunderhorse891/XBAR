@@ -166,6 +166,7 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
+  z-index: 0;
 }
 
 .site-hero-gradient {
@@ -174,20 +175,12 @@
   left: 0;
   right: 0;
   height: 70vh;
-  background: linear-gradient(180deg, #E8EEFF 0%, rgba(237, 242, 255, 0.55) 40%, rgba(255, 255, 255, 0) 100%);
+  background: linear-gradient(180deg, rgba(248, 245, 240, 0.85) 0%, rgba(252, 250, 247, 0.35) 50%, rgba(255, 255, 255, 0) 100%);
   pointer-events: none;
 }
 
-.site-hero-grid-lines {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px);
-  background-size: 60px 60px;
-  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 0%, transparent 100%);
-  opacity: 0.6;
-}
+/* Grid lines intentionally removed for brand-correct warm-white hero background */
+.site-hero-grid-lines { display: none; }
 
 .site-hero-wrap {
   display: grid;
@@ -215,9 +208,9 @@
   height: 28px;
   padding: 0 12px;
   border-radius: 99px;
-  background: rgba(37, 99, 235, 0.07);
-  border: 1px solid rgba(37, 99, 235, 0.15);
-  color: var(--blue-dark);
+  background: rgba(42, 46, 58, 0.06);
+  border: 1px solid rgba(42, 46, 58, 0.13);
+  color: #3C4050;
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -251,7 +244,7 @@
 }
 
 .site-gradient-text {
-  background: linear-gradient(135deg, var(--blue-dark) 0%, var(--blue) 40%, #3B82F6 100%);
+  background: linear-gradient(135deg, #1D2235 0%, #2E3450 45%, #3B4A72 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -522,6 +515,18 @@
   background: linear-gradient(135deg, #DBEAFE, #BFDBFE);
   flex-shrink: 0;
 }
+
+.site-chrome-module-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #D1D5DB;
+}
+.site-chrome-module-dot--emerald { background: #10B981; }
+.site-chrome-module-dot--blue    { background: #3B82F6; }
+.site-chrome-module-dot--amber   { background: #F59E0B; }
+.site-chrome-module-dot--rose    { background: #F43F5E; }
 
 .site-chrome-horse-name {
   font-size: 0.68rem;
@@ -1173,43 +1178,30 @@
   filter: blur(1px);
 }
 
-/* ── Animated accent blobs ────────────────────────────────────────────────── */
+/* ── Horse brand watermark ────────────────────────────────────────────────── */
 
-@keyframes blobFloat {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33%       { transform: translate(20px, -15px) scale(1.04); }
-  66%       { transform: translate(-10px, 10px) scale(0.97); }
-}
-
-.site-hero-blob {
+.xbar-horse-watermark {
   position: absolute;
-  border-radius: 999px;
+  top: 50%;
+  right: -10%;
+  transform: translateY(-50%);
+  width: clamp(480px, 62vw, 860px);
+  height: auto;
   pointer-events: none;
-  filter: blur(72px);
-  animation: blobFloat 20s ease-in-out infinite;
+  z-index: 0;
+  color: #28293A;
+  opacity: 0.055;
+  user-select: none;
 }
 
-.site-hero-blob--blue {
-  width: 400px; height: 300px;
-  top: -80px; right: 5%;
-  background: rgba(37, 99, 235, 0.16);
-  animation-delay: -7s;
+.xbar-horse-watermark svg {
+  width: 100%;
+  height: auto;
+  display: block;
 }
 
-.site-hero-blob--indigo {
-  width: 300px; height: 250px;
-  bottom: 10%; left: -60px;
-  background: rgba(37, 99, 235, 0.10);
-  animation-delay: -13s;
-}
-
-.site-hero-blob--violet {
-  width: 320px; height: 280px;
-  top: 40%; right: 30%;
-  background: rgba(139, 92, 246, 0.06);
-  animation-delay: -4s;
-  animation-duration: 24s;
-}
+/* Blobs removed — hero uses warm-white gradient only */
+.site-hero-blob { display: none; }
 
 /* ── Reduced motion ───────────────────────────────────────────────────────── */
 

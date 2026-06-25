@@ -15,7 +15,7 @@ import type { ExpenseCategory } from '@/types/xbar';
 import { CARE_SIGNAL_TONE, EXPENSE_CATEGORIES } from '@/features/dashboard/constants';
 import type { DashboardMenuState } from '@/features/dashboard/types';
 
-const STAGE_TONE: Record<string, string> = {
+const STAGE_TONE: Record<string, 'blue' | 'slate' | 'emerald' | 'amber' | 'rose'> = {
   New: 'slate',
   Qualified: 'blue',
   Offer: 'amber',

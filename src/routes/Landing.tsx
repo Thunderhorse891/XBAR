@@ -183,16 +183,17 @@ const STATS = [
 ];
 
 const PREVIEW_METRICS = [
-  { value: '47', label: 'Total Horses' },
-  { value: '12', label: 'Listed' },
+  { value: '94%', label: 'Sale Ready' },
+  { value: '13', label: 'Horses' },
   { value: '3', label: 'Alerts' },
-  { value: '94%', label: 'Docs Ready' },
+  { value: 'Clear', label: 'Doc Risk' },
 ];
 
-const PREVIEW_HORSES = [
-  { name: 'Whiskey River', tag: 'Listed', tone: 'emerald', detail: 'QH · Mare · TX' },
-  { name: 'Copper Canyon', tag: 'Pending', tone: 'amber', detail: 'Paint · Gelding · TX' },
-  { name: 'Blue Ridge', tag: 'Breeding', tone: 'blue', detail: 'AQHA · Stud · OK' },
+const PREVIEW_MODULES = [
+  { name: 'Sale Readiness', tag: 'Ready', tone: 'emerald', detail: '12 of 13 horses cleared' },
+  { name: 'Ownership Chain', tag: 'Verified', tone: 'blue', detail: 'All titles on file' },
+  { name: 'Release Blocker', tag: 'Resolved', tone: 'emerald', detail: 'Transfer ready' },
+  { name: 'Document Risk', tag: '1 Gap', tone: 'amber', detail: 'Coggins exp. in 18 days' },
 ];
 
 const TICKER_ITEMS = [
@@ -281,35 +282,59 @@ export default function Landing() {
 
       {/* Hero */}
       <section className="site-hero" aria-labelledby="hero-heading">
+        {/* Horse contour watermark — sits between hero bg and content */}
+        <div className="xbar-horse-watermark" aria-hidden="true">
+          <svg viewBox="0 0 840 580" xmlns="http://www.w3.org/2000/svg" focusable="false">
+            <g fill="currentColor">
+              {/* Body */}
+              <ellipse cx="462" cy="296" rx="202" ry="112" transform="rotate(-7 462 296)" />
+              {/* Neck–body junction */}
+              <ellipse cx="303" cy="226" rx="74" ry="54" transform="rotate(-52 303 226)" />
+              {/* Neck */}
+              <polygon points="268,248 340,216 286,126 214,165" />
+              {/* Head */}
+              <ellipse cx="196" cy="193" rx="72" ry="44" transform="rotate(-22 196 193)" />
+              {/* Muzzle */}
+              <ellipse cx="135" cy="223" rx="36" ry="26" transform="rotate(-12 135 223)" />
+              {/* Ear */}
+              <polygon points="212,153 229,117 253,148" />
+              {/* Front legs */}
+              <rect x="296" y="387" width="28" height="152" rx="13" />
+              <rect x="336" y="387" width="28" height="145" rx="13" />
+              {/* Hind legs */}
+              <rect x="560" y="385" width="28" height="155" rx="13" />
+              <rect x="598" y="385" width="28" height="148" rx="13" />
+            </g>
+            {/* Tail — fluid stroke */}
+            <path d="M 652,258 C 698,230 733,206 738,173 C 743,140 722,117 696,113" fill="none" stroke="currentColor" strokeWidth="30" strokeLinecap="round" />
+          </svg>
+        </div>
+
         <div className="site-hero-bg" aria-hidden="true">
           <div className="site-hero-gradient" />
-          <div className="site-hero-grid-lines" />
-          <div className="site-hero-blob site-hero-blob--blue" />
-          <div className="site-hero-blob site-hero-blob--indigo" />
-          <div className="site-hero-blob site-hero-blob--violet" aria-hidden="true" />
         </div>
 
         <div className="site-hero-wrap">
           {/* Left copy */}
           <div className="site-hero-copy">
             <div className="site-hero-badge sr" aria-hidden="true">
-              Purpose-built for working ranches
+              Equine operations infrastructure
             </div>
             <h1 className="site-hero-h1 sr" data-delay="1" id="hero-heading">
-              Horse records that<br />
-              <span className="site-gradient-text">close deals.</span>
+              One trusted record<br />
+              <span className="site-gradient-text">for every horse.</span>
             </h1>
             <p className="site-hero-sub sr" data-delay="2">
-              XBAR keeps ownership, health records, documents, and sale packets organized by horse — not by filing cabinet. When a buyer asks for proof, you're already ready.
+              Ownership, documents, care history, and sale readiness organized into a buyer-safe operating system for serious horse businesses.
             </p>
             <div className="site-hero-actions sr" data-delay="3">
               <Link to="/login?mode=signup" className="site-btn-primary">
-                Get started free — 14 days
+                Create your workspace
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }} aria-hidden="true">
                   <path d="M3 8h10M9 4l4 4-4 4" />
                 </svg>
               </Link>
-              <Link to="/login" className="site-btn-ghost">Sign in to workspace</Link>
+              <Link to="/login" className="site-btn-ghost">Sign in</Link>
             </div>
             <div className="site-hero-trust sr" data-delay="4">
               <span>No credit card required</span>
@@ -383,14 +408,14 @@ export default function Landing() {
                     ))}
                   </div>
                   <div className="site-chrome-horse-list">
-                    {PREVIEW_HORSES.map((h) => (
-                      <div key={h.name} className="site-chrome-horse-row">
-                        <div className="site-chrome-horse-avatar" />
+                    {PREVIEW_MODULES.map((m) => (
+                      <div key={m.name} className="site-chrome-horse-row">
+                        <div className={`site-chrome-module-dot site-chrome-module-dot--${m.tone}`} />
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div className="site-chrome-horse-name">{h.name}</div>
-                          <div className="site-chrome-horse-detail">{h.detail}</div>
+                          <div className="site-chrome-horse-name">{m.name}</div>
+                          <div className="site-chrome-horse-detail">{m.detail}</div>
                         </div>
-                        <div className={`site-chrome-horse-tag site-chrome-horse-tag--${h.tone}`}>{h.tag}</div>
+                        <div className={`site-chrome-horse-tag site-chrome-horse-tag--${m.tone}`}>{m.tag}</div>
                       </div>
                     ))}
                   </div>

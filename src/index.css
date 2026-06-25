@@ -416,6 +416,7 @@ a:focus-visible,
 
 .search-shell__input,
 .field-input,
+.field-select,
 .role-select {
   width: 100%;
   border-radius: var(--radius-md);
@@ -5035,6 +5036,7 @@ a:focus-visible,
 
 .search-shell__input,
 .field-input,
+.field-select,
 .role-select {
   background: #FFFFFF;
   border: 1px solid rgba(0, 0, 0, 0.1);
@@ -5043,6 +5045,7 @@ a:focus-visible,
 
 .search-shell__input:focus-visible,
 .field-input:focus-visible,
+.field-select:focus-visible,
 .field-textarea:focus-visible,
 .role-select:focus-visible {
   border-color: rgba(37, 99, 235, 0.45);
@@ -5693,4 +5696,219 @@ a:focus-visible,
     margin: 1.5cm;
     size: A4;
   }
+}
+
+/* ─── Dashboard sales pipeline visual ──────────────────────────────── */
+
+.dash-pipeline {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 0;
+}
+
+.dash-pipeline__stage {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  position: relative;
+  overflow: hidden;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.dash-pipeline__stage:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-soft);
+}
+
+.dash-pipeline__stage--new   { border-top: 3px solid var(--slate); }
+.dash-pipeline__stage--qualified { border-top: 3px solid var(--blue); }
+.dash-pipeline__stage--offer { border-top: 3px solid var(--amber); }
+.dash-pipeline__stage--closed { border-top: 3px solid var(--emerald); }
+
+.dash-pipeline__label {
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.dash-pipeline__count {
+  font-size: 2.2rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.05em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-pipeline__value {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted-strong);
+}
+
+/* ─── Dashboard herd health bar ─────────────────────────────────────── */
+
+.dash-health-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dash-health-bar__track {
+  flex: 1;
+  height: 7px;
+  border-radius: 4px;
+  background: var(--surface-strong);
+  overflow: hidden;
+  position: relative;
+}
+
+.dash-health-bar__fill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--emerald);
+  transition: width 700ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.dash-health-bar__fill--warn {
+  background: linear-gradient(90deg, var(--amber), var(--rose));
+}
+
+.dash-health-bar__pct {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--text);
+  white-space: nowrap;
+  min-width: 36px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Dashboard herd overview grid ──────────────────────────────────── */
+
+.dash-herd-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.dash-herd-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  background: var(--surface);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+}
+
+.dash-herd-card:hover {
+  background: var(--surface-strong);
+  box-shadow: var(--shadow-soft);
+}
+
+.dash-herd-card--urgent { border-left-color: var(--rose); }
+.dash-herd-card--watch  { border-left-color: var(--amber); }
+.dash-herd-card--clear  { border-left-color: var(--emerald); }
+
+.dash-herd-card__name {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dash-herd-card__status {
+  font-size: 0.69rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dash-herd-card__signals {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.dash-signal-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--emerald);
+  flex-shrink: 0;
+}
+
+.dash-signal-dot--due   { background: var(--rose); }
+.dash-signal-dot--watch { background: var(--amber); }
+.dash-signal-dot--clear { background: var(--emerald); }
+
+/* ─── Dashboard revenue rail ────────────────────────────────────────── */
+
+.dash-revenue-rail {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dash-revenue-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.dash-revenue-cell__label {
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.dash-revenue-cell__value {
+  font-size: 1.55rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-revenue-cell__sub {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.dash-revenue-cell--emerald .dash-revenue-cell__value { color: var(--emerald); }
+.dash-revenue-cell--amber   .dash-revenue-cell__value { color: var(--amber); }
+.dash-revenue-cell--blue    .dash-revenue-cell__value { color: var(--blue); }
+
+@media (max-width: 1100px) {
+  .dash-pipeline { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dash-revenue-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .dash-pipeline { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dash-herd-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dash-revenue-rail { grid-template-columns: 1fr; }
 }
