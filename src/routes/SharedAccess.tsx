@@ -3,13 +3,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
-import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
+import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { buildPublicShareUrl, openFacebookShareDialog } from '@/lib/facebookSharing';
 import { isFacebookSharingConfigured } from '@/lib/platformConfig';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import type { SharedListingRecord } from '@/types/xbar';
+import './operationsExperience.css';
 
 export default function SharedAccess() {
   const navigate = useNavigate();
@@ -173,10 +174,37 @@ export default function SharedAccess() {
   return (
     <>
       {confirmDialog}
-      <PageHeader
-        eyebrow="Sale Packets"
-        title="Sale Listings"
-      />
+      <div className="ops-hero">
+        <div className="ops-hero__main">
+          <div className="ops-hero__eyebrow">Sale Packets</div>
+          <h1 className="ops-hero__title">Sale Listings</h1>
+          <p className="ops-hero__sub">Buyer-facing profiles and share links — manage access modes, rotate tokens, and distribute listings through direct links and Facebook.</p>
+          <div className="ops-hero__chips">
+            <span className="ops-briefing-chip">{activeSharedListings.length} listing{activeSharedListings.length !== 1 ? 's' : ''}</span>
+            {liveSharedListings.length > 0 && <span className="ops-briefing-chip ops-briefing-chip--success">{liveSharedListings.length} live</span>}
+            {openSharedLeads.length > 0 && <span className="ops-briefing-chip ops-briefing-chip--warning">{openSharedLeads.length} open {openSharedLeads.length === 1 ? 'lead' : 'leads'}</span>}
+            {facebookSharedListings.length > 0 && <span className="ops-briefing-chip ops-briefing-chip--success">{facebookSharedListings.length} on Facebook</span>}
+          </div>
+        </div>
+        <div className="ops-hero__stats">
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{activeSharedListings.length}</span>
+            <span className="ops-hero__stat-label">Active listings</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{liveSharedListings.length}</span>
+            <span className="ops-hero__stat-label">Live links</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{facebookSharedListings.length}</span>
+            <span className="ops-hero__stat-label">Facebook posts</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{openSharedLeads.length}</span>
+            <span className="ops-hero__stat-label">Open inquiries</span>
+          </div>
+        </div>
+      </div>
 
       <div className="metric-grid">
         <MetricCard label="Sale packets" value={`${activeSharedListings.length}`} detail="Active links" tone="blue" />

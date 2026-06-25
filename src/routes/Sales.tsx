@@ -10,6 +10,7 @@ import { formatCompactCurrency, formatCurrency, formatDateLabel } from '@/lib/fo
 import { useUiStore } from '@/store/useUiStore';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
+import './operationsExperience.css';
 
 const STAGE_TONE: Record<string, 'slate' | 'blue' | 'amber' | 'emerald' | 'rose'> = {
   New: 'slate',
@@ -196,23 +197,34 @@ export default function Sales() {
     <>
       {confirmDialog}
 
-      <div className="surface-hero surface-hero--dark">
-        <div className="surface-hero__top">
-          <div>
-            <span className="surface-hero__eyebrow">Sales & Transfers</span>
-            <h1 className="surface-hero__title">Sales</h1>
+      <div className="ops-hero">
+        <div className="ops-hero__main">
+          <div className="ops-hero__eyebrow">Sales & Transfers</div>
+          <h1 className="ops-hero__title">Sales</h1>
+          <p className="ops-hero__sub">Pipeline management from first inquiry to final transfer — track leads by stage, log offers, schedule follow-ups, and generate bill of sale documents.</p>
+          <div className="ops-hero__chips">
+            <span className="ops-briefing-chip">{saleHorses.length} listing{saleHorses.length !== 1 ? 's' : ''}</span>
+            {openLeads.length > 0 && <span className="ops-briefing-chip ops-briefing-chip--success">{openLeads.length} open {openLeads.length === 1 ? 'lead' : 'leads'}</span>}
+            {followUpsDue > 0 && <span className="ops-briefing-chip ops-briefing-chip--warning">{followUpsDue} follow-up{followUpsDue !== 1 ? 's' : ''} due</span>}
+            {wonLeads.length > 0 && <span className="ops-briefing-chip ops-briefing-chip--success">{wonLeads.length} won</span>}
           </div>
-          <div className="surface-hero__stats">
-            <div className="surface-hero__stat"><span>Listings</span><strong>{saleHorses.length}</strong></div>
-            <div className="surface-hero__stat"><span>Open prospects</span><strong>{openLeads.length}</strong></div>
-            <div className="surface-hero__stat">
-              <span>Follow-ups due</span>
-              <strong className={followUpsDue ? 'text-rose' : 'text-emerald'}>{followUpsDue}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Pipeline value</span>
-              <strong>{formatCompactCurrency(pipelineValue)}</strong>
-            </div>
+        </div>
+        <div className="ops-hero__stats">
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{saleHorses.length}</span>
+            <span className="ops-hero__stat-label">Listed horses</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{openLeads.length}</span>
+            <span className="ops-hero__stat-label">Open leads</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{followUpsDue || '—'}</span>
+            <span className="ops-hero__stat-label">Follow-ups due</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{formatCompactCurrency(pipelineValue)}</span>
+            <span className="ops-hero__stat-label">Pipeline value</span>
           </div>
         </div>
       </div>

@@ -12,6 +12,7 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { MedicalEventType } from '@/types/xbar';
 import { medicalEventTypes } from '@/features/health/constants';
+import './operationsExperience.css';
 
 const EVENT_TYPE_TONE: Record<string, 'blue' | 'rose' | 'amber' | 'emerald' | 'slate'> = {
   'Vet visit': 'blue',
@@ -96,29 +97,37 @@ export default function Medical() {
     <>
       {confirmDialog}
 
-      <div className="surface-hero surface-hero--dark">
-        <div className="surface-hero__top">
-          <div>
-            <span className="surface-hero__eyebrow">Health & Care</span>
-            <h1 className="surface-hero__title">Medical</h1>
+      <div className="ops-hero">
+        <div className="ops-hero__main">
+          <div className="ops-hero__eyebrow">Health & Care</div>
+          <h1 className="ops-hero__title">Medical</h1>
+          <p className="ops-hero__sub">Vet visits, wormer schedules, dental, and Coggins — log care events, track the watchlist, and keep every horse's health timeline current.</p>
+          <div className="ops-hero__chips">
+            {medicalWatch.length > 0 ? (
+              <span className="ops-briefing-chip ops-briefing-chip--warning">{medicalWatch.length} on watch</span>
+            ) : (
+              <span className="ops-briefing-chip ops-briefing-chip--success">No horses on watch</span>
+            )}
+            {careDueRows.length > 0 && <span className="ops-briefing-chip ops-briefing-chip--warning">{careDueRows.length} care due</span>}
+            <span className="ops-briefing-chip">{medicalEvents.length} timeline event{medicalEvents.length !== 1 ? 's' : ''}</span>
           </div>
-          <div className="surface-hero__stats">
-            <div className="surface-hero__stat">
-              <span>On watch</span>
-              <strong className={medicalWatch.length ? 'text-rose' : 'text-emerald'}>{medicalWatch.length}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Care due</span>
-              <strong className={careDueRows.length ? 'text-amber' : 'text-emerald'}>{careDueRows.length}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Timeline</span>
-              <strong>{medicalEvents.length}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Vet docs</span>
-              <strong>{documents.filter((d) => d.type === 'Vet Record' || d.type === 'Coggins').length}</strong>
-            </div>
+        </div>
+        <div className="ops-hero__stats">
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{medicalWatch.length || '—'}</span>
+            <span className="ops-hero__stat-label">On watch</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{careDueRows.length || '—'}</span>
+            <span className="ops-hero__stat-label">Care due</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{medicalEvents.length}</span>
+            <span className="ops-hero__stat-label">Timeline events</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{documents.filter((d) => d.type === 'Vet Record' || d.type === 'Coggins').length}</span>
+            <span className="ops-hero__stat-label">Vet docs</span>
           </div>
         </div>
       </div>

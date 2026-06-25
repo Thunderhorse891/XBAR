@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MetricCard, PageHeader, Panel, Pill, ProgressBar } from '@/components/app-ui';
+import { MetricCard, Panel, Pill, ProgressBar } from '@/components/app-ui';
 import { startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency, formatDateLabel } from '@/lib/format';
 import { getStripePaymentLink, isBillingConfigured, stripeConfig } from '@/lib/platformConfig';
@@ -8,6 +8,7 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { SubscriptionTier } from '@/types/xbar';
+import './operationsExperience.css';
 
 const tiers: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
 
@@ -29,16 +30,41 @@ export default function Subscriptions() {
 
   return (
     <>
-      <PageHeader
-        eyebrow="Subscriptions"
-        title="Billing"
-        actions={
-          <>
-            <Pill tone={billingConfigured ? 'emerald' : 'slate'}>{billingConfigured ? 'Stripe links live' : 'Manual billing'}</Pill>
-            <Pill tone="slate">{subscription.tier}</Pill>
-          </>
-        }
-      />
+      <div className="ops-hero">
+        <div className="ops-hero__main">
+          <div className="ops-hero__eyebrow">Subscriptions</div>
+          <h1 className="ops-hero__title">Billing</h1>
+          <p className="ops-hero__sub">Plan tier, seat usage, storage, and shared access — review your current limits and upgrade when you're ready to scale.</p>
+          <div className="ops-hero__chips">
+            <span className="ops-briefing-chip">{subscription.tier}</span>
+            <span className={`ops-briefing-chip${billingConfigured ? ' ops-briefing-chip--success' : ''}`}>{billingConfigured ? 'Stripe live' : 'Manual billing'}</span>
+            {subscription.usage.seatsUsed >= subscription.usage.seatLimit && <span className="ops-briefing-chip ops-briefing-chip--warning">Seats full</span>}
+            {stripeConfig.billingPortalUrl && canManageBilling && (
+              <a className="ops-briefing-chip ops-briefing-chip--action" href={stripeConfig.billingPortalUrl} target="_blank" rel="noreferrer">
+                Manage billing
+              </a>
+            )}
+          </div>
+        </div>
+        <div className="ops-hero__stats">
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{subscription.tier}</span>
+            <span className="ops-hero__stat-label">Current plan</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{formatDateLabel(subscription.renewalDate)}</span>
+            <span className="ops-hero__stat-label">Renews</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{subscription.usage.seatsUsed}/{subscription.usage.seatLimit}</span>
+            <span className="ops-hero__stat-label">Seats used</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{subscription.usage.storageUsedGb}/{subscription.usage.storageLimitGb} GB</span>
+            <span className="ops-hero__stat-label">Storage</span>
+          </div>
+        </div>
+      </div>
 
       <div className="metric-grid">
         <MetricCard label="Tier" value={subscription.tier} detail="Current plan" tone="blue" />

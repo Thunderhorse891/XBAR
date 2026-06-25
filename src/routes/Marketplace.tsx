@@ -9,6 +9,7 @@ import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
+import './operationsExperience.css';
 
 type SortKey = 'price-asc' | 'price-desc' | 'age-asc' | 'name';
 type SexFilter = 'All' | 'Mare' | 'Stud' | 'Gelding' | 'Filly' | 'Colt';
@@ -75,30 +76,33 @@ export default function Marketplace() {
 
   return (
     <>
-      <div className="surface-hero surface-hero--dark">
-        <div className="surface-hero__top">
-          <div>
-            <span className="surface-hero__eyebrow">For Sale Board</span>
+      <div className="ops-hero">
+        <div className="ops-hero__main">
+          <div className="ops-hero__eyebrow">For Sale Board</div>
+          <h1 className="ops-hero__title">Marketplace</h1>
+          <p className="ops-hero__sub">Market-ready horses with complete sale packets — filter by breed or sex, log buyer inquiries, and track your pipeline in one place.</p>
+          <div className="ops-hero__chips">
+            <span className="ops-briefing-chip">{marketHorses.length} listed</span>
+            {readyCount > 0 && <span className="ops-briefing-chip ops-briefing-chip--success">{readyCount} packet{readyCount !== 1 ? 's' : ''} ready</span>}
+            {leadsCount > 0 && <span className="ops-briefing-chip ops-briefing-chip--warning">{leadsCount} open {leadsCount === 1 ? 'lead' : 'leads'}</span>}
           </div>
-          <div className="surface-hero__stats">
-            <div className="surface-hero__stat">
-              <span>Listed</span>
-              <strong>{marketHorses.length}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Total ask</span>
-              <strong>{formatCompactCurrency(totalValue)}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Packet ready</span>
-              <strong className={readyCount === marketHorses.length && marketHorses.length > 0 ? 'text-emerald' : 'text-amber'}>
-                {readyCount}/{marketHorses.length}
-              </strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Open leads</span>
-              <strong>{leadsCount}</strong>
-            </div>
+        </div>
+        <div className="ops-hero__stats">
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{marketHorses.length}</span>
+            <span className="ops-hero__stat-label">Market ready</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{formatCompactCurrency(totalValue)}</span>
+            <span className="ops-hero__stat-label">Total ask value</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{readyCount}/{marketHorses.length || '—'}</span>
+            <span className="ops-hero__stat-label">Packet ready</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{leadsCount}</span>
+            <span className="ops-hero__stat-label">Open leads</span>
           </div>
         </div>
       </div>
