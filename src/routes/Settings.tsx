@@ -9,6 +9,7 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { UserRole } from '@/types/xbar';
+import './operationsExperience.css';
 
 function roleLabel(role: UserRole) {
   return role === 'Owner' ? 'Horse Owner / Client' : role;
@@ -227,10 +228,35 @@ export default function Settings() {
   return (
     <>
       {confirmDialog}
-      <div className="settings-hero">
-        <div className="section-eyebrow">Workspace</div>
-        <h1 className="settings-hero__title">Settings</h1>
-        <p className="settings-hero__sub">Manage your ranch profile, team access, cloud sync, and integrations.</p>
+      <div className="ops-hero">
+        <div className="ops-hero__main">
+          <div className="ops-hero__eyebrow">Workspace</div>
+          <h1 className="ops-hero__title">Settings</h1>
+          <p className="ops-hero__sub">Ranch profile, team access, cloud sync, role permissions, and integrations for this workspace.</p>
+          <div className="ops-hero__chips">
+            <span className="ops-briefing-chip">{activeMembers.length} active member{activeMembers.length !== 1 ? 's' : ''}</span>
+            {pendingInvites.length > 0 && <span className="ops-briefing-chip ops-briefing-chip--warning">{pendingInvites.length} pending invite{pendingInvites.length !== 1 ? 's' : ''}</span>}
+            {cloudSession && <span className="ops-briefing-chip ops-briefing-chip--success">Cloud connected</span>}
+          </div>
+        </div>
+        <div className="ops-hero__stats">
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{subscription.usage.seatsUsed}/{subscription.usage.seatLimit}</span>
+            <span className="ops-hero__stat-label">Seats used</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{subscription.usage.storageUsedGb}/{subscription.usage.storageLimitGb} GB</span>
+            <span className="ops-hero__stat-label">Storage</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{activeMembers.length}</span>
+            <span className="ops-hero__stat-label">Members</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{cloudSession ? 'Live' : 'Local'}</span>
+            <span className="ops-hero__stat-label">Cloud</span>
+          </div>
+        </div>
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">

@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
-import { MetricCard, PageHeader, Pill, SurfaceTabs } from '@/components/app-ui';
+import { MetricCard, Pill, SurfaceTabs } from '@/components/app-ui';
 import { OwnershipIcon } from '@/components/icons';
 import { formatDateLabel, formatDateTimeLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
@@ -16,6 +16,7 @@ import { documentTone, ownershipDocsForHorse, transferTone } from '@/features/ow
 import { createOwnerRegistry, createRelationshipRows, filterAndSortRelationshipRows, getMissingDocumentRows, getHorsesWithOwnership, getLatestOwnershipDocuments, getPendingTransfers } from '@/features/ownership/selectors';
 import type { OwnerRegistryRow, RelationshipRow } from '@/features/ownership/types';
 import './ownershipExperience.css';
+import './operationsExperience.css';
 
 
 type MenuState =
@@ -253,31 +254,46 @@ export default function Ownership() {
     <>
       {confirmDialog}
       <div className="ownership-ops">
-      <PageHeader
-        eyebrow="Ownership"
-        title="Owner Records"
-        actions={
-          <>
-            <button className="button button--primary" type="button" onClick={() => setActiveTab('Registry')} disabled={!canManageOwnership}>
-              Add owner
-            </button>
-            <button className="button button--ghost" type="button" onClick={() => setActiveTab('Transfers')} disabled={!canManageOwnership || !selectedRecord}>
-              Add transfer
-            </button>
-            {canUploadDocuments ? (
-              <Link className="button button--ghost" to="/documents?upload=1">Upload document</Link>
-            ) : (
-              <button className="button button--ghost" type="button" disabled>Upload document</button>
-            )}
-          </>
-        }
-      />
+      <div className="ops-hero">
+        <div className="ops-hero__main">
+          <div className="ops-hero__eyebrow">Ownership</div>
+          <h1 className="ops-hero__title">Owner Records</h1>
+          <p className="ops-hero__sub">Legal ownership, percentage splits, transfer status, and proof documents for every horse on the roster.</p>
+          <div className="ops-hero__chips">
+            <span className="ops-briefing-chip">{ownerRegistry.length} owner{ownerRegistry.length !== 1 ? 's' : ''}</span>
+            {pendingTransfers.length > 0 && <span className="ops-briefing-chip ops-briefing-chip--warning">{pendingTransfers.length} open transfer{pendingTransfers.length !== 1 ? 's' : ''}</span>}
+            {missingDocumentRows.length > 0 && <span className="ops-briefing-chip ops-briefing-chip--warning">{missingDocumentRows.length} missing doc{missingDocumentRows.length !== 1 ? 's' : ''}</span>}
+            <button className="ops-briefing-chip ops-briefing-chip--action" type="button" onClick={() => setActiveTab('Registry')} disabled={!canManageOwnership}>Add owner</button>
+            {canUploadDocuments
+              ? <Link className="ops-briefing-chip ops-briefing-chip--action" to="/documents?upload=1">Upload doc</Link>
+              : null}
+          </div>
+        </div>
+        <div className="ops-hero__stats">
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{ownerRegistry.length}</span>
+            <span className="ops-hero__stat-label">Owners</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{horsesWithOwnership}/{horses.length}</span>
+            <span className="ops-hero__stat-label">Linked</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{pendingTransfers.length || '—'}</span>
+            <span className="ops-hero__stat-label">Open transfers</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{missingDocumentRows.length || '—'}</span>
+            <span className="ops-hero__stat-label">Doc gaps</span>
+          </div>
+        </div>
+      </div>
 
-      <div className="ownership-metric-grid">
-        <MetricCard label="Owners" value={`${ownerRegistry.length}`} detail="People and entities on file" tone="slate" className="ownership-metric-card" onClick={() => setActiveTab('Registry')} />
-        <MetricCard label="Linked horses" value={`${horsesWithOwnership}/${horses.length}`} detail="Horses with ownership records" tone="blue" className="ownership-metric-card" onClick={() => setActiveTab('Horses')} />
-        <MetricCard label="Open transfers" value={`${pendingTransfers.length}`} detail="Signatures, review, or proof still open" tone={pendingTransfers.length ? 'amber' : 'emerald'} className="ownership-metric-card" onClick={() => setActiveTab('Transfers')} />
-        <MetricCard label="Missing documents" value={`${missingDocumentRows.length}`} detail="Rows with bill, registration, or transfer gaps" tone={missingDocumentRows.length ? 'rose' : 'emerald'} className="ownership-metric-card" onClick={() => setActiveTab('Documents')} />
+      <div className="metric-grid">
+        <MetricCard label="Owners" value={`${ownerRegistry.length}`} detail="People and entities on file" tone="slate" onClick={() => setActiveTab('Registry')} />
+        <MetricCard label="Linked horses" value={`${horsesWithOwnership}/${horses.length}`} detail="Horses with ownership records" tone="blue" onClick={() => setActiveTab('Horses')} />
+        <MetricCard label="Open transfers" value={`${pendingTransfers.length}`} detail="Signatures, review, or proof still open" tone={pendingTransfers.length ? 'amber' : 'emerald'} onClick={() => setActiveTab('Transfers')} />
+        <MetricCard label="Missing documents" value={`${missingDocumentRows.length}`} detail="Rows with bill, registration, or transfer gaps" tone={missingDocumentRows.length ? 'rose' : 'emerald'} onClick={() => setActiveTab('Documents')} />
       </div>
 
       <div className="ownership-tab-bar">

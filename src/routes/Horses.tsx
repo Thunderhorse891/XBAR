@@ -13,6 +13,7 @@ import { useUiStore } from '@/store/useUiStore';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { HorseRecord, HorseSegment, HorseSex, HorseStatus } from '@/types/xbar';
+import './operationsExperience.css';
 
 function createHorseFormDefaults(params: {
   defaultOwnerName: string;

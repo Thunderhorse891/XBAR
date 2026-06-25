@@ -1,9 +1,10 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { EmptyState } from '@/components/EmptyState';
-import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
+import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { WeatherIcon } from '@/components/icons';
 import { loadWeatherForecast, resolveWeatherByQuery, searchWeatherLocations, type WeatherForecast, type WeatherLocationResult } from '@/lib/weather';
 import { useXbarStore } from '@/store/useXbarStore';
+import './operationsExperience.css';
 
 type WeatherState =
   | { status: 'idle' | 'loading'; forecast?: WeatherForecast; error?: string }
@@ -117,15 +118,45 @@ export default function Weather() {
 
   return (
     <>
-      <PageHeader
-        eyebrow="Ranch tools"
-        title="Weather"
-        actions={
-          <button className="button button--ghost button--compact" type="button" onClick={handleUseMyLocation} disabled={searching}>
-            Use my location
-          </button>
-        }
-      />
+      <div className="ops-hero">
+        <div className="ops-hero__main">
+          <div className="ops-hero__eyebrow">Ranch tools</div>
+          <h1 className="ops-hero__title">Weather</h1>
+          <p className="ops-hero__sub">Ranch forecast for turnout, hauling, and breeding decisions — loaded by ranch name or current location.</p>
+          <div className="ops-hero__chips">
+            {forecast ? (
+              <>
+                <span className="ops-briefing-chip ops-briefing-chip--success">{forecast.location.label}</span>
+                {forecast.today.rainChance >= 50 && <span className="ops-briefing-chip ops-briefing-chip--warning">{forecast.today.rainChance}% rain today</span>}
+                {forecast.current.windMph >= 20 && <span className="ops-briefing-chip ops-briefing-chip--warning">{forecast.current.windMph} mph wind</span>}
+              </>
+            ) : (
+              <span className="ops-briefing-chip">No forecast loaded</span>
+            )}
+            <button className="ops-briefing-chip ops-briefing-chip--action" type="button" onClick={handleUseMyLocation} disabled={searching}>
+              Use my location
+            </button>
+          </div>
+        </div>
+        <div className="ops-hero__stats">
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{forecast ? `${forecast.current.temperatureF}°F` : '—'}</span>
+            <span className="ops-hero__stat-label">Current temp</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{forecast ? `${forecast.today.rainChance}%` : '—'}</span>
+            <span className="ops-hero__stat-label">Rain chance</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{forecast ? `${forecast.current.windMph} mph` : '—'}</span>
+            <span className="ops-hero__stat-label">Wind</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{forecast ? `${forecast.today.highF}° / ${forecast.today.lowF}°` : '—'}</span>
+            <span className="ops-hero__stat-label">High / Low</span>
+          </div>
+        </div>
+      </div>
 
       <Panel title="Ranch forecast">
         <form className="form-grid form-grid--tight" onSubmit={handleSearch}>

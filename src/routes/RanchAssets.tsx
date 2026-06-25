@@ -8,6 +8,7 @@ import { formatDateLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { AssetCategory, AssetCondition, AssetStatus } from '@/types/xbar';
+import './operationsExperience.css';
 
 const statuses: AssetStatus[] = ['Available', 'Assigned', 'In Service'];
 const conditions: AssetCondition[] = ['Excellent', 'Service Soon', 'Attention Required'];
@@ -117,29 +118,33 @@ export default function RanchAssets() {
   return (
     <>
       {confirmDialog}
-      <div className="surface-hero surface-hero--dark">
-        <div className="surface-hero__top">
-          <div>
-            <span className="surface-hero__eyebrow">Equipment</span>
-            <h1 className="surface-hero__title">Ranch Assets</h1>
+      <div className="ops-hero">
+        <div className="ops-hero__main">
+          <div className="ops-hero__eyebrow">Equipment</div>
+          <h1 className="ops-hero__title">Ranch Assets</h1>
+          <p className="ops-hero__sub">Tack, medical kits, equipment, and transport tracked by assignment, condition, and service schedule.</p>
+          <div className="ops-hero__chips">
+            <span className="ops-briefing-chip">{ranchAssets.length} asset{ranchAssets.length !== 1 ? 's' : ''}</span>
+            {serviceSoon.length > 0 && <span className="ops-briefing-chip ops-briefing-chip--warning">{serviceSoon.length} service due</span>}
+            {ranchAssets.length - assigned.length > 0 && <span className="ops-briefing-chip ops-briefing-chip--success">{ranchAssets.length - assigned.length} available</span>}
           </div>
-          <div className="surface-hero__stats">
-            <div className="surface-hero__stat">
-              <span>Assets</span>
-              <strong>{ranchAssets.length}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Assigned</span>
-              <strong>{assigned.length}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Service soon</span>
-              <strong className={serviceSoon.length ? 'text-amber' : 'text-emerald'}>{serviceSoon.length}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Available</span>
-              <strong className="text-emerald">{ranchAssets.length - assigned.length}</strong>
-            </div>
+        </div>
+        <div className="ops-hero__stats">
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{ranchAssets.length}</span>
+            <span className="ops-hero__stat-label">Tracked assets</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{assigned.length}</span>
+            <span className="ops-hero__stat-label">Assigned</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{serviceSoon.length || '—'}</span>
+            <span className="ops-hero__stat-label">Service soon</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{ranchAssets.length - assigned.length}</span>
+            <span className="ops-hero__stat-label">Available</span>
           </div>
         </div>
       </div>

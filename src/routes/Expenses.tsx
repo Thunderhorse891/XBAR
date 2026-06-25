@@ -97,35 +97,32 @@ export default function Expenses() {
   return (
     <div className="ops-experience">
       {confirmDialog}
-      <div className="surface-hero surface-hero--dark">
-        <div className="surface-hero__top">
-          <div>
-            <span className="surface-hero__eyebrow">Budget &amp; Expenses</span>
-            <h1 className="surface-hero__title">Expenses</h1>
-            <div className="surface-hero__actions">
-              <button className="button button--primary" type="button" onClick={() => document.getElementById('expense-intake')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
-                Log receipt
-              </button>
-              <Link className="button button--ghost" to="/documents?upload=1">Upload expense file</Link>
-            </div>
+      <div className="ops-hero">
+        <div className="ops-hero__main">
+          <div className="ops-hero__eyebrow">Budget &amp; Expenses</div>
+          <h1 className="ops-hero__title">Expenses</h1>
+          <p className="ops-hero__sub">Feed, vet, farrier, travel, and supply costs logged against each horse and the ranch — receipts with context attached.</p>
+          <div className="ops-hero__chips">
+            <span className="ops-briefing-chip">{budgetSummary.receiptCount} receipt{budgetSummary.receiptCount !== 1 ? 's' : ''} this month</span>
+            {horseLinkedCount > 0 && <span className="ops-briefing-chip ops-briefing-chip--success">{horseLinkedCount} horse-linked</span>}
           </div>
-          <div className="surface-hero__stats">
-            <div className="surface-hero__stat">
-              <span>This month</span>
-              <strong>{formatCompactCurrency(budgetSummary.total)}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Receipts</span>
-              <strong>{budgetSummary.receiptCount}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Feed</span>
-              <strong>{formatCompactCurrency(budgetSummary.feed)}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Health</span>
-              <strong>{formatCompactCurrency(budgetSummary.health)}</strong>
-            </div>
+        </div>
+        <div className="ops-hero__stats">
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{formatCompactCurrency(budgetSummary.total)}</span>
+            <span className="ops-hero__stat-label">This month</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{budgetSummary.receiptCount}</span>
+            <span className="ops-hero__stat-label">Receipts</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{formatCompactCurrency(budgetSummary.feed)}</span>
+            <span className="ops-hero__stat-label">Feed</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{formatCompactCurrency(budgetSummary.health)}</span>
+            <span className="ops-hero__stat-label">Health</span>
           </div>
         </div>
       </div>

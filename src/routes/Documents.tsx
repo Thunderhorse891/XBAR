@@ -15,6 +15,7 @@ import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { DocumentRecord, DocumentSource } from '@/types/xbar';
 import { documentSources } from '@/features/documents/constants';
 import type { DocumentsView } from '@/features/documents/types';
+import './operationsExperience.css';
 
 export default function Documents() {
   const navigate = useNavigate();
@@ -312,23 +313,34 @@ export default function Documents() {
   return (
     <>
       {confirmDialog}
-      <div className="surface-hero surface-hero--dark">
-        <div className="surface-hero__top">
-          <div>
-            <span className="surface-hero__eyebrow">Document Vault</span>
-            <h1 className="surface-hero__title">Documents</h1>
+      <div className="ops-hero">
+        <div className="ops-hero__main">
+          <div className="ops-hero__eyebrow">Document Vault</div>
+          <h1 className="ops-hero__title">Documents</h1>
+          <p className="ops-hero__sub">Registration certificates, health records, ownership proof, and sale paperwork — reviewed, matched, and buyer-safe.</p>
+          <div className="ops-hero__chips">
+            <span className="ops-briefing-chip">{documents.length} file{documents.length !== 1 ? 's' : ''}</span>
+            {reviewQueue.length > 0 && <span className="ops-briefing-chip ops-briefing-chip--warning">{reviewQueue.length} needs review</span>}
+            {duplicates.length > 0 && <span className="ops-briefing-chip ops-briefing-chip--warning">{duplicates.length} flagged</span>}
+            {buyerSafeDocuments.length > 0 && <span className="ops-briefing-chip ops-briefing-chip--success">{buyerSafeDocuments.length} buyer-safe</span>}
           </div>
-          <div className="surface-hero__stats">
-            <div className="surface-hero__stat"><span>Total files</span><strong>{documents.length}</strong></div>
-            <div className="surface-hero__stat">
-              <span>Review queue</span>
-              <strong className={reviewQueue.length ? 'text-amber' : 'text-emerald'}>{reviewQueue.length}</strong>
-            </div>
-            <div className="surface-hero__stat"><span>Ready to share</span><strong className="text-emerald">{buyerSafeDocuments.length}</strong></div>
-            <div className="surface-hero__stat">
-              <span>Duplicates</span>
-              <strong className={duplicates.length ? 'text-amber' : 'text-emerald'}>{duplicates.length}</strong>
-            </div>
+        </div>
+        <div className="ops-hero__stats">
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{documents.length}</span>
+            <span className="ops-hero__stat-label">Total files</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{reviewQueue.length}</span>
+            <span className="ops-hero__stat-label">Review queue</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{buyerSafeDocuments.length}</span>
+            <span className="ops-hero__stat-label">Buyer-safe</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{duplicates.length || '—'}</span>
+            <span className="ops-hero__stat-label">Flagged</span>
           </div>
         </div>
       </div>

@@ -8,6 +8,7 @@ import { formatDateLabel } from '@/lib/format';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
+import './operationsExperience.css';
 
 export default function Breeding() {
   const navigate = useNavigate();
@@ -57,31 +58,35 @@ export default function Breeding() {
   return (
     <>
       {confirmDialog}
-      <div className="surface-hero surface-hero--dark">
-        <div className="surface-hero__top">
-          <div>
-            <span className="surface-hero__eyebrow">Breeding Program</span>
-            <h1 className="surface-hero__title">Breeding &amp; Foaling</h1>
+      <div className="ops-hero">
+        <div className="ops-hero__main">
+          <div className="ops-hero__eyebrow">Breeding Program</div>
+          <h1 className="ops-hero__title">Breeding &amp; Foaling</h1>
+          <p className="ops-hero__sub">Mare and stud program with contract coverage, milestone tracking, and foaling timeline organized by record status.</p>
+          <div className="ops-hero__chips">
+            <span className="ops-briefing-chip">{breedingHorses.length} program horse{breedingHorses.length !== 1 ? 's' : ''}</span>
+            {breedingDocs.length > 0 && <span className="ops-briefing-chip ops-briefing-chip--success">{breedingDocs.length} contract{breedingDocs.length !== 1 ? 's' : ''}</span>}
+            {breedingHorses.filter((h) => h.readiness.packetStatus !== 'Ready').length > 0 && (
+              <span className="ops-briefing-chip ops-briefing-chip--warning">{breedingHorses.filter((h) => h.readiness.packetStatus !== 'Ready').length} incomplete</span>
+            )}
           </div>
-          <div className="surface-hero__stats">
-            <div className="surface-hero__stat">
-              <span>Program horses</span>
-              <strong>{breedingHorses.length}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Contracts</span>
-              <strong>{breedingDocs.length}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Milestones</span>
-              <strong>{breedingHorses.reduce((sum, horse) => sum + horse.breedingTimeline.length, 0)}</strong>
-            </div>
-            <div className="surface-hero__stat">
-              <span>Blockers</span>
-              <strong className={breedingHorses.filter((horse) => horse.readiness.packetStatus !== 'Ready').length ? 'text-amber' : 'text-emerald'}>
-                {breedingHorses.filter((horse) => horse.readiness.packetStatus !== 'Ready').length}
-              </strong>
-            </div>
+        </div>
+        <div className="ops-hero__stats">
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{breedingHorses.length}</span>
+            <span className="ops-hero__stat-label">Program horses</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{breedingDocs.length}</span>
+            <span className="ops-hero__stat-label">Contracts</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{breedingHorses.reduce((sum, horse) => sum + horse.breedingTimeline.length, 0)}</span>
+            <span className="ops-hero__stat-label">Milestones</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{breedingHorses.filter((horse) => horse.readiness.packetStatus !== 'Ready').length || '—'}</span>
+            <span className="ops-hero__stat-label">Incomplete</span>
           </div>
         </div>
       </div>
