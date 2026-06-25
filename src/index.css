@@ -976,130 +976,6 @@ a:focus-visible,
   color: var(--blue);
 }
 
-.surface-hero {
-  padding: 24px;
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  box-shadow: var(--shadow);
-}
-
-.surface-hero--dark {
-  background:
-    linear-gradient(rgba(37, 99, 235, 0.055) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(37, 99, 235, 0.055) 1px, transparent 1px),
-    linear-gradient(135deg, #E0EAFF 0%, #EBF4FF 100%);
-  background-size: 52px 52px, 52px 52px, 100% 100%;
-  border-color: rgba(37, 99, 235, 0.12);
-  color: var(--text);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
-  position: relative;
-  overflow: hidden;
-}
-
-.surface-hero--dark::after {
-  content: '';
-  position: absolute;
-  right: -32px;
-  top: -32px;
-  width: 200px;
-  height: 200px;
-  background: url('/brand/xbar-mark.svg') center/contain no-repeat;
-  opacity: 0.05;
-  pointer-events: none;
-  transform: rotate(10deg);
-}
-
-.surface-hero--dark .surface-hero__title {
-  color: var(--text);
-}
-
-.surface-hero--dark .surface-hero__eyebrow {
-  color: var(--blue);
-}
-
-.surface-hero--dark .page-description {
-  color: var(--muted-strong) !important;
-}
-
-.surface-hero--dark .surface-hero__stat {
-  border-color: rgba(37, 99, 235, 0.12);
-  background: rgba(255, 255, 255, 0.65);
-}
-
-.surface-hero--dark .surface-hero__stat span {
-  color: var(--muted);
-}
-
-.surface-hero--dark .surface-hero__stat strong {
-  color: var(--text);
-}
-
-.surface-hero__top {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  align-items: flex-start;
-  flex-wrap: wrap;
-}
-
-.surface-hero__eyebrow {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--blue);
-  margin-bottom: 8px;
-}
-
-.surface-hero__title {
-  margin: 10px 0 0;
-  font-size: clamp(1.5rem, 2vw, 2rem);
-  line-height: 0.96;
-  letter-spacing: -0.06em;
-  font-weight: 800;
-}
-
-.surface-hero__stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  min-width: min(540px, 100%);
-}
-
-.surface-hero__stat {
-  padding: 12px 14px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
-  background: var(--surface-strong);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.surface-hero__stat span {
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  font-size: 0.69rem;
-  font-weight: 700;
-}
-
-.surface-hero__stat strong {
-  font-size: 1.35rem;
-  line-height: 1;
-  letter-spacing: -0.05em;
-  font-variant-numeric: tabular-nums;
-  color: var(--text);
-}
-
-.surface-hero__actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 16px;
-}
-
 .metric-grid,
 .dashboard-grid,
 .detail-grid,
@@ -2842,7 +2718,6 @@ a:focus-visible,
     grid-template-columns: 1fr;
   }
 
-  .surface-hero__stats,
   .portfolio-stage__stats,
   .command-stage__ledger {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2872,7 +2747,6 @@ a:focus-visible,
     padding: 18px 18px 104px;
   }
 
-  .surface-hero__stats,
   .portfolio-stage__stats,
   .command-stage__ledger {
     grid-template-columns: 1fr;
@@ -4702,14 +4576,6 @@ a:focus-visible,
   background: #FFFFFF;
 }
 
-/* ── Surface hero — light ────────────────────────────────────────────────── */
-
-.surface-hero {
-  border-radius: 16px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
-}
-
 /* ── Ops briefing — light ────────────────────────────────────────────────── */
 
 .ops-briefing-header {
@@ -4918,14 +4784,6 @@ a:focus-visible,
   border: 1px solid rgba(0, 0, 0, 0.08);
   background: #FFFFFF;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
-}
-
-/* ── Surface hero dark variant — light mode equivalent ───────────────────── */
-
-.surface-hero--dark {
-  background: linear-gradient(135deg, #E0EAFF 0%, #EBF4FF 100%);
-  border-color: rgba(37, 99, 235, 0.12);
-  color: var(--text);
 }
 
 /* ── Progress bars — light ───────────────────────────────────────────────── */
