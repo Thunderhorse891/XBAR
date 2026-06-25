@@ -1,67 +1,93 @@
-import { type CSSProperties, type FormEvent, useEffect, useState } from 'react';
+import { type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ContextMenu } from '@/components/ContextMenu';
-import { EmptyState } from '@/components/EmptyState';
-import { XbarMark } from '@/components/BrandMark';
-import { MetricCard, Panel, Pill } from '@/components/app-ui';
+import { XBAR_MAIN_LOGO_SRC } from '@/components/BrandMark';
+import { assessRevenueAtRisk } from '@/lib/businessIntelligence';
 import { buildBudgetSummary, buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
 import { formatCompactCurrency, formatCurrency, formatDateLabel } from '@/lib/format';
-import { resolveWeatherByQuery, type WeatherForecast } from '@/lib/weather';
-import { useCurrentRoleCapability, useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
-import { useUiStore } from '@/store/useUiStore';
-import type { ExpenseCategory } from '@/types/xbar';
-import { CARE_SIGNAL_TONE, EXPENSE_CATEGORIES } from '@/features/dashboard/constants';
-import type { DashboardMenuState } from '@/features/dashboard/types';
+import { buildHorsePacketCompleteness, type PacketCompleteness } from '@/lib/xbarPhaseTwo';
+import { useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
+import type { HorseRecord, RanchAsset } from '@/types/xbar';
+import './dashboardEditorial.css';
 
-const EMPTY_PROFILE_CARDS = [
-  { label: 'Horse Record', title: 'Name, barn, owner, status', meta: 'Start with the basic file.', status: 'Ready', metric: '01' },
-  { label: 'Documents', title: 'Registration, Coggins, receipts', meta: 'Upload documents when they are available.', status: 'Next', metric: '02' },
-  { label: 'Health', title: 'Vet, dental, worming, turnout', meta: 'Track care history from one place.', status: 'Planned', metric: '03' },
-  { label: 'Sales', title: 'Photos, notes, buyer details', meta: 'Prepare sale materials when needed.', status: 'Optional', metric: '04' },
-];
+type Tone = 'clear' | 'review' | 'hold' | 'quiet';
 
-const EMPTY_SETUP_STEPS = [
-  {
-    number: '01',
-    title: 'Add a horse',
-    body: 'Create the first horse record with name, barn, owner, and status.',
-    action: 'Add Horse',
-    path: '/horses?new=1',
-  },
-  {
-    number: '02',
-    title: 'Upload documents',
-    body: 'Add Coggins, registration, health papers, contracts, and receipts.',
-    action: 'Upload Documents',
-    path: '/documents?upload=1',
-  },
-  {
-    number: '03',
-    title: 'Set up the ranch',
-    body: 'Confirm barn, pasture, owner, weather, and account settings.',
-    action: 'Settings',
-    path: '/settings',
-  },
-];
+type HorseReadinessProfile = {
+  horse: HorseRecord;
+  packet: PacketCompleteness;
+  askPrice: number;
+  blockers: string[];
+};
 
 function HorseContour({ className = '' }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 560 270" fill="none" aria-hidden="true">
-      <path d="M26 183c49-38 102-57 159-57 32 0 54 9 80 26 21 14 43 20 72 17 46-5 78-26 111-57 18-17 37-30 61-35 12-2 22 1 28 11 6 12-2 26-19 35-19 10-39 17-58 23-15 5-28 13-39 24-17 17-35 34-60 44-38 15-81 10-119-3-35-12-67-13-104-4-41 10-76 7-112-24Z" />
-      <path d="M179 126c10-31 31-54 61-66 32-13 71-9 101 10 23 15 40 38 58 60" />
-      <path d="M247 65c-9-22-6-42 9-54 17 22 20 42 8 60" />
-      <path d="M314 66c9-19 25-29 47-28-1 25-14 40-39 44" />
-      <path d="M118 190c-14 16-24 34-29 55" />
-      <path d="M202 205c-6 18-10 35-10 52" />
-      <path d="M371 207c5 18 15 34 30 48" />
-      <path d="M438 177c20 17 33 38 38 64" />
+    <svg className={className} viewBox="0 0 620 300" fill="none" aria-hidden="true">
+      <path d="M38 202c54-41 114-61 180-61 36 0 62 10 93 29 23 14 48 22 81 18 52-6 90-31 128-67 20-19 44-34 71-39 14-2 25 1 31 12 7 14-3 29-22 40-21 12-45 20-67 27-17 6-32 15-45 28-20 20-42 40-72 51-43 16-92 10-135-5-40-14-77-15-119-5-48 12-89 8-124-28Z" />
+      <path d="M210 141c12-36 37-62 72-77 37-15 83-10 117 12 27 17 47 44 68 70" />
+      <path d="M288 68c-10-26-7-49 11-63 19 26 23 49 9 70" />
+      <path d="M365 69c11-22 30-34 55-33-1 30-17 47-45 51" />
+      <path d="M140 212c-17 20-29 42-35 66" />
+      <path d="M236 229c-8 22-12 41-12 62" />
+      <path d="M429 232c6 22 18 40 35 57" />
+      <path d="M508 196c24 20 39 45 45 75" />
     </svg>
+  );
+}
+
+function getTone(status: PacketCompleteness['buyerProfileStatus']): Tone {
+  if (status === 'Live') return 'clear';
+  if (status === 'Needs Review') return 'review';
+  if (status === 'Blocked') return 'hold';
+  return 'quiet';
+}
+
+function statusLabel(status: PacketCompleteness['buyerProfileStatus']) {
+  if (status === 'Live') return 'Ready to release';
+  if (status === 'Needs Review') return 'Review';
+  if (status === 'Blocked') return 'Hold';
+  return 'Private';
+}
+
+function uniqueItems(items: string[]) {
+  return [...new Set(items.filter(Boolean))];
+}
+
+function serviceTime(asset: RanchAsset) {
+  const time = Date.parse(asset.nextService);
+  return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time;
+}
+
+function buildBlockerCopy(profile?: HorseReadinessProfile) {
+  if (!profile) return ['Create a horse record to start release checks.'];
+  const packetBlockers = profile.packet.requirements
+    .filter((requirement) => requirement.status !== 'ready')
+    .map((requirement) => requirement.detail);
+  return uniqueItems([...profile.blockers, ...packetBlockers]).slice(0, 5);
+}
+
+function ModuleStrip({
+  title,
+  value,
+  detail,
+  tone,
+  to,
+}: {
+  title: string;
+  value: string;
+  detail: string;
+  tone: Tone;
+  to: string;
+}) {
+  return (
+    <Link className={`xbar-module-strip xbar-module-strip--${tone}`} to={to}>
+      <span>{title}</span>
+      <strong>{value}</strong>
+      <em>{detail}</em>
+    </Link>
   );
 }
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const pushToast = useUiStore((state) => state.pushToast);
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
@@ -70,494 +96,284 @@ export default function Dashboard() {
   const intakeBatches = useXbarStore((state) => state.intakeBatches);
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
-  const addExpenseReceipt = useXbarStore((state) => state.addExpenseReceipt);
   const roleWorkspace = useCurrentRoleWorkspace();
-  const canManageBudget = useCurrentRoleCapability('manageAssets');
-  const [menuState, setMenuState] = useState<DashboardMenuState | null>(null);
-  const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  const [savingReceipt, setSavingReceipt] = useState(false);
-  const [weather, setWeather] = useState<WeatherForecast | null>(null);
-  const [weatherLoading, setWeatherLoading] = useState(false);
-  const [weatherError, setWeatherError] = useState<string | null>(null);
-  const [receiptDraft, setReceiptDraft] = useState({
-    horseId: '',
-    title: '',
-    category: 'Feed' as ExpenseCategory,
-    vendor: '',
-    amount: '',
-    receiptDate: new Date().toISOString().slice(0, 10),
-    notes: '',
-    uploadedBy: roleWorkspace.label,
-  });
 
-  const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched');
   const transferGaps = buildTransferGapRows(horses, ownershipRecords, documents);
   const careBoard = buildCareBoardRows(horses, documents, expenseReceipts);
   const budgetSummary = buildBudgetSummary(expenseReceipts);
+  const revenueRisk = assessRevenueAtRisk(horses, ownershipRecords, documents);
+  const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched');
+  const riskyDocuments = documents.filter((document) => document.duplicateRisk !== 'Low' || document.state === 'Needs Review');
   const careDueCount = careBoard.filter((row) => row.signals.some((signal) => signal.status === 'due')).length;
-  const cogginsWatchCount = careBoard.filter((row) => row.signals.some((signal) => signal.key === 'coggins' && signal.status !== 'clear')).length;
+  const activeBuyerCount = salesLeads.filter((lead) => lead.stage !== 'Closed').length;
   const qualifiedBuyerCount = salesLeads.filter((lead) => lead.stage === 'Qualified' || lead.stage === 'Offer').length;
-  const feedReserveAsset = ranchAssets.find((asset) => asset.category === 'Feed & Supply');
-  const recentBatches = intakeBatches.slice(0, 4);
-  const urgencyCount = transferGaps.length + careDueCount + reviewQueue.length;
-  const nextMove = transferGaps.length
-    ? 'Resolve title and transfer blockers'
-    : careDueCount
-      ? 'Clear the care holds'
-      : reviewQueue.length
-        ? 'Review documents waiting in the queue'
-        : qualifiedBuyerCount
-          ? 'Move qualified buyers forward'
-          : 'Prepare the next buyer-ready horse record';
-  const nextMovePath = transferGaps.length
-    ? '/ownership'
-    : careDueCount
-      ? '/medical'
-      : reviewQueue.length
-        ? '/documents'
-        : qualifiedBuyerCount
-          ? '/sales'
-          : '/horses';
+  const assetTimeline = [...ranchAssets]
+    .sort((a, b) => serviceTime(a) - serviceTime(b))
+    .slice(0, 5);
 
-  useEffect(() => {
-    const ranchQuery = workspaceProfile.ranchName.trim();
-    if (!ranchQuery) {
-      setWeather(null);
-      setWeatherError('Set the ranch location in Settings.');
-      return;
-    }
-
-    let cancelled = false;
-    setWeatherLoading(true);
-    setWeatherError(null);
-
-    void resolveWeatherByQuery(ranchQuery)
-      .then((forecast) => {
-        if (!cancelled) setWeather(forecast);
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setWeather(null);
-          setWeatherError(error instanceof Error ? error.message : 'Field conditions could not load.');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setWeatherLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
+  const readinessProfiles: HorseReadinessProfile[] = horses.map((horse) => {
+    const horseDocuments = documents.filter((document) => document.horseId === horse.id);
+    const ownershipRecord = ownershipRecords.find((record) => record.horseId === horse.id);
+    const riskItem = revenueRisk.items.find((item) => item.horseId === horse.id);
+    const packet = buildHorsePacketCompleteness(horse, horseDocuments, ownershipRecord);
+    return {
+      horse,
+      packet,
+      askPrice: horse.sale?.askPrice ?? 0,
+      blockers: riskItem?.blockers ?? horse.readiness.blockers,
     };
-  }, [workspaceProfile.ranchName]);
+  });
 
-  const menuHorse = menuState?.type === 'horse' ? horses.find((horse) => horse.id === menuState.id) : undefined;
-  const menuRecord = menuState?.type === 'record' ? ownershipRecords.find((record) => record.id === menuState.id) : undefined;
-  const menuLead = menuState?.type === 'lead' ? salesLeads.find((lead) => lead.id === menuState.id) : undefined;
-  const menuExpense = menuState?.type === 'expense' ? expenseReceipts.find((receipt) => receipt.id === menuState.id) : undefined;
-  const menuRecordHorse = horses.find((horse) => horse.id === menuRecord?.horseId);
-  const menuLeadHorse = horses.find((horse) => horse.id === menuLead?.horseId);
-  const menuExpenseHorse = horses.find((horse) => horse.id === menuExpense?.horseId);
-  const menuItems = menuHorse
-    ? [
-        { id: 'open-horse', label: 'Open horse record', onSelect: () => navigate(`/horses/${menuHorse.id}`) },
-        { id: 'open-profile', label: 'Open buyer packet', onSelect: () => navigate(`/profiles/${menuHorse.id}`) },
-      ]
-    : menuRecord
-      ? [
-          { id: 'open-ownership', label: 'Open title & transfer', onSelect: () => navigate('/ownership') },
-          ...(menuRecordHorse ? [{ id: 'open-record-horse', label: 'Open horse record', onSelect: () => navigate(`/horses/${menuRecordHorse.id}`) }] : []),
-        ]
-      : menuLead
-        ? [
-            { id: 'open-sales', label: 'Open buyer desk', onSelect: () => navigate('/sales') },
-            ...(menuLeadHorse ? [{ id: 'open-lead-horse', label: 'Open horse record', onSelect: () => navigate(`/horses/${menuLeadHorse.id}`) }] : []),
-          ]
-        : menuExpense
-          ? [
-              { id: 'open-ledger', label: 'Open operating ledger', onSelect: () => navigate('/expenses') },
-              ...(menuExpenseHorse ? [{ id: 'open-expense-horse', label: 'Open horse record', onSelect: () => navigate(`/horses/${menuExpenseHorse.id}`) }] : []),
-            ]
-          : [];
-  const hasWorkspaceData = Boolean(
-    horses.length ||
-    documents.length ||
-    ownershipRecords.length ||
-    expenseReceipts.length ||
-    salesLeads.length ||
-    intakeBatches.length ||
-    ranchAssets.length,
-  );
-
-  async function handleReceiptSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSavingReceipt(true);
-    const result = await addExpenseReceipt({
-      horseId: receiptDraft.horseId || undefined,
-      title: receiptDraft.title,
-      category: receiptDraft.category,
-      vendor: receiptDraft.vendor,
-      amount: Number(receiptDraft.amount),
-      receiptDate: receiptDraft.receiptDate,
-      notes: receiptDraft.notes,
-      uploadedBy: receiptDraft.uploadedBy,
-      file: receiptFile,
+  const saleProfiles = readinessProfiles
+    .filter(({ horse, askPrice, packet }) => (
+      askPrice > 0 ||
+      horse.status === 'Sale Prep' ||
+      horse.sale.listingState === 'Buyer Review' ||
+      horse.sale.listingState === 'Market Ready' ||
+      packet.buyerProfileStatus !== 'Private'
+    ))
+    .sort((a, b) => {
+      const aBlocked = a.packet.buyerProfileStatus === 'Blocked' ? 1 : 0;
+      const bBlocked = b.packet.buyerProfileStatus === 'Blocked' ? 1 : 0;
+      return bBlocked - aBlocked || b.askPrice - a.askPrice || b.packet.score - a.packet.score;
     });
-    pushToast({
-      title: result.ok ? 'Receipt logged' : 'Receipt blocked',
-      message: result.message,
-      tone: result.ok ? 'success' : 'error',
-    });
-    if (result.ok) {
-      setReceiptDraft((current) => ({ ...current, horseId: '', title: '', vendor: '', amount: '', notes: '' }));
-      setReceiptFile(null);
-    }
-    setSavingReceipt(false);
-  }
 
-  if (!hasWorkspaceData) {
-    return (
-      <>
-        <section className="xbar-home-atelier xbar-home-briefing" aria-labelledby="xbar-home-title">
-          <div className="xbar-home-atelier__x" aria-hidden="true" />
-          <div className="xbar-home-atelier__copy">
-            <div className="xbar-home-atelier__brandline">
-              <span className="xbar-home-atelier__mark"><XbarMark tone="mono" /></span>
-              <span>Your Barn</span>
-            </div>
-            <h1 id="xbar-home-title">Add your first horse.</h1>
-            <p>
-              Create a record for your first horse and upload its papers. XBAR keeps health, ownership, buyers, weather, and costs organized around it.
-            </p>
-            <div className="xbar-home-atelier__chips" aria-label="First workspace modules">
-              <span>Horse Records</span>
-              <span>Documents</span>
-              <span>Health</span>
-              <span>Sales</span>
-            </div>
-            <div className="xbar-home-atelier__actions">
-              <Link to="/horses?new=1" className="xbar-home-action xbar-home-action--primary">Add Horse</Link>
-              <Link to="/documents?upload=1" className="xbar-home-action">Upload Documents</Link>
-              <Link to="/settings" className="xbar-home-action">Settings</Link>
-            </div>
-          </div>
+  const focusProfile = saleProfiles[0] ?? readinessProfiles[0];
+  const focusHorse = focusProfile?.horse;
+  const focusPacket = focusProfile?.packet;
+  const releaseBlockers = buildBlockerCopy(focusProfile);
+  const readinessScore = focusPacket?.score ?? 0;
+  const readinessTone = focusPacket ? getTone(focusPacket.buyerProfileStatus) : 'quiet';
+  const readySaleCount = readinessProfiles.filter((profile) => profile.packet.buyerProfileStatus === 'Live').length;
+  const averageReadiness = readinessProfiles.length
+    ? Math.round(readinessProfiles.reduce((sum, profile) => sum + profile.packet.score, 0) / readinessProfiles.length)
+    : 0;
+  const openOwnershipCount = ownershipRecords.filter((record) => record.transferStatus !== 'Clear').length;
+  const readySlotCount = focusPacket?.saleSlots.filter((slot) => slot.status === 'ready').length ?? 0;
+  const nextMovePath = releaseBlockers.length && focusHorse
+    ? `/horses/${focusHorse.id}`
+    : reviewQueue.length
+      ? '/documents'
+      : openOwnershipCount
+        ? '/ownership'
+        : '/sales';
+  const nextMoveLabel = releaseBlockers[0] ?? 'Prepare the next buyer-ready horse record.';
+  const ranchName = workspaceProfile.ranchName || workspaceProfile.businessName || 'XBAR Workspace';
+  const hasHorseData = horses.length > 0;
 
-          <div className="xbar-home-atelier__visual" aria-hidden="true">
-            <HorseContour className="xbar-home-atelier__horse" />
-            <div className="xbar-profile-carousel">
-              {EMPTY_PROFILE_CARDS.map((card, index) => (
-                <article
-                  className="xbar-profile-card"
-                  style={{ '--card-index': index, '--card-delay': `${index * -3.15}s` } as CSSProperties}
-                  key={card.label}
-                >
-                  <span className="xbar-profile-card__metric">{card.metric}</span>
-                  <div className="xbar-profile-card__head">
-                    <span>{card.label}</span>
-                    <i />
-                  </div>
-                  <strong>{card.title}</strong>
-                  <small>{card.meta}</small>
-                  <em>{card.status}</em>
-                  <span className="xbar-profile-card__rail" />
-                </article>
-              ))}
-            </div>
-          </div>
-
-          <div className="xbar-home-runway" aria-label="Empty workspace counters">
-            <div><span>Horses</span><strong>0</strong><small>none yet</small></div>
-            <div><span>Documents</span><strong>0</strong><small>none uploaded</small></div>
-            <div><span>Transfers</span><strong>0</strong><small>none pending</small></div>
-            <div><span>Buyers</span><strong>0</strong><small>no activity yet</small></div>
-          </div>
-        </section>
-
-        <section className="xbar-setup-flow" aria-label="First setup sequence">
-          <div className="xbar-setup-flow__header">
-            <div>
-              <span>Get Started</span>
-              <h2>Create the first horse record</h2>
-            </div>
-            <p>XBAR becomes useful as soon as one horse has a record, documents, and care details attached.</p>
-          </div>
-
-          <div className="xbar-setup-flow__grid">
-            {EMPTY_SETUP_STEPS.map((step, index) => (
-              <Link className="xbar-sequence-card" to={step.path} key={step.number} style={{ '--step-delay': `${index * 90}ms` } as CSSProperties}>
-                <span className="xbar-sequence-card__number">{step.number}</span>
-                <div>
-                  <strong>{step.title}</strong>
-                  <p>{step.body}</p>
-                </div>
-                <em>{step.action}</em>
-              </Link>
-            ))}
-          </div>
-
-          <div className="xbar-system-strip">
-            <div>
-              <span>Setup</span>
-              <strong>Horse Record → Documents → Health → Sales</strong>
-            </div>
-            <HorseContour className="xbar-system-strip__horse" />
-            <div className="xbar-system-strip__ticks" aria-hidden="true">
-              <i />
-              <i />
-              <i />
-              <i />
-            </div>
-          </div>
-        </section>
-      </>
-    );
-  }
+  const moduleStrips = [
+    {
+      title: 'Sale Readiness',
+      value: hasHorseData ? `${averageReadiness}%` : 'Start',
+      detail: hasHorseData ? `${readySaleCount} horse${readySaleCount === 1 ? '' : 's'} ready to release` : 'Add the first horse record',
+      tone: averageReadiness >= 84 ? 'clear' : averageReadiness >= 60 ? 'review' : hasHorseData ? 'hold' : 'quiet',
+      to: focusHorse ? `/horses/${focusHorse.id}` : '/horses?new=1',
+    },
+    {
+      title: 'Release Blockers',
+      value: String(revenueRisk.items.length + careDueCount + openOwnershipCount),
+      detail: revenueRisk.valueAtRisk ? `${formatCompactCurrency(revenueRisk.valueAtRisk)} held from release` : 'No listed value blocked',
+      tone: revenueRisk.items.length || careDueCount || openOwnershipCount ? 'hold' : 'clear',
+      to: '/ownership',
+    },
+    {
+      title: 'Buyer-Safe Proof',
+      value: focusPacket?.buyerSafe ? 'Clear' : focusPacket ? 'Review' : 'Private',
+      detail: focusPacket?.buyerProfileNote ?? 'No buyer packet is active yet',
+      tone: focusPacket?.buyerSafe ? 'clear' : focusPacket ? 'review' : 'quiet',
+      to: focusHorse ? `/profiles/${focusHorse.id}` : '/sales',
+    },
+    {
+      title: 'Document Risk',
+      value: String(riskyDocuments.length),
+      detail: reviewQueue.length ? `${reviewQueue.length} document${reviewQueue.length === 1 ? '' : 's'} waiting on review` : 'Document queue is clear',
+      tone: riskyDocuments.length ? 'review' : 'clear',
+      to: '/documents',
+    },
+    {
+      title: 'Ownership Chain',
+      value: String(openOwnershipCount),
+      detail: transferGaps[0]?.horseName ? `${transferGaps[0].horseName} needs chain review` : 'Transfer chain clear',
+      tone: openOwnershipCount ? 'hold' : 'clear',
+      to: '/ownership',
+    },
+    {
+      title: 'Packet Readiness',
+      value: focusPacket ? `${readySlotCount}/${focusPacket.saleSlots.length}` : '0/5',
+      detail: focusPacket?.trustSummary ?? 'Packet checks begin after a horse is added',
+      tone: focusPacket && readySlotCount === focusPacket.saleSlots.length ? 'clear' : focusPacket ? 'review' : 'quiet',
+      to: focusHorse ? `/horses/${focusHorse.id}` : '/horses?new=1',
+    },
+    {
+      title: 'Asset Timeline',
+      value: String(assetTimeline.length),
+      detail: assetTimeline[0] ? `${assetTimeline[0].name} next` : 'No asset schedule yet',
+      tone: assetTimeline.some((asset) => asset.condition === 'Attention Required') ? 'hold' : assetTimeline.length ? 'review' : 'quiet',
+      to: '/assets',
+    },
+  ] satisfies Array<{
+    title: string;
+    value: string;
+    detail: string;
+    tone: Tone;
+    to: string;
+  }>;
 
   return (
-    <>
-      <div className="ops-briefing-header command-center-briefing">
-        <div className="ops-briefing-header__top">
-          <div className="ops-briefing-header__left">
-            <div className="ops-briefing-header__ranch">{workspaceProfile.ranchName || workspaceProfile.businessName || 'Ranch Operations'} · {roleWorkspace.label}</div>
-            <h1 className="ops-briefing-header__title">
-              {urgencyCount > 0
-                ? `${urgencyCount} control point${urgencyCount === 1 ? '' : 's'} need a decision.`
-                : 'Home is clear.'}
+    <section className="xbar-editorial-dashboard" aria-labelledby="xbar-dashboard-title">
+      <HorseContour className="xbar-editorial-dashboard__horse-line" />
+      <div className="xbar-editorial-dashboard__brand" aria-label="XBAR brand">
+        <img src={XBAR_MAIN_LOGO_SRC} alt="XBAR logo" className="xbar-editorial-dashboard__logo" />
+        <div>
+          <span>XBAR</span>
+          <strong>{ranchName}</strong>
+          <em>{roleWorkspace.label}</em>
+        </div>
+      </div>
+
+      <main className="xbar-editorial-dashboard__stage">
+        <header className="xbar-editorial-dashboard__masthead">
+          <div>
+            <p>Equine transaction infrastructure</p>
+            <h1 id="xbar-dashboard-title">
+              {hasHorseData ? 'Sale readiness, before the horse leaves the barn.' : 'Build sale readiness from the first horse.'}
             </h1>
-            <p className="command-center-briefing__copy">
-              A private view of horse files, documents, care, ownership, buyers, field conditions, and operating cost.
-            </p>
-            <div className="ops-briefing-header__chips">
-              <span className="ops-briefing-chip">{roleWorkspace.label}</span>
-              <span className={transferGaps.length ? 'ops-briefing-chip ops-briefing-chip--urgent' : 'ops-briefing-chip ops-briefing-chip--success'}>
-                {transferGaps.length} transfer{transferGaps.length !== 1 ? 's' : ''} pending
-              </span>
-              <span className={careDueCount ? 'ops-briefing-chip ops-briefing-chip--warning' : 'ops-briefing-chip ops-briefing-chip--success'}>
-                {careDueCount} care due
-              </span>
-              {weather ? <span className="ops-briefing-chip">{weather.current.temperatureF}°F · {weather.current.weatherLabel}</span> : null}
-            </div>
           </div>
-          <div className="ops-briefing-header__actions">
-            <button type="button" className="ops-briefing-action ops-briefing-action--primary" onClick={() => navigate(nextMovePath)}>Open next move</button>
-            <Link to="/documents" className="ops-briefing-action">Documents</Link>
-            <Link to="/weather" className="ops-briefing-action">Weather</Link>
+          <div className="xbar-editorial-dashboard__actions">
+            <Link to={focusHorse ? `/profiles/${focusHorse.id}` : '/horses?new=1'}>Buyer Packet</Link>
+            <Link to="/documents">Documents</Link>
           </div>
-        </div>
-        <div className="command-center-next-move">
-          <span>Next Step</span>
-          <strong>{nextMove}</strong>
-          <em>{urgencyCount > 0 ? 'Start with the item most likely to block work.' : 'Use the clear window to strengthen buyer readiness or documents.'}</em>
-        </div>
-        <div className="ops-briefing-stat-row">
-          <button type="button" className="ops-briefing-stat ops-briefing-stat--clickable" onClick={() => navigate('/ownership')} title="Open title and transfer">
-            <span className="ops-briefing-stat__label">Document gaps</span>
-            <span className={`ops-briefing-stat__value${transferGaps.length ? ' ops-briefing-stat__value--urgent' : ' ops-briefing-stat__value--clear'}`}>{transferGaps.length}</span>
-            <span className="ops-briefing-stat__detail">{transferGaps.length ? 'need resolution' : 'all clear'}</span>
-          </button>
-          <button type="button" className="ops-briefing-stat ops-briefing-stat--clickable" onClick={() => navigate('/medical')} title="Open care status">
-            <span className="ops-briefing-stat__label">Care holds</span>
-            <span className={`ops-briefing-stat__value${careDueCount ? ' ops-briefing-stat__value--warning' : ' ops-briefing-stat__value--clear'}`}>{careDueCount}</span>
-            <span className="ops-briefing-stat__detail">{careDueCount ? 'horses overdue' : 'care current'}</span>
-          </button>
-          <button type="button" className="ops-briefing-stat ops-briefing-stat--clickable" onClick={() => navigate('/documents')} title="Documents waiting on review">
-            <span className="ops-briefing-stat__label">Document queue</span>
-            <span className={`ops-briefing-stat__value${reviewQueue.length ? ' ops-briefing-stat__value--warning' : ''}`}>{reviewQueue.length}</span>
-            <span className="ops-briefing-stat__detail">{reviewQueue.length ? 'waiting review' : 'queue clear'}</span>
-          </button>
-          <button type="button" className="ops-briefing-stat ops-briefing-stat--clickable" onClick={() => navigate('/expenses')} title="Open operating ledger">
-            <span className="ops-briefing-stat__label">Month spend</span>
-            <span className="ops-briefing-stat__value">{formatCompactCurrency(budgetSummary.total)}</span>
-            <span className="ops-briefing-stat__detail">{qualifiedBuyerCount} qualified buyer{qualifiedBuyerCount !== 1 ? 's' : ''}</span>
-          </button>
-        </div>
-      </div>
+        </header>
 
-      <section className="command-stage command-stage--two-col command-center-stage">
-        <div className="command-stage__rail">
-          <MetricCard label="Document gaps" value={String(transferGaps.length + reviewQueue.length)} tone={transferGaps.length ? 'rose' : reviewQueue.length ? 'amber' : 'emerald'} onClick={() => navigate(transferGaps.length ? '/ownership' : '/documents')} title="Open document controls" />
-          <MetricCard label="Care holds" value={String(careDueCount)} tone={careDueCount ? 'amber' : 'emerald'} onClick={() => navigate('/medical')} title="Open care status" />
-          <MetricCard label="Operating spend" value={formatCompactCurrency(budgetSummary.total)} tone="blue" onClick={() => navigate('/expenses')} title="Open operating ledger" />
-        </div>
-
-        <div className="command-stage__support">
-          <div className="command-stage__support-card">
-            <div className="command-stage__support-label">Feed room</div>
-            <strong className="command-stage__support-title">{feedReserveAsset?.name ?? 'Not logged'}</strong>
-            <div className="command-stage__support-copy">
-              <span>{feedReserveAsset?.notes ?? 'Add feed receipts to start reserve tracking.'}</span>
-              {feedReserveAsset?.nextService ? <span>Service {formatDateLabel(feedReserveAsset.nextService)}</span> : <span>No service date</span>}
+        <section className={`xbar-readiness-hero xbar-readiness-hero--${readinessTone}`} aria-label="Sale Readiness">
+          <div className="xbar-readiness-hero__lead">
+            <div>
+              <span>Sale Readiness</span>
+              <strong>{focusHorse?.name ?? 'No horse selected'}</strong>
+              <p>{focusHorse?.summary ?? 'Create the first horse record, then attach ownership, health, and sale documents.'}</p>
             </div>
+            <button type="button" onClick={() => navigate(nextMovePath)}>
+              {focusHorse ? 'Open Release Work' : 'Add Horse'}
+            </button>
           </div>
-          <div className="command-stage__support-card">
-            <div className="command-stage__support-label">Document intake</div>
-            <strong className="command-stage__support-title">{recentBatches[0]?.label ?? 'No batch yet'}</strong>
-            <div className="command-stage__support-copy">
-              <span>{recentBatches[0] ? `${recentBatches[0].processedCount}/${recentBatches[0].fileCount} logged` : 'Upload the first packet.'}</span>
-              <span>{reviewQueue.length} waiting on review</span>
-            </div>
-          </div>
-          <div className="command-stage__support-card">
-            <div className="command-stage__support-label">Field conditions</div>
-            <strong className="command-stage__support-title">{weatherLoading ? 'Loading...' : weather ? `${weather.current.temperatureF}°F · ${weather.current.weatherLabel}` : 'Forecast offline'}</strong>
-            <div className="command-stage__support-copy">
-              <span>{weather ? `${weather.today.rainChance}% rain · ${weather.current.windMph} mph wind · UV ${weather.today.uvIndex}` : weatherError || 'Open Weather and set the ranch location.'}</span>
-              <span>{weather ? weather.notes.turnout : 'Use weather to plan turnout, hauling, and breeding work.'}</span>
-            </div>
-          </div>
-        </div>
-      </section>
 
-      <div className="metric-grid metric-grid--dashboard">
-        <MetricCard label="Document queue" value={String(reviewQueue.length)} tone={reviewQueue.length ? 'blue' : 'slate'} onClick={() => navigate('/documents')} title="Documents waiting on review" />
-        <MetricCard label="Coggins watch" value={String(cogginsWatchCount)} tone={cogginsWatchCount ? 'amber' : 'emerald'} onClick={() => navigate('/medical')} title="Horses missing or aging Coggins" />
-        <MetricCard label="Feed spend" value={formatCompactCurrency(budgetSummary.feed)} tone="blue" onClick={() => navigate('/expenses')} title="Feed, bedding, and supplement spend this month" />
-        <MetricCard label="Health spend" value={formatCompactCurrency(budgetSummary.health)} tone="slate" onClick={() => navigate('/expenses')} title="Health-related spend this month" />
-      </div>
-
-      <div className="dashboard-board">
-        <div className="dashboard-board__main">
-          <Panel title="Title & transfer holds" meta={<Pill tone={transferGaps.length ? 'rose' : 'emerald'}>{transferGaps.length ? 'Action required' : 'Clear'}</Pill>} surfaceId="command-transfer-issues" style={{ order: transferGaps.length ? 0 : 2 }} action={<Link to="/ownership" className="button button--ghost button--compact">Ownership</Link>}>
-            {transferGaps.length ? (
-              <div className="stack-list">
-                {transferGaps.slice(0, 6).map((gap) => (
-                  <button
-                    key={gap.horseId}
-                    type="button"
-                    className="stack-item stack-item--interactive"
-                    onClick={() => navigate(`/horses/${gap.horseId}`)}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      const record = ownershipRecords.find((item) => item.horseId === gap.horseId);
-                      if (record) setMenuState({ type: 'record', id: record.id, x: event.clientX, y: event.clientY });
-                    }}
-                  >
-                    <div className="stack-item__top"><div className="stack-item__title">{gap.horseName}</div><Pill tone={gap.transferStatus === 'Clear' ? 'emerald' : 'rose'}>{gap.transferStatus}</Pill></div>
-                    <div className="dashboard-chip-row">{gap.reasons.slice(0, 3).map((reason) => <Pill key={reason} tone="amber">{reason}</Pill>)}</div>
-                    <div className="inline-metrics"><span>{gap.pendingCount} blockers</span><span>{gap.dueDate ? `Due ${formatDateLabel(gap.dueDate)}` : 'No deadline'}</span></div>
-                  </button>
-                ))}
+          <div className="xbar-readiness-hero__body">
+            <div className="xbar-readiness-meter" style={{ '--score-angle': `${readinessScore * 3.6}deg` } as CSSProperties}>
+              <div className="xbar-readiness-meter__core">
+                <span>{readinessScore}</span>
+                <em>{focusPacket ? statusLabel(focusPacket.buyerProfileStatus) : 'Private'}</em>
               </div>
-            ) : (
-              <EmptyState compact title="Transfer documents clear" description="No horse records are waiting on transfer papers." />
-            )}
-          </Panel>
-
-          <Panel title="Care holds" meta={<Pill tone={careDueCount ? 'amber' : 'emerald'}>{careDueCount ? 'Due now' : 'Current'}</Pill>} surfaceId="command-care-board" style={{ order: careDueCount ? 0 : 2 }} action={<div className="inline-actions"><Link to="/weather" className="button button--ghost button--compact">Weather</Link><Link to="/medical" className="button button--ghost button--compact">Health</Link></div>}>
-            {careBoard.length ? (
-              <div className="stack-list">
-                {careBoard.slice(0, 6).map((row) => (
-                  <button
-                    key={row.horseId}
-                    type="button"
-                    className="stack-item stack-item--interactive"
-                    onClick={() => navigate(`/horses/${row.horseId}`)}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      setMenuState({ type: 'horse', id: row.horseId, x: event.clientX, y: event.clientY });
-                    }}
-                  >
-                    <div className="stack-item__top"><div className="stack-item__title">{row.horseName}</div><Pill tone={row.priority >= 4 ? 'rose' : 'amber'}>{row.priority >= 4 ? 'Hot' : 'Watch'}</Pill></div>
-                    <div className="dashboard-chip-row">{row.signals.map((signal) => <Pill key={signal.key} tone={CARE_SIGNAL_TONE[signal.status]}>{signal.label} {signal.status === 'clear' ? 'ok' : signal.status}</Pill>)}</div>
-                    <div className="inline-metrics">
-                      {row.signals.filter((signal) => signal.status !== 'clear').slice(0, 2).map((signal) => <span key={signal.key}>{signal.detail}</span>)}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <EmptyState compact title="No care holds" description="Care status appears once horse records and documents exist." />
-            )}
-          </Panel>
-        </div>
-
-        <div className="dashboard-board__side">
-          <Panel title="Operating ledger" meta={<Pill tone="blue">{budgetSummary.receiptCount} receipts</Pill>} surfaceId="command-budget" action={<button type="button" className="button button--ghost button--compact" onClick={() => document.getElementById('dashboard-receipt-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Add receipt</button>}>
-            <div className="dashboard-budget-strip">
-              <div className="ledger-stat"><span className="ledger-stat__label">Month</span><strong className="ledger-stat__value">{formatCompactCurrency(budgetSummary.total)}</strong></div>
-              <div className="ledger-stat"><span className="ledger-stat__label">Feed</span><strong className="ledger-stat__value">{formatCompactCurrency(budgetSummary.feed)}</strong></div>
-              <div className="ledger-stat"><span className="ledger-stat__label">Health</span><strong className="ledger-stat__value">{formatCompactCurrency(budgetSummary.health)}</strong></div>
             </div>
-            {budgetSummary.categories.length ? (
-              <div className="stack-list">
-                {budgetSummary.categories.slice(0, 4).map((category) => (
-                  <div key={category.category} className="stack-item"><div className="stack-item__top"><div className="stack-item__title">{category.category}</div><Pill tone="slate">{formatCurrency(category.amount)}</Pill></div></div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState compact title="No receipts this month" description="Upload feed and care receipts to start the ledger view." />
-            )}
-          </Panel>
 
-          <Panel title="Document queue" meta={<Pill tone={reviewQueue.length ? 'amber' : 'emerald'}>{reviewQueue.length ? 'Active' : 'Clear'}</Pill>} surfaceId="command-work-queue" action={<Link to="/documents" className="button button--ghost button--compact">Documents</Link>}>
-            <div className="stack-list">
-              {reviewQueue.slice(0, 5).map((document) => (
-                <Link key={document.id} to="/documents" className="stack-item stack-item--interactive">
-                  <div className="stack-item__top"><div className="stack-item__title">{document.title}</div><Pill tone="amber">{document.state}</Pill></div>
-                  <div className="inline-metrics"><span>{document.type}</span><span>{formatDateLabel(document.uploadedAt)}</span></div>
+            <div className="xbar-release-brief">
+              <div className="xbar-release-brief__headline">
+                <span>Release Blockers</span>
+                <strong>{releaseBlockers.length ? `${releaseBlockers.length} open` : 'Clear'}</strong>
+              </div>
+              <ol>
+                {releaseBlockers.slice(0, 4).map((blocker) => (
+                  <li key={blocker}>{blocker}</li>
+                ))}
+              </ol>
+            </div>
+          </div>
+
+          <div className="xbar-readiness-hero__slots" aria-label="Packet readiness checks">
+            {(focusPacket?.saleSlots ?? []).map((slot) => (
+              <Link key={slot.key} to={focusHorse ? `/horses/${focusHorse.id}` : '/horses?new=1'} className={`xbar-slot xbar-slot--${slot.status}`}>
+                <span>{slot.label}</span>
+                <strong>{slot.status === 'ready' ? 'Clear' : slot.status === 'review' ? 'Review' : 'Hold'}</strong>
+              </Link>
+            ))}
+            {!focusPacket ? (
+              <>
+                <span className="xbar-slot xbar-slot--missing"><span>AQHA papers</span><strong>Hold</strong></span>
+                <span className="xbar-slot xbar-slot--missing"><span>Transfer papers</span><strong>Hold</strong></span>
+                <span className="xbar-slot xbar-slot--missing"><span>Coggins</span><strong>Hold</strong></span>
+              </>
+            ) : null}
+          </div>
+        </section>
+
+        <section className="xbar-module-river" aria-label="XBAR modules">
+          {moduleStrips.map((module) => (
+            <ModuleStrip key={module.title} {...module} />
+          ))}
+        </section>
+
+        <section className="xbar-transaction-timeline" aria-label="Asset Timeline">
+          <div className="xbar-transaction-timeline__header">
+            <span>Asset Timeline</span>
+            <strong>{assetTimeline.length ? 'Next operating dates' : 'No asset dates yet'}</strong>
+          </div>
+          <div className="xbar-transaction-timeline__line">
+            {assetTimeline.length ? assetTimeline.map((asset) => (
+              <Link to="/assets" className="xbar-asset-point" key={asset.id}>
+                <span>{formatDateLabel(asset.nextService)}</span>
+                <strong>{asset.name}</strong>
+                <em>{asset.condition}</em>
+              </Link>
+            )) : (
+              <Link to="/assets" className="xbar-asset-point xbar-asset-point--empty">
+                <span>Next</span>
+                <strong>Add ranch assets</strong>
+                <em>Track service, assignment, and sale prep support.</em>
+              </Link>
+            )}
+          </div>
+        </section>
+      </main>
+
+      <aside className="xbar-intelligence-rail-v2" aria-label="Intelligence rail">
+        <div className="xbar-intelligence-rail-v2__inner">
+          <div className="xbar-intelligence-rail-v2__brand">
+            <img src={XBAR_MAIN_LOGO_SRC} alt="" aria-hidden="true" />
+            <div>
+              <span>Intelligence</span>
+              <strong>{statusLabel(focusPacket?.buyerProfileStatus ?? 'Private')}</strong>
+            </div>
+          </div>
+
+          <button type="button" className="xbar-intelligence-rail-v2__next" onClick={() => navigate(nextMovePath)}>
+            <span>Next release move</span>
+            <strong>{nextMoveLabel}</strong>
+          </button>
+
+          <div className="xbar-intelligence-rail-v2__stack">
+            <div><span>Listed value</span><strong>{formatCompactCurrency(revenueRisk.totalListedValue)}</strong></div>
+            <div><span>Value held</span><strong>{formatCompactCurrency(revenueRisk.valueAtRisk)}</strong></div>
+            <div><span>Buyers</span><strong>{activeBuyerCount}</strong><em>{qualifiedBuyerCount} qualified</em></div>
+            <div><span>Documents</span><strong>{documents.length}</strong><em>{reviewQueue.length} review</em></div>
+            <div><span>Spend</span><strong>{formatCurrency(budgetSummary.total)}</strong><em>{budgetSummary.receiptCount} receipts</em></div>
+          </div>
+
+          <div className="xbar-intelligence-rail-v2__queue">
+            <span>Live queue</span>
+            {(revenueRisk.items.length ? revenueRisk.items.slice(0, 3) : saleProfiles.slice(0, 3)).map((item) => {
+              const horseName = 'horseName' in item ? item.horseName : item.horse.name;
+              const score = 'packet' in item ? item.packet.score : null;
+              return (
+                <Link to={'horseId' in item ? `/horses/${item.horseId}` : `/horses/${item.horse.id}`} key={'horseId' in item ? item.horseId : item.horse.id}>
+                  <strong>{horseName}</strong>
+                  <em>{score === null ? 'Hold' : `${score}% ready`}</em>
                 </Link>
-              ))}
-              {recentBatches.map((batch) => (
-                <Link key={batch.id} to="/documents" className="stack-item stack-item--interactive">
-                  <div className="stack-item__top"><div className="stack-item__title">{batch.label}</div><Pill tone={batch.state === 'Completed' ? 'emerald' : batch.state === 'Reviewing' ? 'amber' : 'blue'}>{batch.state}</Pill></div>
-                  <div className="inline-metrics"><span>{batch.processedCount}/{batch.fileCount} logged</span><span>{batch.needsReviewCount} review</span></div>
-                </Link>
-              ))}
-              {!reviewQueue.length && !recentBatches.length ? <EmptyState compact title="Document queue clear" description="No documents are waiting on review." /> : null}
-            </div>
-          </Panel>
+              );
+            })}
+            {!revenueRisk.items.length && !saleProfiles.length ? (
+              <Link to="/horses?new=1">
+                <strong>Add first horse</strong>
+                <em>Start readiness</em>
+              </Link>
+            ) : null}
+          </div>
+
+          <div className="xbar-intelligence-rail-v2__batch">
+            <span>Latest document batch</span>
+            <strong>{intakeBatches[0]?.label ?? 'No batch yet'}</strong>
+            <em>{intakeBatches[0] ? `${intakeBatches[0].processedCount}/${intakeBatches[0].fileCount} processed` : 'Upload documents to begin.'}</em>
+          </div>
         </div>
-      </div>
-
-      <div className="dashboard-board dashboard-board--lower">
-        <Panel title="Log receipt" meta={<Pill tone={canManageBudget ? 'blue' : 'slate'}>{canManageBudget ? 'Enabled' : 'Read only'}</Pill>} surfaceId="command-receipt-intake">
-          <form id="dashboard-receipt-form" className="dashboard-receipt-form" onSubmit={handleReceiptSubmit}>
-            <div className="form-grid form-grid--tight">
-              <label className="field-stack"><span className="field-label">Category</span><select className="field-input" value={receiptDraft.category} onChange={(event) => setReceiptDraft((current) => ({ ...current, category: event.target.value as ExpenseCategory }))} disabled={!canManageBudget || savingReceipt}>{EXPENSE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}</select></label>
-              <label className="field-stack"><span className="field-label">Horse record</span><select className="field-input" value={receiptDraft.horseId} onChange={(event) => setReceiptDraft((current) => ({ ...current, horseId: event.target.value }))} disabled={!canManageBudget || savingReceipt}><option value="">Ranch-wide</option>{horses.map((horse) => <option key={horse.id} value={horse.id}>{horse.name}</option>)}</select></label>
-              <label className="field-stack"><span className="field-label">Receipt label</span><input className="field-input" value={receiptDraft.title} onChange={(event) => setReceiptDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Dental float" disabled={!canManageBudget || savingReceipt} /></label>
-              <label className="field-stack"><span className="field-label">Vendor</span><input className="field-input" value={receiptDraft.vendor} onChange={(event) => setReceiptDraft((current) => ({ ...current, vendor: event.target.value }))} placeholder="Rolling Plains Vet" disabled={!canManageBudget || savingReceipt} /></label>
-              <label className="field-stack"><span className="field-label">Amount</span><input className="field-input" type="number" min="0" step="0.01" value={receiptDraft.amount} onChange={(event) => setReceiptDraft((current) => ({ ...current, amount: event.target.value }))} placeholder="240.00" disabled={!canManageBudget || savingReceipt} /></label>
-              <label className="field-stack"><span className="field-label">Receipt date</span><input className="field-input" type="date" value={receiptDraft.receiptDate} onChange={(event) => setReceiptDraft((current) => ({ ...current, receiptDate: event.target.value }))} disabled={!canManageBudget || savingReceipt} /></label>
-              <label className="field-stack"><span className="field-label">Uploaded by</span><input className="field-input" value={receiptDraft.uploadedBy} onChange={(event) => setReceiptDraft((current) => ({ ...current, uploadedBy: event.target.value }))} disabled={!canManageBudget || savingReceipt} /></label>
-              <label className="field-stack"><span className="field-label">Receipt file</span><input className="field-input" type="file" accept=".pdf,image/*" onChange={(event) => setReceiptFile(event.target.files?.[0] ?? null)} disabled={!canManageBudget || savingReceipt} /></label>
-              <label className="field-stack field-stack--wide"><span className="field-label">Notes</span><textarea className="field-textarea" value={receiptDraft.notes} onChange={(event) => setReceiptDraft((current) => ({ ...current, notes: event.target.value }))} rows={3} placeholder="Optional note for feed reserve, wormer pack, or dental work." disabled={!canManageBudget || savingReceipt} /></label>
-            </div>
-            <div className="inline-actions">
-              <button type="submit" className="button button--primary" disabled={!canManageBudget || savingReceipt}>{savingReceipt ? 'Logging...' : 'Log receipt'}</button>
-              {receiptFile ? <Pill tone="slate">{receiptFile.name}</Pill> : null}
-            </div>
-          </form>
-        </Panel>
-
-        <Panel title="Buyer desk" meta={<Pill tone={salesLeads.length ? 'blue' : 'slate'}>{salesLeads.length ? 'Active' : 'Quiet'}</Pill>} surfaceId="command-buyer-desk" action={<Link to="/sales" className="button button--ghost button--compact">Sales</Link>}>
-          {salesLeads.length ? (
-            <div className="stack-list">
-              {salesLeads.slice(0, 5).map((lead) => {
-                const horse = horses.find((item) => item.id === lead.horseId);
-                return (
-                  <button
-                    key={lead.id}
-                    type="button"
-                    className="stack-item stack-item--interactive"
-                    onClick={() => navigate('/sales')}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      setMenuState({ type: 'lead', id: lead.id, x: event.clientX, y: event.clientY });
-                    }}
-                  >
-                    <div className="stack-item__top"><div className="stack-item__title">{lead.name}</div><Pill tone={lead.stage === 'Offer' ? 'emerald' : lead.stage === 'Qualified' ? 'blue' : 'amber'}>{lead.stage}</Pill></div>
-                    <div className="inline-metrics"><span>{horse?.name ?? 'Unassigned'}</span><span>{lead.channel}</span><span>{formatDateLabel(lead.lastTouch)}</span></div>
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <EmptyState compact title="No buyer movement" description="Buyer activity appears here once leads are attached to horse records." />
-          )}
-        </Panel>
-      </div>
-
-      <ContextMenu open={Boolean(menuItems.length)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
-    </>
+      </aside>
+    </section>
   );
 }
