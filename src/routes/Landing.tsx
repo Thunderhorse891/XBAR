@@ -105,11 +105,37 @@ const questions = [
   },
 ];
 
-const intelligenceBars = [
-  { label: 'Document readiness', value: '92%', detail: 'approved records' },
-  { label: 'Buyer momentum', value: '78%', detail: 'warm leads moving' },
-  { label: 'Care confidence', value: '86%', detail: 'holds visible' },
-  { label: 'Margin clarity', value: '64%', detail: 'costs connected' },
+const operationalPreviewRows = [
+  {
+    label: 'Sale Readiness',
+    value: 'Ready',
+    detail: 'Approved packet, current Coggins, and buyer-safe profile are in place.',
+  },
+  {
+    label: 'Buyer-Safe Proof',
+    value: 'Clear',
+    detail: 'Only verified records leave the private workspace.',
+  },
+  {
+    label: 'Document Risk',
+    value: '2 reviews',
+    detail: 'Registration and transfer files are waiting on human approval.',
+  },
+  {
+    label: 'Ownership Chain',
+    value: 'Verified',
+    detail: 'Legal owner and co-owner structure are attached to the horse.',
+  },
+  {
+    label: 'Release Blocker',
+    value: '1 hold',
+    detail: 'Renewal deadline must clear before the public packet opens.',
+  },
+  {
+    label: 'Asset Timeline',
+    value: 'Current',
+    detail: 'Care, farrier, service, document, and sale events stay ordered.',
+  },
 ];
 
 const showcaseHorseCards = [
@@ -127,7 +153,7 @@ function Wordmark() {
       <span className="xbar-wordmark__mark" aria-hidden="true"><XbarMark tone="mono" /></span>
       <span className="xbar-wordmark__copy">
         <strong>XBAR</strong>
-        <span>Records &amp; sale readiness</span>
+        <span>Equine operations infrastructure</span>
       </span>
     </span>
   );
@@ -187,15 +213,15 @@ function RevenueIntelligenceShowcase() {
   return (
     <section className="revenue-intelligence-showcase" aria-labelledby="revenue-intelligence-title">
       <div className="revenue-intelligence-showcase__copy">
-        <p className="revenue-kicker">Horse operations dashboard</p>
-        <h2 id="revenue-intelligence-title">Horse records, documents, care, and sales in one place.</h2>
+        <p className="revenue-kicker">Operational preview</p>
+        <h2 id="revenue-intelligence-title">Sale readiness, proof, and ownership without the noise.</h2>
         <p>
-          XBAR keeps the daily work visible with clear charts, horse cards, document status,
-          buyer movement, and plan details that help operators decide what to do next.
+          XBAR is organized around the moments that decide whether a horse can be trusted,
+          transferred, shown, or sold. Every module answers a real operating question.
         </p>
         <div className="revenue-intelligence-showcase__actions">
           <Link className="public-action public-action--primary" to={signupPath('Professional')}>
-            Create Account
+            Create your workspace
           </Link>
           <Link className="public-action" to="#pricing-heading">
             Compare plans
@@ -203,34 +229,30 @@ function RevenueIntelligenceShowcase() {
         </div>
       </div>
 
-      <div className="revenue-command-visual" aria-label="XBAR dashboard preview">
-        <div className="revenue-command-visual__top">
-          <span>Monthly Snapshot</span>
-          <strong>Records improving</strong>
+      <div className="revenue-command-visual revenue-record-preview" aria-label="Static XBAR operational preview">
+        <div className="revenue-record-preview__top">
+          <span>XBAR record view</span>
+          <strong>Buyer-safe operating file</strong>
         </div>
-        <svg className="revenue-command-visual__line" viewBox="0 0 420 140" aria-hidden="true">
-          <path d="M16 110H404" />
-          <path d="M16 72H404" />
-          <path d="M16 34H404" />
-          <polyline points="16,104 78,82 138,88 202,58 266,64 328,34 404,42" />
-        </svg>
-        <div className="revenue-command-visual__bars">
-          {intelligenceBars.map((item) => (
-            <div className="revenue-command-bar" key={item.label}>
-              <div><span>{item.label}</span><strong>{item.value}</strong></div>
-              <i><span style={{ width: item.value }} /></i>
-              <small>{item.detail}</small>
-            </div>
+        <div className="revenue-record-preview__modules">
+          {operationalPreviewRows.map((item) => (
+            <article className="revenue-record-module" key={item.label}>
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+              <p>{item.detail}</p>
+            </article>
           ))}
         </div>
-        <div className="revenue-moving-boxes" aria-hidden="true">
-          <span>Documents approved</span>
-          <span>Buyer viewed packet</span>
-          <span>Checkout ready</span>
-        </div>
+        <ol className="revenue-record-preview__chain" aria-label="Record timeline">
+          <li><span>01</span><strong>Identity</strong></li>
+          <li><span>02</span><strong>Ownership</strong></li>
+          <li><span>03</span><strong>Care</strong></li>
+          <li><span>04</span><strong>Documents</strong></li>
+          <li><span>05</span><strong>Sale packet</strong></li>
+        </ol>
       </div>
 
-      <div className="revenue-horse-carousel" aria-label="Animated premium horse cards">
+      <div className="revenue-horse-carousel" aria-label="XBAR horse record examples">
         <div className="revenue-horse-carousel__track">
           {carouselCards.map((card, index) => (
             <article className="revenue-horse-card" key={`${card.name}-${index}`}>
@@ -283,14 +305,12 @@ export default function Landing() {
       </header>
 
       <section className="revenue-hero revenue-hero--editorial" aria-labelledby="hero-heading">
-        <p className="revenue-kicker">Equine operations, elevated</p>
+        <p className="revenue-kicker">Equine operations infrastructure</p>
         <h1 id="hero-heading">
-          <span>One record per horse.</span>
-          <span>Ownership you can prove.</span>
-          <span>Sales that close.</span>
+          <span>One trusted record for every horse.</span>
         </h1>
         <p className="revenue-hero__lead">
-          XBAR turns scattered paperwork, ownership details, and horse documentation into trusted, buyer-ready digital records &mdash; OCR-assisted intake, compliance deadlines, and watermarked sale packets in one quiet, deliberate system.
+          Ownership, documents, care history, and sale readiness organized into a buyer-safe operating system for serious horse businesses.
         </p>
         <div className="revenue-hero__actions">
           <Link className="public-action public-action--primary" to={signupPath('Professional')} onClick={() => trackPlan('Professional')}>
@@ -301,9 +321,9 @@ export default function Landing() {
           </Link>
         </div>
         <ul className="revenue-proof-line revenue-proof-line--center">
-          <li>Local-first</li>
-          <li>Human-reviewed</li>
-          <li>Watermarked sharing</li>
+          <li>Ownership chain</li>
+          <li>Buyer-safe packets</li>
+          <li>Human-verified records</li>
         </ul>
       </section>
 
@@ -318,6 +338,8 @@ export default function Landing() {
         </div>
         <CommandPreview />
       </section>
+
+      <RevenueIntelligenceShowcase />
 
       <section className="revenue-section" aria-labelledby="pipeline-heading">
         <div className="revenue-section__header">
@@ -417,8 +439,6 @@ export default function Landing() {
           </div>
         </div>
       </section>
-
-      <RevenueIntelligenceShowcase />
 
       <section className="revenue-section" aria-labelledby="pricing-heading">
         <div className="revenue-section__header">
