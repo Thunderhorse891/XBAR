@@ -396,27 +396,45 @@ export default function Horses() {
   const totalHorses = horses.length;
   const activeSales = horses.filter(h => h.status === 'Sale Prep').length;
   const totalInsured = horses.reduce((sum, h) => sum + (h.insuredValue ?? 0), 0);
+  const avgReadiness = useMemo(() => {
+    if (!horses.length) return 0;
+    const sum = horses.reduce((acc, h) => acc + (packetByHorseId[h.id]?.score ?? 0), 0);
+    return Math.round((sum / horses.length) * 100);
+  }, [horses, packetByHorseId]);
+  const readyForSale = useMemo(
+    () => horses.filter(h => (packetByHorseId[h.id]?.score ?? 0) >= 0.8).length,
+    [horses, packetByHorseId],
+  );
 
   return (
     <>
-      <div className="horses-hero">
-        <div className="horses-hero__left">
-          <div className="section-eyebrow">Roster</div>
-          <h1 className="horses-hero__title">Horse Operations</h1>
-          <p className="horses-hero__sub">Active roster, sale pipeline, and breeding program — all in one place.</p>
+      <div className="ops-hero">
+        <div className="ops-hero__main">
+          <div className="ops-hero__eyebrow">Roster</div>
+          <h1 className="ops-hero__title">Horse operations</h1>
+          <p className="ops-hero__sub">Active roster, sale pipeline, and breeding program organized by record completeness.</p>
+          <div className="ops-hero__chips">
+            <span className="ops-briefing-chip">{totalHorses} horse{totalHorses !== 1 ? 's' : ''}</span>
+            {activeSales > 0 && <span className="ops-briefing-chip ops-briefing-chip--warning">{activeSales} for sale</span>}
+            {readyForSale > 0 && <span className="ops-briefing-chip ops-briefing-chip--success">{readyForSale} sale-ready</span>}
+          </div>
         </div>
-        <div className="horses-hero__stats">
-          <div className="horses-stat">
-            <span className="horses-stat__value">{totalHorses}</span>
-            <span className="horses-stat__label">Total Horses</span>
+        <div className="ops-hero__stats">
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{totalHorses}</span>
+            <span className="ops-hero__stat-label">Total horses</span>
           </div>
-          <div className="horses-stat">
-            <span className="horses-stat__value">{activeSales || '—'}</span>
-            <span className="horses-stat__label">Active Sales</span>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{activeSales || '—'}</span>
+            <span className="ops-hero__stat-label">Active sales</span>
           </div>
-          <div className="horses-stat">
-            <span className="horses-stat__value">{totalInsured ? formatCompactCurrency(totalInsured) : '—'}</span>
-            <span className="horses-stat__label">Total Insured</span>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{avgReadiness}%</span>
+            <span className="ops-hero__stat-label">Avg readiness</span>
+          </div>
+          <div className="ops-hero__stat">
+            <span className="ops-hero__stat-value">{totalInsured ? formatCompactCurrency(totalInsured) : '—'}</span>
+            <span className="ops-hero__stat-label">Total insured</span>
           </div>
         </div>
       </div>
