@@ -9,6 +9,7 @@ import { InteractionShell } from './components/InteractionSystem';
 import { Toaster } from './components/ui/sonner';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
 import { useCloudStore } from './store/useCloudStore';
+import { useWorkspaceHydrated, useWorkspaceReady } from './store/useXbarStore';
 import './routes/operationsHierarchy.css';
 import './routes/interactionSystem.css';
 import './routes/xbarCommandSystem.css';
@@ -142,6 +143,31 @@ function RouteTelemetry() {
   return null;
 }
 
+function hasCommandCenterEntry() {
+  if (typeof window === 'undefined') return false;
+  return window.localStorage.getItem('xbar-command-center-entry') === 'true';
+}
+
+function AppHomeGate() {
+  const location = useLocation();
+  const session = useCloudStore((state) => state.session);
+  const workspaceHydrated = useWorkspaceHydrated();
+  const workspaceReady = useWorkspaceReady();
+
+  if (location.pathname === '/' && !session && !hasCommandCenterEntry()) {
+    if (!workspaceHydrated) return <div className="app-loading-shell">Loading XBAR...</div>;
+    if (!workspaceReady) return <Landing />;
+  }
+
+  return (
+    <RequireCloudAuth>
+      <RequireWorkspaceSetup>
+        <MainLayout />
+      </RequireWorkspaceSetup>
+    </RequireCloudAuth>
+  );
+}
+
 export default function App() {
   const Router = useHashRouting() ? HashRouter : BrowserRouter;
 
@@ -161,7 +187,7 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/subscribe" element={<RequireCloudAuth><Subscriptions /></RequireCloudAuth>} />
             <Route path="/setup" element={<RequireCloudAuth><SetupWorkspace /></RequireCloudAuth>} />
-            <Route path="/" element={<RequireCloudAuth><RequireWorkspaceSetup><MainLayout /></RequireWorkspaceSetup></RequireCloudAuth>}>
+            <Route path="/" element={<AppHomeGate />}>
               <Route index element={<Dashboard />} />
               <Route path="horses" element={<Horses />} />
               <Route path="horses/:id" element={<HorseDetail />} />
