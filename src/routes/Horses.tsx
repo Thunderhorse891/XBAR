@@ -78,6 +78,7 @@ export default function Horses() {
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [formErrors, setFormErrors] = useState<Partial<Record<'name' | 'barnName' | 'owner' | 'ownerEntity' | 'barn' | 'pasture', string>>>({});
   const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
+  const [togglingListingId, setTogglingListingId] = useState<string | null>(null);
   const [form, setForm] = useState(() =>
     createHorseFormDefaults({
       defaultOwnerName: workspaceProfile.defaultOwnerName,
@@ -135,14 +136,19 @@ export default function Horses() {
   ];
 
   const handleSavedHorseToggle = async (horseId: string) => {
+    setTogglingListingId(horseId);
     const horse = horses.find((item) => item.id === horseId);
     const wasSaved = sharedListings.some((listing) => listing.horseId === horseId && listing.state !== 'Archived');
-    const result = await toggleSharedListing(horseId);
-    pushToast({
-      title: result.ok ? (wasSaved ? 'Buyer packet removed' : 'Buyer packet staged') : 'Buyer packet blocked',
-      message: horse && result.ok ? `${horse.name} ${wasSaved ? 'was removed from' : 'is now staged in'} buyer packet access.` : result.message,
-      tone: result.ok ? 'success' : 'error',
-    });
+    try {
+      const result = await toggleSharedListing(horseId);
+      pushToast({
+        title: result.ok ? (wasSaved ? 'Buyer packet removed' : 'Buyer packet staged') : 'Buyer packet blocked',
+        message: horse && result.ok ? `${horse.name} ${wasSaved ? 'was removed from' : 'is now staged in'} buyer packet access.` : result.message,
+        tone: result.ok ? 'success' : 'error',
+      });
+    } finally {
+      setTogglingListingId(null);
+    }
   };
 
   const openHorseMenu = (horseId: string, x: number, y: number) => setMenuState({ horseId, x, y });
@@ -338,6 +344,7 @@ export default function Horses() {
           <div className="horse-grid">
             {filtered.map((horse) => {
               const saved = sharedListings.some((listing) => listing.horseId === horse.id && listing.state !== 'Archived');
+              const toggling = togglingListingId === horse.id;
               const packet = buildHorsePacketCompleteness(
                 horse,
                 documents.filter((document) => document.horseId === horse.id),
@@ -386,7 +393,15 @@ export default function Horses() {
                       <div className="status-inline">{saved ? <Pill tone="blue">Buyer packet live</Pill> : <Pill tone={openProofSlots ? 'amber' : 'emerald'}>{openProofSlots ? `${openProofSlots} document gaps` : 'Documents clear'}</Pill>}<span>{showSaleSignals ? `${horse.sale.watchlistCount} watching` : `${horse.sale.inquiryCount} leads`}</span></div>
                       <div className="inline-actions inline-actions--card">
                         <button className="button button--ghost button--compact" type="button" onClick={(event) => { event.stopPropagation(); openHorseDetails(horse); }}>Quick review</button>
-                        <button className="button button--ghost button--compact" type="button" onClick={async (event) => { event.stopPropagation(); await handleSavedHorseToggle(horse.id); }} disabled={!canManageSharedAccess}>{saved ? 'Hold packet' : 'Stage packet'}</button>
+                        <button
+                          className="button button--ghost button--compact"
+                          type="button"
+                          aria-busy={toggling}
+                          onClick={async (event) => { event.stopPropagation(); await handleSavedHorseToggle(horse.id); }}
+                          disabled={!canManageSharedAccess || toggling}
+                        >
+                          {toggling ? 'Updating…' : saved ? 'Hold packet' : 'Stage packet'}
+                        </button>
                         <Link to={`/horses/${horse.id}`} className="button button--primary button--compact" onClick={(event) => event.stopPropagation()}>Horse record</Link>
                       </div>
                     </div>
