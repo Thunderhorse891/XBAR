@@ -397,25 +397,10 @@ body .xbar-command-topbar {
   font-size: 0.92rem;
 }
 
-.revenue-landing {
-  background:
-    linear-gradient(rgba(17, 24, 39, 0.026) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(17, 24, 39, 0.022) 1px, transparent 1px),
-    linear-gradient(180deg, #fbfcfd 0%, #f5f8fb 52%, #eef3f8 100%) !important;
-  background-size: 76px 76px, 76px 76px, auto !important;
-}
-
-.revenue-hero,
 .revenue-section,
 .revenue-section__inner,
 .revenue-cta {
   border-radius: var(--xbar-radius) !important;
-}
-
-.revenue-hero {
-  border: 1px solid var(--xbar-line) !important;
-  background: linear-gradient(115deg, #ffffff 0%, #f6f9fc 54%, #edf5ff 100%) !important;
-  box-shadow: var(--xbar-shadow) !important;
 }
 
 .revenue-hero h1,
@@ -491,28 +476,6 @@ body .xbar-command-topbar {
   color: #9fc5ff;
   font-size: 0.78rem;
   font-weight: 900;
-}
-
-.revenue-command-visual__line {
-  width: 100%;
-  height: 146px;
-  margin: 10px 0 2px;
-}
-
-.revenue-command-visual__line path {
-  fill: none;
-  stroke: rgba(255, 255, 255, 0.12);
-  stroke-width: 1;
-}
-
-.revenue-command-visual__line polyline {
-  fill: none;
-  stroke: #66a3ff;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 6;
-  stroke-dasharray: 720;
-  animation: xbar-line-draw 4.8s ease-in-out infinite;
 }
 
 .revenue-command-visual__bars {
@@ -938,7 +901,6 @@ body .xbar-command-topbar {
 
 @media (prefers-reduced-motion: reduce) {
   .xbar-intel-sparkline polyline,
-  .revenue-command-visual__line polyline,
   .xbar-intel-bar__track span,
   .xbar-motion-box,
   .revenue-moving-boxes span,
