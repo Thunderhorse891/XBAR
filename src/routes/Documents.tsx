@@ -41,6 +41,10 @@ export default function Documents() {
   const [source, setSource] = useState<DocumentSource>('Bulk Intake');
   const [horseId, setHorseId] = useState('');
   const [uploadedBy, setUploadedBy] = useState(currentUserName);
+
+  useEffect(() => {
+    setUploadedBy(currentUserName);
+  }, [currentUserName]);
   const [batchLabel, setBatchLabel] = useState('Live upload batch');
   const [createHorseFromBatch, setCreateHorseFromBatch] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -305,6 +309,8 @@ export default function Documents() {
       setFiles([]);
       setBatchLabel('Live upload batch');
       setCreateHorseFromBatch(false);
+      setHorseId('');
+      setSource('Bulk Intake');
       setSearchParams({});
     }
     setIsSubmitting(false);
@@ -609,8 +615,14 @@ export default function Documents() {
                                   dam: entities.dam,
                                 });
                                 if (result.ok && result.id) {
-                                  reviewDocument(document.id, result.id);
-                                  pushToast({ title: 'Horse created', message: `${horseName} added from registration certificate.`, tone: 'success' });
+                                  const reviewResult = reviewDocument(document.id, result.id);
+                                  pushToast({
+                                    title: reviewResult.ok ? 'Horse created' : 'Horse created — review pending',
+                                    message: reviewResult.ok
+                                      ? `${horseName} added from registration certificate.`
+                                      : `${horseName} added but document approval failed: ${reviewResult.message}`,
+                                    tone: reviewResult.ok ? 'success' : 'error',
+                                  });
                                 } else {
                                   pushToast({ title: 'Creation blocked', message: result.message, tone: 'error' });
                                 }

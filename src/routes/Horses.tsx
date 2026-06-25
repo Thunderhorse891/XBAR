@@ -59,11 +59,12 @@ type HorseCardProps = {
   packet: ReturnType<typeof buildHorsePacketCompleteness>;
   saved: boolean;
   canManageSharedAccess: boolean;
+  toggling: boolean;
   onToggleListing: (id: string) => void;
   onContextMenu: (id: string, x: number, y: number) => void;
 };
 
-function HorseCard({ horse, packet, saved, canManageSharedAccess, onToggleListing, onContextMenu }: HorseCardProps) {
+function HorseCard({ horse, packet, saved, canManageSharedAccess, toggling, onToggleListing, onContextMenu }: HorseCardProps) {
   const { isCollapsed, isExpanded, expand, collapse, headerRef } = useCardState(horse.id);
   const openDrawer = useUiStore((s) => s.openDrawer);
   const headerBtnRef = useRef<HTMLButtonElement>(null);
@@ -208,9 +209,10 @@ function HorseCard({ horse, packet, saved, canManageSharedAccess, onToggleListin
                 className="button button--ghost button--compact"
                 type="button"
                 onClick={(e) => { e.stopPropagation(); void onToggleListing(horse.id); }}
-                disabled={!canManageSharedAccess}
+                disabled={!canManageSharedAccess || toggling}
+                aria-busy={toggling}
               >
-                {saved ? 'Remove listing' : 'List for sale'}
+                {toggling ? 'Updating…' : saved ? 'Remove listing' : 'List for sale'}
               </button>
               <Link to={`/horses/${horse.id}`} className="button button--primary button--compact">Record</Link>
             </div>
@@ -304,15 +306,23 @@ export default function Horses() {
   }, [horses, search, segmentFilter]);
 
 
+  const [togglingListingId, setTogglingListingId] = useState<string | null>(null);
+
   const handleSavedHorseToggle = async (horseId: string) => {
+    if (togglingListingId) return;
     const horse = horses.find((item) => item.id === horseId);
     const wasSaved = sharedListings.some((listing) => listing.horseId === horseId && listing.state !== 'Archived');
-    const result = await toggleSharedListing(horseId);
-    pushToast({
-      title: result.ok ? (wasSaved ? 'Removed from shared access' : 'Added to shared access') : 'Shared access blocked',
-      message: horse && result.ok ? `${horse.name} ${wasSaved ? 'was removed from' : 'is now in'} the shared-access list.` : result.message,
-      tone: result.ok ? 'success' : 'error',
-    });
+    setTogglingListingId(horseId);
+    try {
+      const result = await toggleSharedListing(horseId);
+      pushToast({
+        title: result.ok ? (wasSaved ? 'Removed from shared access' : 'Added to shared access') : 'Shared access blocked',
+        message: horse && result.ok ? `${horse.name} ${wasSaved ? 'was removed from' : 'is now in'} the shared-access list.` : result.message,
+        tone: result.ok ? 'success' : 'error',
+      });
+    } finally {
+      setTogglingListingId(null);
+    }
   };
 
   const openHorseMenu = (horseId: string, x: number, y: number) => {
@@ -601,6 +611,7 @@ export default function Horses() {
                 packet={packet}
                 saved={saved}
                 canManageSharedAccess={canManageSharedAccess}
+                toggling={togglingListingId === horse.id}
                 onToggleListing={handleSavedHorseToggle}
                 onContextMenu={openHorseMenu}
               />

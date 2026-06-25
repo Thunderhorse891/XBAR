@@ -14,16 +14,15 @@ export function EmptyState({
   compact?: boolean;
 }) {
   return (
-    <div className={`empty-state${compact ? ' empty-state--compact' : ''}`} role="status" aria-live="polite">
+    <div className={`empty-state${compact ? ' empty-state--compact' : ''}`}>
       {Icon && !compact ? (
         <div className="empty-state__icon" aria-hidden="true">
           <Icon style={{ width: 24, height: 24 }} />
         </div>
       ) : null}
-      <div className="empty-state__title">{title}</div>
-      <div className="empty-state__description">{description}</div>
+      <p className="empty-state__title">{title}</p>
+      <p className="empty-state__description">{description}</p>
       {action ? <div className="empty-state__action">{action}</div> : null}
     </div>
   );
 }
-

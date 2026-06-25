@@ -56,27 +56,28 @@ export default function Settings() {
   }, [workspaceProfile]);
 
   const handleExport = () => {
+    let url = '';
     try {
       const backup = exportWorkspaceBackup();
       const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
+      url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
       anchor.download = `xbar-workspace-${backup.exportedAt.slice(0, 10)}.json`;
       anchor.click();
-      URL.revokeObjectURL(url);
       pushToast({
         title: 'Backup exported',
         message: 'Ranch backup downloaded successfully.',
         tone: 'success',
       });
-    } catch (error) {
-      console.error('Backup export failed', error);
+    } catch {
       pushToast({
         title: 'Backup failed',
         message: 'The ranch backup could not be exported.',
         tone: 'error',
       });
+    } finally {
+      if (url) URL.revokeObjectURL(url);
     }
   };
 
@@ -93,8 +94,7 @@ export default function Settings() {
         message: result.message,
         tone: result.ok ? 'success' : 'error',
       });
-    } catch (error) {
-      console.error('Backup import failed', error);
+    } catch {
       pushToast({
         title: 'Import failed',
         message: 'Choose a valid XBAR backup JSON file.',
@@ -483,6 +483,8 @@ export default function Settings() {
                         onClick={() => {
                           void navigator.clipboard.writeText(invite.id).then(() => {
                             pushToast({ title: 'Invite code copied', message: 'Share this code with the invitee so they can join the workspace.', tone: 'success' });
+                          }).catch(() => {
+                            pushToast({ title: 'Copy failed', message: 'Clipboard access was denied. Copy the code manually.', tone: 'error' });
                           });
                         }}
                       >

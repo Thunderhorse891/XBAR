@@ -50,7 +50,8 @@ export default function Ownership() {
   const [pendingDocuments, setPendingDocuments] = useState('');
   const [auditNote, setAuditNote] = useState('');
   const [coOwner, setCoOwner] = useState({ name: '', share: '25', role: 'Co-Owner' as OwnershipStake['role'], contact: '' });
-  const [formError, setFormError] = useState('');
+  const [transferFormError, setTransferFormError] = useState('');
+  const [coOwnerFormError, setCoOwnerFormError] = useState('');
   const [menuState, setMenuState] = useState<MenuState>(null);
   const [activeTab, setActiveTab] = useState<'Registry' | 'Horses' | 'Transfers' | 'Documents'>('Horses');
   const ownershipDocuments = useMemo(
@@ -177,7 +178,7 @@ export default function Ownership() {
     }
 
     if (!legalOwner.trim() || !complianceDeadline.trim()) {
-      setFormError('Legal owner and target date are required.');
+      setTransferFormError('Legal owner and target date are required.');
       return;
     }
 
@@ -198,7 +199,7 @@ export default function Ownership() {
     });
 
     if (result.ok) {
-      setFormError('');
+      setTransferFormError('');
     }
   };
 
@@ -224,14 +225,14 @@ export default function Ownership() {
 
     const share = Number(coOwner.share);
     if (!coOwner.name.trim()) {
-      setFormError('Owner name is required.');
+      setCoOwnerFormError('Owner name is required.');
       return;
     }
     if (!share || share <= 0 || share > remainingShare) {
-      setFormError(`Share must be between 1 and ${remainingShare}.`);
+      setCoOwnerFormError(`Share must be between 1 and ${remainingShare}.`);
       return;
     }
-    setFormError('');
+    setCoOwnerFormError('');
 
     const result = addOwnershipStake(selectedHorse.id, {
       name: coOwner.name.trim(),
@@ -437,7 +438,7 @@ export default function Ownership() {
                       <input className="field-input" value={coOwner.contact} onChange={(event) => setCoOwner((current) => ({ ...current, contact: event.target.value }))} disabled={!canManageOwnership} />
                     </label>
                   </div>
-                  {formError ? <div className="field-error" role="alert">{formError}</div> : null}
+                  {coOwnerFormError ? <div className="field-error" role="alert">{coOwnerFormError}</div> : null}
                   <button className="button button--primary ownership-full-button" type="button" onClick={addCoOwner} disabled={!canManageOwnership}>
                     Add owner to horse
                   </button>
@@ -480,12 +481,14 @@ export default function Ownership() {
                 onClick={() => {
                   if (row.record) {
                     setSelectedRecordId(row.record.id);
-                    setFormError('');
+                    setTransferFormError('');
+                    setCoOwnerFormError('');
                   } else {
                     const result = ensureOwnershipRecord(row.horse.id);
                     if (result.ok && result.recordId) {
                       setSelectedRecordId(result.recordId);
-                      setFormError('');
+                      setTransferFormError('');
+                      setCoOwnerFormError('');
                       pushToast({ title: 'Ownership record created', message: result.message, tone: 'success' });
                     } else if (!result.ok) {
                       pushToast({ title: 'Could not create record', message: result.message, tone: 'error' });
@@ -571,7 +574,7 @@ export default function Ownership() {
                   <input className="field-input" value={pendingDocuments} onChange={(event) => setPendingDocuments(event.target.value)} disabled={!canManageOwnership} />
                 </label>
               </div>
-              {formError ? <div className="field-error">{formError}</div> : null}
+              {transferFormError ? <div className="field-error" role="alert">{transferFormError}</div> : null}
               <button className="button button--primary ownership-full-button" type="button" onClick={saveTransfer} disabled={!canManageOwnership}>
                 Save transfer record
               </button>
@@ -598,12 +601,12 @@ export default function Ownership() {
                   <strong>{selectedRelationship?.currentOwner ?? selectedRecord.legalOwner}</strong>
                 </div>
                 <div>
-                  <span>Previous owner</span>
-                  <strong>Not recorded</strong>
+                  <span>Transfer status</span>
+                  <strong>{selectedRecord.transferStatus}</strong>
                 </div>
                 <div>
                   <span>Acquisition date</span>
-                  <strong>{formatDateLabel(selectedRelationship?.acquisitionDate ?? '')}</strong>
+                  <strong>{selectedRelationship?.acquisitionDate ? formatDateLabel(selectedRelationship.acquisitionDate) : '—'}</strong>
                 </div>
                 <div>
                   <span>Proof files</span>
