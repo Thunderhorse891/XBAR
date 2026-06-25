@@ -216,8 +216,8 @@ export function CommandPalette() {
           >
             {Object.entries(grouped).map(([category, items]) => (
               <li key={category} className="cp-group" role="presentation">
-                <div className="cp-group-label">{category}</div>
-                <ul role="group">
+                <div className="cp-group-label" aria-hidden="true">{category}</div>
+                <ul role="group" aria-label={category}>
                   {items.map((item) => {
                     const idx = flatIdx++;
                     const isActive = idx === activeIdx;

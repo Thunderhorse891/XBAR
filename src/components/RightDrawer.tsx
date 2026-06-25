@@ -16,6 +16,7 @@ function useFocusLock(ref: React.RefObject<HTMLElement | null>, active: boolean)
   useEffect(() => {
     if (!active || !ref.current) return;
     const el = ref.current;
+    const opener = document.activeElement;
     const focusable = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
     const first = el.querySelector<HTMLElement>(focusable);
     first?.focus();
@@ -37,9 +38,17 @@ function useFocusLock(ref: React.RefObject<HTMLElement | null>, active: boolean)
       }
     };
     el.addEventListener('keydown', trap);
-    return () => el.removeEventListener('keydown', trap);
+    return () => {
+      el.removeEventListener('keydown', trap);
+      if (opener instanceof HTMLElement && opener.isConnected) {
+        opener.focus();
+      }
+    };
   }, [active, ref]);
 }
+
+const MS_PER_DAY = 86_400_000;
+const VET_VISIT_OVERDUE_DAYS = 330;
 
 /* ── Drawer content renderers ────────────────────────────────────────── */
 
@@ -270,8 +279,8 @@ function NotificationCentreContent() {
   const today = new Date();
   const careDue = horses.filter((h) => {
     if (!h.lastVetVisit) return false;
-    const daysSince = Math.floor((today.getTime() - new Date(h.lastVetVisit).getTime()) / 86400000);
-    return daysSince > 330;
+    const daysSince = Math.floor((today.getTime() - new Date(h.lastVetVisit).getTime()) / MS_PER_DAY);
+    return daysSince > VET_VISIT_OVERDUE_DAYS;
   });
 
   const hasAny = pendingDocs.length > 0 || pendingTransfers.length > 0 || careDue.length > 0 || toasts.length > 0;
