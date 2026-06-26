@@ -238,7 +238,7 @@ export default function Expenses() {
       <div className="ops-workspace ops-workspace--split">
         <section className="ops-panel ops-panel--wide">
           <div className="ops-section-heading">
-            <div><span className="section-eyebrow">Profit intelligence</span><h2>Know the break-even before setting the sale price</h2></div>
+            <div><span className="section-eyebrow">Margin Planning</span><h2>Know the break-even before setting the sale price</h2></div>
             <Pill tone={profitGate ? 'amber' : 'emerald'}>{profitGate ? 'Ranch Ops' : 'Live margin'}</Pill>
           </div>
           {profitProfile ? (

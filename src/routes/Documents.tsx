@@ -26,7 +26,7 @@ const PIPELINE_STAGES: { id: PipelineStage; label: string; hint: string }[] = [
   { id: 'Upload', label: 'Upload', hint: 'Bring files in: choose documents, tag a source, and optionally attach a horse.' },
   { id: 'Processing', label: 'OCR / Processing', hint: 'OCR runs locally; extracted fields appear here while files are queued.' },
   { id: 'Review', label: 'Review', hint: 'Confirm the extracted match, assign the right horse, then approve or discard.' },
-  { id: 'Proof', label: 'Proof', hint: 'Use approved documents as ownership proof on the horse’s proof chain.' },
+  { id: 'Proof', label: 'Ownership', hint: 'Use approved documents to support the horse ownership record.' },
   { id: 'Share', label: 'Share', hint: 'Bundle approved documents into watermarked sale packets and hand off to Shared Access.' },
 ];
 
@@ -303,7 +303,7 @@ export default function Documents() {
                 },
                 {
                   id: 'go-proof-from-buyer',
-                  label: 'Go to Proof stage',
+                  label: 'Go to Ownership stage',
                   onSelect: () => goToStage('Proof'),
                 },
               ]
@@ -372,7 +372,7 @@ export default function Documents() {
             ? [
                 {
                   id: 'open-ownership',
-                  label: 'Open Ownership page (proof chains)',
+                  label: 'Open Ownership page',
                   onSelect: () => navigate('/ownership'),
                 },
                 {
@@ -447,12 +447,12 @@ export default function Documents() {
     }
     const requirementId = proofSelections[document.id];
     if (!requirementId) {
-      pushToast({ title: 'Pick a requirement', message: 'Choose which proof requirement this document satisfies.', tone: 'warning' });
+      pushToast({ title: 'Pick a requirement', message: 'Choose which ownership requirement this document satisfies.', tone: 'warning' });
       return;
     }
     const result = linkOwnershipProof(recordId, requirementId, document.id);
     pushToast({
-      title: result.ok ? 'Proof linked' : 'Proof link blocked',
+      title: result.ok ? 'Document linked' : 'Document link blocked',
       message: result.message,
       tone: result.ok ? 'success' : 'error',
     });
@@ -461,8 +461,8 @@ export default function Documents() {
     }
   };
 
-  // Packet generation is the guided premium workflow (release gate, margin
-  // intelligence, buyer capture, deal-room logging) — see SalePacketWizard.
+  // Packet generation is the guided premium workflow (release gate, margin,
+  // buyer capture, and deal-room logging) — see SalePacketWizard.
 
   const shareGroups = horses
     .map((horse) => ({ horse, documents: readyDocuments.filter((document) => document.horseId === horse.id) }))
@@ -476,12 +476,12 @@ export default function Documents() {
         eyebrow="Document Vault"
         entity="Your Documents"
         status={heroStatus}
-        summary="Every file moves through one path: upload, local OCR, human review, ownership proof, then watermarked sharing."
+        summary="Every file moves through one path: upload, local OCR, human review, ownership support, then watermarked sharing."
         evidence={[
           { label: 'Uploaded total', value: String(documents.length) },
           { label: 'Processing', value: String(queuedDocuments.length) },
           { label: 'Needs review', value: String(reviewQueue.length) },
-          { label: 'Proof-linked', value: String(proofLinkedCount) },
+          { label: 'Ownership-linked', value: String(proofLinkedCount) },
           { label: 'Share-ready', value: String(buyerSafeDocuments.length) },
         ]}
         risks={heroRisks}
@@ -856,7 +856,7 @@ export default function Documents() {
             ) : (
               <EmptyState
                 title="Review queue is clear"
-                description="Approved documents continue to the Proof stage; upload more files to keep the pipeline moving."
+                description="Approved documents continue to the Ownership stage; upload more files to keep the pipeline moving."
                 action={
                   <button className="button button--ghost button--compact" type="button" onClick={() => goToStage('Upload')}>
                     Go to Upload stage
@@ -891,8 +891,8 @@ export default function Documents() {
 
       {activeStage === 'Proof' ? (
         <Panel
-          title="Stage 4 · Proof"
-          description="Attach approved documents to the horse's ownership proof chain."
+          title="Stage 4 · Ownership"
+          description="Attach approved documents to the horse ownership record."
           className="cursor-context-menu"
           onContextMenu={(event) => openSurfaceMenu('proof', event)}
         >
@@ -926,7 +926,7 @@ export default function Documents() {
                     {record && normalized ? (
                       <div className="inline-actions">
                         <label className="field-stack" style={{ minWidth: 260 }}>
-                          <span className="field-label">Use as ownership proof…</span>
+                          <span className="field-label">Use for ownership record</span>
                           <select
                             className="field-input field-input--compact"
                             value={proofSelections[document.id] ?? ''}
@@ -934,7 +934,7 @@ export default function Documents() {
                               setProofSelections((current) => ({ ...current, [document.id]: event.target.value }))
                             }
                           >
-                            <option value="">Select proof requirement</option>
+                            <option value="">Select ownership requirement</option>
                             {requirements.map((requirement) => (
                               <option key={requirement.id} value={requirement.id}>
                                 {requirement.label} — {requirement.status}
@@ -948,7 +948,7 @@ export default function Documents() {
                           onClick={() => handleLinkProof(document)}
                           disabled={!proofSelections[document.id]}
                         >
-                          Link proof
+                          Link document
                         </button>
                       </div>
                     ) : (
@@ -969,8 +969,8 @@ export default function Documents() {
             </div>
           ) : (
             <EmptyState
-              title="No approved documents to use as proof"
-              description="Approve documents in the Review stage (with a horse assigned) and they appear here for ownership proof linking."
+              title="No approved documents ready for ownership"
+              description="Approve documents in the Review stage with a horse assigned, and they appear here for ownership linking."
               action={
                 <button className="button button--ghost button--compact" type="button" onClick={() => goToStage('Review')}>
                   Go to Review stage

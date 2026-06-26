@@ -54,7 +54,7 @@ function BuyerActionPanel({
       return;
     }
     if ((mode === 'question' || mode === 'proof-requested') && !message.trim()) {
-      setStatusText(mode === 'proof-requested' ? 'Describe the proof or document you want to review.' : 'Enter your question for the seller.');
+      setStatusText(mode === 'proof-requested' ? 'Describe the document you want to review.' : 'Enter your question for the seller.');
       return;
     }
     setSubmitting(true);
@@ -121,7 +121,7 @@ function BuyerActionPanel({
           Request a call
         </Button>
         <Button variant={mode === 'proof-requested' ? 'default' : 'outline'} size="sm" type="button" onClick={() => setMode('proof-requested')}>
-          Request proof
+          Request document
         </Button>
         <Button variant={mode === 'offer' ? 'default' : 'outline'} size="sm" type="button" onClick={() => setMode('offer')}>
           Submit an offer
@@ -144,7 +144,7 @@ function BuyerActionPanel({
             </Field>
           )}
           <Field className="md:col-span-2">
-            <FieldLabel htmlFor="buyer-message">{mode === 'question' ? 'Your question' : mode === 'proof-requested' ? 'Proof or document requested' : mode === 'offer' ? 'Terms or notes (optional)' : mode === 'packet-downloaded' ? 'Note for seller (optional)' : 'Best time to call'}</FieldLabel>
+            <FieldLabel htmlFor="buyer-message">{mode === 'question' ? 'Your question' : mode === 'proof-requested' ? 'Document requested' : mode === 'offer' ? 'Terms or notes (optional)' : mode === 'packet-downloaded' ? 'Note for seller (optional)' : 'Best time to call'}</FieldLabel>
             <Input
               id="buyer-message"
               value={message}

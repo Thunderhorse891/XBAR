@@ -16,7 +16,7 @@ const proofTiles = [
   },
   {
     label: 'Document Trust',
-    summary: 'Coggins, contracts, transfer files, invoices, and proof packets stay tied to the operation they belong to.',
+    summary: 'Coggins, contracts, transfer files, invoices, and sale packets stay tied to the operation they belong to.',
   },
   {
     label: 'Care Cadence',
@@ -131,16 +131,16 @@ export default function SetupWorkspace() {
               </div>
               <div>
                 <span className="premium-setup-wordmark">XBAR</span>
-                <span className="premium-setup-kicker">Command workspace</span>
+                <span className="premium-setup-kicker">Ranch workspace</span>
               </div>
             </div>
             <span className="premium-setup-status">{accessLabel}</span>
           </div>
 
           <div className="premium-setup-brand__content">
-            <p className="premium-setup-eyebrow">Operational foundation</p>
+            <p className="premium-setup-eyebrow">Ranch Setup</p>
             <h1 id="setup-brand-title" className="premium-setup-brand-title">
-              Build your operating workspace
+              Build your ranch workspace
             </h1>
             <p className="premium-setup-brand-copy">
               Start with clean ranch identity, then add horses, records, documents, care, sales, and ownership.
@@ -172,7 +172,7 @@ export default function SetupWorkspace() {
             <div className="premium-setup-card__header">
               <p className="premium-setup-card-eyebrow">Ranch Profile</p>
               <h2>Set the identity your team will trust.</h2>
-              <p>This becomes the default operating layer for records, owners, horses, and documents.</p>
+              <p>This becomes the default workspace for records, owners, horses, and documents.</p>
             </div>
 
             <div className="premium-setup-fields">

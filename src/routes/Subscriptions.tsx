@@ -139,7 +139,7 @@ function HorseProfileCarousel() {
                   <dd>{card.owner}</dd>
                 </div>
                 <div>
-                  <dt>Proof</dt>
+                  <dt>Documents</dt>
                   <dd>{card.documents}</dd>
                 </div>
                 <div>
@@ -157,7 +157,7 @@ function HorseProfileCarousel() {
       </div>
       <div className="subscription-floating-box subscription-floating-box--one">
         <span>Records locked</span>
-        <strong>Proof vault synced</strong>
+        <strong>Documents synced</strong>
       </div>
       <div className="subscription-floating-box subscription-floating-box--two">
         <span>Buyer action</span>
@@ -196,6 +196,11 @@ export default function Subscriptions() {
       ? 'Secure checkout ready'
       : 'Sign in required for checkout'
     : 'Billing not configured yet';
+  const checkoutSignals = [
+    { label: 'Managed checkout', state: billingEnabled ? 'Enabled' : 'Paused', value: billingEnabled ? 100 : 28 },
+    { label: 'Stripe fallback', state: anyPaymentLink ? 'Payment links ready' : 'No links configured', value: anyPaymentLink ? 100 : 36 },
+    { label: 'Workspace identity', state: hasManagedIdentity ? 'Session verified' : 'Sign in needed', value: hasManagedIdentity ? 100 : 44 },
+  ];
 
   const emit = (eventName: Parameters<typeof productEvent>[0], payload: Record<string, unknown>, severity: 'info' | 'warning' = 'info') => {
     void trackRuntimeEvent({ workspaceId, severity, ...productEvent(eventName, payload) });
@@ -248,6 +253,30 @@ export default function Subscriptions() {
           </div>
         </div>
         <HorseProfileCarousel />
+      </section>
+
+      <section className="subscription-readiness-console" aria-label="Checkout readiness">
+        <div className="subscription-readiness-console__copy">
+          <span>Stripe-ready plan engine</span>
+          <strong>{billingReadinessLabel}</strong>
+          <p>
+            Paid plan actions still use the production path already in XBAR: managed checkout first,
+            then configured Stripe payment links. The visual layer clarifies the gate without changing billing rules.
+          </p>
+        </div>
+        <div className="subscription-readiness-console__grid">
+          {checkoutSignals.map((signal) => (
+            <div className="subscription-readiness-card" key={signal.label}>
+              <div><span>{signal.label}</span><strong>{signal.state}</strong></div>
+              <i><span style={{ width: `${signal.value}%` }} /></i>
+            </div>
+          ))}
+        </div>
+        <div className="subscription-checkout-boxes" aria-hidden="true">
+          <span>Plan selected</span>
+          <span>Identity checked</span>
+          <span>Checkout guarded</span>
+        </div>
       </section>
 
       <section id="plans" className="subscription-plans" aria-label="Choose a subscription tier">

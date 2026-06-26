@@ -51,7 +51,7 @@ test('operational value pulse recommends the largest operating gap without inven
   assert.doesNotMatch(JSON.stringify(pulse), /hours saved|money saved/i);
 });
 
-test('operational value pulse guides an empty workspace to its first command record', () => {
+test('operational value pulse guides an empty workspace to its first horse record', () => {
   const pulse = buildOperationalValuePulse({
     horseCount: 0,
     linkedDocumentHorseCount: 0,

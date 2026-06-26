@@ -1,0 +1,21 @@
+# XBAR — Equine Operations Command
+User-agent: *
+Allow: /$
+Allow: /landing
+Allow: /login
+Allow: /privacy
+Allow: /terms
+
+# Keep authenticated application surfaces out of the index
+Disallow: /api/
+Disallow: /settings
+Disallow: /horses
+Disallow: /documents
+Disallow: /ownership
+Disallow: /sales
+Disallow: /expenses
+Disallow: /reminders
+Disallow: /shared
+Disallow: /setup
+
+Sitemap: https://xbar.app/sitemap.xml

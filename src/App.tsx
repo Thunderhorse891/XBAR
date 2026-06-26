@@ -9,6 +9,7 @@ import { InteractionShell } from './components/InteractionSystem';
 import { Toaster } from './components/ui/sonner';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
 import { useCloudStore } from './store/useCloudStore';
+import { useWorkspaceHydrated, useWorkspaceReady } from './store/useXbarStore';
 import './routes/operationsHierarchy.css';
 import './routes/interactionSystem.css';
 import './routes/xbarCommandSystem.css';
@@ -16,6 +17,7 @@ import './routes/metalBrandSystem.css';
 import './routes/commandCenterLocal.css';
 import './routes/premiumOperatingSystem.css';
 import './routes/premiumSaasExperience.css';
+import './routes/productionFinal.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Breeding = lazy(() => import('./routes/Breeding'));
@@ -51,7 +53,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/documents': 'Documents',
   '/expenses': 'Expenses',
   '/follow-ups': 'Buyer Follow-ups',
-  '/horses': 'My Horses',
+  '/horses': 'Horses',
   '/landing': 'Ranch Platform',
   '/login': 'Login',
   '/medical': 'Health',
@@ -73,8 +75,52 @@ function useHashRouting() {
 
 function routeTitle(path: string) {
   if (path.startsWith('/profiles/')) return 'XBAR | Listings';
-  if (path.startsWith('/horses/')) return 'XBAR | Horse Command File';
+  if (path.startsWith('/horses/')) return 'XBAR | Horse';
   return `XBAR | ${ROUTE_LABELS[path] ?? 'Ranch'}`;
+}
+
+const DEFAULT_META_DESCRIPTION =
+  'XBAR turns scattered horse paperwork into trusted, buyer-ready digital records — OCR-assisted intake, ownership integrity, compliance deadlines, and watermarked sale packets in one command system.';
+
+// Distinct titles and descriptions for the publicly indexable routes. These
+// compound the static SEO in index.html so each crawlable page presents its
+// own snippet in search and social results instead of the shared default.
+const PUBLIC_ROUTE_META: Record<string, { title: string; description: string }> = {
+  '/landing': {
+    title: 'XBAR — Clean records, ownership integrity, faster sale readiness',
+    description: DEFAULT_META_DESCRIPTION,
+  },
+  '/login': {
+    title: 'Sign in or create your workspace | XBAR',
+    description:
+      'Sign in to XBAR or create a local-first workspace for horse records, ownership, documents, and sale-ready buyer packets.',
+  },
+  '/privacy': {
+    title: 'Privacy Policy | XBAR',
+    description: 'How XBAR handles workspace data, document storage, and account information.',
+  },
+  '/terms': {
+    title: 'Terms of Service | XBAR',
+    description: 'The terms that govern use of the XBAR equine operations platform.',
+  },
+};
+
+function setMetaDescription(content: string) {
+  if (typeof document === 'undefined') return;
+  let tag = document.querySelector('meta[name="description"]');
+  if (!tag) {
+    tag = document.createElement('meta');
+    tag.setAttribute('name', 'description');
+    document.head.appendChild(tag);
+  }
+  tag.setAttribute('content', content);
+}
+
+function applyRouteMeta(path: string) {
+  if (typeof document === 'undefined') return;
+  const meta = PUBLIC_ROUTE_META[path];
+  document.title = meta ? meta.title : routeTitle(path);
+  setMetaDescription(meta ? meta.description : DEFAULT_META_DESCRIPTION);
 }
 
 function RouteTelemetry() {
@@ -91,10 +137,35 @@ function RouteTelemetry() {
   }, [location.pathname, location.search, workspaceId]);
 
   useEffect(() => {
-    document.title = routeTitle(location.pathname);
+    applyRouteMeta(location.pathname);
   }, [location.pathname]);
 
   return null;
+}
+
+function hasCommandCenterEntry() {
+  if (typeof window === 'undefined') return false;
+  return window.localStorage.getItem('xbar-command-center-entry') === 'true';
+}
+
+function AppHomeGate() {
+  const location = useLocation();
+  const session = useCloudStore((state) => state.session);
+  const workspaceHydrated = useWorkspaceHydrated();
+  const workspaceReady = useWorkspaceReady();
+
+  if (location.pathname === '/' && !session && !hasCommandCenterEntry()) {
+    if (!workspaceHydrated) return <div className="app-loading-shell">Loading XBAR...</div>;
+    if (!workspaceReady) return <Landing />;
+  }
+
+  return (
+    <RequireCloudAuth>
+      <RequireWorkspaceSetup>
+        <MainLayout />
+      </RequireWorkspaceSetup>
+    </RequireCloudAuth>
+  );
 }
 
 export default function App() {
@@ -107,7 +178,7 @@ export default function App() {
         <InteractionShell />
         <SubscriptionEnforcement />
         <RouteTelemetry />
-        <Suspense fallback={<div className="app-loading-shell">Loading XBAR Command...</div>}>
+        <Suspense fallback={<div className="app-loading-shell">Loading XBAR...</div>}>
           <Routes>
             <Route path="/profiles/:id" element={<BuyerProfile />} />
             <Route path="/landing" element={<Landing />} />
@@ -116,7 +187,7 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/subscribe" element={<RequireCloudAuth><Subscriptions /></RequireCloudAuth>} />
             <Route path="/setup" element={<RequireCloudAuth><SetupWorkspace /></RequireCloudAuth>} />
-            <Route path="/" element={<RequireCloudAuth><RequireWorkspaceSetup><MainLayout /></RequireWorkspaceSetup></RequireCloudAuth>}>
+            <Route path="/" element={<AppHomeGate />}>
               <Route index element={<Dashboard />} />
               <Route path="horses" element={<Horses />} />
               <Route path="horses/:id" element={<HorseDetail />} />

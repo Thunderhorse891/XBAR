@@ -179,7 +179,7 @@ export function createOwnershipRecord(horse: HorseRecord): OwnershipRecord {
         action: 'created',
         entityType: 'ownership',
         entityId: id,
-        summary: 'Ownership record created — proof chain initialized',
+        summary: 'Ownership record created — document checklist initialized',
       }),
     ],
   };

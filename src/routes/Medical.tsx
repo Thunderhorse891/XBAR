@@ -155,7 +155,7 @@ export default function Medical() {
       <CommandBrief
         variant="wide"
         eyebrow="Health & Care"
-        entity="Horse Health"
+        entity="Health & Care"
         status={
           medicalWatch.length || overdueFollowUps.length
             ? { label: 'Care overdue', tone: 'rose' }

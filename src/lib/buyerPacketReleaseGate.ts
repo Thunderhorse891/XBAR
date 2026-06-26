@@ -62,7 +62,7 @@ export function buildBuyerPacketReleaseGate(params: {
     blockers: uniqueBlockers,
     warnings: uniqueWarnings,
     summary: allowed
-      ? 'Buyer packet release is clear. Title, proof, care, and packet readiness meet the release standard.'
+      ? 'Buyer packet release is clear. Title, documents, care, and packet readiness meet the release standard.'
       : `${uniqueBlockers.length} blocker${uniqueBlockers.length === 1 ? '' : 's'} must clear before buyer packet release.`,
     nextAction,
   };

@@ -21,7 +21,7 @@ const pipeline = [
   { step: 'Upload', copy: 'Bring in registration papers, transfer forms, vet records, and media.' },
   { step: 'Local OCR', copy: 'Documents are read on-device so intake keeps pace with real paperwork volume.' },
   { step: 'Human review', copy: 'Nothing becomes part of the record until a person verifies it.' },
-  { step: 'Ownership proof', copy: 'Approved documents link into each horse’s ownership proof chain.' },
+  { step: 'Ownership review', copy: 'Approved documents link into each horse ownership record.' },
   { step: 'Watermarked sharing', copy: 'Approved records bundle into watermarked sale packets for buyers.' },
 ];
 
@@ -34,7 +34,7 @@ const pillars = [
   {
     title: 'Ownership integrity',
     copy: 'Track legal owner, co-owner structure, transfer status, and compliance deadlines before paperwork blocks a sale.',
-    details: ['Ownership proof chain per horse', 'Transfer status and deadlines surfaced', 'Every change lands in the audit log'],
+    details: ['Ownership documents per horse', 'Transfer status and deadlines surfaced', 'Every change lands in the audit log'],
   },
   {
     title: 'Faster sale readiness',
@@ -56,6 +56,21 @@ const painPoints = [
   'Internal handoffs create delays and risk',
 ];
 
+const segments = [
+  {
+    title: 'Breeding & broodmare programs',
+    copy: 'Keep registration papers, foaling history, and ownership structure attached to each animal so breeding decisions and transfers never stall on missing paperwork.',
+  },
+  {
+    title: 'Sale barns & consignors',
+    copy: 'Turn approved records into watermarked, buyer-ready sale packets and shared profiles in one click — present documentation that closes faster and protects your reputation.',
+  },
+  {
+    title: 'Trainers, ranches & multi-horse operations',
+    copy: 'Give a whole team one trusted record per horse — care status, documents, compliance deadlines, and buyer movement — without losing history in folders and group texts.',
+  },
+];
+
 const trustPoints = [
   {
     title: 'Source-record discipline',
@@ -63,7 +78,7 @@ const trustPoints = [
   },
   {
     title: 'Audit-logged operations',
-    copy: 'Proof links, verifications, and status changes are recorded, so your team always knows who changed what and when.',
+    copy: 'Document links, verifications, and status changes are recorded, so your team always knows who changed what and when.',
   },
   {
     title: 'Controlled buyer access',
@@ -90,6 +105,46 @@ const questions = [
   },
 ];
 
+const operationalPreviewRows = [
+  {
+    label: 'Sale Readiness',
+    value: 'Ready',
+    detail: 'Approved packet, current Coggins, and buyer-safe profile are in place.',
+  },
+  {
+    label: 'Buyer-Safe Proof',
+    value: 'Clear',
+    detail: 'Only verified records leave the private workspace.',
+  },
+  {
+    label: 'Document Risk',
+    value: '2 reviews',
+    detail: 'Registration and transfer files are waiting on human approval.',
+  },
+  {
+    label: 'Ownership Chain',
+    value: 'Verified',
+    detail: 'Legal owner and co-owner structure are attached to the horse.',
+  },
+  {
+    label: 'Release Blocker',
+    value: '1 hold',
+    detail: 'Renewal deadline must clear before the public packet opens.',
+  },
+  {
+    label: 'Asset Timeline',
+    value: 'Current',
+    detail: 'Care, farrier, service, document, and sale events stay ordered.',
+  },
+];
+
+const showcaseHorseCards = [
+  { name: 'Silver Mesa', role: 'Sale Prospect', proof: '18 docs', signal: 'Packet ready', value: '$48k ask' },
+  { name: 'Blue Hancock', role: 'Rope Horse', proof: '12 docs', signal: 'Farrier due', value: '$32k insured' },
+  { name: 'Mesa Drift', role: 'Broodmare', proof: '24 docs', signal: 'Foal window', value: 'May 14' },
+  { name: 'Copper Line', role: 'Prospect', proof: '9 docs', signal: 'Buyer room', value: '3 inquiries' },
+];
+
 const signupPath = (plan?: SubscriptionTier) => `/login?mode=signup${plan ? `&plan=${encodeURIComponent(plan)}` : ''}`;
 
 function Wordmark() {
@@ -98,7 +153,7 @@ function Wordmark() {
       <span className="xbar-wordmark__mark" aria-hidden="true"><XbarMark tone="mono" /></span>
       <span className="xbar-wordmark__copy">
         <strong>XBAR</strong>
-        <span>Records &amp; sale readiness</span>
+        <span>Equine operations infrastructure</span>
       </span>
     </span>
   );
@@ -115,7 +170,7 @@ function CommandPreview() {
           <p className="revenue-kicker">Operational record</p>
           <strong>Smart Lena Bar &middot; 2019 mare</strong>
         </div>
-        <span className="revenue-chip revenue-chip--blue">Proof chain complete</span>
+        <span className="revenue-chip revenue-chip--blue">Documents complete</span>
       </div>
       <dl className="revenue-console__rows">
         <div className="revenue-console__row">
@@ -152,6 +207,72 @@ function CommandPreview() {
   );
 }
 
+function RevenueIntelligenceShowcase() {
+  const carouselCards = [...showcaseHorseCards, ...showcaseHorseCards];
+
+  return (
+    <section className="revenue-intelligence-showcase" aria-labelledby="revenue-intelligence-title">
+      <div className="revenue-intelligence-showcase__copy">
+        <p className="revenue-kicker">Operational preview</p>
+        <h2 id="revenue-intelligence-title">Sale readiness, proof, and ownership without the noise.</h2>
+        <p>
+          XBAR is organized around the moments that decide whether a horse can be trusted,
+          transferred, shown, or sold. Every module answers a real operating question.
+        </p>
+        <div className="revenue-intelligence-showcase__actions">
+          <Link className="public-action public-action--primary" to={signupPath('Professional')}>
+            Create your workspace
+          </Link>
+          <Link className="public-action" to="#pricing-heading">
+            Compare plans
+          </Link>
+        </div>
+      </div>
+
+      <div className="revenue-command-visual revenue-record-preview" aria-label="Static XBAR operational preview">
+        <div className="revenue-record-preview__top">
+          <span>XBAR record view</span>
+          <strong>Buyer-safe operating file</strong>
+        </div>
+        <div className="revenue-record-preview__modules">
+          {operationalPreviewRows.map((item) => (
+            <article className="revenue-record-module" key={item.label}>
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+              <p>{item.detail}</p>
+            </article>
+          ))}
+        </div>
+        <ol className="revenue-record-preview__chain" aria-label="Record timeline">
+          <li><span>01</span><strong>Identity</strong></li>
+          <li><span>02</span><strong>Ownership</strong></li>
+          <li><span>03</span><strong>Care</strong></li>
+          <li><span>04</span><strong>Documents</strong></li>
+          <li><span>05</span><strong>Sale packet</strong></li>
+        </ol>
+      </div>
+
+      <div className="revenue-horse-carousel" aria-label="XBAR horse record examples">
+        <div className="revenue-horse-carousel__track">
+          {carouselCards.map((card, index) => (
+            <article className="revenue-horse-card" key={`${card.name}-${index}`}>
+              <div>
+                <span>{card.role}</span>
+                <strong>{card.name}</strong>
+              </div>
+              <dl>
+                <div><dt>Documents</dt><dd>{card.proof}</dd></div>
+                <div><dt>Signal</dt><dd>{card.signal}</dd></div>
+                <div><dt>Value</dt><dd>{card.value}</dd></div>
+              </dl>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function Landing() {
   const navigate = useNavigate();
   const session = useCloudStore((state) => state.session);
@@ -183,37 +304,50 @@ export default function Landing() {
         </nav>
       </header>
 
-      <section className="revenue-hero" aria-labelledby="hero-heading">
-        <div className="revenue-hero__copy">
-          <p className="revenue-kicker">Built for performance horse operations</p>
-          <h1 id="hero-heading">Clean records. Ownership integrity. Faster sale readiness.</h1>
-          <p className="revenue-hero__lead">
-            XBAR turns scattered paperwork, ownership details, and horse documentation into trusted, buyer-ready digital records &mdash; with OCR-assisted intake, compliance deadlines, and watermarked sale packets in one system.
+      <section className="revenue-hero revenue-hero--editorial" aria-labelledby="hero-heading">
+        <p className="revenue-kicker">Equine operations infrastructure</p>
+        <h1 id="hero-heading">
+          <span>One trusted record for every horse.</span>
+        </h1>
+        <p className="revenue-hero__lead">
+          Ownership, documents, care history, and sale readiness organized into a buyer-safe operating system for serious horse businesses.
+        </p>
+        <div className="revenue-hero__actions">
+          <Link className="public-action public-action--primary" to={signupPath('Professional')} onClick={() => trackPlan('Professional')}>
+            Create your workspace
+          </Link>
+          <Link className="public-action" to="/login" onClick={() => trackCta('hero', '/login')}>
+            Sign in
+          </Link>
+        </div>
+        <ul className="revenue-proof-line revenue-proof-line--center">
+          <li>Ownership chain</li>
+          <li>Buyer-safe packets</li>
+          <li>Human-verified records</li>
+        </ul>
+      </section>
+
+      <section className="revenue-reveal" aria-labelledby="reveal-heading">
+        <div className="revenue-reveal__copy">
+          <p className="revenue-kicker">The record itself</p>
+          <h2 id="reveal-heading">Every horse, resolved to a single source of truth.</h2>
+          <p>
+            Ownership, transfer status, compliance, documents, and sale readiness &mdash; verified by a
+            person, audit-logged, and ready to share the moment a buyer asks.
           </p>
-          <div className="revenue-hero__actions">
-            <Link className="public-action public-action--primary" to={signupPath('Professional')} onClick={() => trackPlan('Professional')}>
-              Create your workspace
-            </Link>
-            <Link className="public-action" to="/login" onClick={() => trackCta('hero', '/login')}>
-              Sign in
-            </Link>
-          </div>
-          <ul className="revenue-proof-line">
-            <li>Local-first workspace</li>
-            <li>Human review before records are final</li>
-            <li>Records stay intact across plans</li>
-          </ul>
         </div>
         <CommandPreview />
       </section>
+
+      <RevenueIntelligenceShowcase />
 
       <section className="revenue-section" aria-labelledby="pipeline-heading">
         <div className="revenue-section__header">
           <div>
             <p className="revenue-kicker">One path for every document</p>
-            <h2 id="pipeline-heading">From paperwork to proof, in five steps.</h2>
+            <h2 id="pipeline-heading">From paperwork to ready records, in five steps.</h2>
           </div>
-          <p>Every file moves through one pipeline: upload, local OCR, human review, ownership proof, then watermarked sharing. No shortcuts, no untracked copies.</p>
+          <p>Every file moves through one pipeline: upload, local OCR, human review, ownership review, then watermarked sharing. No shortcuts, no untracked copies.</p>
         </div>
         <ol className="revenue-pipeline">
           {pipeline.map((item, index) => (
@@ -280,6 +414,26 @@ export default function Landing() {
               <article className="revenue-trust-card" key={point.title}>
                 <h3>{point.title}</h3>
                 <p>{point.copy}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="revenue-section revenue-section--bordered" aria-labelledby="segments-heading">
+        <div className="revenue-section__inner">
+          <div className="revenue-section__header">
+            <div>
+              <p className="revenue-kicker">Who it's for</p>
+              <h2 id="segments-heading">Built for the operations where paperwork decides the deal.</h2>
+            </div>
+            <p>From a single broodmare program to a multi-rider barn, XBAR gives every horse one record your team and your buyers can trust.</p>
+          </div>
+          <div className="revenue-trust-grid">
+            {segments.map((segment) => (
+              <article className="revenue-trust-card" key={segment.title}>
+                <h3>{segment.title}</h3>
+                <p>{segment.copy}</p>
               </article>
             ))}
           </div>

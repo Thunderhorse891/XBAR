@@ -46,13 +46,13 @@ test('listed horse with verified proof and current Coggins is sale-ready', () =>
   assert.equal(result.items.length, 0);
 });
 
-test('unverified proof chain prices the listing as blocked with a fix action', () => {
+test('unverified ownership documents price the listing as blocked with a fix action', () => {
   const record = createOwnershipRecord({ id: 'h1', name: 'Spirit', owner: 'Erin' } as HorseRecord);
   const result = assessRevenueAtRisk([horse('h1', 'Spirit', 18500)], [record], [cogginsDoc('h1', 90)], now);
   assert.equal(result.valueAtRisk, 18500);
   assert.equal(result.items.length, 1);
-  assert.match(result.items[0]!.blockers[0] ?? '', /proofs unverified/);
-  assert.match(result.items[0]!.actionLabel, /Verify proofs for Spirit/);
+  assert.match(result.items[0]!.blockers[0] ?? '', /documents unverified/);
+  assert.match(result.items[0]!.actionLabel, /Verify documents for Spirit/);
   assert.equal(result.items[0]!.actionRoute, '/ownership');
 });
 

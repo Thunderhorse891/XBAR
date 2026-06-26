@@ -82,7 +82,7 @@ export default function Login() {
   };
 
   const label = !supabaseReady ? 'Local evaluation workspace' : authMode === 'signin' ? 'Welcome back' : selectedPlan ? `${selectedPlan} workspace` : 'Start your operation';
-  const title = !supabaseReady ? 'Evaluate the XBAR command center' : authMode === 'signin' ? 'Sign in to your account' : 'Create your XBAR account';
+  const title = !supabaseReady ? 'Evaluate XBAR' : authMode === 'signin' ? 'Sign in to your account' : 'Create your XBAR account';
   const description = !supabaseReady ? 'Explore the complete operating workflow in this browser before cloud account services are enabled.' : selectedPlan ? `Create your workspace, then review ${selectedPlan} in secure checkout.` : 'Your ranch, horses, records, and next actions in one place.';
 
   return <main className="xbar-login-shell lp-shell"><div className="xbar-login-noise" aria-hidden="true" /><div className="lp-frame"><section className="lp-brand" aria-labelledby="login-brand-title"><div className="brand-canvas" aria-hidden="true"><div className="brand-canvas__lockup"><span className="brand-canvas__mark"><XbarMark tone="mono" /></span><span className="brand-canvas__bar">XBAR</span><span className="brand-canvas__rule" /></div></div><div className="lp-tagline"><strong id="login-brand-title">Horse Management.</strong><span>Reimagined.</span></div><div className="lp-features">{features.map((feature) => <div className="lp-feature" key={feature}>{feature}</div>)}</div><p className="lp-card-sub">Built for ranches, breeders, and serious horse owners.</p></section>

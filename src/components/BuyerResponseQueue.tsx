@@ -19,7 +19,7 @@ function eventLabel(kind: BuyerRoomEvent['kind']) {
     'packet-downloaded': 'Packet downloaded',
     question: 'Buyer question',
     'call-requested': 'Call requested',
-    'proof-requested': 'Proof requested',
+    'proof-requested': 'Document requested',
     offer: 'Buyer offer',
     'seller-response': 'Seller response',
     'deal-status': 'Deal status',
@@ -221,7 +221,7 @@ export function BuyerResponseQueue() {
       <Panel
         eyebrow="Buyer response queue"
         title="Buyer activity"
-        description="Questions, proof requests, offers, packet downloads, scheduled follow-ups, and seller responses from shared buyer links."
+        description="Questions, document requests, offers, packet downloads, scheduled follow-ups, and seller responses from shared buyer links."
         meta={<Pill tone={openRequests.length ? 'amber' : activity.length ? 'blue' : 'slate'}>{openRequests.length ? `${openRequests.length} response needed` : activity.length ? 'Activity current' : 'Quiet'}</Pill>}
         action={<Button variant="outline" size="sm" disabled={syncing} onClick={() => void refresh()}>{syncing ? 'Refreshing...' : 'Refresh activity'}</Button>}
       >
@@ -231,7 +231,7 @@ export function BuyerResponseQueue() {
             <TabsTrigger value="activity">All activity ({activity.length})</TabsTrigger>
           </TabsList>
           <TabsContent value="responses">
-            {renderEvents(openRequests, 'No buyer requests waiting', 'New buyer questions, call requests, and proof requests will appear here.')}
+            {renderEvents(openRequests, 'No buyer requests waiting', 'New buyer questions, call requests, and document requests will appear here.')}
           </TabsContent>
           <TabsContent value="activity">
             {renderEvents(activity, 'No buyer activity yet', 'Share a buyer packet to begin tracking views, requests, and offers.')}
@@ -271,7 +271,7 @@ export function BuyerResponseQueue() {
               rows={6}
               value={responseNote}
               onChange={(event) => setResponseNote(event.target.value)}
-              placeholder="Write the answer, proof delivered, or call outcome shared with the buyer."
+              placeholder="Write the answer, document shared, or call outcome shared with the buyer."
               aria-invalid={Boolean(responseError)}
               disabled={Boolean(respondingEventId)}
             />

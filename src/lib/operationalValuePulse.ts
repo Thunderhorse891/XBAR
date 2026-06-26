@@ -49,8 +49,8 @@ export function buildOperationalValuePulse(input: OperationalValuePulseInput): O
     return {
       score: 0,
       tone: 'risk',
-      headline: 'Build the first command record.',
-      summary: 'XBAR can begin controlling risk once the first horse and source document are connected.',
+      headline: 'Add the first horse record.',
+      summary: 'XBAR becomes useful once the first horse and source document are connected.',
       signals: [],
       nextAction: {
         label: 'Create the first horse',
@@ -109,7 +109,7 @@ export function buildOperationalValuePulse(input: OperationalValuePulseInput): O
   ];
 
   let nextAction = {
-    label: 'Open the command record',
+    label: 'Open horse records',
     detail: 'Review the operation from horse records, source documents, care, and ownership.',
     path: '/horses',
   };
@@ -157,7 +157,7 @@ export function buildOperationalValuePulse(input: OperationalValuePulseInput): O
       ? 'The operation is under control.'
       : tone === 'watch'
         ? 'XBAR is carrying useful operating context.'
-        : 'The command record needs attention.';
+        : 'The workspace needs attention.';
   const summary =
     tone === 'clear'
       ? 'Core records are connected and the highest-risk operating queues are clear.'
