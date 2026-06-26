@@ -2,26 +2,26 @@
    This file upgrades shared surfaces without changing route, auth, billing, or data logic. */
 
 :root {
-  --xbar-ink: #f7f8f8;
-  --xbar-ink-soft: #c4c8cd;
-  --xbar-muted: #8a8f98;
-  --xbar-muted-2: #6b7079;
-  --xbar-panel: rgba(17, 18, 20, 0.86);
-  --xbar-panel-solid: #0f1011;
-  --xbar-panel-soft: #141517;
-  --xbar-line: rgba(255, 255, 255, 0.08);
-  --xbar-line-strong: rgba(255, 255, 255, 0.13);
-  --xbar-blue: #4ea3ff;
-  --xbar-blue-strong: #2d8cff;
-  --xbar-blue-soft: rgba(78, 163, 255, 0.10);
-  --xbar-steel: #2a2b2e;
-  --xbar-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --xbar-shadow-hover: 0 8px 24px -12px rgba(0, 0, 0, 0.7);
-  --xbar-focus: 0 0 0 3px rgba(78, 163, 255, 0.25);
+  --xbar-ink: #0b1120;
+  --xbar-ink-soft: #1f2937;
+  --xbar-muted: #627086;
+  --xbar-muted-2: #8492a6;
+  --xbar-panel: rgba(255, 255, 255, 0.86);
+  --xbar-panel-solid: #ffffff;
+  --xbar-panel-soft: #f6f9fc;
+  --xbar-line: rgba(100, 116, 139, 0.2);
+  --xbar-line-strong: rgba(100, 116, 139, 0.34);
+  --xbar-blue: #1e73e8;
+  --xbar-blue-strong: #155fc5;
+  --xbar-blue-soft: rgba(30, 115, 232, 0.08);
+  --xbar-steel: #c6d0dc;
+  --xbar-shadow: 0 24px 70px rgba(15, 23, 42, 0.08);
+  --xbar-shadow-hover: 0 32px 90px rgba(15, 23, 42, 0.13);
+  --xbar-focus: 0 0 0 4px rgba(30, 115, 232, 0.16);
 }
 
 .xbar-command-shell {
-  background: #141517 !important;
+  background: #f7f9fc !important;
   color: var(--xbar-ink);
 }
 
@@ -34,7 +34,7 @@
     linear-gradient(90deg, rgba(15, 23, 42, 0.022) 1px, transparent 1px),
     radial-gradient(circle at 12% 0%, rgba(30, 115, 232, 0.12), transparent 30rem),
     radial-gradient(circle at 90% 12%, rgba(198, 208, 220, 0.26), transparent 28rem),
-    linear-gradient(180deg, #141517 0%, #f4f7fb 48%, #141517 100%) !important;
+    linear-gradient(180deg, #fbfdff 0%, #f4f7fb 48%, #eef3f8 100%) !important;
   background-size: 76px 76px, 76px 76px, auto, auto, auto !important;
 }
 
@@ -69,7 +69,7 @@
   border: 1px solid rgba(15, 23, 42, 0.035);
   background:
     linear-gradient(180deg, rgba(15, 23, 42, 0.052), rgba(30, 115, 232, 0.032), rgba(15, 23, 42, 0.026));
-  box-shadow: inset 1px 0 0 rgba(20, 21, 23, 0.74);
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.74);
 }
 
 .xbar-shell-x::before { transform: rotate(43deg); }
@@ -127,9 +127,9 @@
 /* Premium shell */
 .xbar-command-shell > aside {
   background:
-    linear-gradient(180deg, rgba(20, 21, 23, 0.96), rgba(243, 247, 252, 0.94)) !important;
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(243, 247, 252, 0.94)) !important;
   border-right: 1px solid rgba(100, 116, 139, 0.2) !important;
-  box-shadow: 18px 0 60px rgba(15, 23, 42, 0.055), inset -1px 0 0 rgba(20, 21, 23, 0.86) !important;
+  box-shadow: 18px 0 60px rgba(15, 23, 42, 0.055), inset -1px 0 0 rgba(255, 255, 255, 0.86) !important;
 }
 
 .xbar-command-shell aside .xbar-wordmark__mark svg,
@@ -156,9 +156,9 @@
 .xbar-command-shell aside a[aria-current="page"] {
   border-color: rgba(30, 115, 232, 0.52) !important;
   background:
-    linear-gradient(90deg, rgba(30, 115, 232, 0.12), rgba(20, 21, 23, 0.74)) !important;
-  color: var(--xbar-ink) !important;
-  box-shadow: 0 14px 34px rgba(30, 115, 232, 0.1), inset 0 1px 0 rgba(20, 21, 23, 0.92) !important;
+    linear-gradient(90deg, rgba(30, 115, 232, 0.12), rgba(255, 255, 255, 0.74)) !important;
+  color: #0b1120 !important;
+  box-shadow: 0 14px 34px rgba(30, 115, 232, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.92) !important;
 }
 
 .xbar-command-shell aside a[aria-current="page"]::after {
@@ -167,7 +167,7 @@
 
 .xbar-command-topbar {
   border-bottom: 1px solid rgba(100, 116, 139, 0.18) !important;
-  background: rgba(20, 21, 23, 0.83) !important;
+  background: rgba(255, 255, 255, 0.83) !important;
   color: var(--xbar-ink) !important;
   box-shadow: 0 16px 42px -34px rgba(15, 23, 42, 0.45), inset 0 -1px 0 rgba(30, 115, 232, 0.08) !important;
   backdrop-filter: blur(20px) saturate(1.12) !important;
@@ -182,9 +182,9 @@
 nav[aria-label="Mobile quick navigation"],
 #mobile-more-menu {
   border-color: rgba(100, 116, 139, 0.24) !important;
-  background: rgba(20, 21, 23, 0.9) !important;
+  background: rgba(255, 255, 255, 0.9) !important;
   color: var(--xbar-ink) !important;
-  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.16), inset 0 1px 0 rgba(20, 21, 23, 0.95) !important;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
   backdrop-filter: blur(18px) saturate(1.12);
 }
 
@@ -208,10 +208,10 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   background:
     linear-gradient(rgba(15, 23, 42, 0.028) 1px, transparent 1px),
     linear-gradient(90deg, rgba(15, 23, 42, 0.024) 1px, transparent 1px),
-    linear-gradient(135deg, rgba(20, 21, 23, 0.98), rgba(246, 250, 253, 0.94)) !important;
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(246, 250, 253, 0.94)) !important;
   background-size: 64px 64px, 64px 64px, auto !important;
   color: var(--xbar-ink) !important;
-  box-shadow: var(--xbar-shadow), inset 0 1px 0 rgba(20, 21, 23, 0.94) !important;
+  box-shadow: var(--xbar-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.94) !important;
 }
 
 .xbar-route-surface :is(.surface-hero, .surface-hero--dark, .ops-hero, .ops-briefing-header, .command-brief)::after {
@@ -253,9 +253,9 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
 .xbar-route-surface :is(.surface-hero__stat, .ops-briefing-stat, .ops-hero__ledger, .command-center-next-move) {
   border-color: rgba(100, 116, 139, 0.18) !important;
   border-radius: 8px !important;
-  background: rgba(20, 21, 23, 0.84) !important;
+  background: rgba(255, 255, 255, 0.84) !important;
   color: var(--xbar-ink) !important;
-  box-shadow: inset 0 1px 0 rgba(20, 21, 23, 0.9) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
 }
 
 .xbar-route-surface :is(.surface-hero__stat strong, .ops-briefing-stat__value, .ops-hero__ledger strong, .command-center-next-move strong) {
@@ -267,9 +267,9 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   border-color: var(--xbar-line) !important;
   border-radius: 8px !important;
   background:
-    linear-gradient(145deg, rgba(20, 21, 23, 0.94), rgba(247, 250, 253, 0.88)) !important;
+    linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(247, 250, 253, 0.88)) !important;
   color: var(--xbar-ink) !important;
-  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.065), inset 0 1px 0 rgba(20, 21, 23, 0.92) !important;
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.065), inset 0 1px 0 rgba(255, 255, 255, 0.92) !important;
 }
 
 .xbar-route-surface :is(.panel, .ops-panel, .metric-card) {
@@ -356,7 +356,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
 .xbar-route-surface :is(.metric-card--interactive, .stack-item--interactive, .horse-card--interactive, .table-row--interactive, .follow-up-row, .ownership-row, .priority-card):hover {
   transform: translateY(-2px);
   border-color: rgba(30, 115, 232, 0.42) !important;
-  background: linear-gradient(145deg, #0f1011, #141517) !important;
+  background: linear-gradient(145deg, #ffffff, #f2f7fd) !important;
   box-shadow: var(--xbar-shadow-hover), inset 3px 0 0 rgba(30, 115, 232, 0.72) !important;
 }
 
@@ -367,9 +367,9 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
 .xbar-route-surface :is(.pill, .revenue-chip, .ops-briefing-chip, .status-inline span) {
   border-radius: 999px !important;
   border-color: rgba(100, 116, 139, 0.24) !important;
-  background: rgba(20, 21, 23, 0.68) !important;
+  background: rgba(255, 255, 255, 0.68) !important;
   color: #475569 !important;
-  box-shadow: inset 0 1px 0 rgba(20, 21, 23, 0.88);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
 }
 
 .xbar-route-surface :is(.pill--blue, .revenue-chip--blue) {
@@ -411,7 +411,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
 
 .xbar-route-surface :is(.button--ghost, .ops-briefing-action, .public-action:not(.public-action--primary), .xbar-home-action:not(.xbar-home-action--primary)) {
   border-color: rgba(100, 116, 139, 0.22) !important;
-  background: rgba(20, 21, 23, 0.72) !important;
+  background: rgba(255, 255, 255, 0.72) !important;
   color: var(--xbar-ink-soft) !important;
 }
 
@@ -424,7 +424,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
 .xbar-route-surface :is(input, select, textarea, .field-input, .field-textarea, .field-select) {
   border-color: rgba(100, 116, 139, 0.24) !important;
   border-radius: 8px !important;
-  background: rgba(20, 21, 23, 0.88) !important;
+  background: rgba(255, 255, 255, 0.88) !important;
   color: var(--xbar-ink) !important;
   box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.045) !important;
 }
@@ -460,7 +460,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   background:
     linear-gradient(rgba(15, 23, 42, 0.024) 1px, transparent 1px),
     linear-gradient(90deg, rgba(15, 23, 42, 0.022) 1px, transparent 1px),
-    rgba(20, 21, 23, 0.62);
+    rgba(255, 255, 255, 0.62);
   background-size: 46px 46px;
   padding: 22px;
 }
@@ -489,7 +489,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   background:
     linear-gradient(rgba(15, 23, 42, 0.026) 1px, transparent 1px),
     linear-gradient(90deg, rgba(15, 23, 42, 0.022) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(20, 21, 23, 0.98), rgba(244, 248, 252, 0.96)) !important;
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 248, 252, 0.96)) !important;
   background-size: 58px 58px, 58px 58px, auto !important;
   color: var(--xbar-ink) !important;
   box-shadow: -26px 0 90px rgba(15, 23, 42, 0.16) !important;
@@ -519,7 +519,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
 }
 
 .right-drawer__facts div {
-  background: rgba(20, 21, 23, 0.76) !important;
+  background: rgba(255, 255, 255, 0.76) !important;
 }
 
 .workspace-help-overlay {
@@ -535,10 +535,10 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   background:
     linear-gradient(rgba(15, 23, 42, 0.026) 1px, transparent 1px),
     linear-gradient(90deg, rgba(15, 23, 42, 0.022) 1px, transparent 1px),
-    linear-gradient(180deg, #0f1011, #141517);
+    linear-gradient(180deg, #ffffff, #f5f8fc);
   background-size: 48px 48px, 48px 48px, auto;
   color: var(--xbar-ink);
-  box-shadow: 0 28px 90px rgba(15, 23, 42, 0.18), inset 0 1px 0 rgba(20, 21, 23, 0.92);
+  box-shadow: 0 28px 90px rgba(15, 23, 42, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.92);
   animation: xbar-drawer-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -575,7 +575,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   place-items: center;
   border: 1px solid rgba(100, 116, 139, 0.24);
   border-radius: 8px;
-  background: #0f1011;
+  background: #ffffff;
   color: var(--xbar-ink);
 }
 
@@ -596,13 +596,13 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
 .workspace-help-drawer__close {
   border: 1px solid rgba(100, 116, 139, 0.22);
   border-radius: 8px;
-  background: rgba(20, 21, 23, 0.72);
+  background: rgba(255, 255, 255, 0.72);
   color: var(--xbar-muted);
 }
 
 .workspace-help-drawer__section {
   border: 1px solid rgba(100, 116, 139, 0.18);
-  background: rgba(20, 21, 23, 0.72);
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .workspace-help-drawer__section p {
@@ -613,7 +613,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   overflow: hidden !important;
   border: 1px solid rgba(100, 116, 139, 0.26) !important;
   border-radius: 10px !important;
-  background: #0f1011 !important;
+  background: #ffffff !important;
   box-shadow: 0 34px 120px rgba(15, 23, 42, 0.22) !important;
 }
 
@@ -621,7 +621,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   background:
     linear-gradient(rgba(15, 23, 42, 0.024) 1px, transparent 1px),
     linear-gradient(90deg, rgba(15, 23, 42, 0.022) 1px, transparent 1px),
-    #0f1011 !important;
+    #ffffff !important;
   background-size: 54px 54px, 54px 54px, auto !important;
   color: var(--xbar-ink) !important;
 }
@@ -651,7 +651,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   background:
     radial-gradient(circle at 16% 4%, rgba(30, 115, 232, 0.12), transparent 28rem),
     radial-gradient(circle at 86% 14%, rgba(198, 208, 220, 0.32), transparent 30rem),
-    linear-gradient(180deg, #0f1011 0%, #141517 52%, #141517 100%) !important;
+    linear-gradient(180deg, #ffffff 0%, #f5f8fc 52%, #eef3f8 100%) !important;
   color: var(--xbar-ink) !important;
 }
 
@@ -671,7 +671,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   background:
     linear-gradient(46deg, transparent 32%, rgba(15, 23, 42, 0.035) 32%, rgba(15, 23, 42, 0.035) 39%, transparent 39%),
     linear-gradient(-46deg, transparent 30%, rgba(30, 115, 232, 0.03) 30%, rgba(30, 115, 232, 0.03) 38%, transparent 38%),
-    linear-gradient(180deg, rgba(20, 21, 23, 0.88), rgba(242, 247, 252, 0.9)) !important;
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(242, 247, 252, 0.9)) !important;
 }
 
 .brand-canvas {
@@ -731,9 +731,9 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   place-items: center;
   border: 1px solid rgba(100, 116, 139, 0.24);
   border-radius: 8px;
-  background: #0f1011;
+  background: #ffffff;
   color: var(--xbar-ink);
-  box-shadow: 0 22px 52px rgba(15, 23, 42, 0.09), inset 0 1px 0 rgba(20, 21, 23, 0.94);
+  box-shadow: 0 22px 52px rgba(15, 23, 42, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.94);
 }
 
 .brand-canvas__mark svg {
@@ -765,7 +765,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
 
 .lp-features {
   border-color: rgba(100, 116, 139, 0.22) !important;
-  background: rgba(20, 21, 23, 0.72) !important;
+  background: rgba(255, 255, 255, 0.72) !important;
 }
 
 .lp-feature {
@@ -774,7 +774,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
 
 .lp-auth {
   border-left-color: rgba(100, 116, 139, 0.18) !important;
-  background: rgba(20, 21, 23, 0.58) !important;
+  background: rgba(255, 255, 255, 0.58) !important;
 }
 
 .lp-card {
@@ -783,10 +783,10 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   background:
     linear-gradient(rgba(15, 23, 42, 0.026) 1px, transparent 1px),
     linear-gradient(90deg, rgba(15, 23, 42, 0.022) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(20, 21, 23, 0.96), rgba(247, 250, 253, 0.94)) !important;
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 250, 253, 0.94)) !important;
   background-size: 52px 52px, 52px 52px, auto !important;
   color: var(--xbar-ink) !important;
-  box-shadow: var(--xbar-shadow), inset 0 1px 0 rgba(20, 21, 23, 0.92) !important;
+  box-shadow: var(--xbar-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.92) !important;
 }
 
 .lp-card::before {
@@ -809,7 +809,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
 .lp-input {
   border-color: rgba(100, 116, 139, 0.24) !important;
   border-radius: 8px !important;
-  background: rgba(20, 21, 23, 0.9) !important;
+  background: rgba(255, 255, 255, 0.9) !important;
   color: var(--xbar-ink) !important;
 }
 
@@ -832,7 +832,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
 .lp-btn-social {
   border-color: rgba(100, 116, 139, 0.22) !important;
   border-radius: 8px !important;
-  background: rgba(20, 21, 23, 0.74) !important;
+  background: rgba(255, 255, 255, 0.74) !important;
   color: var(--xbar-ink-soft) !important;
 }
 
@@ -855,9 +855,9 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   background:
     linear-gradient(rgba(15, 23, 42, 0.022) 1px, transparent 1px),
     linear-gradient(90deg, rgba(15, 23, 42, 0.02) 1px, transparent 1px),
-    rgba(20, 21, 23, 0.78) !important;
+    rgba(255, 255, 255, 0.78) !important;
   background-size: 38px 38px, 38px 38px, auto !important;
-  box-shadow: inset 0 1px 0 rgba(20, 21, 23, 0.9) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
 }
 
 .lp-local-mode__facts {
@@ -962,7 +962,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   background:
     linear-gradient(rgba(15, 23, 42, 0.024) 1px, transparent 1px),
     linear-gradient(90deg, rgba(15, 23, 42, 0.022) 1px, transparent 1px),
-    linear-gradient(180deg, #0f1011 0%, #141517 54%, #eef4fb 100%) !important;
+    linear-gradient(180deg, #ffffff 0%, #f7f9fc 54%, #eef4fb 100%) !important;
   background-size: 76px 76px, 76px 76px, auto !important;
 }
 
@@ -1068,7 +1068,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
     linear-gradient(90deg, rgba(15, 23, 42, 0.016) 1px, transparent 1px),
     radial-gradient(circle at 16% -8%, rgba(30, 115, 232, 0.075), transparent 34rem),
     radial-gradient(circle at 92% 8%, rgba(148, 163, 184, 0.18), transparent 30rem),
-    linear-gradient(180deg, #141517 0%, #141517 52%, #141517 100%) !important;
+    linear-gradient(180deg, #fbfdff 0%, #f6f9fc 52%, #f1f5f9 100%) !important;
   background-size: 118px 118px, 118px 118px, auto, auto, auto !important;
 }
 
@@ -1086,7 +1086,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   border-color: rgba(15, 23, 42, 0.026);
   background: transparent;
   box-shadow:
-    inset 1px 0 0 rgba(20, 21, 23, 0.8),
+    inset 1px 0 0 rgba(255, 255, 255, 0.8),
     inset -1px 0 0 rgba(15, 23, 42, 0.025);
   mask-image: linear-gradient(180deg, transparent 4%, black 24%, black 72%, transparent 96%);
 }
@@ -1110,11 +1110,11 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
     linear-gradient(rgba(15, 23, 42, 0.018) 1px, transparent 1px),
     linear-gradient(90deg, rgba(15, 23, 42, 0.016) 1px, transparent 1px),
     radial-gradient(circle at 76% 20%, rgba(30, 115, 232, 0.055), transparent 25rem),
-    linear-gradient(135deg, #0f1011 0%, #fafcff 52%, #141517 100%) !important;
+    linear-gradient(135deg, #ffffff 0%, #fafcff 52%, #f3f7fb 100%) !important;
   background-size: 104px 104px, 104px 104px, auto, auto !important;
   box-shadow:
     0 32px 82px rgba(15, 23, 42, 0.08),
-    inset 0 1px 0 rgba(20, 21, 23, 0.96) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.96) !important;
 }
 
 .xbar-home-atelier::after {
@@ -1142,7 +1142,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   border-radius: 10px;
   background: transparent;
   box-shadow:
-    inset 1px 0 0 rgba(20, 21, 23, 0.72),
+    inset 1px 0 0 rgba(255, 255, 255, 0.72),
     inset -1px 0 0 rgba(15, 23, 42, 0.028);
   mask-image: linear-gradient(180deg, transparent 6%, black 25%, black 72%, transparent 96%);
 }
@@ -1226,11 +1226,11 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   padding: 18px 18px 20px;
   overflow: hidden;
   background:
-    linear-gradient(135deg, rgba(20, 21, 23, 0.98), rgba(246, 249, 253, 0.9)),
-    rgba(20, 21, 23, 0.92);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 253, 0.9)),
+    rgba(255, 255, 255, 0.92);
   box-shadow:
     0 26px 68px rgba(15, 23, 42, 0.12),
-    inset 0 1px 0 rgba(20, 21, 23, 0.96);
+    inset 0 1px 0 rgba(255, 255, 255, 0.96);
   transform-origin: 50% 50%;
   animation: xbar-profile-stage 12.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
   animation-delay: var(--card-delay);
@@ -1272,7 +1272,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(105deg, transparent 0 34%, rgba(20, 21, 23, 0.72) 46%, transparent 58%),
+    linear-gradient(105deg, transparent 0 34%, rgba(255, 255, 255, 0.72) 46%, transparent 58%),
     linear-gradient(180deg, rgba(30, 115, 232, 0.08), transparent 38%);
   opacity: 0;
   transform: translateX(-34%);
@@ -1327,7 +1327,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   background:
     linear-gradient(rgba(15, 23, 42, 0.018) 1px, transparent 1px),
     linear-gradient(90deg, rgba(15, 23, 42, 0.016) 1px, transparent 1px),
-    rgba(20, 21, 23, 0.82) !important;
+    rgba(255, 255, 255, 0.82) !important;
   background-size: 96px 96px, 96px 96px, auto !important;
 }
 
@@ -1488,7 +1488,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   --xbar-button-edge: rgba(98, 116, 137, 0.28);
   --xbar-button-edge-active: rgba(30, 115, 232, 0.5);
   --xbar-button-glow: rgba(30, 115, 232, 0.18);
-  --xbar-button-surface: linear-gradient(180deg, rgba(20, 21, 23, 0.96), rgba(239, 244, 249, 0.92));
+  --xbar-button-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(239, 244, 249, 0.92));
   --xbar-button-primary: linear-gradient(180deg, #348bf2 0%, #176ad7 52%, #1155bd 100%);
 }
 
@@ -1550,7 +1550,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   z-index: -1;
   border-radius: inherit;
   background:
-    linear-gradient(110deg, transparent 0 34%, rgba(20, 21, 23, 0.7) 45%, transparent 56%),
+    linear-gradient(110deg, transparent 0 34%, rgba(255, 255, 255, 0.7) 45%, transparent 56%),
     var(--xbar-button-surface);
   opacity: 0;
   transform: translateX(-42%);
@@ -1564,7 +1564,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   letter-spacing: 0;
   box-shadow:
     0 10px 22px -18px rgba(15, 23, 42, 0.55),
-    inset 0 1px 0 rgba(20, 21, 23, 0.92) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.92) !important;
 }
 
 .xbar-route-surface :is(.button--primary, .ops-briefing-action--primary, .public-action--primary, .xbar-home-action--primary),
@@ -1581,7 +1581,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
 .xbar-route-surface :is(.button--ghost, .ops-briefing-action, .public-action:not(.public-action--primary), .xbar-home-action:not(.xbar-home-action--primary), .panel__display-controls button),
 .xbar-command-main :is(.button--ghost, .ops-briefing-action, .xbar-home-action:not(.xbar-home-action--primary), .panel__display-controls button) {
   background: var(--xbar-button-surface) !important;
-  color: var(--xbar-ink) !important;
+  color: #182230 !important;
 }
 
 .xbar-route-surface :is(
@@ -1607,7 +1607,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   box-shadow:
     0 18px 38px -24px rgba(15, 23, 42, 0.54),
     0 0 0 3px rgba(30, 115, 232, 0.065),
-    inset 0 1px 0 rgba(20, 21, 23, 0.96) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.96) !important;
 }
 
 .xbar-route-surface :is(
@@ -1637,7 +1637,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   box-shadow:
     0 22px 44px -22px rgba(30, 115, 232, 0.78),
     0 0 0 3px rgba(30, 115, 232, 0.12),
-    inset 0 1px 0 rgba(20, 21, 23, 0.42) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.42) !important;
 }
 
 .xbar-route-surface :is(
@@ -1687,7 +1687,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   box-shadow:
     0 0 0 4px rgba(30, 115, 232, 0.16),
     0 16px 34px -26px rgba(15, 23, 42, 0.5),
-    inset 0 1px 0 rgba(20, 21, 23, 0.95) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
 }
 
 .xbar-route-surface :is(button, .button, .icon-button, .surface-tab):disabled,
@@ -1695,7 +1695,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   cursor: not-allowed !important;
   opacity: 0.62 !important;
   transform: none !important;
-  box-shadow: inset 0 1px 0 rgba(20, 21, 23, 0.78) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78) !important;
 }
 
 .xbar-route-surface .panel__display-controls {
@@ -1705,7 +1705,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   padding: 3px;
   border: 1px solid rgba(98, 116, 137, 0.16);
   border-radius: 8px;
-  background: rgba(20, 21, 23, 0.56);
+  background: rgba(255, 255, 255, 0.56);
 }
 
 .xbar-route-surface .panel__display-controls button {
@@ -1754,7 +1754,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   background: transparent !important;
   border-color: rgba(15, 23, 42, 0.06) !important;
   box-shadow:
-    inset 1px 0 0 rgba(20, 21, 23, 0.76),
+    inset 1px 0 0 rgba(255, 255, 255, 0.76),
     inset -1px 0 0 rgba(15, 23, 42, 0.035) !important;
 }
 
@@ -1812,11 +1812,11 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
   min-height: 146px;
   border-color: rgba(98, 116, 137, 0.22) !important;
   background:
-    linear-gradient(130deg, rgba(20, 21, 23, 0.98), rgba(246, 249, 253, 0.92) 58%, rgba(238, 244, 251, 0.86)),
-    rgba(20, 21, 23, 0.92) !important;
+    linear-gradient(130deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 253, 0.92) 58%, rgba(238, 244, 251, 0.86)),
+    rgba(255, 255, 255, 0.92) !important;
   box-shadow:
     0 30px 72px rgba(15, 23, 42, 0.14),
-    0 1px 0 rgba(20, 21, 23, 0.84) inset !important;
+    0 1px 0 rgba(255, 255, 255, 0.84) inset !important;
   animation: xbar-profile-premium-cycle 12.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
   animation-delay: var(--card-delay);
 }
@@ -1855,7 +1855,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
 
 .xbar-profile-card::before {
   background:
-    linear-gradient(108deg, transparent 0 34%, rgba(20, 21, 23, 0.86) 46%, transparent 58%),
+    linear-gradient(108deg, transparent 0 34%, rgba(255, 255, 255, 0.86) 46%, transparent 58%),
     linear-gradient(180deg, rgba(30, 115, 232, 0.09), transparent 36%) !important;
   animation: xbar-card-premium-sheen 12.6s ease-in-out infinite;
   animation-delay: var(--card-delay);
@@ -1895,7 +1895,7 @@ nav[aria-label="Mobile quick navigation"] a[aria-current="page"],
 .xbar-system-strip:hover {
   transform: translateY(-2px);
   border-color: rgba(30, 115, 232, 0.26);
-  box-shadow: 0 24px 64px rgba(31, 41, 55, 0.09), inset 0 1px 0 rgba(20, 21, 23, 0.95);
+  box-shadow: 0 24px 64px rgba(31, 41, 55, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.95);
 }
 
 @keyframes xbar-profile-premium-cycle {

@@ -7,7 +7,7 @@
   background:
     radial-gradient(circle at top left, rgba(24, 168, 255, 0.09), transparent 32%),
     linear-gradient(180deg, rgba(238, 245, 251, 0.98), rgba(226, 235, 244, 0.98));
-  color: var(--xbar-ink);
+  color: #11151b;
 }
 
 .xbar-command-topbar {
@@ -44,7 +44,7 @@
 .xbar-command-main .ops-briefing-action--primary {
   border-color: rgba(24, 168, 255, 0.72);
   background: linear-gradient(180deg, #18a8ff, #2d8cff);
-  color: var(--xbar-ink);
+  color: #010204;
 }
 
 .command-center-briefing__copy {
@@ -93,7 +93,7 @@
 .xbar-command-main .empty-state {
   border-color: rgba(48, 56, 66, 0.16);
   background: rgba(237, 245, 255, 0.92);
-  color: var(--xbar-ink);
+  color: #11151b;
   box-shadow: 0 20px 48px rgba(48, 56, 66, 0.1);
 }
 
@@ -107,7 +107,7 @@
 .xbar-command-main .stack-item__title,
 .xbar-command-main .empty-state__title,
 .xbar-command-main .metric-card__value {
-  color: var(--xbar-ink);
+  color: #010204;
 }
 
 .xbar-command-main .command-stage__support-title {
@@ -131,7 +131,7 @@
 .xbar-command-main .field-textarea {
   border-color: rgba(48, 56, 66, 0.24);
   background: rgba(238, 245, 251, 0.88);
-  color: var(--xbar-ink);
+  color: #11151b;
 }
 
 .xbar-command-main .button--ghost:hover {
@@ -142,7 +142,7 @@
 .xbar-command-main .button--primary {
   border-color: rgba(24, 168, 255, 0.72);
   background: linear-gradient(180deg, #18a8ff, #2d8cff);
-  color: var(--xbar-ink);
+  color: #010204;
 }
 
 .xbar-command-main .metric-card--blue {
