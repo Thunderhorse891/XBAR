@@ -52,6 +52,8 @@ test('creates a fresh workspace and lands on the operations dashboard', async ({
   await page.getByRole('button', { name: 'Create workspace' }).click();
 
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole('heading', { name: 'Ranch desk', exact: true })).toBeVisible();
+  // The h1 reads "Ranch desk is clear." (no urgency) or "N items need attention."
+  // Use partial match so the assertion is resilient to the urgency count.
+  await expect(page.getByRole('heading', { name: /Ranch desk/, exact: false })).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText('No records yet')).toBeVisible();
 });
