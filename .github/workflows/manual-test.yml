@@ -1,12 +1,45 @@
-name: Manual Test Workflow
+name: Manual Smoke Test
+
 on:
   workflow_dispatch:
-    
-jobs: 
-  test:
-    runs-on: windows-latest
-    steps: 
+    inputs:
+      environment_url:
+        description: 'Production URL to smoke-test (defaults to Vercel deployment)'
+        required: false
+        default: 'https://xbar-horse-management-app.vercel.app'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Simple Test
-        run: echo "GitHub Actions is working!"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check public root returns 200
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ github.event.inputs.environment_url }}")
+          echo "Public root returned HTTP $STATUS"
+          [ "$STATUS" = "200" ]
+
+      - name: Check unauthenticated API returns 401
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ github.event.inputs.environment_url }}/api/reminders/run")
+          echo "Unauthenticated /api/reminders/run returned HTTP $STATUS (expect 401)"
+          [ "$STATUS" = "401" ]
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run e2e workspace setup test
+        run: npm run test:e2e -- --grep "creates a fresh workspace"

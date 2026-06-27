@@ -52,8 +52,13 @@ test('creates a fresh workspace and lands on the operations dashboard', async ({
   await page.getByRole('button', { name: 'Create workspace' }).click();
 
   await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
-  await expect(page.getByRole('heading', { name: 'Build sale readiness from the first horse.', exact: true })).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator('[aria-label="Sale Readiness"]')).toContainText('No horse selected', { timeout: 15_000 });
-  await expect(page.locator('[aria-label="XBAR modules"]')).toContainText('Buyer-Safe Proof', { timeout: 15_000 });
-  await expect(page.locator('[aria-label="Intelligence rail"]')).toContainText('Next release move', { timeout: 15_000 });
+
+  // A fresh workspace (no horses) shows the FirstRunExperience with this h1.
+  // Once a horse is added the Dashboard shows 'Sale readiness, before the horse leaves the barn.'
+  await expect(
+    page.getByRole('heading', { name: /One trusted record/i }),
+  ).toBeVisible({ timeout: 15_000 });
+
+  // FirstRunExperience always shows the primary CTA to add the first horse.
+  await expect(page.getByRole('button', { name: 'Add your first horse' })).toBeVisible();
 });
