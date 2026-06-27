@@ -107,6 +107,50 @@ async function removeIndexedValue(name: string) {
   }
 }
 
+function parsePersistedState(value: string | null) {
+  if (!value) return null;
+
+  try {
+    const parsed = JSON.parse(value) as { state?: unknown } | unknown;
+    if (parsed && typeof parsed === 'object' && 'state' in parsed) {
+      return (parsed as { state?: unknown }).state;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function hasItems(state: Record<string, unknown>, key: string) {
+  const value = state[key];
+  return Array.isArray(value) && value.length > 0;
+}
+
+export function hasMeaningfulPersistedWorkspace(value: string | null) {
+  const state = parsePersistedState(value);
+  if (!state || typeof state !== 'object') return false;
+
+  const workspace = state as Record<string, unknown>;
+  const profile = workspace.workspaceProfile && typeof workspace.workspaceProfile === 'object'
+    ? workspace.workspaceProfile as Record<string, unknown>
+    : null;
+
+  return Boolean(
+    (typeof profile?.setupCompleteAt === 'string' && profile.setupCompleteAt.trim()) ||
+    hasItems(workspace, 'horses') ||
+    hasItems(workspace, 'documents') ||
+    hasItems(workspace, 'intakeBatches') ||
+    hasItems(workspace, 'salePacketBuilds') ||
+    hasItems(workspace, 'buyerRoomEvents') ||
+    hasItems(workspace, 'workspaceMembers') ||
+    hasItems(workspace, 'workspaceInvitations'),
+  );
+}
+
+export function shouldProtectMeaningfulWorkspaceWrite(existingValue: string | null, nextValue: string) {
+  return hasMeaningfulPersistedWorkspace(existingValue) && !hasMeaningfulPersistedWorkspace(nextValue);
+}
+
 export const workspaceStateStorage: StateStorage = {
   async getItem(name) {
     const indexedValue = await readIndexedValue(name);
@@ -125,6 +169,13 @@ export const workspaceStateStorage: StateStorage = {
     return legacyValue;
   },
   async setItem(name, value) {
+    if (name === LEGACY_KEY) {
+      const existingValue = await readIndexedValue(name) ?? readLegacyValue(name);
+      if (shouldProtectMeaningfulWorkspaceWrite(existingValue, value)) {
+        return;
+      }
+    }
+
     const persisted = await writeIndexedValue(name, value);
     if (!persisted) {
       writeLegacyValue(name, value);

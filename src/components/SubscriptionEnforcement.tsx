@@ -1,12 +1,15 @@
 import { useEffect } from 'react';
 import '@/lib/subscriptionPlans';
 import { documentIntakeGate, horseCreationGate, packetExportGate, sharedListingGate, teamInviteGate } from '@/lib/subscriptionGates';
-import { useXbarStore } from '@/store/useXbarStore';
+import { useWorkspaceHydrated, useXbarStore } from '@/store/useXbarStore';
 
 let installed = false;
 
 export function SubscriptionEnforcement() {
+  const workspaceHydrated = useWorkspaceHydrated();
+
   useEffect(() => {
+    if (!workspaceHydrated) return;
     if (installed) return;
     installed = true;
 
@@ -47,7 +50,7 @@ export function SubscriptionEnforcement() {
         return blocked ? { ok: false, message: blocked } : inviteWorkspaceMember(email, role);
       },
     });
-  }, []);
+  }, [workspaceHydrated]);
 
   return null;
 }
