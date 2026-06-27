@@ -143,6 +143,26 @@ test('a breeding logged through the app (free-text, no details) is recognized', 
   assert.match(state.actionLabel, /Confirm pregnancy/);
 });
 
+test('a breeding verb outranks result words in mixed notes', () => {
+  // "open" describes prior state; the logged action is a cover.
+  const open = buildMareBreedingState(mare('m1', 'Glory', [plainBreedingEvent(8, 'Open mare bred to Thunder')]), now);
+  assert.equal(open.status, 'bred-awaiting-check');
+  const cover = buildMareBreedingState(mare('m2', 'Star', [plainBreedingEvent(8, 'Confirmed live cover')]), now);
+  assert.equal(cover.status, 'bred-awaiting-check');
+});
+
+test('a live foaling note that mentions "still" is not read as a loss', () => {
+  const state = buildMareBreedingState(
+    mare('m1', 'Glory', [
+      plainBreedingEvent(345, 'Bred to Thunder'),
+      plainBreedingEvent(2, 'Foaled a live filly', 'mare and foal still doing well'),
+    ]),
+    now,
+  );
+  assert.equal(state.status, 'foaled-live');
+  assert.equal(state.guarantee, 'fulfilled');
+});
+
 test('a free-text positive pregnancy check confirms the mare in foal', () => {
   const state = buildMareBreedingState(
     mare('m1', 'Glory', [

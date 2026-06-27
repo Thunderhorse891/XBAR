@@ -103,9 +103,20 @@ function resolveRecordType(event: TimelineEvent): BreedingRecordDetails['recordT
   if (explicit) return explicit;
   if (event.category !== 'Breeding') return undefined;
   const text = `${event.title} ${event.summary}`.toLowerCase();
-  if (/ultrasound|preg|scan|\bcheck\b|in.?foal|\bopen\b|barren|heartbeat|confirm/.test(text)) return 'pregnancy-check';
-  if (/foaled|foaling|parturition|delivered|gave birth|stillborn|abort|\bloss\b/.test(text)) return 'foaling';
-  if (/bred|breed|cover|served|insemin|\bai\b|mated|booked|stud/.test(text)) return 'breeding';
+
+  // A birth event wins outright ("in foal" is deliberately NOT a birth).
+  if (/foaled|foaling|parturition|delivered|gave birth|\bborn\b|stillborn|abort/.test(text)) return 'foaling';
+
+  // A breeding verb/noun (word-bounded to avoid "recovered"/"observed") marks
+  // a cover. It outranks result words like "open"/"in foal", which often just
+  // describe the mare's prior state in the same note ("open mare bred to
+  // Thunder"). An explicit scan/check term flips it back to a pregnancy check.
+  const hasBreedingVerb = /\bbred\b|\bbreed\b|\bcover\b|\bserved\b|insemin|\bai\b|\bmated\b|\bbooked\b|\bstud\b/.test(text);
+  const hasCheckTerm = /ultrasound|sonogram|preg(?:nancy)?.?check|vet.?check|\bscan\b|heartbeat|\bchecked\b/.test(text);
+  if (hasBreedingVerb && !hasCheckTerm) return 'breeding';
+
+  if (hasCheckTerm || /in.?foal|\bopen\b|barren|confirm|pregnant|positive|negative/.test(text)) return 'pregnancy-check';
+  if (hasBreedingVerb) return 'breeding';
   return undefined;
 }
 
@@ -247,7 +258,9 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
   const foaling = latestByRecordType(events, 'foaling');
   if (foaling && foaling.date >= breeding.date) {
     const result = outcomeText(foaling);
-    const live = !/loss|dead|abort|still|died/.test(result);
+    // Loss-specific terms only — a bare "still" (e.g. "mare and foal still
+    // doing well") must not flip a live foaling to a loss.
+    const live = !/\bloss\b|stillborn|still.?birth|\bdead\b|\bdied\b|abort|slipped/.test(result);
     const status: MareStatus = live ? 'foaled-live' : 'foaled-loss';
     return {
       ...base,
