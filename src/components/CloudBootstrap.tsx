@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
 import { decideCloudReconciliation, serializeWorkspaceBackup } from '@/lib/cloudSyncPolicy';
 import { useCloudStore } from '@/store/useCloudStore';
-import { useXbarStore } from '@/store/useXbarStore';
+import { useWorkspaceHydrated, useXbarStore } from '@/store/useXbarStore';
 
 export function CloudBootstrap() {
   const initialize = useCloudStore((state) => state.initialize);
@@ -17,6 +17,7 @@ export function CloudBootstrap() {
   const setCurrentRole = useXbarStore((state) => state.setCurrentRole);
   const importWorkspaceBackup = useXbarStore((state) => state.importWorkspaceBackup);
   const exportWorkspaceBackup = useXbarStore((state) => state.exportWorkspaceBackup);
+  const workspaceHydrated = useWorkspaceHydrated();
   const hydrationKeyRef = useRef('');
   const autosaveUnlockedRef = useRef(false);
   const lastPersistedSignatureRef = useRef('');
@@ -27,9 +28,14 @@ export function CloudBootstrap() {
     return () => { dispose?.(); };
   }, [initialize]);
 
-  useEffect(() => { setCurrentRole(workspaceRole); }, [setCurrentRole, workspaceRole]);
+  useEffect(() => {
+    if (!workspaceHydrated) return;
+    setCurrentRole(workspaceRole);
+  }, [setCurrentRole, workspaceHydrated, workspaceRole]);
 
   useEffect(() => {
+    if (!workspaceHydrated) return;
+
     if (cloudStatus !== 'signed-in' || !session?.user.id) {
       hydrationKeyRef.current = '';
       autosaveUnlockedRef.current = false;
@@ -94,9 +100,10 @@ export function CloudBootstrap() {
 
     void hydrate();
     return () => { cancelled = true; };
-  }, [cloudStatus, exportWorkspaceBackup, importWorkspaceBackup, session?.user.id, setAutosaveReady, setLastSyncAt, setSyncState, workspaceId]);
+  }, [cloudStatus, exportWorkspaceBackup, importWorkspaceBackup, session?.user.id, setAutosaveReady, setLastSyncAt, setSyncState, workspaceHydrated, workspaceId]);
 
   useEffect(() => {
+    if (!workspaceHydrated) return;
     if (cloudStatus !== 'signed-in' || !autosaveReady || !autosaveUnlockedRef.current) return;
     let disposed = false;
     let syncTimeout: number | undefined;
@@ -139,7 +146,7 @@ export function CloudBootstrap() {
       unsubscribe();
       window.removeEventListener('online', queuePersist);
     };
-  }, [autosaveReady, cloudStatus, exportWorkspaceBackup, setLastSyncAt, setSyncState]);
+  }, [autosaveReady, cloudStatus, exportWorkspaceBackup, setLastSyncAt, setSyncState, workspaceHydrated]);
 
   return null;
 }
