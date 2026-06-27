@@ -197,6 +197,20 @@ test('a breeding past the latest foaling date with no outcome is not counted as 
   assert.equal(program.inFoal, 0);
 });
 
+test('a logged pregnancy check satisfies earlier diagnostic checkpoints', () => {
+  // Bred 30 days ago with a positive check at gestational day ~20.
+  const state = buildMareBreedingState(
+    mare('m1', 'Glory', [
+      breedingEvent(30, 'breeding', { mateName: 'Thunder' }),
+      breedingEvent(10, 'pregnancy-check', { result: 'in foal' }),
+    ]),
+    now,
+  );
+  assert.equal(state.status, 'in-foal');
+  // The day-15 ultrasound must not be flagged overdue once a later check exists.
+  assert.ok(!state.overdueCheckpoints.some((c) => c.dayOffset === 15));
+});
+
 test('a bred mare that went open stays in the program with a rebreed action', () => {
   const program = buildBreedingProgram([
     mare('m1', 'Glory', [breedingEvent(40, 'breeding'), breedingEvent(15, 'pregnancy-check', { result: 'open' })]),

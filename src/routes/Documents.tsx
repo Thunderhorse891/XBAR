@@ -51,6 +51,9 @@ export default function Documents() {
   const pushToast = useUiStore((state) => state.pushToast);
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
   const canReviewDocuments = useCurrentRoleCapability('reviewDocuments');
+  // Applying OCR facts writes to the horse record (updateHorse → editHorse),
+  // so the action needs edit rights, not just document review rights.
+  const canEditHorses = useCurrentRoleCapability('editHorse');
   const session = useCloudStore((state) => state.session);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName || 'Ranch Staff';
@@ -810,8 +813,12 @@ export default function Documents() {
                                 className="button button--ghost button--compact"
                                 type="button"
                                 onClick={() => applyExtractedFacts(document)}
-                                disabled={!canReviewDocuments}
-                                title="Copy extracted facts into empty fields on the horse record (never overwrites)."
+                                disabled={!canReviewDocuments || !canEditHorses}
+                                title={
+                                  canEditHorses
+                                    ? 'Copy extracted facts into empty fields on the horse record (never overwrites).'
+                                    : 'Applying facts edits the horse record, which your role cannot do.'
+                                }
                               >
                                 Apply facts
                               </button>

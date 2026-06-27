@@ -285,8 +285,18 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
   }
 
   const checkpoints = buildCheckpoints(bredOn, now);
+  // Gestational day of the latest logged pregnancy check (−1 if none). A check
+  // satisfies every earlier diagnostic checkpoint — a day-20 scan covers the
+  // day-15 ultrasound — so those should not be surfaced as overdue.
+  const latestCheckDay = events.reduce((latest, event) => {
+    if (resolveRecordType(event) !== 'pregnancy-check') return latest;
+    const day = Math.floor((new Date(event.date).getTime() - bredOn.getTime()) / DAY_MS);
+    return day >= 0 ? Math.max(latest, day) : latest;
+  }, -1);
   const overdueCheckpoints = checkpoints.filter((checkpoint) => {
     if (checkpoint.status !== 'overdue' || !checkpoint.critical) return false;
+    // A logged check supersedes diagnostic checkpoints at or before its day.
+    if (checkpoint.kind === 'diagnostic' && checkpoint.dayOffset <= latestCheckDay) return false;
     const ageDays = (now.getTime() - new Date(checkpoint.dueDate).getTime()) / DAY_MS;
     return ageDays <= RECENT_OVERDUE_WINDOW_DAYS;
   });
