@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import './dataviz.css';
 
 /*
  * XBAR dataviz — dependency-free, palette-aware SVG charts and animated
