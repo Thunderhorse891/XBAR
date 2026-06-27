@@ -92,6 +92,30 @@ function breedingDetails(event: TimelineEvent): BreedingRecordDetails | undefine
   return details && 'recordType' in details ? details : undefined;
 }
 
+// Events logged through the in-app "Add breeding event" flow carry no
+// structured details payload — only a free-text title/summary. Infer the
+// record type from that text so user-entered milestones are first-class
+// alongside OCR/structured records. Order matters: pregnancy-check phrases
+// (e.g. "in foal") are tested before foaling so they are not misread as a
+// birth.
+function resolveRecordType(event: TimelineEvent): BreedingRecordDetails['recordType'] | undefined {
+  const explicit = breedingDetails(event)?.recordType;
+  if (explicit) return explicit;
+  if (event.category !== 'Breeding') return undefined;
+  const text = `${event.title} ${event.summary}`.toLowerCase();
+  if (/ultrasound|preg|scan|\bcheck\b|in.?foal|\bopen\b|barren|heartbeat|confirm/.test(text)) return 'pregnancy-check';
+  if (/foaled|foaling|parturition|delivered|gave birth|stillborn|abort|\bloss\b/.test(text)) return 'foaling';
+  if (/bred|breed|cover|served|insemin|\bai\b|mated|booked|stud/.test(text)) return 'breeding';
+  return undefined;
+}
+
+// All the text we can match an outcome against: the structured result, the
+// event status, and the free-text title/summary of an in-app entry.
+function outcomeText(event: TimelineEvent): string {
+  const details = breedingDetails(event);
+  return `${details?.result ?? ''} ${event.status ?? ''} ${event.title} ${event.summary}`.toLowerCase();
+}
+
 // Standard equine prenatal cadence (days after cover/insemination). EHV-1
 // boosters and pre-foaling vaccines are flagged compliance-critical.
 const CHECKPOINT_TEMPLATE: { day: number; label: string; kind: BreedingCheckpoint['kind']; critical: boolean }[] = [
@@ -124,25 +148,25 @@ export function buildCheckpoints(bredOn: Date, now: Date): BreedingCheckpoint[] 
 
 function latestByRecordType(events: TimelineEvent[], recordType: BreedingRecordDetails['recordType']): TimelineEvent | undefined {
   return events
-    .filter((event) => breedingDetails(event)?.recordType === recordType)
+    .filter((event) => resolveRecordType(event) === recordType)
     .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
 }
 
 function positivePregnancyCheck(events: TimelineEvent[], afterISO: string): boolean {
   return events.some((event) => {
-    const details = breedingDetails(event);
-    if (details?.recordType !== 'pregnancy-check' || event.date < afterISO) return false;
-    const result = (details.result ?? event.status ?? '').toLowerCase();
-    return /in.?foal|positive|confirmed|pregnant/.test(result);
+    if (resolveRecordType(event) !== 'pregnancy-check' || event.date < afterISO) return false;
+    const result = outcomeText(event);
+    // A check is only positive if it is not also an explicit open/negative.
+    if (/\bopen\b|negative|not.?in.?foal|barren|empty/.test(result)) return false;
+    return /in.?foal|positive|confirmed|pregnant|heartbeat/.test(result);
   });
 }
 
 function negativePregnancyCheck(events: TimelineEvent[], afterISO: string): boolean {
   return events.some((event) => {
-    const details = breedingDetails(event);
-    if (details?.recordType !== 'pregnancy-check' || event.date < afterISO) return false;
-    const result = (details.result ?? event.status ?? '').toLowerCase();
-    return /open|negative|not.?in.?foal|barren|empty/.test(result);
+    if (resolveRecordType(event) !== 'pregnancy-check' || event.date < afterISO) return false;
+    const result = outcomeText(event);
+    return /\bopen\b|negative|not.?in.?foal|barren|empty/.test(result);
   });
 }
 
@@ -222,7 +246,7 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
 
   const foaling = latestByRecordType(events, 'foaling');
   if (foaling && foaling.date >= breeding.date) {
-    const result = (breedingDetails(foaling)?.result ?? foaling.status ?? '').toLowerCase();
+    const result = outcomeText(foaling);
     const live = !/loss|dead|abort|still|died/.test(result);
     const status: MareStatus = live ? 'foaled-live' : 'foaled-loss';
     return {
@@ -262,11 +286,21 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
 
   const confirmed = positivePregnancyCheck(events, breeding.date);
 
+  // Once "now" is past the latest viable foaling date (GESTATION_LATE_DAYS)
+  // with no foaling or negative check recorded, the record is stale: the mare
+  // has almost certainly foaled or slipped and the outcome was never logged.
+  // daysToFoaling is measured from the mean date, so the late window sits at
+  // (mean - late) days. Past that, do not count her as an active pregnancy or
+  // hand her a foaling-kit action months late — surface her for resolution.
+  const isOverdueFoaling = daysToFoaling < GESTATION_MEAN_DAYS - GESTATION_LATE_DAYS;
+
   // A mare counts as "in foal" only with a positive check, or once she is
   // visibly near term. Bred-but-unconfirmed stays "awaiting check" — the
   // overdue diagnostics surface the gap instead of overstating the program.
   let status: MareStatus;
-  if (daysToFoaling <= NEAR_TERM_WINDOW_DAYS) {
+  if (isOverdueFoaling) {
+    status = 'bred-awaiting-check';
+  } else if (daysToFoaling <= NEAR_TERM_WINDOW_DAYS) {
     status = 'near-term';
   } else if (confirmed) {
     status = 'in-foal';
@@ -278,7 +312,9 @@ export function buildMareBreedingState(horse: HorseRecord, now: Date = new Date(
   // concern; otherwise a recently-missed critical checkpoint leads, then
   // confirmation, then the routine next checkpoint.
   let actionLabel: string;
-  if (status === 'near-term') {
+  if (isOverdueFoaling) {
+    actionLabel = `Record foaling outcome for ${horse.name} (past due ${isoDate(expectedFoaling)})`;
+  } else if (status === 'near-term') {
     actionLabel = `Prepare foaling kit for ${horse.name} (due ${isoDate(expectedFoaling)})`;
   } else if (overdueCheckpoints.length) {
     actionLabel = `${horse.name}: ${overdueCheckpoints[0]!.label} overdue`;

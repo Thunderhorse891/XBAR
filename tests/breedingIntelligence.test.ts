@@ -121,6 +121,62 @@ test('geldings and stallions are excluded as carriers', () => {
   assert.equal(buildMareBreedingState(gelding, now).status, 'not-breeding');
 });
 
+function plainBreedingEvent(daysAgo: number, title: string, summary = '', status?: string): TimelineEvent {
+  return {
+    id: `pev-${title}-${daysAgo}`,
+    date: isoDaysAgo(daysAgo),
+    title,
+    summary,
+    owner: 'Owner',
+    category: 'Breeding',
+    status,
+  } as TimelineEvent;
+}
+
+test('a breeding logged through the app (free-text, no details) is recognized', () => {
+  const state = buildMareBreedingState(
+    mare('m1', 'Glory', [plainBreedingEvent(10, 'Bred to Thunder', 'Live cover')]),
+    now,
+  );
+  assert.equal(state.status, 'bred-awaiting-check');
+  assert.ok(state.expectedFoalingDate);
+  assert.match(state.actionLabel, /Confirm pregnancy/);
+});
+
+test('a free-text positive pregnancy check confirms the mare in foal', () => {
+  const state = buildMareBreedingState(
+    mare('m1', 'Glory', [
+      plainBreedingEvent(60, 'Bred to Thunder'),
+      plainBreedingEvent(30, 'Pregnancy check', 'Confirmed in foal'),
+    ]),
+    now,
+  );
+  assert.equal(state.status, 'in-foal');
+});
+
+test('a breeding past the latest foaling date with no outcome is not counted as active', () => {
+  const state = buildMareBreedingState(
+    mare('m1', 'Glory', [
+      breedingEvent(400, 'breeding', { mateName: 'Thunder' }),
+      breedingEvent(370, 'pregnancy-check', { result: 'in foal' }),
+    ]),
+    now,
+  );
+  assert.notEqual(state.status, 'near-term');
+  assert.notEqual(state.status, 'in-foal');
+  assert.equal(state.status, 'bred-awaiting-check');
+  assert.match(state.actionLabel, /Record foaling outcome/);
+
+  const program = buildBreedingProgram([
+    mare('m1', 'Glory', [
+      breedingEvent(400, 'breeding', { mateName: 'Thunder' }),
+      breedingEvent(370, 'pregnancy-check', { result: 'in foal' }),
+    ], { studFee: 3000, bookedMares: 1, breedingCosts: 4000, mareProductionValue: 0, foalProjectedValue: 18000 }),
+  ], now);
+  assert.equal(program.nearTerm, 0);
+  assert.equal(program.inFoal, 0);
+});
+
 test('program rollup aggregates carriers, value, and overdue checks', () => {
   const program = buildBreedingProgram(
     [

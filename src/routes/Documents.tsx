@@ -988,6 +988,12 @@ export default function Documents() {
             description="Bundle each horse's approved documents into a watermarked sale packet."
             action={
               <button className="button button--ghost button--compact" type="button" onClick={() => navigate(SHARED_ACCESS_PATH)}>
+                Open Shared Access workspace
+              </button>
+            }
+            className="cursor-context-menu"
+            onContextMenu={(event) => openSurfaceMenu('buyer', event)}
+          >
             {subscription.tier === 'Starter' ? (
               <p className="panel__description" style={{ marginBottom: 12 }}>
                 Starter records the packet build. Upgrading to Professional unlocks the watermarked PDF and the buyer deal room.{' '}
@@ -996,12 +1002,6 @@ export default function Documents() {
                 </button>
               </p>
             ) : null}
-                Open Shared Access workspace
-              </button>
-            }
-            className="cursor-context-menu"
-            onContextMenu={(event) => openSurfaceMenu('buyer', event)}
-          >
             {shareGroups.length ? (
               <div className="stack-list">
                 {shareGroups.map((group) => (
