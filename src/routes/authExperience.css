@@ -532,6 +532,406 @@
   .lp-card { animation: none; }
 }
 
+/* Phase 1 premium entry system for login/evaluation. */
+.xbar-login-shell {
+  --xbar-status-success: #059669;
+  --xbar-status-warning: #d97706;
+  --xbar-status-error: #bf4040;
+  --xbar-entry-ink: #101418;
+  --xbar-entry-muted: #5b6672;
+  --xbar-entry-line: rgba(16, 20, 24, 0.14);
+  background:
+    radial-gradient(circle at 15% 18%, rgba(49, 95, 127, 0.22), transparent 26rem),
+    linear-gradient(135deg, #11171d 0%, #19222a 48%, #f3f5f7 48.1%, #eef1f4 100%);
+}
+
+.xbar-login-shell .xbar-login-noise {
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.028) 1px, transparent 1px);
+  background-size: 62px 62px;
+  opacity: 0.58;
+}
+
+.xbar-login-shell .lp-frame {
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 0.72fr);
+}
+
+.xbar-login-shell .lp-brand {
+  justify-content: center;
+  gap: clamp(22px, 3vw, 34px);
+  min-height: 100vh;
+  padding: clamp(28px, 5vw, 64px);
+}
+
+.xbar-login-shell .lp-brand::after {
+  content: none;
+  display: none;
+}
+
+.lp-brand__topline,
+.lp-brand__copy,
+.lp-command-panel {
+  position: relative;
+  z-index: 2;
+}
+
+.lp-brand__topline {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid rgba(248, 250, 252, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 10px 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.lp-brand__mark {
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.09);
+}
+
+.lp-brand__topline strong,
+.lp-brand__topline span {
+  display: block;
+}
+
+.lp-brand__topline strong {
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 860;
+}
+
+.lp-brand__topline span {
+  margin-top: 3px;
+  color: rgba(248, 250, 252, 0.58);
+  font-size: 11px;
+}
+
+.lp-brand__copy {
+  display: grid;
+  gap: 12px;
+  max-width: 680px;
+}
+
+.lp-brand__copy .lp-card-label {
+  margin: 0;
+  color: #a7c4d8;
+  text-shadow: none;
+}
+
+.lp-brand__copy h1 {
+  margin: 0;
+  max-width: 12ch;
+  color: #ffffff;
+  font-size: clamp(3rem, 6.4vw, 6.2rem);
+  font-weight: 790;
+  line-height: 0.95;
+}
+
+.lp-brand__copy p:not(.lp-card-label) {
+  max-width: 620px;
+  margin: 0;
+  color: rgba(248, 250, 252, 0.68);
+  font-size: clamp(15px, 1.35vw, 18px);
+  line-height: 1.62;
+}
+
+.lp-command-panel {
+  display: grid;
+  gap: 14px;
+  max-width: 620px;
+  border: 1px solid rgba(248, 250, 252, 0.14);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(49, 95, 127, 0.34), transparent 15rem),
+    rgba(7, 11, 15, 0.72);
+  padding: clamp(16px, 2.3vw, 22px);
+  box-shadow: 0 26px 70px -44px rgba(0, 0, 0, 0.86), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(18px);
+}
+
+.lp-command-panel__header,
+.lp-command-panel__release {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.lp-command-panel__header {
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(248, 250, 252, 0.12);
+}
+
+.lp-command-panel__header span,
+.lp-command-panel__release span,
+.lp-command-signal span {
+  color: rgba(248, 250, 252, 0.58);
+  font-size: 11px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.lp-command-panel__header strong {
+  color: #ffffff;
+  font-size: clamp(24px, 3vw, 34px);
+  font-weight: 790;
+}
+
+.lp-command-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.lp-command-signal {
+  display: grid;
+  min-height: 82px;
+  align-content: space-between;
+  border: 1px solid rgba(248, 250, 252, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
+  padding: 11px;
+}
+
+.lp-command-signal strong {
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 790;
+}
+
+.lp-command-signal--success {
+  border-color: rgba(5, 150, 105, 0.34);
+  box-shadow: inset 3px 0 0 var(--xbar-status-success);
+}
+
+.lp-command-signal--warning {
+  border-color: rgba(217, 119, 6, 0.42);
+  box-shadow: inset 3px 0 0 var(--xbar-status-warning);
+}
+
+.lp-command-signal--error {
+  border-color: rgba(191, 64, 64, 0.42);
+  box-shadow: inset 3px 0 0 var(--xbar-status-error);
+}
+
+.lp-command-panel__release {
+  border: 1px solid rgba(248, 250, 252, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 13px 14px;
+}
+
+.lp-command-panel__release strong {
+  color: #ffffff;
+  font-size: 13px;
+  text-align: right;
+}
+
+.xbar-login-shell .lp-features {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  max-width: 620px;
+  margin: 0;
+  border-radius: 8px;
+  background: rgba(7, 11, 15, 0.62);
+}
+
+.xbar-login-shell .lp-feature {
+  min-height: 58px;
+  padding: 10px 8px;
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+.xbar-login-shell .lp-auth {
+  background:
+    linear-gradient(90deg, rgba(16, 20, 24, 0.075) 1px, transparent 1px),
+    linear-gradient(rgba(16, 20, 24, 0.05) 1px, transparent 1px),
+    rgba(238, 241, 244, 0.9);
+  background-size: 58px 58px;
+  border-left: 1px solid rgba(16, 20, 24, 0.12);
+}
+
+.xbar-login-shell .lp-card {
+  width: min(100%, 520px);
+  border-color: var(--xbar-entry-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--xbar-entry-ink);
+  box-shadow: 0 26px 70px -46px rgba(16, 20, 24, 0.62), inset 0 1px 0 rgba(255, 255, 255, 0.94);
+}
+
+.xbar-login-shell .lp-card::before {
+  left: 18px;
+  width: calc(100% - 36px);
+  background: linear-gradient(90deg, transparent, rgba(49, 95, 127, 0.46), transparent);
+  box-shadow: none;
+}
+
+.xbar-login-shell .lp-card-label {
+  color: #315f7f;
+  text-shadow: none;
+}
+
+.xbar-login-shell .lp-card-title {
+  color: var(--xbar-entry-ink);
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-weight: 780;
+  letter-spacing: 0;
+}
+
+.xbar-login-shell .lp-card-sub {
+  color: var(--xbar-entry-muted);
+}
+
+.xbar-login-shell .lp-label-text,
+.xbar-login-shell .lp-remember {
+  color: #4f5d6a;
+}
+
+.xbar-login-shell .lp-input {
+  border-color: rgba(16, 20, 24, 0.16);
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--xbar-entry-ink);
+}
+
+.xbar-login-shell .lp-input:focus {
+  border-color: rgba(49, 95, 127, 0.62);
+  box-shadow: 0 0 0 3px rgba(49, 95, 127, 0.14);
+}
+
+.xbar-login-shell .lp-pw-eye {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  color: #315f7f;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.xbar-login-shell .lp-btn-primary,
+.xbar-login-shell .lp-btn-enter {
+  background: linear-gradient(180deg, #20262c 0%, #111519 100%);
+  box-shadow: 0 16px 34px -24px rgba(16, 20, 24, 0.78), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.xbar-login-shell .lp-btn-primary:hover:not(:disabled),
+.xbar-login-shell .lp-btn-enter:hover {
+  background: linear-gradient(180deg, #2a3138 0%, #15191e 100%);
+}
+
+.xbar-login-shell .lp-btn-social {
+  border-color: rgba(16, 20, 24, 0.14);
+  background: rgba(255, 255, 255, 0.68);
+  color: #24303a;
+}
+
+.xbar-login-shell .lp-btn-social:hover:not(:disabled) {
+  background: #ffffff;
+  border-color: rgba(16, 20, 24, 0.24);
+}
+
+.xbar-login-shell .lp-divider {
+  color: #7a8590;
+}
+
+.xbar-login-shell .lp-divider::before,
+.xbar-login-shell .lp-divider::after {
+  background: rgba(16, 20, 24, 0.12);
+}
+
+.xbar-login-shell .lp-local-mode {
+  border-color: rgba(16, 20, 24, 0.14);
+  border-radius: 8px;
+  background:
+    linear-gradient(rgba(16, 20, 24, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(16, 20, 24, 0.032) 1px, transparent 1px),
+    rgba(255, 255, 255, 0.76);
+}
+
+.xbar-login-shell .lp-local-mode__notice {
+  color: #8a5f05;
+}
+
+.xbar-login-shell .public-action {
+  min-height: 42px;
+  border-radius: 8px;
+  border-color: rgba(16, 20, 24, 0.14);
+  background: rgba(255, 255, 255, 0.74);
+  color: #1b2229;
+}
+
+@media (max-width: 1120px) {
+  .xbar-login-shell .lp-frame {
+    grid-template-columns: 1fr;
+  }
+
+  .xbar-login-shell .lp-brand {
+    min-height: auto;
+  }
+
+  .xbar-login-shell .lp-auth {
+    border-left: 0;
+    border-top: 1px solid rgba(16, 20, 24, 0.12);
+  }
+}
+
+@media (max-width: 680px) {
+  .xbar-login-shell {
+    background: linear-gradient(180deg, #11171d 0%, #19222a 46%, #eef1f4 46.1%, #eef1f4 100%);
+  }
+
+  .xbar-login-shell .lp-brand {
+    padding: 22px 18px 26px;
+  }
+
+  .lp-brand__copy h1 {
+    max-width: 10.8ch;
+    font-size: clamp(2.45rem, 12vw, 3.75rem);
+  }
+
+  .lp-command-panel__grid,
+  .xbar-login-shell .lp-features {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .xbar-login-shell .lp-feature {
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .xbar-login-shell .lp-feature:nth-child(2n) {
+    border-right: 0;
+  }
+}
+
+.xbar-login-shell .lp-brand__topline {
+  border-color: rgba(16, 20, 24, 0.12);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.xbar-login-shell .lp-brand__topline strong,
+.xbar-login-shell .lp-brand__copy h1 {
+  color: #101418;
+}
+
+.xbar-login-shell .lp-brand__topline span,
+.xbar-login-shell .lp-brand__copy p:not(.lp-card-label) {
+  color: #59636e;
+}
+
+.xbar-login-shell .lp-brand__copy .lp-card-label {
+  color: #315f7f;
+}
+
 /* ═══════════════════════════════════════════
    SETUP WORKSPACE PAGE — premium dark shell
 ═══════════════════════════════════════════ */

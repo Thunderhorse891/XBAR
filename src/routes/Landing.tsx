@@ -145,6 +145,19 @@ const showcaseHorseCards = [
   { name: 'Copper Line', role: 'Prospect', proof: '9 docs', signal: 'Buyer room', value: '3 inquiries' },
 ];
 
+const heroSignals = [
+  { label: 'Ownership', value: 'Verified', tone: 'success' },
+  { label: 'Coggins', value: 'Due in 12 days', tone: 'warning' },
+  { label: 'Transfer', value: 'Ready', tone: 'success' },
+  { label: 'Buyer proof', value: 'Locked packet', tone: 'neutral' },
+] as const;
+
+const nextActions = [
+  'Release watermarked packet to buyer room',
+  'Confirm renewal owner signature',
+  'Schedule post-sale follow-up',
+];
+
 const signupPath = (plan?: SubscriptionTier) => `/login?mode=signup${plan ? `&plan=${encodeURIComponent(plan)}` : ''}`;
 
 function Wordmark() {
@@ -204,6 +217,54 @@ function CommandPreview() {
         Ownership verification recorded by R. Calloway &middot; 2 min ago
       </figcaption>
     </figure>
+  );
+}
+
+function HeroOperationsPanel() {
+  return (
+    <aside className="revenue-hero-console" aria-label="XBAR command center preview">
+      <div className="revenue-hero-console__chrome">
+        <span />
+        <span />
+        <span />
+      </div>
+      <div className="revenue-hero-console__header">
+        <div>
+          <p className="revenue-kicker">Live operating file</p>
+          <strong>Smart Lena Bar</strong>
+          <span>2019 mare &middot; Professional sale workspace</span>
+        </div>
+        <span className="revenue-hero-console__score">92%</span>
+      </div>
+
+      <div className="revenue-hero-console__matrix">
+        {heroSignals.map((signal) => (
+          <div className={`revenue-hero-signal revenue-hero-signal--${signal.tone}`} key={signal.label}>
+            <span>{signal.label}</span>
+            <strong>{signal.value}</strong>
+          </div>
+        ))}
+      </div>
+
+      <div className="revenue-hero-console__timeline" aria-label="Proof workflow">
+        <span className="is-complete">Identity</span>
+        <span className="is-complete">Documents</span>
+        <span className="is-active">Review</span>
+        <span>Release</span>
+      </div>
+
+      <div className="revenue-hero-console__actions">
+        <div>
+          <span>Next best actions</span>
+          <strong>3 operator decisions before release</strong>
+        </div>
+        <ol>
+          {nextActions.map((action) => (
+            <li key={action}>{action}</li>
+          ))}
+        </ol>
+      </div>
+    </aside>
   );
 }
 
@@ -305,26 +366,29 @@ export default function Landing() {
       </header>
 
       <section className="revenue-hero revenue-hero--editorial" aria-labelledby="hero-heading">
-        <p className="revenue-kicker">Equine operations infrastructure</p>
-        <h1 id="hero-heading">
-          <span>One trusted record for every horse.</span>
-        </h1>
-        <p className="revenue-hero__lead">
-          Ownership, documents, care history, and sale readiness organized into a buyer-safe operating system for serious horse businesses.
-        </p>
-        <div className="revenue-hero__actions">
-          <Link className="public-action public-action--primary" to={signupPath('Professional')} onClick={() => trackPlan('Professional')}>
-            Create your workspace
-          </Link>
-          <Link className="public-action" to="/login" onClick={() => trackCta('hero', '/login')}>
-            Sign in
-          </Link>
+        <div className="revenue-hero__copy">
+          <p className="revenue-kicker">Equine operations infrastructure</p>
+          <h1 id="hero-heading">
+            <span>The operating system for modern horse operations.</span>
+          </h1>
+          <p className="revenue-hero__lead">
+            One trusted record for every horse, document, buyer, and transfer. XBAR turns scattered paperwork into sale-ready proof your team can actually operate from.
+          </p>
+          <div className="revenue-hero__actions">
+            <Link className="public-action public-action--primary" to={signupPath('Professional')} onClick={() => trackPlan('Professional')}>
+              Create your workspace
+            </Link>
+            <Link className="public-action" to="/login" onClick={() => trackCta('hero', '/login')}>
+              Evaluate locally
+            </Link>
+          </div>
+          <ul className="revenue-proof-line revenue-proof-line--center">
+            <li>Ownership chain</li>
+            <li>Buyer-safe packets</li>
+            <li>Human-verified records</li>
+          </ul>
         </div>
-        <ul className="revenue-proof-line revenue-proof-line--center">
-          <li>Ownership chain</li>
-          <li>Buyer-safe packets</li>
-          <li>Human-verified records</li>
-        </ul>
+        <HeroOperationsPanel />
       </section>
 
       <section className="revenue-reveal" aria-labelledby="reveal-heading">
