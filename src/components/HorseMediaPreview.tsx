@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 type HorseMediaPreviewProps = {
   src?: string | null;
   name: string;
@@ -23,16 +25,17 @@ export function HorseMediaPreview({
   fallbackClassName,
   emptyLabel = 'No media',
 }: HorseMediaPreviewProps) {
+  const [imgError, setImgError] = useState(false);
   const mediaUrl = src?.trim();
 
-  if (mediaUrl) {
-    return <img src={mediaUrl} alt="" className={imageClassName} />;
+  if (mediaUrl && !imgError) {
+    return <img src={mediaUrl} alt={name} className={imageClassName} onError={() => setImgError(true)} />;
   }
 
   return (
-    <div className={`horse-media-fallback ${fallbackClassName}`.trim()} aria-hidden="true">
-      <span className="horse-media-fallback__mark">{buildInitials(name)}</span>
-      <span className="horse-media-fallback__label">{emptyLabel}</span>
+    <div className={`horse-media-fallback ${fallbackClassName}`.trim()} role="img" aria-label={name}>
+      <span className="horse-media-fallback__mark" aria-hidden="true">{buildInitials(name)}</span>
+      <span className="horse-media-fallback__label" aria-hidden="true">{emptyLabel}</span>
     </div>
   );
 }
