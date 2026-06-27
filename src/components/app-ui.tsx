@@ -6,6 +6,9 @@ import { useUiStore } from '@/store/useUiStore';
 
 type Tone = 'blue' | 'slate' | 'emerald' | 'amber' | 'rose';
 
+/** Inset left status edge for marking blocked / ready / attention states. */
+type StatusEdge = 'blue' | 'amber' | 'rose';
+
 export function PageHeader({
   eyebrow,
   title,
@@ -40,6 +43,7 @@ export function Panel({
   action,
   children,
   className = '',
+  edge,
   onContextMenu,
   surfaceId,
   style,
@@ -52,6 +56,7 @@ export function Panel({
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  edge?: StatusEdge;
   onContextMenu?: MouseEventHandler<HTMLElement>;
   surfaceId?: string;
   style?: CSSProperties;
@@ -62,7 +67,7 @@ export function Panel({
 
   return (
     <Card
-      className={`panel ${onContextMenu ? 'panel--contextual' : ''} ${statefulClassName} ${className}`.trim()}
+      className={`panel ${onContextMenu ? 'panel--contextual' : ''} ${statefulClassName} ${edge ? `panel--edge-${edge}` : ''} ${className}`.trim()}
       data-surface-id={surfaceId}
       onContextMenu={onContextMenu}
       style={style}
@@ -123,6 +128,7 @@ export function MetricCard({
   showDetail = true,
   tone = 'blue',
   className = '',
+  edge,
   title,
   onClick,
   onContextMenu,
@@ -133,6 +139,7 @@ export function MetricCard({
   showDetail?: boolean;
   tone?: Tone;
   className?: string;
+  edge?: StatusEdge;
   title?: string;
   onClick?: MouseEventHandler<HTMLDivElement>;
   onContextMenu?: MouseEventHandler<HTMLDivElement>;
@@ -140,7 +147,7 @@ export function MetricCard({
   const interactive = Boolean(onClick || onContextMenu);
   return (
     <Card
-      className={`metric-card metric-card--${tone}${interactive ? ' metric-card--interactive' : ''} ${className}`.trim()}
+      className={`metric-card metric-card--${tone}${interactive ? ' metric-card--interactive' : ''}${edge ? ` metric-card--edge-${edge}` : ''} ${className}`.trim()}
       title={title ?? (interactive ? `${label}. Press Enter to open${onContextMenu ? ' or Shift+F10 for actions' : ''}.` : undefined)}
       onClick={onClick}
       onContextMenu={onContextMenu}

@@ -302,7 +302,7 @@ export default function Horses() {
       {createOpen ? (
         <section className="panel">
           <div className="panel__header">
-            <div><div className="panel__eyebrow">Horse record intake</div><h2 className="panel__title">Create horse record</h2></div>
+            <div><div className="panel__eyebrow">New horse</div><h2 className="panel__title">Add a horse</h2></div>
             <button className="button button--ghost button--compact" type="button" onClick={() => setNewHorseParam(false)}>Close</button>
           </div>
           <div className="form-grid">
