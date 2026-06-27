@@ -66,8 +66,8 @@ html body #root .xbar-command-shell.xbar-shell-home #mobile-more-menu {
   left: clamp(16px, 18vw, 290px);
   top: clamp(32px, 4vw, 72px);
   z-index: -2;
-  color: rgba(7, 17, 31, 0.035);
-  font-size: clamp(20rem, 42vw, 48rem);
+  color: rgba(7, 17, 31, 0.03);
+  font-size: clamp(8rem, 17vw, 21rem);
   font-weight: 900;
   line-height: 0.78;
   letter-spacing: 0;
@@ -179,13 +179,13 @@ html body #root .xbar-command-shell.xbar-shell-home #mobile-more-menu {
 }
 
 .xbar-editorial-dashboard__masthead h1 {
-  max-width: 840px;
+  max-width: 760px;
   margin: 8px 0 0;
   color: #07111f;
-  font-size: clamp(2.75rem, 5vw, 5.85rem);
+  font-size: clamp(1.9rem, 3.2vw, 3.1rem);
   font-weight: 850;
-  line-height: 0.9;
-  letter-spacing: 0;
+  line-height: 1;
+  letter-spacing: -0.02em;
 }
 
 .xbar-editorial-dashboard__actions {
@@ -251,8 +251,8 @@ html body #root .xbar-command-shell.xbar-shell-home #mobile-more-menu {
   position: absolute;
   right: clamp(20px, 4vw, 58px);
   bottom: -0.18em;
-  color: rgba(7, 17, 31, 0.035);
-  font-size: clamp(5rem, 13vw, 14rem);
+  color: rgba(7, 17, 31, 0.03);
+  font-size: clamp(3rem, 7vw, 6.5rem);
   font-weight: 900;
   line-height: 0.8;
   pointer-events: none;
