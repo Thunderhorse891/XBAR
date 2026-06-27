@@ -7,6 +7,7 @@ import { formatCompactCurrency, formatCurrency, formatDateLabel } from '@/lib/fo
 import { buildHorsePacketCompleteness, type PacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
 import type { HorseRecord, RanchAsset } from '@/types/xbar';
+import FirstRunExperience from './FirstRunExperience';
 import './dashboardEditorial.css';
 
 type Tone = 'clear' | 'review' | 'hold' | 'quiet';
@@ -97,6 +98,17 @@ export default function Dashboard() {
   const ranchAssets = useXbarStore((state) => state.ranchAssets);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const roleWorkspace = useCurrentRoleWorkspace();
+
+  // A brand-new workspace gets the bold first-run welcome instead of a data
+  // dashboard full of zeros and red "Hold" chips.
+  if (horses.length === 0) {
+    return (
+      <FirstRunExperience
+        ranchName={workspaceProfile.ranchName || workspaceProfile.businessName || 'XBAR Workspace'}
+        roleLabel={roleWorkspace.label}
+      />
+    );
+  }
 
   const transferGaps = buildTransferGapRows(horses, ownershipRecords, documents);
   const careBoard = buildCareBoardRows(horses, documents, expenseReceipts);
