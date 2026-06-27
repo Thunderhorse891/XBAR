@@ -359,9 +359,11 @@ export function buildBreedingProgram(horses: HorseRecord[], now: Date = new Date
   const carriers = horses
     .map((horse) => buildMareBreedingState(horse, now))
     .filter((state) => state.status !== 'not-breeding')
-    // Only mares that have entered the program (bred at least once) or are
-    // flagged open with breeding economics attached.
-    .filter((state) => state.status !== 'open' || Boolean(state.projectedFoalValue));
+    // Keep any mare that has entered the program: a recorded breeding
+    // (bredOn) means she belongs here even if she came back open — her
+    // "rebreed this cycle" action must stay visible. Open mares with no
+    // breeding history are only included once economics are attached.
+    .filter((state) => state.status !== 'open' || Boolean(state.bredOn) || Boolean(state.projectedFoalValue));
 
   const inFoalStates = carriers.filter((state) => state.status === 'in-foal' || state.status === 'near-term');
   const nearTerm = carriers.filter((state) => state.status === 'near-term');

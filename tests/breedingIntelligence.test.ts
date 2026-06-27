@@ -197,6 +197,15 @@ test('a breeding past the latest foaling date with no outcome is not counted as 
   assert.equal(program.inFoal, 0);
 });
 
+test('a bred mare that went open stays in the program with a rebreed action', () => {
+  const program = buildBreedingProgram([
+    mare('m1', 'Glory', [breedingEvent(40, 'breeding'), breedingEvent(15, 'pregnancy-check', { result: 'open' })]),
+  ], now);
+  assert.equal(program.maresTracked, 1);
+  assert.equal(program.mares[0]!.status, 'open');
+  assert.match(program.mares[0]!.actionLabel, /[Rr]ebreed/);
+});
+
 test('program rollup aggregates carriers, value, and overdue checks', () => {
   const program = buildBreedingProgram(
     [
