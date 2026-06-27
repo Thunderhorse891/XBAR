@@ -99,9 +99,19 @@ export default function Dashboard() {
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const roleWorkspace = useCurrentRoleWorkspace();
 
-  // A brand-new workspace gets the bold first-run welcome instead of a data
-  // dashboard full of zeros and red "Hold" chips.
-  if (horses.length === 0) {
+  // A genuinely empty workspace gets the bold first-run welcome instead of a
+  // data dashboard full of zeros and red "Hold" chips. Once any real data
+  // exists — including documents imported before the first horse — fall through
+  // to the live dashboard so that state is never hidden behind the preview.
+  const workspaceIsEmpty =
+    horses.length === 0 &&
+    documents.length === 0 &&
+    intakeBatches.length === 0 &&
+    expenseReceipts.length === 0 &&
+    ranchAssets.length === 0 &&
+    salesLeads.length === 0 &&
+    ownershipRecords.length === 0;
+  if (workspaceIsEmpty) {
     return (
       <FirstRunExperience
         ranchName={workspaceProfile.ranchName || workspaceProfile.businessName || 'XBAR Workspace'}
