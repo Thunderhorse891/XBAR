@@ -4,6 +4,16 @@ const DATABASE_NAME = 'xbar-workspace';
 const STORE_NAME = 'persist';
 const LEGACY_KEY = 'xbar-live-workspace';
 
+// Hydration guard: block setItem until the persist middleware has finished
+// reading the stored state. Without this guard a React render that fires
+// between store creation and async getItem completion can write the empty
+// seed state back to IndexedDB, erasing real workspace data.
+let _storageHydrated = false;
+
+export function markStorageHydrated() {
+  _storageHydrated = true;
+}
+
 export const workspaceStorageDriverLabel = 'IndexedDB primary, localStorage fallback';
 
 function hasBrowserStorage() {
@@ -125,6 +135,11 @@ export const workspaceStateStorage: StateStorage = {
     return legacyValue;
   },
   async setItem(name, value) {
+    // Do not persist until the initial getItem hydration has completed.
+    // Pre-hydration writes would overwrite real workspace data with the
+    // empty seed state that the store starts with.
+    if (!_storageHydrated) return;
+
     const persisted = await writeIndexedValue(name, value);
     if (!persisted) {
       writeLegacyValue(name, value);

@@ -70,8 +70,7 @@ export default function SharedAccess() {
         message: 'The protected listing link is ready to paste.',
         tone: 'success',
       });
-    } catch (error) {
-      console.error('Copy share link failed', error);
+    } catch {
       pushToast({
         title: 'Copy failed',
         message: 'The listing link could not be copied.',

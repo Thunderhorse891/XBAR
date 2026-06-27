@@ -40,6 +40,20 @@ export default async function handler(req, res) {
     return sendJson(res, 202, { ok: true, message: 'Telemetry skipped — admin credentials not configured.' });
   }
 
+  // Require a verified session token — unauthenticated callers cannot pollute
+  // the analytics table or spoof workspace IDs.
+  const accessToken = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim() || '';
+  if (!accessToken) {
+    return sendJson(res, 401, { ok: false, message: 'Authentication required.' });
+  }
+
+  const { data: userData, error: userError } = await supabase.auth.getUser(accessToken);
+  if (userError || !userData?.user) {
+    return sendJson(res, 401, { ok: false, message: 'Invalid or expired token.' });
+  }
+
+  const userId = userData.user.id;
+
   let body;
   try {
     body = await readJsonBody(req);
@@ -60,7 +74,7 @@ export default async function handler(req, res) {
 
   await supabase.from('runtime_events').insert({
     workspace_id: workspaceId,
-    user_id: null,
+    user_id: userId,
     channel: 'web',
     severity,
     event_name: eventName,

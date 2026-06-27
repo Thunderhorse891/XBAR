@@ -35,7 +35,7 @@ import {
   uploadMediaAssetToCloud,
   upsertSharedListingInCloud,
 } from '@/lib/cloudWorkspace';
-import { workspaceStateStorage } from '@/lib/workspaceStorage';
+import { markStorageHydrated, workspaceStateStorage } from '@/lib/workspaceStorage';
 import {
   createOwnershipRecord,
   validateExpenseReceiptInput,
@@ -88,6 +88,7 @@ type HorsePatch = Partial<Pick<HorseRecord, 'name' | 'barnName' | 'summary' | 'b
 };
 
 type XbarStore = {
+  _hasHydrated: boolean;
   currentRole: UserRole;
   horses: HorseRecord[];
   documents: DocumentRecord[];
@@ -207,6 +208,7 @@ function createEmptyWorkspaceState(): PersistedXbarState {
 }
 
 const initialState = {
+  _hasHydrated: false,
   currentRole: (isSupabaseConfigured() ? 'Owner' : 'Admin') as UserRole,
   ...createEmptyWorkspaceState(),
 };
@@ -991,7 +993,6 @@ export const useXbarStore = create<XbarStore>()(
         if (isSupabaseConfigured()) {
           const cloudResult = await updateSharedListingChannelsInCloud({ horseId, channel });
           if (!cloudResult.ok) {
-            console.error('Shared channel sync failed', cloudResult.message);
           }
         }
 
@@ -1351,7 +1352,6 @@ export const useXbarStore = create<XbarStore>()(
                   horseId: selectedHorse?.id ?? horseId,
                 });
               } catch (error) {
-                console.error('Cloud document upload failed; storing file locally instead.', error);
               }
               const document = await buildDocumentRecord({
                 file,
@@ -1466,7 +1466,6 @@ export const useXbarStore = create<XbarStore>()(
             id: batch.id,
           };
         } catch (error) {
-          console.error('Document upload failed', error);
           return { ok: false, message: 'Document upload failed. Check the selected files and try again.' };
         }
       },
@@ -1579,7 +1578,6 @@ export const useXbarStore = create<XbarStore>()(
               try {
                 uploadedAsset = await uploadMediaAssetToCloud({ file, horseId });
               } catch (error) {
-                console.error('Cloud media upload failed; storing media locally instead.', error);
               }
               return {
                 id: createId('media'),
@@ -1639,7 +1637,6 @@ export const useXbarStore = create<XbarStore>()(
             id: horseId,
           };
         } catch (error) {
-          console.error('Media upload failed', error);
           return { ok: false, message: 'Media upload failed. Check the selected files and try again.' };
         }
       },
@@ -1721,7 +1718,6 @@ export const useXbarStore = create<XbarStore>()(
                 horseId: input.horseId,
               });
             } catch (error) {
-              console.error('Cloud receipt upload failed; storing receipt locally instead.', error);
             }
           }
 
@@ -1769,7 +1765,6 @@ export const useXbarStore = create<XbarStore>()(
             id: receipt.id,
           };
         } catch (error) {
-          console.error('Expense receipt upload failed', error);
           return { ok: false, message: 'Receipt upload failed. Check the fields and try again.' };
         }
       },
@@ -2448,6 +2443,12 @@ export const useXbarStore = create<XbarStore>()(
       storage: createJSONStorage(() => workspaceStateStorage),
       version: WORKSPACE_SCHEMA_VERSION,
       migrate: (persistedState) => restorePersistedState(persistedState),
+      onRehydrateStorage: () => (_state, error) => {
+        if (!error) {
+          markStorageHydrated();
+          useXbarStore.setState({ _hasHydrated: true });
+        }
+      },
       partialize: (state) =>
         selectPersistedState({
           horses: state.horses,
@@ -2490,4 +2491,8 @@ export function useCurrentRoleCapability(capability: RoleCapability) {
 
 export function useWorkspaceReady() {
   return useXbarStore((state) => isWorkspaceSetup(state.workspaceProfile));
+}
+
+export function useStoreHydrated() {
+  return useXbarStore((state) => state._hasHydrated);
 }

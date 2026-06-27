@@ -53,6 +53,7 @@ function routeTitle(path: string) {
 
   const labels: Record<string, string> = {
     '/': 'Dashboard',
+    '/landing': 'Horse Management for Operations That Mean Business',
     '/horses': 'Horses',
     '/documents': 'Document Vault',
     '/ownership': 'Ownership',

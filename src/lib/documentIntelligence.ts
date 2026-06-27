@@ -81,8 +81,7 @@ async function runImageOcr(image: File | Blob | HTMLCanvasElement) {
     const worker = await getOcrWorker();
     const result = await worker.recognize(image, { rotateAuto: true });
     return result.data.text.trim();
-  } catch (error) {
-    console.error('Image OCR failed', error);
+  } catch {
     return '';
   }
 }
@@ -124,8 +123,7 @@ async function renderPdfPageToCanvas(file: File) {
     }).promise;
 
     return canvas;
-  } catch (error) {
-    console.error('PDF render failed for OCR', error);
+  } catch {
     return null;
   }
 }
@@ -162,8 +160,7 @@ async function extractPdfText(file: File) {
     }
 
     return runImageOcr(canvas);
-  } catch (error) {
-    console.error('PDF extraction failed', error);
+  } catch {
     return '';
   }
 }
