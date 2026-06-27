@@ -838,7 +838,7 @@ html body #root .xbar-command-shell.xbar-shell-home #mobile-more-menu {
   .xbar-editorial-dashboard::before {
     left: -28px;
     top: 60px;
-    font-size: 21rem;
+    font-size: 10rem;
   }
 
   .xbar-editorial-dashboard__logo {
@@ -847,7 +847,7 @@ html body #root .xbar-command-shell.xbar-shell-home #mobile-more-menu {
   }
 
   .xbar-editorial-dashboard__masthead h1 {
-    font-size: clamp(2.35rem, 14vw, 4.2rem);
+    font-size: clamp(1.85rem, 8vw, 2.7rem);
   }
 
   .xbar-editorial-dashboard__actions {
