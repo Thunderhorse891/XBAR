@@ -24,7 +24,7 @@ const STEPS = [
     title: 'Upload papers & Coggins',
     detail: 'Drop registration, transfer, and health PDFs. OCR reads them into the record automatically.',
     cta: 'Import documents',
-    to: '/documents',
+    to: '/documents?upload=1',
   },
   {
     index: '03',
@@ -73,7 +73,7 @@ export default function FirstRunExperience({ ranchName, roleLabel }: { ranchName
             <button type="button" className="xbar-firstrun__cta" onClick={() => navigate('/horses?new=1')}>
               Add your first horse
             </button>
-            <button type="button" className="xbar-firstrun__cta xbar-firstrun__cta--ghost" onClick={() => navigate('/documents')}>
+            <button type="button" className="xbar-firstrun__cta xbar-firstrun__cta--ghost" onClick={() => navigate('/documents?upload=1')}>
               Import documents
             </button>
           </div>
