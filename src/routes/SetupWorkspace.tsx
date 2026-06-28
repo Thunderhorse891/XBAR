@@ -28,6 +28,13 @@ const proofTiles = [
   },
 ] as const;
 
+const setupStages = [
+  { label: 'Identity', value: 'Ranch profile' },
+  { label: 'Ownership', value: 'Default entity' },
+  { label: 'Locations', value: 'Barn and pasture' },
+  { label: 'Proof', value: 'Ready for records' },
+] as const;
+
 export default function SetupWorkspace() {
   const navigate = useNavigate();
   const workspaceHydrated = useWorkspaceHydrated();
@@ -140,10 +147,10 @@ export default function SetupWorkspace() {
           <div className="premium-setup-brand__content">
             <p className="premium-setup-eyebrow">Ranch Setup</p>
             <h1 id="setup-brand-title" className="premium-setup-brand-title">
-              Build your ranch workspace
+              Build the operating record your team will trust
             </h1>
             <p className="premium-setup-brand-copy">
-              Start with clean ranch identity, then add horses, records, documents, care, sales, and ownership.
+              Start with a clean ranch identity, then add horses, documents, ownership, care, sales, and buyer-ready proof.
             </p>
 
             <div className="premium-setup-proof" aria-label="Workspace proof points">
@@ -164,6 +171,16 @@ export default function SetupWorkspace() {
               <span>{activeTile.label}</span>
               <p>{activeTile.summary}</p>
             </div>
+
+            <ol className="premium-setup-flow" aria-label="Workspace setup sequence">
+              {setupStages.map((stage, index) => (
+                <li key={stage.label}>
+                  <span>{String(index + 1).padStart(2, '0')}</span>
+                  <strong>{stage.label}</strong>
+                  <p>{stage.value}</p>
+                </li>
+              ))}
+            </ol>
           </div>
         </section>
 
@@ -173,6 +190,12 @@ export default function SetupWorkspace() {
               <p className="premium-setup-card-eyebrow">Ranch Profile</p>
               <h2>Set the identity your team will trust.</h2>
               <p>This becomes the default workspace for records, owners, horses, and documents.</p>
+            </div>
+
+            <div className="premium-setup-card__ledger" aria-label="Setup requirements">
+              <span>Required before first horse</span>
+              <strong>Business name + ranch name</strong>
+              <p>Everything else can be refined after the workspace opens.</p>
             </div>
 
             <div className="premium-setup-fields">
