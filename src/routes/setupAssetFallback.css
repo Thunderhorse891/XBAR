@@ -1,8 +1,0 @@
-/* Supports the refreshed XBAR public brand assets during the XBAR asset migration. */
-.premium-setup-hero {
-  background:
-    radial-gradient(ellipse at 65% 18%, rgba(31, 157, 255, 0.20), transparent 28rem),
-    linear-gradient(90deg, rgba(6, 10, 16, 0.24), rgba(6, 10, 16, 0.08) 42%, rgba(6, 10, 16, 0.48)),
-    url('/brand/xbar-login-hero.svg'),
-    linear-gradient(145deg, #060a10 0%, #0b1422 52%, #03060b 100%);
-}

@@ -92,7 +92,7 @@ body::selection {
 }
 
 .shell-content,
-aside + div > main,
+.xbar-command-shell > aside + div > main,
 main.flex.flex-col {
   background: transparent !important;
   color: var(--text) !important;
@@ -108,7 +108,7 @@ main.flex.flex-col {
 
 /* ── Sidebar stays graphite (shell identity) ─── */
 .sidebar,
-aside {
+.xbar-command-shell > aside {
   background:
     radial-gradient(ellipse at 50% -6%, rgba(45, 140, 255, 0.14), transparent 18rem),
     linear-gradient(180deg, #050a12 0%, #03070d 100%) !important;
@@ -118,8 +118,8 @@ aside {
 }
 
 .brand-lockup__title,
-aside [class*="tracking-[0.14em]"],
-aside [class*="tracking-[0.24em]"] {
+.xbar-command-shell aside [class*="tracking-[0.14em]"],
+.xbar-command-shell aside [class*="tracking-[0.24em]"] {
   color: #f3f8ff !important;
 }
 
@@ -127,38 +127,38 @@ aside [class*="tracking-[0.24em]"] {
 .sidebar-card__eyebrow,
 .nav-section__title,
 .sidebar-footer__title,
-aside [class*="text-[#52708d]"],
-aside [class*="text-[#3d5870]"] {
+.xbar-command-shell aside [class*="text-[#52708d]"],
+.xbar-command-shell aside [class*="text-[#3d5870]"] {
   color: rgba(168, 194, 224, 0.58) !important;
 }
 
 .sidebar-card,
 .sidebar-footer,
-aside [class*="bg-[#080f1c]"],
-aside [class*="bg-[#08111d]"],
-aside [class*="bg-[#0a1628]"] {
+.xbar-command-shell aside [class*="bg-[#080f1c]"],
+.xbar-command-shell aside [class*="bg-[#08111d]"],
+.xbar-command-shell aside [class*="bg-[#0a1628]"] {
   border-color: rgba(120, 165, 220, 0.13) !important;
   background: linear-gradient(145deg, rgba(12, 21, 34, 0.86), rgba(5, 10, 18, 0.92)) !important;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045) !important;
 }
 
 .nav-link,
-aside a,
-aside button {
+.xbar-command-shell aside a,
+.xbar-command-shell aside button {
   border-radius: 9px !important;
   color: rgba(205, 222, 242, 0.72) !important;
 }
 
 .nav-link:hover,
-aside a:hover,
-aside button:hover {
+.xbar-command-shell aside a:hover,
+.xbar-command-shell aside button:hover {
   background: rgba(45, 140, 255, 0.09) !important;
   color: #f5f9ff !important;
   border-color: rgba(45, 140, 255, 0.30) !important;
 }
 
 .nav-link--active,
-aside a[aria-current='page'] {
+.xbar-command-shell aside a[aria-current='page'] {
   background: linear-gradient(90deg, rgba(45, 140, 255, 0.18), rgba(45, 140, 255, 0.045)) !important;
   color: #ffffff !important;
   border-color: rgba(45, 140, 255, 0.46) !important;
@@ -672,7 +672,7 @@ nav[aria-label='Mobile quick navigation'] a[aria-current='page'] {
 
 @media (max-width: 768px) {
   .shell-content,
-  aside + div > main,
+  .xbar-command-shell > aside + div > main,
   main.flex.flex-col {
     padding-inline: 14px !important;
   }
