@@ -393,6 +393,32 @@ export default function MainLayout() {
             <span className="xbar-shell-x xbar-shell-x--two" />
             <ShellHorseMotif className="xbar-shell-horse-line" />
           </div>
+          <section className="xbar-os-band" aria-label="XBAR operating system status">
+            <div className="xbar-os-band__identity">
+              <span>XBAR OS</span>
+              <strong>{currentLabel}</strong>
+              <em>{workspaceProfile.ranchName || workspaceProfile.businessName || 'Modern horse operation'}</em>
+            </div>
+            <div className="xbar-os-band__meters" aria-label="Workspace operating totals">
+              <div>
+                <span>Horse files</span>
+                <strong>{horses.length}</strong>
+              </div>
+              <div>
+                <span>Documents</span>
+                <strong>{documents.length}</strong>
+              </div>
+              <div>
+                <span>Open work</span>
+                <strong>{pendingReview + pendingTransfers + careDueCount}</strong>
+              </div>
+            </div>
+            <div className="xbar-os-band__state">
+              <span>{subscription.tier}</span>
+              <strong>{commandState}</strong>
+              <em>{localStatus}</em>
+            </div>
+          </section>
           <CommercialPressureBanner />
           <div className="xbar-route-transition" key={location.pathname}>
             <Outlet />
