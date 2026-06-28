@@ -51,6 +51,8 @@ export default function Subscriptions() {
     ? hasManagedIdentity || anyPaymentLink
       ? 'Secure checkout ready'
       : 'Sign in required for checkout'
+    : anyPaymentLink
+      ? 'Stripe checkout link ready'
     : 'Billing not configured yet';
   const selectedReadiness = getCheckoutReadiness({
     billingEnabled,
@@ -197,7 +199,7 @@ export default function Subscriptions() {
               <div>Stripe</div>
             </label>
           </div>
-          <p>XBAR does not collect or store raw card numbers. Paid plans redirect to the configured Stripe checkout path.</p>
+          <p>XBAR does not collect or store raw card numbers. Paid plans redirect to managed Stripe Checkout or the configured hosted payment link.</p>
         </div>
 
         <div className="checkout-status-list" aria-label="Checkout readiness">
