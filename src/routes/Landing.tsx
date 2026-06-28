@@ -379,7 +379,7 @@ export default function Landing() {
               Create your workspace
             </Link>
             <Link className="public-action" to="/login" onClick={() => trackCta('hero', '/login')}>
-              Evaluate locally
+              Sign in
             </Link>
           </div>
           <ul className="revenue-proof-line revenue-proof-line--center">

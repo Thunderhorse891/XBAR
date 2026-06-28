@@ -86,6 +86,11 @@ const DEFAULT_META_DESCRIPTION =
 // compound the static SEO in index.html so each crawlable page presents its
 // own snippet in search and social results instead of the shared default.
 const PUBLIC_ROUTE_META: Record<string, { title: string; description: string }> = {
+  '/': {
+    title: 'Sign in to XBAR',
+    description:
+      'Sign in to XBAR to manage horse records, ownership, documents, and sale-ready buyer packets.',
+  },
   '/landing': {
     title: 'XBAR — Clean records, ownership integrity, faster sale readiness',
     description: DEFAULT_META_DESCRIPTION,
@@ -156,7 +161,7 @@ function AppHomeGate() {
 
   if (location.pathname === '/' && !session && !hasCommandCenterEntry()) {
     if (!workspaceHydrated) return <div className="app-loading-shell">Loading XBAR...</div>;
-    if (!workspaceReady) return <Landing />;
+    if (!workspaceReady) return <Login />;
   }
 
   return (
