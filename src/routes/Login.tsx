@@ -12,12 +12,6 @@ import './cleanEntryExperience.css';
 type AuthMode = 'signin' | 'signup';
 type BusyState = 'password' | 'google' | 'facebook' | 'apple' | 'reset' | '';
 
-const localFacts = [
-  'Try XBAR in this browser without creating a cloud account.',
-  'Backups and cloud sync can be configured later.',
-  'Paid billing opens through the subscription page.',
-];
-
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -51,10 +45,7 @@ export default function Login() {
   }, [cloud.session, cloud.status, navigate, redirectTarget]);
 
   const toast = (title: string, result: { ok: boolean; message: string }) => pushToast({ title, message: result.message, tone: result.ok ? 'success' : 'error' });
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy('password');
-    const result = authMode === 'signin' ? await cloud.signInWithPassword(email, password) : await cloud.signUpWithPassword(email, password);
+  const rememberEmailPreference = () => {
     if (remember) {
       localStorage.setItem('xbar-remember-me', 'true');
       localStorage.setItem('xbar-remembered-email', email);
@@ -62,6 +53,29 @@ export default function Login() {
       localStorage.removeItem('xbar-remember-me');
       localStorage.removeItem('xbar-remembered-email');
     }
+  };
+  const openBrowserWorkspace = () => {
+    localStorage.setItem('xbar-command-center-entry', 'true');
+    if (selectedPlan) localStorage.setItem('xbar-local-plan-intent', selectedPlan);
+    initializeWorkspace({ businessName: 'XBAR Ranch', ranchName: 'XBAR Ranch' });
+    void trackRuntimeEvent(productEvent(productEventNames.localWorkspaceEntered, { selectedPlan: selectedPlan || undefined, storage: 'browser-local' }));
+    navigate(redirectTarget, { replace: true });
+  };
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy('password');
+    rememberEmailPreference();
+    if (!supabaseReady) {
+      pushToast({
+        title: 'Opening XBAR',
+        message: 'Cloud sign-in is not connected in this deployment, so this opens a private browser workspace.',
+        tone: 'success',
+      });
+      openBrowserWorkspace();
+      setBusy('');
+      return;
+    }
+    const result = authMode === 'signin' ? await cloud.signInWithPassword(email, password) : await cloud.signUpWithPassword(email, password);
     toast(result.ok ? (authMode === 'signin' ? 'Welcome back' : 'Account created') : 'We could not complete that', result);
     setBusy('');
   };
@@ -77,25 +91,15 @@ export default function Login() {
     toast(result.ok ? 'Reset email sent' : 'Reset unavailable', result);
     setBusy('');
   };
-  const enterWorkspace = () => {
-    localStorage.setItem('xbar-command-center-entry', 'true');
-    if (selectedPlan) localStorage.setItem('xbar-local-plan-intent', selectedPlan);
-    initializeWorkspace({ businessName: 'XBAR Ranch', ranchName: 'XBAR Ranch' });
-    void trackRuntimeEvent(productEvent(productEventNames.localWorkspaceEntered, { selectedPlan: selectedPlan || undefined, storage: 'browser-local' }));
-    navigate(redirectTarget, { replace: true });
-  };
-
-  const label = !supabaseReady ? 'Browser evaluation' : authMode === 'signin' ? 'Welcome back' : selectedPlan ? `${selectedPlan} plan` : 'Create account';
-  const title = !supabaseReady ? 'Start your XBAR trial.' : authMode === 'signin' ? 'Sign in to XBAR.' : 'Create your XBAR account.';
-  const description = !supabaseReady
-    ? 'Open a local workspace, choose a plan, and review the product without the confusing demo layer.'
-    : selectedPlan
-      ? `Create your account, then continue to ${selectedPlan} checkout.`
-      : 'Access horse records, sale packets, ownership, care, reminders, and buyer workflows.';
+  const label = authMode === 'signin' ? 'Welcome back' : selectedPlan ? `${selectedPlan} plan` : 'Create account';
+  const title = authMode === 'signin' ? 'Sign in to XBAR.' : 'Create your XBAR account.';
+  const description = selectedPlan
+    ? `Use your email and password, then continue to ${selectedPlan} checkout.`
+    : 'Use your email and password to open your horse records, documents, buyer packets, and billing.';
 
   return (
     <main className="clean-entry-shell">
-      <section className="clean-auth-card" aria-label={supabaseReady ? authMode === 'signin' ? 'Sign in to XBAR' : 'Create an XBAR account' : 'Start XBAR locally'}>
+      <section className="clean-auth-card" aria-label={authMode === 'signin' ? 'Sign in to XBAR' : 'Create an XBAR account'}>
         <Link className="clean-brand" to="/landing" aria-label="XBAR overview">
           <span className="clean-brand__mark" aria-hidden="true">
             <XbarMark tone="mono" />
@@ -112,65 +116,55 @@ export default function Login() {
           <span>{description}</span>
         </div>
 
-        {supabaseReady ? (
-          <form className="clean-form" onSubmit={submit} aria-busy={busy !== ''}>
-            <label className="clean-field">
-              <span>Email</span>
-              <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required />
+        <form className="clean-form" onSubmit={submit} aria-busy={busy !== ''}>
+          <label className="clean-field">
+            <span>Email</span>
+            <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required />
+          </label>
+          <label className="clean-field">
+            <span>Password</span>
+            <div className="clean-password-field">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete={authMode === 'signin' ? 'current-password' : 'new-password'}
+                minLength={8}
+                required
+              />
+              <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Hide entered value' : 'Show entered value'}>
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
+          </label>
+          <div className="clean-auth-options">
+            <label>
+              <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} /> Remember me
             </label>
-            <label className="clean-field">
-              <span>Password</span>
-              <div className="clean-password-field">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  autoComplete={authMode === 'signin' ? 'current-password' : 'new-password'}
-                  minLength={8}
-                  required
-                />
-                <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'}>
-                  {showPassword ? 'Hide' : 'Show'}
-                </button>
-              </div>
-            </label>
-            <div className="clean-auth-options">
-              <label>
-                <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} /> Remember me
-              </label>
-              {authMode === 'signin' && (
-                <button type="button" disabled={!email || busy !== ''} onClick={reset}>
-                  {busy === 'reset' ? 'Sending...' : 'Forgot password?'}
-                </button>
-              )}
-            </div>
-            <button className="clean-primary-button" type="submit" disabled={!email || password.length < 8 || busy !== ''}>
-              {busy === 'password' ? 'Working...' : authMode === 'signin' ? 'Sign in' : 'Create account'}
-            </button>
-            <div className="clean-divider">
-              <span>or continue with</span>
-            </div>
-            <div className="clean-social-grid">
-              {(['google', 'facebook', 'apple'] as const).map((provider) => (
-                <button key={provider} type="button" disabled={busy !== ''} onClick={() => oauth(provider)}>
-                  {provider[0].toUpperCase() + provider.slice(1)}
-                </button>
-              ))}
-            </div>
-          </form>
-        ) : (
-          <div className="clean-local-start">
-            <ul>
-              {localFacts.map((fact) => (
-                <li key={fact}>{fact}</li>
-              ))}
-            </ul>
-            <button className="clean-primary-button" type="button" onClick={enterWorkspace}>
-              Start free trial
-            </button>
-            <p>Local browser storage is for evaluation. Export backups before using it as your only record source.</p>
+            {authMode === 'signin' && supabaseReady && (
+              <button type="button" disabled={!email || busy !== ''} onClick={reset}>
+                {busy === 'reset' ? 'Sending...' : 'Forgot password?'}
+              </button>
+            )}
           </div>
-        )}
+          <button className="clean-primary-button" type="submit" disabled={!email || password.length < 8 || busy !== ''}>
+            {busy === 'password' ? 'Working...' : authMode === 'signin' ? 'Sign in' : 'Create account'}
+          </button>
+          {supabaseReady && (
+            <>
+              <div className="clean-divider">
+                <span>or continue with</span>
+              </div>
+              <div className="clean-social-grid">
+                {(['google', 'facebook', 'apple'] as const).map((provider) => (
+                  <button key={provider} type="button" disabled={busy !== ''} onClick={() => oauth(provider)}>
+                    {provider[0].toUpperCase() + provider.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </form>
 
         <div className="clean-auth-footer">
           {supabaseReady ? (
