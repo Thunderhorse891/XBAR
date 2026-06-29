@@ -103,8 +103,8 @@ export default function Login() {
     <main className="clean-entry-shell clean-entry-shell--brand-auth">
       <section className="clean-login-layout" aria-label={authMode === 'signin' ? 'Sign in to XBAR' : 'Create an XBAR account'}>
         <aside className="clean-login-visual" aria-label="XBAR brand">
-          <img className="clean-login-visual__horse" src="/brand/xbar-horse-outline.png" width="980" height="331" alt="" />
-          <img className="clean-login-visual__logo" src="/brand/xbar-login-mark.png" width="512" height="512" alt="" />
+          <img className="clean-login-visual__horse" src="/brand/xbar-horse-outline-safe.png" width="980" height="331" alt="" />
+          <img className="clean-login-visual__logo" src="/brand/xbar-x-watermark-main.png" width="512" height="512" alt="" />
           <div className="clean-login-visual__copy">
             <span>XBAR</span>
             <h2>Horse records that stay organized.</h2>

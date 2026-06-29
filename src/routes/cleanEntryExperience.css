@@ -121,13 +121,14 @@
 .clean-login-visual__horse {
   position: absolute;
   z-index: 0;
-  width: min(620px, 88%);
+  width: min(620px, 82%);
   height: auto;
-  right: -132px;
+  right: clamp(12px, 4vw, 42px);
   top: 18px;
   opacity: 0.52;
   filter: saturate(1.18) contrast(1.08);
   mix-blend-mode: screen;
+  object-fit: contain;
   pointer-events: none;
 }
 
@@ -138,7 +139,7 @@
   height: auto;
   aspect-ratio: 1;
   align-self: start;
-  object-fit: cover;
+  object-fit: contain;
   filter: drop-shadow(0 24px 48px rgba(0, 0, 0, 0.72));
 }
 
@@ -637,8 +638,8 @@
   }
 
   .clean-login-visual__horse {
-    width: 360px;
-    right: -154px;
+    width: min(330px, 72%);
+    right: 12px;
     top: 6px;
     opacity: 0.46;
   }
