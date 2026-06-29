@@ -247,7 +247,52 @@ function extractFirstMatch(haystack: string, candidates: string[]) {
 }
 
 function extractRegistrationNumber(haystack: string) {
-  return haystack.match(/\b[A-Z]{2,5}-[A-Z0-9-]{3,}\b/i)?.[0]?.toUpperCase();
+  const labelMatch = haystack.match(/\b(?:registration|reg\.?)\s*(?:no|number|#)?\.?\s*[:#-]?\s*([A-Z]{0,5}\s*-?\s*\d{4,10}[A-Z]?)/i);
+  const registryMatch = haystack.match(/\b(?:AHA|AQHA|APHA|USEF|JC)\s*-?\s*\d{4,10}[A-Z]?\b/i);
+  return (labelMatch?.[1] ?? registryMatch?.[0] ?? '')
+    .replace(/\s+/g, '')
+    .toUpperCase() || undefined;
+}
+
+function extractLabeledText(haystack: string, labels: string[]) {
+  const stopLabels = [
+    'registration',
+    'reg',
+    'breed',
+    'color',
+    'colour',
+    'sex',
+    'gender',
+    'sire',
+    'dam',
+    'foaled',
+    'foaling',
+    'birth',
+    'owner',
+    'breeder',
+    'microchip',
+    'markings',
+    'registry',
+  ].join('|');
+
+  for (const label of labels) {
+    const pattern = new RegExp(`\\b${label}\\s*[:#-]?\\s*([A-Z][A-Z0-9 .,'&-]{1,72}?)(?=\\s+(?:${stopLabels})\\b|$)`, 'i');
+    const match = haystack.match(pattern);
+    const value = match?.[1]?.replace(/\s+/g, ' ').replace(/[|;,:-]+$/g, '').trim();
+    if (value && value.length >= 2) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function extractRegisteredHorseName(haystack: string) {
+  return extractLabeledText(haystack, ['registered\\s+name', '(?:horse\\s+)?name(?:\\s+of\\s+horse)?']);
+}
+
+function extractOwnerName(haystack: string) {
+  return extractLabeledText(haystack, ['current\\s+owner', 'recorded\\s+owner', 'owner(?:\\s+name)?']);
 }
 
 function extractExamDate(haystack: string) {
@@ -284,9 +329,9 @@ function extractDocumentEntities(params: {
   const haystack = `${fileName} ${previewText}`;
 
   return {
-    horseName: extractFirstMatch(haystack, horses.flatMap((horse) => [horse.name, horse.barnName])),
+    horseName: extractFirstMatch(haystack, horses.flatMap((horse) => [horse.name, horse.barnName])) ?? extractRegisteredHorseName(haystack),
     registrationNumber: extractRegistrationNumber(haystack),
-    ownerName: extractFirstMatch(haystack, buildKnownOwners(horses)),
+    ownerName: extractFirstMatch(haystack, buildKnownOwners(horses)) ?? extractOwnerName(haystack),
     examDate: inferredType === 'Vet Record' || inferredType === 'Coggins' ? extractExamDate(haystack) : undefined,
     veterinarian: inferredType === 'Vet Record' || inferredType === 'Coggins' ? extractVeterinarian(haystack) : undefined,
     transferStatus: extractTransferStatus(haystack, inferredType),

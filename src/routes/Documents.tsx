@@ -418,10 +418,18 @@ export default function Documents() {
       tone: result.ok ? 'success' : 'error',
     });
     if (result.ok) {
+      const createdHorseIds = result.createdHorseIds ?? [];
       setFiles([]);
       setBatchLabel('Live upload batch');
       setCreateHorseFromBatch(false);
       setSearchParams({});
+      if (createdHorseIds.length === 1) {
+        navigate(`/horses/${createdHorseIds[0]}`);
+        return;
+      }
+      if (createdHorseIds.length > 1) {
+        goToStage('Proof');
+      }
     }
     setIsSubmitting(false);
   };
@@ -579,7 +587,7 @@ export default function Documents() {
                   onClick={() => setCreateHorseFromBatch((current) => !current)}
                   disabled={!canUploadDocuments || Boolean(horseId)}
                 >
-                  {createHorseFromBatch ? 'Create from docs' : 'Review only'}
+                  {createHorseFromBatch ? 'Create horse profiles' : 'Review only'}
                 </button>
               </label>
               <label className="field-stack field-stack--wide">
