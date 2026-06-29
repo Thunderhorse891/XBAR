@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useId, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { XbarMark } from '@/components/BrandMark';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
@@ -16,6 +16,8 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const [params, setParams] = useSearchParams();
+  const emailId = useId();
+  const passwordId = useId();
   const pushToast = useUiStore((state) => state.pushToast);
   const cloud = useCloudStore();
   const initializeWorkspace = useXbarStore((state) => state.initializeWorkspace);
@@ -67,8 +69,8 @@ export default function Login() {
     rememberEmailPreference();
     if (!supabaseReady) {
       pushToast({
-        title: 'Opening XBAR',
-        message: 'Cloud sign-in is not connected in this deployment, so this opens a private browser workspace.',
+        title: 'Signed in',
+        message: 'Choose a plan to continue.',
         tone: 'success',
       });
       openBrowserWorkspace();
@@ -91,92 +93,119 @@ export default function Login() {
     toast(result.ok ? 'Reset email sent' : 'Reset unavailable', result);
     setBusy('');
   };
-  const label = authMode === 'signin' ? 'Welcome back' : selectedPlan ? `${selectedPlan} plan` : 'Create account';
-  const title = authMode === 'signin' ? 'Sign in to XBAR.' : 'Create your XBAR account.';
+  const label = authMode === 'signin' ? 'XBAR account' : selectedPlan ? `${selectedPlan} plan` : 'Create account';
+  const title = authMode === 'signin' ? 'Sign in to XBAR' : 'Create your XBAR account';
   const description = selectedPlan
-    ? `Use your email and password, then continue to ${selectedPlan} checkout.`
-    : 'Use your email and password to open your horse records, documents, buyer packets, and billing.';
+    ? `Enter your email and password, then continue to the ${selectedPlan} plan.`
+    : 'Access your horse records, documents, buyer packets, and billing.';
 
   return (
-    <main className="clean-entry-shell">
-      <section className="clean-auth-card" aria-label={authMode === 'signin' ? 'Sign in to XBAR' : 'Create an XBAR account'}>
-        <Link className="clean-brand" to="/landing" aria-label="XBAR overview">
-          <span className="clean-brand__mark" aria-hidden="true">
-            <XbarMark tone="mono" />
-          </span>
-          <span>
-            <strong>XBAR</strong>
-            <small>Equine operations</small>
-          </span>
-        </Link>
-
-        <div className="clean-auth-card__header">
-          <p>{label}</p>
-          <h1>{title}</h1>
-          <span>{description}</span>
-        </div>
-
-        <form className="clean-form" onSubmit={submit} aria-busy={busy !== ''}>
-          <label className="clean-field">
-            <span>Email</span>
-            <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required />
-          </label>
-          <label className="clean-field">
-            <span>Password</span>
-            <div className="clean-password-field">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete={authMode === 'signin' ? 'current-password' : 'new-password'}
-                minLength={8}
-                required
-              />
-              <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Hide entered value' : 'Show entered value'}>
-                {showPassword ? 'Hide' : 'Show'}
-              </button>
-            </div>
-          </label>
-          <div className="clean-auth-options">
-            <label>
-              <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} /> Remember me
-            </label>
-            {authMode === 'signin' && supabaseReady && (
-              <button type="button" disabled={!email || busy !== ''} onClick={reset}>
-                {busy === 'reset' ? 'Sending...' : 'Forgot password?'}
-              </button>
-            )}
+    <main className="clean-entry-shell clean-entry-shell--brand-auth">
+      <section className="clean-login-layout" aria-label={authMode === 'signin' ? 'Sign in to XBAR' : 'Create an XBAR account'}>
+        <aside className="clean-login-visual" aria-label="XBAR brand">
+          <img className="clean-login-visual__horse" src="/brand/xbar-horse-outline.png" width="980" height="331" alt="" />
+          <img className="clean-login-visual__logo" src="/brand/xbar-login-mark.png" width="512" height="512" alt="" />
+          <div className="clean-login-visual__copy">
+            <span>XBAR</span>
+            <h2>Horse records that stay organized.</h2>
+            <p>Sign in to manage horses, documents, sale packets, and billing.</p>
           </div>
-          <button className="clean-primary-button" type="submit" disabled={!email || password.length < 8 || busy !== ''}>
-            {busy === 'password' ? 'Working...' : authMode === 'signin' ? 'Sign in' : 'Create account'}
-          </button>
-          {supabaseReady && (
-            <>
-              <div className="clean-divider">
-                <span>or continue with</span>
-              </div>
-              <div className="clean-social-grid">
-                {(['google', 'facebook', 'apple'] as const).map((provider) => (
-                  <button key={provider} type="button" disabled={busy !== ''} onClick={() => oauth(provider)}>
-                    {provider[0].toUpperCase() + provider.slice(1)}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </form>
-
-        <div className="clean-auth-footer">
-          {supabaseReady ? (
+          <dl className="clean-login-proof" aria-label="XBAR account features">
             <div>
-              <span>{authMode === 'signin' ? "Don't have an account?" : 'Already have an account?'}</span>
-              <button type="button" onClick={() => setMode(authMode === 'signin' ? 'signup' : 'signin')}>
-                {authMode === 'signin' ? 'Create account' : 'Sign in'}
-              </button>
+              <dt>Horses</dt>
+              <dd>One record each</dd>
             </div>
-          ) : null}
-          <Link to="/landing">Back to overview</Link>
-        </div>
+            <div>
+              <dt>Files</dt>
+              <dd>Documents attached</dd>
+            </div>
+            <div>
+              <dt>Billing</dt>
+              <dd>Plan details</dd>
+            </div>
+          </dl>
+        </aside>
+
+        <section className="clean-auth-card clean-auth-card--login">
+          <Link className="clean-brand clean-brand--login" to="/landing" aria-label="XBAR home">
+            <span className="clean-brand__mark" aria-hidden="true">
+              <XbarMark tone="mono" />
+            </span>
+            <span>
+              <strong>XBAR</strong>
+              <small>Horse records</small>
+            </span>
+          </Link>
+
+          <div className="clean-auth-card__header">
+            <p>{label}</p>
+            <h1>{title}</h1>
+            <span>{description}</span>
+          </div>
+
+          <form className="clean-form" onSubmit={submit} aria-busy={busy !== ''}>
+            <div className="clean-field">
+              <label htmlFor={emailId}>Email</label>
+              <input id={emailId} type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required />
+            </div>
+            <div className="clean-field">
+              <label htmlFor={passwordId}>Password</label>
+              <div className="clean-password-field">
+                <input
+                  id={passwordId}
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete={authMode === 'signin' ? 'current-password' : 'new-password'}
+                  minLength={8}
+                  required
+                />
+                <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Hide entered value' : 'Show entered value'}>
+                  {showPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
+            </div>
+            <div className="clean-auth-options">
+              <label>
+                <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} /> Remember me
+              </label>
+              {authMode === 'signin' && supabaseReady && (
+                <button type="button" disabled={!email || busy !== ''} onClick={reset}>
+                  {busy === 'reset' ? 'Sending...' : 'Forgot password?'}
+                </button>
+              )}
+            </div>
+            <button className="clean-primary-button" type="submit" disabled={!email || password.length < 8 || busy !== ''}>
+              {busy === 'password' ? 'Signing in...' : authMode === 'signin' ? 'Sign in' : 'Create account'}
+            </button>
+            {supabaseReady && (
+              <>
+                <div className="clean-divider">
+                  <span>or continue with</span>
+                </div>
+                <div className="clean-social-grid">
+                  {(['google', 'facebook', 'apple'] as const).map((provider) => (
+                    <button key={provider} type="button" disabled={busy !== ''} onClick={() => oauth(provider)}>
+                      {provider[0].toUpperCase() + provider.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </form>
+
+          <div className="clean-auth-footer">
+            {supabaseReady ? (
+              <div>
+                <span>{authMode === 'signin' ? "Don't have an account?" : 'Already have an account?'}</span>
+                <button type="button" onClick={() => setMode(authMode === 'signin' ? 'signup' : 'signin')}>
+                  {authMode === 'signin' ? 'Create account' : 'Sign in'}
+                </button>
+              </div>
+            ) : null}
+            <Link to="/landing">View plans</Link>
+          </div>
+        </section>
       </section>
     </main>
   );

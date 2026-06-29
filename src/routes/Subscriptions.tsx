@@ -50,10 +50,10 @@ export default function Subscriptions() {
   const billingReadinessLabel = billingEnabled
     ? hasManagedIdentity || anyPaymentLink
       ? 'Secure checkout ready'
-      : 'Sign in required for checkout'
+      : 'Sign in to continue checkout'
     : anyPaymentLink
       ? 'Stripe checkout link ready'
-    : 'Billing not configured yet';
+    : 'Checkout is being connected';
   const selectedReadiness = getCheckoutReadiness({
     billingEnabled,
     canManageBilling,
@@ -147,19 +147,18 @@ export default function Subscriptions() {
           <p>Subscription</p>
           <h1 id="checkout-title">Choose your plan.</h1>
           <span>
-            Start with the free trial, or continue to secure Stripe checkout for the plan that fits your horses,
-            team, documents, and buyer workflow.
+            Pick the plan that fits your horses, team, documents, and billing needs.
           </span>
         </div>
 
         <div className="checkout-trial">
           <div>
             <span>Free trial</span>
-            <h2>Evaluate XBAR</h2>
-            <p>No card required. Use Starter capacity while you confirm the workflow.</p>
+            <h2>Start with XBAR</h2>
+            <p>No card required. Use Starter while you set up your records.</p>
           </div>
-          <button type="button" onClick={startTrial}>{workspaceReady ? 'Open workspace' : 'Start trial'}</button>
-          <small>{trialActive ? 'Trial workspace active' : `${formatLimit(subscriptionPlans.Starter.limits.horseLimit, 'horses')} and ${formatLimit(subscriptionPlans.Starter.limits.documentLimit, 'documents')}`}</small>
+          <button type="button" onClick={startTrial}>{workspaceReady ? 'Continue' : 'Start trial'}</button>
+          <small>{trialActive ? 'Trial active' : `${formatLimit(subscriptionPlans.Starter.limits.horseLimit, 'horses')} and ${formatLimit(subscriptionPlans.Starter.limits.documentLimit, 'documents')}`}</small>
         </div>
 
         <div className="checkout-plan-list" aria-label="Paid plans">
@@ -204,16 +203,16 @@ export default function Subscriptions() {
 
         <div className="checkout-status-list" aria-label="Checkout readiness">
           <div>
-            <span>Managed checkout</span>
-            <strong>{billingEnabled ? 'Enabled' : 'Paused'}</strong>
+            <span>Checkout</span>
+            <strong>{billingEnabled ? 'Ready' : 'Unavailable'}</strong>
           </div>
           <div>
-            <span>Stripe links</span>
-            <strong>{anyPaymentLink ? 'Ready' : 'Not configured'}</strong>
+            <span>Payment link</span>
+            <strong>{anyPaymentLink ? 'Ready' : 'Unavailable'}</strong>
           </div>
           <div>
-            <span>Workspace identity</span>
-            <strong>{hasManagedIdentity ? 'Verified' : 'Needed'}</strong>
+            <span>Account</span>
+            <strong>{hasManagedIdentity ? 'Signed in' : 'Sign in required'}</strong>
           </div>
         </div>
 
@@ -251,7 +250,7 @@ export default function Subscriptions() {
           <a href="#enterprise">Enterprise</a>
         </nav>
         <Link className="checkout-nav__action" to={continuePath}>
-          {workspaceReady ? 'Access workspace' : 'Setup workspace'}
+          {workspaceReady ? 'Open XBAR' : 'Set up workspace'}
         </Link>
       </header>
 
