@@ -47,13 +47,7 @@ export default function Subscriptions() {
   const billingEnabled = stripeConfig.managedBillingEnabled;
   const trialActive = subscription.tier === 'Starter' && subscription.monthlyRate === 0;
   const continuePath = workspaceReady ? '/' : '/setup';
-  const billingReadinessLabel = billingEnabled
-    ? hasManagedIdentity || anyPaymentLink
-      ? 'Secure checkout ready'
-      : 'Sign in to continue checkout'
-    : anyPaymentLink
-      ? 'Stripe checkout link ready'
-    : 'Checkout is being connected';
+  const checkoutReadinessLabel = billingEnabled || anyPaymentLink ? 'Secure checkout opens next.' : 'Secure checkout is not active yet.';
   const selectedReadiness = getCheckoutReadiness({
     billingEnabled,
     canManageBilling,
@@ -131,11 +125,11 @@ export default function Subscriptions() {
         {paidCurrent ? (
           <button type="button" disabled>Current plan</button>
         ) : (
-          <button type="button" disabled={!readiness.ready} onClick={() => void beginCheckout(tier)}>
+          <button type="button" disabled={!readiness.ready} title={readiness.reason} onClick={() => void beginCheckout(tier)}>
             {busy ? 'Opening checkout...' : `Choose ${tier}`}
           </button>
         )}
-        <small>{paidCurrent ? 'Your active paid capacity.' : readiness.reason}</small>
+        <small>{paidCurrent ? 'Your active paid capacity.' : readiness.ready ? 'Secure checkout opens next.' : readiness.reason}</small>
       </article>
     );
   };
@@ -182,37 +176,37 @@ export default function Subscriptions() {
         <div className="checkout-card-box" aria-label="Secure payment details">
           <div className="checkout-card-box__top">
             <span>Card details</span>
-            <strong>Stripe Checkout</strong>
+            <strong>Secure checkout</strong>
           </div>
           <label>
             <span>Card number</span>
-            <div>Entered securely in Stripe</div>
+            <div>Entered on the next secure step</div>
           </label>
           <div className="checkout-card-box__row">
             <label>
               <span>Expiration</span>
-              <div>Stripe</div>
+              <div>Next step</div>
             </label>
             <label>
               <span>CVC</span>
-              <div>Stripe</div>
+              <div>Next step</div>
             </label>
           </div>
-          <p>XBAR does not collect or store raw card numbers. Paid plans redirect to managed Stripe Checkout or the configured hosted payment link.</p>
+          <p>Your card details are handled by the payment processor. XBAR never stores raw card numbers.</p>
         </div>
 
-        <div className="checkout-status-list" aria-label="Checkout readiness">
+        <div className="checkout-status-list" aria-label="Plan details">
           <div>
-            <span>Checkout</span>
-            <strong>{billingEnabled ? 'Ready' : 'Unavailable'}</strong>
+            <span>Billing</span>
+            <strong>Monthly</strong>
           </div>
           <div>
-            <span>Payment link</span>
-            <strong>{anyPaymentLink ? 'Ready' : 'Unavailable'}</strong>
+            <span>Card</span>
+            <strong>Protected</strong>
           </div>
           <div>
-            <span>Account</span>
-            <strong>{hasManagedIdentity ? 'Signed in' : 'Sign in required'}</strong>
+            <span>Receipt</span>
+            <strong>Emailed</strong>
           </div>
         </div>
 
@@ -220,14 +214,15 @@ export default function Subscriptions() {
           className="checkout-primary-action"
           type="button"
           disabled={!selectedReadiness.ready || selectedPaidCurrent}
+          title={selectedPaidCurrent ? 'This plan is already active.' : selectedReadiness.reason}
           onClick={() => void beginCheckout(decisionTier)}
         >
-          {checkoutTier === decisionTier ? 'Opening secure checkout...' : selectedPaidCurrent ? 'Current plan' : `Continue to ${decisionTier} checkout`}
+          {checkoutTier === decisionTier ? 'Opening secure checkout...' : selectedPaidCurrent ? 'Current plan' : 'Continue to secure checkout'}
         </button>
         <button className="checkout-secondary-action" type="button" onClick={startTrial}>
           Start free trial instead
         </button>
-        <p className="checkout-note">{selectedPaidCurrent ? 'This paid plan is already active.' : selectedReadiness.reason || billingReadinessLabel}</p>
+        <p className="checkout-note">{selectedPaidCurrent ? 'This paid plan is already active.' : selectedReadiness.reason || checkoutReadinessLabel}</p>
       </aside>
     </div>
   );

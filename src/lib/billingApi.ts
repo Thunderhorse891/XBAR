@@ -32,7 +32,7 @@ export async function startManagedCheckout(params: {
   if (!params.workspaceId || !params.accessToken) {
     return {
       ok: false,
-      message: 'Sign in to start a managed billing session.',
+      message: 'Sign in to continue to secure checkout.',
     };
   }
 
@@ -54,7 +54,7 @@ export async function startManagedCheckout(params: {
     if (!response.ok || !payload.ok || !payload.url) {
       return {
         ok: false,
-        message: payload.message ?? 'Managed checkout is unavailable in this environment.',
+        message: payload.message ?? 'Secure checkout is not ready yet.',
       };
     }
 
@@ -65,7 +65,7 @@ export async function startManagedCheckout(params: {
   } catch {
     return {
       ok: false,
-      message: 'Managed checkout is unavailable in this environment.',
+      message: 'Secure checkout is not ready yet.',
     };
   }
 }
