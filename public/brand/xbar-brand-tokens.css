@@ -1,10 +1,10 @@
 :root {
-  --xbar-graphite: #16191d;
-  --xbar-gunmetal: #22272d;
-  --xbar-steel: #6f7882;
-  --xbar-silver: #c7ccd1;
-  --xbar-warm-white: #f4f1ea;
-  --xbar-muted-sand: #b6a98f;
-  --xbar-electric-blue: #2f8dff;
-  --xbar-electric-blue-soft: rgba(47, 141, 255, 0.38);
+  --xbar-black: #0B0D0F;
+  --xbar-graphite: #121518;
+  --xbar-gunmetal: #20252A;
+  --xbar-steel: #596168;
+  --xbar-silver: #B7BCC2;
+  --xbar-warm-white: #F5F2EC;
+  --xbar-muted-sand: #C7BDAA;
+  --xbar-blue: #0078D7;
 }

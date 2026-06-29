@@ -21,9 +21,9 @@ Use for:
 - merchandise
 
 Assets added:
-- `public/brand/xbar-app-icon.svg`
-- `public/brand/xbar-mark.svg`
-- `public/favicon.svg`
+- `public/brand/xbar-app-icon.png`
+- `public/brand/xbar-icon-mark.png`
+- `public/brand/xbar-favicon.png`
 - `src/components/BrandMark.tsx`
 
 ### Concept 2: Horizon Bar
@@ -173,7 +173,7 @@ Visual:
 
 ## App Icon
 
-Use `public/brand/xbar-app-icon.svg` as the new source of truth.
+Use `public/brand/xbar-app-icon.png` as the new source of truth.
 
 Rules:
 - Background must remain dark, not white.
@@ -183,7 +183,7 @@ Rules:
 
 ## Favicon
 
-Use `public/favicon.svg`.
+Use `public/brand/xbar-favicon.png`.
 
 Rules:
 - No horse curve at favicon size.

@@ -16,7 +16,7 @@
   --xbar-metal-line: linear-gradient(110deg, rgba(255,255,255,.9), rgba(150,170,190,.35) 28%, rgba(255,255,255,.5) 52%, rgba(120,150,180,.4));
   --xbar-metal-panel: linear-gradient(170deg, #ffffff 0%, #f4f9fe 58%, #ecf3fa 100%);
   --xbar-command-panel: linear-gradient(145deg, rgba(30,36,44,.96), rgba(8,11,16,.98) 42%, rgba(3,5,8,.99));
-  --xbar-logo-image: url('/brand/xbar_public_assets/public/main%20logo.png');
+  --xbar-logo-image: url('/brand/xbar-x-watermark-main.png');
   --radius-xl: 22px;
   --radius-lg: 16px;
   --radius-md: 11px;
@@ -107,7 +107,7 @@ body::before {
 
 .brand-canvas__lockup { opacity: 0; }
 
-/* Machined graphite shell (sidebar keeps the dark brand identity). */
+/* Machined graphite shell for the sidebar. */
 .sidebar,
 .xbar-command-shell > aside {
   border-right: 1px solid rgba(224,237,248,.18) !important;

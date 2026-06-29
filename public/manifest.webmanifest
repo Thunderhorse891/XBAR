@@ -8,19 +8,19 @@
   "start_url": "/",
   "icons": [
     {
-      "src": "/brand/xbar_public_assets/public/main%20logo.png",
+      "src": "/brand/xbar-app-icon.png",
       "sizes": "any",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/brand/xbar_public_assets/public/main%20logo.png",
+      "src": "/brand/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/brand/xbar_public_assets/public/main%20logo.png",
+      "src": "/brand/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
