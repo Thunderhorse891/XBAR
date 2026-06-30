@@ -93,35 +93,37 @@ export default function Login() {
     toast(result.ok ? 'Reset email sent' : 'Reset unavailable', result);
     setBusy('');
   };
-  const label = authMode === 'signin' ? 'XBAR account' : selectedPlan ? `${selectedPlan} plan` : 'Create account';
-  const title = authMode === 'signin' ? 'Sign in to XBAR' : 'Create your XBAR account';
+  const label = authMode === 'signin' ? 'System access' : selectedPlan ? `${selectedPlan} tier` : 'New operator';
+  const title = authMode === 'signin' ? 'Sign In' : 'Create Account';
   const description = selectedPlan
-    ? `Enter your email and password, then continue to the ${selectedPlan} plan.`
-    : 'Access your horse records, documents, buyer packets, and billing.';
+    ? `Create credentials, then continue to the ${selectedPlan} plan.`
+    : authMode === 'signin'
+      ? 'Enter your credentials to access the system.'
+      : 'Create secure credentials for your XBAR workspace.';
 
   return (
     <main className="clean-entry-shell clean-entry-shell--brand-auth">
       <section className="clean-login-layout" aria-label={authMode === 'signin' ? 'Sign in to XBAR' : 'Create an XBAR account'}>
         <aside className="clean-login-visual" aria-label="XBAR brand">
           <img className="clean-login-visual__horse" src="/brand/xbar-horse-outline-safe.png" width="980" height="331" alt="" />
-          <img className="clean-login-visual__logo" src="/brand/xbar-x-watermark-main.png" width="512" height="512" alt="" />
+          <img className="clean-login-visual__watermark" src="/brand/xbar-x-watermark-main.png" width="512" height="512" alt="" />
           <div className="clean-login-visual__copy">
-            <span>XBAR</span>
-            <h2>Horse records that stay organized.</h2>
-            <p>Sign in to manage horses, documents, sale packets, and billing.</p>
+            <img className="clean-login-visual__wordmark" src="/brand/xbar-wordmark.png" width="420" height="120" alt="XBAR" />
+            <h2>XBAR Ranch Management</h2>
+            <p>Access your enterprise dashboard with high-fidelity security protocols.</p>
           </div>
-          <dl className="clean-login-proof" aria-label="XBAR account features">
+          <dl className="clean-login-proof" aria-label="XBAR system status">
             <div>
-              <dt>Horses</dt>
-              <dd>One record each</dd>
+              <dt>Global Network</dt>
+              <dd>v2.0 online</dd>
             </div>
             <div>
-              <dt>Files</dt>
-              <dd>Documents attached</dd>
+              <dt>Security</dt>
+              <dd>E2EE active</dd>
             </div>
             <div>
-              <dt>Billing</dt>
-              <dd>Plan details</dd>
+              <dt>Workspace</dt>
+              <dd>Ranch OS ready</dd>
             </div>
           </dl>
         </aside>
@@ -145,7 +147,7 @@ export default function Login() {
 
           <form className="clean-form" onSubmit={submit} aria-busy={busy !== ''}>
             <div className="clean-field">
-              <label htmlFor={emailId}>Email</label>
+              <label htmlFor={emailId}>Email or User ID</label>
               <input id={emailId} type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required />
             </div>
             <div className="clean-field">
@@ -176,7 +178,7 @@ export default function Login() {
               )}
             </div>
             <button className="clean-primary-button" type="submit" disabled={!email || password.length < 8 || busy !== ''}>
-              {busy === 'password' ? 'Signing in...' : authMode === 'signin' ? 'Sign in' : 'Create account'}
+              {busy === 'password' ? 'Authenticating...' : authMode === 'signin' ? 'Sign In' : 'Create Account'}
             </button>
             {supabaseReady && (
               <>
@@ -204,6 +206,7 @@ export default function Login() {
               </div>
             ) : null}
             <Link to="/landing">View plans</Link>
+            <span>© 2026 XBAR Corp · E2EE</span>
           </div>
         </section>
       </section>

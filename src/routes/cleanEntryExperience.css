@@ -1,10 +1,10 @@
 .clean-entry-shell {
-  --entry-bg: #f5f6f7;
+  --entry-bg: #F5F2EC;
   --entry-panel: #ffffff;
-  --entry-ink: #101418;
-  --entry-muted: #59636e;
+  --entry-ink: #121518;
+  --entry-muted: #596168;
   --entry-line: rgba(16, 20, 24, 0.14);
-  --entry-blue: #315f7f;
+  --entry-blue: #0078D7;
   --entry-success: #059669;
   --entry-warning: #d97706;
   --entry-error: #bf4040;
@@ -39,10 +39,11 @@
   --entry-steel: #596168;
   align-items: center;
   background:
-    linear-gradient(rgba(11, 13, 15, 0.026) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(11, 13, 15, 0.026) 1px, transparent 1px),
+    linear-gradient(rgba(11, 13, 15, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(11, 13, 15, 0.03) 1px, transparent 1px),
+    radial-gradient(circle at 14% 18%, rgba(0, 120, 215, 0.055), transparent 24rem),
     #F5F2EC;
-  background-size: 80px 80px, 80px 80px, auto;
+  background-size: 68px 68px, 68px 68px, auto, auto;
   justify-items: center;
   overflow: hidden;
   padding: clamp(18px, 4vw, 56px);
@@ -61,28 +62,29 @@
   position: relative;
   z-index: 1;
   display: grid;
-  width: min(1120px, 100%);
-  min-height: min(720px, calc(100vh - 72px));
-  grid-template-columns: minmax(0, 1.08fr) minmax(380px, 0.92fr);
+  width: min(1000px, 100%);
+  min-height: min(640px, calc(100vh - 72px));
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.94fr);
   overflow: hidden;
   border: 1px solid rgba(183, 188, 194, 0.82);
   border-radius: 8px;
   background: #ffffff;
-  box-shadow: 0 38px 90px -60px rgba(11, 13, 15, 0.42);
+  box-shadow: 0 34px 90px -52px rgba(11, 13, 15, 0.46);
 }
 
 .clean-login-visual {
   position: relative;
   display: grid;
-  align-content: space-between;
+  align-content: stretch;
+  grid-template-rows: minmax(0, 1fr) auto;
   min-height: 100%;
   overflow: hidden;
   border-right: 1px solid rgba(183, 188, 194, 0.82);
   background:
-    linear-gradient(rgba(11, 13, 15, 0.03) 1px, transparent 1px),
+    linear-gradient(rgba(11, 13, 15, 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(11, 13, 15, 0.03) 1px, transparent 1px),
-    #F5F2EC;
-  background-size: 44px 44px, 44px 44px, auto;
+    linear-gradient(180deg, #ffffff 0%, #F5F2EC 100%);
+  background-size: 42px 42px, 42px 42px, auto;
   color: #121518;
   padding: clamp(26px, 4vw, 46px);
 }
@@ -116,27 +118,37 @@
 .clean-login-visual__horse {
   position: absolute;
   z-index: 0;
-  width: min(620px, 82%);
+  width: min(620px, 88%);
   height: auto;
-  right: clamp(12px, 4vw, 42px);
-  top: 18px;
-  opacity: 0.16;
+  right: clamp(8px, 3vw, 34px);
+  top: 26px;
+  opacity: 0.3;
   filter: saturate(0.85) contrast(1.06);
   mix-blend-mode: multiply;
   object-fit: contain;
   pointer-events: none;
 }
 
+.clean-login-visual__watermark,
 .clean-login-visual__logo {
   position: relative;
   z-index: 2;
-  width: min(240px, 46%);
+  width: min(230px, 45%);
   height: auto;
   aspect-ratio: 1;
   align-self: start;
   object-fit: contain;
-  opacity: 0.08;
-  filter: grayscale(1);
+  opacity: 0.09;
+  filter: grayscale(1) contrast(1.1);
+}
+
+.clean-login-visual__watermark {
+  position: absolute;
+  left: clamp(24px, 4vw, 42px);
+  top: clamp(28px, 5vw, 58px);
+  width: min(300px, 52%);
+  opacity: 0.16;
+  z-index: 1;
 }
 
 .clean-login-visual__copy {
@@ -144,7 +156,16 @@
   z-index: 2;
   display: grid;
   width: min(560px, 100%);
-  gap: 13px;
+  align-self: end;
+  gap: 12px;
+  margin-bottom: clamp(24px, 5vw, 42px);
+}
+
+.clean-login-visual__wordmark {
+  width: min(210px, 52%);
+  height: auto;
+  object-fit: contain;
+  filter: contrast(1.04);
 }
 
 .clean-login-visual__copy span {
@@ -159,18 +180,19 @@
 .clean-login-visual__copy h2 {
   margin: 0;
   color: #121518 !important;
-  font-family: 'Outfit', 'Geist', sans-serif;
-  font-size: clamp(2.1rem, 5vw, 3.6rem);
-  font-weight: 700;
+  font-family: 'Hanken Grotesk', 'Geist', 'Outfit', sans-serif;
+  font-size: clamp(1.8rem, 4vw, 2.65rem);
+  font-weight: 800;
   letter-spacing: 0 !important;
-  line-height: 1.04;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .clean-login-visual__copy p {
   width: min(480px, 100%);
   margin: 0;
   color: #596168;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.65;
 }
 
@@ -187,14 +209,16 @@
   min-width: 0;
   border: 1px solid rgba(183, 188, 194, 0.82);
   border-radius: 8px;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.78);
   padding: 13px;
 }
 
 .clean-login-proof dt {
   color: #121518;
-  font-size: 12px;
-  font-weight: 700;
+  font-family: 'Geist', 'Hanken Grotesk', sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
 }
 
 .clean-login-proof dd {
@@ -210,7 +234,7 @@
   gap: 24px;
   border: 1px solid var(--entry-line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.94);
   padding: clamp(24px, 4vw, 36px);
   box-shadow: 0 26px 70px -52px rgba(16, 20, 24, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.95);
 }
@@ -218,7 +242,7 @@
 .clean-auth-card--login {
   align-self: center;
   justify-self: center;
-  width: min(100% - 48px, 430px);
+  width: min(100% - 48px, 420px);
   border-color: rgba(215, 221, 228, 0.72);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 248, 249, 0.98)),
@@ -288,9 +312,10 @@
 .clean-heading-kicker {
   margin: 0;
   color: var(--entry-blue);
+  font-family: 'Geist', 'Hanken Grotesk', sans-serif;
   font-size: 11px;
   font-weight: 820;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
@@ -298,8 +323,9 @@
 .clean-auth-card__header h2 {
   margin: 0;
   color: var(--entry-ink);
-  font-size: clamp(2rem, 7vw, 3rem);
-  font-weight: 790;
+  font-family: 'Hanken Grotesk', 'Geist', 'Outfit', sans-serif;
+  font-size: clamp(2.8rem, 7vw, 4rem);
+  font-weight: 800;
   line-height: 1;
 }
 
@@ -327,8 +353,11 @@
 .clean-field span,
 .clean-field > label {
   color: #46515e;
+  font-family: 'Geist', 'Hanken Grotesk', sans-serif;
   font-size: 12px;
   font-weight: 760;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .clean-field input,
@@ -338,7 +367,7 @@
   border-radius: 7px;
   background: #ffffff;
   color: var(--entry-ink);
-  min-height: 46px;
+  min-height: 48px;
 }
 
 .clean-field input {
@@ -400,14 +429,16 @@
 .clean-secondary-button,
 .clean-social-grid button {
   display: inline-flex;
-  min-height: 46px;
+  min-height: 50px;
   align-items: center;
   justify-content: center;
   border-radius: 7px;
   cursor: pointer;
   font: inherit;
+  font-family: 'Geist', 'Hanken Grotesk', sans-serif;
   font-size: 13px;
   font-weight: 820;
+  text-transform: uppercase;
 }
 
 .clean-primary-button {
@@ -522,6 +553,13 @@
 .clean-auth-footer a {
   color: var(--entry-blue);
   font-weight: 760;
+}
+
+.clean-auth-footer > span {
+  color: rgba(89, 97, 104, 0.72);
+  font-family: 'Geist', 'Hanken Grotesk', sans-serif;
+  font-size: 10px;
+  text-transform: uppercase;
 }
 
 .clean-entry-shell--setup {
@@ -641,6 +679,7 @@
     opacity: 0.46;
   }
 
+  .clean-login-visual__watermark,
   .clean-login-visual__logo {
     width: 112px;
   }

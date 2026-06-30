@@ -160,18 +160,7 @@ function routeSurfaceSlug(label: string) {
 }
 
 function ShellHorseMotif({ className = '' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 620 310" fill="none" aria-hidden="true">
-      <path d="M30 211c54-43 115-65 181-65 36 0 64 10 93 28 25 16 50 23 83 19 53-6 90-30 128-66 21-19 43-35 70-40 14-3 26 1 32 12 7 13-2 30-22 40-22 11-45 19-67 27-18 6-33 15-46 28-20 20-41 39-70 50-44 17-94 11-137-4-40-14-77-15-119-5-47 11-87 8-126-24Z" />
-      <path d="M205 146c12-36 36-62 71-76 37-15 82-10 117 12 27 17 47 44 68 70" />
-      <path d="M282 76c-11-25-7-48 10-62 20 25 23 49 9 69" />
-      <path d="M360 77c11-22 29-34 54-32-1 28-16 46-45 51" />
-      <path d="M136 219c-16 18-27 40-33 64" />
-      <path d="M235 237c-8 21-12 41-12 60" />
-      <path d="M427 239c6 21 18 39 35 55" />
-      <path d="M504 205c23 20 38 44 44 75" />
-    </svg>
-  );
+  return <img className={className} src="/brand/xbar-horse-outline-safe.png" alt="" aria-hidden="true" />;
 }
 
 function NavSection({ title, items, badges }: { title: NavSectionName; items: NavItem[]; badges: Record<string, number> }) {

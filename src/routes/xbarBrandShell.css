@@ -83,6 +83,7 @@ html body #root .xbar-shell-x--two {
    negative space with snout and ears intact, low contrast, never centered. */
 html body #root .xbar-shell-horse-line {
   display: none;
+  object-fit: contain;
 }
 
 html body #root .xbar-shell-motifs::after {
@@ -294,4 +295,108 @@ html body #root .xbar-firstrun__hero-actions button:not(:first-child) {
   background: #ffffff !important;
   border: 1px solid var(--xbar-shell-outline) !important;
   color: #121518 !important;
+}
+
+/* ------------------------------------------------ Legal/public docs ------- */
+html body #root .xbar-legal-route {
+  position: relative;
+  min-height: 100vh;
+  width: min(1040px, calc(100% - 36px));
+  margin: 0 auto;
+  padding: clamp(34px, 6vw, 82px) 0;
+  color: #121518;
+  font-family: var(--xbar-shell-sans);
+}
+
+html body #root .xbar-legal-route::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    linear-gradient(rgba(11, 13, 15, 0.026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(11, 13, 15, 0.026) 1px, transparent 1px),
+    #F5F2EC;
+  background-size: 76px 76px, 76px 76px, auto;
+}
+
+html body #root .xbar-legal-route::after {
+  content: "";
+  position: fixed;
+  right: max(18px, 8vw);
+  top: max(28px, 8vh);
+  z-index: -1;
+  width: min(42vw, 620px);
+  aspect-ratio: 980 / 331;
+  background: url('/brand/xbar-horse-outline-safe.png') top right / contain no-repeat;
+  opacity: 0.08;
+  pointer-events: none;
+}
+
+html body #root .xbar-legal-route__eyebrow,
+html body #root .xbar-legal-route__meta,
+html body #root .xbar-legal-route h2 {
+  font-family: var(--xbar-shell-mono);
+  text-transform: uppercase;
+}
+
+html body #root .xbar-legal-route__eyebrow {
+  margin: 0 0 14px;
+  color: #0078D7;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+html body #root .xbar-legal-route h1 {
+  width: min(760px, 100%);
+  margin: 0;
+  color: #121518;
+  font-family: 'Hanken Grotesk', var(--xbar-shell-sans);
+  font-size: clamp(2.4rem, 6vw, 4.6rem);
+  font-weight: 850;
+  letter-spacing: 0;
+  line-height: 0.96;
+}
+
+html body #root .xbar-legal-route__meta {
+  margin: 14px 0 24px;
+  color: #596168;
+  font-size: 0.76rem;
+  letter-spacing: 0.12em;
+}
+
+html body #root .xbar-legal-route__notice {
+  width: min(760px, 100%);
+  margin: 0 0 36px;
+  border: 1px solid var(--xbar-shell-outline);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #596168;
+  line-height: 1.7;
+  padding: 18px;
+}
+
+html body #root .xbar-legal-route section {
+  display: grid;
+  gap: 10px;
+  width: min(860px, 100%);
+  margin: 0 0 28px;
+  border-top: 1px solid var(--xbar-shell-outline);
+  padding-top: 22px;
+}
+
+html body #root .xbar-legal-route h2 {
+  margin: 0;
+  color: #121518;
+  font-size: 0.86rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+}
+
+html body #root .xbar-legal-route p {
+  margin: 0;
+  color: #596168;
+  font-size: 0.95rem;
+  line-height: 1.7;
 }

@@ -109,7 +109,7 @@ export default function Subscriptions() {
         key={tier}
       >
         <div>
-          <span>{highlighted ? 'Selected' : 'Paid plan'}</span>
+          <span>{highlighted ? 'Selected tier' : 'Operational tier'}</span>
           <h3>{tier}</h3>
           <p>{profile.fit}</p>
         </div>
@@ -138,16 +138,16 @@ export default function Subscriptions() {
     <div className="checkout-grid">
       <section className="checkout-panel checkout-panel--plans" aria-labelledby="checkout-title">
         <div className="checkout-heading">
-          <p>Subscription</p>
-          <h1 id="checkout-title">Choose your plan.</h1>
+          <p>Subscription tiers</p>
+          <h1 id="checkout-title">Select Your Plan</h1>
           <span>
-            Pick the plan that fits your horses, team, documents, and billing needs.
+            Choose the tier that fits your workflow. All plans include secure checkout readiness and clean operating controls for modern horse operations.
           </span>
         </div>
 
         <div className="checkout-trial">
           <div>
-            <span>Free trial</span>
+            <span>Trial protocol</span>
             <h2>Start with XBAR</h2>
             <p>No card required. Use Starter while you set up your records.</p>
           </div>
@@ -162,7 +162,7 @@ export default function Subscriptions() {
 
       <aside className="checkout-panel checkout-panel--payment" aria-label="Payment method">
         <div className="checkout-heading checkout-heading--compact">
-          <p>Payment</p>
+          <p>Secure gateway</p>
           <h2>{decisionTier}</h2>
           <span>{decisionProfile.fit}</span>
         </div>

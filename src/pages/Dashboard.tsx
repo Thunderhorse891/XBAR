@@ -19,21 +19,6 @@ type HorseReadinessProfile = {
   blockers: string[];
 };
 
-function HorseContour({ className = '' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 620 300" fill="none" aria-hidden="true">
-      <path d="M38 202c54-41 114-61 180-61 36 0 62 10 93 29 23 14 48 22 81 18 52-6 90-31 128-67 20-19 44-34 71-39 14-2 25 1 31 12 7 14-3 29-22 40-21 12-45 20-67 27-17 6-32 15-45 28-20 20-42 40-72 51-43 16-92 10-135-5-40-14-77-15-119-5-48 12-89 8-124-28Z" />
-      <path d="M210 141c12-36 37-62 72-77 37-15 83-10 117 12 27 17 47 44 68 70" />
-      <path d="M288 68c-10-26-7-49 11-63 19 26 23 49 9 70" />
-      <path d="M365 69c11-22 30-34 55-33-1 30-17 47-45 51" />
-      <path d="M140 212c-17 20-29 42-35 66" />
-      <path d="M236 229c-8 22-12 41-12 62" />
-      <path d="M429 232c6 22 18 40 35 57" />
-      <path d="M508 196c24 20 39 45 45 75" />
-    </svg>
-  );
-}
-
 function getTone(status: PacketCompleteness['buyerProfileStatus']): Tone {
   if (status === 'Live') return 'clear';
   if (status === 'Needs Review') return 'review';
@@ -243,7 +228,7 @@ export default function Dashboard() {
 
   return (
     <section className="xbar-editorial-dashboard" aria-labelledby="xbar-dashboard-title">
-      <HorseContour className="xbar-editorial-dashboard__horse-line" />
+      <img className="xbar-editorial-dashboard__horse-line" src="/brand/xbar-horse-outline-safe.png" alt="" aria-hidden="true" />
       <div className="xbar-editorial-dashboard__brand" aria-label="XBAR brand">
         <img src={XBAR_MAIN_LOGO_SRC} alt="XBAR logo" className="xbar-editorial-dashboard__logo" />
         <div>
@@ -256,7 +241,7 @@ export default function Dashboard() {
       <main className="xbar-editorial-dashboard__stage">
         <header className="xbar-editorial-dashboard__masthead">
           <div>
-            <p>Equine transaction infrastructure</p>
+            <p>Equine_Training_OS_V4</p>
             <h1 id="xbar-dashboard-title">
               {hasHorseData ? 'Sale readiness, before the horse leaves the barn.' : 'Build sale readiness from the first horse.'}
             </h1>
