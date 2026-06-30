@@ -18,6 +18,7 @@ import './routes/commandCenterLocal.css';
 import './routes/premiumOperatingSystem.css';
 import './routes/premiumSaasExperience.css';
 import './routes/productionFinal.css';
+import './routes/stitchDesignSystem.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Breeding = lazy(() => import('./routes/Breeding'));
