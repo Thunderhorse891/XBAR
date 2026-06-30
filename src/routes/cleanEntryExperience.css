@@ -30,18 +30,18 @@
 }
 
 .clean-entry-shell--brand-auth {
-  --entry-bg: #fcf8fa;
+  --entry-bg: #F5F2EC;
   --entry-panel: #ffffff;
-  --entry-ink: #1b1b1d;
-  --entry-muted: #45464d;
-  --entry-line: rgba(27, 27, 29, 0.12);
-  --entry-blue: #000000;
-  --entry-steel: #76777d;
+  --entry-ink: #121518;
+  --entry-muted: #596168;
+  --entry-line: rgba(11, 13, 15, 0.14);
+  --entry-blue: #0078D7;
+  --entry-steel: #596168;
   align-items: center;
   background:
-    linear-gradient(rgba(27, 27, 29, 0.022) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(27, 27, 29, 0.022) 1px, transparent 1px),
-    #fcf8fa;
+    linear-gradient(rgba(11, 13, 15, 0.026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(11, 13, 15, 0.026) 1px, transparent 1px),
+    #F5F2EC;
   background-size: 80px 80px, 80px 80px, auto;
   justify-items: center;
   overflow: hidden;
@@ -65,10 +65,10 @@
   min-height: min(720px, calc(100vh - 72px));
   grid-template-columns: minmax(0, 1.08fr) minmax(380px, 0.92fr);
   overflow: hidden;
-  border: 1px solid #c6c6cd;
-  border-radius: 12px;
+  border: 1px solid rgba(183, 188, 194, 0.82);
+  border-radius: 8px;
   background: #ffffff;
-  box-shadow: 0 38px 90px -60px rgba(27, 27, 29, 0.42);
+  box-shadow: 0 38px 90px -60px rgba(11, 13, 15, 0.42);
 }
 
 .clean-login-visual {
@@ -77,13 +77,13 @@
   align-content: space-between;
   min-height: 100%;
   overflow: hidden;
-  border-right: 1px solid #c6c6cd;
+  border-right: 1px solid rgba(183, 188, 194, 0.82);
   background:
-    linear-gradient(rgba(27, 27, 29, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(27, 27, 29, 0.03) 1px, transparent 1px),
-    #f6f3f5;
+    linear-gradient(rgba(11, 13, 15, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(11, 13, 15, 0.03) 1px, transparent 1px),
+    #F5F2EC;
   background-size: 44px 44px, 44px 44px, auto;
-  color: #1b1b1d;
+  color: #121518;
   padding: clamp(26px, 4vw, 46px);
 }
 
@@ -108,9 +108,9 @@
   height: 520px;
   right: -180px;
   bottom: -180px;
-  border: 1px solid rgba(27, 27, 29, 0.08);
+  border: 1px solid rgba(0, 120, 215, 0.18);
   border-radius: 50%;
-  box-shadow: inset 0 0 68px rgba(27, 27, 29, 0.03);
+  box-shadow: inset 0 0 68px rgba(0, 120, 215, 0.05);
 }
 
 .clean-login-visual__horse {
@@ -120,8 +120,8 @@
   height: auto;
   right: clamp(12px, 4vw, 42px);
   top: 18px;
-  opacity: 0.08;
-  filter: grayscale(1);
+  opacity: 0.16;
+  filter: saturate(0.85) contrast(1.06);
   mix-blend-mode: multiply;
   object-fit: contain;
   pointer-events: none;
@@ -135,7 +135,7 @@
   aspect-ratio: 1;
   align-self: start;
   object-fit: contain;
-  opacity: 0.06;
+  opacity: 0.08;
   filter: grayscale(1);
 }
 
@@ -158,18 +158,18 @@
 
 .clean-login-visual__copy h2 {
   margin: 0;
-  color: #1b1b1d !important;
-  font-family: 'Hanken Grotesk', 'Outfit', sans-serif;
+  color: #121518 !important;
+  font-family: 'Outfit', 'Geist', sans-serif;
   font-size: clamp(2.1rem, 5vw, 3.6rem);
   font-weight: 700;
-  letter-spacing: -0.02em !important;
+  letter-spacing: 0 !important;
   line-height: 1.04;
 }
 
 .clean-login-visual__copy p {
   width: min(480px, 100%);
   margin: 0;
-  color: #45464d;
+  color: #596168;
   font-size: 15px;
   line-height: 1.65;
 }
@@ -185,21 +185,21 @@
 
 .clean-login-proof div {
   min-width: 0;
-  border: 1px solid #c6c6cd;
+  border: 1px solid rgba(183, 188, 194, 0.82);
   border-radius: 8px;
   background: #ffffff;
   padding: 13px;
 }
 
 .clean-login-proof dt {
-  color: #1b1b1d;
+  color: #121518;
   font-size: 12px;
   font-weight: 700;
 }
 
 .clean-login-proof dd {
   margin: 5px 0 0;
-  color: #76777d;
+  color: #596168;
   font-size: 12px;
   line-height: 1.35;
 }
@@ -417,10 +417,10 @@
 }
 
 .clean-entry-shell--brand-auth .clean-primary-button {
-  border-color: #000000;
-  background: #000000;
+  border-color: #0B0D0F;
+  background: #0B0D0F;
   color: #ffffff;
-  box-shadow: 0 14px 30px -22px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 14px 30px -22px rgba(0, 120, 215, 0.48);
 }
 
 .clean-secondary-button,
