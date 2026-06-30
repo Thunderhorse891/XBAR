@@ -10,7 +10,7 @@
       ]
     },
     {
-      "source": "/((?!api/|assets/|brand/).*)",
+      "source": "/((?!api/|assets/|brand/|favicon\\.svg|favicon\\.ico|site\\.webmanifest|manifest\\.webmanifest|xbar-service-worker\\.js|robots\\.txt|sitemap\\.xml).*)",
       "headers": [
         {
           "key": "Cache-Control",
@@ -21,7 +21,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!api/).*)",
+      "source": "/((?!api/|assets/|brand/|favicon\\.svg|favicon\\.ico|site\\.webmanifest|manifest\\.webmanifest|xbar-service-worker\\.js|robots\\.txt|sitemap\\.xml).*)",
       "destination": "/index.html"
     }
   ],

@@ -1,6 +1,6 @@
 export type OfflineRuntimeStatus = 'unsupported' | 'ready' | 'registered' | 'failed';
 
-const SERVICE_WORKER_URL = '/xbar-service-worker.js?v=20260628-design-sync';
+const SERVICE_WORKER_URL = '/xbar-service-worker.js?v=20260630-vercel-freshness';
 let refreshQueued = false;
 
 export async function registerOfflineRuntime(): Promise<OfflineRuntimeStatus> {
