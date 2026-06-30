@@ -1176,3 +1176,46 @@ aside.xs-drawer .xs-drawer__sub { color: var(--xbar-text-muted) !important; }
 .xs-intel__line { display: flex; gap: 9px; align-items: flex-start; font-size: 12.5px; padding: 4px 0; }
 .xs-intel__line svg { color: var(--xbar-text-muted); flex: none; margin-top: 2px; }
 .xs-intel__qc { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+/* =========================================================================
+   Legacy → brand bridge
+   The legacy pages (Settings, Subscriptions, Expenses, Horses, Sales, …)
+   render inside the new `.xs-shell` but still use index.css / shadcn tokens
+   keyed to a BLUE accent. Remap those tokens to the cool XBAR system here so
+   every legacy surface inherits cyan/carbon/graphite without a rewrite.
+   ========================================================================= */
+.xs-shell {
+  --blue: var(--xbar-cyan-ink);
+  --brand-electric: var(--xbar-cyan);
+  --primary: 197 11% 7%;            /* carbon — legacy primary buttons */
+  --primary-foreground: 0 0% 100%;
+  --ring: 188 89% 53%;              /* cyan — focus rings */
+  --accent: 187 100% 93%;           /* cyan-soft */
+  --accent-foreground: 190 84% 30%; /* cyan-ink */
+}
+/* legacy eyebrows / accents that hardcode the blue token (concept stylesheets
+   set these with !important, so the bridge must too) */
+.xs-shell .eyebrow,
+.xs-shell .panel__eyebrow,
+.xs-shell .detail-hero__eyebrow,
+.xs-shell .nav-section__title { color: var(--xbar-cyan-ink) !important; }
+/* legacy primary buttons + blue pills → carbon / cyan */
+.xs-shell .button--primary {
+  background: var(--xbar-carbon) !important;
+  border-color: var(--xbar-carbon) !important;
+  color: #fff !important;
+}
+.xs-shell .pill--blue {
+  color: var(--xbar-cyan-ink) !important;
+  background: var(--xbar-cyan-soft) !important;
+  border-color: rgba(24, 216, 242, 0.35) !important;
+}
+
+/* Permanent guard: no <aside> rendered inside the page body may inherit the
+   legacy dark "brand" skin (the recurring dark-panel leak). Drawer + sidebar
+   keep their own explicit treatment above. */
+.xs-shell .xs-page aside {
+  background: var(--xbar-surface) !important;
+  color: var(--xbar-text) !important;
+  box-shadow: var(--xbar-shadow-card) !important;
+}

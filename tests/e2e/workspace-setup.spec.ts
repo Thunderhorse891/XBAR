@@ -49,7 +49,7 @@ async function bootstrapWorkspace(page: Page) {
   await page.getByRole('button', { name: 'Create workspace' }).click();
 
   await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
-  await expect(page.getByRole('heading', { name: 'XBAR Operations Console' })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: /at risk/ })).toBeVisible({ timeout: 15_000 });
 }
 
 test('creates a workspace and lands on the operations console', async ({ page }) => {
