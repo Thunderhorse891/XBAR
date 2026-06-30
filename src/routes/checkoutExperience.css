@@ -1,10 +1,10 @@
 .checkout-route {
-  --checkout-bg: #f5f6f7;
+  --checkout-bg: #F5F2EC;
   --checkout-panel: #ffffff;
-  --checkout-ink: #101418;
-  --checkout-muted: #59636e;
+  --checkout-ink: #121518;
+  --checkout-muted: #596168;
   --checkout-line: rgba(16, 20, 24, 0.14);
-  --checkout-blue: #315f7f;
+  --checkout-blue: #0078D7;
   --checkout-success: #059669;
   --checkout-warning: #d97706;
   --checkout-error: #bf4040;
@@ -12,8 +12,9 @@
   background:
     linear-gradient(rgba(16, 20, 24, 0.024) 1px, transparent 1px),
     linear-gradient(90deg, rgba(16, 20, 24, 0.02) 1px, transparent 1px),
+    radial-gradient(circle at 84% 12%, rgba(0, 120, 215, 0.065), transparent 26rem),
     linear-gradient(180deg, #ffffff 0%, var(--checkout-bg) 100%);
-  background-size: 88px 88px, 88px 88px, auto;
+  background-size: 88px 88px, 88px 88px, auto, auto;
   color: var(--checkout-ink);
 }
 
@@ -41,6 +42,7 @@
   display: inline-flex;
   align-items: center;
   gap: 10px;
+  font-family: 'Geist', 'Hanken Grotesk', sans-serif;
   font-size: 15px;
   font-weight: 840;
 }
@@ -57,7 +59,8 @@
   flex-wrap: wrap;
   gap: 18px;
   color: var(--checkout-muted);
-  font-size: 13px;
+  font-family: 'Geist', 'Hanken Grotesk', sans-serif;
+  font-size: 12px;
   font-weight: 720;
 }
 
@@ -127,9 +130,10 @@
 .checkout-total span {
   margin: 0;
   color: var(--checkout-blue);
+  font-family: 'Geist', 'Hanken Grotesk', sans-serif;
   font-size: 11px;
   font-weight: 830;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
@@ -144,8 +148,10 @@
 }
 
 .checkout-heading h1 {
-  font-size: clamp(2.4rem, 6vw, 4.25rem);
+  font-family: 'Hanken Grotesk', 'Geist', 'Outfit', sans-serif;
+  font-size: clamp(2.8rem, 6vw, 4.7rem);
   line-height: 0.98;
+  text-transform: uppercase;
 }
 
 .checkout-heading h2 {
@@ -173,7 +179,7 @@
   border-radius: 8px;
   background: rgba(5, 150, 105, 0.06);
   padding: 18px;
-  box-shadow: inset 3px 0 0 var(--checkout-success);
+  box-shadow: inset 3px 0 0 var(--checkout-blue);
 }
 
 .checkout-trial div {
@@ -235,13 +241,13 @@
   display: grid;
   gap: 14px;
   border: 1px solid var(--checkout-line);
-  border-radius: 8px;
+  border-radius: 6px;
   background: #ffffff;
   padding: 18px;
 }
 
 .checkout-plan--selected {
-  border-color: rgba(49, 95, 127, 0.54);
+  border-color: rgba(0, 120, 215, 0.54);
   box-shadow: inset 3px 0 0 var(--checkout-blue);
 }
 
