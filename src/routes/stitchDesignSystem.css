@@ -228,6 +228,234 @@ html body #root .xbar-command-shell aside a[class*="bg-[#f0edef]"] {
   background: #f0edef !important;
 }
 
+/* ----------------------------------- Horses "portfolio signal deck" ------- */
+/* This section shipped with markup but no styles, so it rendered as raw text.
+   Give it a proper Stitch layout: explainer + signal bars + preview cards. */
+html body #root .portfolio-signal-deck {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: clamp(18px, 2.4vw, 32px);
+  align-items: start;
+  padding: clamp(20px, 2.6vw, 30px);
+  border: 1px solid var(--stitch-outline);
+  border-radius: 14px;
+  background: var(--stitch-card);
+  box-shadow: 0 10px 30px rgba(27, 27, 29, 0.05);
+}
+
+html body #root .portfolio-signal-deck__copy {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+html body #root .portfolio-signal-deck__copy span {
+  font-family: var(--stitch-mono);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--stitch-faint);
+}
+
+html body #root .portfolio-signal-deck__copy strong {
+  font-family: var(--stitch-sans);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.18;
+  color: var(--stitch-primary);
+}
+
+html body #root .portfolio-signal-deck__copy p {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: var(--stitch-muted);
+}
+
+html body #root .portfolio-signal-deck__bars {
+  display: grid;
+  gap: 16px;
+}
+
+html body #root .portfolio-signal-bar {
+  display: grid;
+  gap: 6px;
+}
+
+html body #root .portfolio-signal-bar > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+html body #root .portfolio-signal-bar > div span {
+  font-family: var(--stitch-mono);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--stitch-muted);
+}
+
+html body #root .portfolio-signal-bar > div strong {
+  font-family: var(--stitch-sans);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--stitch-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+html body #root .portfolio-signal-bar i {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--stitch-surface-high);
+  overflow: hidden;
+}
+
+html body #root .portfolio-signal-bar i span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--stitch-primary);
+}
+
+html body #root .portfolio-signal-bar small {
+  font-size: 0.72rem;
+  color: var(--stitch-faint);
+}
+
+html body #root .portfolio-mini-carousel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+html body #root .portfolio-mini-card {
+  display: grid;
+  gap: 3px;
+  padding: 14px;
+  text-align: left;
+  border: 1px solid var(--stitch-outline);
+  border-radius: 10px;
+  background: var(--stitch-surface-low);
+  cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease, transform 150ms ease;
+}
+
+html body #root .portfolio-mini-card:hover:not(:disabled) {
+  border-color: var(--stitch-primary);
+  background: #ffffff;
+  transform: translateY(-1px);
+}
+
+html body #root .portfolio-mini-card:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+html body #root .portfolio-mini-card span {
+  font-family: var(--stitch-sans);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--stitch-primary);
+}
+
+html body #root .portfolio-mini-card strong {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--stitch-text);
+}
+
+html body #root .portfolio-mini-card small {
+  font-size: 0.72rem;
+  color: var(--stitch-faint);
+}
+
+html body #root .portfolio-mini-card em {
+  margin-top: 4px;
+  justify-self: start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--stitch-outline);
+  background: #ffffff;
+  font-family: var(--stitch-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  font-style: normal;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--stitch-muted);
+}
+
+@media (max-width: 1080px) {
+  html body #root .portfolio-signal-deck {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  html body #root .portfolio-mini-carousel {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --------------------------------------------- Generic content panels ----- */
+/* A legacy layer paints .surface-panel with a dark navy gradient on some
+   routes (e.g. the Documents pipeline rail), which clashes with the light
+   Stitch system. Force the generic panel + its tab rail to a clean surface. */
+html body #root .xbar-command-main .surface-panel,
+html body #root .xbar-route-surface .surface-panel {
+  background: #ffffff !important;
+  border: 1px solid #c6c6cd !important;
+  color: #1b1b1d !important;
+  box-shadow: 0 8px 24px rgba(27, 27, 29, 0.04) !important;
+}
+
+html body #root .xbar-command-main .surface-tab--active,
+html body #root .xbar-route-surface .surface-tab--active {
+  background: #1b1b1d !important;
+  border-color: #1b1b1d !important;
+  color: #ffffff !important;
+}
+
+/* ------------------------------------------- Unified action buttons ------- */
+/* The legacy layers paint primary actions with a blue gradient and some
+   secondaries dark. Standardize the whole app to the Stitch palette:
+   black filled primary, white outlined secondary. */
+html body #root .xbar-route-surface :is(.button--primary, .ops-briefing-action--primary, .public-action--primary, .xbar-home-action--primary),
+html body #root .xbar-command-main :is(.button--primary, .ops-briefing-action--primary, .xbar-home-action--primary) {
+  background: #000000 !important;
+  border: 1px solid #000000 !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.55) !important;
+}
+
+html body #root .xbar-route-surface :is(.button--primary, .ops-briefing-action--primary, .public-action--primary, .xbar-home-action--primary):hover,
+html body #root .xbar-command-main :is(.button--primary, .ops-briefing-action--primary, .xbar-home-action--primary):hover {
+  background: #1b1b1d !important;
+  border-color: #1b1b1d !important;
+}
+
+/* Secondary / ghost actions → clean white outline. */
+html body #root .xbar-route-surface :is(.button, .ops-briefing-action, .public-action, .xbar-home-action):not(.button--primary):not(.ops-briefing-action--primary):not(.public-action--primary):not(.xbar-home-action--primary),
+html body #root .xbar-command-main :is(.button, .ops-briefing-action, .xbar-home-action):not(.button--primary):not(.ops-briefing-action--primary):not(.xbar-home-action--primary) {
+  background: #ffffff !important;
+  border: 1px solid #c6c6cd !important;
+  color: #1b1b1d !important;
+  box-shadow: none !important;
+}
+
+html body #root .xbar-route-surface :is(.button, .ops-briefing-action, .public-action, .xbar-home-action):not(.button--primary):not(.ops-briefing-action--primary):not(.public-action--primary):not(.xbar-home-action--primary):hover,
+html body #root .xbar-command-main :is(.button, .ops-briefing-action, .xbar-home-action):not(.button--primary):not(.ops-briefing-action--primary):not(.xbar-home-action--primary):hover {
+  border-color: #000000 !important;
+  background: #f6f3f5 !important;
+}
+
 /* ------------------------------------------ First-run welcome (Stitch) ---- */
 /* The empty-workspace welcome shipped as a dark command-center hero. Repaint
    it as a clean, light Stitch surface so the dashboard reads consistently. */
