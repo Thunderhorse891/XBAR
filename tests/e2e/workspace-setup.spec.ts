@@ -54,7 +54,9 @@ async function bootstrapWorkspace(page: Page) {
 
 test('creates a workspace and lands on the operations console', async ({ page }) => {
   await bootstrapWorkspace(page);
-  await expect(page.getByRole('heading', { name: "Today's Work — Work Queue" })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /at risk/ })).toBeVisible();
+  await expect(page.getByText('Needs a decision today')).toBeVisible();
+  await expect(page.locator('.xs-ribbon')).toBeVisible();
   await expect(page.getByText('XBAR Intelligence')).toBeVisible();
 });
 
@@ -70,11 +72,11 @@ test('global Create opens a real create drawer with fields', async ({ page }) =>
 
 test('clicking a task opens the task drawer; revenue blocker launches the resolve flow', async ({ page }) => {
   await bootstrapWorkspace(page);
-  await page.locator('.xs-task--click').first().click();
+  await page.locator('.xs-workmini__row').first().click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.keyboard.press('Escape');
 
-  await page.getByRole('button', { name: 'Clear Blocker' }).first().click();
+  await page.getByRole('button', { name: 'Resolve blocker' }).first().click();
   const wizard = page.getByRole('dialog', { name: 'Resolve Blocker' });
   await expect(wizard).toBeVisible();
   await expect(wizard.getByText('Health certificate expiration date missing')).toBeVisible();
@@ -84,7 +86,7 @@ test('clicking a task opens the task drawer; revenue blocker launches the resolv
 
 test('animal profile opens with tabs', async ({ page }) => {
   await bootstrapWorkspace(page);
-  await page.locator('.xs-animal').first().click();
+  await page.locator('.xs-signal', { hasText: 'Medical hold' }).click();
   const drawer = page.getByRole('dialog');
   await expect(drawer).toBeVisible();
   await expect(drawer.locator('.xs-dtab', { hasText: /^Sale Readiness$/ })).toBeVisible();

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Archive, ArrowUpDown, Check, FileUp, Link2, ShieldCheck, Upload } from 'lucide-react';
 import { ActionButton, Card, PageHead, SlideOverDrawer, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
+import { events, track } from '@/lib/telemetry';
 import { dataRoomDocs, documentFilters, type DataRoomDoc } from '@/data/xbarSaasMock';
 
 const statusTone = { Current: 'success', Expiring: 'warning', Missing: 'danger', Review: 'warning' } as const;
@@ -60,7 +61,7 @@ export default function DocumentsVault() {
       {selectedRows.size > 0 ? (
         <div className="xs-bulkbar">
           <span className="xs-bulkbar__count">{selectedRows.size} selected</span>
-          <ActionButton size="sm" icon={<ShieldCheck size={14} />} onClick={() => { toast(`${selectedRows.size} marked buyer-safe`); setSelectedRows(new Set()); }}>Mark Buyer-Safe</ActionButton>
+          <ActionButton size="sm" icon={<ShieldCheck size={14} />} onClick={() => { track(events.documentBulkAction, { action: 'mark_buyer_safe', count: selectedRows.size }); toast(`${selectedRows.size} marked buyer-safe`); setSelectedRows(new Set()); }}>Mark Buyer-Safe</ActionButton>
           <ActionButton size="sm" icon={<FileUp size={14} />} onClick={() => { toast(`${selectedRows.size} added to packet`); setSelectedRows(new Set()); }}>Include in Packet</ActionButton>
           <ActionButton size="sm" icon={<Archive size={14} />} onClick={() => { toast(`${selectedRows.size} archived`); setSelectedRows(new Set()); }}>Archive</ActionButton>
           <span className="xs-bulkbar__spacer" />
@@ -85,7 +86,7 @@ export default function DocumentsVault() {
             {rows.map((d) => {
               const sel = selectedRows.has(d.id);
               return (
-                <tr key={d.id} className={sel ? 'xs-tr--sel' : ''} onClick={() => setSelected(d)}>
+                <tr key={d.id} className={sel ? 'xs-tr--sel' : ''} onClick={() => { track(events.documentOpened, { id: d.id, type: d.type }); setSelected(d); }}>
                   <td onClick={(e) => { e.stopPropagation(); toggleRow(d.id); }}><span className={`xs-checkbox${sel ? ' xs-checkbox--on' : ''}`}>{sel ? <Check size={12} /> : null}</span></td>
                   <td style={{ fontWeight: 600 }}>{d.name}</td>
                   <td className="xs-muted">{d.type}</td>

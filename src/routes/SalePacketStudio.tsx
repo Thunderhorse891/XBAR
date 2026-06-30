@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, Check, FileText, Link2, ShieldCheck, Upload } fr
 import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
 import { Stepper } from '@/components/saas/flows';
 import { useUiStore } from '@/store/useUiStore';
+import { events, track } from '@/lib/telemetry';
 import { saasHorses } from '@/data/xbarSaasMock';
 
 const STEPS = ['Select animal', 'Packet type', 'Required documents', 'Fix issues', 'Preview', 'Share'];
@@ -152,7 +153,7 @@ export default function SalePacketStudio() {
               <label><span className="xs-field-label">Share link</span><input className="xs-input" readOnly value={`https://xbar.app/packet/${horse.id}`} /></label>
               <div style={{ display: 'flex', gap: 8 }}>
                 <ActionButton icon={<Link2 size={15} />} onClick={() => pushToast({ title: 'Copied', message: 'Share link copied', tone: 'success' })}>Copy Link</ActionButton>
-                <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={() => navigate('/buyer-deal-room')}>Open Buyer Deal Room</ActionButton>
+                <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={() => { track(events.packetShared, { horse: horse.id, packetType }); navigate('/buyer-deal-room'); }}>Open Buyer Deal Room</ActionButton>
               </div>
             </div>
           </div>
@@ -164,7 +165,7 @@ export default function SalePacketStudio() {
           {step < STEPS.length - 1 ? (
             <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={next}>Continue</ActionButton>
           ) : (
-            <ActionButton variant="primary" onClick={() => navigate('/buyer-deal-room')}>Share & Open Deal Room</ActionButton>
+            <ActionButton variant="primary" onClick={() => { track(events.packetShared, { horse: horse.id, packetType }); navigate('/buyer-deal-room'); }}>Share & Open Deal Room</ActionButton>
           )}
         </div>
       </Card>

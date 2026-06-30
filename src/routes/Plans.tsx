@@ -4,6 +4,7 @@ import { Check } from 'lucide-react';
 import { ActionButton, PageHead } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
+import { events, track } from '@/lib/telemetry';
 import { subscriptionPlanCards } from '@/data/xbarSaasMock';
 
 export default function Plans() {
@@ -43,7 +44,7 @@ export default function Plans() {
               {isCurrent ? (
                 <span className="xs-chip xs-chip--success" style={{ justifyContent: 'center' }}>Current plan</span>
               ) : (
-                <ActionButton variant={p.featured ? 'primary' : 'default'} block onClick={() => { pushToast({ title: 'Upgrade', message: `${p.name} selected`, tone: 'success' }); navigate('/subscriptions'); }}>
+                <ActionButton variant={p.featured ? 'primary' : 'default'} block onClick={() => { track(events.planSelected, { plan: p.name }); pushToast({ title: 'Upgrade', message: `${p.name} selected`, tone: 'success' }); navigate('/subscriptions'); }}>
                   {p.price === 'Custom' ? 'Contact Sales' : `Choose ${p.name}`}
                 </ActionButton>
               )}

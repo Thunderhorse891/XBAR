@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Ban, Download, Eye, MessageSquare, Phone, Send, ShieldCheck } from 'lucide-react';
 import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
+import { events, track } from '@/lib/telemetry';
 import { dealRooms, type DealRoom } from '@/data/xbarSaasMock';
 
 const accessTone = { Active: 'success', Pending: 'warning', Revoked: 'danger' } as const;
@@ -32,7 +33,7 @@ export default function BuyerDealRoom() {
         <div className="xs-md__list">
           <div className="xs-md__listhead"><span>Buyers</span><span>{rooms.length}</span></div>
           {rooms.map((r) => (
-            <button key={r.id} type="button" className={`xs-mdrow${r.id === selectedId ? ' xs-mdrow--active' : ''}`} onClick={() => setSelectedId(r.id)}>
+            <button key={r.id} type="button" className={`xs-mdrow${r.id === selectedId ? ' xs-mdrow--active' : ''}`} onClick={() => { track(events.buyerSelected, { id: r.id }); setSelectedId(r.id); }}>
               <span className="xs-mdrow__avatar">{initials(r.buyer)}</span>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span className="xs-mdrow__name">{r.buyer}</span>
@@ -55,7 +56,7 @@ export default function BuyerDealRoom() {
               </div>
             </div>
             <div className="xs-toolbar">
-              <ActionButton size="sm" icon={<Ban size={14} />} onClick={() => { update(selected.id, { access: 'Revoked' }); toast('Access revoked'); }}>Revoke</ActionButton>
+              <ActionButton size="sm" icon={<Ban size={14} />} onClick={() => { track(events.buyerAccessRevoked, { id: selected.id }); update(selected.id, { access: 'Revoked' }); toast('Access revoked'); }}>Revoke</ActionButton>
               <ActionButton size="sm" variant="primary" icon={<ShieldCheck size={14} />} onClick={() => navigate('/sale-packet-studio')}>Prepare Release</ActionButton>
             </div>
           </div>
@@ -76,7 +77,7 @@ export default function BuyerDealRoom() {
             ) : (
               <>
                 <p className="xs-muted" style={{ fontSize: 13, margin: '0 0 12px' }}>No offer recorded yet for this buyer.</p>
-                <ActionButton size="sm" variant="primary" onClick={() => { update(selected.id, { offer: 'Received', offerAmount: 22000 }); toast('Offer recorded'); }}>Record Offer</ActionButton>
+                <ActionButton size="sm" variant="primary" onClick={() => { track(events.buyerOfferRecorded, { id: selected.id, amount: 22000 }); update(selected.id, { offer: 'Received', offerAmount: 22000 }); toast('Offer recorded'); }}>Record Offer</ActionButton>
               </>
             )}
           </Card>

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { ActionButton, SlideOverDrawer, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
+import { events, track } from '@/lib/telemetry';
 import {
   saasHorses,
   type WatchAnimal,
@@ -85,6 +86,7 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
   if (!action) return null;
 
   const submit = (msg: string, go?: string) => {
+    track(events.createSubmitted, { action });
     pushToast({ title: action, message: msg, tone: 'success' });
     setF({});
     onClose();
@@ -218,7 +220,7 @@ export function ResolveBlockerWizard({
         ) : (
           <>
             <ActionButton onClick={close}>Close</ActionButton>
-            <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={() => { pushToast({ title: 'Blocker resolved', message: `${horse} is now release-ready`, tone: 'success' }); close(); navigate('/sale-packet-studio'); }}>Open Sale Packet</ActionButton>
+            <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={() => { track(events.blockerResolved, { horse, amount }); pushToast({ title: 'Blocker resolved', message: `${horse} is now release-ready`, tone: 'success' }); close(); navigate('/sale-packet-studio'); }}>Open Sale Packet</ActionButton>
           </>
         )
       }
@@ -302,7 +304,7 @@ export function TaskDrawer({ task, onClose, onResolveBlocker }: { task: WorkTask
         ) : (
           <>
             <ActionButton onClick={() => { toast('Snoozed'); onClose(); }}>Snooze</ActionButton>
-            <ActionButton variant="primary" icon={<Check size={15} />} onClick={() => { toast(`Completed: ${task.title}`); onClose(); }}>Mark Done</ActionButton>
+            <ActionButton variant="primary" icon={<Check size={15} />} onClick={() => { track(events.taskCompleted, { id: task.id, category: task.category }); toast(`Completed: ${task.title}`); onClose(); }}>Mark Done</ActionButton>
           </>
         )
       }
