@@ -30,20 +30,19 @@
 }
 
 .clean-entry-shell--brand-auth {
-  --entry-bg: #07090c;
-  --entry-panel: #f8f8f9;
-  --entry-ink: #0c1015;
-  --entry-muted: #5f6873;
-  --entry-line: rgba(12, 16, 21, 0.14);
-  --entry-blue: #0078d7;
-  --entry-steel: #d7dde4;
+  --entry-bg: #F5F2EC;
+  --entry-panel: #ffffff;
+  --entry-ink: #121518;
+  --entry-muted: #596168;
+  --entry-line: rgba(11, 13, 15, 0.14);
+  --entry-blue: #0078D7;
+  --entry-steel: #596168;
   align-items: center;
   background:
-    radial-gradient(circle at 28% 18%, rgba(0, 120, 215, 0.24), transparent 32%),
-    radial-gradient(circle at 74% 84%, rgba(215, 221, 228, 0.1), transparent 34%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.055) 0 1px, transparent 1px 28px),
-    linear-gradient(180deg, #171b20 0%, #090b0f 52%, #030405 100%);
-  background-size: auto, auto, 28px 28px, auto;
+    linear-gradient(rgba(11, 13, 15, 0.026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(11, 13, 15, 0.026) 1px, transparent 1px),
+    #F5F2EC;
+  background-size: 80px 80px, 80px 80px, auto;
   justify-items: center;
   overflow: hidden;
   padding: clamp(18px, 4vw, 56px);
@@ -53,11 +52,9 @@
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background:
-    linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.04) 50%, transparent 100%),
-    radial-gradient(circle at 50% -18%, rgba(255, 255, 255, 0.18), transparent 36%);
+  background: none;
   content: "";
-  opacity: 0.68;
+  opacity: 0;
 }
 
 .clean-login-layout {
@@ -68,13 +65,10 @@
   min-height: min(720px, calc(100vh - 72px));
   grid-template-columns: minmax(0, 1.08fr) minmax(380px, 0.92fr);
   overflow: hidden;
-  border: 1px solid rgba(215, 221, 228, 0.22);
+  border: 1px solid rgba(183, 188, 194, 0.82);
   border-radius: 8px;
-  background: rgba(9, 12, 16, 0.78);
-  box-shadow:
-    0 38px 120px -68px rgba(0, 0, 0, 0.96),
-    0 0 0 1px rgba(0, 120, 215, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  background: #ffffff;
+  box-shadow: 0 38px 90px -60px rgba(11, 13, 15, 0.42);
 }
 
 .clean-login-visual {
@@ -83,12 +77,13 @@
   align-content: space-between;
   min-height: 100%;
   overflow: hidden;
-  border-right: 1px solid rgba(215, 221, 228, 0.16);
+  border-right: 1px solid rgba(183, 188, 194, 0.82);
   background:
-    linear-gradient(120deg, rgba(255, 255, 255, 0.08), transparent 30%),
-    radial-gradient(circle at 34% 28%, rgba(0, 120, 215, 0.23), transparent 32%),
-    linear-gradient(145deg, #15191e 0%, #0a0d11 64%, #050607 100%);
-  color: #f6f7f8;
+    linear-gradient(rgba(11, 13, 15, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(11, 13, 15, 0.03) 1px, transparent 1px),
+    #F5F2EC;
+  background-size: 44px 44px, 44px 44px, auto;
+  color: #121518;
   padding: clamp(26px, 4vw, 46px);
 }
 
@@ -113,9 +108,9 @@
   height: 520px;
   right: -180px;
   bottom: -180px;
-  border: 1px solid rgba(0, 120, 215, 0.34);
+  border: 1px solid rgba(0, 120, 215, 0.18);
   border-radius: 50%;
-  box-shadow: inset 0 0 68px rgba(0, 120, 215, 0.1);
+  box-shadow: inset 0 0 68px rgba(0, 120, 215, 0.05);
 }
 
 .clean-login-visual__horse {
@@ -125,9 +120,9 @@
   height: auto;
   right: clamp(12px, 4vw, 42px);
   top: 18px;
-  opacity: 0.52;
-  filter: saturate(1.18) contrast(1.08);
-  mix-blend-mode: screen;
+  opacity: 0.16;
+  filter: saturate(0.85) contrast(1.06);
+  mix-blend-mode: multiply;
   object-fit: contain;
   pointer-events: none;
 }
@@ -135,12 +130,13 @@
 .clean-login-visual__logo {
   position: relative;
   z-index: 2;
-  width: min(280px, 52%);
+  width: min(240px, 46%);
   height: auto;
   aspect-ratio: 1;
   align-self: start;
   object-fit: contain;
-  filter: drop-shadow(0 24px 48px rgba(0, 0, 0, 0.72));
+  opacity: 0.08;
+  filter: grayscale(1);
 }
 
 .clean-login-visual__copy {
@@ -153,24 +149,27 @@
 
 .clean-login-visual__copy span {
   color: var(--entry-steel);
-  font-size: 12px;
-  font-weight: 820;
-  letter-spacing: 0.12em;
+  font-family: 'Geist', 'Outfit', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
 }
 
 .clean-login-visual__copy h2 {
   margin: 0;
-  color: #ffffff !important;
-  font-size: clamp(2.1rem, 5vw, 4.25rem);
-  font-weight: 780;
+  color: #121518 !important;
+  font-family: 'Outfit', 'Geist', sans-serif;
+  font-size: clamp(2.1rem, 5vw, 3.6rem);
+  font-weight: 700;
   letter-spacing: 0 !important;
-  line-height: 0.95;
+  line-height: 1.04;
 }
 
 .clean-login-visual__copy p {
   width: min(480px, 100%);
   margin: 0;
-  color: rgba(246, 247, 248, 0.72);
+  color: #596168;
   font-size: 15px;
   line-height: 1.65;
 }
@@ -186,21 +185,21 @@
 
 .clean-login-proof div {
   min-width: 0;
-  border: 1px solid rgba(215, 221, 228, 0.16);
+  border: 1px solid rgba(183, 188, 194, 0.82);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.055);
+  background: #ffffff;
   padding: 13px;
 }
 
 .clean-login-proof dt {
-  color: #ffffff;
+  color: #121518;
   font-size: 12px;
-  font-weight: 820;
+  font-weight: 700;
 }
 
 .clean-login-proof dd {
   margin: 5px 0 0;
-  color: rgba(246, 247, 248, 0.64);
+  color: #596168;
   font-size: 12px;
   line-height: 1.35;
 }
@@ -418,12 +417,10 @@
 }
 
 .clean-entry-shell--brand-auth .clean-primary-button {
-  border-color: #07090c;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent),
-    #07090c;
+  border-color: #0B0D0F;
+  background: #0B0D0F;
   color: #ffffff;
-  box-shadow: 0 18px 40px -28px rgba(0, 120, 215, 0.68);
+  box-shadow: 0 14px 30px -22px rgba(0, 120, 215, 0.48);
 }
 
 .clean-secondary-button,

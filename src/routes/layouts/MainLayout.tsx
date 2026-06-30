@@ -177,7 +177,7 @@ function ShellHorseMotif({ className = '' }: { className?: string }) {
 function NavSection({ title, items, badges }: { title: NavSectionName; items: NavItem[]; badges: Record<string, number> }) {
   return (
     <div className="flex flex-col gap-2">
-      <div className="px-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-[#536d88]">{sectionDisplayNames[title]}</div>
+      <div className="px-3 font-[Geist] text-[10px] font-semibold uppercase tracking-[0.24em] text-[#596168]">{sectionDisplayNames[title]}</div>
       <div className="flex flex-col gap-[1px]">
         {items.map(({ label, path, icon: Icon, badgeKey }) => {
           const badge = badgeKey ? (badges[badgeKey] ?? 0) : 0;
@@ -190,8 +190,8 @@ function NavSection({ title, items, badges }: { title: NavSectionName; items: Na
                 classNames(
                   'group flex items-center gap-3 border-l-[3px] px-3 py-[9px] text-[13px] font-medium transition-all duration-150 ease-[ease]',
                   isActive
-                    ? 'border-[#4d94ff] bg-[#0d2040] text-white shadow-[0_6px_18px_rgba(34,102,238,0.2)]'
-                    : 'border-transparent text-[#7a9ab4] hover:border-[#1e3a56] hover:bg-[#0b1c30] hover:text-[#c8ddf0]',
+                    ? 'border-[#0B0D0F] bg-[#F5F2EC] font-semibold text-[#121518]'
+                    : 'border-transparent text-[#596168] hover:border-[#B7BCC2] hover:bg-[#F5F2EC] hover:text-[#121518]',
                 )
               }
             >
@@ -282,35 +282,35 @@ export default function MainLayout() {
 
   return (
     <div className={classNames('xbar-command-shell min-h-screen lg:grid lg:grid-cols-[264px,1fr]', `xbar-shell-${routeSlug}`)}>
-      <aside className="hidden min-h-screen flex-col gap-6 border-r border-[#0e1e32] bg-[#050b14] px-5 py-6 text-[#c2d4e8] lg:flex">
+      <aside className="hidden min-h-screen flex-col gap-6 border-r border-[#B7BCC2] bg-[#F5F2EC] px-5 py-6 text-[#121518] lg:flex">
         <div className="xbar-sidebar-brand flex items-center gap-3">
-          <div className="xbar-sidebar-brand__mark flex h-[52px] w-[52px] items-center justify-center rounded-lg border border-[#1a2e46] bg-[#050910] p-1.5 shadow-[0_14px_32px_rgba(47,141,255,0.18)]">
-            <XbarMark title="XBAR logo" tone="mono" className="h-full w-full" />
+          <div className="xbar-sidebar-brand__mark flex h-[52px] w-[52px] items-center justify-center rounded-lg border border-[#B7BCC2] bg-white p-1.5 shadow-[0_8px_22px_rgba(11,13,15,0.08)]">
+            <XbarMark title="XBAR logo" className="h-full w-full" />
           </div>
           <div className="xbar-sidebar-brand__copy min-w-0">
-            <div className="text-[1.04rem] font-extrabold uppercase tracking-[0.14em] text-white">XBAR</div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#52708d]">Horse records</div>
+            <div className="text-[1.04rem] font-extrabold uppercase tracking-[0.14em] text-[#0B0D0F]">XBAR</div>
+            <div className="font-[Geist] text-[10px] font-semibold uppercase tracking-[0.24em] text-[#596168]">Horse records</div>
           </div>
         </div>
 
-        <div className="rounded-[14px] border border-[#162436] bg-[#080f1c] p-4 shadow-[0_12px_28px_rgba(0,0,0,0.36)]">
+        <div className="rounded-lg border border-[#B7BCC2] bg-white p-4 shadow-[0_8px_24px_rgba(11,13,15,0.04)]">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#536d88]">Ranch Status</div>
-            <span className={classNames('ops-pulse', opsUrgency !== 'clear' ? '' : '')}>
+            <div className="font-[Geist] text-[10px] font-semibold uppercase tracking-[0.24em] text-[#596168]">Ranch Status</div>
+            <span className="ops-pulse">
               <span className={classNames('ops-pulse__dot', opsUrgency === 'urgent' ? 'ops-pulse__dot--urgent' : opsUrgency === 'warning' ? 'ops-pulse__dot--warning' : '')} />
             </span>
           </div>
-          <div className="mt-2 text-[0.96rem] font-bold leading-tight text-[#ddeaf8]">{workspaceProfile.ranchName || workspaceProfile.businessName || 'Primary ranch'}</div>
-          <div className="mt-0.5 text-xs text-[#6f8aa5]">{commandState} · {roleWorkspace.label}</div>
+          <div className="mt-2 text-[0.96rem] font-bold leading-tight text-[#121518]">{workspaceProfile.ranchName || workspaceProfile.businessName || 'Primary ranch'}</div>
+          <div className="mt-0.5 text-xs text-[#596168]">{commandState} · {roleWorkspace.label}</div>
           <div className="mt-3 grid grid-cols-2 gap-1.5 text-xs">
-            <span className="rounded border border-[#142030] bg-[#08111d] px-2 py-1.5 text-[#6e8da6]">{horses.length} files</span>
-            <span className={classNames('rounded border px-2 py-1.5', pendingTransfers > 0 ? 'border-[#5a1a1a] bg-[#1a0808] text-[#ff8a8a]' : 'border-[#142030] bg-[#08111d] text-[#6e8da6]')}>{pendingTransfers} transfers</span>
-            <span className={classNames('rounded border px-2 py-1.5', pendingReview > 0 ? 'border-[#4a3800] bg-[#191000] text-[#fbbf24]' : 'border-[#142030] bg-[#08111d] text-[#6e8da6]')}>{pendingReview} docs</span>
-            <span className="rounded border border-[#142030] bg-[#08111d] px-2 py-1.5 text-[#6e8da6]">{activeSales} buyers</span>
+            <span className="rounded border border-[#B7BCC2] bg-[#F5F2EC] px-2 py-1.5 text-[#596168]">{horses.length} files</span>
+            <span className={classNames('rounded border px-2 py-1.5', pendingTransfers > 0 ? 'border-[#0078D7] bg-[#F5F2EC] text-[#0B0D0F]' : 'border-[#B7BCC2] bg-[#F5F2EC] text-[#596168]')}>{pendingTransfers} transfers</span>
+            <span className={classNames('rounded border px-2 py-1.5', pendingReview > 0 ? 'border-[#C7BDAA] bg-[#F5F2EC] text-[#20252A]' : 'border-[#B7BCC2] bg-[#F5F2EC] text-[#596168]')}>{pendingReview} docs</span>
+            <span className="rounded border border-[#B7BCC2] bg-[#F5F2EC] px-2 py-1.5 text-[#596168]">{activeSales} buyers</span>
           </div>
           <div className="mt-2.5 flex flex-wrap gap-1.5">
-            <span className="inline-flex min-h-[24px] items-center rounded-full border border-[#1a2e46] bg-[#0a1628] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#7e98b2]">{subscription.tier}</span>
-            <span className="inline-flex min-h-[24px] items-center rounded-full border border-[#1a3a6a] bg-[#0c1e3c] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#65a6ff]">{localStatus}</span>
+            <span className="inline-flex min-h-[24px] items-center rounded-full border border-[#B7BCC2] bg-[#F5F2EC] px-2.5 py-0.5 font-[Geist] text-[10px] font-semibold uppercase tracking-[0.12em] text-[#596168]">{subscription.tier}</span>
+            <span className="inline-flex min-h-[24px] items-center rounded-full border border-[#0B0D0F] bg-[#0B0D0F] px-2.5 py-0.5 font-[Geist] text-[10px] font-semibold uppercase tracking-[0.12em] text-white">{localStatus}</span>
           </div>
         </div>
 
@@ -318,25 +318,25 @@ export default function MainLayout() {
         <NavSection title="Work" items={sections.Work} badges={navBadges} />
         <NavSection title="Account" items={sections.Account} badges={navBadges} />
 
-        <div className="mt-auto border-t border-[#0a1624] pt-4 text-xs text-[#3d5870]">
-          <div className="font-semibold uppercase tracking-[0.12em] text-[#4a6880]">Workspace</div>
-          <div className="mt-1 text-[#2e4560]">{expenseReceipts.length} receipts · {documents.length} documents · {horses.length} horse records</div>
+        <div className="mt-auto border-t border-[#B7BCC2] pt-4 text-xs text-[#596168]">
+          <div className="font-[Geist] font-semibold uppercase tracking-[0.12em] text-[#596168]">Workspace</div>
+          <div className="mt-1 text-[#596168]">{expenseReceipts.length} receipts · {documents.length} documents · {horses.length} horse records</div>
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-col">
-        <header className="xbar-command-topbar sticky top-0 z-10 border-b border-[#122033] bg-[#07101d]/92 backdrop-blur">
+        <header className="xbar-command-topbar sticky top-0 z-10 border-b border-[#B7BCC2] bg-[#F5F2EC]/85 backdrop-blur">
           <div className="flex min-h-[62px] flex-wrap items-center justify-between gap-4 px-5 py-3">
             <div className="flex items-center gap-3">
-              <div className="text-[0.98rem] font-extrabold tracking-[0.01em] text-[#e9f2ff]">{currentLabel}</div>
-              <span className={classNames('inline-flex min-h-[24px] items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]', pendingReview || pendingTransfers ? 'border-[#314159] bg-[#111b2a] text-[#f0c76e]' : 'border-[#1e3b5d] bg-[#0b1c30] text-[#65a6ff]')}>
+              <div className="text-[0.98rem] font-extrabold tracking-[0.01em] text-[#121518]">{currentLabel}</div>
+              <span className={classNames('inline-flex min-h-[24px] items-center rounded-md border px-2.5 py-1 font-[Geist] text-[11px] font-semibold uppercase tracking-[0.14em]', pendingReview || pendingTransfers ? 'border-[#C7BDAA] bg-[#F5F2EC] text-[#20252A]' : 'border-[#B7BCC2] bg-[#F5F2EC] text-[#596168]')}>
                 {pendingReview || pendingTransfers ? `${pendingReview + pendingTransfers} open` : 'All clear'}
               </span>
             </div>
 
             <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
               <label className="relative min-w-[220px] max-w-[420px] flex-1">
-                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[#748ba4]" />
+                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[#596168]" />
                 <input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
@@ -344,36 +344,36 @@ export default function MainLayout() {
                   onFocus={() => setCommandPaletteOpen(true)}
                   placeholder="Search horses, documents, buyers, or tasks"
                   aria-label="Open XBAR search"
-                  className="h-10 w-full rounded-md border border-[#1d3047] bg-[#0b1625] pl-10 pr-4 text-sm text-[#e9f2ff] transition-all duration-150 ease-[ease] placeholder:text-[#677f98] focus:border-[#4d94ff] focus:outline-none"
+                  className="h-10 w-full rounded-md border border-[#B7BCC2] bg-white pl-10 pr-4 text-sm text-[#121518] transition-all duration-150 ease-[ease] placeholder:text-[#596168] focus:border-[#0078D7] focus:outline-none"
                 />
                 <kbd className="command-shortcut-hint">Ctrl K</kbd>
               </label>
 
-              <div className="hidden h-10 items-center gap-3 rounded-md border border-[#1d3047] bg-[#0b1625] px-3 text-sm font-semibold text-[#d9e6f5] md:inline-flex">
+              <div className="hidden h-10 items-center gap-3 rounded-md border border-[#B7BCC2] bg-white px-3 text-sm font-semibold text-[#121518] md:inline-flex">
                 <span className="max-w-[190px] truncate">{accountLabel}</span>
-                <span className="inline-flex rounded-sm border border-[#243952] bg-[#101d2d] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7f9bb6]">{cloudSession ? currentRole : 'Local'}</span>
+                <span className="inline-flex rounded-sm border border-[#B7BCC2] bg-[#F5F2EC] px-2 py-0.5 font-[Geist] text-[10px] font-semibold uppercase tracking-[0.14em] text-[#596168]">{cloudSession ? currentRole : 'Local'}</span>
               </div>
 
-              <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#1d3047] bg-[#0b1625] px-4 text-sm font-semibold text-[#d9e6f5] transition-all duration-150 ease-[ease] hover:border-[#4d94ff] hover:bg-[#0f2033]" type="button" onClick={() => setHelpOpen(true)}>
+              <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#B7BCC2] bg-white px-4 text-sm font-semibold text-[#121518] transition-all duration-150 ease-[ease] hover:border-[#0B0D0F] hover:bg-[#F5F2EC]" type="button" onClick={() => setHelpOpen(true)}>
                 Help
               </button>
 
               {cloudSession && canSyncCloud ? (
-                <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#1d3047] bg-[#0b1625] px-4 text-sm font-semibold text-[#d9e6f5] transition-all duration-150 ease-[ease] hover:border-[#4d94ff] hover:bg-[#0f2033]" type="button" onClick={() => void handleCloudSignOut()}>
+                <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#B7BCC2] bg-white px-4 text-sm font-semibold text-[#121518] transition-all duration-150 ease-[ease] hover:border-[#0B0D0F] hover:bg-[#F5F2EC]" type="button" onClick={() => void handleCloudSignOut()}>
                   Sign out
                 </button>
               ) : null}
 
-              <button className="relative inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#1d3047] bg-[#0b1625] text-[#d9e6f5] transition-all duration-150 ease-[ease] hover:border-[#4d94ff] hover:bg-[#0f2033]" type="button" onClick={() => navigate('/reminders')} aria-label="Open reminders">
+              <button className="relative inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#B7BCC2] bg-white text-[#121518] transition-all duration-150 ease-[ease] hover:border-[#0B0D0F] hover:bg-[#F5F2EC]" type="button" onClick={() => navigate('/reminders')} aria-label="Open reminders">
                 <BellIcon className="h-[18px] w-[18px]" />
-                {pendingReview + pendingTransfers ? <span className="absolute right-0.5 top-0.5 min-w-[18px] rounded-full bg-[#CC3333] px-1.5 py-0.5 text-[10px] font-bold text-white">{pendingReview + pendingTransfers}</span> : null}
+                {pendingReview + pendingTransfers ? <span className="absolute right-0.5 top-0.5 min-w-[18px] rounded-full bg-[#0078D7] px-1.5 py-0.5 text-[10px] font-bold text-white">{pendingReview + pendingTransfers}</span> : null}
               </button>
 
-              <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#1d3047] bg-[#0b1625] px-4 text-sm font-semibold text-[#d9e6f5] transition-all duration-150 ease-[ease] hover:border-[#4d94ff] hover:bg-[#0f2033] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={() => navigate('/documents?upload=1')} disabled={!canUploadDocuments}>
+              <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#B7BCC2] bg-white px-4 text-sm font-semibold text-[#121518] transition-all duration-150 ease-[ease] hover:border-[#0B0D0F] hover:bg-[#F5F2EC] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={() => navigate('/documents?upload=1')} disabled={!canUploadDocuments}>
                 Upload Documents
               </button>
 
-              <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#1155dd] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#0d44b0] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={() => navigate('/horses?new=1')} disabled={!canCreateHorse}>
+              <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#0B0D0F] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#20252A] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={() => navigate('/horses?new=1')} disabled={!canCreateHorse}>
                 <AddIcon className="h-[16px] w-[16px]" />
                 Add Horse
               </button>
@@ -393,30 +393,28 @@ export default function MainLayout() {
             <span className="xbar-shell-x xbar-shell-x--two" />
             <ShellHorseMotif className="xbar-shell-horse-line" />
           </div>
-          <section className="xbar-os-band" aria-label="XBAR operating system status">
-            <div className="xbar-os-band__identity">
-              <span>XBAR OS</span>
-              <strong>{currentLabel}</strong>
-              <em>{workspaceProfile.ranchName || workspaceProfile.businessName || 'Modern horse operation'}</em>
+          <section className="xbar-context-strip" aria-label="Workspace overview">
+            <div className="flex min-w-0 flex-col gap-1">
+              <div className="xbar-context-strip__crumbs">
+                <span>XBAR</span>
+                <span data-sep>/</span>
+                <strong>{currentLabel}</strong>
+              </div>
+              <div className="xbar-context-strip__title">{workspaceProfile.ranchName || workspaceProfile.businessName || 'Your ranch'}</div>
             </div>
-            <div className="xbar-os-band__meters" aria-label="Workspace operating totals">
-              <div>
-                <span>Horse files</span>
-                <strong>{horses.length}</strong>
-              </div>
-              <div>
-                <span>Documents</span>
-                <strong>{documents.length}</strong>
-              </div>
-              <div>
-                <span>Open work</span>
+            <div className="xbar-context-strip__meta" aria-label="Workspace totals">
+              <span className="xbar-context-chip">Horses <strong>{horses.length}</strong></span>
+              <span className="xbar-context-chip">Documents <strong>{documents.length}</strong></span>
+              <span
+                className={classNames(
+                  'xbar-context-chip',
+                  pendingReview + pendingTransfers + careDueCount > 0 ? 'xbar-context-chip--alert' : 'xbar-context-chip--ok',
+                )}
+              >
+                {pendingReview + pendingTransfers + careDueCount > 0 ? 'Open work' : 'All clear'}
                 <strong>{pendingReview + pendingTransfers + careDueCount}</strong>
-              </div>
-            </div>
-            <div className="xbar-os-band__state">
-              <span>{subscription.tier}</span>
-              <strong>{commandState}</strong>
-              <em>{localStatus}</em>
+              </span>
+              <span className="xbar-context-chip">{subscription.tier}</span>
             </div>
           </section>
           <CommercialPressureBanner />
@@ -427,10 +425,10 @@ export default function MainLayout() {
 
         {mobileMoreOpen ? (
           <>
-            <button className="fixed inset-0 z-30 bg-[#061426]/50 lg:hidden" type="button" aria-label="Close mobile menu" onClick={() => setMobileMoreOpen(false)} />
-            <div id="mobile-more-menu" className="fixed bottom-[94px] left-3 right-3 z-50 rounded-lg border border-[#1d3047] bg-[#07101d] p-3 text-[#d9e6f5] shadow-xl lg:hidden">
+            <button className="fixed inset-0 z-30 bg-[#121518]/40 lg:hidden" type="button" aria-label="Close mobile menu" onClick={() => setMobileMoreOpen(false)} />
+            <div id="mobile-more-menu" className="fixed bottom-[94px] left-3 right-3 z-50 rounded-lg border border-[#B7BCC2] bg-white p-3 text-[#121518] shadow-xl lg:hidden">
               {canCreateHorse ? (
-                <button className="mb-2 flex min-h-[50px] w-full items-center gap-3 rounded-md bg-[#1155dd] px-3 text-left text-sm font-semibold text-white" type="button" onClick={() => { setMobileMoreOpen(false); navigate('/horses?new=1'); }}>
+                <button className="mb-2 flex min-h-[50px] w-full items-center gap-3 rounded-md bg-[#0B0D0F] px-3 text-left text-sm font-semibold text-white" type="button" onClick={() => { setMobileMoreOpen(false); navigate('/horses?new=1'); }}>
                   <AddIcon className="h-[18px] w-[18px] shrink-0" />
                   <span>Add horse</span>
                 </button>
@@ -439,7 +437,7 @@ export default function MainLayout() {
                 {mobileMoreItems.map(({ label, path, icon: Icon }) => {
                   const isActive = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
                   return (
-                    <button key={label} className={classNames('flex min-h-[54px] items-center gap-3 rounded-md border px-3 text-left text-sm font-semibold transition-all duration-150 ease-[ease]', isActive ? 'border-[#4d94ff] bg-[#0d2040] text-white' : 'border-[#1d3047] bg-[#0b1625] text-[#9eb4ca] hover:border-[#4d94ff] hover:bg-[#0f2033]')} type="button" onClick={() => { setMobileMoreOpen(false); navigate(path); }}>
+                    <button key={label} className={classNames('flex min-h-[54px] items-center gap-3 rounded-md border px-3 text-left text-sm font-semibold transition-all duration-150 ease-[ease]', isActive ? 'border-[#0B0D0F] bg-[#F5F2EC] text-[#121518]' : 'border-[#B7BCC2] bg-white text-[#596168] hover:border-[#0B0D0F] hover:bg-[#F5F2EC]')} type="button" onClick={() => { setMobileMoreOpen(false); navigate(path); }}>
                       <Icon className="h-[18px] w-[18px] shrink-0" />
                       <span className="min-w-0 truncate">{label}</span>
                     </button>
@@ -450,23 +448,23 @@ export default function MainLayout() {
           </>
         ) : null}
 
-        <nav className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-2 rounded-lg border border-[#1d3047] bg-[#07101d] p-2 text-[#d9e6f5] shadow-lg lg:hidden" aria-label="Mobile quick navigation">
+        <nav className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-2 rounded-lg border border-[#B7BCC2] bg-white p-2 text-[#121518] shadow-lg lg:hidden" aria-label="Mobile quick navigation">
           {([
             { label: 'Home', path: '/', icon: DashboardIcon, badge: pendingTransfers + careDueCount },
             { label: 'Horses', path: '/horses', icon: HorsesIcon, badge: 0 },
             { label: 'Documents', path: '/documents', icon: DocumentsIcon, badge: pendingReview },
             { label: 'Sales', path: '/sales', icon: SalesIcon, badge: 0 },
           ] as const).map(({ label, path, icon: Icon, badge }) => (
-            <NavLink key={label} to={path} end={path === '/'} className={({ isActive }) => classNames('relative flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]', isActive ? 'bg-[#0d2040] text-white' : 'text-[#798ca3] hover:bg-[#0b1625] hover:text-[#d9e6f5]')}>
+            <NavLink key={label} to={path} end={path === '/'} className={({ isActive }) => classNames('relative flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]', isActive ? 'bg-[#F5F2EC] text-[#121518]' : 'text-[#596168] hover:bg-[#F5F2EC] hover:text-[#121518]')}>
               <Icon className="h-[18px] w-[18px]" />
               <span>{label}</span>
-              {badge > 0 ? <span className="absolute right-2 top-2 min-w-[16px] rounded-full bg-[#CC3333] px-1 py-px text-center text-[9px] font-bold text-white">{badge}</span> : null}
+              {badge > 0 ? <span className="absolute right-2 top-2 min-w-[16px] rounded-full bg-[#0078D7] px-1 py-px text-center text-[9px] font-bold text-white">{badge}</span> : null}
             </NavLink>
           ))}
-          <button className={classNames('relative flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]', mobileMoreOpen || mobileMoreItems.some((item) => location.pathname.startsWith(item.path) && item.path !== '/') ? 'bg-[#0d2040] text-white' : 'text-[#798ca3] hover:bg-[#0b1625] hover:text-[#d9e6f5]')} type="button" onClick={() => setMobileMoreOpen((current) => !current)} aria-expanded={mobileMoreOpen} aria-controls="mobile-more-menu">
+          <button className={classNames('relative flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]', mobileMoreOpen || mobileMoreItems.some((item) => location.pathname.startsWith(item.path) && item.path !== '/') ? 'bg-[#F5F2EC] text-[#121518]' : 'text-[#596168] hover:bg-[#F5F2EC] hover:text-[#121518]')} type="button" onClick={() => setMobileMoreOpen((current) => !current)} aria-expanded={mobileMoreOpen} aria-controls="mobile-more-menu">
             <DotsIcon className="h-[18px] w-[18px]" />
             <span>More</span>
-            {pendingTransfers + careDueCount > 0 ? <span className="absolute right-2 top-2 min-w-[16px] rounded-full bg-[#CC3333] px-1 py-px text-center text-[9px] font-bold text-white">{pendingTransfers + careDueCount}</span> : null}
+            {pendingTransfers + careDueCount > 0 ? <span className="absolute right-2 top-2 min-w-[16px] rounded-full bg-[#0078D7] px-1 py-px text-center text-[9px] font-bold text-white">{pendingTransfers + careDueCount}</span> : null}
           </button>
         </nav>
       </div>
