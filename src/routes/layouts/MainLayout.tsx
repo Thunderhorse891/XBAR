@@ -1,464 +1,289 @@
-import type { ComponentType, KeyboardEvent, SVGProps } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { XbarMark } from '@/components/BrandMark';
-import { CommercialPressureBanner } from '@/components/CommercialPressureBanner';
-import { WorkspaceHelp, type HelpSection } from '@/components/WorkspaceHelp';
 import {
-  AddIcon,
-  AssetsIcon,
-  BellIcon,
-  BreedingIcon,
-  DashboardIcon,
-  DocumentsIcon,
-  DotsIcon,
-  HorsesIcon,
-  MedicalIcon,
-  OwnershipIcon,
-  SalesIcon,
-  SearchIcon,
-  SettingsIcon,
-  SharedAccessIcon,
-  SubscriptionIcon,
-  WeatherIcon,
-} from '@/components/icons';
+  Bell,
+  Boxes,
+  ChevronDown,
+  CircleHelp,
+  ClipboardList,
+  Coins,
+  FileText,
+  FolderOpen,
+  Gauge,
+  Home,
+  LayoutDashboard,
+  type LucideIcon,
+  Map,
+  Plus,
+  Rocket,
+  Search,
+  Settings as SettingsIcon,
+  ShieldCheck,
+  Sparkles,
+  Stethoscope,
+  Sprout,
+  Users,
+  Wheat,
+} from 'lucide-react';
+import { ProgressRing, QuickCreateMenu } from '@/components/saas';
+import { GlobalCreateDrawer, createActions, type CreateKey } from '@/components/saas/flows';
 import { buildCareBoardRows } from '@/lib/dashboardOps';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
-import { useCurrentRoleCapability, useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
+import { useXbarStore } from '@/store/useXbarStore';
+import { ranchSeason, ranchWeather, xbarRanch } from '@/data/xbarSaasMock';
 
-type NavSectionName = 'Home' | 'Work' | 'Account';
+const XBAR_ICON = '/brand/xbar_public_assets/public/brand/xbar-app-icon-512.png';
 
-type NavItem = {
-  label: string;
-  path: string;
-  icon: ComponentType<SVGProps<SVGSVGElement>>;
-  section: NavSectionName;
-  requires?: 'billing' | 'settings';
-  badgeKey?: 'transfers' | 'care' | 'docs' | 'reminders';
-};
+type NavItem = { label: string; path: string; icon: LucideIcon; badgeKey?: 'docs' | 'transfers' | 'care' };
+type NavGroup = { heading: string; items: NavItem[] };
 
-const navItems: NavItem[] = [
-  { label: 'Home', path: '/', icon: DashboardIcon, section: 'Home' },
-  { label: 'Horses', path: '/horses', icon: HorsesIcon, section: 'Home' },
-  { label: 'Ownership', path: '/ownership', icon: OwnershipIcon, section: 'Home', badgeKey: 'transfers' },
-  { label: 'Documents', path: '/documents', icon: DocumentsIcon, section: 'Home', badgeKey: 'docs' },
-  { label: 'Document Library', path: '/document-library', icon: DocumentsIcon, section: 'Home' },
-  { label: 'Health', path: '/medical', icon: MedicalIcon, section: 'Work', badgeKey: 'care' },
-  { label: 'Breeding', path: '/breeding', icon: BreedingIcon, section: 'Work' },
-  { label: 'Sales', path: '/sales', icon: SalesIcon, section: 'Work' },
-  { label: 'Expenses', path: '/expenses', icon: SubscriptionIcon, section: 'Work' },
-  { label: 'Reminders', path: '/reminders', icon: BellIcon, section: 'Work', badgeKey: 'reminders' },
-  { label: 'Equipment', path: '/assets', icon: AssetsIcon, section: 'Work' },
-  { label: 'Weather', path: '/weather', icon: WeatherIcon, section: 'Work' },
-  { label: 'Listings', path: '/shared-access', icon: SharedAccessIcon, section: 'Account' },
-  { label: 'Plan & Billing', path: '/subscriptions', icon: SubscriptionIcon, section: 'Account', requires: 'billing' },
-  { label: 'Settings', path: '/settings', icon: SettingsIcon, section: 'Account', requires: 'settings' },
+const navGroups: NavGroup[] = [
+  {
+    heading: 'Operations',
+    items: [
+      { label: 'Command Center', path: '/', icon: LayoutDashboard },
+      { label: "Today's Work", path: '/today', icon: ClipboardList },
+      { label: 'Animals', path: '/animals', icon: Home },
+      { label: 'Herd Groups', path: '/herd-groups', icon: Users },
+      { label: 'Pastures & Locations', path: '/pastures', icon: Map },
+    ],
+  },
+  {
+    heading: 'Care',
+    items: [
+      { label: 'Health & Care', path: '/health-care', icon: Stethoscope, badgeKey: 'care' },
+      { label: 'Breeding & Foaling', path: '/breeding-foaling', icon: Sprout },
+      { label: 'Feed & Inventory', path: '/feed', icon: Wheat },
+    ],
+  },
+  {
+    heading: 'Transactions',
+    items: [
+      { label: 'Sales Pipeline', path: '/sales-pipeline', icon: Gauge },
+      { label: 'Buyer Deal Rooms', path: '/buyer-deal-room', icon: Users },
+      { label: 'Sale Packet Studio', path: '/sale-packet-studio', icon: FileText },
+      { label: 'Ownership Chain', path: '/ownership-chain', icon: ShieldCheck, badgeKey: 'transfers' },
+    ],
+  },
+  {
+    heading: 'Records',
+    items: [
+      { label: 'Documents Vault', path: '/documents-vault', icon: FolderOpen, badgeKey: 'docs' },
+      { label: 'Equipment', path: '/equipment', icon: Boxes },
+      { label: 'Expenses', path: '/expenses', icon: Coins },
+      { label: 'Reports', path: '/reports', icon: Gauge },
+    ],
+  },
+  {
+    heading: 'Account',
+    items: [
+      { label: 'Settings', path: '/settings', icon: SettingsIcon },
+      { label: 'Subscription', path: '/plans', icon: Rocket },
+    ],
+  },
 ];
 
-const routeLabels: Record<string, string> = {
-  '/': 'Home',
-  '/horses': 'Horses',
-  '/documents': 'Documents',
-  '/document-library': 'Document Library',
-  '/ownership': 'Ownership',
-  '/medical': 'Health',
-  '/breeding': 'Breeding',
-  '/sales': 'Sales',
-  '/expenses': 'Expenses',
-  '/reminders': 'Reminders',
-  '/assets': 'Equipment',
-  '/weather': 'Weather',
-  '/subscriptions': 'Plan & Billing',
-  '/shared-access': 'Listings',
-  '/settings': 'Settings',
-};
+const whatsNew = ['Release Blocker detection', 'Buyer Deal Rooms', 'Sale Packet Studio'];
 
-const routeHelp: Record<string, HelpSection[]> = {
-  'Home': [
-    { label: 'Daily Work', text: 'Start with transfers, care holds, document review, buyer movement, or spending.' },
-    { label: 'Records', text: 'Each section keeps status, documents, risk, and next action visible.' },
-  ],
-  'Horses': [
-    { label: 'Horse file', text: 'Each horse should read like a horse record: identity, ownership, care, documents, sales, and history.' },
-    { label: 'Confirmed data', text: 'Unknown should remain unknown until verified by a source record.' },
-  ],
-  'Ownership': [
-    { label: 'Ownership', text: 'Use this area for owners, percentages, sale status, transfer blockers, and source documents.' },
-    { label: 'Transfers', text: 'No sale or transfer should move without required documents resolved.' },
-  ],
-  'Documents': [
-    { label: 'Documents', text: 'Upload first. Assign, approve, and keep the document chain clean.' },
-    { label: 'Release discipline', text: 'Only approved ready-to-share files should reach buyer packets.' },
-  ],
-  'Document Library': [
-    { label: 'Prefill', text: 'Templates pull horse, owner, barn, health, Coggins, sale, and document-vault data.' },
-    { label: 'Export', text: 'Preview, download a report, print to PDF, or copy the buyer-facing link.' },
-  ],
-  'Health': [
-    { label: 'Care holds', text: 'Coggins, vaccines, dental, wormer, treatment, and due dates belong here.' },
-    { label: 'Source dates', text: 'Do not guess due dates. Use records the operation can verify.' },
-  ],
-  'Breeding': [
-    { label: 'Program', text: 'Track pairings, milestones, contracts, foaling windows, and documents.' },
-    { label: 'Decisions', text: 'Breeding movement should connect back to files and history.' },
-  ],
-  'Sales': [
-    { label: 'Pipeline', text: 'Keep lead movement, buyer quality, record readiness, and follow-ups visible.' },
-    { label: 'Buyer packet', text: 'Share only when the horse and documents are ready.' },
-  ],
-  'Expenses': [
-    { label: 'Ledger', text: 'Log costs while the context is fresh.' },
-    { label: 'Connect', text: 'Receipts should connect to horses, care, documents, and operating decisions.' },
-  ],
-  'Reminders': [
-    { label: 'Queue', text: 'This is the work list for care, papers, documents, transfers, and buyer movement.' },
-    { label: 'Confidence', text: 'An action should always show the source of the work.' },
-  ],
-  'Equipment': [
-    { label: 'Assets', text: 'Track equipment, kits, feed supply, transport, and service work.' },
-    { label: 'Field use', text: 'Keep mobile actions short and readable.' },
-  ],
-  'Weather': [
-    { label: 'Conditions', text: 'Use weather for turnout, hauling, handling, breeding, and field work.' },
-    { label: 'Location', text: 'Set the ranch location in Settings for better daily context.' },
-  ],
-  'Plan & Billing': [
-    { label: 'Plan state', text: 'Keep plan status clear without implying cloud billing is connected before it is.' },
-    { label: 'Limits', text: 'Storage, seats, listings, and documents should remain easy to understand.' },
-  ],
-  'Listings': [
-    { label: 'Release', text: 'Buyer links need approved, sanitized records only.' },
-    { label: 'Review', text: 'Preview before making any horse public.' },
-  ],
-  'Settings': [
-    { label: 'Control', text: 'Manage ranch defaults, members, sync, and backups.' },
-    { label: 'Recovery', text: 'Use backups before large imports or cloud changes.' },
-  ],
-  'Horse': [
-    { label: 'Horse record', text: 'Identity, care, ownership, documents, sales, and history should read as one record.' },
-    { label: 'Missing data', text: 'Unknown should stay unknown until verified.' },
-  ],
-};
-
-function classNames(...parts: Array<string | false | null | undefined>) {
-  return parts.filter(Boolean).join(' ');
-}
-
-const sectionDisplayNames: Record<NavSectionName, string> = {
-  Home: 'Home',
-  Work: 'Daily Work',
-  Account: 'Account',
-};
-
-function routeSurfaceSlug(label: string) {
-  return label
-    .toLowerCase()
-    .replace(/&/g, 'and')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '') || 'home';
-}
-
-function ShellHorseMotif({ className = '' }: { className?: string }) {
-  return <img className={className} src="/brand/xbar-horse-outline-safe.png" alt="" aria-hidden="true" />;
-}
-
-function NavSection({ title, items, badges }: { title: NavSectionName; items: NavItem[]; badges: Record<string, number> }) {
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="px-3 font-[Geist] text-[10px] font-semibold uppercase tracking-[0.24em] text-[#596168]">{sectionDisplayNames[title]}</div>
-      <div className="flex flex-col gap-[1px]">
-        {items.map(({ label, path, icon: Icon, badgeKey }) => {
-          const badge = badgeKey ? (badges[badgeKey] ?? 0) : 0;
-          return (
-            <NavLink
-              key={label}
-              to={path}
-              end={path === '/'}
-              className={({ isActive }) =>
-                classNames(
-                  'group flex items-center gap-3 border-l-[3px] px-3 py-[9px] text-[13px] font-medium transition-all duration-150 ease-[ease]',
-                  isActive
-                    ? 'border-[#0B0D0F] bg-[#F5F2EC] font-semibold text-[#121518]'
-                    : 'border-transparent text-[#596168] hover:border-[#B7BCC2] hover:bg-[#F5F2EC] hover:text-[#121518]',
-                )
-              }
-            >
-              <Icon className="h-[17px] w-[17px] shrink-0" />
-              <span className="flex-1">{label}</span>
-              {badge > 0 ? <span className={classNames('nav-badge', badge <= 3 ? 'nav-badge--blue' : '')}>{badge}</span> : null}
-            </NavLink>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+const mobileItems: { label: string; path: string; icon: LucideIcon }[] = [
+  { label: 'Home', path: '/', icon: LayoutDashboard },
+  { label: 'Work', path: '/today', icon: ClipboardList },
+  { label: 'Animals', path: '/animals', icon: Home },
+  { label: 'Pipeline', path: '/sales-pipeline', icon: Gauge },
+  { label: 'Docs', path: '/documents', icon: FolderOpen },
+];
 
 export default function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [search, setSearch] = useState('');
-  const [helpOpen, setHelpOpen] = useState(false);
-  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
-  const currentRole = useXbarStore((state) => state.currentRole);
-  const subscription = useXbarStore((state) => state.subscription);
+  const [mode, setMode] = useState<'ops' | 'buyer'>('ops');
+  const [createAction, setCreateAction] = useState<CreateKey | null>(null);
+
   const documents = useXbarStore((state) => state.documents);
   const horses = useXbarStore((state) => state.horses);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
-  const salesLeads = useXbarStore((state) => state.salesLeads);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
-  const cloudStatus = useCloudStore((state) => state.status);
+  const subscription = useXbarStore((state) => state.subscription);
+  const currentRole = useXbarStore((state) => state.currentRole);
   const cloudSession = useCloudStore((state) => state.session);
   const signOutCloud = useCloudStore((state) => state.signOut);
-  const roleWorkspace = useCurrentRoleWorkspace();
   const pushToast = useUiStore((state) => state.pushToast);
   const setCommandPaletteOpen = useUiStore((state) => state.setCommandPaletteOpen);
-  const canCreateHorse = useCurrentRoleCapability('createHorse');
-  const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
-  const canManageBilling = useCurrentRoleCapability('manageBilling');
-  const canManageSettings = useCurrentRoleCapability('manageSettings');
-  const canSyncCloud = useCurrentRoleCapability('syncCloud');
 
-  const visibleNavItems = useMemo(() => navItems.filter((item) => {
-    if (item.requires === 'billing') return canManageBilling;
-    if (item.requires === 'settings') return canManageSettings;
-    return true;
-  }), [canManageBilling, canManageSettings]);
-
-  const sections = {
-    Home: visibleNavItems.filter((item) => item.section === 'Home'),
-    Work: visibleNavItems.filter((item) => item.section === 'Work'),
-    Account: visibleNavItems.filter((item) => item.section === 'Account'),
-  };
-  const mobilePrimaryPaths = new Set(['/', '/horses', '/documents', '/sales']);
-  const mobileMoreItems = visibleNavItems.filter((item) => !mobilePrimaryPaths.has(item.path));
-  const pendingReview = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched').length;
-  const pendingTransfers = ownershipRecords.filter((record) => record.transferStatus !== 'Clear').length;
-  const activeSales = salesLeads.filter((lead) => lead.stage !== 'Closed').length;
-
+  const pendingReview = documents.filter((d) => d.state === 'Needs Review' || d.state === 'Matched').length;
+  const pendingTransfers = ownershipRecords.filter((r) => r.transferStatus !== 'Clear').length;
   const careDueCount = useMemo(() => {
     const board = buildCareBoardRows(horses, documents, expenseReceipts);
-    return board.filter((row) => row.signals.some((signal) => signal.status === 'due')).length;
+    return board.filter((row) => row.signals.some((s) => s.status === 'due')).length;
   }, [horses, documents, expenseReceipts]);
 
-  const navBadges = useMemo<Record<string, number>>(() => ({
-    transfers: pendingTransfers,
-    care: careDueCount,
-    docs: pendingReview,
-    reminders: pendingTransfers + careDueCount + pendingReview,
-  }), [pendingTransfers, careDueCount, pendingReview]);
-  const opsUrgency = pendingTransfers > 0 ? 'urgent' : careDueCount > 0 ? 'warning' : 'clear';
-  const commandState = opsUrgency === 'urgent' ? 'Action required' : opsUrgency === 'warning' ? 'Needs review' : 'All clear';
-  const localStatus = cloudStatus === 'signed-in' ? 'Cloud sync connected' : 'Local browser workspace';
-  const currentLabel = location.pathname.startsWith('/horses/') ? 'Horse' : routeLabels[location.pathname] ?? 'Ranch';
-  const routeSlug = routeSurfaceSlug(currentLabel);
-  const helpSections = routeHelp[currentLabel] ?? routeHelp['Home'];
-  const accountLabel = cloudSession?.user?.email ?? currentRole;
+  const badges: Record<string, number> = { docs: pendingReview, transfers: pendingTransfers, care: careDueCount };
+  const notifications = pendingReview + pendingTransfers + careDueCount;
 
-  useEffect(() => { setHelpOpen(false); setMobileMoreOpen(false); }, [location.pathname]);
+  const ranchName = workspaceProfile.ranchName || workspaceProfile.businessName || xbarRanch.name;
+  const planTier = subscription?.tier || xbarRanch.plan;
+  const accountInitials = (cloudSession?.user?.email ?? currentRole ?? 'XB').replace(/@.*/, '').slice(0, 2).toUpperCase();
+  const setupProgress = xbarRanch.setupProgress;
 
-  const handleSearch = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter' && search.trim()) navigate(`/horses?search=${encodeURIComponent(search.trim())}`);
-  };
-
-  const handleCloudSignOut = async () => {
+  async function handleSignOut() {
     const result = await signOutCloud();
     pushToast({ title: result.ok ? 'Signed out' : 'Sign-out failed', message: result.message, tone: result.ok ? 'success' : 'error' });
     if (result.ok) navigate('/login', { replace: true });
-  };
+  }
+
+  function handleMode(next: 'ops' | 'buyer') {
+    setMode(next);
+    if (next === 'buyer') navigate('/buyer-deal-room');
+  }
+
+  function handleSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      const q = (e.target as HTMLInputElement).value.trim();
+      if (q) navigate(`/horses?search=${encodeURIComponent(q)}`);
+    }
+  }
+
+  const createItems = createActions.map((label) => ({ label, onSelect: () => setCreateAction(label) }));
 
   return (
-    <div className={classNames('xbar-command-shell min-h-screen lg:grid lg:grid-cols-[264px,1fr]', `xbar-shell-${routeSlug}`)}>
-      <aside className="hidden min-h-screen flex-col gap-6 border-r border-[#B7BCC2] bg-[#F5F2EC] px-5 py-6 text-[#121518] lg:flex">
-        <div className="xbar-sidebar-brand flex items-center gap-3">
-          <div className="xbar-sidebar-brand__mark flex h-[52px] w-[52px] items-center justify-center rounded-lg border border-[#B7BCC2] bg-white p-1.5 shadow-[0_8px_22px_rgba(11,13,15,0.08)]">
-            <XbarMark title="XBAR logo" className="h-full w-full" />
-          </div>
-          <div className="xbar-sidebar-brand__copy min-w-0">
-            <div className="text-[1.04rem] font-extrabold uppercase tracking-[0.14em] text-[#0B0D0F]">XBAR</div>
-            <div className="font-[Geist] text-[10px] font-semibold uppercase tracking-[0.24em] text-[#596168]">Horse records</div>
-          </div>
+    <div className="xs-shell">
+      {/* ---------------------------------------------------------- Sidebar */}
+      <aside className="xs-sidebar">
+        <div className="xs-brand">
+          <img className="xs-brand__tile" src={XBAR_ICON} alt="XBAR" />
+          <span>
+            <span className="xs-brand__word">XBAR</span>
+            <span className="xs-brand__sub">Operations</span>
+          </span>
         </div>
 
-        <div className="rounded-lg border border-[#B7BCC2] bg-white p-4 shadow-[0_8px_24px_rgba(11,13,15,0.04)]">
-          <div className="flex items-center justify-between gap-2">
-            <div className="font-[Geist] text-[10px] font-semibold uppercase tracking-[0.24em] text-[#596168]">Ranch Status</div>
-            <span className="ops-pulse">
-              <span className={classNames('ops-pulse__dot', opsUrgency === 'urgent' ? 'ops-pulse__dot--urgent' : opsUrgency === 'warning' ? 'ops-pulse__dot--warning' : '')} />
+        <button type="button" className="xs-workspace" onClick={() => navigate('/settings')}>
+          <span className="xs-workspace__logo">{xbarRanch.initials}</span>
+          <span className="xs-workspace__body">
+            <span className="xs-workspace__name">{ranchName}</span>
+            <span className="xs-workspace__plan"><Sparkles size={11} /> {planTier}</span>
+          </span>
+          <ChevronDown size={16} className="xs-workspace__chev" />
+        </button>
+
+        <button type="button" className="xs-setupbar" onClick={() => navigate('/getting-started')}>
+          <ProgressRing value={setupProgress} size={32} />
+          <span className="xs-setupbar__body">
+            <span className="xs-setupbar__top">{setupProgress}% Ranch setup</span>
+            <span className="xs-setupbar__sub">Finish onboarding</span>
+          </span>
+        </button>
+
+        <nav className="xs-nav" aria-label="Primary">
+          {navGroups.map((group) => (
+            <div key={group.heading}>
+              <div className="xs-nav__section">{group.heading}</div>
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const badge = item.badgeKey ? badges[item.badgeKey] ?? 0 : 0;
+                return (
+                  <NavLink key={item.path} to={item.path} end={item.path === '/'} className={({ isActive }) => `xs-nav__item${isActive ? ' xs-nav__item--active' : ''}`}>
+                    <Icon size={17} className="xs-nav__icon" />
+                    <span className="xs-nav__label">{item.label}</span>
+                    {badge > 0 ? <span className="xs-nav__badge">{badge}</span> : null}
+                  </NavLink>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
+
+        <div className="xs-sidebar__footer">
+          <img className="xs-sidebar__wm" src={XBAR_ICON} alt="" aria-hidden="true" />
+          <div className="xs-ranchcard">
+            <span className="xs-ranchcard__avatar">{xbarRanch.initials}</span>
+            <span>
+              <div className="xs-ranchcard__name">{ranchName}</div>
+              <div className="xs-ranchcard__meta">{xbarRanch.id}</div>
             </span>
           </div>
-          <div className="mt-2 text-[0.96rem] font-bold leading-tight text-[#121518]">{workspaceProfile.ranchName || workspaceProfile.businessName || 'Primary ranch'}</div>
-          <div className="mt-0.5 text-xs text-[#596168]">{commandState} · {roleWorkspace.label}</div>
-          <div className="mt-3 grid grid-cols-2 gap-1.5 text-xs">
-            <span className="rounded border border-[#B7BCC2] bg-[#F5F2EC] px-2 py-1.5 text-[#596168]">{horses.length} files</span>
-            <span className={classNames('rounded border px-2 py-1.5', pendingTransfers > 0 ? 'border-[#0078D7] bg-[#F5F2EC] text-[#0B0D0F]' : 'border-[#B7BCC2] bg-[#F5F2EC] text-[#596168]')}>{pendingTransfers} transfers</span>
-            <span className={classNames('rounded border px-2 py-1.5', pendingReview > 0 ? 'border-[#C7BDAA] bg-[#F5F2EC] text-[#20252A]' : 'border-[#B7BCC2] bg-[#F5F2EC] text-[#596168]')}>{pendingReview} docs</span>
-            <span className="rounded border border-[#B7BCC2] bg-[#F5F2EC] px-2 py-1.5 text-[#596168]">{activeSales} buyers</span>
+          <div className="xs-whatsnew">
+            <div className="xs-whatsnew__title"><Sparkles size={13} /> What's New</div>
+            <div className="xs-whatsnew__list">
+              {whatsNew.map((item) => (
+                <div key={item} className="xs-whatsnew__row"><span className="xs-whatsnew__dot" /> {item}</div>
+              ))}
+            </div>
           </div>
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
-            <span className="inline-flex min-h-[24px] items-center rounded-full border border-[#B7BCC2] bg-[#F5F2EC] px-2.5 py-0.5 font-[Geist] text-[10px] font-semibold uppercase tracking-[0.12em] text-[#596168]">{subscription.tier}</span>
-            <span className="inline-flex min-h-[24px] items-center rounded-full border border-[#0B0D0F] bg-[#0B0D0F] px-2.5 py-0.5 font-[Geist] text-[10px] font-semibold uppercase tracking-[0.12em] text-white">{localStatus}</span>
-          </div>
-        </div>
-
-        <NavSection title="Home" items={sections.Home} badges={navBadges} />
-        <NavSection title="Work" items={sections.Work} badges={navBadges} />
-        <NavSection title="Account" items={sections.Account} badges={navBadges} />
-
-        <div className="mt-auto border-t border-[#B7BCC2] pt-4 text-xs text-[#596168]">
-          <div className="font-[Geist] font-semibold uppercase tracking-[0.12em] text-[#596168]">Workspace</div>
-          <div className="mt-1 text-[#596168]">{expenseReceipts.length} receipts · {documents.length} documents · {horses.length} horse records</div>
+          <div className="xs-version">XBAR Platform · v2.0</div>
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-col">
-        <header className="xbar-command-topbar sticky top-0 z-10 border-b border-[#B7BCC2] bg-[#F5F2EC]/85 backdrop-blur">
-          <div className="flex min-h-[62px] flex-wrap items-center justify-between gap-4 px-5 py-3">
-            <div className="flex items-center gap-3">
-              <div className="text-[0.98rem] font-extrabold tracking-[0.01em] text-[#121518]">{currentLabel}</div>
-              <span className={classNames('inline-flex min-h-[24px] items-center rounded-md border px-2.5 py-1 font-[Geist] text-[11px] font-semibold uppercase tracking-[0.14em]', pendingReview || pendingTransfers ? 'border-[#C7BDAA] bg-[#F5F2EC] text-[#20252A]' : 'border-[#B7BCC2] bg-[#F5F2EC] text-[#596168]')}>
-                {pendingReview || pendingTransfers ? `${pendingReview + pendingTransfers} open` : 'All clear'}
-              </span>
+      {/* -------------------------------------------------------------- Main */}
+      <div className="xs-main">
+        <header className="xs-topbar">
+          <div className="xs-topbar__left">
+            <span className="xs-seasonchip"><Sparkles size={14} /> {ranchSeason.label}</span>
+            <span className="xs-weatherchip">
+              {ranchWeather.tempF}°F · {ranchWeather.label}
+              <span className="xs-weatherchip__risk">· {ranchWeather.risk}</span>
+            </span>
+          </div>
+
+          <label className="xs-search">
+            <Search size={15} className="xs-search__icon" />
+            <input className="xs-search__input" placeholder="Search animals, documents, buyers, deals…" onKeyDown={handleSearchKey} aria-label="Search" />
+          </label>
+
+          <div className="xs-topbar__spacer" />
+
+          <div className="xs-topbar__right">
+            <div className="xs-toggle" role="tablist" aria-label="Workspace mode">
+              <button type="button" className={`xs-toggle__btn${mode === 'ops' ? ' xs-toggle__btn--active' : ''}`} onClick={() => handleMode('ops')}>Ranch Ops</button>
+              <button type="button" className={`xs-toggle__btn${mode === 'buyer' ? ' xs-toggle__btn--active' : ''}`} onClick={() => handleMode('buyer')}>Buyer Portal</button>
             </div>
 
-            <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
-              <label className="relative min-w-[220px] max-w-[420px] flex-1">
-                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[#596168]" />
-                <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  onKeyDown={handleSearch}
-                  onFocus={() => setCommandPaletteOpen(true)}
-                  placeholder="Search horses, documents, buyers, or tasks"
-                  aria-label="Open XBAR search"
-                  className="h-10 w-full rounded-md border border-[#B7BCC2] bg-white pl-10 pr-4 text-sm text-[#121518] transition-all duration-150 ease-[ease] placeholder:text-[#596168] focus:border-[#0078D7] focus:outline-none"
-                />
-                <kbd className="command-shortcut-hint">Ctrl K</kbd>
-              </label>
-
-              <div className="hidden h-10 items-center gap-3 rounded-md border border-[#B7BCC2] bg-white px-3 text-sm font-semibold text-[#121518] md:inline-flex">
-                <span className="max-w-[190px] truncate">{accountLabel}</span>
-                <span className="inline-flex rounded-sm border border-[#B7BCC2] bg-[#F5F2EC] px-2 py-0.5 font-[Geist] text-[10px] font-semibold uppercase tracking-[0.14em] text-[#596168]">{cloudSession ? currentRole : 'Local'}</span>
-              </div>
-
-              <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#B7BCC2] bg-white px-4 text-sm font-semibold text-[#121518] transition-all duration-150 ease-[ease] hover:border-[#0B0D0F] hover:bg-[#F5F2EC]" type="button" onClick={() => setHelpOpen(true)}>
-                Help
-              </button>
-
-              {cloudSession && canSyncCloud ? (
-                <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#B7BCC2] bg-white px-4 text-sm font-semibold text-[#121518] transition-all duration-150 ease-[ease] hover:border-[#0B0D0F] hover:bg-[#F5F2EC]" type="button" onClick={() => void handleCloudSignOut()}>
-                  Sign out
+            <QuickCreateMenu
+              items={createItems}
+              trigger={(open) => (
+                <button type="button" className="xs-btn xs-btn--primary" onClick={open}>
+                  <Plus size={15} /> Create
                 </button>
-              ) : null}
+              )}
+            />
 
-              <button className="relative inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#B7BCC2] bg-white text-[#121518] transition-all duration-150 ease-[ease] hover:border-[#0B0D0F] hover:bg-[#F5F2EC]" type="button" onClick={() => navigate('/reminders')} aria-label="Open reminders">
-                <BellIcon className="h-[18px] w-[18px]" />
-                {pendingReview + pendingTransfers ? <span className="absolute right-0.5 top-0.5 min-w-[18px] rounded-full bg-[#0078D7] px-1.5 py-0.5 text-[10px] font-bold text-white">{pendingReview + pendingTransfers}</span> : null}
-              </button>
+            <button type="button" className="xs-iconbtn" aria-label="Notifications" onClick={() => navigate('/reminders')}>
+              <Bell size={17} />
+              {notifications > 0 ? <span className="xs-iconbtn__badge">{notifications}</span> : null}
+            </button>
+            <button type="button" className="xs-iconbtn" aria-label="Help" onClick={() => setCommandPaletteOpen(true)}>
+              <CircleHelp size={17} />
+            </button>
 
-              <button className="inline-flex h-10 items-center justify-center rounded-md border border-[#B7BCC2] bg-white px-4 text-sm font-semibold text-[#121518] transition-all duration-150 ease-[ease] hover:border-[#0B0D0F] hover:bg-[#F5F2EC] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={() => navigate('/documents?upload=1')} disabled={!canUploadDocuments}>
-                Upload Documents
-              </button>
+            <button type="button" className="xs-btn" onClick={() => navigate('/settings')}><Users size={15} /> Invite Team</button>
+            <button type="button" className="xs-btn xs-btn--brass" onClick={() => navigate('/plans')}><Rocket size={15} /> Upgrade</button>
 
-              <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#0B0D0F] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#20252A] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={() => navigate('/horses?new=1')} disabled={!canCreateHorse}>
-                <AddIcon className="h-[16px] w-[16px]" />
-                Add Horse
-              </button>
-            </div>
+            <button type="button" className="xs-avatar" aria-label="Account" title={cloudSession?.user?.email ?? 'Account'} onClick={() => (cloudSession ? void handleSignOut() : navigate('/settings'))}>
+              {accountInitials}
+            </button>
           </div>
         </header>
 
-        <main
-          className={classNames(
-            'xbar-command-main xbar-route-surface flex flex-col gap-[20px] px-6 py-5 pb-28 lg:pb-5',
-            `xbar-route-${routeSlug}`,
-          )}
-          data-route={routeSlug}
-        >
-          <div className="xbar-shell-motifs" aria-hidden="true">
-            <span className="xbar-shell-x xbar-shell-x--one" />
-            <span className="xbar-shell-x xbar-shell-x--two" />
-            <ShellHorseMotif className="xbar-shell-horse-line" />
-          </div>
-          <section className="xbar-context-strip" aria-label="Workspace overview">
-            <div className="flex min-w-0 flex-col gap-1">
-              <div className="xbar-context-strip__crumbs">
-                <span>XBAR</span>
-                <span data-sep>/</span>
-                <strong>{currentLabel}</strong>
-              </div>
-              <div className="xbar-context-strip__title">{workspaceProfile.ranchName || workspaceProfile.businessName || 'Your ranch'}</div>
-            </div>
-            <div className="xbar-context-strip__meta" aria-label="Workspace totals">
-              <span className="xbar-context-chip">Horses <strong>{horses.length}</strong></span>
-              <span className="xbar-context-chip">Documents <strong>{documents.length}</strong></span>
-              <span
-                className={classNames(
-                  'xbar-context-chip',
-                  pendingReview + pendingTransfers + careDueCount > 0 ? 'xbar-context-chip--alert' : 'xbar-context-chip--ok',
-                )}
-              >
-                {pendingReview + pendingTransfers + careDueCount > 0 ? 'Open work' : 'All clear'}
-                <strong>{pendingReview + pendingTransfers + careDueCount}</strong>
-              </span>
-              <span className="xbar-context-chip">{subscription.tier}</span>
-            </div>
-          </section>
-          <CommercialPressureBanner />
-          <div className="xbar-route-transition" key={location.pathname}>
-            <Outlet />
-          </div>
+        <main className="xs-page">
+          <Outlet />
         </main>
 
-        {mobileMoreOpen ? (
-          <>
-            <button className="fixed inset-0 z-30 bg-[#121518]/40 lg:hidden" type="button" aria-label="Close mobile menu" onClick={() => setMobileMoreOpen(false)} />
-            <div id="mobile-more-menu" className="fixed bottom-[94px] left-3 right-3 z-50 rounded-lg border border-[#B7BCC2] bg-white p-3 text-[#121518] shadow-xl lg:hidden">
-              {canCreateHorse ? (
-                <button className="mb-2 flex min-h-[50px] w-full items-center gap-3 rounded-md bg-[#0B0D0F] px-3 text-left text-sm font-semibold text-white" type="button" onClick={() => { setMobileMoreOpen(false); navigate('/horses?new=1'); }}>
-                  <AddIcon className="h-[18px] w-[18px] shrink-0" />
-                  <span>Add horse</span>
-                </button>
-              ) : null}
-              <div className="grid grid-cols-2 gap-2">
-                {mobileMoreItems.map(({ label, path, icon: Icon }) => {
-                  const isActive = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
-                  return (
-                    <button key={label} className={classNames('flex min-h-[54px] items-center gap-3 rounded-md border px-3 text-left text-sm font-semibold transition-all duration-150 ease-[ease]', isActive ? 'border-[#0B0D0F] bg-[#F5F2EC] text-[#121518]' : 'border-[#B7BCC2] bg-white text-[#596168] hover:border-[#0B0D0F] hover:bg-[#F5F2EC]')} type="button" onClick={() => { setMobileMoreOpen(false); navigate(path); }}>
-                      <Icon className="h-[18px] w-[18px] shrink-0" />
-                      <span className="min-w-0 truncate">{label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </>
-        ) : null}
+        <GlobalCreateDrawer action={createAction} onClose={() => setCreateAction(null)} />
 
-        <nav className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-2 rounded-lg border border-[#B7BCC2] bg-white p-2 text-[#121518] shadow-lg lg:hidden" aria-label="Mobile quick navigation">
-          {([
-            { label: 'Home', path: '/', icon: DashboardIcon, badge: pendingTransfers + careDueCount },
-            { label: 'Horses', path: '/horses', icon: HorsesIcon, badge: 0 },
-            { label: 'Documents', path: '/documents', icon: DocumentsIcon, badge: pendingReview },
-            { label: 'Sales', path: '/sales', icon: SalesIcon, badge: 0 },
-          ] as const).map(({ label, path, icon: Icon, badge }) => (
-            <NavLink key={label} to={path} end={path === '/'} className={({ isActive }) => classNames('relative flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]', isActive ? 'bg-[#F5F2EC] text-[#121518]' : 'text-[#596168] hover:bg-[#F5F2EC] hover:text-[#121518]')}>
-              <Icon className="h-[18px] w-[18px]" />
-              <span>{label}</span>
-              {badge > 0 ? <span className="absolute right-2 top-2 min-w-[16px] rounded-full bg-[#0078D7] px-1 py-px text-center text-[9px] font-bold text-white">{badge}</span> : null}
-            </NavLink>
-          ))}
-          <button className={classNames('relative flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-all duration-150 ease-[ease]', mobileMoreOpen || mobileMoreItems.some((item) => location.pathname.startsWith(item.path) && item.path !== '/') ? 'bg-[#F5F2EC] text-[#121518]' : 'text-[#596168] hover:bg-[#F5F2EC] hover:text-[#121518]')} type="button" onClick={() => setMobileMoreOpen((current) => !current)} aria-expanded={mobileMoreOpen} aria-controls="mobile-more-menu">
-            <DotsIcon className="h-[18px] w-[18px]" />
-            <span>More</span>
-            {pendingTransfers + careDueCount > 0 ? <span className="absolute right-2 top-2 min-w-[16px] rounded-full bg-[#0078D7] px-1 py-px text-center text-[9px] font-bold text-white">{pendingTransfers + careDueCount}</span> : null}
-          </button>
+        <nav className="xs-mobilebar" aria-label="Mobile navigation">
+          {mobileItems.map(({ label, path, icon: Icon }) => {
+            const active = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
+            return (
+              <NavLink key={path} to={path} end={path === '/'} className={`xs-mobilebar__btn${active ? ' xs-mobilebar__btn--active' : ''}`}>
+                <Icon size={18} />
+                {label}
+              </NavLink>
+            );
+          })}
         </nav>
       </div>
-
-      <WorkspaceHelp open={helpOpen} title={currentLabel} sections={helpSections} onClose={() => setHelpOpen(false)} />
     </div>
   );
 }

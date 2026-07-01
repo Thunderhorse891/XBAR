@@ -9,7 +9,6 @@ import { InteractionShell } from './components/InteractionSystem';
 import { Toaster } from './components/ui/sonner';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
 import { useCloudStore } from './store/useCloudStore';
-import { useWorkspaceHydrated, useWorkspaceReady } from './store/useXbarStore';
 import './routes/operationsHierarchy.css';
 import './routes/interactionSystem.css';
 import './routes/xbarCommandSystem.css';
@@ -18,9 +17,26 @@ import './routes/commandCenterLocal.css';
 import './routes/premiumOperatingSystem.css';
 import './routes/premiumSaasExperience.css';
 import './routes/productionFinal.css';
-import './routes/xbarBrandShell.css';
+import './styles/xbarSaas.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
+const GettingStarted = lazy(() => import('./routes/GettingStarted'));
+const SalesPipeline = lazy(() => import('./routes/SalesPipeline'));
+const BuyerDealRoom = lazy(() => import('./routes/BuyerDealRoom'));
+const SalePacketStudio = lazy(() => import('./routes/SalePacketStudio'));
+const Reports = lazy(() => import('./routes/Reports'));
+const TodayWork = lazy(() => import('./routes/TodayWork'));
+const HerdGroups = lazy(() => import('./routes/HerdGroups'));
+const Pastures = lazy(() => import('./routes/Pastures'));
+const FeedInventory = lazy(() => import('./routes/FeedInventory'));
+const DocumentsVault = lazy(() => import('./routes/DocumentsVault'));
+const Animals = lazy(() => import('./routes/Animals'));
+const AnimalProfile = lazy(() => import('./routes/AnimalProfile'));
+const HealthCare = lazy(() => import('./routes/HealthCare'));
+const OwnershipChain = lazy(() => import('./routes/OwnershipChain'));
+const EquipmentPage = lazy(() => import('./routes/Equipment'));
+const BreedingFoaling = lazy(() => import('./routes/BreedingFoaling'));
+const Plans = lazy(() => import('./routes/Plans'));
 const Breeding = lazy(() => import('./routes/Breeding'));
 const BuyerProfile = lazy(() => import('./routes/BuyerProfile'));
 const DocumentLibrary = lazy(() => import('./routes/DocumentLibrary'));
@@ -47,7 +63,23 @@ const Terms = lazy(() => import('./routes/Terms'));
 const Weather = lazy(() => import('./routes/Weather'));
 
 const ROUTE_LABELS: Record<string, string> = {
-  '/': 'Home',
+  '/': 'Command Center',
+  '/getting-started': 'Getting Started',
+  '/today': "Today's Work",
+  '/herd-groups': 'Herd Groups',
+  '/pastures': 'Pastures & Locations',
+  '/feed': 'Feed & Inventory',
+  '/documents-vault': 'Documents Vault',
+  '/animals': 'Animals',
+  '/health-care': 'Health & Care',
+  '/ownership-chain': 'Ownership Chain',
+  '/equipment': 'Equipment',
+  '/breeding-foaling': 'Breeding & Foaling',
+  '/plans': 'Plans',
+  '/sales-pipeline': 'Sales Pipeline',
+  '/buyer-deal-room': 'Buyer Deal Room',
+  '/sale-packet-studio': 'Sale Packet Studio',
+  '/reports': 'Reports',
   '/assets': 'Equipment',
   '/breeding': 'Breeding',
   '/document-library': 'Document Library',
@@ -87,11 +119,6 @@ const DEFAULT_META_DESCRIPTION =
 // compound the static SEO in index.html so each crawlable page presents its
 // own snippet in search and social results instead of the shared default.
 const PUBLIC_ROUTE_META: Record<string, { title: string; description: string }> = {
-  '/': {
-    title: 'Sign in to XBAR',
-    description:
-      'Sign in to XBAR to manage horse records, ownership, documents, and sale-ready buyer packets.',
-  },
   '/landing': {
     title: 'XBAR — Clean records, ownership integrity, faster sale readiness',
     description: DEFAULT_META_DESCRIPTION,
@@ -149,31 +176,6 @@ function RouteTelemetry() {
   return null;
 }
 
-function hasCommandCenterEntry() {
-  if (typeof window === 'undefined') return false;
-  return window.localStorage.getItem('xbar-command-center-entry') === 'true';
-}
-
-function AppHomeGate() {
-  const location = useLocation();
-  const session = useCloudStore((state) => state.session);
-  const workspaceHydrated = useWorkspaceHydrated();
-  const workspaceReady = useWorkspaceReady();
-
-  if (location.pathname === '/' && !session && !hasCommandCenterEntry()) {
-    if (!workspaceHydrated) return <div className="app-loading-shell">Loading XBAR...</div>;
-    if (!workspaceReady) return <Login />;
-  }
-
-  return (
-    <RequireCloudAuth>
-      <RequireWorkspaceSetup>
-        <MainLayout />
-      </RequireWorkspaceSetup>
-    </RequireCloudAuth>
-  );
-}
-
 export default function App() {
   const Router = useHashRouting() ? HashRouter : BrowserRouter;
 
@@ -193,10 +195,28 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/subscribe" element={<RequireCloudAuth><Subscriptions /></RequireCloudAuth>} />
             <Route path="/setup" element={<RequireCloudAuth><SetupWorkspace /></RequireCloudAuth>} />
-            <Route path="/" element={<AppHomeGate />}>
+            <Route path="/" element={<RequireCloudAuth><RequireWorkspaceSetup><MainLayout /></RequireWorkspaceSetup></RequireCloudAuth>}>
               <Route index element={<Dashboard />} />
+              <Route path="getting-started" element={<GettingStarted />} />
+              <Route path="today" element={<TodayWork />} />
+              <Route path="herd-groups" element={<HerdGroups />} />
+              <Route path="pastures" element={<Pastures />} />
+              <Route path="feed" element={<FeedInventory />} />
+              <Route path="documents-vault" element={<DocumentsVault />} />
+              <Route path="sales-pipeline" element={<SalesPipeline />} />
+              <Route path="buyer-deal-room" element={<BuyerDealRoom />} />
+              <Route path="sale-packet-studio" element={<SalePacketStudio />} />
+              <Route path="reports" element={<Reports />} />
+              <Route path="animals" element={<Animals />} />
+              <Route path="animals/:id" element={<AnimalProfile />} />
+              <Route path="health-care" element={<HealthCare />} />
+              <Route path="ownership-chain" element={<OwnershipChain />} />
+              <Route path="equipment" element={<EquipmentPage />} />
+              <Route path="breeding-foaling" element={<BreedingFoaling />} />
+              <Route path="plans" element={<Plans />} />
               <Route path="horses" element={<Horses />} />
               <Route path="horses/:id" element={<HorseDetail />} />
+              <Route path="assets-equipment" element={<RanchAssets />} />
               <Route path="documents" element={<Documents />} />
               <Route path="document-library" element={<DocumentLibrary />} />
               <Route path="weather" element={<Weather />} />

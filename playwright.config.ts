@@ -10,6 +10,9 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
+    // Allow pointing at a preinstalled Chromium when the bundled browser is
+    // unavailable (e.g. restricted CI/sandbox). Set XBAR_CHROME=/path/to/chrome.
+    ...(process.env.XBAR_CHROME ? { launchOptions: { executablePath: process.env.XBAR_CHROME } } : {}),
   },
   webServer: {
     command: 'node ./node_modules/vite/bin/vite.js --mode e2e --host 0.0.0.0 --port 4174',
