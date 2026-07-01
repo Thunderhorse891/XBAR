@@ -555,6 +555,9 @@
 .xs-plan__feat { display: flex; gap: 8px; align-items: flex-start; }
 
 .xs-empty { padding: 30px 16px; text-align: center; color: var(--xbar-text-muted); }
+.xs-empty__icon { display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 16px; background: var(--xbar-surface-2); border: 1px solid var(--xbar-border); color: var(--xbar-text); margin-bottom: 14px; }
+.xs-empty__title { font-size: 16px; font-weight: 700; color: var(--xbar-text); margin-bottom: 6px; }
+.xs-empty__sub { font-size: 13px; color: var(--xbar-text-muted); max-width: 380px; margin: 0 auto 18px; line-height: 1.5; }
 .xs-muted { color: var(--xbar-text-muted); }
 .xs-divider { height: 1px; background: var(--xbar-border); border: 0; margin: 0; }
 

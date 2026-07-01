@@ -1,211 +1,266 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  AlertTriangle,
   ArrowRight,
   CalendarClock,
   Coins,
   FileWarning,
   Plus,
+  ShieldCheck,
   Sparkles,
   Stethoscope,
   Upload,
   Users,
 } from 'lucide-react';
 import { HorsesIcon } from '@/components/icons';
-import { ActionButton, StatusChip } from '@/components/saas';
-import { AnimalProfileDrawer, ResolveBlockerWizard, TaskDrawer } from '@/components/saas/flows';
-import { useXbarStore } from '@/store/useXbarStore';
+import { ActionButton } from '@/components/saas';
+import { buildBudgetSummary, buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
+import { formatCompactCurrency } from '@/lib/format';
 import { events, track } from '@/lib/telemetry';
-import {
-  commandActivity,
-  commandMetrics,
-  commandRevenue,
-  commandRisk,
-  dashboardMetrics,
-  documentExpiry,
-  nextBestAction,
-  todayTasks,
-  watchAnimals,
-  xbarRanch,
-  type WatchAnimal,
-  type WorkTask,
-} from '@/data/xbarSaasMock';
+import { useXbarStore } from '@/store/useXbarStore';
 
 const XBAR_ICON = '/brand/xbar_public_assets/public/brand/xbar-app-icon-512.png';
-const usd = (n: number) => `$${n.toLocaleString('en-US')}`;
+
+type Tone = 'danger' | 'warning' | 'info' | 'neutral';
+type Signal = { key: string; tone: Tone; title: string; meta: string; chip: string; to: string; icon: 'coins' | 'stethoscope' | 'doc' | 'horse' | 'shield' };
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const horses = useXbarStore((s) => s.horses);
+  const documents = useXbarStore((s) => s.documents);
+  const ownershipRecords = useXbarStore((s) => s.ownershipRecords);
+  const expenseReceipts = useXbarStore((s) => s.expenseReceipts);
+  const salesLeads = useXbarStore((s) => s.salesLeads);
   const workspaceProfile = useXbarStore((s) => s.workspaceProfile);
-  const ranchName = workspaceProfile.ranchName || workspaceProfile.businessName || xbarRanch.name;
 
-  const [openTask, setOpenTask] = useState<WorkTask | null>(null);
-  const [animal, setAnimal] = useState<WatchAnimal | null>(null);
-  const [resolveOpen, setResolveOpen] = useState(false);
+  const ranchName = workspaceProfile.ranchName || workspaceProfile.businessName || 'Your ranch';
+  const isEmpty = horses.length === 0;
+
+  const model = useMemo(() => {
+    const reviewQueue = documents.filter((d) => d.state === 'Needs Review' || d.state === 'Matched');
+    const transferGaps = buildTransferGapRows(horses, ownershipRecords, documents);
+    const careBoard = buildCareBoardRows(horses, documents, expenseReceipts);
+    const careDue = careBoard.filter((row) => row.signals.some((sig) => sig.status === 'due'));
+    const budget = buildBudgetSummary(expenseReceipts);
+    const activeSales = salesLeads.filter((l) => l.stage !== 'Closed');
+    const readiness = horses.length
+      ? Math.round(horses.reduce((sum, h) => sum + (h.readiness?.score ?? 0), 0) / horses.length)
+      : 0;
+    const openItems = transferGaps.length + careDue.length + reviewQueue.length;
+    return { reviewQueue, transferGaps, careDue, budget, activeSales, readiness, openItems };
+  }, [horses, documents, ownershipRecords, expenseReceipts, salesLeads]);
 
   useEffect(() => {
-    track(events.pageView, { surface: 'operations_console' });
-  }, []);
+    track(events.pageView, { surface: 'operations_console', empty: isEmpty, horses: horses.length });
+  }, [isEmpty, horses.length]);
 
-  const previewTasks = useMemo(() => todayTasks.slice(0, 4), []);
-  const medicalHold = watchAnimals.find((a) => a.group === 'Medical Hold');
-  const reviewAnimal = watchAnimals.find((a) => a.group === 'Missing Records');
+  /* -------------------------------------------------- Empty (new workspace) */
+  if (isEmpty) {
+    return (
+      <div className="xs-home">
+        <section className="xs-hero">
+          <img className="xs-hero__wm" src={XBAR_ICON} alt="" aria-hidden="true" />
+          <div className="xs-hero__body">
+            <div className="xs-hero__eyebrow"><Sparkles size={13} /> {ranchName} · Getting started</div>
+            <h1 className="xs-hero__headline">Set up your ranch operating system.</h1>
+            <p className="xs-hero__sub">Add your first animal and its papers. XBAR builds sale readiness, documents, ownership proof, and buyer deal rooms around your real records.</p>
+            <div className="xs-hero__actions">
+              <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>Add first animal</ActionButton>
+              <ActionButton onClick={() => navigate('/documents?upload=1')}>Upload documents</ActionButton>
+              <ActionButton variant="ghost" onClick={() => navigate('/getting-started')}>Getting started</ActionButton>
+            </div>
+          </div>
+        </section>
+
+        <div className="xs-ribbon">
+          {[
+            { v: 0, l: 'Animals', to: '/animals' },
+            { v: 0, l: 'Sale prospects', to: '/sales-pipeline' },
+            { v: 0, l: 'Documents', to: '/documents-vault' },
+            { v: 0, l: 'Deal rooms', to: '/buyer-deal-room' },
+            { v: '—', l: 'Readiness', to: '/reports' },
+          ].map((r) => (
+            <button key={r.l} type="button" className="xs-ribbon__item" onClick={() => navigate(r.to)}>
+              <span className="xs-ribbon__value">{r.v}</span>
+              <span className="xs-ribbon__label">{r.l}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="xs-homegrid">
+          <div>
+            <div className="xs-sectlabel"><span className="xs-sectlabel__title">First steps</span></div>
+            {[
+              { icon: <HorsesIcon width={20} height={20} />, title: 'Add your first animal', meta: 'Name, sex, status, and location — the record everything hangs off.', to: '/horses?new=1' },
+              { icon: <Upload size={20} />, title: 'Upload documents', meta: 'Coggins, registration, health certificates — OCR intake builds the file.', to: '/documents?upload=1' },
+              { icon: <ShieldCheck size={20} />, title: 'Configure the ranch', meta: 'Owner, entity, barn, and team access.', to: '/settings' },
+            ].map((s) => (
+              <button key={s.title} type="button" className="xs-signal xs-signal--info" onClick={() => navigate(s.to)}>
+                <span className="xs-signal__icon">{s.icon}</span>
+                <span className="xs-signal__body"><span className="xs-signal__title">{s.title}</span><span className="xs-signal__meta">{s.meta}</span></span>
+                <span className="xs-signal__cta"><ArrowRight size={16} className="xs-muted" /></span>
+              </button>
+            ))}
+          </div>
+
+          <div className="xs-intel">
+            <div className="xs-intel__head"><Sparkles size={13} /> XBAR Intelligence</div>
+            <div className="xs-intel__nba">
+              <div className="xs-intel__sec-label" style={{ color: 'var(--xbar-cyan-ink)' }}>Next best action</div>
+              <div className="xs-intel__nba-title">Add your first animal</div>
+              <div className="xs-intel__nba-reason">Signals, sale readiness, and the work queue populate from your real records.</div>
+              <ActionButton variant="primary" size="sm" icon={<Plus size={14} />} onClick={() => navigate('/horses?new=1')}>Add animal</ActionButton>
+            </div>
+            <div className="xs-intel__sec">
+              <div className="xs-intel__sec-label">Quick create</div>
+              <div className="xs-intel__qc">
+                <ActionButton size="sm" icon={<HorsesIcon width={14} height={14} />} onClick={() => navigate('/horses?new=1')}>Animal</ActionButton>
+                <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents?upload=1')}>Document</ActionButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ------------------------------------------------------------ Populated */
+  const { reviewQueue, transferGaps, careDue, budget, activeSales, readiness, openItems } = model;
+
+  const signals: Signal[] = [];
+  transferGaps.slice(0, 2).forEach((g) =>
+    signals.push({ key: `t-${g.horseId}`, tone: 'danger', icon: 'shield', title: `Ownership transfer — ${g.horseName}`, meta: g.reasons.slice(0, 2).join(' · '), chip: 'Blocked', to: `/animals/${g.horseId}` }),
+  );
+  careDue.slice(0, 2).forEach((c) =>
+    signals.push({ key: `c-${c.horseId}`, tone: 'warning', icon: 'stethoscope', title: `Care due — ${c.horseName}`, meta: c.signals.filter((s) => s.status !== 'clear').map((s) => s.label).join(' · ') || 'Care attention needed', chip: 'Due', to: `/animals/${c.horseId}` }),
+  );
+  if (reviewQueue.length) {
+    signals.push({ key: 'docs', tone: 'info', icon: 'doc', title: `${reviewQueue.length} document${reviewQueue.length === 1 ? '' : 's'} waiting on review`, meta: reviewQueue.slice(0, 3).map((d) => d.title).join(' · '), chip: 'Review', to: '/documents' });
+  }
+  if (!signals.length) {
+    signals.push({ key: 'clear', tone: 'neutral', icon: 'horse', title: 'Records are clear', meta: 'No transfer gaps, overdue care, or documents waiting on review.', chip: 'Clear', to: '/animals' });
+  }
+
+  const primary = signals[0];
+  const heroLine = primary.tone === 'danger'
+    ? <>Ownership documents are blocking a transfer — <em>{transferGaps.length} to clear</em>.</>
+    : primary.tone === 'warning'
+      ? <>{careDue.length} animal{careDue.length === 1 ? '' : 's'} need care attention today.</>
+      : primary.tone === 'info'
+        ? <>{reviewQueue.length} document{reviewQueue.length === 1 ? '' : 's'} are waiting on review.</>
+        : <>Everything's clear across {horses.length} animals.</>;
+
+  const workItems = [
+    ...transferGaps.map((g) => ({ id: `t-${g.horseId}`, title: `Resolve transfer documents — ${g.horseName}`, chip: 'Ownership', to: `/animals/${g.horseId}` })),
+    ...careDue.map((c) => ({ id: `c-${c.horseId}`, title: `Complete care — ${c.horseName}`, chip: 'Health', to: `/animals/${c.horseId}` })),
+    ...reviewQueue.map((d) => ({ id: `d-${d.id}`, title: `Review ${d.title}`, chip: 'Documents', to: '/documents' })),
+  ].slice(0, 5);
+
+  const iconFor = (k: Signal['icon']) =>
+    k === 'coins' ? <Coins size={20} /> : k === 'stethoscope' ? <Stethoscope size={20} /> : k === 'doc' ? <FileWarning size={20} /> : k === 'shield' ? <ShieldCheck size={20} /> : <HorsesIcon width={20} height={20} />;
 
   const ribbon = [
-    { value: commandMetrics.activeSaleProspects + 24, label: 'Animals', to: '/animals' },
-    { value: commandMetrics.activeSaleProspects, label: 'Sale prospects', to: '/sales-pipeline' },
-    { value: commandMetrics.documentsExpiring, label: 'Docs expiring', to: '/documents-vault', tone: 'warn' as const },
-    { value: commandMetrics.buyerDealRooms, label: 'Deal rooms', to: '/buyer-deal-room' },
-    { value: `${dashboardMetrics.readinessScore}%`, label: 'Readiness', to: '/reports' },
+    { v: horses.length, l: 'Animals', to: '/animals' },
+    { v: activeSales.length, l: 'Sale prospects', to: '/sales-pipeline' },
+    { v: reviewQueue.length, l: 'Docs to review', to: '/documents-vault', warn: reviewQueue.length > 0 },
+    { v: transferGaps.length, l: 'Transfer gaps', to: '/ownership-chain', danger: transferGaps.length > 0 },
+    { v: `${readiness}%`, l: 'Readiness', to: '/reports' },
   ];
-
-  function openResolve() {
-    track(events.blockerOpened, { source: 'home_hero' });
-    setResolveOpen(true);
-  }
 
   return (
     <div className="xs-home">
-      {/* ---------------------------------------------------------- Hero */}
       <section className="xs-hero">
         <img className="xs-hero__wm" src={XBAR_ICON} alt="" aria-hidden="true" />
         <div className="xs-hero__body">
-          <div className="xs-hero__eyebrow"><Sparkles size={13} /> {ranchName} · Sale Season</div>
-          <h1 className="xs-hero__headline">
-            1 sale is blocked — <em>{usd(commandMetrics.revenueBlocked)}</em> at risk.
-          </h1>
+          <div className="xs-hero__eyebrow"><Sparkles size={13} /> {ranchName} · Operations</div>
+          <h1 className="xs-hero__headline">{heroLine}</h1>
           <p className="xs-hero__sub">
-            RHA Pine Barrel Prospect can't move to a buyer until its health certificate expiration is added.
-            Clear it and {commandMetrics.activeBuyers} active buyers can proceed. {commandMetrics.tasksDueToday} tasks are due today, {commandMetrics.overdueTasks} overdue.
+            {openItems > 0
+              ? `${openItems} control point${openItems === 1 ? '' : 's'} need a decision. Start with the item most likely to block a sale or care.`
+              : `All control points are clear. ${activeSales.length} active buyer${activeSales.length === 1 ? '' : 's'} in the pipeline.`}
           </p>
           <div className="xs-hero__actions">
-            <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={openResolve}>Resolve blocker</ActionButton>
-            <ActionButton onClick={() => navigate('/today')}>Open work queue</ActionButton>
+            <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={() => navigate(primary.to)}>Open next decision</ActionButton>
+            <ActionButton onClick={() => navigate('/animals')}>Animals</ActionButton>
             <ActionButton variant="ghost" onClick={() => navigate('/reports')}>Readiness report</ActionButton>
           </div>
         </div>
       </section>
 
-      {/* -------------------------------------------------------- Ribbon */}
       <div className="xs-ribbon">
         {ribbon.map((r) => (
-          <button key={r.label} type="button" className="xs-ribbon__item" onClick={() => navigate(r.to)}>
-            <span className={`xs-ribbon__value${r.tone === 'warn' ? ' xs-ribbon__value--warn' : ''}`}>{r.value}</span>
-            <span className="xs-ribbon__label">{r.label}</span>
+          <button key={r.l} type="button" className="xs-ribbon__item" onClick={() => navigate(r.to)}>
+            <span className={`xs-ribbon__value${r.warn ? ' xs-ribbon__value--warn' : ''}${r.danger ? ' xs-ribbon__value--danger' : ''}`}>{r.v}</span>
+            <span className="xs-ribbon__label">{r.l}</span>
           </button>
         ))}
       </div>
 
-      {/* ----------------------------------------- Working area (2-col) */}
       <div className="xs-homegrid">
         <div>
-          {/* Needs a decision */}
           <div className="xs-sectlabel">
             <span className="xs-sectlabel__title">Needs a decision today</span>
             <button type="button" className="xs-card__link" onClick={() => navigate('/today')}>Open work queue</button>
           </div>
-
-          <button type="button" className="xs-signal xs-signal--danger" onClick={openResolve}>
-            <span className="xs-signal__icon xs-signal__icon--danger"><Coins size={20} /></span>
-            <span className="xs-signal__body">
-              <span className="xs-signal__title">Revenue blocker — RHA Pine Barrel Prospect</span>
-              <span className="xs-signal__meta">Health certificate expiration missing · {usd(commandMetrics.revenueBlocked)} target · offer {usd(20000)}</span>
-            </span>
-            <span className="xs-signal__cta"><StatusChip tone="danger">Blocked</StatusChip></span>
-          </button>
-
-          {medicalHold ? (
-            <button type="button" className="xs-signal xs-signal--warning" onClick={() => { track(events.animalProfileOpened, { id: medicalHold.id, source: 'home_signal' }); setAnimal(medicalHold); }}>
-              <span className="xs-signal__icon xs-signal__icon--warning"><Stethoscope size={20} /></span>
-              <span className="xs-signal__body">
-                <span className="xs-signal__title">Medical hold — {medicalHold.name}</span>
-                <span className="xs-signal__meta">{medicalHold.next} · {medicalHold.location}</span>
-              </span>
-              <span className="xs-signal__cta"><StatusChip tone="warning">Hold</StatusChip></span>
+          {signals.map((s) => (
+            <button key={s.key} type="button" className={`xs-signal xs-signal--${s.tone === 'neutral' ? 'info' : s.tone}`} onClick={() => navigate(s.to)}>
+              <span className={`xs-signal__icon${s.tone === 'danger' ? ' xs-signal__icon--danger' : s.tone === 'warning' ? ' xs-signal__icon--warning' : ''}`}>{iconFor(s.icon)}</span>
+              <span className="xs-signal__body"><span className="xs-signal__title">{s.title}</span><span className="xs-signal__meta">{s.meta}</span></span>
+              <span className="xs-signal__cta"><span className={`xs-chip xs-chip--${s.tone === 'danger' ? 'danger' : s.tone === 'warning' ? 'warning' : s.tone === 'info' ? 'info' : 'success'}`}>{s.chip}</span></span>
             </button>
-          ) : null}
+          ))}
 
-          <button type="button" className="xs-signal xs-signal--warning" onClick={() => navigate('/documents-vault')}>
-            <span className="xs-signal__icon xs-signal__icon--warning"><FileWarning size={20} /></span>
-            <span className="xs-signal__body">
-              <span className="xs-signal__title">{documentExpiry.total} documents expiring soon</span>
-              <span className="xs-signal__meta">{documentExpiry.breakdown.map((b) => `${b.count} ${b.label}`).join(' · ')}</span>
-            </span>
-            <span className="xs-signal__cta"><StatusChip tone="warning">Review</StatusChip></span>
-          </button>
-
-          {reviewAnimal ? (
-            <button type="button" className="xs-signal xs-signal--info" onClick={() => { track(events.animalProfileOpened, { id: reviewAnimal.id, source: 'home_signal' }); setAnimal(reviewAnimal); }}>
-              <span className="xs-signal__icon"><HorsesIcon width={20} height={20} /></span>
-              <span className="xs-signal__body">
-                <span className="xs-signal__title">Packet review — {reviewAnimal.name}</span>
-                <span className="xs-signal__meta">{reviewAnimal.next}</span>
-              </span>
-              <span className="xs-signal__cta"><StatusChip tone="info">Review</StatusChip></span>
-            </button>
-          ) : null}
-
-          {/* Compact work preview */}
-          <div className="xs-sectlabel" style={{ marginTop: 26 }}>
-            <span className="xs-sectlabel__title">Today's work</span>
-            <button type="button" className="xs-card__link" onClick={() => navigate('/today')}>{commandMetrics.tasksDueToday} due</button>
-          </div>
-          <div className="xs-card" style={{ padding: '6px 18px' }}>
-            <div className="xs-workmini">
-              {previewTasks.map((t) => (
-                <div key={t.id} className="xs-workmini__row" role="button" tabIndex={0} onClick={() => { track(events.taskOpened, { id: t.id, source: 'home' }); setOpenTask(t); }} onKeyDown={(e) => e.key === 'Enter' && setOpenTask(t)}>
-                  <StatusChip tone={t.priority === 'Revenue Blocker' ? 'danger' : t.priority === 'High' ? 'warning' : 'neutral'}>{t.priority}</StatusChip>
-                  <span className="xs-workmini__title">{t.title}</span>
-                  <span className="xs-workmini__due">{t.due}</span>
+          {workItems.length ? (
+            <>
+              <div className="xs-sectlabel" style={{ marginTop: 26 }}>
+                <span className="xs-sectlabel__title">Today's work</span>
+                <button type="button" className="xs-card__link" onClick={() => navigate('/today')}>{workItems.length} open</button>
+              </div>
+              <div className="xs-card" style={{ padding: '6px 18px' }}>
+                <div className="xs-workmini">
+                  {workItems.map((w) => (
+                    <div key={w.id} className="xs-workmini__row" role="button" tabIndex={0} onClick={() => navigate(w.to)} onKeyDown={(e) => e.key === 'Enter' && navigate(w.to)}>
+                      <span className="xs-chip xs-chip--neutral">{w.chip}</span>
+                      <span className="xs-workmini__title">{w.title}</span>
+                      <ArrowRight size={15} className="xs-muted" />
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
+            </>
+          ) : null}
         </div>
 
-        {/* -------------------------------------- Intelligence panel */}
         <div className="xs-intel">
           <div className="xs-intel__head"><Sparkles size={13} /> XBAR Intelligence</div>
-
           <div className="xs-intel__nba">
             <div className="xs-intel__sec-label" style={{ color: 'var(--xbar-cyan-ink)' }}>Next best action</div>
-            <div className="xs-intel__nba-title">{nextBestAction.title}</div>
-            <div className="xs-intel__nba-reason">{nextBestAction.reason}</div>
-            <ActionButton variant="primary" size="sm" icon={<ArrowRight size={14} />} onClick={openResolve}>Resolve now</ActionButton>
+            <div className="xs-intel__nba-title">{primary.title}</div>
+            <div className="xs-intel__nba-reason">{primary.meta}</div>
+            <ActionButton variant="primary" size="sm" icon={<ArrowRight size={14} />} onClick={() => navigate(primary.to)}>Resolve now</ActionButton>
           </div>
-
           <div className="xs-intel__sec">
             <div className="xs-intel__sec-label">Risk</div>
-            {commandRisk.map((r) => (<div key={r} className="xs-intel__line"><AlertTriangle size={14} /><span>{r}</span></div>))}
+            <div className="xs-intel__line"><ShieldCheck size={14} /><span>{transferGaps.length} ownership transfer{transferGaps.length === 1 ? '' : 's'} pending</span></div>
+            <div className="xs-intel__line"><Stethoscope size={14} /><span>{careDue.length} animal{careDue.length === 1 ? '' : 's'} with care due</span></div>
+            <div className="xs-intel__line"><FileWarning size={14} /><span>{reviewQueue.length} document{reviewQueue.length === 1 ? '' : 's'} in the review queue</span></div>
           </div>
-
           <div className="xs-intel__sec">
             <div className="xs-intel__sec-label">Revenue</div>
-            {commandRevenue.map((r) => (<div key={r} className="xs-intel__line"><Coins size={14} /><span>{r}</span></div>))}
+            <div className="xs-intel__line"><Coins size={14} /><span>{activeSales.length} active buyer{activeSales.length === 1 ? '' : 's'} in the pipeline</span></div>
+            <div className="xs-intel__line"><CalendarClock size={14} /><span>{formatCompactCurrency(budget.total)} spend this month</span></div>
           </div>
-
-          <div className="xs-intel__sec">
-            <div className="xs-intel__sec-label">Recent activity</div>
-            {commandActivity.slice(0, 4).map((a) => (<div key={a.label} className="xs-intel__line"><CalendarClock size={14} /><span>{a.label}<span style={{ color: 'var(--xbar-text-muted)', display: 'block', fontSize: 11 }}>{a.time}</span></span></div>))}
-          </div>
-
           <div className="xs-intel__sec">
             <div className="xs-intel__sec-label">Quick create</div>
             <div className="xs-intel__qc">
               <ActionButton size="sm" icon={<Plus size={14} />} onClick={() => navigate('/today')}>Task</ActionButton>
-              <ActionButton size="sm" icon={<HorsesIcon width={14} height={14} />} onClick={() => navigate('/animals')}>Animal</ActionButton>
-              <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents-vault')}>Document</ActionButton>
+              <ActionButton size="sm" icon={<HorsesIcon width={14} height={14} />} onClick={() => navigate('/horses?new=1')}>Animal</ActionButton>
+              <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents?upload=1')}>Document</ActionButton>
               <ActionButton size="sm" icon={<Users size={14} />} onClick={() => navigate('/buyer-deal-room')}>Buyer</ActionButton>
             </div>
           </div>
         </div>
       </div>
-
-      {/* -------------------------------------------------------- Flows */}
-      <TaskDrawer task={openTask} onClose={() => setOpenTask(null)} onResolveBlocker={() => { setOpenTask(null); openResolve(); }} />
-      <ResolveBlockerWizard open={resolveOpen} onClose={() => setResolveOpen(false)} />
-      <AnimalProfileDrawer animal={animal} onClose={() => setAnimal(null)} onStartPacket={() => { setAnimal(null); navigate('/sale-packet-studio'); }} />
     </div>
   );
 }
