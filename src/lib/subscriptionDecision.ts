@@ -30,10 +30,11 @@ export function getCheckoutReadiness(params: {
   hasPaymentLink: boolean;
   checkoutInProgress: boolean;
 }) {
-  if (!params.billingEnabled) return { ready: false, reason: 'Managed billing is paused. Your workspace and current plan will not change.' };
   if (!params.canManageBilling) return { ready: false, reason: 'Ask a workspace owner to change plans.' };
   if (params.checkoutInProgress) return { ready: false, reason: 'A secure checkout session is already opening.' };
-  if (!params.hasManagedIdentity && !params.hasPaymentLink) return { ready: false, reason: 'Sign in to this workspace before choosing a paid plan.' };
+  if (params.hasPaymentLink) return { ready: true, reason: 'Secure checkout opens next. XBAR never stores raw card numbers.' };
+  if (!params.billingEnabled) return { ready: false, reason: 'Secure checkout is not active yet.' };
+  if (!params.hasManagedIdentity) return { ready: false, reason: 'Sign in to this workspace before choosing a paid plan.' };
   return { ready: true, reason: 'Your plan changes only after secure checkout is complete.' };
 }
 

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { XbarMark } from '@/components/BrandMark';
 
 export type HelpSection = {
@@ -17,19 +17,45 @@ export function WorkspaceHelp({
   sections: HelpSection[];
   onClose: () => void;
 }) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const openerRef = useRef<Element | null>(null);
+
   useEffect(() => {
-    if (!open) {
-      return;
-    }
+    if (!open) return;
+
+    openerRef.current = document.activeElement;
+    closeRef.current?.focus();
+
+    const focusable = 'button:not(:disabled), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         onClose();
+        return;
+      }
+
+      if (event.key !== 'Tab') return;
+
+      const panel = closeRef.current?.closest('[role="dialog"]');
+      if (!panel) return;
+      const all = Array.from(panel.querySelectorAll<HTMLElement>(focusable));
+      if (!all.length) { event.preventDefault(); return; }
+      const first = all[0];
+      const last = all[all.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault(); last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault(); first.focus();
       }
     };
 
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      if (openerRef.current instanceof HTMLElement && openerRef.current.isConnected) {
+        openerRef.current.focus();
+      }
+    };
   }, [open, onClose]);
 
   if (!open) {
@@ -54,12 +80,13 @@ export function WorkspaceHelp({
             </div>
           </div>
           <button
+            ref={closeRef}
             type="button"
             onClick={onClose}
             className="workspace-help-drawer__close inline-flex h-9 w-9 items-center justify-center"
             aria-label="Close guide"
           >
-            ×
+            &times;
           </button>
         </div>
 

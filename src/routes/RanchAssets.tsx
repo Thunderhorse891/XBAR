@@ -108,7 +108,7 @@ export default function RanchAssets() {
       <CommandBrief
         variant="compact"
         eyebrow="Equipment"
-        entity="Equipment Readiness"
+        entity="Equipment"
         status={
           attentionRequired.length
             ? { label: 'Attention required', tone: 'rose' }

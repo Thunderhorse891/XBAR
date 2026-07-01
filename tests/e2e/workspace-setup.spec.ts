@@ -4,6 +4,7 @@ async function bootstrapWorkspace(page: Page) {
   await page.addInitScript(async () => {
     window.localStorage.clear();
     window.sessionStorage.clear();
+    window.localStorage.setItem('xbar-command-center-entry', 'true');
     if (indexedDB.databases) {
       const databases = await indexedDB.databases();
       await Promise.all(
@@ -25,27 +26,22 @@ async function bootstrapWorkspace(page: Page) {
 
   await page.goto('/setup');
 
-  const setupHeading = page.getByRole('heading', { name: 'Build your ranch workspace' });
-  const openBrowserWorkspace = page.getByRole('button', { name: 'Open browser workspace' });
+  const setupHeading = page.getByRole('heading', { name: 'Configure Workspace' });
   const setupVisible = await setupHeading.isVisible({ timeout: 5_000 }).catch(() => false);
   if (!setupVisible) {
-    const browserEntryVisible = await openBrowserWorkspace.isVisible({ timeout: 2_000 }).catch(() => false);
-    if (browserEntryVisible) {
-      await openBrowserWorkspace.click();
-    } else {
-      await page.goto('/#/setup');
-    }
+    await page.goto('/#/setup');
   }
   await expect(setupHeading).toBeVisible({ timeout: 10_000 });
 
-  await page.getByLabel('Business name').fill('XBAR Holdings');
-  await page.getByLabel('Ranch name').fill('Thunder Horse Ranch');
-  await page.getByLabel('Ranch manager').fill('Erin Wyrick');
-  await page.getByLabel('Ops email').fill('ops@xbar.test');
-  await page.getByLabel('Default owner').fill('Thunder Horse Ranch');
-  await page.getByLabel('Owner entity').fill('Thunder Horse Ranch LLC');
-  await page.getByLabel('Default barn').fill('Barn A');
-  await page.getByLabel('Default pasture').fill('North Pasture');
+  // Fill by placeholder — stable against label theming.
+  await page.getByPlaceholder('XBAR LLC').fill('XBAR Holdings');
+  await page.getByPlaceholder('Primary Ranch').fill('Thunder Horse Ranch');
+  await page.getByPlaceholder('Ranch manager').fill('Erin Wyrick');
+  await page.getByPlaceholder('ops@xbar.com').fill('ops@xbar.test');
+  await page.getByPlaceholder('Legal owner').fill('Thunder Horse Ranch');
+  await page.getByPlaceholder('Owner entity').fill('Thunder Horse Ranch LLC');
+  await page.getByPlaceholder('Barn A').fill('Barn A');
+  await page.getByPlaceholder('Pasture 1').fill('North Pasture');
   await page.getByRole('button', { name: 'Create workspace' }).click();
 
   await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });

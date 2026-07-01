@@ -1,0 +1,121 @@
+/* XBAR dataviz — layout/styling for the dependency-free chart primitives in
+   Charts.tsx. SVG charts (Sparkline, RadialGauge) are mostly self-describing;
+   MiniBars and StackBar need fl/grid layout to render their tracks. */
+
+/* ── Sparkline ─────────────────────────────────────────────────────────── */
+.xbar-spark {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+
+/* ── MiniBars ──────────────────────────────────────────────────────────── */
+.xbar-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  width: 100%;
+}
+
+.xbar-bars__col {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  height: 100%;
+  min-width: 0;
+}
+
+/* Definite track height (col height less the label row) so the fill's
+   percentage height resolves reliably across browsers. */
+.xbar-bars__track {
+  position: relative;
+  height: calc(100% - 22px);
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.xbar-bars__fill {
+  width: 64%;
+  min-height: 4px;
+  border-radius: 7px 7px 2px 2px;
+}
+
+.xbar-bars__label {
+  height: 16px;
+  line-height: 16px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--fr-muted, #5b6472);
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* ── RadialGauge ───────────────────────────────────────────────────────── */
+.xbar-gauge {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.xbar-gauge__value {
+  fill: var(--text, #0b0c0e);
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.xbar-gauge__caption {
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--muted, #5b6472);
+}
+
+/* ── StackBar ──────────────────────────────────────────────────────────── */
+.xbar-stackbar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.xbar-stackbar__track {
+  display: flex;
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(120, 130, 150, 0.16);
+}
+
+.xbar-stackbar__seg { height: 100%; }
+
+.xbar-stackbar__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.xbar-stackbar__legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--muted, #5b6472);
+}
+
+.xbar-stackbar__legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  display: inline-block;
+}

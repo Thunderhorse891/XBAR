@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  buildDocumentRecord,
+} from '../src/lib/xbarRuntime.js';
+import {
   summarizeBatch,
   validateAssetPatch,
   validateHorseNoteInput,
@@ -9,6 +12,35 @@ import {
   validateNewHorseInput,
 } from '../src/store/xbarStoreLogic.js';
 import type { DocumentRecord, IntakeBatch } from '../src/types/xbar.js';
+
+test('registration paper intake extracts a new horse identity without an existing profile', async () => {
+  const file = new File(
+    [
+      [
+        'Certificate of Registration',
+        'Registered Name: Smart Lena Bar',
+        'Registration Number: AQHA1234567',
+        'Owner: Blue River Ranch LLC',
+        'Sex: Mare',
+      ].join('\n'),
+    ],
+    'registration-paper.txt',
+    { type: 'text/plain' },
+  );
+
+  const document = await buildDocumentRecord({
+    file,
+    uploadedBy: 'Ops Desk',
+    source: 'Bulk Intake',
+    horses: [],
+    existingDocuments: [],
+  });
+
+  assert.equal(document.type, 'Registration');
+  assert.equal(document.entities.horseName, 'Smart Lena Bar');
+  assert.equal(document.entities.registrationNumber, 'AQHA1234567');
+  assert.equal(document.entities.ownerName, 'Blue River Ranch LLC');
+});
 
 test('validateNewHorseInput rejects incomplete horse records', () => {
   assert.equal(

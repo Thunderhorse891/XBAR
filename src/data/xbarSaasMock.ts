@@ -185,6 +185,11 @@ export const operationalTasks = ['Resolve release blocker', 'Prepare sale packet
    Command Center — operational ranch data
    =========================================================================== */
 
+/** Blocker resolutions performed in-session (home Resolve Blocker wizard →
+ *  Sale Packet Studio). Keyed by animal id; lets the studio see a cleared
+ *  health-certificate blocker instead of re-deriving it from static mock. */
+export const resolvedBlockers = new Set<string>();
+
 export const ranchSeason = { label: 'Sale Season', tone: 'brass' as ChipTone };
 export const ranchWeather = { tempF: 88, label: 'Hot · dry', risk: 'Heat watch', tone: 'warning' as ChipTone };
 
@@ -414,10 +419,10 @@ export const healthRecords = [
 ];
 
 export const ownershipChain = [
-  { id: 'o1', animal: 'RHA Pine Barrel Prospect', owner: 'Thunder Horse Ranch', proof: 'Registration + 2 transfers', status: 'Clear', tone: 'success' as ChipTone },
-  { id: 'o2', animal: 'THR Copper Canyon', owner: 'Thunder Horse Ranch', proof: 'Registration + bill of sale', status: 'Clear', tone: 'success' as ChipTone },
-  { id: 'o3', animal: 'THR Juniper Ledge', owner: 'Thunder Horse Ranch', proof: 'Bill of sale unsigned', status: 'Review', tone: 'warning' as ChipTone },
-  { id: 'o4', animal: 'THR Stone Mesa', owner: 'Pending transfer', proof: 'Prior owner release missing', status: 'Gap Detected', tone: 'danger' as ChipTone },
+  { id: 'o1', animalId: 'rha-pine-barrel-prospect', animal: 'RHA Pine Barrel Prospect', owner: 'Thunder Horse Ranch', proof: 'Registration + 2 transfers', status: 'Clear', tone: 'success' as ChipTone },
+  { id: 'o2', animalId: 'thr-copper-canyon', animal: 'THR Copper Canyon', owner: 'Thunder Horse Ranch', proof: 'Registration + bill of sale', status: 'Clear', tone: 'success' as ChipTone },
+  { id: 'o3', animalId: 'thr-juniper-ledge', animal: 'THR Juniper Ledge', owner: 'Thunder Horse Ranch', proof: 'Bill of sale unsigned', status: 'Review', tone: 'warning' as ChipTone },
+  { id: 'o4', animalId: 'thr-stone-mesa', animal: 'THR Stone Mesa', owner: 'Pending transfer', proof: 'Prior owner release missing', status: 'Gap Detected', tone: 'danger' as ChipTone },
 ];
 
 export const equipmentList = [

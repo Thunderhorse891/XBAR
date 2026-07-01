@@ -1,7 +1,27 @@
 {
+  "headers": [
+    {
+      "source": "/xbar-service-worker.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/((?!api/|assets/|brand/|favicon\\.svg|favicon\\.ico|site\\.webmanifest|manifest\\.webmanifest|xbar-service-worker\\.js|robots\\.txt|sitemap\\.xml).*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0, must-revalidate"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     {
-      "source": "/((?!api/).*)",
+      "source": "/((?!api/|assets/|brand/|favicon\\.svg|favicon\\.ico|site\\.webmanifest|manifest\\.webmanifest|xbar-service-worker\\.js|robots\\.txt|sitemap\\.xml).*)",
       "destination": "/index.html"
     }
   ],

@@ -46,9 +46,14 @@ export default function Documents() {
   const discardDocument = useXbarStore((state) => state.discardDocument);
   const ensureOwnershipRecord = useXbarStore((state) => state.ensureOwnershipRecord);
   const linkOwnershipProof = useXbarStore((state) => state.linkOwnershipProof);
+  const updateHorse = useXbarStore((state) => state.updateHorse);
+  const recordAuditEvent = useXbarStore((state) => state.recordAuditEvent);
   const pushToast = useUiStore((state) => state.pushToast);
   const canUploadDocuments = useCurrentRoleCapability('uploadDocuments');
   const canReviewDocuments = useCurrentRoleCapability('reviewDocuments');
+  // Applying OCR facts writes to the horse record (updateHorse → editHorse),
+  // so the action needs edit rights, not just document review rights.
+  const canEditHorses = useCurrentRoleCapability('editHorse');
   const session = useCloudStore((state) => state.session);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName || 'Ranch Staff';
@@ -133,6 +138,45 @@ export default function Documents() {
       ? [{ label: `${unmatchedDocuments.length} ${unmatchedDocuments.length === 1 ? 'document' : 'documents'} not matched to a horse`, severity: 'rose' as const }]
       : []),
   ];
+
+  const applyExtractedFacts = (document: DocumentRecord) => {
+    const targetId = reviewAssignments[document.id] ?? document.horseId ?? '';
+    const horse = horses.find((item) => item.id === targetId);
+    if (!horse) {
+      pushToast({ title: 'Pick a horse first', message: 'Select which horse these facts belong to, then apply.', tone: 'warning' });
+      return;
+    }
+    const applied: string[] = [];
+    const patch: { registrationNumber?: string; owner?: string } = {};
+    if (document.entities.registrationNumber && !horse.registrationNumber.trim()) {
+      patch.registrationNumber = document.entities.registrationNumber;
+      applied.push(`registration # ${document.entities.registrationNumber}`);
+    }
+    if (document.entities.ownerName && !horse.owner.trim()) {
+      patch.owner = document.entities.ownerName;
+      applied.push(`owner ${document.entities.ownerName}`);
+    }
+    if (!applied.length) {
+      pushToast({ title: 'Nothing new to apply', message: `${horse.name} already has values for every fact this document extracted. Existing data is never overwritten.`, tone: 'info' });
+      return;
+    }
+    const result = updateHorse(horse.id, patch);
+    if (result.ok) {
+      recordAuditEvent({
+        actor: currentUserName,
+        action: 'updated',
+        entityType: 'horse',
+        entityId: horse.id,
+        summary: `OCR facts accepted from "${document.title}": ${applied.join(', ')}`,
+        context: { documentId: document.id },
+      });
+    }
+    pushToast({
+      title: result.ok ? 'Facts applied to record' : 'Apply blocked',
+      message: result.ok ? `${horse.name} updated: ${applied.join(', ')}. Logged to the audit trail.` : result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
+  };
 
   const menuDocument = menuState?.type === 'document' ? documents.find((document) => document.id === menuState.documentId) : undefined;
   const menuHorseId = menuDocument ? reviewAssignments[menuDocument.id] ?? menuDocument.horseId : undefined;
@@ -374,10 +418,18 @@ export default function Documents() {
       tone: result.ok ? 'success' : 'error',
     });
     if (result.ok) {
+      const createdHorseIds = result.createdHorseIds ?? [];
       setFiles([]);
       setBatchLabel('Live upload batch');
       setCreateHorseFromBatch(false);
       setSearchParams({});
+      if (createdHorseIds.length === 1) {
+        navigate(`/horses/${createdHorseIds[0]}`);
+        return;
+      }
+      if (createdHorseIds.length > 1) {
+        goToStage('Proof');
+      }
     }
     setIsSubmitting(false);
   };
@@ -433,7 +485,7 @@ export default function Documents() {
     <>
       <CommandBrief
         eyebrow="Document Vault"
-        entity="Document Pipeline"
+        entity="Your Documents"
         status={heroStatus}
         summary="Every file moves through one path: upload, local OCR, human review, ownership support, then watermarked sharing."
         evidence={[
@@ -535,7 +587,7 @@ export default function Documents() {
                   onClick={() => setCreateHorseFromBatch((current) => !current)}
                   disabled={!canUploadDocuments || Boolean(horseId)}
                 >
-                  {createHorseFromBatch ? 'Create from docs' : 'Review only'}
+                  {createHorseFromBatch ? 'Create horse profiles' : 'Review only'}
                 </button>
               </label>
               <label className="field-stack field-stack--wide">
@@ -768,6 +820,19 @@ export default function Documents() {
                               <button
                                 className="button button--ghost button--compact"
                                 type="button"
+                                onClick={() => applyExtractedFacts(document)}
+                                disabled={!canReviewDocuments || !canEditHorses}
+                                title={
+                                  canEditHorses
+                                    ? 'Copy extracted facts into empty fields on the horse record (never overwrites).'
+                                    : 'Applying facts edits the horse record, which your role cannot do.'
+                                }
+                              >
+                                Apply facts
+                              </button>
+                              <button
+                                className="button button--ghost button--compact"
+                                type="button"
                                 onClick={() => {
                                   const result = reviewDocument(document.id, reviewAssignments[document.id] ?? document.horseId);
                                   pushToast({
@@ -944,6 +1009,14 @@ export default function Documents() {
             className="cursor-context-menu"
             onContextMenu={(event) => openSurfaceMenu('buyer', event)}
           >
+            {subscription.tier === 'Starter' ? (
+              <p className="panel__description" style={{ marginBottom: 12 }}>
+                Starter records the packet build. Upgrading to Professional unlocks the watermarked PDF and the buyer deal room.{' '}
+                <button className="button button--ghost button--compact" type="button" onClick={() => navigate('/subscriptions?plan=Professional')}>
+                  View Plan &amp; Billing
+                </button>
+              </p>
+            ) : null}
             {shareGroups.length ? (
               <div className="stack-list">
                 {shareGroups.map((group) => (

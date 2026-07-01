@@ -34,7 +34,7 @@ export default function OwnershipChain() {
           <thead><tr><th>Animal</th><th>Current owner</th><th>Proof</th><th>Status</th><th /></tr></thead>
           <tbody>
             {ownershipChain.map((o) => (
-              <tr key={o.id} onClick={() => navigate(`/animals/${o.animal === 'RHA Pine Barrel Prospect' ? 'rha-pine-barrel-prospect' : 'thr-copper-canyon'}`)}>
+              <tr key={o.id} onClick={() => navigate(`/animals/${o.animalId}`)}>
                 <td style={{ fontWeight: 600 }}>{o.animal}</td>
                 <td>{o.owner}</td>
                 <td className="xs-muted">{o.proof}</td>

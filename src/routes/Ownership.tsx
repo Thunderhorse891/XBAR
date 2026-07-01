@@ -393,7 +393,7 @@ export default function Ownership() {
     <div className="ownership-ops">
       <CommandBrief
         eyebrow="Ownership"
-        entity="Ownership & Transfer Registry"
+        entity="Ownership & Transfers"
         variant="split"
         status={heroStatus}
         summary="Every transfer is supported by linked, verified documents. Clear status requires completed records."

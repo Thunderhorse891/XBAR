@@ -1,1 +1,1 @@
-{"name":"XBAR Equine Operations Command","short_name":"XBAR","start_url":"/","scope":"/","display":"standalone","background_color":"#05070A","theme_color":"#05070A","icons":[{"src":"/brand/xbar_public_assets/public/main%20logo.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}]}
+{"name":"XBAR","short_name":"XBAR","start_url":"/","scope":"/","display":"standalone","background_color":"#05070A","theme_color":"#05070A","icons":[{"src":"/brand/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}]}

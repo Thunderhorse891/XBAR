@@ -102,7 +102,7 @@ export function isSnapshotFallbackEnabled() {
 }
 
 export function isBillingConfigured() {
-  return stripeConfig.managedBillingEnabled;
+  return stripeConfig.managedBillingEnabled || Object.values(stripeConfig.paymentLinks).some(Boolean);
 }
 
 export function isFacebookSharingConfigured() {

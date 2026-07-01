@@ -23,6 +23,7 @@
     "src/lib/facebookSharing.ts",
     "src/lib/permissions.ts",
     "src/lib/cloudSyncPolicy.ts",
+    "src/lib/workspaceStorage.ts",
     "src/vite-env.d.ts",
     "tests/**/*.ts"
   ]

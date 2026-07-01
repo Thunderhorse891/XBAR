@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -45,6 +45,7 @@ export function ConfirmActionDialog({
   onConfirm,
   onCancel,
 }: ConfirmActionDialogProps) {
+  const idPrefix = useId();
   const [checked, setChecked] = useState<boolean[]>([]);
   const [typed, setTyped] = useState('');
 
@@ -61,7 +62,7 @@ export function ConfirmActionDialog({
   const blockerHint = !allAcknowledged
     ? 'Check every acknowledgement to continue.'
     : !textMatches
-      ? `Type “${requireText}” exactly to enable ${confirmLabel.toLowerCase()}.`
+      ? `Type "${requireText}" exactly to enable ${confirmLabel.toLowerCase()}.`
       : '';
 
   return (
@@ -85,13 +86,13 @@ export function ConfirmActionDialog({
             {acknowledgements.map((text, index) => (
               <div key={text} className="confirm-dialog__ack">
                 <Checkbox
-                  id={`confirm-dialog-ack-${index}`}
+                  id={`${idPrefix}-ack-${index}`}
                   checked={checked[index] ?? false}
                   onCheckedChange={(value) =>
                     setChecked((previous) => previous.map((item, i) => (i === index ? Boolean(value) : item)))
                   }
                 />
-                <Label htmlFor={`confirm-dialog-ack-${index}`}>{text}</Label>
+                <Label htmlFor={`${idPrefix}-ack-${index}`}>{text}</Label>
               </div>
             ))}
           </div>
@@ -99,11 +100,11 @@ export function ConfirmActionDialog({
 
         {requireText && (
           <div className="confirm-dialog__type-check">
-            <Label htmlFor="confirm-dialog-type">
+            <Label htmlFor={`${idPrefix}-type`}>
               Type <strong>{requireText}</strong> to confirm
             </Label>
             <Input
-              id="confirm-dialog-type"
+              id={`${idPrefix}-type`}
               value={typed}
               onChange={(event) => setTyped(event.target.value)}
               autoComplete="off"

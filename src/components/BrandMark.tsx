@@ -5,7 +5,7 @@ type BrandMarkProps = SVGProps<SVGSVGElement> & {
   tone?: 'color' | 'mono';
 };
 
-export const XBAR_MAIN_LOGO_SRC = '/brand/xbar_public_assets/public/main%20logo.png';
+export const XBAR_MAIN_LOGO_SRC = '/brand/xbar-app-icon.png';
 
 export function XbarMark({ title, tone = 'color', ...props }: BrandMarkProps) {
   return (

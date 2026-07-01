@@ -1,0 +1,402 @@
+/*
+ * XBAR Brand Shell
+ * --------------------------------------------------------------------------
+ * Finishes the light production shell around the corrected XBAR assets:
+ *   - Warm-white surface with crisp work cards
+ *   - Graphite primary, steel outlines, low radius
+ *   - Outfit for headings/body, Geist for labels and data
+ *   - Subtle, architectural X watermark + horse outline (real brand assets)
+ *
+ * This file is imported LAST so it wins over the legacy command-center
+ * overrides. It intentionally restyles the global shell only; individual
+ * page surfaces keep their existing (already light) component styling.
+ */
+
+:root {
+  --xbar-shell-surface: #F5F2EC;
+  --xbar-shell-surface-low: rgba(199, 189, 170, 0.2);
+  --xbar-shell-card: #ffffff;
+  --xbar-shell-primary: #0B0D0F;
+  --xbar-shell-on-primary: #ffffff;
+  --xbar-shell-text: #121518;
+  --xbar-shell-muted: #596168;
+  --xbar-shell-faint: #596168;
+  --xbar-shell-outline: rgba(183, 188, 194, 0.82);
+  --xbar-shell-blue: #0078D7;
+  --xbar-shell-mono: 'Geist', 'Outfit', ui-monospace, monospace;
+  --xbar-shell-sans: 'Outfit', 'Geist', 'Segoe UI Variable Text', sans-serif;
+}
+
+/* ----------------------------------------------------------------- Shell -- */
+html body #root .xbar-command-shell {
+  background: var(--xbar-shell-surface);
+  font-family: var(--xbar-shell-sans);
+}
+
+/* Repaint the main work surface to a clean XBAR canvas with a faint
+   architectural grid instead of the old command-center gradient. */
+html body #root .xbar-command-main {
+  background:
+    linear-gradient(rgba(11, 13, 15, 0.024) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(11, 13, 15, 0.024) 1px, transparent 1px),
+    var(--xbar-shell-surface) !important;
+  background-size: 80px 80px, 80px 80px, auto !important;
+}
+
+/* ------------------------------------------------ Brand motif (watermark) -- */
+/* Replace the CSS-drawn glyph with the real, subtle XBAR brand assets so the
+   X reads as an architectural background and the horse as an intentional
+   accent, never a pasted-on sticker. */
+html body #root .xbar-shell-motifs {
+  position: fixed;
+  inset: 62px 0 0 264px;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+html body #root .xbar-shell-x {
+  background-image: url('/brand/xbar-x-watermark-main.png');
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: center;
+  opacity: 0.055;
+  filter: saturate(0.72) contrast(1.02);
+}
+
+html body #root .xbar-shell-x::before,
+html body #root .xbar-shell-x::after {
+  content: none !important;
+}
+
+html body #root .xbar-shell-x--one {
+  right: -14%;
+  bottom: -30%;
+  width: min(52vw, 760px);
+}
+
+html body #root .xbar-shell-x--two {
+  display: none;
+}
+
+/* The horse outline becomes a quiet, intentional accent in the upper-right
+   negative space with snout and ears intact, low contrast, never centered. */
+html body #root .xbar-shell-horse-line {
+  display: none;
+  object-fit: contain;
+}
+
+html body #root .xbar-shell-motifs::after {
+  content: "";
+  position: absolute;
+  right: max(20px, 5vw);
+  top: 8%;
+  width: min(40vw, 560px);
+  aspect-ratio: 980 / 331;
+  background-image: url('/brand/xbar-horse-outline-safe.png');
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: top right;
+  opacity: 0.08;
+  filter: saturate(0.8) contrast(1.04);
+}
+
+html body #root .xbar-sidebar-brand__copy > div:first-child {
+  color: var(--xbar-shell-primary) !important;
+  opacity: 1 !important;
+  text-shadow: none !important;
+}
+
+html body #root .xbar-sidebar-brand__copy > div:last-child {
+  color: var(--xbar-shell-muted) !important;
+  opacity: 1 !important;
+  text-shadow: none !important;
+}
+
+/* --------------------------------------------------- Page context strip --- */
+/* Plain-language replacement for the removed "XBAR OS" telemetry band. */
+html body #root .xbar-context-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  padding: 14px 18px;
+  border: 1px solid var(--xbar-shell-outline);
+  border-radius: 8px;
+  background: var(--xbar-shell-card);
+  box-shadow: 0 8px 24px rgba(11, 13, 15, 0.04);
+}
+
+html body #root .xbar-context-strip__crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--xbar-shell-mono);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--xbar-shell-faint);
+}
+
+html body #root .xbar-context-strip__crumbs strong {
+  color: var(--xbar-shell-primary);
+}
+
+html body #root .xbar-context-strip__crumbs span[data-sep] {
+  color: var(--xbar-shell-outline);
+}
+
+html body #root .xbar-context-strip__title {
+  font-family: var(--xbar-shell-sans);
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--xbar-shell-primary);
+  line-height: 1.1;
+}
+
+html body #root .xbar-context-strip__meta {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+html body #root .xbar-context-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 12px;
+  border: 1px solid var(--xbar-shell-outline);
+  border-radius: 999px;
+  background: var(--xbar-shell-surface-low);
+  font-family: var(--xbar-shell-mono);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--xbar-shell-muted);
+}
+
+html body #root .xbar-context-chip strong {
+  color: var(--xbar-shell-primary);
+  font-weight: 700;
+}
+
+html body #root .xbar-context-chip--alert {
+  border-color: rgba(0, 120, 215, 0.46);
+  background: rgba(0, 120, 215, 0.08);
+  color: var(--xbar-shell-primary);
+}
+
+html body #root .xbar-context-chip--alert strong {
+  color: var(--xbar-shell-blue);
+}
+
+html body #root .xbar-context-chip--ok {
+  border-color: rgba(89, 97, 104, 0.4);
+  background: rgba(199, 189, 170, 0.16);
+  color: var(--xbar-shell-muted);
+}
+
+html body #root .xbar-context-chip--ok strong {
+  color: var(--xbar-shell-primary);
+}
+
+@media (max-width: 720px) {
+  html body #root .xbar-context-strip__meta {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+/* --------------------------------------------- XBAR primary CTA ---------- */
+/* The legacy operating-system overrides repaint every top-bar button with a
+   white gradient and force white labels dark. Re-assert the graphite
+   primary action so the main CTA reads as a true filled button. */
+html body #root .xbar-command-topbar button[class*="bg-[#0B0D0F]"],
+html body #root .xbar-command-shell button[class*="bg-[#0B0D0F]"] {
+  background: #0B0D0F !important;
+  border-color: #0B0D0F !important;
+  color: #ffffff !important;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16) !important;
+}
+
+html body #root .xbar-command-topbar button[class*="bg-[#0B0D0F]"]:hover,
+html body #root .xbar-command-shell button[class*="bg-[#0B0D0F]"]:hover {
+  background: #20252A !important;
+  border-color: #20252A !important;
+}
+
+html body #root .xbar-command-topbar button[class*="bg-[#0B0D0F]"] * {
+  color: #ffffff !important;
+}
+
+/* Sidebar active nav: strong black text + neutral fill (legacy rule forces
+   link text gray, so re-assert the active item's weight). */
+html body #root .xbar-command-shell aside a[class*="bg-[#F5F2EC]"] {
+  color: #121518 !important;
+  background: rgba(199, 189, 170, 0.22) !important;
+}
+
+/* ------------------------------------------ First-run welcome ------------ */
+/* The empty-workspace welcome shipped as a dark command-center hero. Repaint
+   it as a clean, light XBAR surface so the dashboard reads consistently. */
+html body #root .xbar-firstrun__hero {
+  background:
+    linear-gradient(rgba(11, 13, 15, 0.024) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(11, 13, 15, 0.024) 1px, transparent 1px),
+    #ffffff !important;
+  background-size: 60px 60px, 60px 60px, auto !important;
+  color: #121518 !important;
+  border: 1px solid var(--xbar-shell-outline) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 18px 48px -34px rgba(11, 13, 15, 0.32) !important;
+}
+
+html body #root .xbar-firstrun__eyebrow {
+  color: #596168 !important;
+}
+
+html body #root .xbar-firstrun__hero-viz .xbar-gauge__value {
+  fill: #121518 !important;
+}
+
+html body #root .xbar-firstrun__hero h1 {
+  color: #121518 !important;
+  -webkit-text-fill-color: #121518 !important;
+}
+
+html body #root .xbar-firstrun__sub {
+  color: #596168 !important;
+}
+
+html body #root .xbar-firstrun__hero-viz {
+  background: rgba(199, 189, 170, 0.18) !important;
+  border: 1px solid var(--xbar-shell-outline) !important;
+}
+
+html body #root .xbar-firstrun__hero-viz .xbar-gauge__caption {
+  color: #596168 !important;
+}
+
+/* Primary welcome CTA -> graphite; secondary -> light outline. */
+html body #root .xbar-firstrun__hero-actions a:first-child,
+html body #root .xbar-firstrun__hero-actions button:first-child {
+  background: #0B0D0F !important;
+  border-color: #0B0D0F !important;
+  color: #ffffff !important;
+}
+
+html body #root .xbar-firstrun__hero-actions a:not(:first-child),
+html body #root .xbar-firstrun__hero-actions button:not(:first-child) {
+  background: #ffffff !important;
+  border: 1px solid var(--xbar-shell-outline) !important;
+  color: #121518 !important;
+}
+
+/* ------------------------------------------------ Legal/public docs ------- */
+html body #root .xbar-legal-route {
+  position: relative;
+  min-height: 100vh;
+  width: min(1040px, calc(100% - 36px));
+  margin: 0 auto;
+  padding: clamp(34px, 6vw, 82px) 0;
+  color: #121518;
+  font-family: var(--xbar-shell-sans);
+}
+
+html body #root .xbar-legal-route::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    linear-gradient(rgba(11, 13, 15, 0.026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(11, 13, 15, 0.026) 1px, transparent 1px),
+    #F5F2EC;
+  background-size: 76px 76px, 76px 76px, auto;
+}
+
+html body #root .xbar-legal-route::after {
+  content: "";
+  position: fixed;
+  right: max(18px, 8vw);
+  top: max(28px, 8vh);
+  z-index: -1;
+  width: min(42vw, 620px);
+  aspect-ratio: 980 / 331;
+  background: url('/brand/xbar-horse-outline-safe.png') top right / contain no-repeat;
+  opacity: 0.08;
+  pointer-events: none;
+}
+
+html body #root .xbar-legal-route__eyebrow,
+html body #root .xbar-legal-route__meta,
+html body #root .xbar-legal-route h2 {
+  font-family: var(--xbar-shell-mono);
+  text-transform: uppercase;
+}
+
+html body #root .xbar-legal-route__eyebrow {
+  margin: 0 0 14px;
+  color: #0078D7;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+html body #root .xbar-legal-route h1 {
+  width: min(760px, 100%);
+  margin: 0;
+  color: #121518;
+  font-family: 'Hanken Grotesk', var(--xbar-shell-sans);
+  font-size: clamp(2.4rem, 6vw, 4.6rem);
+  font-weight: 850;
+  letter-spacing: 0;
+  line-height: 0.96;
+}
+
+html body #root .xbar-legal-route__meta {
+  margin: 14px 0 24px;
+  color: #596168;
+  font-size: 0.76rem;
+  letter-spacing: 0.12em;
+}
+
+html body #root .xbar-legal-route__notice {
+  width: min(760px, 100%);
+  margin: 0 0 36px;
+  border: 1px solid var(--xbar-shell-outline);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #596168;
+  line-height: 1.7;
+  padding: 18px;
+}
+
+html body #root .xbar-legal-route section {
+  display: grid;
+  gap: 10px;
+  width: min(860px, 100%);
+  margin: 0 0 28px;
+  border-top: 1px solid var(--xbar-shell-outline);
+  padding-top: 22px;
+}
+
+html body #root .xbar-legal-route h2 {
+  margin: 0;
+  color: #121518;
+  font-size: 0.86rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+}
+
+html body #root .xbar-legal-route p {
+  margin: 0;
+  color: #596168;
+  font-size: 0.95rem;
+  line-height: 1.7;
+}

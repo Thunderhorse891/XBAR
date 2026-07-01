@@ -93,6 +93,7 @@ type ActionResult = {
   ok: boolean;
   message: string;
   id?: string;
+  createdHorseIds?: string[];
 };
 
 type HorsePatch = Partial<Pick<HorseRecord, 'name' | 'breed' | 'color' | 'sex' | 'registrationNumber' | 'registry' | 'aqhaNumber' | 'owner' | 'ownerEntity' | 'segment' | 'status' | 'costBasis'>> & { askPrice?: number };
@@ -723,11 +724,25 @@ function guessHorseSexFromDocuments(documents: DocumentRecord[]): NewHorseInput[
   return 'Mare';
 }
 
+function inferHorseNameFromDocumentTitle(title: string) {
+  const normalized = title
+    .replace(/[-_]/g, ' ')
+    .replace(/\b(registration|certificate|papers?|coggins|health|bill\s+of\s+sale|transfer|packet|vet|record|scan|copy|document|doc|pdf|jpg|jpeg|png)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!/[A-Za-z]/.test(normalized) || normalized.length < 3) {
+    return '';
+  }
+
+  return normalized;
+}
+
 function buildHorseInputFromDocuments(documents: DocumentRecord[], workspaceProfile: WorkspaceProfile): NewHorseInput | null {
   const horseName =
     documents.map((document) => document.entities.horseName?.trim()).find(Boolean) ??
     documents
-      .map((document) => document.title.replace(/[-_]/g, ' ').trim())
+      .map((document) => inferHorseNameFromDocumentTitle(document.title))
       .find((title) => title.length >= 3) ??
     '';
   const registrationNumber = documents.map((document) => document.entities.registrationNumber?.trim()).find(Boolean) ?? '';
@@ -1573,6 +1588,7 @@ export const useXbarStore = create<XbarStore>()(
             ok: true,
             message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the upload batch.` : ''}${omittedHorseCount ? ` ${omittedHorseCount} additional horse candidate${omittedHorseCount === 1 ? ' was' : 's were'} left for review because the horse limit was reached.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only because cloud file storage is not available.` : ''}`,
             id: batch.id,
+            createdHorseIds: createdHorses.map((horse) => horse.id),
           };
         } catch (error) {
           console.error('Document upload failed', error);

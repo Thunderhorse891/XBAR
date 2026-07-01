@@ -13,6 +13,7 @@ import { ActionButton, SlideOverDrawer, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
 import { events, track } from '@/lib/telemetry';
 import {
+  resolvedBlockers,
   saasHorses,
   type WatchAnimal,
   type WorkTask,
@@ -187,11 +188,13 @@ export function ResolveBlockerWizard({
   open,
   onClose,
   horse = 'RHA Pine Barrel Prospect',
+  horseId = 'rha-pine-barrel-prospect',
   amount = 35000,
 }: {
   open: boolean;
   onClose: () => void;
   horse?: string;
+  horseId?: string;
   amount?: number;
 }) {
   const navigate = useNavigate();
@@ -220,7 +223,7 @@ export function ResolveBlockerWizard({
         ) : (
           <>
             <ActionButton onClick={close}>Close</ActionButton>
-            <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={() => { track(events.blockerResolved, { horse, amount }); pushToast({ title: 'Blocker resolved', message: `${horse} is now release-ready`, tone: 'success' }); close(); navigate('/sale-packet-studio'); }}>Open Sale Packet</ActionButton>
+            <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={() => { resolvedBlockers.add(horseId); track(events.blockerResolved, { horse, horseId, amount }); pushToast({ title: 'Blocker resolved', message: `${horse} is now release-ready`, tone: 'success' }); close(); navigate('/sale-packet-studio'); }}>Open Sale Packet</ActionButton>
           </>
         )
       }
