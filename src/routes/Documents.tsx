@@ -473,7 +473,7 @@ export default function Documents() {
   };
 
   // Packet generation is the guided premium workflow (release gate, margin,
-  // buyer capture, and deal-room logging) — see SalePacketWizard.
+  // buyer capture, and buyer-folder logging) — see SalePacketWizard.
 
   const shareGroups = horses
     .map((horse) => ({ horse, documents: readyDocuments.filter((document) => document.horseId === horse.id) }))
@@ -1011,7 +1011,7 @@ export default function Documents() {
           >
             {subscription.tier === 'Starter' ? (
               <p className="panel__description" style={{ marginBottom: 12 }}>
-                Starter records the packet build. Upgrading to Professional unlocks the watermarked PDF and the buyer deal room.{' '}
+                Starter records the packet build. Upgrading to Professional unlocks the watermarked PDF and the buyer folder.{' '}
                 <button className="button button--ghost button--compact" type="button" onClick={() => navigate('/subscriptions?plan=Professional')}>
                   View Plan &amp; Billing
                 </button>

@@ -15,7 +15,7 @@ export default function BuyerDealRoom() {
   const [rooms, setRooms] = useState(dealRooms);
   const [selectedId, setSelectedId] = useState(dealRooms[0].id);
   const selected = rooms.find((r) => r.id === selectedId) ?? rooms[0];
-  const toast = (m: string) => pushToast({ title: 'Buyer Deal Room', message: m, tone: 'success' });
+  const toast = (m: string) => pushToast({ title: 'Buyer Folder', message: m, tone: 'success' });
 
   const update = (id: string, patch: Partial<DealRoom>) => setRooms((cur) => cur.map((r) => (r.id === id ? { ...r, ...patch } : r)));
 
@@ -23,8 +23,8 @@ export default function BuyerDealRoom() {
     <>
       <PageHead
         eyebrow="Transactions"
-        title="Buyer Deal Room"
-        subtitle="A controlled transaction room — buyer access, packet activity, offers, and release."
+        title="Buyer Folder"
+        subtitle="A private folder you can share with a buyer before the sale. Add photos, Coggins, health records, registration papers, invoices, and sale terms. You control what the buyer can see."
         actions={<ActionButton variant="primary" icon={<Send size={15} />} onClick={() => toast('Buyer invitation drafted')}>Invite Buyer</ActionButton>}
       />
 

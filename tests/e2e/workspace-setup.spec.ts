@@ -109,9 +109,9 @@ test('sale packet studio is a stepper wizard', async ({ page }) => {
   await expect(page.getByText('Choose packet type')).toBeVisible(); // step 2 content
 });
 
-test('buyer deal room is a master-detail workspace', async ({ page }) => {
+test('buyer folder is a master-detail workspace', async ({ page }) => {
   await bootstrapWorkspace(page);
-  await page.getByRole('link', { name: 'Buyer Deal Rooms', exact: true }).click();
+  await page.getByRole('link', { name: 'Buyer Folders', exact: true }).click();
   await page.locator('.xs-mdrow', { hasText: 'Cedar Hollow Equine' }).click();
   await expect(page.locator('.xs-detailhead__name')).toHaveText('Cedar Hollow Equine');
   await expect(page.getByRole('button', { name: 'Prepare Release' })).toBeVisible();
@@ -123,7 +123,7 @@ test('documents opens a document drawer', async ({ page }) => {
   await page.locator('.xs-table tbody tr').first().click();
   const drawer = page.getByRole('dialog');
   await expect(drawer).toBeVisible();
-  await expect(drawer.getByRole('button', { name: 'Mark Buyer-Safe' })).toBeVisible();
+  await expect(drawer.getByRole('button', { name: 'Share With Buyer' })).toBeVisible();
 });
 
 test('pasture location opens a detail drawer', async ({ page }) => {
@@ -144,7 +144,7 @@ test('a seeded animal opens a full animal profile object page with tabs', async 
   await expect(page).toHaveURL(/\/animals\//);
   await expect(page.locator('.xs-objhead__name')).toHaveText(/roster prospect/i);
   await page.locator('.xs-tabbar__tab', { hasText: 'Sale Readiness' }).click();
-  await expect(page.getByText('Buyer-safe proof')).toBeVisible();
+  await expect(page.getByText('Share With Buyer')).toBeVisible();
 });
 
 test('sales pipeline renders a kanban board', async ({ page }) => {

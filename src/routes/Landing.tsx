@@ -109,10 +109,10 @@ const operationalPreviewRows = [
   {
     label: 'Sale Readiness',
     value: 'Ready',
-    detail: 'Approved packet, current Coggins, and buyer-safe profile are in place.',
+    detail: 'Approved packet, current Coggins, and buyer-ready profile are in place.',
   },
   {
-    label: 'Buyer-Safe Proof',
+    label: 'Share With Buyer',
     value: 'Clear',
     detail: 'Only verified records leave the private workspace.',
   },
@@ -293,7 +293,7 @@ function RevenueIntelligenceShowcase() {
       <div className="revenue-command-visual revenue-record-preview" aria-label="Static XBAR operational preview">
         <div className="revenue-record-preview__top">
           <span>XBAR record view</span>
-          <strong>Buyer-safe operating file</strong>
+          <strong>Buyer-ready operating file</strong>
         </div>
         <div className="revenue-record-preview__modules">
           {operationalPreviewRows.map((item) => (
@@ -384,7 +384,7 @@ export default function Landing() {
           </div>
           <ul className="revenue-proof-line revenue-proof-line--center">
             <li>Ownership chain</li>
-            <li>Buyer-safe packets</li>
+            <li>Buyer-ready packets</li>
             <li>Human-verified records</li>
           </ul>
         </div>

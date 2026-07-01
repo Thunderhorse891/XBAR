@@ -18,7 +18,7 @@ export default function Plans() {
       <PageHead
         eyebrow="Account"
         title="Plans & Upgrade"
-        subtitle="Scale XBAR with your operation — from basic records to buyer deal rooms and white-glove infrastructure."
+        subtitle="Scale XBAR with your operation — from basic records to buyer folders and white-glove infrastructure."
         actions={
           <div className="xs-toggle" role="tablist" aria-label="Billing period">
             <button type="button" className={`xs-toggle__btn${billing === 'mo' ? ' xs-toggle__btn--active' : ''}`} onClick={() => setBilling('mo')}>Monthly</button>

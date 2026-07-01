@@ -46,7 +46,7 @@ export default function SalePacketStudio() {
 
   return (
     <>
-      <PageHead eyebrow="Transactions · Sale Packet Studio" title={`${horse.name}`} subtitle="A guided wizard that takes one animal from documents to a buyer-safe, shareable packet." actions={<StatusChip tone={tone}>{state}</StatusChip>} />
+      <PageHead eyebrow="Transactions · Sale Packet Studio" title={`${horse.name}`} subtitle="A guided wizard that takes one animal from documents to a buyer-ready packet." actions={<StatusChip tone={tone}>{state}</StatusChip>} />
 
       <Card>
         <Stepper steps={STEPS} current={step} />
@@ -105,7 +105,7 @@ export default function SalePacketStudio() {
             <div className="xs-rows">
               {blockers.map((b) => (
                 <div key={b} className="xs-row">
-                  <span className="xs-row__main"><span className="xs-row__title">{b}</span><span className="xs-row__meta">Blocks buyer-safe release</span></span>
+                  <span className="xs-row__main"><span className="xs-row__title">{b}</span><span className="xs-row__meta">Blocks buyer sharing</span></span>
                   <ActionButton size="sm" variant="primary" icon={<Upload size={14} />} onClick={() => { fix('health'); pushToast({ title: 'Fixed', message: 'Health certificate updated', tone: 'success' }); }}>Fix</ActionButton>
                 </div>
               ))}
@@ -123,7 +123,7 @@ export default function SalePacketStudio() {
         {step === 4 ? (
           <div className="xs-grid-2">
             <div>
-              <div className="xs-section-label">Buyer-safe preview</div>
+              <div className="xs-section-label">Buyer Documents</div>
               <div className="xs-railcard">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span className="xs-banner__icon"><FileText size={18} /></span>
@@ -136,10 +136,10 @@ export default function SalePacketStudio() {
               <div className="xs-section-label">Included</div>
               <div className="xs-mlist">
                 {REQUIRED.filter((d) => present.includes(d.id)).map((d) => (
-                  <div key={d.id} className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">{d.label}</span></span><StatusChip tone="success">Buyer-safe</StatusChip></div>
+                  <div key={d.id} className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">{d.label}</span></span><StatusChip tone="success">Buyer Documents</StatusChip></div>
                 ))}
               </div>
-              <div className="xs-railrow"><span className="xs-railrow__label" style={{ display: 'inline-flex', gap: 7, alignItems: 'center' }}><ShieldCheck size={15} /> Buyer-Safe Proof</span><StatusChip tone={state === 'Ready' ? 'success' : 'warning'}>{state === 'Ready' ? 'Verified' : 'Pending'}</StatusChip></div>
+              <div className="xs-railrow"><span className="xs-railrow__label" style={{ display: 'inline-flex', gap: 7, alignItems: 'center' }}><ShieldCheck size={15} /> Share With Buyer</span><StatusChip tone={state === 'Ready' ? 'success' : 'warning'}>{state === 'Ready' ? 'Verified' : 'Pending'}</StatusChip></div>
             </div>
           </div>
         ) : null}
@@ -148,13 +148,13 @@ export default function SalePacketStudio() {
         {step === 5 ? (
           <div style={{ maxWidth: 560 }}>
             <div className="xs-okbanner" style={state === 'Ready' ? undefined : { borderColor: 'rgba(201,130,34,0.35)', background: 'var(--xbar-warning-soft)', color: 'var(--xbar-warning)' }}>
-              {state === 'Ready' ? <><Check size={16} /> Packet is ready to share.</> : <>Resolve remaining items for a fully buyer-safe packet.</>}
+              {state === 'Ready' ? <><Check size={16} /> Packet is ready to share.</> : <>Resolve remaining items for a ready-to-share packet.</>}
             </div>
             <div className="xs-form" style={{ marginTop: 14 }}>
               <label><span className="xs-field-label">Share link</span><input className="xs-input" readOnly value={`https://xbar.app/packet/${horse.id}`} /></label>
               <div style={{ display: 'flex', gap: 8 }}>
                 <ActionButton icon={<Link2 size={15} />} onClick={() => pushToast({ title: 'Copied', message: 'Share link copied', tone: 'success' })}>Copy Link</ActionButton>
-                <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={() => { track(events.packetShared, { horse: horse.id, packetType }); navigate('/buyer-deal-room'); }}>Open Buyer Deal Room</ActionButton>
+                <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={() => { track(events.packetShared, { horse: horse.id, packetType }); navigate('/buyer-deal-room'); }}>Open Buyer Folder</ActionButton>
               </div>
             </div>
           </div>
@@ -166,7 +166,7 @@ export default function SalePacketStudio() {
           {step < STEPS.length - 1 ? (
             <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={next}>Continue</ActionButton>
           ) : (
-            <ActionButton variant="primary" onClick={() => { track(events.packetShared, { horse: horse.id, packetType }); navigate('/buyer-deal-room'); }}>Share & Open Deal Room</ActionButton>
+            <ActionButton variant="primary" onClick={() => { track(events.packetShared, { horse: horse.id, packetType }); navigate('/buyer-deal-room'); }}>Share & Open Buyer Folder</ActionButton>
           )}
         </div>
       </Card>

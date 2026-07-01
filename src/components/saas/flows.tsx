@@ -321,14 +321,14 @@ export function ResolveBlockerWizard({
             <dt>Affected sale</dt><dd>${amount.toLocaleString()}</dd>
             <dt>Active buyers</dt><dd>2</dd>
           </dl>
-          <p className="xs-muted" style={{ fontSize: 13, margin: 0 }}>Fix this one field and the sale can move to a buyer-safe release state.</p>
+          <p className="xs-muted" style={{ fontSize: 13, margin: 0 }}>Fix this one field and the sale can move to a buyer-ready sharing state.</p>
         </>
       ) : null}
 
       {step === 1 ? (
         <>
           <div className="xs-section-label">Step 2 · Add the missing field</div>
-          <Text label="Health certificate expiration date" placeholder="YYYY-MM-DD" value={exp} onChange={setExp} hint="Required for buyer-safe release." />
+          <Text label="Health certificate expiration date" placeholder="YYYY-MM-DD" value={exp} onChange={setExp} hint="Required before sharing with a buyer." />
           <div className="xs-drop"><Upload size={18} style={{ display: 'block', margin: '0 auto 6px' }} />Or re-upload the corrected certificate</div>
         </>
       ) : null}
@@ -348,7 +348,7 @@ export function ResolveBlockerWizard({
       {step === 3 ? (
         <>
           <div className="xs-section-label">Step 4 · Sale readiness updated</div>
-          <div className="xs-okbanner"><ShieldCheck size={16} /> Readiness raised to 100% — Buyer-Safe Proof verified</div>
+          <div className="xs-okbanner"><ShieldCheck size={16} /> Readiness raised to 100% - Share With Buyer verified</div>
           <dl className="xs-kv">
             <dt>Before</dt><dd>94% · Blocked</dd>
             <dt>After</dt><dd>100% · Release ready</dd>
@@ -357,7 +357,7 @@ export function ResolveBlockerWizard({
       ) : null}
 
       {step === 4 ? (
-        <div className="xs-okbanner"><Check size={16} /> Blocker cleared. {horse} can move forward to its sale packet and deal room.</div>
+        <div className="xs-okbanner"><Check size={16} /> Blocker cleared. {horse} can move forward to its sale packet and buyer folder.</div>
       ) : null}
     </SlideOverDrawer>
   );

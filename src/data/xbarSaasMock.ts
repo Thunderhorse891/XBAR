@@ -39,7 +39,7 @@ export const readinessSegments = [
 ];
 
 export const topReleaseItems: { label: string; state: ReadinessState | 'Clear'; detail: string }[] = [
-  { label: 'Buyer-Safe Proof', state: 'Clear', detail: 'Watermarked proof verified across active assets.' },
+  { label: 'Share With Buyer', state: 'Clear', detail: 'Watermarked proof verified across active records.' },
   { label: 'Documents', state: 'Clear', detail: 'All required documents present and current.' },
   { label: 'Ownership Chain', state: 'Clear', detail: 'Title history complete and unbroken.' },
   { label: 'Packet Readiness', state: 'Review', detail: 'One packet needs a final review before release.' },
@@ -56,7 +56,7 @@ export const activity30d = [
 
 export const pipelineFeature = {
   name: 'RHA Pine Barrel Prospect',
-  steps: ['Packet prepared', 'Buyer invited', 'Deal room opened', 'Offer received', 'Release ready'],
+  steps: ['Packet prepared', 'Buyer invited', 'Buyer folder opened', 'Offer received', 'Release ready'],
   currentStep: 3,
   currentOffer: 20000,
   targetPrice: 35000,
@@ -87,7 +87,7 @@ export const intelligenceRail = {
     { label: 'Buyer downloaded packet', time: '12m ago' },
     { label: 'Call requested', time: '1h ago' },
     { label: 'Document uploaded', time: '3h ago' },
-    { label: 'Buyer viewed deal room', time: 'Yesterday' },
+    { label: 'Buyer viewed folder', time: 'Yesterday' },
   ],
 };
 
@@ -105,7 +105,7 @@ export const gettingStartedSteps: {
   { id: 'health', title: 'Upload health certificate', detail: 'Add a current health certificate with expiration.', done: false, action: 'Upload', to: '/documents?upload=1' },
   { id: 'packet', title: 'Create sale packet', detail: 'Assemble a buyer-ready packet in the studio.', done: false, action: 'Open Studio', to: '/sale-packet-studio' },
   { id: 'buyer', title: 'Invite buyer', detail: 'Send a secure invitation to a prospective buyer.', done: false, action: 'Invite', to: '/buyer-deal-room' },
-  { id: 'room', title: 'Open deal room', detail: 'Launch a controlled buyer deal room.', done: false, action: 'Open', to: '/buyer-deal-room' },
+  { id: 'room', title: 'Open Buyer Folder', detail: 'A private folder you can share with a buyer before the sale.', done: false, action: 'Open', to: '/buyer-deal-room' },
   { id: 'plan', title: 'Choose subscription plan', detail: 'Pick the plan that matches your operation.', done: false, action: 'Compare', to: '/subscriptions' },
 ];
 
@@ -174,7 +174,7 @@ export const documentFilters = ['All', 'Health Cert', 'Coggins', 'Registration',
 export const subscriptionPlanCards = [
   { name: 'Starter', price: '$29', cadence: '/mo', summary: 'Basic horses and records.', features: ['Horse records & care log', 'Document storage with OCR intake', '1 team seat'], featured: false },
   { name: 'Professional', price: '$79', cadence: '/mo', summary: 'Sale packet tools.', features: ['Everything in Starter', 'Watermarked sale packets', 'Published sale listings', '5 team seats'], featured: false },
-  { name: 'Ranch Ops', price: '$199', cadence: '/mo', summary: 'Buyer deal rooms & operational workflows.', features: ['Everything in Professional', 'Buyer deal rooms', 'Team roles & breeding program', '20 team seats'], featured: true },
+  { name: 'Ranch Ops', price: '$199', cadence: '/mo', summary: 'Buyer folders and ranch workflows.', features: ['Everything in Professional', 'Buyer folders', 'Team roles & breeding program', '20 team seats'], featured: true },
   { name: 'Enterprise', price: '$499', cadence: '/mo', summary: 'Multi-ranch, advanced reporting, team controls.', features: ['Everything in Ranch Ops', 'Multi-ranch & advanced reporting', 'Team controls', '60 team seats'], featured: false },
   { name: 'Sovereign', price: 'Custom', cadence: '', summary: 'Private setup, custom workflows, white-glove infrastructure.', features: ['Private setup', 'Custom workflows', 'White-glove infrastructure'], featured: false },
 ];
@@ -358,7 +358,7 @@ export const pipelineStages: { id: string; label: string; deals: { id: string; h
   { id: 'prospect', label: 'Prospect', deals: [{ id: 'p1', horse: 'Copper Belle', price: 18000, offer: null, tone: 'neutral', note: 'Evaluating' }] },
   { id: 'packet', label: 'Packet Ready', deals: [{ id: 'p2', horse: 'THR Juniper Ledge', price: 22000, offer: null, tone: 'warning', note: 'Bill of sale unsigned' }] },
   { id: 'invited', label: 'Buyer Invited', deals: [{ id: 'p3', horse: 'High Plains — Copper Canyon', price: 30000, offer: null, tone: 'info', note: '3 buyer views' }] },
-  { id: 'room', label: 'Deal Room', deals: [{ id: 'p4', horse: 'THR Copper Canyon', price: 30000, offer: 28000, tone: 'success', note: 'Release ready' }] },
+  { id: 'room', label: 'Buyer Folder', deals: [{ id: 'p4', horse: 'THR Copper Canyon', price: 30000, offer: 28000, tone: 'success', note: 'Release ready' }] },
   { id: 'offer', label: 'Offer / Blocked', deals: [{ id: 'p5', horse: 'RHA Pine Barrel Prospect', price: 35000, offer: 20000, tone: 'danger', note: 'Release blocked' }] },
   { id: 'release', label: 'Release Ready', deals: [] },
   { id: 'closed', label: 'Closed', deals: [{ id: 'p6', horse: 'THR Willow Creek', price: 16500, offer: 16500, tone: 'success', note: 'Sold · Apr' }] },

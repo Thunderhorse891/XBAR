@@ -49,7 +49,7 @@ export default function DocumentsVault() {
       <div className="xs-grid-3">
         <Card><div className="xs-card__sub">Expiring soon</div><div style={{ fontSize: 28, fontWeight: 700, color: 'var(--xbar-warning)' }}>15</div></Card>
         <Card><div className="xs-card__sub">Missing data</div><div style={{ fontSize: 28, fontWeight: 700, color: 'var(--xbar-danger)' }}>{dataRoomDocs.filter((d) => d.status === 'Missing').length}</div></Card>
-        <Card><div className="xs-card__sub">Buyer-safe</div><div style={{ fontSize: 28, fontWeight: 700 }}>{buyerSafe.size}</div></Card>
+        <Card><div className="xs-card__sub">Buyer Documents</div><div style={{ fontSize: 28, fontWeight: 700 }}>{buyerSafe.size}</div></Card>
       </div>
 
       <div className="xs-fchips">
@@ -61,7 +61,7 @@ export default function DocumentsVault() {
       {selectedRows.size > 0 ? (
         <div className="xs-bulkbar">
           <span className="xs-bulkbar__count">{selectedRows.size} selected</span>
-          <ActionButton size="sm" icon={<ShieldCheck size={14} />} onClick={() => { track(events.documentBulkAction, { action: 'mark_buyer_safe', count: selectedRows.size }); setBuyerSafe((cur) => new Set([...cur, ...selectedRows])); toast(`${selectedRows.size} marked buyer-safe`); setSelectedRows(new Set()); }}>Mark Buyer-Safe</ActionButton>
+          <ActionButton size="sm" icon={<ShieldCheck size={14} />} onClick={() => { track(events.documentBulkAction, { action: 'mark_buyer_safe', count: selectedRows.size }); setBuyerSafe((cur) => new Set([...cur, ...selectedRows])); toast(`${selectedRows.size} marked for buyer sharing`); setSelectedRows(new Set()); }}>Share With Buyer</ActionButton>
           <ActionButton size="sm" icon={<FileUp size={14} />} onClick={() => { toast(`${selectedRows.size} added to packet`); setSelectedRows(new Set()); }}>Include in Packet</ActionButton>
           <ActionButton size="sm" icon={<Archive size={14} />} onClick={() => { toast(`${selectedRows.size} archived`); setSelectedRows(new Set()); }}>Archive</ActionButton>
           <span className="xs-bulkbar__spacer" />
@@ -79,7 +79,7 @@ export default function DocumentsVault() {
               <th>Linked to</th>
               <Th k="expires" label="Expires" />
               <Th k="status" label="Status" />
-              <th>Buyer-safe</th>
+              <th>Buyer Documents</th>
             </tr>
           </thead>
           <tbody>
@@ -94,7 +94,7 @@ export default function DocumentsVault() {
                   <td className="xs-muted">{d.expires ?? '—'}</td>
                   <td><StatusChip tone={statusTone[d.status]}>{d.status}</StatusChip></td>
                   <td onClick={(e) => e.stopPropagation()}>
-                    <button type="button" className={`xs-switch${buyerSafe.has(d.id) ? ' xs-switch--on' : ''}`} aria-label="Toggle buyer-safe" onClick={() => toggleSafe(d.id)}><span className="xs-switch__knob" /></button>
+                    <button type="button" className={`xs-switch${buyerSafe.has(d.id) ? ' xs-switch--on' : ''}`} aria-label="Toggle buyer document sharing" onClick={() => toggleSafe(d.id)}><span className="xs-switch__knob" /></button>
                   </td>
                 </tr>
               );
@@ -109,13 +109,13 @@ export default function DocumentsVault() {
         title={selected?.name ?? ''}
         subtitle={selected ? `${selected.type} · ${selected.horse}` : ''}
         onClose={() => setSelected(null)}
-        footer={selected ? (<><ActionButton icon={<Archive size={15} />} onClick={() => { toast('Archived'); setSelected(null); }}>Archive</ActionButton><ActionButton variant="primary" icon={<ShieldCheck size={15} />} onClick={() => { if (selected) setBuyerSafe((c) => new Set(c).add(selected.id)); toast('Marked buyer-safe'); setSelected(null); }}>Mark Buyer-Safe</ActionButton></>) : null}
+        footer={selected ? (<><ActionButton icon={<Archive size={15} />} onClick={() => { toast('Archived'); setSelected(null); }}>Archive</ActionButton><ActionButton variant="primary" icon={<ShieldCheck size={15} />} onClick={() => { if (selected) setBuyerSafe((c) => new Set(c).add(selected.id)); toast('Marked for buyer sharing'); setSelected(null); }}>Share With Buyer</ActionButton></>) : null}
       >
         {selected ? (
           <>
             <div style={{ display: 'flex', gap: 8 }}>
               <StatusChip tone={statusTone[selected.status]}>{selected.status}</StatusChip>
-              <span className={`xs-chip xs-chip--${buyerSafe.has(selected.id) ? 'success' : 'neutral'}`}>{buyerSafe.has(selected.id) ? 'Buyer-safe' : 'Internal only'}</span>
+              <span className={`xs-chip xs-chip--${buyerSafe.has(selected.id) ? 'success' : 'neutral'}`}>{buyerSafe.has(selected.id) ? 'Buyer Documents' : 'Internal only'}</span>
             </div>
             <div className="xs-skel" style={{ height: 120 }} aria-hidden="true" />
             <dl className="xs-kv">
