@@ -69,7 +69,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/herd-groups': 'Herd Groups',
   '/pastures': 'Pastures & Locations',
   '/feed': 'Feed & Inventory',
-  '/documents-vault': 'Documents Vault',
+  '/documents-vault': 'Documents',
   '/animals': 'Animals',
   '/health-care': 'Health & Care',
   '/ownership-chain': 'Ownership Chain',

@@ -69,7 +69,7 @@ const navGroups: NavGroup[] = [
   {
     heading: 'Records',
     items: [
-      { label: 'Documents Vault', path: '/documents-vault', icon: FolderOpen, badgeKey: 'docs' },
+      { label: 'Documents', path: '/documents-vault', icon: FolderOpen, badgeKey: 'docs' },
       { label: 'Equipment', path: '/equipment', icon: Boxes },
       { label: 'Expenses', path: '/expenses', icon: Coins },
       { label: 'Reports', path: '/reports', icon: Gauge },

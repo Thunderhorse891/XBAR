@@ -66,7 +66,7 @@ export default function Dashboard() {
             <p className="xs-hero__sub">Add your first animal and its papers. XBAR builds sale readiness, documents, ownership proof, and buyer deal rooms around your real records.</p>
             <div className="xs-hero__actions">
               <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>Add first animal</ActionButton>
-              <ActionButton onClick={() => navigate('/documents?upload=1')}>Upload documents</ActionButton>
+              <ActionButton onClick={() => navigate('/documents?upload=1')}>Add document</ActionButton>
               <ActionButton variant="ghost" onClick={() => navigate('/getting-started')}>Getting started</ActionButton>
             </div>
           </div>
@@ -92,7 +92,7 @@ export default function Dashboard() {
             <div className="xs-sectlabel"><span className="xs-sectlabel__title">First steps</span></div>
             {[
               { icon: <HorsesIcon width={20} height={20} />, title: 'Add your first animal', meta: 'Name, sex, status, and location — the record everything hangs off.', to: '/horses?new=1' },
-              { icon: <Upload size={20} />, title: 'Upload documents', meta: 'Coggins, registration, health certificates — OCR intake builds the file.', to: '/documents?upload=1' },
+              { icon: <Upload size={20} />, title: 'Add document', meta: 'Coggins, registration, health certificates — OCR intake builds the file.', to: '/documents?upload=1' },
               { icon: <ShieldCheck size={20} />, title: 'Configure the ranch', meta: 'Owner, entity, barn, and team access.', to: '/settings' },
             ].map((s) => (
               <button key={s.title} type="button" className="xs-signal xs-signal--info" onClick={() => navigate(s.to)}>

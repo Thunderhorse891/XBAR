@@ -16,7 +16,7 @@ export default function DocumentsVault() {
   const [buyerSafe, setBuyerSafe] = useState<Set<string>>(new Set(dataRoomDocs.filter((d) => d.status === 'Current').map((d) => d.id)));
   const [selected, setSelected] = useState<DataRoomDoc | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const toast = (m: string) => pushToast({ title: 'Documents Vault', message: m, tone: 'success' });
+  const toast = (m: string) => pushToast({ title: 'Documents', message: m, tone: 'success' });
 
   const rows = useMemo(() => {
     const base = filter === 'All' ? dataRoomDocs : dataRoomDocs.filter((d) => d.type === filter);
@@ -41,9 +41,9 @@ export default function DocumentsVault() {
     <>
       <PageHead
         eyebrow="Records"
-        title="Documents Vault"
-        subtitle="A ranch data room — attach proof to animals, deals, and locations, track expirations, and control buyer-safe access."
-        actions={<ActionButton variant="primary" icon={<Upload size={15} />} onClick={() => setUploadOpen(true)}>Upload</ActionButton>}
+        title="Documents"
+        subtitle="Keep registration papers, Coggins, health records, bills of sale, and buyer-ready paperwork in one place."
+        actions={<ActionButton variant="primary" icon={<Upload size={15} />} onClick={() => setUploadOpen(true)}>Add Document</ActionButton>}
       />
 
       <div className="xs-grid-3">
@@ -137,10 +137,10 @@ export default function DocumentsVault() {
       {/* Upload drawer */}
       <SlideOverDrawer
         open={uploadOpen}
-        title="Upload Document"
-        subtitle="Add proof to the data room"
+        title="Add Document"
+        subtitle="Add paperwork to the horse record"
         onClose={() => setUploadOpen(false)}
-        footer={<><ActionButton onClick={() => setUploadOpen(false)}>Cancel</ActionButton><ActionButton variant="primary" onClick={() => { toast('Document uploaded'); setUploadOpen(false); }}>Upload</ActionButton></>}
+        footer={<><ActionButton onClick={() => setUploadOpen(false)}>Cancel</ActionButton><ActionButton variant="primary" onClick={() => { toast('Document added'); setUploadOpen(false); }}>Add Document</ActionButton></>}
       >
         <div className="xs-drop"><FileUp size={20} style={{ display: 'block', margin: '0 auto 8px' }} />Drop a file or click to browse (PDF, JPG)</div>
         <label><span className="xs-field-label">Document type</span><select className="xs-select" defaultValue="Health Cert">{['Health Cert', 'Coggins', 'Registration', 'Bill of Sale', 'Photos', 'Contracts'].map((t) => <option key={t}>{t}</option>)}</select></label>
