@@ -235,26 +235,6 @@ export const todayTasks: WorkTask[] = [
 
 export const workboardTabs = ['All', 'Overdue', 'Animal Care', 'Pasture', 'Feed', 'Documents', 'Sales', 'Equipment'] as const;
 
-export type WatchAnimal = {
-  id: string;
-  name: string;
-  species: string;
-  sex: string;
-  age: string;
-  location: string;
-  group: 'Medical Hold' | 'Due for Care' | 'Breeding Window' | 'Sale Prospect' | 'Missing Records';
-  status: string;
-  tone: ChipTone;
-  next: string;
-};
-
-export const watchAnimals: WatchAnimal[] = [
-  { id: 'rha-pine-barrel-prospect', name: 'RHA Pine Barrel Prospect', species: 'Horse', sex: 'Mare', age: '6 yr', location: 'Main Barn', group: 'Sale Prospect', status: 'Sale Review', tone: 'warning', next: 'Add health certificate expiration date' },
-  { id: 'thr-stone-mesa', name: 'THR Stone Mesa', species: 'Horse', sex: 'Gelding', age: '4 yr', location: 'Quarantine Pen', group: 'Medical Hold', status: 'Medical Hold', tone: 'danger', next: 'Clear withdrawal period · re-test Coggins' },
-  { id: 'copper-belle', name: 'Copper Belle', species: 'Horse', sex: 'Mare', age: '9 yr', location: 'Foaling Pen', group: 'Breeding Window', status: 'Preg check due', tone: 'info', next: 'Schedule preg check with Dr. Hale' },
-  { id: 'thr-juniper-ledge', name: 'THR Juniper Ledge', species: 'Horse', sex: 'Mare', age: '5 yr', location: 'North Pasture', group: 'Missing Records', status: 'Records incomplete', tone: 'warning', next: 'Bill of sale unsigned' },
-];
-
 export type HerdGroup = {
   id: string;
   name: string;
@@ -373,31 +353,6 @@ export const commandActivity = [
    Extended object data — roster, pipeline, health, ownership, equipment, breeding
    =========================================================================== */
 
-export type RosterAnimal = {
-  id: string;
-  name: string;
-  species: string;
-  sex: string;
-  age: string;
-  location: string;
-  group: string;
-  status: string;
-  tone: ChipTone;
-  readiness: number;
-  saleStatus: ReadinessState;
-  next: string;
-};
-
-export const rosterAnimals: RosterAnimal[] = [
-  { id: 'rha-pine-barrel-prospect', name: 'RHA Pine Barrel Prospect', species: 'Horse', sex: 'Mare', age: '6 yr', location: 'Main Barn', group: 'Sale Prospect', status: 'Sale Review', tone: 'warning', readiness: 94, saleStatus: 'Review', next: 'Add health certificate expiration date' },
-  { id: 'thr-copper-canyon', name: 'THR Copper Canyon', species: 'Horse', sex: 'Gelding', age: '7 yr', location: 'Main Barn', group: 'Sale Prospect', status: 'Release ready', tone: 'success', readiness: 100, saleStatus: 'Ready', next: 'Share packet to buyer' },
-  { id: 'thr-juniper-ledge', name: 'THR Juniper Ledge', species: 'Horse', sex: 'Mare', age: '5 yr', location: 'North Pasture', group: 'Sale Prospect', status: 'Records incomplete', tone: 'warning', readiness: 88, saleStatus: 'Review', next: 'Sign bill of sale' },
-  { id: 'thr-stone-mesa', name: 'THR Stone Mesa', species: 'Horse', sex: 'Gelding', age: '4 yr', location: 'Quarantine Pen', group: 'Medical Hold', status: 'Medical Hold', tone: 'danger', readiness: 61, saleStatus: 'Hold', next: 'Clear withdrawal · re-test Coggins' },
-  { id: 'copper-belle', name: 'Copper Belle', species: 'Horse', sex: 'Mare', age: '9 yr', location: 'Foaling Pen', group: 'Breeding', status: 'Preg check due', tone: 'info', readiness: 0, saleStatus: 'Hold', next: 'Schedule preg check' },
-  { id: 'rojo', name: 'Rojo', species: 'Horse', sex: 'Stud', age: '11 yr', location: 'Stud Pen', group: 'Studs', status: 'Active', tone: 'success', readiness: 0, saleStatus: 'Hold', next: 'Breeding record review' },
-];
-
-export const animalGroups = ['All', 'Sale Prospect', 'Medical Hold', 'Breeding', 'Studs'] as const;
 
 export const pipelineStages: { id: string; label: string; deals: { id: string; horse: string; price: number; offer: number | null; tone: ChipTone; note: string }[] }[] = [
   { id: 'prospect', label: 'Prospect', deals: [{ id: 'p1', horse: 'Copper Belle', price: 18000, offer: null, tone: 'neutral', note: 'Evaluating' }] },

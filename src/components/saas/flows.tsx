@@ -11,11 +11,12 @@ import {
 } from 'lucide-react';
 import { ActionButton, SlideOverDrawer, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
+import { useXbarStore } from '@/store/useXbarStore';
 import { events, track } from '@/lib/telemetry';
+import type { ExpenseCategory, HorseSegment, HorseSex, HorseStatus } from '@/types/xbar';
 import {
   resolvedBlockers,
   saasHorses,
-  type WatchAnimal,
   type WorkTask,
 } from '@/data/xbarSaasMock';
 
@@ -75,14 +76,32 @@ export const createActions: CreateKey[] = [
   'Create Sale Packet', 'Invite Buyer', 'Add Expense', 'Add Equipment', 'Report Pasture Issue',
 ];
 
-const animalNames = saasHorses.map((h) => h.name);
 const locationNames = ['Main Barn', 'North Pasture', 'South Pasture', 'Foaling Pen', 'Quarantine Pen', 'Round Pen'];
+
+const SEGMENT_OPTIONS: HorseSegment[] = ['Sale Prospect', 'Broodmare', 'Stud', 'Show String', 'Young Stock', 'Retired'];
+const SEX_OPTIONS: HorseSex[] = ['Mare', 'Stud', 'Gelding', 'Filly', 'Colt'];
+const SEGMENT_STATUS: Record<HorseSegment, HorseStatus> = {
+  'Sale Prospect': 'Sale Prep',
+  Broodmare: 'Broodmare Program',
+  Stud: 'In Training',
+  'Show String': 'In Training',
+  'Young Stock': 'Pasture',
+  Retired: 'Retired',
+};
+const EXPENSE_CATEGORIES: ExpenseCategory[] = ['Feed', 'Vet Care', 'Farrier', 'Wormer', 'Dental Float', 'Supplements', 'Bedding', 'Travel'];
 
 export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | null; onClose: () => void }) {
   const navigate = useNavigate();
   const pushToast = useUiStore((s) => s.pushToast);
+  const horses = useXbarStore((s) => s.horses);
+  const workspaceProfile = useXbarStore((s) => s.workspaceProfile);
+  const addHorse = useXbarStore((s) => s.addHorse);
+  const addExpenseReceipt = useXbarStore((s) => s.addExpenseReceipt);
   const [f, setF] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
   const set = (k: string) => (v: string) => setF((cur) => ({ ...cur, [k]: v }));
+
+  const animalNames = horses.length ? horses.map((h) => h.name) : saasHorses.map((h) => h.name);
 
   if (!action) return null;
 
@@ -94,6 +113,65 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
     if (go) navigate(go);
   };
 
+  const submitAnimal = () => {
+    const name = (f.name ?? '').trim();
+    if (name.length < 2) {
+      pushToast({ title: 'Add Animal', message: 'Enter a name to add the animal.', tone: 'warning' });
+      return;
+    }
+    const segment = (f.segment as HorseSegment) ?? 'Sale Prospect';
+    const owner = (f.owner ?? '').trim() || workspaceProfile.defaultOwnerName || workspaceProfile.businessName || 'Ranch owner';
+    const ownerEntity = workspaceProfile.defaultOwnerEntity || workspaceProfile.businessName || owner;
+    const result = addHorse({
+      name,
+      barnName: (f.barnName ?? '').trim() || name,
+      segment,
+      status: SEGMENT_STATUS[segment] ?? 'In Training',
+      sex: (f.sex as HorseSex) ?? 'Mare',
+      owner,
+      ownerEntity,
+      barn: f.loc ?? workspaceProfile.defaultBarn ?? locationNames[0],
+      pasture: workspaceProfile.defaultPasture ?? '',
+    });
+    track(events.createSubmitted, { action });
+    if (result.ok) {
+      pushToast({ title: 'Add Animal', message: `${name} added to the herd`, tone: 'success' });
+      setF({});
+      onClose();
+      navigate(result.id ? `/animals/${result.id}` : '/animals');
+    } else {
+      pushToast({ title: 'Add Animal', message: result.message, tone: 'warning' });
+    }
+  };
+
+  const submitExpense = async () => {
+    const desc = (f.desc ?? '').trim();
+    const amount = Number.parseFloat((f.amt ?? '').replace(/[^0-9.]/g, ''));
+    if (desc.length < 2 || !Number.isFinite(amount) || amount <= 0) {
+      pushToast({ title: 'Add Expense', message: 'Enter a description and a valid amount.', tone: 'warning' });
+      return;
+    }
+    setBusy(true);
+    const result = await addExpenseReceipt({
+      title: desc,
+      category: (f.cat as ExpenseCategory) ?? 'Feed',
+      vendor: (f.vendor ?? '').trim() || 'General',
+      amount,
+      receiptDate: new Date().toISOString().slice(0, 10),
+      uploadedBy: workspaceProfile.ranchManagerName || 'Ranch manager',
+    });
+    setBusy(false);
+    track(events.createSubmitted, { action });
+    if (result.ok) {
+      pushToast({ title: 'Add Expense', message: 'Expense logged', tone: 'success' });
+      setF({});
+      onClose();
+      navigate('/expenses');
+    } else {
+      pushToast({ title: 'Add Expense', message: result.message, tone: 'warning' });
+    }
+  };
+
   let body: ReactNode = null;
   let footer: ReactNode = null;
 
@@ -102,12 +180,13 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
       body = (
         <div className="xs-form">
           <Text label="Name" placeholder="e.g. THR Copper Canyon" value={f.name ?? ''} onChange={set('name')} />
-          <Pick label="Species" value={f.species ?? 'Horse'} onChange={set('species')} options={['Horse', 'Cattle', 'Goat', 'Chicken', 'Duck']} />
-          <Pick label="Sex" value={f.sex ?? 'Mare'} onChange={set('sex')} options={['Mare', 'Stud', 'Gelding', 'Filly', 'Colt']} />
-          <Pick label="Location" value={f.loc ?? locationNames[0]} onChange={set('loc')} options={locationNames} />
+          <Pick label="Segment" value={f.segment ?? 'Sale Prospect'} onChange={set('segment')} options={SEGMENT_OPTIONS} />
+          <Pick label="Sex" value={f.sex ?? 'Mare'} onChange={set('sex')} options={SEX_OPTIONS} />
+          <Text label="Owner" placeholder={workspaceProfile.defaultOwnerName || 'Legal owner'} value={f.owner ?? ''} onChange={set('owner')} hint="Defaults to the workspace owner if left blank." />
+          <Pick label="Location" value={f.loc ?? workspaceProfile.defaultBarn ?? locationNames[0]} onChange={set('loc')} options={locationNames} />
         </div>
       );
-      footer = <ActionButton variant="primary" onClick={() => submit(`${f.name || 'Animal'} added to the herd`, '/horses')}>Add Animal</ActionButton>;
+      footer = <ActionButton variant="primary" onClick={submitAnimal}>Add Animal</ActionButton>;
       break;
     case 'Add Task':
       body = (
@@ -161,8 +240,8 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
       footer = <ActionButton variant="primary" onClick={() => submit(`Invite sent to ${f.name || 'buyer'}`, '/buyer-deal-room')}>Send Invite</ActionButton>;
       break;
     case 'Add Expense':
-      body = <div className="xs-form"><Text label="Description" placeholder="Feed, vet, farrier…" value={f.desc ?? ''} onChange={set('desc')} /><Text label="Amount" placeholder="$" value={f.amt ?? ''} onChange={set('amt')} /><Pick label="Category" value={f.cat ?? 'Feed'} onChange={set('cat')} options={['Feed', 'Vet & health', 'Farrier', 'Labor', 'Equipment']} /></div>;
-      footer = <ActionButton variant="primary" onClick={() => submit('Expense logged', '/expenses')}>Add Expense</ActionButton>;
+      body = <div className="xs-form"><Text label="Description" placeholder="Feed, vet, farrier…" value={f.desc ?? ''} onChange={set('desc')} /><Text label="Vendor" placeholder="e.g. Tractor Supply" value={f.vendor ?? ''} onChange={set('vendor')} /><Text label="Amount" placeholder="$" value={f.amt ?? ''} onChange={set('amt')} /><Pick label="Category" value={f.cat ?? 'Feed'} onChange={set('cat')} options={EXPENSE_CATEGORIES} /></div>;
+      footer = <ActionButton variant="primary" disabled={busy} onClick={submitExpense}>{busy ? 'Adding…' : 'Add Expense'}</ActionButton>;
       break;
     case 'Add Equipment':
       body = <div className="xs-form"><Text label="Equipment" placeholder="e.g. Stock trailer (24ft)" value={f.name ?? ''} onChange={set('name')} /><Pick label="Type" value={f.type ?? 'Trailer'} onChange={set('type')} options={['Truck', 'Trailer', 'Tractor', 'UTV', 'Tack', 'Feeder', 'Water trough', 'Tool']} /><Pick label="Location" value={f.loc ?? locationNames[0]} onChange={set('loc')} options={locationNames} /></div>;
@@ -353,94 +432,6 @@ export function TaskDrawer({ task, onClose, onResolveBlocker }: { task: WorkTask
         <button type="button" className="xs-fieldbtn" onClick={() => toast('Reassigned')}>Assign</button>
         <button type="button" className="xs-fieldbtn" onClick={() => { onClose(); navigate(task.category === 'Sales' ? '/sales-pipeline' : task.category === 'Documents' ? '/documents-vault' : '/horses'); }}>Open Linked Record</button>
       </div>
-    </SlideOverDrawer>
-  );
-}
-
-/* ----------------------------------------------------- Animal profile drawer */
-const animalTabs = ['Overview', 'Health', 'Documents', 'Ownership', 'Breeding', 'Location', 'Tasks', 'Sale Readiness', 'Buyer Activity', 'Timeline'] as const;
-
-export function AnimalProfileDrawer({ animal, onClose, onStartPacket }: { animal: WatchAnimal | null; onClose: () => void; onStartPacket: () => void }) {
-  const navigate = useNavigate();
-  const [tab, setTab] = useState<string>('Overview');
-  if (!animal) return null;
-
-  return (
-    <SlideOverDrawer
-      open
-      title={animal.name}
-      subtitle={`${animal.species} · ${animal.sex} · ${animal.age} · ${animal.location}`}
-      onClose={onClose}
-      footer={
-        <>
-          <ActionButton onClick={() => { const to = `/animals/${animal.id}`; onClose(); navigate(to); }}>Open Full Profile</ActionButton>
-          <ActionButton variant="primary" onClick={onStartPacket}>Start Sale Packet</ActionButton>
-        </>
-      }
-    >
-      <div style={{ display: 'flex', gap: 8 }}>
-        <StatusChip tone={animal.tone}>{animal.status}</StatusChip>
-        <span className="xs-chip xs-chip--neutral">{animal.group}</span>
-      </div>
-
-      <div className="xs-dtabs">
-        {animalTabs.map((t) => (
-          <button key={t} type="button" className={`xs-dtab${tab === t ? ' xs-dtab--active' : ''}`} onClick={() => setTab(t)}>{t}</button>
-        ))}
-      </div>
-
-      {tab === 'Overview' ? (
-        <dl className="xs-kv">
-          <dt>Species</dt><dd>{animal.species}</dd>
-          <dt>Sex</dt><dd>{animal.sex}</dd>
-          <dt>Age</dt><dd>{animal.age}</dd>
-          <dt>Location</dt><dd>{animal.location}</dd>
-          <dt>Status</dt><dd>{animal.status}</dd>
-          <dt>Next action</dt><dd>{animal.next}</dd>
-        </dl>
-      ) : null}
-      {tab === 'Health' ? (
-        <div className="xs-mlist">
-          <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Coggins</span><span className="xs-mrow__detail">Negative · current</span></span><StatusChip tone="success">OK</StatusChip></div>
-          <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Health certificate</span><span className="xs-mrow__detail">Expiration date missing</span></span><StatusChip tone="danger">Blocker</StatusChip></div>
-          <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Vaccines</span><span className="xs-mrow__detail">Spring booster due</span></span><StatusChip tone="warning">Due</StatusChip></div>
-        </div>
-      ) : null}
-      {tab === 'Documents' ? (
-        <div className="xs-mlist">
-          <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Registration papers</span><span className="xs-mrow__detail">On file · buyer-safe</span></span><StatusChip tone="success">Ready</StatusChip></div>
-          <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Bill of sale</span><span className="xs-mrow__detail">Unsigned</span></span><StatusChip tone="warning">Review</StatusChip></div>
-        </div>
-      ) : null}
-      {tab === 'Ownership' ? (
-        <>
-          <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>Ownership chain is complete and verified.</p>
-          <ActionButton size="sm" onClick={() => { onClose(); navigate('/ownership'); }}>View Ownership Chain</ActionButton>
-        </>
-      ) : null}
-      {tab === 'Breeding' ? <p className="xs-muted" style={{ fontSize: 13 }}>No active breeding records. Open Breeding & Foaling to add one.</p> : null}
-      {tab === 'Location' ? (
-        <dl className="xs-kv"><dt>Current</dt><dd>{animal.location}</dd><dt>Last move</dt><dd>4h ago · from Main Barn</dd></dl>
-      ) : null}
-      {tab === 'Tasks' ? (
-        <div className="xs-mlist"><div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">{animal.next}</span><span className="xs-mrow__detail">Due today</span></span><StatusChip tone="warning">Open</StatusChip></div></div>
-      ) : null}
-      {tab === 'Sale Readiness' ? (
-        <>
-          <div className="xs-okbanner" style={{ borderColor: 'rgba(201,130,34,0.35)', background: 'var(--xbar-warning-soft)', color: 'var(--xbar-warning)' }}><CircleAlert size={16} /> Review — 1 blocker before release</div>
-          <ActionButton size="sm" variant="primary" onClick={onStartPacket}>Start Sale Packet</ActionButton>
-        </>
-      ) : null}
-      {tab === 'Buyer Activity' ? (
-        <dl className="xs-kv"><dt>Packet views</dt><dd>8</dd><dt>Downloads</dt><dd>2</dd><dt>Active buyers</dt><dd>2</dd></dl>
-      ) : null}
-      {tab === 'Timeline' ? (
-        <div className="xs-tl">
-          <div className="xs-tl__row"><span className="xs-tl__dot" /><span><div className="xs-tl__title">Buyer downloaded packet</div><div className="xs-tl__time">12m ago</div></span></div>
-          <div className="xs-tl__row"><span className="xs-tl__dot" /><span><div className="xs-tl__title">Moved to {animal.location}</div><div className="xs-tl__time">4h ago</div></span></div>
-          <div className="xs-tl__row"><span className="xs-tl__dot" /><span><div className="xs-tl__title">Offer recorded — $20,000</div><div className="xs-tl__time">Yesterday</div></span></div>
-        </div>
-      ) : null}
     </SlideOverDrawer>
   );
 }

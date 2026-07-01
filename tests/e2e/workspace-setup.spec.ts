@@ -45,15 +45,27 @@ async function bootstrapWorkspace(page: Page) {
   await page.getByRole('button', { name: 'Create workspace' }).click();
 
   await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
-  await expect(page.getByRole('heading', { name: /at risk/ })).toBeVisible({ timeout: 15_000 });
+  // Fresh workspace lands on the data-driven getting-started console (no seeded records).
+  await expect(page.getByRole('heading', { name: 'Set up your ranch operating system.' })).toBeVisible({ timeout: 15_000 });
 }
 
-test('creates a workspace and lands on the operations console', async ({ page }) => {
+// Seed one real animal through the global Create → Add Animal flow (persists to the store).
+async function seedAnimal(page: Page, name = 'Test Prospect') {
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Add Animal' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Add Animal' });
+  await expect(drawer).toBeVisible();
+  await drawer.getByPlaceholder('e.g. THR Copper Canyon').fill(name);
+  await drawer.getByRole('button', { name: 'Add Animal' }).click();
+  await expect(page).toHaveURL(/\/animals\//, { timeout: 15_000 });
+}
+
+test('creates a workspace and lands on the getting-started console', async ({ page }) => {
   await bootstrapWorkspace(page);
-  await expect(page.getByRole('heading', { name: /at risk/ })).toBeVisible();
-  await expect(page.getByText('Needs a decision today')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Set up your ranch operating system.' })).toBeVisible();
   await expect(page.locator('.xs-ribbon')).toBeVisible();
   await expect(page.getByText('XBAR Intelligence')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add your first animal' })).toBeVisible();
 });
 
 test('global Create opens a real create drawer with fields', async ({ page }) => {
@@ -66,13 +78,14 @@ test('global Create opens a real create drawer with fields', async ({ page }) =>
   await expect(drawer.getByRole('button', { name: 'Add Animal' })).toBeVisible();
 });
 
-test('clicking a task opens the task drawer; revenue blocker launches the resolve flow', async ({ page }) => {
+test('work queue task opens the task drawer; revenue blocker launches the resolve flow', async ({ page }) => {
   await bootstrapWorkspace(page);
-  await page.locator('.xs-workmini__row').first().click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.keyboard.press('Escape');
+  await page.getByRole('link', { name: "Today's Work", exact: true }).click();
+  await page.locator('.xs-task').first().click();
+  const drawer = page.getByRole('dialog');
+  await expect(drawer).toBeVisible();
+  await drawer.getByRole('button', { name: 'Resolve Blocker' }).click();
 
-  await page.getByRole('button', { name: 'Resolve blocker' }).first().click();
   const wizard = page.getByRole('dialog', { name: 'Resolve Blocker' });
   await expect(wizard).toBeVisible();
   await expect(wizard.getByText('Health certificate expiration date missing')).toBeVisible();
@@ -80,14 +93,11 @@ test('clicking a task opens the task drawer; revenue blocker launches the resolv
   await expect(wizard.getByText('Add the missing field')).toBeVisible();
 });
 
-test('animal profile opens with tabs', async ({ page }) => {
+test('animals roster shows an empty state until an animal is added', async ({ page }) => {
   await bootstrapWorkspace(page);
-  await page.locator('.xs-signal', { hasText: 'Medical hold' }).click();
-  const drawer = page.getByRole('dialog');
-  await expect(drawer).toBeVisible();
-  await expect(drawer.locator('.xs-dtab', { hasText: /^Sale Readiness$/ })).toBeVisible();
-  await drawer.locator('.xs-dtab', { hasText: /^Health$/ }).click();
-  await expect(drawer.getByText('Health certificate')).toBeVisible();
+  await page.getByRole('link', { name: 'Animals', exact: true }).click();
+  await expect(page.getByText('No animals yet')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add first animal' })).toBeVisible();
 });
 
 test('sale packet studio is a stepper wizard', async ({ page }) => {
@@ -125,13 +135,14 @@ test('pasture location opens a detail drawer', async ({ page }) => {
   await expect(drawer.getByText('Animals currently here')).toBeVisible();
 });
 
-test('animals roster opens a full animal profile object page with tabs', async ({ page }) => {
+test('a seeded animal opens a full animal profile object page with tabs', async ({ page }) => {
   await bootstrapWorkspace(page);
+  await seedAnimal(page, 'Roster Prospect');
   await page.getByRole('link', { name: 'Animals', exact: true }).click();
   await expect(page.locator('.xs-table tbody tr').first()).toBeVisible();
   await page.locator('.xs-table tbody tr').first().click();
   await expect(page).toHaveURL(/\/animals\//);
-  await expect(page.locator('.xs-objhead__name')).toBeVisible();
+  await expect(page.locator('.xs-objhead__name')).toHaveText(/roster prospect/i);
   await page.locator('.xs-tabbar__tab', { hasText: 'Sale Readiness' }).click();
   await expect(page.getByText('Buyer-safe proof')).toBeVisible();
 });

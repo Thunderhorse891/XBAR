@@ -4,17 +4,50 @@ import { ArrowLeft, FileText, HeartPulse, Move, Plus, Upload } from 'lucide-reac
 import { HorsesIcon } from '@/components/icons';
 import { ActionButton, Card, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
-import { rosterAnimals } from '@/data/xbarSaasMock';
+import { useHorseRecord } from '@/store/useXbarStore';
+import { formatCurrency } from '@/lib/format';
+import type { HorseStatus } from '@/types/xbar';
 
 const TABS = ['Overview', 'Health', 'Documents', 'Ownership', 'Breeding', 'Location', 'Tasks', 'Sale Readiness', 'Buyer Activity', 'Timeline'] as const;
+
+type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
+const STATUS_TONE: Record<HorseStatus, Tone> = {
+  'In Training': 'info',
+  'Broodmare Program': 'neutral',
+  'Sale Prep': 'info',
+  'Medical Review': 'danger',
+  Pasture: 'neutral',
+  Retired: 'neutral',
+};
 
 export default function AnimalProfile() {
   const navigate = useNavigate();
   const { id } = useParams();
   const pushToast = useUiStore((s) => s.pushToast);
   const [tab, setTab] = useState<string>('Overview');
-  const animal = rosterAnimals.find((a) => a.id === id) ?? rosterAnimals[0];
+  const animal = useHorseRecord(id);
+
+  if (!animal) {
+    return (
+      <>
+        <button type="button" className="xs-back" onClick={() => navigate('/animals')}><ArrowLeft size={14} /> Animals</button>
+        <Card>
+          <div className="xs-empty">
+            <span className="xs-empty__icon"><HorsesIcon width={26} height={26} /></span>
+            <div className="xs-empty__title">Animal not found</div>
+            <div className="xs-empty__sub">This record may have been removed. Return to the roster to pick another animal.</div>
+            <ActionButton variant="primary" onClick={() => navigate('/animals')}>Back to animals</ActionButton>
+          </div>
+        </Card>
+      </>
+    );
+  }
+
   const toast = (m: string) => pushToast({ title: animal.name, message: m, tone: 'success' });
+  const readiness = animal.readiness?.score ?? 0;
+  const packetReady = animal.readiness?.packetStatus === 'Ready';
+  const location = [animal.location.barn, animal.location.pasture].filter(Boolean).join(' · ') || animal.location.ranch || '—';
+  const forSale = animal.sale?.listingState !== 'Hold' && (animal.segment === 'Sale Prospect' || readiness > 0);
 
   return (
     <>
@@ -25,10 +58,10 @@ export default function AnimalProfile() {
           <span className="xs-objhead__avatar"><HorsesIcon width={28} height={28} /></span>
           <div>
             <div className="xs-objhead__name">{animal.name}</div>
-            <div className="xs-objhead__meta">{animal.species} · {animal.sex} · {animal.age} · {animal.location}</div>
+            <div className="xs-objhead__meta">{animal.breed || 'Horse'} · {animal.sex} · {animal.age} yrs · {location}</div>
             <div className="xs-objhead__chips">
-              <StatusChip tone={animal.tone}>{animal.status}</StatusChip>
-              {animal.readiness > 0 ? <StatusChip tone={animal.saleStatus === 'Ready' ? 'success' : animal.saleStatus === 'Review' ? 'warning' : 'danger'}>Sale {animal.saleStatus}</StatusChip> : <span className="xs-chip xs-chip--neutral">Not for sale</span>}
+              <StatusChip tone={STATUS_TONE[animal.status] ?? 'neutral'}>{animal.status}</StatusChip>
+              {forSale ? <StatusChip tone={packetReady ? 'success' : 'warning'}>Sale {packetReady ? 'Ready' : 'Prep'}</StatusChip> : <span className="xs-chip xs-chip--neutral">Not for sale</span>}
             </div>
           </div>
         </div>
@@ -51,15 +84,17 @@ export default function AnimalProfile() {
           <Card title="Identity">
             <dl className="xs-kv">
               <dt>Name</dt><dd>{animal.name}</dd>
-              <dt>Species</dt><dd>{animal.species}</dd>
+              <dt>Breed</dt><dd>{animal.breed || '—'}</dd>
               <dt>Sex</dt><dd>{animal.sex}</dd>
-              <dt>Age</dt><dd>{animal.age}</dd>
-              <dt>Location</dt><dd>{animal.location}</dd>
-              <dt>Group</dt><dd>{animal.group}</dd>
+              <dt>Age</dt><dd>{animal.age} yrs</dd>
+              <dt>Registry</dt><dd>{animal.registered ? `${animal.registry} · ${animal.registrationNumber || animal.aqhaNumber || '—'}` : 'Unregistered'}</dd>
+              <dt>Owner</dt><dd>{animal.owner}{animal.ownerEntity ? ` · ${animal.ownerEntity}` : ''}</dd>
+              <dt>Location</dt><dd>{location}</dd>
+              <dt>Segment</dt><dd>{animal.segment}</dd>
             </dl>
           </Card>
           <Card title="Next required action">
-            <div className="xs-nba"><div className="xs-nba__label">Recommended</div><div className="xs-nba__title">{animal.next}</div></div>
+            <div className="xs-nba"><div className="xs-nba__label">Recommended</div><div className="xs-nba__title">{animal.readiness?.blockers?.[0] ?? `Keep ${animal.name}'s records current`}</div></div>
             <div className="xs-toolbar" style={{ marginTop: 12 }}>
               <ActionButton size="sm" onClick={() => navigate('/today')}>Add Task</ActionButton>
               <ActionButton size="sm" variant="primary" onClick={() => navigate('/sale-packet-studio')}>Open Sale Packet</ActionButton>
@@ -70,84 +105,128 @@ export default function AnimalProfile() {
 
       {tab === 'Health' ? (
         <Card title="Health & Compliance" link="Open Health & Care" onLink={() => navigate('/health-care')}>
-          <div className="xs-mlist">
-            <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Coggins</span><span className="xs-mrow__detail">Negative · current</span></span><StatusChip tone="success">OK</StatusChip></div>
-            <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Health certificate</span><span className="xs-mrow__detail">Expiration date missing</span></span><StatusChip tone="danger">Blocker</StatusChip></div>
-            <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Vaccines</span><span className="xs-mrow__detail">Spring booster due</span></span><StatusChip tone="warning">Due</StatusChip></div>
-            <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Farrier</span><span className="xs-mrow__detail">Trim cycle</span></span><StatusChip tone="warning">Due</StatusChip></div>
-          </div>
+          {animal.medicalTimeline.length ? (
+            <div className="xs-mlist">
+              {animal.medicalTimeline.slice(0, 8).map((e) => (
+                <div key={e.id} className="xs-mrow">
+                  <span className="xs-mrow__main"><span className="xs-mrow__title">{e.title}</span><span className="xs-mrow__detail">{e.summary} · {e.date}</span></span>
+                  <StatusChip tone={e.severity === 'high' ? 'danger' : e.severity === 'medium' ? 'warning' : 'success'}>{e.status ?? 'Logged'}</StatusChip>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>No health records yet.{animal.lastVetVisit ? ` Last vet visit ${animal.lastVetVisit}.` : ''}</p>
+          )}
           <ActionButton size="sm" icon={<Plus size={14} />} onClick={() => toast('Health record added')}>Add Health Record</ActionButton>
         </Card>
       ) : null}
 
       {tab === 'Documents' ? (
         <Card title="Documents" link="Open Vault" onLink={() => navigate('/documents-vault')}>
-          <div className="xs-mlist">
-            <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Registration papers</span><span className="xs-mrow__detail">On file · buyer-safe</span></span><StatusChip tone="success">Ready</StatusChip></div>
-            <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Coggins (negative)</span><span className="xs-mrow__detail">Expires 2026-11-02</span></span><StatusChip tone="success">Current</StatusChip></div>
-            <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Health certificate</span><span className="xs-mrow__detail">Expiration date missing</span></span><StatusChip tone="danger">Missing</StatusChip></div>
-          </div>
+          {animal.documentFacts.length ? (
+            <div className="xs-mlist">
+              {animal.documentFacts.slice(0, 10).map((f) => (
+                <div key={f.id} className="xs-mrow">
+                  <span className="xs-mrow__main"><span className="xs-mrow__title">{f.label}</span><span className="xs-mrow__detail">{f.value}</span></span>
+                  <StatusChip tone={f.decision === 'Accepted' ? 'success' : f.decision === 'Rejected' ? 'danger' : 'warning'}>{f.decision ?? 'Review'}</StatusChip>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>No documents linked to this animal yet.</p>
+          )}
         </Card>
       ) : null}
 
       {tab === 'Ownership' ? (
-        <Card title="Ownership chain" link="Open Ownership" onLink={() => navigate('/ownership-chain')}>
-          <div className="xs-tl">
-            <div className="xs-tl__row"><span className="xs-tl__dot" /><span><div className="xs-tl__title">Thunder Horse Ranch — current owner</div><div className="xs-tl__time">Acquired 2023 · bill of sale on file</div></span></div>
-            <div className="xs-tl__row"><span className="xs-tl__dot" /><span><div className="xs-tl__title">Prior: Rocking H Ranch</div><div className="xs-tl__time">Transfer verified</div></span></div>
-          </div>
-          <StatusChip tone="success">Chain clear</StatusChip>
+        <Card title="Ownership" link="Open Ownership" onLink={() => navigate('/ownership-chain')}>
+          {animal.ownership.length ? (
+            <div className="xs-mlist">
+              {animal.ownership.map((o) => (
+                <div key={o.id} className="xs-mrow">
+                  <span className="xs-mrow__main"><span className="xs-mrow__title">{o.name}</span><span className="xs-mrow__detail">{o.role} · {o.share}%</span></span>
+                  <StatusChip tone="success">{o.share}%</StatusChip>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>No ownership stakes recorded.</p>
+          )}
         </Card>
       ) : null}
 
       {tab === 'Breeding' ? (
         <Card title="Breeding & Foaling" link="Open Breeding" onLink={() => navigate('/breeding-foaling')}>
-          <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>No active breeding records for this animal.</p>
+          {animal.breedingTimeline.length ? (
+            <div className="xs-mlist">
+              {animal.breedingTimeline.slice(0, 8).map((e) => (
+                <div key={e.id} className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">{e.title}</span><span className="xs-mrow__detail">{e.summary} · {e.date}</span></span><StatusChip tone="info">{e.status ?? 'Logged'}</StatusChip></div>
+              ))}
+            </div>
+          ) : (
+            <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>No active breeding records for this animal.</p>
+          )}
           <ActionButton size="sm" icon={<Plus size={14} />} onClick={() => toast('Breeding record added')}>Add Breeding Record</ActionButton>
         </Card>
       ) : null}
 
       {tab === 'Location' ? (
         <Card title="Location" link="Open Pastures" onLink={() => navigate('/pastures')}>
-          <dl className="xs-kv"><dt>Current</dt><dd>{animal.location}</dd><dt>Last move</dt><dd>4h ago · from Main Barn</dd><dt>Water</dt><dd>OK</dd><dt>Fence</dt><dd>OK</dd></dl>
+          <dl className="xs-kv"><dt>Ranch</dt><dd>{animal.location.ranch || '—'}</dd><dt>Barn</dt><dd>{animal.location.barn || '—'}</dd><dt>Pasture</dt><dd>{animal.location.pasture || '—'}</dd><dt>Stall</dt><dd>{animal.location.stall || '—'}</dd></dl>
           <ActionButton size="sm" icon={<Move size={14} />} onClick={() => toast('Move drawer opened')}>Move Animal</ActionButton>
         </Card>
       ) : null}
 
       {tab === 'Tasks' ? (
         <Card title="Tasks" link="Open Work Queue" onLink={() => navigate('/today')}>
-          <div className="xs-mlist"><div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">{animal.next}</span><span className="xs-mrow__detail">Due today · Erin W.</span></span><StatusChip tone="warning">Open</StatusChip></div></div>
+          {animal.alerts.length ? (
+            <div className="xs-mlist">
+              {animal.alerts.map((a) => (
+                <div key={a.id} className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">{a.title}</span><span className="xs-mrow__detail">{a.summary} · {a.module}</span></span><StatusChip tone={a.severity === 'high' ? 'danger' : a.severity === 'medium' ? 'warning' : 'info'}>Open</StatusChip></div>
+              ))}
+            </div>
+          ) : (
+            <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>No open tasks for this animal.</p>
+          )}
         </Card>
       ) : null}
 
       {tab === 'Sale Readiness' ? (
         <Card title="Sale Readiness" link="Open Studio" onLink={() => navigate('/sale-packet-studio')}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
-            <span className="xs-finbar__track" style={{ flex: 1 }}><span className="xs-finbar__fill" style={{ width: `${animal.readiness}%`, background: animal.readiness >= 95 ? 'var(--xbar-success)' : 'var(--xbar-warning)' }} /></span>
-            <strong>{animal.readiness}%</strong>
+            <span className="xs-finbar__track" style={{ flex: 1 }}><span className="xs-finbar__fill" style={{ width: `${readiness}%`, background: readiness >= 95 ? 'var(--xbar-success)' : 'var(--xbar-warning)' }} /></span>
+            <strong>{readiness}%</strong>
           </div>
           <div className="xs-mlist">
-            <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Documents</span></span><StatusChip tone="warning">Review</StatusChip></div>
-            <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Buyer-safe proof</span></span><StatusChip tone="warning">Pending</StatusChip></div>
-            <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Release blockers</span></span><StatusChip tone="danger">1 blocker</StatusChip></div>
+            <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Packet status</span></span><StatusChip tone={packetReady ? 'success' : 'warning'}>{animal.readiness?.packetStatus ?? 'Review'}</StatusChip></div>
+            <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Buyer-safe proof</span></span><StatusChip tone={packetReady ? 'success' : 'warning'}>{packetReady ? 'Verified' : 'Pending'}</StatusChip></div>
+            <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Release blockers</span></span><StatusChip tone={animal.readiness?.blockers?.length ? 'danger' : 'success'}>{animal.readiness?.blockers?.length ? `${animal.readiness.blockers.length} blocker${animal.readiness.blockers.length === 1 ? '' : 's'}` : 'Clear'}</StatusChip></div>
           </div>
         </Card>
       ) : null}
 
       {tab === 'Buyer Activity' ? (
         <Card title="Buyer Activity" link="Open Deal Room" onLink={() => navigate('/buyer-deal-room')}>
-          <dl className="xs-kv"><dt>Packet views</dt><dd>8</dd><dt>Downloads</dt><dd>2</dd><dt>Active buyers</dt><dd>2</dd><dt>Top offer</dt><dd>$20,000</dd></dl>
+          <dl className="xs-kv">
+            <dt>Ask price</dt><dd>{animal.sale?.askPrice ? formatCurrency(animal.sale.askPrice) : '—'}</dd>
+            <dt>Inquiries</dt><dd>{animal.sale?.inquiryCount ?? 0}</dd>
+            <dt>Watchlist</dt><dd>{animal.sale?.watchlistCount ?? 0}</dd>
+            <dt>Buyer confidence</dt><dd>{animal.sale?.buyerConfidence ?? 0}%</dd>
+          </dl>
         </Card>
       ) : null}
 
       {tab === 'Timeline' ? (
         <Card title="Timeline">
-          <div className="xs-tl">
-            <div className="xs-tl__row"><span className="xs-tl__dot" /><span><div className="xs-tl__title">Buyer downloaded packet</div><div className="xs-tl__time">12m ago</div></span></div>
-            <div className="xs-tl__row"><span className="xs-tl__dot" /><span><div className="xs-tl__title">Moved to {animal.location}</div><div className="xs-tl__time">4h ago</div></span></div>
-            <div className="xs-tl__row"><span className="xs-tl__dot" /><span><div className="xs-tl__title">Offer recorded — $20,000</div><div className="xs-tl__time">Yesterday</div></span></div>
-            <div className="xs-tl__row"><span className="xs-tl__dot" /><span><div className="xs-tl__title">Coggins uploaded</div><div className="xs-tl__time">3 days ago</div></span></div>
-          </div>
+          {animal.activity.length ? (
+            <div className="xs-tl">
+              {animal.activity.slice(0, 12).map((e) => (
+                <div key={e.id} className="xs-tl__row"><span className="xs-tl__dot" /><span><div className="xs-tl__title">{e.title}</div><div className="xs-tl__time">{e.summary} · {e.date}</div></span></div>
+              ))}
+            </div>
+          ) : (
+            <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>No activity recorded yet.</p>
+          )}
         </Card>
       ) : null}
     </>
