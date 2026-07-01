@@ -80,6 +80,8 @@ test('fresh public root opens login before workspace setup', async ({ page }) =>
   await expect(page).toHaveURL(/\/login$/, { timeout: 15_000 });
   await expect(page.getByRole('heading', { name: 'Sign In' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Configure Workspace' })).toBeHidden();
+  await page.getByRole('button', { name: 'Create workspace' }).click();
+  await expect(page.getByRole('heading', { name: 'Configure Workspace' })).toBeVisible({ timeout: 10_000 });
 });
 
 test('global Create opens a real create drawer with fields', async ({ page }) => {

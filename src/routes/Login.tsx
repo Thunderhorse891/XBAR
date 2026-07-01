@@ -56,13 +56,24 @@ export default function Login() {
       localStorage.removeItem('xbar-remembered-email');
     }
   };
-  const openBrowserWorkspace = () => {
+
+  const markLocalWorkspaceIntent = () => {
     localStorage.setItem('xbar-command-center-entry', 'true');
     if (selectedPlan) localStorage.setItem('xbar-local-plan-intent', selectedPlan);
-    initializeWorkspace({ businessName: 'XBAR Ranch', ranchName: 'XBAR Ranch' });
     void trackRuntimeEvent(productEvent(productEventNames.localWorkspaceEntered, { selectedPlan: selectedPlan || undefined, storage: 'browser-local' }));
+  };
+
+  const openBrowserWorkspace = () => {
+    markLocalWorkspaceIntent();
+    initializeWorkspace({ businessName: 'XBAR Ranch', ranchName: 'XBAR Ranch' });
     navigate(redirectTarget, { replace: true });
   };
+
+  const openWorkspaceSetup = () => {
+    markLocalWorkspaceIntent();
+    navigate('/setup');
+  };
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setBusy('password');
@@ -204,7 +215,14 @@ export default function Login() {
                   {authMode === 'signin' ? 'Create account' : 'Sign in'}
                 </button>
               </div>
-            ) : null}
+            ) : (
+              <div>
+                <span>Starting fresh?</span>
+                <button type="button" onClick={openWorkspaceSetup}>
+                  Create workspace
+                </button>
+              </div>
+            )}
             <Link to="/landing">View plans</Link>
             <span>© 2026 XBAR Corp · E2EE</span>
           </div>
