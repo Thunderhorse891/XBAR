@@ -78,7 +78,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/plans': 'Plans',
   '/sales-pipeline': 'Sales Pipeline',
   '/buyer-deal-room': 'Buyer Folder',
-  '/sale-packet-studio': 'Sale Packet Studio',
+  '/sale-packet-studio': 'Sale Packet Builder',
   '/reports': 'Reports',
   '/assets': 'Equipment',
   '/breeding': 'Breeding',

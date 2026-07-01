@@ -233,7 +233,7 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
       break;
     case 'Create Sale Packet':
       body = <div className="xs-form"><Pick label="Animal" value={f.animal ?? animalNames[0]} onChange={set('animal')} options={animalNames} /><Pick label="Packet type" value={f.type ?? 'Buyer Review Packet'} onChange={set('type')} options={['Sale Prospect Packet', 'Buyer Review Packet', 'Release Packet', 'Vet/Transport Packet']} /></div>;
-      footer = <ActionButton variant="primary" onClick={() => submit('Opening Sale Packet Studio', '/sale-packet-studio')}>Open Studio</ActionButton>;
+      footer = <ActionButton variant="primary" onClick={() => submit('Opening Sale Packet Builder', '/sale-packet-studio')}>Open Builder</ActionButton>;
       break;
     case 'Invite Buyer':
       body = <div className="xs-form"><Text label="Buyer name" placeholder="e.g. Marlow Ranch Partners" value={f.name ?? ''} onChange={set('name')} /><Text label="Email" placeholder="buyer@email.com" value={f.email ?? ''} onChange={set('email')} /><Pick label="Animal" value={f.animal ?? animalNames[0]} onChange={set('animal')} options={animalNames} /></div>;

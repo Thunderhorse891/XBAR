@@ -46,7 +46,7 @@ export default function SalePacketStudio() {
 
   return (
     <>
-      <PageHead eyebrow="Transactions · Sale Packet Studio" title={`${horse.name}`} subtitle="A guided wizard that takes one animal from documents to a buyer-ready packet." actions={<StatusChip tone={tone}>{state}</StatusChip>} />
+      <PageHead eyebrow="Transactions · Sale Packet Builder" title={`${horse.name}`} subtitle="A guided builder that takes one animal from documents to a buyer-ready packet." actions={<StatusChip tone={tone}>{state}</StatusChip>} />
 
       <Card>
         <Stepper steps={STEPS} current={step} />

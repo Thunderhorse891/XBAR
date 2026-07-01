@@ -192,7 +192,7 @@ export default function AnimalProfile() {
       ) : null}
 
       {tab === 'Sale Readiness' ? (
-        <Card title="Sale Readiness" link="Open Studio" onLink={() => navigate('/sale-packet-studio')}>
+        <Card title="Sale Readiness" link="Open Builder" onLink={() => navigate('/sale-packet-studio')}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
             <span className="xs-finbar__track" style={{ flex: 1 }}><span className="xs-finbar__fill" style={{ width: `${readiness}%`, background: readiness >= 95 ? 'var(--xbar-success)' : 'var(--xbar-warning)' }} /></span>
             <strong>{readiness}%</strong>

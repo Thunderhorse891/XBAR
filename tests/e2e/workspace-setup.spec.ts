@@ -100,9 +100,9 @@ test('animals roster shows an empty state until an animal is added', async ({ pa
   await expect(page.getByRole('button', { name: 'Add first animal' })).toBeVisible();
 });
 
-test('sale packet studio is a stepper wizard', async ({ page }) => {
+test('sale packet builder is a stepper wizard', async ({ page }) => {
   await bootstrapWorkspace(page);
-  await page.getByRole('link', { name: 'Sale Packet Studio', exact: true }).click();
+  await page.getByRole('link', { name: 'Sale Packet Builder', exact: true }).click();
   await expect(page.locator('.xs-stepper')).toBeVisible();
   await expect(page.locator('.xs-select')).toBeVisible(); // step 1: animal select
   await page.getByRole('button', { name: 'Continue' }).click();
