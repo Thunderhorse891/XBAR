@@ -1,10 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 
-async function bootstrapWorkspace(page: Page) {
+async function clearBrowserWorkspace(page: Page) {
   await page.addInitScript(async () => {
     window.localStorage.clear();
     window.sessionStorage.clear();
-    window.localStorage.setItem('xbar-command-center-entry', 'true');
     if (indexedDB.databases) {
       const databases = await indexedDB.databases();
       await Promise.all(
@@ -22,6 +21,13 @@ async function bootstrapWorkspace(page: Page) {
           ),
       );
     }
+  });
+}
+
+async function bootstrapWorkspace(page: Page) {
+  await clearBrowserWorkspace(page);
+  await page.addInitScript(() => {
+    window.localStorage.setItem('xbar-command-center-entry', 'true');
   });
 
   await page.goto('/setup');
@@ -66,6 +72,14 @@ test('creates a workspace and lands on the getting-started console', async ({ pa
   await expect(page.locator('.xs-ribbon')).toBeVisible();
   await expect(page.getByText('XBAR Intelligence')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add your first animal' })).toBeVisible();
+});
+
+test('fresh public root opens login before workspace setup', async ({ page }) => {
+  await clearBrowserWorkspace(page);
+  await page.goto('/');
+  await expect(page).toHaveURL(/\/login$/, { timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: 'Sign In' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Configure Workspace' })).toBeHidden();
 });
 
 test('global Create opens a real create drawer with fields', async ({ page }) => {
