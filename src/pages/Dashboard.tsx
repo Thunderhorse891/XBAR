@@ -19,7 +19,7 @@ import { formatCompactCurrency } from '@/lib/format';
 import { events, track } from '@/lib/telemetry';
 import { useXbarStore } from '@/store/useXbarStore';
 
-const XBAR_ICON = '/brand/xbar_public_assets/public/brand/xbar-app-icon-512.png';
+const XBAR_ICON = '/brand/xbar-app-icon.png';
 
 type Tone = 'danger' | 'warning' | 'info' | 'neutral';
 type Signal = { key: string; tone: Tone; title: string; meta: string; chip: string; to: string; icon: 'coins' | 'stethoscope' | 'doc' | 'horse' | 'shield' };
