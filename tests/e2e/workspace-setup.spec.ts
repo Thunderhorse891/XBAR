@@ -144,11 +144,16 @@ test('documents opens a document drawer', async ({ page }) => {
 
 test('pasture location opens a detail drawer', async ({ page }) => {
   await bootstrapWorkspace(page);
+  await seedAnimal(page, 'Pasture Prospect');
   await page.getByRole('link', { name: 'Pastures & Locations', exact: true }).click();
   await page.locator('.xs-grid-2 .xs-card').first().click();
   const drawer = page.getByRole('dialog');
   await expect(drawer).toBeVisible();
   await expect(drawer.getByText('Animals currently here')).toBeVisible();
+  await expect(drawer.locator('.xs-mrow__title', { hasText: 'PASTURE PROSPECT' })).toHaveCount(1);
+  await expect(drawer.getByText('Open location work')).toBeVisible();
+  await expect(drawer.getByText('Check water trough')).toHaveCount(0);
+  await expect(drawer.getByText('Photo upload coming soon')).toHaveCount(0);
 });
 
 test('a seeded animal opens a full animal profile object page with tabs', async ({ page }) => {
