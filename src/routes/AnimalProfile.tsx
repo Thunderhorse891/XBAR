@@ -199,14 +199,14 @@ export default function AnimalProfile() {
           </div>
           <div className="xs-mlist">
             <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Packet status</span></span><StatusChip tone={packetReady ? 'success' : 'warning'}>{animal.readiness?.packetStatus ?? 'Review'}</StatusChip></div>
-            <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Buyer-safe proof</span></span><StatusChip tone={packetReady ? 'success' : 'warning'}>{packetReady ? 'Verified' : 'Pending'}</StatusChip></div>
+            <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Share With Buyer</span></span><StatusChip tone={packetReady ? 'success' : 'warning'}>{packetReady ? 'Verified' : 'Pending'}</StatusChip></div>
             <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Release blockers</span></span><StatusChip tone={animal.readiness?.blockers?.length ? 'danger' : 'success'}>{animal.readiness?.blockers?.length ? `${animal.readiness.blockers.length} blocker${animal.readiness.blockers.length === 1 ? '' : 's'}` : 'Clear'}</StatusChip></div>
           </div>
         </Card>
       ) : null}
 
       {tab === 'Buyer Activity' ? (
-        <Card title="Buyer Activity" link="Open Deal Room" onLink={() => navigate('/buyer-deal-room')}>
+        <Card title="Buyer Activity" link="Open Buyer Folder" onLink={() => navigate('/buyer-deal-room')}>
           <dl className="xs-kv">
             <dt>Ask price</dt><dd>{animal.sale?.askPrice ? formatCurrency(animal.sale.askPrice) : '—'}</dd>
             <dt>Inquiries</dt><dd>{animal.sale?.inquiryCount ?? 0}</dd>

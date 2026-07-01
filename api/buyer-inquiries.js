@@ -2,11 +2,11 @@ import { readJsonBody, sendJson } from './_lib/http.js';
 import { getSupabaseAdmin } from './_lib/supabase-admin.js';
 
 /*
- * Public buyer deal-room intake. Anonymous buyers on a shared packet page can
+ * Public buyer folder intake. Anonymous buyers on a shared packet page can
  * ask a question, request a call or proof, submit an offer, or download the
  * buyer packet. The share path/token is validated against the listing (same
  * RPC the public page uses) before anything is written, and events land in
- * public_share_events where the workspace's deal room reads them.
+ * public_share_events where the workspace's buyer folder reads them.
  */
 
 const ALLOWED_KINDS = new Set(['question', 'call-requested', 'proof-requested', 'offer', 'packet-downloaded']);

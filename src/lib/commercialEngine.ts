@@ -46,7 +46,7 @@ export function featureGate(subscription: SubscriptionProfile, feature: Commerci
 }
 
 export function featureLabel(feature: CommercialFeature) {
-  if (feature === 'buyerDealRoom') return 'the Buyer Deal Room';
+  if (feature === 'buyerDealRoom') return 'the Buyer Folder';
   if (feature === 'packetExport') return 'buyer packet export';
   if (feature === 'teamInvites') return 'team invitations';
   if (feature === 'profitIntelligence') return 'profit intelligence';

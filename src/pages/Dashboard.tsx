@@ -63,7 +63,7 @@ export default function Dashboard() {
           <div className="xs-hero__body">
             <div className="xs-hero__eyebrow"><Sparkles size={13} /> {ranchName} · Getting started</div>
             <h1 className="xs-hero__headline">Set up your ranch operating system.</h1>
-            <p className="xs-hero__sub">Add your first animal and its papers. XBAR builds sale readiness, documents, ownership proof, and buyer deal rooms around your real records.</p>
+            <p className="xs-hero__sub">Add your first animal and its papers. XBAR builds sale readiness, documents, ownership proof, and buyer folders around your real records.</p>
             <div className="xs-hero__actions">
               <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>Add first animal</ActionButton>
               <ActionButton onClick={() => navigate('/documents?upload=1')}>Add document</ActionButton>
@@ -77,7 +77,7 @@ export default function Dashboard() {
             { v: 0, l: 'Animals', to: '/animals' },
             { v: 0, l: 'Sale prospects', to: '/sales-pipeline' },
             { v: 0, l: 'Documents', to: '/documents-vault' },
-            { v: 0, l: 'Deal rooms', to: '/buyer-deal-room' },
+            { v: 0, l: 'Buyer folders', to: '/buyer-deal-room' },
             { v: '—', l: 'Readiness', to: '/reports' },
           ].map((r) => (
             <button key={r.l} type="button" className="xs-ribbon__item" onClick={() => navigate(r.to)}>

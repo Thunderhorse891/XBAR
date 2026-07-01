@@ -25,7 +25,7 @@ import './confirmActionDialog.css';
  * The core paid workflow: select horse → release gate (title/transfer is a
  * HARD gate, stale Coggins requires explicit disclosure) → choose proof →
  * buyer + watermark → generate (real PDF in cloud workspaces, recorded build
- * in local mode) → deal room opens automatically (packet-shared event +
+ * in local mode) → buyer folder opens automatically (packet-shared event +
  * sales lead) with the next money action offered.
  */
 
@@ -157,7 +157,7 @@ export function SalePacketWizard({
       return;
     }
 
-    // The deal room opens automatically: share event + sales lead.
+    // The buyer folder opens automatically: share event + sales lead.
     if (buyerName.trim()) {
       logBuyerRoomEvent({
         horseId: horse.id,
@@ -181,8 +181,8 @@ export function SalePacketWizard({
     pushToast({
       title: downloadUrl ? 'Sale packet PDF ready' : 'Sale packet recorded',
       message: downloadUrl
-        ? 'Watermarked PDF opened in a new tab. Buyer activity is now tracked in the deal room.'
-        : `${build.message} Cloud sign-in generates the watermarked PDF; the deal room is tracking this buyer either way.`,
+        ? 'Watermarked PDF opened in a new tab. Buyer activity is now tracked in the buyer folder.'
+        : `${build.message} Cloud sign-in generates the watermarked PDF; the buyer folder is tracking this buyer either way.`,
       tone: 'success',
     });
   };
@@ -195,7 +195,7 @@ export function SalePacketWizard({
       >
         <DialogHeader>
           <DialogTitle className="confirm-dialog__title">Sale packet generator</DialogTitle>
-          <DialogDescription>Build a legally gated buyer packet, open the buyer deal room, and protect margin.</DialogDescription>
+          <DialogDescription>Build a buyer packet, open the buyer folder, and keep the sale organized.</DialogDescription>
         </DialogHeader>
         <div style={{ display: 'flex', gap: 6, marginTop: 12 }} aria-label={`Step ${step + 1} of ${STEPS.length}`}>
           {STEPS.map((label, index) => (
@@ -332,7 +332,7 @@ export function SalePacketWizard({
                     <FormItem>
                       <FormLabel>Buyer name</FormLabel>
                       <FormControl><Input {...field} placeholder="John Smith" /></FormControl>
-                      <FormDescription>Opens the deal room and creates a buyer lead.</FormDescription>
+                      <FormDescription>Opens the buyer folder and creates a buyer lead.</FormDescription>
                     </FormItem>
                   )}
                 />
@@ -367,7 +367,7 @@ export function SalePacketWizard({
               <ul className="confirm-dialog__consequences">
                 <li>{docSelection.length} approved document{docSelection.length === 1 ? '' : 's'} bundled for {horse.name}.</li>
                 <li>Watermark “{effectiveWatermark}” on every page.</li>
-                <li>{buyerName.trim() ? `Deal room opens for ${buyerName.trim()} with a packet-shared event and a sales lead.` : 'No buyer named — packet generates without a deal room entry.'}</li>
+                <li>{buyerName.trim() ? `Buyer folder opens for ${buyerName.trim()} with a packet-shared event and a sales lead.` : 'No buyer named — packet generates without a buyer folder entry.'}</li>
                 <li>The build and buyer attribution are written to the audit log.</li>
               </ul>
               <button className="confirm-dialog__confirm confirm-dialog__confirm--legal" type="button" style={{ width: '100%', marginTop: 14 }} disabled={isGenerating} onClick={() => void generate()}>
@@ -394,7 +394,7 @@ export function SalePacketWizard({
                   type="button"
                   onClick={() => {
                     logBuyerRoomEvent({ horseId: horse.id, kind: 'packet-viewed', actor: buyerName.trim() || 'Buyer', packetId: generated.packetId });
-                    pushToast({ title: 'Buyer view logged', message: 'The deal room timeline now shows the packet was viewed.', tone: 'success' });
+                    pushToast({ title: 'Buyer view logged', message: 'The buyer folder timeline now shows the packet was viewed.', tone: 'success' });
                   }}
                 >
                   Log that the buyer viewed it

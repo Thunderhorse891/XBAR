@@ -28,7 +28,7 @@ const STEPS = [
   },
   {
     index: '03',
-    title: 'Generate a buyer-safe packet',
+    title: 'Create a buyer-ready packet',
     detail: 'Bundle proof of ownership, health, and provenance into one watermarked packet a buyer can trust.',
     cta: 'Open sales',
     to: '/sales',
@@ -37,7 +37,7 @@ const STEPS = [
 
 const VALUE_PROPS = [
   { k: 'Ownership proof chain', v: 'Every transfer, documented and verifiable.' },
-  { k: 'Buyer-safe sale packets', v: 'Release nothing until the paperwork clears.' },
+  { k: 'Buyer-ready sale packets', v: 'Release nothing until the paperwork clears.' },
   { k: 'OCR document intake', v: 'Papers become structured records in seconds.' },
   { k: 'Margin intelligence', v: 'See the profit on every horse before you sell.' },
 ];

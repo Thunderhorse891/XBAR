@@ -72,7 +72,7 @@ export default function Reports() {
           <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 30, fontWeight: 700 }}>{dashboardMetrics.activeSaleProspects}</div>
         </Card>
         <Card>
-          <div className="xs-card__sub">Buyer deal rooms</div>
+          <div className="xs-card__sub">Buyer folders</div>
           <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 30, fontWeight: 700 }}>{dashboardMetrics.buyerDealRooms}</div>
         </Card>
         <Card>

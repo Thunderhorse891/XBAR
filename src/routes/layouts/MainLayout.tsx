@@ -61,7 +61,7 @@ const navGroups: NavGroup[] = [
     heading: 'Transactions',
     items: [
       { label: 'Sales Pipeline', path: '/sales-pipeline', icon: Gauge },
-      { label: 'Buyer Deal Rooms', path: '/buyer-deal-room', icon: Users },
+      { label: 'Buyer Folders', path: '/buyer-deal-room', icon: Users },
       { label: 'Sale Packet Studio', path: '/sale-packet-studio', icon: FileText },
       { label: 'Ownership Chain', path: '/ownership-chain', icon: ShieldCheck, badgeKey: 'transfers' },
     ],
@@ -84,7 +84,7 @@ const navGroups: NavGroup[] = [
   },
 ];
 
-const whatsNew = ['Release Blocker detection', 'Buyer Deal Rooms', 'Sale Packet Studio'];
+const whatsNew = ['Release Blocker detection', 'Buyer Folders', 'Sale Packet Studio'];
 
 const mobileItems: { label: string; path: string; icon: LucideIcon }[] = [
   { label: 'Home', path: '/', icon: LayoutDashboard },
