@@ -103,7 +103,7 @@ export const gettingStartedSteps: {
   { id: 'horse', title: 'Add first horse', detail: 'Start the horse record with identity and status.', done: true, action: 'View', to: '/horses' },
   { id: 'coggins', title: 'Upload Coggins', detail: 'Attach the negative Coggins test record.', done: true, action: 'View', to: '/documents' },
   { id: 'health', title: 'Upload health certificate', detail: 'Add a current health certificate with expiration.', done: false, action: 'Upload', to: '/documents?upload=1' },
-  { id: 'packet', title: 'Create sale packet', detail: 'Assemble a buyer-ready packet in the studio.', done: false, action: 'Open Studio', to: '/sale-packet-studio' },
+  { id: 'packet', title: 'Create sale packet', detail: 'Assemble a buyer-ready packet in the builder.', done: false, action: 'Open Builder', to: '/sale-packet-studio' },
   { id: 'buyer', title: 'Invite buyer', detail: 'Send a secure invitation to a prospective buyer.', done: false, action: 'Invite', to: '/buyer-deal-room' },
   { id: 'room', title: 'Open Buyer Folder', detail: 'A private folder you can share with a buyer before the sale.', done: false, action: 'Open', to: '/buyer-deal-room' },
   { id: 'plan', title: 'Choose subscription plan', detail: 'Pick the plan that matches your operation.', done: false, action: 'Compare', to: '/subscriptions' },
@@ -186,7 +186,7 @@ export const operationalTasks = ['Resolve release blocker', 'Prepare sale packet
    =========================================================================== */
 
 /** Blocker resolutions performed in-session (home Resolve Blocker wizard →
- *  Sale Packet Studio). Keyed by animal id; lets the studio see a cleared
+ *  Sale Packet Builder). Keyed by animal id; lets the builder see a cleared
  *  health-certificate blocker instead of re-deriving it from static mock. */
 export const resolvedBlockers = new Set<string>();
 
