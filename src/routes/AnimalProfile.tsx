@@ -122,7 +122,7 @@ export default function AnimalProfile() {
       ) : null}
 
       {tab === 'Documents' ? (
-        <Card title="Documents" link="Open Vault" onLink={() => navigate('/documents-vault')}>
+        <Card title="Documents" link="Open Documents" onLink={() => navigate('/documents-vault')}>
           {animal.documentFacts.length ? (
             <div className="xs-mlist">
               {animal.documentFacts.slice(0, 10).map((f) => (

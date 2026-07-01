@@ -117,9 +117,9 @@ test('buyer deal room is a master-detail workspace', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Prepare Release' })).toBeVisible();
 });
 
-test('documents vault opens a document drawer', async ({ page }) => {
+test('documents opens a document drawer', async ({ page }) => {
   await bootstrapWorkspace(page);
-  await page.getByRole('link', { name: 'Documents Vault', exact: true }).click();
+  await page.getByRole('link', { name: 'Documents', exact: true }).click();
   await page.locator('.xs-table tbody tr').first().click();
   const drawer = page.getByRole('dialog');
   await expect(drawer).toBeVisible();
