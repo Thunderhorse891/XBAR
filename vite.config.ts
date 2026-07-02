@@ -25,18 +25,11 @@ export default defineConfig(() => {
       target: ['es2021', 'chrome100', 'safari13'],
       minify: debugBuild ? false : 'esbuild',
       sourcemap: debugBuild,
+      // Raise the size-warning threshold only. Do NOT add a manualChunks split
+      // that separates `react` from `react-dom` — it crashes the app at runtime
+      // with "Cannot read '__SECRET_INTERNALS...'" (blank white screen). Vite's
+      // default chunking keeps React and React-DOM together.
       chunkSizeWarningLimit: 900,
-      rollupOptions: {
-        output: {
-          manualChunks(id) {
-            if (!id.includes('node_modules')) return undefined;
-            if (/pdf|fontkit|@pdf-lib|jszip/.test(id)) return 'pdf-vendor';
-            if (id.includes('lucide-react')) return 'icons';
-            if (/react-router|react-dom|scheduler|zustand/.test(id)) return 'react-vendor';
-            return 'vendor';
-          },
-        },
-      },
     },
   };
 });
