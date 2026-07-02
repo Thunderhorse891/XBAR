@@ -31,7 +31,6 @@ import { buildCareBoardRows } from '@/lib/dashboardOps';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
-import { ranchSeason, ranchWeather, xbarRanch } from '@/data/xbarSaasMock';
 
 const XBAR_ICON = '/brand/xbar_public_assets/public/brand/xbar-app-icon-512.png';
 
@@ -40,13 +39,13 @@ type NavGroup = { heading: string; items: NavItem[] };
 
 const navGroups: NavGroup[] = [
   {
-    heading: 'Operations',
+    heading: 'Ranch',
     items: [
-      { label: 'Command Center', path: '/', icon: LayoutDashboard },
-      { label: "Today's Work", path: '/today', icon: ClipboardList },
-      { label: 'Animals', path: '/animals', icon: Home },
+      { label: 'Dashboard', path: '/', icon: LayoutDashboard },
+      { label: 'Care Tasks', path: '/today', icon: ClipboardList },
+      { label: 'Horses', path: '/animals', icon: Home },
       { label: 'Herd Groups', path: '/herd-groups', icon: Users },
-      { label: 'Pastures & Locations', path: '/pastures', icon: Map },
+      { label: 'Pastures', path: '/pastures', icon: Map },
     ],
   },
   {
@@ -54,22 +53,22 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Health & Care', path: '/health-care', icon: Stethoscope, badgeKey: 'care' },
       { label: 'Breeding & Foaling', path: '/breeding-foaling', icon: Sprout },
-      { label: 'Feed & Inventory', path: '/feed', icon: Wheat },
+      { label: 'Feed & Supplies', path: '/feed', icon: Wheat },
     ],
   },
   {
-    heading: 'Transactions',
+    heading: 'Selling',
     items: [
-      { label: 'Sales Pipeline', path: '/sales-pipeline', icon: Gauge },
-      { label: 'Buyer Deal Rooms', path: '/buyer-deal-room', icon: Users },
-      { label: 'Sale Packet Studio', path: '/sale-packet-studio', icon: FileText },
-      { label: 'Ownership Chain', path: '/ownership-chain', icon: ShieldCheck, badgeKey: 'transfers' },
+      { label: 'Sales', path: '/sales-pipeline', icon: Gauge },
+      { label: 'Buyer Folders', path: '/buyer-deal-room', icon: Users },
+      { label: 'Sale Packets', path: '/sale-packet-studio', icon: FileText },
+      { label: 'Ownership History', path: '/ownership-chain', icon: ShieldCheck, badgeKey: 'transfers' },
     ],
   },
   {
     heading: 'Records',
     items: [
-      { label: 'Documents Vault', path: '/documents-vault', icon: FolderOpen, badgeKey: 'docs' },
+      { label: 'Paperwork', path: '/documents-vault', icon: FolderOpen, badgeKey: 'docs' },
       { label: 'Equipment', path: '/equipment', icon: Boxes },
       { label: 'Expenses', path: '/expenses', icon: Coins },
       { label: 'Reports', path: '/reports', icon: Gauge },
@@ -79,12 +78,12 @@ const navGroups: NavGroup[] = [
     heading: 'Account',
     items: [
       { label: 'Settings', path: '/settings', icon: SettingsIcon },
-      { label: 'Subscription', path: '/plans', icon: Rocket },
+      { label: 'Plan & Billing', path: '/plans', icon: Rocket },
     ],
   },
 ];
 
-const whatsNew = ['Release Blocker detection', 'Buyer Deal Rooms', 'Sale Packet Studio'];
+const whatsNew = ['Missing paperwork alerts', 'Buyer Folders', 'Sale Packets'];
 
 const mobileItems: { label: string; path: string; icon: LucideIcon }[] = [
   { label: 'Home', path: '/', icon: LayoutDashboard },
@@ -122,10 +121,12 @@ export default function MainLayout() {
   const badges: Record<string, number> = { docs: pendingReview, transfers: pendingTransfers, care: careDueCount };
   const notifications = pendingReview + pendingTransfers + careDueCount;
 
-  const ranchName = workspaceProfile.ranchName || workspaceProfile.businessName || xbarRanch.name;
-  const planTier = subscription?.tier || xbarRanch.plan;
+  const ranchName = workspaceProfile.ranchName || workspaceProfile.businessName || 'Your ranch';
+  const planTier = subscription?.tier || 'Starter';
   const accountInitials = (cloudSession?.user?.email ?? currentRole ?? 'XB').replace(/@.*/, '').slice(0, 2).toUpperCase();
-  const setupProgress = xbarRanch.setupProgress;
+  const ranchInitials = ranchName.split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'XB';
+  const setupSteps = [Boolean(workspaceProfile.ranchName), horses.length > 0, documents.length > 0, Boolean(workspaceProfile.defaultOwnerName)];
+  const setupProgress = Math.round((setupSteps.filter(Boolean).length / setupSteps.length) * 100);
 
   async function handleSignOut() {
     const result = await signOutCloud();
@@ -155,12 +156,12 @@ export default function MainLayout() {
           <img className="xs-brand__tile" src={XBAR_ICON} alt="XBAR" />
           <span>
             <span className="xs-brand__word">XBAR</span>
-            <span className="xs-brand__sub">Operations</span>
+            <span className="xs-brand__sub">Ranch records</span>
           </span>
         </div>
 
         <button type="button" className="xs-workspace" onClick={() => navigate('/settings')}>
-          <span className="xs-workspace__logo">{xbarRanch.initials}</span>
+          <span className="xs-workspace__logo">{ranchInitials}</span>
           <span className="xs-workspace__body">
             <span className="xs-workspace__name">{ranchName}</span>
             <span className="xs-workspace__plan"><Sparkles size={11} /> {planTier}</span>
@@ -171,8 +172,8 @@ export default function MainLayout() {
         <button type="button" className="xs-setupbar" onClick={() => navigate('/getting-started')}>
           <ProgressRing value={setupProgress} size={32} />
           <span className="xs-setupbar__body">
-            <span className="xs-setupbar__top">{setupProgress}% Ranch setup</span>
-            <span className="xs-setupbar__sub">Finish onboarding</span>
+            <span className="xs-setupbar__top">{setupProgress}% set up</span>
+            <span className="xs-setupbar__sub">Finish getting started</span>
           </span>
         </button>
 
@@ -198,10 +199,10 @@ export default function MainLayout() {
         <div className="xs-sidebar__footer">
           <img className="xs-sidebar__wm" src={XBAR_ICON} alt="" aria-hidden="true" />
           <div className="xs-ranchcard">
-            <span className="xs-ranchcard__avatar">{xbarRanch.initials}</span>
+            <span className="xs-ranchcard__avatar">{ranchInitials}</span>
             <span>
               <div className="xs-ranchcard__name">{ranchName}</div>
-              <div className="xs-ranchcard__meta">{xbarRanch.id}</div>
+              <div className="xs-ranchcard__meta">{planTier} plan</div>
             </span>
           </div>
           <div className="xs-whatsnew">
@@ -220,16 +221,17 @@ export default function MainLayout() {
       <div className="xs-main">
         <header className="xs-topbar">
           <div className="xs-topbar__left">
-            <span className="xs-seasonchip"><Sparkles size={14} /> {ranchSeason.label}</span>
-            <span className="xs-weatherchip">
-              {ranchWeather.tempF}°F · {ranchWeather.label}
-              <span className="xs-weatherchip__risk">· {ranchWeather.risk}</span>
-            </span>
+            <span className="xs-seasonchip"><Sparkles size={14} /> {ranchName}</span>
+            {notifications > 0 ? (
+              <span className="xs-weatherchip">{notifications} need{notifications === 1 ? 's' : ''} attention</span>
+            ) : (
+              <span className="xs-weatherchip">Everything looks good</span>
+            )}
           </div>
 
           <label className="xs-search">
             <Search size={15} className="xs-search__icon" />
-            <input className="xs-search__input" placeholder="Search animals, documents, buyers, deals…" onKeyDown={handleSearchKey} aria-label="Search" />
+            <input className="xs-search__input" placeholder="Search horses, paperwork, buyers…" onKeyDown={handleSearchKey} aria-label="Search" />
           </label>
 
           <div className="xs-topbar__spacer" />

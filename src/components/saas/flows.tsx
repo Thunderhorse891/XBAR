@@ -1,24 +1,12 @@
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  ArrowRight,
-  Check,
-  CircleAlert,
-  FileUp,
-  ShieldCheck,
-  Upload,
-} from 'lucide-react';
-import { ActionButton, SlideOverDrawer, StatusChip } from '@/components/saas';
+import { Check, FileUp } from 'lucide-react';
+import { ActionButton, SlideOverDrawer } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import { events, track } from '@/lib/telemetry';
 import type { ExpenseCategory, HorseSegment, HorseSex, HorseStatus } from '@/types/xbar';
-import {
-  resolvedBlockers,
-  saasHorses,
-  type WorkTask,
-} from '@/data/xbarSaasMock';
 
 /* ----------------------------------------------------------- Form fields */
 export function Text({ label, placeholder, value, onChange, hint }: { label: string; placeholder?: string; value: string; onChange: (v: string) => void; hint?: string }) {
@@ -101,7 +89,7 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
   const [busy, setBusy] = useState(false);
   const set = (k: string) => (v: string) => setF((cur) => ({ ...cur, [k]: v }));
 
-  const animalNames = horses.length ? horses.map((h) => h.name) : saasHorses.map((h) => h.name);
+  const animalNames = horses.length ? horses.map((h) => h.name) : ['(add a horse first)'];
 
   if (!action) return null;
 
@@ -256,182 +244,6 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
   return (
     <SlideOverDrawer open title={action} subtitle="Quick create" onClose={onClose} footer={<><ActionButton onClick={onClose}>Cancel</ActionButton>{footer}</>}>
       {body}
-    </SlideOverDrawer>
-  );
-}
-
-/* ------------------------------------------------- Resolve Blocker wizard */
-const blockerSteps = ['Identify', 'Fix data', 'Validate', 'Readiness', 'Return'];
-
-export function ResolveBlockerWizard({
-  open,
-  onClose,
-  horse = 'RHA Pine Barrel Prospect',
-  horseId = 'rha-pine-barrel-prospect',
-  amount = 35000,
-}: {
-  open: boolean;
-  onClose: () => void;
-  horse?: string;
-  horseId?: string;
-  amount?: number;
-}) {
-  const navigate = useNavigate();
-  const pushToast = useUiStore((s) => s.pushToast);
-  const [step, setStep] = useState(0);
-  const [exp, setExp] = useState('');
-
-  const close = () => { setStep(0); setExp(''); onClose(); };
-  const next = () => setStep((s) => Math.min(s + 1, blockerSteps.length - 1));
-  const back = () => setStep((s) => Math.max(s - 1, 0));
-
-  const canAdvance = step !== 1 || exp.trim().length > 0;
-
-  return (
-    <SlideOverDrawer
-      open={open}
-      title="Resolve Blocker"
-      subtitle={`${horse} · $${amount.toLocaleString()} target sale`}
-      onClose={close}
-      footer={
-        step < blockerSteps.length - 1 ? (
-          <>
-            {step > 0 ? <ActionButton onClick={back}>Back</ActionButton> : <ActionButton onClick={close}>Cancel</ActionButton>}
-            <ActionButton variant="primary" disabled={!canAdvance} onClick={next}>Continue</ActionButton>
-          </>
-        ) : (
-          <>
-            <ActionButton onClick={close}>Close</ActionButton>
-            <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={() => { resolvedBlockers.add(horseId); track(events.blockerResolved, { horse, horseId, amount }); pushToast({ title: 'Blocker resolved', message: `${horse} is now release-ready`, tone: 'success' }); close(); navigate('/sale-packet-studio'); }}>Open Sale Packet</ActionButton>
-          </>
-        )
-      }
-    >
-      <Stepper steps={blockerSteps} current={step} />
-
-      {step === 0 ? (
-        <>
-          <div className="xs-railcard" style={{ borderColor: 'rgba(185,71,62,0.35)', background: 'var(--xbar-danger-soft)' }}>
-            <div className="xs-section-label" style={{ color: 'var(--xbar-danger)' }}>Blocker</div>
-            <div style={{ fontWeight: 700 }}>Health certificate expiration date missing</div>
-          </div>
-          <dl className="xs-kv">
-            <dt>Linked horse</dt><dd>{horse}</dd>
-            <dt>Linked document</dt><dd>Health Certificate</dd>
-            <dt>Affected sale</dt><dd>${amount.toLocaleString()}</dd>
-            <dt>Active buyers</dt><dd>2</dd>
-          </dl>
-          <p className="xs-muted" style={{ fontSize: 13, margin: 0 }}>Fix this one field and the sale can move to a buyer-safe release state.</p>
-        </>
-      ) : null}
-
-      {step === 1 ? (
-        <>
-          <div className="xs-section-label">Step 2 · Add the missing field</div>
-          <Text label="Health certificate expiration date" placeholder="YYYY-MM-DD" value={exp} onChange={setExp} hint="Required for buyer-safe release." />
-          <div className="xs-drop"><Upload size={18} style={{ display: 'block', margin: '0 auto 6px' }} />Or re-upload the corrected certificate</div>
-        </>
-      ) : null}
-
-      {step === 2 ? (
-        <>
-          <div className="xs-section-label">Step 3 · Validate required data</div>
-          <dl className="xs-kv">
-            <dt>Expiration date</dt><dd>{exp || '—'} <StatusChip tone="success">Valid</StatusChip></dd>
-            <dt>Coggins</dt><dd>Current <StatusChip tone="success">OK</StatusChip></dd>
-            <dt>Registration</dt><dd>On file <StatusChip tone="success">OK</StatusChip></dd>
-            <dt>Ownership chain</dt><dd>Complete <StatusChip tone="success">OK</StatusChip></dd>
-          </dl>
-        </>
-      ) : null}
-
-      {step === 3 ? (
-        <>
-          <div className="xs-section-label">Step 4 · Sale readiness updated</div>
-          <div className="xs-okbanner"><ShieldCheck size={16} /> Readiness raised to 100% — Buyer-Safe Proof verified</div>
-          <dl className="xs-kv">
-            <dt>Before</dt><dd>94% · Blocked</dd>
-            <dt>After</dt><dd>100% · Release ready</dd>
-          </dl>
-        </>
-      ) : null}
-
-      {step === 4 ? (
-        <div className="xs-okbanner"><Check size={16} /> Blocker cleared. {horse} can move forward to its sale packet and deal room.</div>
-      ) : null}
-    </SlideOverDrawer>
-  );
-}
-
-/* --------------------------------------------------------------- Task drawer */
-export function TaskDrawer({ task, onClose, onResolveBlocker }: { task: WorkTask | null; onClose: () => void; onResolveBlocker: () => void }) {
-  const navigate = useNavigate();
-  const pushToast = useUiStore((s) => s.pushToast);
-  if (!task) return null;
-  const isBlocker = task.priority === 'Revenue Blocker';
-  const toast = (m: string) => pushToast({ title: 'Task', message: m, tone: 'success' });
-
-  return (
-    <SlideOverDrawer
-      open
-      title={task.title}
-      subtitle={`${task.linkedType}: ${task.linkedName}`}
-      onClose={onClose}
-      footer={
-        isBlocker ? (
-          <>
-            <ActionButton onClick={onClose}>Close</ActionButton>
-            <ActionButton variant="primary" icon={<CircleAlert size={15} />} onClick={onResolveBlocker}>Resolve Blocker</ActionButton>
-          </>
-        ) : (
-          <>
-            <ActionButton onClick={() => { toast('Snoozed'); onClose(); }}>Snooze</ActionButton>
-            <ActionButton variant="primary" icon={<Check size={15} />} onClick={() => { track(events.taskCompleted, { id: task.id, category: task.category }); toast(`Completed: ${task.title}`); onClose(); }}>Mark Done</ActionButton>
-          </>
-        )
-      }
-    >
-      <div style={{ display: 'flex', gap: 8 }}>
-        <StatusChip tone={isBlocker ? 'danger' : task.priority === 'High' ? 'warning' : 'neutral'}>{task.priority}</StatusChip>
-        <span className="xs-chip xs-chip--neutral">{task.status}</span>
-      </div>
-
-      {isBlocker ? (
-        <div className="xs-railcard" style={{ borderColor: 'rgba(185,71,62,0.35)', background: 'var(--xbar-danger-soft)' }}>
-          <div className="xs-section-label" style={{ color: 'var(--xbar-danger)' }}>Revenue blocker</div>
-          <dl className="xs-kv">
-            <dt>Reason</dt><dd>Health certificate expiration date missing</dd>
-            <dt>Affected sale</dt><dd>$35,000</dd>
-            <dt>Linked horse</dt><dd>RHA Pine Barrel Prospect</dd>
-            <dt>Linked document</dt><dd>Health Certificate</dd>
-          </dl>
-        </div>
-      ) : null}
-
-      <dl className="xs-kv">
-        <dt>Priority</dt><dd>{task.priority}</dd>
-        <dt>Due</dt><dd>{task.due}</dd>
-        <dt>Assigned to</dt><dd>{task.assignee}</dd>
-        <dt>Linked record</dt><dd>{task.linkedType}: {task.linkedName}</dd>
-      </dl>
-
-      <div>
-        <div className="xs-section-label">Notes</div>
-        <Area label="" placeholder="Add a note for the crew…" value="" onChange={(v) => v && toast('Note saved')} />
-      </div>
-
-      <div>
-        <div className="xs-section-label">Activity</div>
-        <div className="xs-tl">
-          <div className="xs-tl__row"><span className="xs-tl__dot" /><span><div className="xs-tl__title">Task created</div><div className="xs-tl__time">Today · 7:02 AM · system</div></span></div>
-          <div className="xs-tl__row"><span className="xs-tl__dot" /><span><div className="xs-tl__title">Assigned to {task.assignee}</div><div className="xs-tl__time">Today · 7:03 AM</div></span></div>
-        </div>
-      </div>
-
-      <div className="xs-field">
-        <button type="button" className="xs-fieldbtn" onClick={() => toast('Reassigned')}>Assign</button>
-        <button type="button" className="xs-fieldbtn" onClick={() => { onClose(); navigate(task.category === 'Sales' ? '/sales-pipeline' : task.category === 'Documents' ? '/documents-vault' : '/horses'); }}>Open Linked Record</button>
-      </div>
     </SlideOverDrawer>
   );
 }

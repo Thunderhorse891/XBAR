@@ -1,6 +1,6 @@
 import type { DocumentRecord, ExpenseCategory, ExpenseReceipt, HorseRecord, OwnershipRecord } from '../types/xbar.js';
 
-type CareSignalStatus = 'due' | 'watch' | 'clear';
+export type CareSignalStatus = 'due' | 'watch' | 'clear';
 
 export type TransferGapRow = {
   horseId: string;
