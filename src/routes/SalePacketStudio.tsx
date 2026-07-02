@@ -5,7 +5,7 @@ import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
 import { Stepper } from '@/components/saas/flows';
 import { useUiStore } from '@/store/useUiStore';
 import { events, track } from '@/lib/telemetry';
-import { resolvedBlockers, saasHorses } from '@/data/xbarSaasMock';
+import { saasHorses } from '@/data/xbarSaasMock';
 
 const STEPS = ['Select animal', 'Packet type', 'Required documents', 'Fix issues', 'Preview', 'Share'];
 const PACKET_TYPES = ['Sale Prospect Packet', 'Buyer Review Packet', 'Release Packet', 'Vet/Transport Packet', 'Boarding/Client Packet'];
@@ -30,8 +30,7 @@ export default function SalePacketStudio() {
   const [step, setStep] = useState(0);
   const [horseId, setHorseId] = useState(saasHorses[0].id);
   const [packetType, setPacketType] = useState(PACKET_TYPES[1]);
-  // Carry forward any blocker resolved earlier in-session (home Resolve flow).
-  const [fixed, setFixed] = useState<string[]>(() => (resolvedBlockers.has(saasHorses[0].id) ? ['health'] : []));
+  const [fixed, setFixed] = useState<string[]>([]);
 
   const horse = saasHorses.find((h) => h.id === horseId)!;
   const present = useMemo(() => [...(presentByHorse[horseId] ?? []), ...fixed], [horseId, fixed]);
@@ -56,7 +55,7 @@ export default function SalePacketStudio() {
           <div className="xs-form" style={{ maxWidth: 520 }}>
             <label>
               <span className="xs-field-label">Animal</span>
-              <select className="xs-select" value={horseId} onChange={(e) => { setHorseId(e.target.value); setFixed(resolvedBlockers.has(e.target.value) ? ['health'] : []); }}>
+              <select className="xs-select" value={horseId} onChange={(e) => { setHorseId(e.target.value); setFixed([]); }}>
                 {saasHorses.map((h) => <option key={h.id} value={h.id}>{h.name} — {h.discipline}</option>)}
               </select>
             </label>
