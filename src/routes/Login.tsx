@@ -109,8 +109,8 @@ export default function Login() {
   const description = selectedPlan
     ? `Create credentials, then continue to the ${selectedPlan} plan.`
     : authMode === 'signin'
-      ? 'Enter your credentials to access the system.'
-      : 'Create secure credentials for your XBAR workspace.';
+      ? 'Sign in to your workspace.'
+      : 'Create a sign-in for your XBAR workspace.';
 
   return (
     <main className="clean-entry-shell clean-entry-shell--brand-auth">
@@ -121,20 +121,20 @@ export default function Login() {
           <div className="clean-login-visual__copy">
             <img className="clean-login-visual__wordmark" src="/brand/xbar-wordmark.png" width="420" height="120" alt="XBAR" />
             <h2>XBAR Ranch Management</h2>
-            <p>Access your enterprise dashboard with high-fidelity security protocols.</p>
+            <p>Keep your horse records, paperwork, and sale documents organized in one place.</p>
           </div>
-          <dl className="clean-login-proof" aria-label="XBAR system status">
+          <dl className="clean-login-proof" aria-label="XBAR workspace">
             <div>
-              <dt>Global Network</dt>
-              <dd>v2.0 online</dd>
+              <dt>Local-first</dt>
+              <dd>Start offline</dd>
             </div>
             <div>
-              <dt>Security</dt>
-              <dd>E2EE active</dd>
+              <dt>Cloud sync</dt>
+              <dd>When configured</dd>
             </div>
             <div>
               <dt>Workspace</dt>
-              <dd>Ranch OS ready</dd>
+              <dd>Ready when you are</dd>
             </div>
           </dl>
         </aside>
@@ -224,7 +224,7 @@ export default function Login() {
               </div>
             )}
             <Link to="/landing">View plans</Link>
-            <span>© 2026 XBAR Corp · E2EE</span>
+            <span>© 2026 XBAR</span>
           </div>
         </section>
       </section>
