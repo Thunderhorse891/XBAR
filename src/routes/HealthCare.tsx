@@ -24,15 +24,25 @@ export default function HealthCare() {
 
   const careRows = useMemo(() => buildCareBoardRows(horses, documents, expenseReceipts), [horses, documents, expenseReceipts]);
 
-  const rows = useMemo(
-    () =>
-      careRows.flatMap((row) =>
-        row.signals
-          .filter((sig) => f === 'All' || STATUS_LABEL[sig.status] === f || (f === 'Watch' && sig.status === 'watch'))
-          .map((sig) => ({ id: `${row.horseId}-${sig.key}`, horseId: row.horseId, animal: row.horseName, type: sig.label, detail: sig.detail, dueDate: sig.dueDate, status: sig.status })),
-      ),
-    [careRows, f],
-  );
+  const rows = useMemo(() => {
+    const matches = (status: CareSignalStatus) =>
+      f === 'All' || (f === 'Due' && status === 'due') || (f === 'Watch' && status === 'watch') || (f === 'Clear' && status === 'clear');
+    // buildCareBoardRows only returns horses with a due/watch signal, so add the
+    // fully-current horses back in under All/Clear — this page shows care status,
+    // not just exceptions.
+    const issueIds = new Set(careRows.map((r) => r.horseId));
+    const signalRows = careRows.flatMap((row) =>
+      row.signals
+        .filter((sig) => matches(sig.status))
+        .map((sig) => ({ id: `${row.horseId}-${sig.key}`, horseId: row.horseId, animal: row.horseName, type: sig.label, detail: sig.detail, dueDate: sig.dueDate, status: sig.status })),
+    );
+    const clearRows = f === 'All' || f === 'Clear'
+      ? horses
+          .filter((h) => !issueIds.has(h.id))
+          .map((h) => ({ id: `${h.id}-current`, horseId: h.id, animal: h.name, type: 'Coggins · Wormer · Dental', detail: 'All current', dueDate: undefined as string | undefined, status: 'clear' as CareSignalStatus }))
+      : [];
+    return [...signalRows, ...clearRows];
+  }, [careRows, horses, f]);
 
   const dueCount = careRows.reduce((n, r) => n + r.signals.filter((s) => s.status === 'due').length, 0);
   const watchCount = careRows.reduce((n, r) => n + r.signals.filter((s) => s.status === 'watch').length, 0);

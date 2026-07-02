@@ -7,8 +7,8 @@ import { useXbarStore } from '@/store/useXbarStore';
 import { events, track } from '@/lib/telemetry';
 import type { SalesLead } from '@/types/xbar';
 
-type Access = 'Active' | 'Pending' | 'Revoked';
-const accessTone = { Active: 'success', Pending: 'warning', Revoked: 'danger' } as const;
+type Access = 'Active' | 'Pending';
+const accessTone = { Active: 'success', Pending: 'warning' } as const;
 const initials = (s: string) => s.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 
 export default function BuyerDealRoom() {
@@ -16,18 +16,19 @@ export default function BuyerDealRoom() {
   const pushToast = useUiStore((s) => s.pushToast);
   const leads = useXbarStore((s) => s.salesLeads);
   const horses = useXbarStore((s) => s.horses);
+  const updateSalesLead = useXbarStore((s) => s.updateSalesLead);
   const [selectedId, setSelectedId] = useState<string>(() => leads[0]?.id ?? '');
-  const [revoked, setRevoked] = useState<Set<string>>(new Set());
-  const [recorded, setRecorded] = useState<Record<string, number>>({});
-  const toast = (m: string) => pushToast({ title: 'Buyer Deal Room', message: m, tone: 'success' });
+  const toast = (m: string) => pushToast({ title: 'Buyer Folder', message: m, tone: 'success' });
 
   const horseName = useMemo(() => {
     const map = new Map(horses.map((h) => [h.id, h.name]));
     return (l: SalesLead) => map.get(l.horseId) ?? 'Unlinked animal';
   }, [horses]);
 
-  const accessOf = (l: SalesLead): Access => (revoked.has(l.id) ? 'Revoked' : l.shareReady ? 'Active' : 'Pending');
-  const offerOf = (l: SalesLead) => recorded[l.id] ?? l.offerAmount;
+  // Access + offer come straight from the persisted lead so other views (sales
+  // pipeline open value, etc.) stay consistent after revoking or recording.
+  const accessOf = (l: SalesLead): Access => (l.shareReady ? 'Active' : 'Pending');
+  const offerOf = (l: SalesLead) => l.offerAmount;
 
   const selected = leads.find((r) => r.id === selectedId) ?? leads[0];
 
@@ -92,7 +93,7 @@ export default function BuyerDealRoom() {
               </div>
             </div>
             <div className="xs-toolbar">
-              <ActionButton size="sm" icon={<Ban size={14} />} onClick={() => { track(events.buyerAccessRevoked, { id: selected.id }); setRevoked((cur) => new Set(cur).add(selected.id)); toast('Access revoked'); }}>Revoke</ActionButton>
+              <ActionButton size="sm" icon={<Ban size={14} />} disabled={!selected.shareReady} onClick={() => { track(events.buyerAccessRevoked, { id: selected.id }); updateSalesLead(selected.id, { shareReady: false }); toast('Access revoked'); }}>Revoke</ActionButton>
               <ActionButton size="sm" variant="primary" icon={<ShieldCheck size={14} />} onClick={() => navigate('/sale-packet-studio')}>Prepare Release</ActionButton>
             </div>
           </div>
@@ -113,7 +114,7 @@ export default function BuyerDealRoom() {
             ) : (
               <>
                 <p className="xs-muted" style={{ fontSize: 13, margin: '0 0 12px' }}>No offer recorded yet for this buyer.</p>
-                <ActionButton size="sm" variant="primary" onClick={() => { track(events.buyerOfferRecorded, { id: selected.id, amount: 22000 }); setRecorded((cur) => ({ ...cur, [selected.id]: 22000 })); toast('Offer recorded'); }}>Record Offer</ActionButton>
+                <ActionButton size="sm" variant="primary" onClick={() => { track(events.buyerOfferRecorded, { id: selected.id, amount: 22000 }); updateSalesLead(selected.id, { offerAmount: 22000, offerStatus: 'Submitted', offerUpdatedAt: new Date().toISOString() }); toast('Offer recorded'); }}>Record Offer</ActionButton>
               </>
             )}
           </Card>
