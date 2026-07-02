@@ -10,7 +10,7 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -33,3 +33,18 @@ jobs:
 
       - name: Build app
         run: npm run build
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Production smoke test (built dist)
+        run: npm run test:prod-smoke
+
+      - name: Upload smoke test traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-smoke-test-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7

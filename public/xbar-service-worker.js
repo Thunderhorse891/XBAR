@@ -1,5 +1,5 @@
 const XBAR_RUNTIME_CACHE_PREFIX = 'xbar-runtime-';
-const XBAR_CACHE = 'xbar-runtime-v20260630-vercel-freshness';
+const XBAR_CACHE = 'xbar-runtime-v20260702-stabilization';
 const NETWORK_FIRST_ASSET_PATHS = [
   /^\/assets\//,
   /^\/brand\//,
