@@ -14,7 +14,9 @@ export default defineConfig({
   // A real blank-screen/bundle regression fails every attempt; retries only
   // absorb cold-start flake when vite preview has just booted in CI.
   retries: process.env.CI ? 2 : 1,
-  reporter: 'line',
+  // On CI, emit GitHub annotations so the failing test and assertion are
+  // visible on the workflow run summary page.
+  reporter: process.env.CI ? 'github' : 'line',
   use: {
     baseURL: 'http://127.0.0.1:4175',
     trace: 'retain-on-failure',

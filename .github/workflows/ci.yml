@@ -39,3 +39,12 @@ jobs:
 
       - name: Production smoke test (built dist)
         run: npm run test:prod-smoke
+
+      - name: Upload smoke test traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-smoke-test-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
