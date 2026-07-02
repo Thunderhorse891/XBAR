@@ -30,5 +30,10 @@ export default defineConfig({
     url: 'http://127.0.0.1:4175',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
+    // vite preview re-reads vite.config.ts, which switches base to /XBAR/ when
+    // GITHUB_ACTIONS is set (GitHub Pages deploys). The dist under test is built
+    // with VITE_STATIC_TARGET=web (base /), so the preview server must match —
+    // otherwise every route and asset 404s in CI.
+    env: { VITE_STATIC_TARGET: 'web' },
   },
 });
