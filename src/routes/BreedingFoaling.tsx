@@ -18,7 +18,7 @@ export default function BreedingFoaling() {
 
   const rows = useMemo(
     () => mares.map((m) => {
-      const latest = m.breedingTimeline[m.breedingTimeline.length - 1];
+      const latest = m.breedingTimeline[0];
       const inFoal = m.breedingTimeline.some((e) => /foal/i.test(e.title) || /foal/i.test(e.status ?? ''));
       return { id: m.id, mare: m.name, stage: latest?.status ?? latest?.title ?? 'No records', due: latest?.date ?? '—', inFoal, hasRecords: m.breedingTimeline.length > 0 };
     }),

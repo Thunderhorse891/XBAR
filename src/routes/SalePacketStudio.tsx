@@ -36,19 +36,21 @@ export default function SalePacketStudio() {
   const [step, setStep] = useState(0);
   const [horseId, setHorseId] = useState(() => horses[0]?.id ?? '');
   const [packetType, setPacketType] = useState(PACKET_TYPES[1]);
-  const [fixedDocs, setFixedDocs] = useState<string[]>([]);
   const [fixedBlockers, setFixedBlockers] = useState<string[]>([]);
 
   const horse = horses.find((h) => h.id === horseId) ?? horses[0];
 
+  // Only count approved (Ready) linked documents — a packet is only "ready to
+  // share" when the real proof is persisted and reviewed, matching the packet
+  // generator (which includes document.state === 'Ready' only).
   const present = useMemo(() => {
     if (!horse) return [];
     const fromDocs = documents
-      .filter((d) => d.horseId === horse.id)
+      .filter((d) => d.horseId === horse.id && d.state === 'Ready')
       .map((d) => DOC_TYPE_TO_REQ[d.type])
       .filter((v): v is string => Boolean(v));
-    return Array.from(new Set([...fromDocs, ...fixedDocs]));
-  }, [documents, horse, fixedDocs]);
+    return Array.from(new Set(fromDocs));
+  }, [documents, horse]);
 
   const missing = REQUIRED.filter((d) => !present.includes(d.id));
   const blockers = (horse?.readiness?.blockers ?? []).filter((b) => !fixedBlockers.includes(b));
@@ -57,7 +59,6 @@ export default function SalePacketStudio() {
 
   const next = () => setStep((s) => Math.min(s + 1, STEPS.length - 1));
   const back = () => setStep((s) => Math.max(s - 1, 0));
-  const fixDoc = (id: string) => setFixedDocs((cur) => (cur.includes(id) ? cur : [...cur, id]));
   const fixBlocker = (b: string) => setFixedBlockers((cur) => (cur.includes(b) ? cur : [...cur, b]));
 
   if (!horse) {
@@ -88,7 +89,7 @@ export default function SalePacketStudio() {
           <div className="xs-form" style={{ maxWidth: 520 }}>
             <label>
               <span className="xs-field-label">Animal</span>
-              <select className="xs-select" value={horseId} onChange={(e) => { setHorseId(e.target.value); setFixedDocs([]); setFixedBlockers([]); }}>
+              <select className="xs-select" value={horseId} onChange={(e) => { setHorseId(e.target.value); setFixedBlockers([]); }}>
                 {horses.map((h) => <option key={h.id} value={h.id}>{h.name} — {h.segment}</option>)}
               </select>
             </label>
@@ -144,7 +145,7 @@ export default function SalePacketStudio() {
               {missing.map((m) => (
                 <div key={m.id} className="xs-row">
                   <span className="xs-row__main"><span className="xs-row__title">{m.label} missing</span><span className="xs-row__meta">Upload to complete the packet</span></span>
-                  <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => { fixDoc(m.id); pushToast({ title: 'Uploaded', message: `${m.label} attached`, tone: 'success' }); }}>Upload</ActionButton>
+                  <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate(`/documents?upload=1&horse=${horse.id}`)}>Upload</ActionButton>
                 </div>
               ))}
             </div>
