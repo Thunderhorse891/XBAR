@@ -1,18 +1,12 @@
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  ArrowRight,
-  Check,
-  CircleAlert,
-  FileUp,
-} from 'lucide-react';
-import { ActionButton, SlideOverDrawer, StatusChip } from '@/components/saas';
+import { Check, FileUp } from 'lucide-react';
+import { ActionButton, SlideOverDrawer } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import { events, track } from '@/lib/telemetry';
 import type { ExpenseCategory, HorseSegment, HorseSex, HorseStatus } from '@/types/xbar';
-import type { WorkTask } from '@/types/saas';
 
 /* ----------------------------------------------------------- Form fields */
 export function Text({ label, placeholder, value, onChange, hint }: { label: string; placeholder?: string; value: string; onChange: (v: string) => void; hint?: string }) {
@@ -95,8 +89,7 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
   const [busy, setBusy] = useState(false);
   const set = (k: string) => (v: string) => setF((cur) => ({ ...cur, [k]: v }));
 
-  const animalNames = horses.map((h) => h.name);
-  const defaultAnimalName = animalNames[0] ?? 'Add an animal first';
+  const animalNames = horses.length ? horses.map((h) => h.name) : ['(add a horse first)'];
 
   if (!action) return null;
 
@@ -199,7 +192,7 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
         <div className="xs-form">
           <div className="xs-drop"><FileUp size={20} style={{ display: 'block', margin: '0 auto 8px' }} />Drop a file or click to browse (PDF, JPG)</div>
           <Pick label="Document type" value={f.type ?? 'Health Certificate'} onChange={set('type')} options={['Health Certificate', 'Coggins', 'Registration', 'Bill of Sale', 'Photos', 'Contract']} />
-          <Pick label="Link to animal" value={f.animal ?? defaultAnimalName} onChange={set('animal')} options={animalNames.length ? animalNames : [defaultAnimalName]} />
+          <Pick label="Link to animal" value={f.animal ?? animalNames[0]} onChange={set('animal')} options={animalNames} />
           <Text label="Expiration date" placeholder="YYYY-MM-DD" value={f.exp ?? ''} onChange={set('exp')} />
         </div>
       );
@@ -208,7 +201,7 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
     case 'Add Health Record':
       body = (
         <div className="xs-form">
-          <Pick label="Animal" value={f.animal ?? defaultAnimalName} onChange={set('animal')} options={animalNames.length ? animalNames : [defaultAnimalName]} />
+          <Pick label="Animal" value={f.animal ?? animalNames[0]} onChange={set('animal')} options={animalNames} />
           <Pick label="Record type" value={f.type ?? 'Vaccine'} onChange={set('type')} options={['Vaccine', 'Deworming', 'Coggins', 'Dental', 'Farrier', 'Vet visit', 'Medication']} />
           <Text label="Date" placeholder="YYYY-MM-DD" value={f.date ?? ''} onChange={set('date')} />
           <Area label="Notes" placeholder="Withdrawal date, dosage, vet…" value={f.notes ?? ''} onChange={set('notes')} />
@@ -227,11 +220,11 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
       footer = <ActionButton variant="primary" onClick={() => submit(`Moved ${f.count || 'animals'} → ${f.to || 'new location'}`, '/pastures')}>Move Animals</ActionButton>;
       break;
     case 'Create Sale Packet':
-      body = <div className="xs-form"><Pick label="Animal" value={f.animal ?? defaultAnimalName} onChange={set('animal')} options={animalNames.length ? animalNames : [defaultAnimalName]} /><Pick label="Packet type" value={f.type ?? 'Buyer Review Packet'} onChange={set('type')} options={['Sale Prospect Packet', 'Buyer Review Packet', 'Release Packet', 'Vet/Transport Packet']} /></div>;
-      footer = <ActionButton variant="primary" onClick={() => submit('Opening Sale Packet Builder', '/sale-packet-studio')}>Open Builder</ActionButton>;
+      body = <div className="xs-form"><Pick label="Animal" value={f.animal ?? animalNames[0]} onChange={set('animal')} options={animalNames} /><Pick label="Packet type" value={f.type ?? 'Buyer Review Packet'} onChange={set('type')} options={['Sale Prospect Packet', 'Buyer Review Packet', 'Release Packet', 'Vet/Transport Packet']} /></div>;
+      footer = <ActionButton variant="primary" onClick={() => submit('Opening Sale Packet Studio', '/sale-packet-studio')}>Open Studio</ActionButton>;
       break;
     case 'Invite Buyer':
-      body = <div className="xs-form"><Text label="Buyer name" placeholder="e.g. Marlow Ranch Partners" value={f.name ?? ''} onChange={set('name')} /><Text label="Email" placeholder="buyer@email.com" value={f.email ?? ''} onChange={set('email')} /><Pick label="Animal" value={f.animal ?? defaultAnimalName} onChange={set('animal')} options={animalNames.length ? animalNames : [defaultAnimalName]} /></div>;
+      body = <div className="xs-form"><Text label="Buyer name" placeholder="e.g. Marlow Ranch Partners" value={f.name ?? ''} onChange={set('name')} /><Text label="Email" placeholder="buyer@email.com" value={f.email ?? ''} onChange={set('email')} /><Pick label="Animal" value={f.animal ?? animalNames[0]} onChange={set('animal')} options={animalNames} /></div>;
       footer = <ActionButton variant="primary" onClick={() => submit(`Invite sent to ${f.name || 'buyer'}`, '/buyer-deal-room')}>Send Invite</ActionButton>;
       break;
     case 'Add Expense':
@@ -251,145 +244,6 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
   return (
     <SlideOverDrawer open title={action} subtitle="Quick create" onClose={onClose} footer={<><ActionButton onClick={onClose}>Cancel</ActionButton>{footer}</>}>
       {body}
-    </SlideOverDrawer>
-  );
-}
-
-export function ResolveBlockerWizard({
-  open,
-  onClose,
-  task,
-}: {
-  open: boolean;
-  onClose: () => void;
-  task: WorkTask | null;
-}) {
-  const navigate = useNavigate();
-  if (!open || !task) return null;
-
-  const reasons = task.blocker?.reasons.length ? task.blocker.reasons : [task.detail];
-  const amount = task.blocker?.amount;
-  const openLinkedRecord = () => {
-    track(events.blockerOpened, { id: task.id, route: task.route, source: task.source });
-    onClose();
-    navigate(task.route);
-  };
-
-  return (
-    <SlideOverDrawer
-      open={open}
-      title="Resolve Blocker"
-      subtitle={`${task.linkedName}${amount ? ` · $${amount.toLocaleString()} target sale` : ''}`}
-      onClose={onClose}
-      footer={
-        <>
-          <ActionButton onClick={onClose}>Close</ActionButton>
-          <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={openLinkedRecord}>Open Linked Record</ActionButton>
-        </>
-      }
-    >
-      <div className="xs-railcard" style={{ borderColor: 'rgba(185,71,62,0.35)', background: 'var(--xbar-danger-soft)' }}>
-        <div className="xs-section-label" style={{ color: 'var(--xbar-danger)' }}>Current blocker</div>
-        <div style={{ fontWeight: 700 }}>{task.detail}</div>
-      </div>
-      <dl className="xs-kv">
-        <dt>Linked record</dt><dd>{task.linkedType}: {task.linkedName}</dd>
-        <dt>Source</dt><dd>{task.source}</dd>
-        <dt>Next action</dt><dd>{task.blocker?.nextAction ?? task.detail}</dd>
-      </dl>
-      <div className="xs-section-label">Blocking reasons</div>
-      <div className="xs-rows">
-        {reasons.map((reason) => (
-          <div key={reason} className="xs-row">
-            <span className="xs-row__main"><span className="xs-row__title">{reason}</span></span>
-            <StatusChip tone="danger">Blocking</StatusChip>
-          </div>
-        ))}
-      </div>
-      <p className="xs-muted" style={{ fontSize: 13, margin: 0 }}>
-        Open the linked record to clear the underlying document, ownership, or care issue. The task disappears when the live workspace data no longer produces the blocker.
-      </p>
-    </SlideOverDrawer>
-  );
-}
-
-/* --------------------------------------------------------------- Task drawer */
-export function TaskDrawer({
-  task,
-  onClose,
-  onDismiss,
-  onSnooze,
-  onResolveBlocker,
-}: {
-  task: WorkTask | null;
-  onClose: () => void;
-  onDismiss: (taskId: string) => void;
-  onSnooze: (taskId: string) => void;
-  onResolveBlocker: (task: WorkTask) => void;
-}) {
-  const navigate = useNavigate();
-  if (!task) return null;
-  const isBlocker = task.priority === 'Revenue Blocker';
-  const openLinkedRecord = () => {
-    track(events.taskOpened, { id: task.id, category: task.category, route: task.route, source: task.source });
-    onClose();
-    navigate(task.route);
-  };
-
-  return (
-    <SlideOverDrawer
-      open
-      title={task.title}
-      subtitle={`${task.linkedType}: ${task.linkedName}`}
-      onClose={onClose}
-      footer={
-        isBlocker ? (
-          <>
-            <ActionButton onClick={onClose}>Close</ActionButton>
-            <ActionButton variant="primary" icon={<CircleAlert size={15} />} onClick={() => onResolveBlocker(task)}>Resolve Blocker</ActionButton>
-          </>
-        ) : (
-          <>
-            <ActionButton onClick={() => { onSnooze(task.id); onClose(); }}>Snooze</ActionButton>
-            <ActionButton variant="primary" icon={<Check size={15} />} onClick={() => { onDismiss(task.id); onClose(); }}>Dismiss</ActionButton>
-          </>
-        )
-      }
-    >
-      <div style={{ display: 'flex', gap: 8 }}>
-        <StatusChip tone={isBlocker ? 'danger' : task.priority === 'High' ? 'warning' : 'neutral'}>{task.priority}</StatusChip>
-        <span className="xs-chip xs-chip--neutral">{task.status}</span>
-      </div>
-
-      {isBlocker ? (
-        <div className="xs-railcard" style={{ borderColor: 'rgba(185,71,62,0.35)', background: 'var(--xbar-danger-soft)' }}>
-          <div className="xs-section-label" style={{ color: 'var(--xbar-danger)' }}>Revenue blocker</div>
-          <div style={{ fontWeight: 700 }}>{task.detail}</div>
-          {task.blocker?.amount ? <div className="xs-card__sub">Target sale ${task.blocker.amount.toLocaleString()}</div> : null}
-        </div>
-      ) : null}
-
-      <dl className="xs-kv">
-        <dt>Priority</dt><dd>{task.priority}</dd>
-        <dt>Due</dt><dd>{task.due}</dd>
-        <dt>Assigned to</dt><dd>{task.assignee}</dd>
-        <dt>Linked record</dt><dd>{task.linkedType}: {task.linkedName}</dd>
-        <dt>Source</dt><dd>{task.source}</dd>
-      </dl>
-
-      <div>
-        <div className="xs-section-label">Detail</div>
-        <p className="xs-muted" style={{ margin: 0 }}>{task.detail}</p>
-      </div>
-
-      <div>
-        <div className="xs-section-label">How this clears</div>
-        <p className="xs-muted" style={{ margin: 0 }}>Open the linked record and update the source data. Generated tasks stay tied to the record that created them.</p>
-      </div>
-
-      <div className="xs-field">
-        <button type="button" className="xs-fieldbtn" onClick={openLinkedRecord}>Open Linked Record</button>
-      </div>
     </SlideOverDrawer>
   );
 }

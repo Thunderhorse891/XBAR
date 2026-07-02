@@ -4,8 +4,9 @@ import { ArrowLeft, ArrowRight, Check, FileText, Link2, ShieldCheck, Upload } fr
 import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
 import { Stepper } from '@/components/saas/flows';
 import { useUiStore } from '@/store/useUiStore';
+import { useXbarStore } from '@/store/useXbarStore';
 import { events, track } from '@/lib/telemetry';
-import { saasHorses } from '@/data/xbarSaasMock';
+import type { DocumentType } from '@/types/xbar';
 
 const STEPS = ['Select animal', 'Packet type', 'Required documents', 'Fix issues', 'Preview', 'Share'];
 const PACKET_TYPES = ['Sale Prospect Packet', 'Buyer Review Packet', 'Release Packet', 'Vet/Transport Packet', 'Boarding/Client Packet'];
@@ -17,35 +18,68 @@ const REQUIRED = [
   { id: 'bos', label: 'Bill of sale' },
   { id: 'photos', label: 'Sale photos' },
 ];
-const presentByHorse: Record<string, string[]> = {
-  'rha-pine-barrel-prospect': ['coggins', 'registration', 'bos', 'photos'],
-  'thr-copper-canyon': ['coggins', 'health', 'registration', 'bos', 'photos'],
-  'thr-juniper-ledge': ['coggins', 'health', 'registration', 'photos'],
-  'thr-stone-mesa': ['registration', 'photos'],
+
+// Map a stored document type onto the required-document slot it satisfies.
+const DOC_TYPE_TO_REQ: Partial<Record<DocumentType, string>> = {
+  Coggins: 'coggins',
+  'Vet Record': 'health',
+  Registration: 'registration',
+  'Bill of Sale': 'bos',
+  'Media Kit': 'photos',
 };
 
 export default function SalePacketStudio() {
   const navigate = useNavigate();
   const pushToast = useUiStore((s) => s.pushToast);
+  const horses = useXbarStore((s) => s.horses);
+  const documents = useXbarStore((s) => s.documents);
   const [step, setStep] = useState(0);
-  const [horseId, setHorseId] = useState(saasHorses[0].id);
+  const [horseId, setHorseId] = useState(() => horses[0]?.id ?? '');
   const [packetType, setPacketType] = useState(PACKET_TYPES[1]);
-  const [fixed, setFixed] = useState<string[]>([]);
 
-  const horse = saasHorses.find((h) => h.id === horseId)!;
-  const present = useMemo(() => [...(presentByHorse[horseId] ?? []), ...fixed], [horseId, fixed]);
+  const horse = horses.find((h) => h.id === horseId) ?? horses[0];
+
+  // Only count approved (Ready) linked documents — a packet is only "ready to
+  // share" when the real proof is persisted and reviewed, matching the packet
+  // generator (which includes document.state === 'Ready' only).
+  const present = useMemo(() => {
+    if (!horse) return [];
+    const fromDocs = documents
+      .filter((d) => d.horseId === horse.id && d.state === 'Ready')
+      .map((d) => DOC_TYPE_TO_REQ[d.type])
+      .filter((v): v is string => Boolean(v));
+    return Array.from(new Set(fromDocs));
+  }, [documents, horse]);
+
   const missing = REQUIRED.filter((d) => !present.includes(d.id));
-  const blockers = horse.blockers.filter(() => !fixed.includes('health'));
+  // Blockers reflect the real horse readiness — they clear only when the
+  // underlying record is fixed, so the packet can't be faked to "Ready" here.
+  const blockers = horse?.readiness?.blockers ?? [];
   const state: 'Ready' | 'Review' | 'Blocked' = blockers.length ? 'Blocked' : missing.length ? 'Review' : 'Ready';
   const tone = state === 'Ready' ? 'success' : state === 'Review' ? 'warning' : 'danger';
 
   const next = () => setStep((s) => Math.min(s + 1, STEPS.length - 1));
   const back = () => setStep((s) => Math.max(s - 1, 0));
-  const fix = (id: string) => setFixed((cur) => (cur.includes(id) ? cur : [...cur, id]));
+
+  if (!horse) {
+    return (
+      <>
+        <PageHead eyebrow="Selling · Sale Packets" title="Sale Packet Studio" subtitle="Build a sale packet one horse at a time — we check the paperwork and get it ready to share with buyers." />
+        <Card>
+          <div className="xs-empty">
+            <span className="xs-empty__icon"><FileText size={26} /></span>
+            <div className="xs-empty__title">No horses to package yet</div>
+            <div className="xs-empty__sub">Add a horse and its paperwork, then build a sale packet to share with buyers in a few easy steps.</div>
+            <ActionButton variant="primary" onClick={() => navigate('/horses?new=1')}>Add first horse</ActionButton>
+          </div>
+        </Card>
+      </>
+    );
+  }
 
   return (
     <>
-      <PageHead eyebrow="Transactions · Sale Packet Builder" title={`${horse.name}`} subtitle="A guided builder that takes one animal from documents to a buyer-ready packet." actions={<StatusChip tone={tone}>{state}</StatusChip>} />
+      <PageHead eyebrow="Selling · Sale Packets" title={`${horse.name}`} subtitle="Build a sale packet one horse at a time — we check the paperwork and get it ready to share with buyers." actions={<StatusChip tone={tone}>{state}</StatusChip>} />
 
       <Card>
         <Stepper steps={STEPS} current={step} />
@@ -55,14 +89,14 @@ export default function SalePacketStudio() {
           <div className="xs-form" style={{ maxWidth: 520 }}>
             <label>
               <span className="xs-field-label">Animal</span>
-              <select className="xs-select" value={horseId} onChange={(e) => { setHorseId(e.target.value); setFixed([]); }}>
-                {saasHorses.map((h) => <option key={h.id} value={h.id}>{h.name} — {h.discipline}</option>)}
+              <select className="xs-select" value={horseId} onChange={(e) => setHorseId(e.target.value)}>
+                {horses.map((h) => <option key={h.id} value={h.id}>{h.name} — {h.segment}</option>)}
               </select>
             </label>
             <dl className="xs-kv">
-              <dt>Discipline</dt><dd>{horse.discipline}</dd>
-              <dt>Target price</dt><dd>${horse.targetPrice.toLocaleString()}</dd>
-              <dt>Current readiness</dt><dd>{horse.readinessScore}%</dd>
+              <dt>Segment</dt><dd>{horse.segment}</dd>
+              <dt>Ask price</dt><dd>{horse.sale?.askPrice ? `$${horse.sale.askPrice.toLocaleString()}` : '—'}</dd>
+              <dt>Current readiness</dt><dd>{horse.readiness?.score ?? 0}%</dd>
             </dl>
           </div>
         ) : null}
@@ -104,14 +138,14 @@ export default function SalePacketStudio() {
             <div className="xs-rows">
               {blockers.map((b) => (
                 <div key={b} className="xs-row">
-                  <span className="xs-row__main"><span className="xs-row__title">{b}</span><span className="xs-row__meta">Blocks buyer sharing</span></span>
-                  <ActionButton size="sm" variant="primary" icon={<Upload size={14} />} onClick={() => { fix('health'); pushToast({ title: 'Fixed', message: 'Health certificate updated', tone: 'success' }); }}>Fix</ActionButton>
+                  <span className="xs-row__main"><span className="xs-row__title">{b}</span><span className="xs-row__meta">Blocks buyer-safe release</span></span>
+                  <ActionButton size="sm" variant="primary" icon={<Upload size={14} />} onClick={() => navigate(`/animals/${horse.id}`)}>Fix on profile</ActionButton>
                 </div>
               ))}
-              {missing.filter((m) => m.id !== 'health').map((m) => (
+              {missing.map((m) => (
                 <div key={m.id} className="xs-row">
                   <span className="xs-row__main"><span className="xs-row__title">{m.label} missing</span><span className="xs-row__meta">Upload to complete the packet</span></span>
-                  <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => { fix(m.id); pushToast({ title: 'Uploaded', message: `${m.label} attached`, tone: 'success' }); }}>Upload</ActionButton>
+                  <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate(`/documents?upload=1&horse=${horse.id}`)}>Upload</ActionButton>
                 </div>
               ))}
             </div>
@@ -122,7 +156,7 @@ export default function SalePacketStudio() {
         {step === 4 ? (
           <div className="xs-grid-2">
             <div>
-              <div className="xs-section-label">Buyer Documents</div>
+              <div className="xs-section-label">Ready-to-share preview</div>
               <div className="xs-railcard">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span className="xs-banner__icon"><FileText size={18} /></span>
@@ -135,10 +169,11 @@ export default function SalePacketStudio() {
               <div className="xs-section-label">Included</div>
               <div className="xs-mlist">
                 {REQUIRED.filter((d) => present.includes(d.id)).map((d) => (
-                  <div key={d.id} className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">{d.label}</span></span><StatusChip tone="success">Buyer Documents</StatusChip></div>
+                  <div key={d.id} className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">{d.label}</span></span><StatusChip tone="success">Ready to share</StatusChip></div>
                 ))}
+                {present.length === 0 ? <p className="xs-muted" style={{ fontSize: 13 }}>No documents attached yet.</p> : null}
               </div>
-              <div className="xs-railrow"><span className="xs-railrow__label" style={{ display: 'inline-flex', gap: 7, alignItems: 'center' }}><ShieldCheck size={15} /> Share With Buyer</span><StatusChip tone={state === 'Ready' ? 'success' : 'warning'}>{state === 'Ready' ? 'Verified' : 'Pending'}</StatusChip></div>
+              <div className="xs-railrow"><span className="xs-railrow__label" style={{ display: 'inline-flex', gap: 7, alignItems: 'center' }}><ShieldCheck size={15} /> Ready to share</span><StatusChip tone={state === 'Ready' ? 'success' : 'warning'}>{state === 'Ready' ? 'Verified' : 'Pending'}</StatusChip></div>
             </div>
           </div>
         ) : null}
@@ -147,13 +182,13 @@ export default function SalePacketStudio() {
         {step === 5 ? (
           <div style={{ maxWidth: 560 }}>
             <div className="xs-okbanner" style={state === 'Ready' ? undefined : { borderColor: 'rgba(201,130,34,0.35)', background: 'var(--xbar-warning-soft)', color: 'var(--xbar-warning)' }}>
-              {state === 'Ready' ? <><Check size={16} /> Packet is ready to share.</> : <>Resolve remaining items for a ready-to-share packet.</>}
+              {state === 'Ready' ? <><Check size={16} /> Packet is ready to share.</> : <>Resolve remaining items for a fully buyer-safe packet.</>}
             </div>
             <div className="xs-form" style={{ marginTop: 14 }}>
               <label><span className="xs-field-label">Share link</span><input className="xs-input" readOnly value={`https://xbar.app/packet/${horse.id}`} /></label>
               <div style={{ display: 'flex', gap: 8 }}>
                 <ActionButton icon={<Link2 size={15} />} onClick={() => pushToast({ title: 'Copied', message: 'Share link copied', tone: 'success' })}>Copy Link</ActionButton>
-                <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={() => { track(events.packetShared, { horse: horse.id, packetType }); navigate('/buyer-deal-room'); }}>Open Buyer Folder</ActionButton>
+                <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={() => { track(events.packetShared, { horse: horse.id, packetType }); navigate('/buyer-deal-room'); }}>Open Buyer Deal Room</ActionButton>
               </div>
             </div>
           </div>
@@ -165,7 +200,7 @@ export default function SalePacketStudio() {
           {step < STEPS.length - 1 ? (
             <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={next}>Continue</ActionButton>
           ) : (
-            <ActionButton variant="primary" onClick={() => { track(events.packetShared, { horse: horse.id, packetType }); navigate('/buyer-deal-room'); }}>Share & Open Buyer Folder</ActionButton>
+            <ActionButton variant="primary" onClick={() => { track(events.packetShared, { horse: horse.id, packetType }); navigate('/buyer-deal-room'); }}>Share & Open Deal Room</ActionButton>
           )}
         </div>
       </Card>

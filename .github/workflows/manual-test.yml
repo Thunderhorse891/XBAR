@@ -7,6 +7,6 @@ jobs:
     runs-on: windows-latest
     steps: 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Simple Test
         run: echo "GitHub Actions is working!"

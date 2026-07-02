@@ -28,7 +28,7 @@ const STEPS = [
   },
   {
     index: '03',
-    title: 'Create a buyer-ready packet',
+    title: 'Build a sale packet to share with buyers',
     detail: 'Bundle proof of ownership, health, and provenance into one watermarked packet a buyer can trust.',
     cta: 'Open sales',
     to: '/sales',
@@ -37,9 +37,9 @@ const STEPS = [
 
 const VALUE_PROPS = [
   { k: 'Ownership proof chain', v: 'Every transfer, documented and verifiable.' },
-  { k: 'Buyer-ready sale packets', v: 'Release nothing until the paperwork clears.' },
+  { k: 'Ready-to-share sale packets', v: 'Share nothing with buyers until the paperwork is clear.' },
   { k: 'OCR document intake', v: 'Papers become structured records in seconds.' },
-  { k: 'Margin intelligence', v: 'See the profit on every horse before you sell.' },
+  { k: 'Know your profit', v: 'See what you make on every horse before you sell.' },
 ];
 
 export default function FirstRunExperience({ ranchName, roleLabel }: { ranchName: string; roleLabel: string }) {
@@ -81,10 +81,10 @@ export default function FirstRunExperience({ ranchName, roleLabel }: { ranchName
 
         <div className="xbar-firstrun__hero-viz" aria-hidden="true">
           <div className="xbar-firstrun__viz-gauge">
-            <RadialGauge value={92} tone="blue" size={150} caption="Packet readiness" centerLabel="92%" />
+            <RadialGauge value={92} tone="blue" size={150} caption="Ready to sell" centerLabel="92%" />
           </div>
           <div className="xbar-firstrun__viz-spark">
-            <span>Sale readiness trend</span>
+            <span>Ready-to-sell trend</span>
             <Sparkline data={[38, 49, 57, 61, 70, 78, 86, 92]} tone="emerald" height={64} label="sample readiness trend" />
           </div>
         </div>
