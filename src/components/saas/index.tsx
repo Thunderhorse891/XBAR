@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
-import type { ChipTone, TaskPriority } from '@/data/xbarSaasMock';
+import type { ChipTone, TaskPriority } from '@/types/saas';
 
 /* ------------------------------------------------------------------ Chips */
 export function StatusChip({ tone, children }: { tone: ChipTone; children: ReactNode }) {

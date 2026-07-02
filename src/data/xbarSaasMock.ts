@@ -1,3 +1,5 @@
+import type { ChipTone } from '@/types/saas';
+
 /**
  * Realistic XBAR mock data for the rebuilt SaaS surfaces. These power the
  * Cake-style dashboard, intelligence rail, and transaction flows when the
@@ -5,7 +7,6 @@
  */
 
 export type ReadinessState = 'Ready' | 'Review' | 'Hold';
-export type ChipTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'brass';
 
 export const stateToTone: Record<ReadinessState | 'Clear' | 'Blocked' | 'Complete', ChipTone> = {
   Ready: 'success',
@@ -185,11 +186,6 @@ export const operationalTasks = ['Resolve release blocker', 'Prepare sale packet
    Command Center — operational ranch data
    =========================================================================== */
 
-/** Blocker resolutions performed in-session (home Resolve Blocker wizard →
- *  Sale Packet Builder). Keyed by animal id; lets the builder see a cleared
- *  health-certificate blocker instead of re-deriving it from static mock. */
-export const resolvedBlockers = new Set<string>();
-
 export const ranchSeason = { label: 'Sale Season', tone: 'brass' as ChipTone };
 export const ranchWeather = { tempF: 88, label: 'Hot · dry', risk: 'Heat watch', tone: 'warning' as ChipTone };
 
@@ -207,33 +203,6 @@ export const commandMetrics = {
   activeSaleProspects: 8,
   buyerDealRooms: 4,
 };
-
-export type TaskPriority = 'Revenue Blocker' | 'High' | 'Medium' | 'Normal' | 'Planned';
-export type WorkTask = {
-  id: string;
-  title: string;
-  linkedType: 'Animal' | 'Pasture' | 'Document' | 'Sale Packet' | 'Herd Group' | 'Equipment';
-  linkedName: string;
-  priority: TaskPriority;
-  assignee: string;
-  due: string;
-  status: 'Open' | 'Review' | 'Blocking Release' | 'Planned';
-  category: 'Animal Care' | 'Pasture' | 'Feed' | 'Documents' | 'Sales' | 'Equipment';
-  overdue?: boolean;
-};
-
-export const todayTasks: WorkTask[] = [
-  { id: 't1', title: 'Add missing health certificate expiration date', linkedType: 'Sale Packet', linkedName: 'RHA Pine Barrel Prospect', priority: 'Revenue Blocker', assignee: 'Erin W.', due: 'Now', status: 'Blocking Release', category: 'Sales', overdue: true },
-  { id: 't2', title: 'Check north pasture water trough', linkedType: 'Pasture', linkedName: 'North Pasture', priority: 'High', assignee: 'Cody R.', due: 'Today', status: 'Open', category: 'Pasture' },
-  { id: 't3', title: 'Give evening medication', linkedType: 'Animal', linkedName: 'RHA Pine Barrel Prospect', priority: 'High', assignee: 'Erin W.', due: '6:00 PM', status: 'Open', category: 'Animal Care' },
-  { id: 't4', title: 'Upload new Coggins document', linkedType: 'Document', linkedName: 'THR Stone Mesa', priority: 'Medium', assignee: 'Erin W.', due: 'Today', status: 'Review', category: 'Documents' },
-  { id: 't5', title: 'Repair south gate latch', linkedType: 'Equipment', linkedName: 'South Trap Gate', priority: 'High', assignee: 'Cody R.', due: 'Today', status: 'Open', category: 'Equipment', overdue: true },
-  { id: 't6', title: 'Move mares to South Trap', linkedType: 'Herd Group', linkedName: 'Mares', priority: 'Normal', assignee: 'Cody R.', due: 'Tomorrow', status: 'Planned', category: 'Pasture' },
-  { id: 't7', title: 'Log morning hay feeding', linkedType: 'Herd Group', linkedName: 'Sale Prospects', priority: 'Normal', assignee: 'Cody R.', due: 'Today', status: 'Open', category: 'Feed' },
-  { id: 't8', title: 'Preg check — Copper Belle', linkedType: 'Animal', linkedName: 'Copper Belle', priority: 'Medium', assignee: 'Dr. Hale', due: 'Today', status: 'Open', category: 'Animal Care', overdue: true },
-];
-
-export const workboardTabs = ['All', 'Overdue', 'Animal Care', 'Pasture', 'Feed', 'Documents', 'Sales', 'Equipment'] as const;
 
 export type HerdGroup = {
   id: string;
