@@ -380,7 +380,7 @@ export default function DocumentLibrary() {
                 <div className="field-error">
                   This template belongs to {selectedTemplate.minimumPlan}+ plan positioning. Current plan: {subscription.tier}.{' '}
                   {selectedTemplate.minimumPlan === 'Professional'
-                    ? 'Upgrading to Professional unlocks watermarked sale packets and buyer deal rooms.'
+                    ? 'Upgrading to Professional unlocks watermarked sale packets and buyer folders.'
                     : selectedTemplate.minimumPlan === 'Ranch Ops'
                       ? 'Upgrading to Ranch Ops unlocks team roles, the breeding program, and equipment at scale.'
                       : `Upgrading to ${selectedTemplate.minimumPlan} unlocks this template.`}

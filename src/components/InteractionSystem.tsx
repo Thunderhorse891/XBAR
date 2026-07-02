@@ -247,7 +247,7 @@ type CommandItem = {
 const routeCommands: CommandItem[] = [
   ['dashboard', 'Home', 'Daily ranch operations', '/', 'Navigate'],
   ['horses', 'Horse registry', 'All horse records', '/horses', 'Navigate'],
-  ['documents', 'Document vault', 'Source records and review', '/documents', 'Navigate'],
+  ['documents', 'Documents', 'Source records and review', '/documents', 'Navigate'],
   ['ownership', 'Ownership', 'Transfers and documents', '/ownership', 'Navigate'],
   ['medical', 'Health', 'Care records and due work', '/medical', 'Navigate'],
   ['breeding', 'Breeding pipeline', 'Pairings and milestones', '/breeding', 'Navigate'],

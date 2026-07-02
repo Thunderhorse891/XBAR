@@ -24,7 +24,7 @@ export const subscriptionPlans = {
     brandedListings: true,
     featureFlags: [
       'Everything in Starter',
-      'Make money: watermarked sale packets and buyer deal rooms',
+      'Make money: watermarked sale packets and buyer folders',
       'Sale listings — publish buyer-ready horse profiles to shared access',
       '5 team seats · 10 shared-access seats',
       '1,000 document capacity · 100 GB storage',

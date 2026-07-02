@@ -1,3 +1,5 @@
+import type { ChipTone } from '@/types/saas';
+
 /**
  * Realistic XBAR mock data for the rebuilt SaaS surfaces. These power the
  * Cake-style dashboard, intelligence rail, and transaction flows when the
@@ -5,7 +7,6 @@
  */
 
 export type ReadinessState = 'Ready' | 'Review' | 'Hold';
-export type ChipTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'brass';
 
 export const stateToTone: Record<ReadinessState | 'Clear' | 'Blocked' | 'Complete', ChipTone> = {
   Ready: 'success',
@@ -39,7 +40,7 @@ export const readinessSegments = [
 ];
 
 export const topReleaseItems: { label: string; state: ReadinessState | 'Clear'; detail: string }[] = [
-  { label: 'Buyer-Safe Proof', state: 'Clear', detail: 'Watermarked proof verified across active assets.' },
+  { label: 'Share With Buyer', state: 'Clear', detail: 'Watermarked proof verified across active records.' },
   { label: 'Documents', state: 'Clear', detail: 'All required documents present and current.' },
   { label: 'Ownership Chain', state: 'Clear', detail: 'Title history complete and unbroken.' },
   { label: 'Packet Readiness', state: 'Review', detail: 'One packet needs a final review before release.' },
@@ -56,7 +57,7 @@ export const activity30d = [
 
 export const pipelineFeature = {
   name: 'RHA Pine Barrel Prospect',
-  steps: ['Packet prepared', 'Buyer invited', 'Deal room opened', 'Offer received', 'Release ready'],
+  steps: ['Packet prepared', 'Buyer invited', 'Buyer folder opened', 'Offer received', 'Release ready'],
   currentStep: 3,
   currentOffer: 20000,
   targetPrice: 35000,
@@ -87,7 +88,7 @@ export const intelligenceRail = {
     { label: 'Buyer downloaded packet', time: '12m ago' },
     { label: 'Call requested', time: '1h ago' },
     { label: 'Document uploaded', time: '3h ago' },
-    { label: 'Buyer viewed deal room', time: 'Yesterday' },
+    { label: 'Buyer viewed folder', time: 'Yesterday' },
   ],
 };
 
@@ -103,9 +104,9 @@ export const gettingStartedSteps: {
   { id: 'horse', title: 'Add first horse', detail: 'Start the horse record with identity and status.', done: true, action: 'View', to: '/horses' },
   { id: 'coggins', title: 'Upload Coggins', detail: 'Attach the negative Coggins test record.', done: true, action: 'View', to: '/documents' },
   { id: 'health', title: 'Upload health certificate', detail: 'Add a current health certificate with expiration.', done: false, action: 'Upload', to: '/documents?upload=1' },
-  { id: 'packet', title: 'Create sale packet', detail: 'Assemble a buyer-ready packet in the studio.', done: false, action: 'Open Studio', to: '/sale-packet-studio' },
+  { id: 'packet', title: 'Create sale packet', detail: 'Assemble a buyer-ready packet in the builder.', done: false, action: 'Open Builder', to: '/sale-packet-studio' },
   { id: 'buyer', title: 'Invite buyer', detail: 'Send a secure invitation to a prospective buyer.', done: false, action: 'Invite', to: '/buyer-deal-room' },
-  { id: 'room', title: 'Open deal room', detail: 'Launch a controlled buyer deal room.', done: false, action: 'Open', to: '/buyer-deal-room' },
+  { id: 'room', title: 'Open Buyer Folder', detail: 'A private folder you can share with a buyer before the sale.', done: false, action: 'Open', to: '/buyer-deal-room' },
   { id: 'plan', title: 'Choose subscription plan', detail: 'Pick the plan that matches your operation.', done: false, action: 'Compare', to: '/subscriptions' },
 ];
 
@@ -174,7 +175,7 @@ export const documentFilters = ['All', 'Health Cert', 'Coggins', 'Registration',
 export const subscriptionPlanCards = [
   { name: 'Starter', price: '$29', cadence: '/mo', summary: 'Basic horses and records.', features: ['Horse records & care log', 'Document storage with OCR intake', '1 team seat'], featured: false },
   { name: 'Professional', price: '$79', cadence: '/mo', summary: 'Sale packet tools.', features: ['Everything in Starter', 'Watermarked sale packets', 'Published sale listings', '5 team seats'], featured: false },
-  { name: 'Ranch Ops', price: '$199', cadence: '/mo', summary: 'Buyer deal rooms & operational workflows.', features: ['Everything in Professional', 'Buyer deal rooms', 'Team roles & breeding program', '20 team seats'], featured: true },
+  { name: 'Ranch Ops', price: '$199', cadence: '/mo', summary: 'Buyer folders and ranch workflows.', features: ['Everything in Professional', 'Buyer folders', 'Team roles & breeding program', '20 team seats'], featured: true },
   { name: 'Enterprise', price: '$499', cadence: '/mo', summary: 'Multi-ranch, advanced reporting, team controls.', features: ['Everything in Ranch Ops', 'Multi-ranch & advanced reporting', 'Team controls', '60 team seats'], featured: false },
   { name: 'Sovereign', price: 'Custom', cadence: '', summary: 'Private setup, custom workflows, white-glove infrastructure.', features: ['Private setup', 'Custom workflows', 'White-glove infrastructure'], featured: false },
 ];
@@ -184,11 +185,6 @@ export const operationalTasks = ['Resolve release blocker', 'Prepare sale packet
 /* ===========================================================================
    Command Center — operational ranch data
    =========================================================================== */
-
-/** Blocker resolutions performed in-session (home Resolve Blocker wizard →
- *  Sale Packet Studio). Keyed by animal id; lets the studio see a cleared
- *  health-certificate blocker instead of re-deriving it from static mock. */
-export const resolvedBlockers = new Set<string>();
 
 export const ranchSeason = { label: 'Sale Season', tone: 'brass' as ChipTone };
 export const ranchWeather = { tempF: 88, label: 'Hot · dry', risk: 'Heat watch', tone: 'warning' as ChipTone };
@@ -207,33 +203,6 @@ export const commandMetrics = {
   activeSaleProspects: 8,
   buyerDealRooms: 4,
 };
-
-export type TaskPriority = 'Revenue Blocker' | 'High' | 'Medium' | 'Normal' | 'Planned';
-export type WorkTask = {
-  id: string;
-  title: string;
-  linkedType: 'Animal' | 'Pasture' | 'Document' | 'Sale Packet' | 'Herd Group' | 'Equipment';
-  linkedName: string;
-  priority: TaskPriority;
-  assignee: string;
-  due: string;
-  status: 'Open' | 'Review' | 'Blocking Release' | 'Planned';
-  category: 'Animal Care' | 'Pasture' | 'Feed' | 'Documents' | 'Sales' | 'Equipment';
-  overdue?: boolean;
-};
-
-export const todayTasks: WorkTask[] = [
-  { id: 't1', title: 'Add missing health certificate expiration date', linkedType: 'Sale Packet', linkedName: 'RHA Pine Barrel Prospect', priority: 'Revenue Blocker', assignee: 'Erin W.', due: 'Now', status: 'Blocking Release', category: 'Sales', overdue: true },
-  { id: 't2', title: 'Check north pasture water trough', linkedType: 'Pasture', linkedName: 'North Pasture', priority: 'High', assignee: 'Cody R.', due: 'Today', status: 'Open', category: 'Pasture' },
-  { id: 't3', title: 'Give evening medication', linkedType: 'Animal', linkedName: 'RHA Pine Barrel Prospect', priority: 'High', assignee: 'Erin W.', due: '6:00 PM', status: 'Open', category: 'Animal Care' },
-  { id: 't4', title: 'Upload new Coggins document', linkedType: 'Document', linkedName: 'THR Stone Mesa', priority: 'Medium', assignee: 'Erin W.', due: 'Today', status: 'Review', category: 'Documents' },
-  { id: 't5', title: 'Repair south gate latch', linkedType: 'Equipment', linkedName: 'South Trap Gate', priority: 'High', assignee: 'Cody R.', due: 'Today', status: 'Open', category: 'Equipment', overdue: true },
-  { id: 't6', title: 'Move mares to South Trap', linkedType: 'Herd Group', linkedName: 'Mares', priority: 'Normal', assignee: 'Cody R.', due: 'Tomorrow', status: 'Planned', category: 'Pasture' },
-  { id: 't7', title: 'Log morning hay feeding', linkedType: 'Herd Group', linkedName: 'Sale Prospects', priority: 'Normal', assignee: 'Cody R.', due: 'Today', status: 'Open', category: 'Feed' },
-  { id: 't8', title: 'Preg check — Copper Belle', linkedType: 'Animal', linkedName: 'Copper Belle', priority: 'Medium', assignee: 'Dr. Hale', due: 'Today', status: 'Open', category: 'Animal Care', overdue: true },
-];
-
-export const workboardTabs = ['All', 'Overdue', 'Animal Care', 'Pasture', 'Feed', 'Documents', 'Sales', 'Equipment'] as const;
 
 export type HerdGroup = {
   id: string;
@@ -358,7 +327,7 @@ export const pipelineStages: { id: string; label: string; deals: { id: string; h
   { id: 'prospect', label: 'Prospect', deals: [{ id: 'p1', horse: 'Copper Belle', price: 18000, offer: null, tone: 'neutral', note: 'Evaluating' }] },
   { id: 'packet', label: 'Packet Ready', deals: [{ id: 'p2', horse: 'THR Juniper Ledge', price: 22000, offer: null, tone: 'warning', note: 'Bill of sale unsigned' }] },
   { id: 'invited', label: 'Buyer Invited', deals: [{ id: 'p3', horse: 'High Plains — Copper Canyon', price: 30000, offer: null, tone: 'info', note: '3 buyer views' }] },
-  { id: 'room', label: 'Deal Room', deals: [{ id: 'p4', horse: 'THR Copper Canyon', price: 30000, offer: 28000, tone: 'success', note: 'Release ready' }] },
+  { id: 'room', label: 'Buyer Folder', deals: [{ id: 'p4', horse: 'THR Copper Canyon', price: 30000, offer: 28000, tone: 'success', note: 'Release ready' }] },
   { id: 'offer', label: 'Offer / Blocked', deals: [{ id: 'p5', horse: 'RHA Pine Barrel Prospect', price: 35000, offer: 20000, tone: 'danger', note: 'Release blocked' }] },
   { id: 'release', label: 'Release Ready', deals: [] },
   { id: 'closed', label: 'Closed', deals: [{ id: 'p6', horse: 'THR Willow Creek', price: 16500, offer: 16500, tone: 'success', note: 'Sold · Apr' }] },

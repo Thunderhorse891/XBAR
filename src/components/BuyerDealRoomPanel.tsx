@@ -20,8 +20,8 @@ export function BuyerDealRoomPanel({ compact = false }: { compact?: boolean }) {
 
   return (
     <Panel
-      eyebrow="Buyer Deal Room"
-      title="Deal pressure"
+      eyebrow="Buyer Folder"
+      title="Buyer follow-up"
       description={compact ? undefined : 'Buyer activity by horse: unanswered questions, document requests, packet downloads, open offers, latest status, and the next seller action.'}
       meta={<Pill tone={activeQuestionCount ? 'amber' : highestOffer || packetDownloadCount ? 'blue' : 'slate'}>{activeQuestionCount ? `${activeQuestionCount} response needed` : highestOffer ? 'Offer pressure' : packetDownloadCount ? `${packetDownloadCount} packet download${packetDownloadCount === 1 ? '' : 's'}` : 'Quiet'}</Pill>}
       action={<Link className="button button--ghost button--compact" to="/sales">Sales</Link>}

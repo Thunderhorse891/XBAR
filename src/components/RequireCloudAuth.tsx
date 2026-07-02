@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { isCloudAuthRequired, isSupabaseConfigured } from '@/lib/platformConfig';
+import { isCloudAuthRequired, isLocalModeEnabled, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 
 function hasCommandCenterEntry() {
@@ -13,8 +13,14 @@ export function RequireCloudAuth({ children }: { children: ReactNode }) {
   const status = useCloudStore((state) => state.status);
   const session = useCloudStore((state) => state.session);
 
-  if (hasCommandCenterEntry()) {
+  const localEntryStarted = hasCommandCenterEntry();
+
+  if (localEntryStarted) {
     return <>{children}</>;
+  }
+
+  if (!isSupabaseConfigured() && isLocalModeEnabled()) {
+    return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}`, reason: 'local-entry-required' }} />;
   }
 
   if (isCloudAuthRequired()) {
