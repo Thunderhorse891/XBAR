@@ -43,7 +43,7 @@ export default function SalesPipeline() {
               <button type="button" className={`xs-toggle__btn${view === 'board' ? ' xs-toggle__btn--active' : ''}`} onClick={() => setView('board')}><LayoutGrid size={14} /> Board</button>
               <button type="button" className={`xs-toggle__btn${view === 'list' ? ' xs-toggle__btn--active' : ''}`} onClick={() => setView('list')}><List size={14} /> List</button>
             </div>
-            <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/sale-packet-studio')}>New Deal</ActionButton>
+            <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/sale-packet-studio')}>Prepare documents</ActionButton>
           </>
         }
       />
@@ -72,7 +72,7 @@ export default function SalesPipeline() {
           })}
         </div>
       ) : leads.length === 0 ? (
-        <Card><div className="xs-empty">No deals yet. Start a sale packet to bring a buyer into the pipeline.</div></Card>
+        <Card><div className="xs-empty">No sales yet. Prepare sale documents when a buyer is ready.</div></Card>
       ) : (
         <div className="xs-tablewrap">
           <table className="xs-table">
@@ -92,7 +92,7 @@ export default function SalesPipeline() {
         </div>
       )}
 
-      <Card title="Pipeline summary">
+      <Card title="Sales summary">
         <div className="xs-grid-3">
           <div className="xs-stattile"><div className="xs-stattile__num">{activeCount}</div><div className="xs-stattile__label">Active deals</div></div>
           <div className="xs-stattile"><div className="xs-stattile__num">{closedCount}</div><div className="xs-stattile__label">Closed</div></div>

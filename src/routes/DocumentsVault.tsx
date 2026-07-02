@@ -103,7 +103,7 @@ export default function DocumentsVault() {
         <div className="xs-bulkbar">
           <span className="xs-bulkbar__count">{selectedRows.size} selected</span>
           <ActionButton size="sm" icon={<ShieldCheck size={14} />} onClick={() => { track(events.documentBulkAction, { action: 'mark_buyer_safe', count: selectedRows.size }); setBuyerSafe((cur) => new Set([...cur, ...selectedRows])); toast(`${selectedRows.size} marked ready to share`); setSelectedRows(new Set()); }}>Mark Ready to Share</ActionButton>
-          <ActionButton size="sm" icon={<FileUp size={14} />} onClick={() => { toast(`${selectedRows.size} added to packet`); setSelectedRows(new Set()); }}>Include in Packet</ActionButton>
+          <ActionButton size="sm" icon={<FileUp size={14} />} onClick={() => { toast(`${selectedRows.size} added to sale documents`); setSelectedRows(new Set()); }}>Add to sale documents</ActionButton>
           <ActionButton size="sm" icon={<Archive size={14} />} onClick={() => { toast(`${selectedRows.size} archived`); setSelectedRows(new Set()); }}>Archive</ActionButton>
           <span className="xs-bulkbar__spacer" />
           <button type="button" className="xs-btn xs-btn--sm xs-btn--ghost" onClick={() => setSelectedRows(new Set())}>Clear</button>

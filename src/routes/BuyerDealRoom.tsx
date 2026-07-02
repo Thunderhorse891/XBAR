@@ -18,7 +18,7 @@ export default function BuyerDealRoom() {
   const horses = useXbarStore((s) => s.horses);
   const updateSalesLead = useXbarStore((s) => s.updateSalesLead);
   const [selectedId, setSelectedId] = useState<string>(() => leads[0]?.id ?? '');
-  const toast = (m: string) => pushToast({ title: 'Buyer Folder', message: m, tone: 'success' });
+  const toast = (m: string) => pushToast({ title: 'Buyer follow-up', message: m, tone: 'success' });
 
   const horseName = useMemo(() => {
     const map = new Map(horses.map((h) => [h.id, h.name]));
@@ -37,16 +37,16 @@ export default function BuyerDealRoom() {
       <>
         <PageHead
           eyebrow="Selling"
-          title="Buyer Folder"
-          subtitle="One folder per buyer — what you've shared, their offer, and follow-ups, all in one place."
-          actions={<ActionButton variant="primary" icon={<Send size={15} />} onClick={() => navigate('/sale-packet-studio')}>Start a packet</ActionButton>}
+          title="Buyer follow-up"
+          subtitle="See what each buyer has, what they offered, and what needs a reply."
+          actions={<ActionButton variant="primary" icon={<Send size={15} />} onClick={() => navigate('/sale-packet-studio')}>Open sale documents</ActionButton>}
         />
         <Card>
           <div className="xs-empty">
             <span className="xs-empty__icon"><Users size={26} /></span>
             <div className="xs-empty__title">No buyers yet</div>
-            <div className="xs-empty__sub">Build a sale packet and share it to open a folder for each buyer — you'll keep what you shared, their offer, and follow-ups all in one place.</div>
-            <ActionButton variant="primary" onClick={() => navigate('/sale-packet-studio')}>Build a sale packet</ActionButton>
+            <div className="xs-empty__sub">Prepare sale documents and add buyer notes so offers and next steps stay together.</div>
+            <ActionButton variant="primary" onClick={() => navigate('/sale-packet-studio')}>Prepare sale documents</ActionButton>
           </div>
         </Card>
       </>
@@ -60,9 +60,9 @@ export default function BuyerDealRoom() {
     <>
       <PageHead
         eyebrow="Selling"
-        title="Buyer Folder"
-        subtitle="One folder per buyer — what you've shared, their offer, and follow-ups, all in one place."
-        actions={<ActionButton variant="primary" icon={<Send size={15} />} onClick={() => toast('Buyer invitation drafted')}>Invite Buyer</ActionButton>}
+        title="Buyer follow-up"
+        subtitle="See what each buyer has, what they offered, and what needs a reply."
+        actions={<ActionButton variant="primary" icon={<Send size={15} />} onClick={() => navigate('/sales')}>Open sales</ActionButton>}
       />
 
       <div className="xs-md">
@@ -94,14 +94,14 @@ export default function BuyerDealRoom() {
             </div>
             <div className="xs-toolbar">
               <ActionButton size="sm" icon={<Ban size={14} />} disabled={!selected.shareReady} onClick={() => { track(events.buyerAccessRevoked, { id: selected.id }); updateSalesLead(selected.id, { shareReady: false }); toast('Access revoked'); }}>Revoke</ActionButton>
-              <ActionButton size="sm" variant="primary" icon={<ShieldCheck size={14} />} onClick={() => navigate('/sale-packet-studio')}>Prepare Release</ActionButton>
+              <ActionButton size="sm" variant="primary" icon={<ShieldCheck size={14} />} onClick={() => navigate('/sale-packet-studio')}>Prepare documents</ActionButton>
             </div>
           </div>
 
           <div className="xs-grid-3">
             <Card><div className="xs-card__sub">Stage</div><div style={{ marginTop: 6 }}><StatusChip tone={selected.stage === 'Closed' ? 'success' : selected.stage === 'Offer' ? 'warning' : 'info'}>{selected.stage}</StatusChip></div></Card>
             <Card><div className="xs-card__sub">Channel</div><div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>{selected.channel}</div></Card>
-            <Card><div className="xs-card__sub">Packet access</div><div style={{ marginTop: 6 }}><StatusChip tone={accessTone[selAccess]}>{selAccess}</StatusChip></div></Card>
+            <Card><div className="xs-card__sub">Shared access</div><div style={{ marginTop: 6 }}><StatusChip tone={accessTone[selAccess]}>{selAccess}</StatusChip></div></Card>
           </div>
 
           <Card title="Offer">
@@ -125,9 +125,9 @@ export default function BuyerDealRoom() {
               <dt>Notes</dt><dd>{selected.notes ?? '—'}</dd>
             </dl>
             <div className="xs-toolbar" style={{ marginTop: 12 }}>
-              <ActionButton size="sm" icon={<MessageSquare size={14} />} onClick={() => toast('Reply sent')}>Reply</ActionButton>
-              <ActionButton size="sm" icon={<Phone size={14} />} onClick={() => toast('Call scheduled')}>Schedule Call</ActionButton>
-              <ActionButton size="sm" icon={<Send size={14} />} onClick={() => navigate('/sale-packet-studio')}>Share Packet</ActionButton>
+              <ActionButton size="sm" icon={<MessageSquare size={14} />} onClick={() => navigate(`/follow-ups?lead=${selected.id}`)}>Open follow-up</ActionButton>
+              <ActionButton size="sm" icon={<Phone size={14} />} onClick={() => navigate(`/follow-ups?lead=${selected.id}`)}>Plan call</ActionButton>
+              <ActionButton size="sm" icon={<Send size={14} />} onClick={() => navigate('/sale-packet-studio')}>Share documents</ActionButton>
             </div>
           </Card>
         </div>

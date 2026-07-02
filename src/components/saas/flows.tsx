@@ -57,11 +57,11 @@ export function Stepper({ steps, current }: { steps: string[]; current: number }
 /* ------------------------------------------------- Global Create (drawer) */
 export type CreateKey =
   | 'Add Animal' | 'Add Task' | 'Upload Document' | 'Add Health Record' | 'Move Animals'
-  | 'Create Sale Packet' | 'Invite Buyer' | 'Add Expense' | 'Add Equipment' | 'Report Pasture Issue';
+  | 'Prepare Sale Documents' | 'Add Buyer Follow-up' | 'Add Expense' | 'Add Equipment' | 'Report Pasture Issue';
 
 export const createActions: CreateKey[] = [
   'Add Animal', 'Add Task', 'Upload Document', 'Add Health Record', 'Move Animals',
-  'Create Sale Packet', 'Invite Buyer', 'Add Expense', 'Add Equipment', 'Report Pasture Issue',
+  'Prepare Sale Documents', 'Add Buyer Follow-up', 'Add Expense', 'Add Equipment', 'Report Pasture Issue',
 ];
 
 const locationNames = ['Main Barn', 'North Pasture', 'South Pasture', 'Foaling Pen', 'Quarantine Pen', 'Round Pen'];
@@ -219,13 +219,13 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
       );
       footer = <ActionButton variant="primary" onClick={() => submit(`Moved ${f.count || 'animals'} → ${f.to || 'new location'}`, '/pastures')}>Move Animals</ActionButton>;
       break;
-    case 'Create Sale Packet':
-      body = <div className="xs-form"><Pick label="Animal" value={f.animal ?? animalNames[0]} onChange={set('animal')} options={animalNames} /><Pick label="Packet type" value={f.type ?? 'Buyer Review Packet'} onChange={set('type')} options={['Sale Prospect Packet', 'Buyer Review Packet', 'Release Packet', 'Vet/Transport Packet']} /></div>;
-      footer = <ActionButton variant="primary" onClick={() => submit('Opening Sale Packet Studio', '/sale-packet-studio')}>Open Studio</ActionButton>;
+    case 'Prepare Sale Documents':
+      body = <div className="xs-form"><Pick label="Animal" value={f.animal ?? animalNames[0]} onChange={set('animal')} options={animalNames} /><Pick label="Document set" value={f.type ?? 'Buyer review documents'} onChange={set('type')} options={['Sale documents', 'Buyer review documents', 'Release documents', 'Vet and travel documents']} /></div>;
+      footer = <ActionButton variant="primary" onClick={() => submit('Opening sale documents', '/sale-packet-studio')}>Open sale documents</ActionButton>;
       break;
-    case 'Invite Buyer':
+    case 'Add Buyer Follow-up':
       body = <div className="xs-form"><Text label="Buyer name" placeholder="e.g. Marlow Ranch Partners" value={f.name ?? ''} onChange={set('name')} /><Text label="Email" placeholder="buyer@email.com" value={f.email ?? ''} onChange={set('email')} /><Pick label="Animal" value={f.animal ?? animalNames[0]} onChange={set('animal')} options={animalNames} /></div>;
-      footer = <ActionButton variant="primary" onClick={() => submit(`Invite sent to ${f.name || 'buyer'}`, '/buyer-deal-room')}>Send Invite</ActionButton>;
+      footer = <ActionButton variant="primary" onClick={() => submit(`Open sales to save follow-up for ${f.name || 'buyer'}`, '/sales')}>Open sales</ActionButton>;
       break;
     case 'Add Expense':
       body = <div className="xs-form"><Text label="Description" placeholder="Feed, vet, farrier…" value={f.desc ?? ''} onChange={set('desc')} /><Text label="Vendor" placeholder="e.g. Tractor Supply" value={f.vendor ?? ''} onChange={set('vendor')} /><Text label="Amount" placeholder="$" value={f.amt ?? ''} onChange={set('amt')} /><Pick label="Category" value={f.cat ?? 'Feed'} onChange={set('cat')} options={EXPENSE_CATEGORIES} /></div>;

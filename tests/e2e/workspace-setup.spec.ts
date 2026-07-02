@@ -95,21 +95,21 @@ test('horses roster shows an empty state until a horse is added', async ({ page 
   await expect(page.getByRole('button', { name: 'Add first horse' })).toBeVisible();
 });
 
-test('sale packets is a stepper wizard once a horse exists', async ({ page }) => {
+test('sale documents is a stepper wizard once a horse exists', async ({ page }) => {
   await bootstrapWorkspace(page);
   await seedAnimal(page, 'Packet Horse');
-  await page.getByRole('link', { name: 'Sale Packets', exact: true }).click();
+  await page.getByRole('link', { name: 'Sale documents', exact: true }).click();
   await expect(page.locator('.xs-stepper')).toBeVisible();
   await expect(page.locator('.xs-select')).toBeVisible(); // step 1: animal select
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText('Choose packet type')).toBeVisible(); // step 2 content
+  await expect(page.getByText('Choose document set')).toBeVisible(); // step 2 content
 });
 
-test('buyer folders shows an empty state on a fresh workspace', async ({ page }) => {
+test('buyer follow-up shows an empty state on a fresh workspace', async ({ page }) => {
   await bootstrapWorkspace(page);
-  await page.getByRole('link', { name: 'Buyer Folders', exact: true }).click();
+  await page.getByRole('link', { name: 'Buyer follow-up', exact: true }).click();
   await expect(page.getByText('No buyers yet')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Build a sale packet' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Prepare sale documents' })).toBeVisible();
 });
 
 test('paperwork shows an empty state on a fresh workspace', async ({ page }) => {
@@ -148,7 +148,7 @@ test('sales renders a kanban board', async ({ page }) => {
 
 test('plans page shows plan cards', async ({ page }) => {
   await bootstrapWorkspace(page);
-  await page.getByRole('button', { name: 'Upgrade' }).click();
-  await expect(page.getByRole('heading', { name: 'Plans & Upgrade' })).toBeVisible();
-  await expect(page.locator('.xs-plancard')).toHaveCount(5);
+  await page.getByRole('button', { name: 'Plan' }).click();
+  await expect(page.getByRole('heading', { name: 'Choose a plan' })).toBeVisible();
+  await expect(page.locator('.xs-plancard')).toHaveCount(4);
 });

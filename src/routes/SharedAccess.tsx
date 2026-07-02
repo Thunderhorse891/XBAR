@@ -179,12 +179,12 @@ export default function SharedAccess() {
   return (
     <>
       <PageHeader
-        eyebrow="Sale Packets"
-        title="Sale Listings"
+        eyebrow="Sale documents"
+        title="Sale listings"
       />
 
       <div className="metric-grid">
-        <MetricCard label="Sale packets" value={`${activeSharedListings.length}`} detail="Active links" tone="blue" />
+        <MetricCard label="Sale documents" value={`${activeSharedListings.length}`} detail="Active links" tone="blue" />
         <MetricCard label="Live links" value={`${liveSharedListings.length}`} detail="Open to buyers" tone="emerald" />
         <MetricCard label="Facebook posts" value={`${facebookSharedListings.length}`} detail="Sent through Facebook" tone="slate" />
         <MetricCard label="Open inquiries" value={`${openSharedLeads.length}`} detail="Leads tied to shared horses" tone="amber" />

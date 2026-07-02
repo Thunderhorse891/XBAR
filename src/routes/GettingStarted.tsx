@@ -1,39 +1,108 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check } from 'lucide-react';
 import { Card, PageHead, ProgressRing } from '@/components/saas';
-import { gettingStartedSteps } from '@/data/xbarSaasMock';
+import { useXbarStore } from '@/store/useXbarStore';
+
+type Step = {
+  id: string;
+  title: string;
+  detail: string;
+  done: boolean;
+  action: string;
+  to: string;
+};
 
 export default function GettingStarted() {
   const navigate = useNavigate();
-  const [steps, setSteps] = useState(gettingStartedSteps);
+  const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
+  const horses = useXbarStore((state) => state.horses);
+  const documents = useXbarStore((state) => state.documents);
+  const salePacketBuilds = useXbarStore((state) => state.salePacketBuilds);
+  const salesLeads = useXbarStore((state) => state.salesLeads);
+  const subscription = useXbarStore((state) => state.subscription);
+
+  const documentsToCheck = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched').length;
+  const steps: Step[] = [
+    {
+      id: 'workspace',
+      title: 'Name your ranch',
+      detail: workspaceProfile.ranchName ? workspaceProfile.ranchName : 'Add the ranch name people should see.',
+      done: Boolean(workspaceProfile.ranchName),
+      action: 'Open settings',
+      to: '/settings',
+    },
+    {
+      id: 'horse',
+      title: 'Add your first horse',
+      detail: horses.length ? `${horses.length} horse${horses.length === 1 ? '' : 's'} in this workspace.` : 'Start with the horse you work with most.',
+      done: horses.length > 0,
+      action: horses.length ? 'View horses' : 'Add horse',
+      to: horses.length ? '/horses' : '/horses?new=1',
+    },
+    {
+      id: 'documents',
+      title: 'Add paperwork',
+      detail: documents.length ? `${documents.length} document${documents.length === 1 ? '' : 's'} uploaded.` : 'Upload Coggins, registration, health records, or bills of sale.',
+      done: documents.length > 0,
+      action: 'Upload',
+      to: '/documents?upload=1',
+    },
+    {
+      id: 'review',
+      title: 'Check uploaded paperwork',
+      detail: documents.length ? `${documentsToCheck} item${documentsToCheck === 1 ? '' : 's'} still need checking.` : 'Review starts after the first upload.',
+      done: documents.length > 0 && documentsToCheck === 0,
+      action: 'Review',
+      to: '/documents',
+    },
+    {
+      id: 'sale-documents',
+      title: 'Prepare sale documents',
+      detail: salePacketBuilds.length ? `${salePacketBuilds.length} set${salePacketBuilds.length === 1 ? '' : 's'} prepared.` : 'Choose the records a buyer can see before a sale.',
+      done: salePacketBuilds.length > 0,
+      action: 'Prepare',
+      to: '/sale-packet-studio',
+    },
+    {
+      id: 'buyer',
+      title: 'Track buyer follow-up',
+      detail: salesLeads.length ? `${salesLeads.length} buyer${salesLeads.length === 1 ? '' : 's'} in sales.` : 'Add buyer notes, offers, and next follow-up dates.',
+      done: salesLeads.length > 0,
+      action: 'Open sales',
+      to: '/sales',
+    },
+    {
+      id: 'plan',
+      title: 'Choose a plan',
+      detail: `${subscription.tier} plan is active for this workspace.`,
+      done: subscription.billingState === 'Active' || subscription.monthlyRate > 0,
+      action: 'View plans',
+      to: '/subscriptions',
+    },
+  ];
 
   const doneCount = steps.filter((s) => s.done).length;
   const progress = Math.round((doneCount / steps.length) * 100);
 
-  function toggle(id: string) {
-    setSteps((current) => current.map((s) => (s.id === id ? { ...s, done: !s.done } : s)));
-  }
-
   return (
     <>
       <PageHead
-        eyebrow="Onboarding"
-        title="Getting Started"
-        subtitle="Stand up your ranch operations and reach buyer-ready release. Each step contributes to your setup progress."
+        eyebrow="Setup"
+        title="Getting started"
+        subtitle="Use real workspace activity to see what is ready and what still needs attention."
       />
 
       <Card>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
           <ProgressRing value={progress} size={56} />
           <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 24, fontWeight: 600 }}>{progress}% Ranch setup</div>
+            <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 24, fontWeight: 600 }}>{progress}% set up</div>
             <div className="xs-card__sub">
-              {doneCount} of {steps.length} steps complete — finish setup to unlock full release readiness.
+              {doneCount} of {steps.length} steps are complete.
             </div>
           </div>
-          <button type="button" className="xs-btn xs-btn--primary" onClick={() => navigate('/subscriptions')}>
-            Choose plan
+          <button type="button" className="xs-btn xs-btn--primary" onClick={() => navigate('/horses?new=1')}>
+            Add horse
           </button>
         </div>
       </Card>
@@ -41,14 +110,12 @@ export default function GettingStarted() {
       <div className="xs-checklist">
         {steps.map((s) => (
           <div key={s.id} className={`xs-checkitem${s.done ? ' xs-checkitem--done' : ''}`}>
-            <button
-              type="button"
+            <span
               className={`xs-check${s.done ? ' xs-check--done' : ''}`}
-              aria-label={s.done ? 'Mark incomplete' : 'Mark complete'}
-              onClick={() => toggle(s.id)}
+              aria-label={s.done ? 'Done' : 'Not done'}
             >
-              <Check size={15} />
-            </button>
+              {s.done ? <Check size={15} /> : null}
+            </span>
             <div className="xs-checkitem__body">
               <div className="xs-checkitem__title">{s.title}</div>
               <div className="xs-checkitem__sub">{s.detail}</div>
