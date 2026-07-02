@@ -32,7 +32,7 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 
-const XBAR_ICON = '/brand/xbar_public_assets/public/brand/xbar-app-icon-512.png';
+const XBAR_ICON = '/brand/xbar-app-icon.png';
 
 type NavItem = { label: string; path: string; icon: LucideIcon; badgeKey?: 'docs' | 'transfers' | 'care' };
 type NavGroup = { heading: string; items: NavItem[] };
