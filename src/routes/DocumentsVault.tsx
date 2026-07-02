@@ -1,31 +1,51 @@
 import { useMemo, useState } from 'react';
-import { Archive, ArrowUpDown, Check, FileUp, Link2, ShieldCheck, Upload } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Archive, ArrowUpDown, Check, FileText, FileUp, Link2, ShieldCheck, Upload } from 'lucide-react';
 import { ActionButton, Card, PageHead, SlideOverDrawer, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
+import { useXbarStore } from '@/store/useXbarStore';
 import { events, track } from '@/lib/telemetry';
-import { dataRoomDocs, documentFilters, type DataRoomDoc } from '@/data/xbarSaasMock';
+import type { DocumentRecord, ProcessingState } from '@/types/xbar';
 
-const statusTone = { Current: 'success', Expiring: 'warning', Missing: 'danger', Review: 'warning' } as const;
-type SortKey = 'name' | 'expires' | 'status';
+type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
+const STATE_TONE: Record<ProcessingState, Tone> = {
+  Ready: 'success',
+  Matched: 'info',
+  'Needs Review': 'warning',
+  Queued: 'warning',
+  Archived: 'neutral',
+};
+type SortKey = 'name' | 'uploaded' | 'status';
 
 export default function DocumentsVault() {
+  const navigate = useNavigate();
   const pushToast = useUiStore((s) => s.pushToast);
+  const documents = useXbarStore((s) => s.documents);
+  const horses = useXbarStore((s) => s.horses);
   const [filter, setFilter] = useState<string>('All');
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'status', dir: 1 });
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
-  const [buyerSafe, setBuyerSafe] = useState<Set<string>>(new Set(dataRoomDocs.filter((d) => d.status === 'Current').map((d) => d.id)));
-  const [selected, setSelected] = useState<DataRoomDoc | null>(null);
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const toast = (m: string) => pushToast({ title: 'Documents', message: m, tone: 'success' });
+  const [buyerSafe, setBuyerSafe] = useState<Set<string>>(() => new Set(documents.filter((d) => d.state === 'Ready').map((d) => d.id)));
+  const [selected, setSelected] = useState<DocumentRecord | null>(null);
+  const toast = (m: string) => pushToast({ title: 'Paperwork', message: m, tone: 'success' });
+
+  const horseName = useMemo(() => {
+    const map = new Map(horses.map((h) => [h.id, h.name]));
+    return (d: DocumentRecord) => (d.horseId ? map.get(d.horseId) : undefined) ?? d.entities.horseName ?? 'Unlinked';
+  }, [horses]);
+
+  const filters = useMemo(() => ['All', ...Array.from(new Set(documents.map((d) => d.type)))], [documents]);
 
   const rows = useMemo(() => {
-    const base = filter === 'All' ? dataRoomDocs : dataRoomDocs.filter((d) => d.type === filter);
+    const base = filter === 'All' ? documents : documents.filter((d) => d.type === filter);
     return [...base].sort((a, b) => {
-      const av = sort.key === 'name' ? a.name : sort.key === 'expires' ? a.expires ?? 'zzzz' : a.status;
-      const bv = sort.key === 'name' ? b.name : sort.key === 'expires' ? b.expires ?? 'zzzz' : b.status;
+      const av = sort.key === 'name' ? a.title : sort.key === 'uploaded' ? a.uploadedAt : a.state;
+      const bv = sort.key === 'name' ? b.title : sort.key === 'uploaded' ? b.uploadedAt : b.state;
       return av.localeCompare(bv) * sort.dir;
     });
-  }, [filter, sort]);
+  }, [documents, filter, sort]);
+
+  const reviewCount = documents.filter((d) => d.state === 'Needs Review' || d.state === 'Queued' || d.state === 'Matched').length;
 
   const toggleSort = (key: SortKey) => setSort((s) => (s.key === key ? { key, dir: (s.dir * -1) as 1 | -1 } : { key, dir: 1 }));
   const toggleRow = (id: string) => setSelectedRows((cur) => { const n = new Set(cur); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -37,23 +57,44 @@ export default function DocumentsVault() {
     <th className={`xs-th-sort${sort.key === k ? ' xs-th-sort--on' : ''}`} onClick={() => toggleSort(k)}>{label}<span><ArrowUpDown size={11} /></span></th>
   );
 
+  if (documents.length === 0) {
+    return (
+      <>
+        <PageHead
+          eyebrow="Records"
+          title="Paperwork"
+          subtitle="Keep all your horse paperwork in one place — registration, Coggins, health records, and bills of sale — and choose what buyers can see."
+          actions={<ActionButton variant="primary" icon={<Upload size={15} />} onClick={() => navigate('/documents?upload=1')}>Upload</ActionButton>}
+        />
+        <Card>
+          <div className="xs-empty">
+            <span className="xs-empty__icon"><FileText size={26} /></span>
+            <div className="xs-empty__title">No paperwork yet</div>
+            <div className="xs-empty__sub">Add registration papers, Coggins, health records, and bills of sale. XBAR reads them and files them under the right horse for you.</div>
+            <ActionButton variant="primary" icon={<Upload size={15} />} onClick={() => navigate('/documents?upload=1')}>Upload documents</ActionButton>
+          </div>
+        </Card>
+      </>
+    );
+  }
+
   return (
     <>
       <PageHead
         eyebrow="Records"
-        title="Documents"
-        subtitle="Keep registration papers, Coggins, health records, bills of sale, and buyer-ready paperwork in one place."
-        actions={<ActionButton variant="primary" icon={<Upload size={15} />} onClick={() => setUploadOpen(true)}>Add Document</ActionButton>}
+        title="Paperwork"
+        subtitle="Keep all your horse paperwork in one place — registration, Coggins, health records, and bills of sale — and choose what buyers can see."
+        actions={<ActionButton variant="primary" icon={<Upload size={15} />} onClick={() => navigate('/documents?upload=1')}>Upload</ActionButton>}
       />
 
       <div className="xs-grid-3">
-        <Card><div className="xs-card__sub">Expiring soon</div><div style={{ fontSize: 28, fontWeight: 700, color: 'var(--xbar-warning)' }}>15</div></Card>
-        <Card><div className="xs-card__sub">Missing data</div><div style={{ fontSize: 28, fontWeight: 700, color: 'var(--xbar-danger)' }}>{dataRoomDocs.filter((d) => d.status === 'Missing').length}</div></Card>
-        <Card><div className="xs-card__sub">Buyer Documents</div><div style={{ fontSize: 28, fontWeight: 700 }}>{buyerSafe.size}</div></Card>
+        <Card><div className="xs-card__sub">Total documents</div><div style={{ fontSize: 28, fontWeight: 700 }}>{documents.length}</div></Card>
+        <Card><div className="xs-card__sub">Needs review</div><div style={{ fontSize: 28, fontWeight: 700, color: reviewCount ? 'var(--xbar-warning)' : 'var(--xbar-text)' }}>{reviewCount}</div></Card>
+        <Card><div className="xs-card__sub">Ready to share</div><div style={{ fontSize: 28, fontWeight: 700 }}>{buyerSafe.size}</div></Card>
       </div>
 
       <div className="xs-fchips">
-        {documentFilters.map((f) => (
+        {filters.map((f) => (
           <button key={f} type="button" className={`xs-fchip${filter === f ? ' xs-fchip--active' : ''}`} onClick={() => setFilter(f)}>{f}</button>
         ))}
       </div>
@@ -61,7 +102,7 @@ export default function DocumentsVault() {
       {selectedRows.size > 0 ? (
         <div className="xs-bulkbar">
           <span className="xs-bulkbar__count">{selectedRows.size} selected</span>
-          <ActionButton size="sm" icon={<ShieldCheck size={14} />} onClick={() => { track(events.documentBulkAction, { action: 'mark_buyer_safe', count: selectedRows.size }); setBuyerSafe((cur) => new Set([...cur, ...selectedRows])); toast(`${selectedRows.size} marked for buyer sharing`); setSelectedRows(new Set()); }}>Share With Buyer</ActionButton>
+          <ActionButton size="sm" icon={<ShieldCheck size={14} />} onClick={() => { track(events.documentBulkAction, { action: 'mark_buyer_safe', count: selectedRows.size }); setBuyerSafe((cur) => new Set([...cur, ...selectedRows])); toast(`${selectedRows.size} marked ready to share`); setSelectedRows(new Set()); }}>Mark Ready to Share</ActionButton>
           <ActionButton size="sm" icon={<FileUp size={14} />} onClick={() => { toast(`${selectedRows.size} added to packet`); setSelectedRows(new Set()); }}>Include in Packet</ActionButton>
           <ActionButton size="sm" icon={<Archive size={14} />} onClick={() => { toast(`${selectedRows.size} archived`); setSelectedRows(new Set()); }}>Archive</ActionButton>
           <span className="xs-bulkbar__spacer" />
@@ -77,9 +118,9 @@ export default function DocumentsVault() {
               <Th k="name" label="Document" />
               <th>Type</th>
               <th>Linked to</th>
-              <Th k="expires" label="Expires" />
+              <Th k="uploaded" label="Uploaded" />
               <Th k="status" label="Status" />
-              <th>Buyer Documents</th>
+              <th>Ready to share</th>
             </tr>
           </thead>
           <tbody>
@@ -88,13 +129,13 @@ export default function DocumentsVault() {
               return (
                 <tr key={d.id} className={sel ? 'xs-tr--sel' : ''} onClick={() => { track(events.documentOpened, { id: d.id, type: d.type }); setSelected(d); }}>
                   <td onClick={(e) => { e.stopPropagation(); toggleRow(d.id); }}><span className={`xs-checkbox${sel ? ' xs-checkbox--on' : ''}`}>{sel ? <Check size={12} /> : null}</span></td>
-                  <td style={{ fontWeight: 600 }}>{d.name}</td>
+                  <td style={{ fontWeight: 600 }}>{d.title}</td>
                   <td className="xs-muted">{d.type}</td>
-                  <td>{d.horse}</td>
-                  <td className="xs-muted">{d.expires ?? '—'}</td>
-                  <td><StatusChip tone={statusTone[d.status]}>{d.status}</StatusChip></td>
+                  <td>{horseName(d)}</td>
+                  <td className="xs-muted">{d.uploadedAt}</td>
+                  <td><StatusChip tone={STATE_TONE[d.state]}>{d.state}</StatusChip></td>
                   <td onClick={(e) => e.stopPropagation()}>
-                    <button type="button" className={`xs-switch${buyerSafe.has(d.id) ? ' xs-switch--on' : ''}`} aria-label="Toggle buyer document sharing" onClick={() => toggleSafe(d.id)}><span className="xs-switch__knob" /></button>
+                    <button type="button" className={`xs-switch${buyerSafe.has(d.id) ? ' xs-switch--on' : ''}`} aria-label="Toggle buyer-safe" onClick={() => toggleSafe(d.id)}><span className="xs-switch__knob" /></button>
                   </td>
                 </tr>
               );
@@ -106,45 +147,33 @@ export default function DocumentsVault() {
       {/* Document preview drawer */}
       <SlideOverDrawer
         open={Boolean(selected)}
-        title={selected?.name ?? ''}
-        subtitle={selected ? `${selected.type} · ${selected.horse}` : ''}
+        title={selected?.title ?? ''}
+        subtitle={selected ? `${selected.type} · ${horseName(selected)}` : ''}
         onClose={() => setSelected(null)}
-        footer={selected ? (<><ActionButton icon={<Archive size={15} />} onClick={() => { toast('Archived'); setSelected(null); }}>Archive</ActionButton><ActionButton variant="primary" icon={<ShieldCheck size={15} />} onClick={() => { if (selected) setBuyerSafe((c) => new Set(c).add(selected.id)); toast('Marked for buyer sharing'); setSelected(null); }}>Share With Buyer</ActionButton></>) : null}
+        footer={selected ? (<><ActionButton icon={<Archive size={15} />} onClick={() => { toast('Archived'); setSelected(null); }}>Archive</ActionButton><ActionButton variant="primary" icon={<ShieldCheck size={15} />} onClick={() => { if (selected) setBuyerSafe((c) => new Set(c).add(selected.id)); toast('Marked ready to share'); setSelected(null); }}>Mark Ready to Share</ActionButton></>) : null}
       >
         {selected ? (
           <>
             <div style={{ display: 'flex', gap: 8 }}>
-              <StatusChip tone={statusTone[selected.status]}>{selected.status}</StatusChip>
-              <span className={`xs-chip xs-chip--${buyerSafe.has(selected.id) ? 'success' : 'neutral'}`}>{buyerSafe.has(selected.id) ? 'Buyer Documents' : 'Internal only'}</span>
+              <StatusChip tone={STATE_TONE[selected.state]}>{selected.state}</StatusChip>
+              <span className={`xs-chip xs-chip--${buyerSafe.has(selected.id) ? 'success' : 'neutral'}`}>{buyerSafe.has(selected.id) ? 'Ready to share' : 'Private'}</span>
             </div>
-            <div className="xs-skel" style={{ height: 120 }} aria-hidden="true" />
+            <p className="xs-muted" style={{ fontSize: 13 }}>{selected.summary || selected.extractedTextPreview}</p>
             <dl className="xs-kv">
               <dt>Type</dt><dd>{selected.type}</dd>
-              <dt>Linked animal</dt><dd>{selected.horse}</dd>
-              <dt>Transaction</dt><dd>{selected.transaction}</dd>
-              <dt>Expiration</dt><dd>{selected.expires ?? 'Not set'}</dd>
+              <dt>Linked animal</dt><dd>{horseName(selected)}</dd>
+              <dt>Source</dt><dd>{selected.source}</dd>
+              <dt>Confidence</dt><dd>{Math.round(selected.confidence * 100)}%</dd>
+              <dt>Uploaded</dt><dd>{selected.uploadedAt} · {selected.uploadedBy}</dd>
             </dl>
             <div className="xs-section-label">Actions</div>
             <div className="xs-field">
-              <button type="button" className="xs-fieldbtn" onClick={() => toast('Sent to review')}><Check size={15} /> Review</button>
+              <button type="button" className="xs-fieldbtn" onClick={() => navigate('/documents')}><Check size={15} /> Open in intake</button>
               <button type="button" className="xs-fieldbtn" onClick={() => toast('Attached to record')}><Link2 size={15} /> Attach</button>
               <button type="button" className="xs-fieldbtn" onClick={() => toast('Included in packet')}><FileUp size={15} /> Include in Packet</button>
             </div>
           </>
         ) : null}
-      </SlideOverDrawer>
-
-      {/* Upload drawer */}
-      <SlideOverDrawer
-        open={uploadOpen}
-        title="Add Document"
-        subtitle="Add paperwork to the horse record"
-        onClose={() => setUploadOpen(false)}
-        footer={<><ActionButton onClick={() => setUploadOpen(false)}>Cancel</ActionButton><ActionButton variant="primary" onClick={() => { toast('Document added'); setUploadOpen(false); }}>Add Document</ActionButton></>}
-      >
-        <div className="xs-drop"><FileUp size={20} style={{ display: 'block', margin: '0 auto 8px' }} />Drop a file or click to browse (PDF, JPG)</div>
-        <label><span className="xs-field-label">Document type</span><select className="xs-select" defaultValue="Health Cert">{['Health Cert', 'Coggins', 'Registration', 'Bill of Sale', 'Photos', 'Contracts'].map((t) => <option key={t}>{t}</option>)}</select></label>
-        <label><span className="xs-field-label">Expiration date</span><input className="xs-input" placeholder="YYYY-MM-DD" /></label>
       </SlideOverDrawer>
     </>
   );

@@ -109,15 +109,15 @@ const operationalPreviewRows = [
   {
     label: 'Sale Readiness',
     value: 'Ready',
-    detail: 'Approved packet, current Coggins, and buyer-ready profile are in place.',
+    detail: 'Approved packet, current Coggins, and ready-to-share buyer file are in place.',
   },
   {
-    label: 'Share With Buyer',
+    label: 'Ready to Share',
     value: 'Clear',
     detail: 'Only verified records leave the private workspace.',
   },
   {
-    label: 'Document Risk',
+    label: 'Missing Paperwork',
     value: '2 reviews',
     detail: 'Registration and transfer files are waiting on human approval.',
   },
@@ -127,9 +127,9 @@ const operationalPreviewRows = [
     detail: 'Legal owner and co-owner structure are attached to the horse.',
   },
   {
-    label: 'Release Blocker',
+    label: 'Cannot Sell Yet',
     value: '1 hold',
-    detail: 'Renewal deadline must clear before the public packet opens.',
+    detail: 'Renewal deadline must clear before you can share with buyers.',
   },
   {
     label: 'Asset Timeline',
@@ -222,7 +222,7 @@ function CommandPreview() {
 
 function HeroOperationsPanel() {
   return (
-    <aside className="revenue-hero-console" aria-label="XBAR command center preview">
+    <aside className="revenue-hero-console" aria-label="XBAR dashboard preview">
       <div className="revenue-hero-console__chrome">
         <span />
         <span />
@@ -256,7 +256,7 @@ function HeroOperationsPanel() {
       <div className="revenue-hero-console__actions">
         <div>
           <span>Next best actions</span>
-          <strong>3 operator decisions before release</strong>
+          <strong>3 things to fix before selling</strong>
         </div>
         <ol>
           {nextActions.map((action) => (
@@ -275,7 +275,7 @@ function RevenueIntelligenceShowcase() {
     <section className="revenue-intelligence-showcase" aria-labelledby="revenue-intelligence-title">
       <div className="revenue-intelligence-showcase__copy">
         <p className="revenue-kicker">Operational preview</p>
-        <h2 id="revenue-intelligence-title">Sale readiness, proof, and ownership without the noise.</h2>
+        <h2 id="revenue-intelligence-title">Health records, paperwork, and ownership — all in one place.</h2>
         <p>
           XBAR is organized around the moments that decide whether a horse can be trusted,
           transferred, shown, or sold. Every module answers a real operating question.
@@ -293,7 +293,7 @@ function RevenueIntelligenceShowcase() {
       <div className="revenue-command-visual revenue-record-preview" aria-label="Static XBAR operational preview">
         <div className="revenue-record-preview__top">
           <span>XBAR record view</span>
-          <strong>Buyer-ready operating file</strong>
+          <strong>Ready-to-share horse file</strong>
         </div>
         <div className="revenue-record-preview__modules">
           {operationalPreviewRows.map((item) => (
@@ -369,7 +369,7 @@ export default function Landing() {
         <div className="revenue-hero__copy">
           <p className="revenue-kicker">Equine operations infrastructure</p>
           <h1 id="hero-heading">
-            <span>The operating system for modern horse operations.</span>
+            <span>Simple record-keeping for horse ranches and breeders.</span>
           </h1>
           <p className="revenue-hero__lead">
             One trusted record for every horse, document, buyer, and transfer. XBAR turns scattered paperwork into sale-ready proof your team can actually operate from.
@@ -384,7 +384,7 @@ export default function Landing() {
           </div>
           <ul className="revenue-proof-line revenue-proof-line--center">
             <li>Ownership chain</li>
-            <li>Buyer-ready packets</li>
+            <li>Ready-to-share sale packets</li>
             <li>Human-verified records</li>
           </ul>
         </div>
@@ -428,7 +428,7 @@ export default function Landing() {
         <div className="revenue-section__inner">
           <div className="revenue-section__header">
             <div>
-              <p className="revenue-kicker">What operators pay for</p>
+              <p className="revenue-kicker">What ranchers get</p>
               <h2 id="pillars-heading">Built around the workflows that cost horse businesses time and money.</h2>
             </div>
             <p>XBAR is not trying to be every kind of horse software. It is designed to solve the record, paperwork, and buyer-confidence problems that directly affect operations and sales.</p>
@@ -577,7 +577,7 @@ export default function Landing() {
       </section>
 
       <footer className="revenue-footer">
-        <p>XBAR &middot; Records, ownership, and sale readiness for performance horse operations.</p>
+        <p>XBAR &middot; Records, ownership, and sale packets for horse ranches and breeders.</p>
         <nav aria-label="Legal">
           <Link to="/privacy">Privacy</Link>
           <Link to="/terms">Terms</Link>

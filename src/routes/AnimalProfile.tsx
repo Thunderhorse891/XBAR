@@ -8,7 +8,7 @@ import { useHorseRecord } from '@/store/useXbarStore';
 import { formatCurrency } from '@/lib/format';
 import type { HorseStatus } from '@/types/xbar';
 
-const TABS = ['Overview', 'Health', 'Documents', 'Ownership', 'Breeding', 'Location', 'Tasks', 'Sale Readiness', 'Buyer Activity', 'Timeline'] as const;
+const TABS = ['Overview', 'Health', 'Documents', 'Ownership', 'Breeding', 'Location', 'Tasks', 'Ready to Sell', 'Buyers', 'Timeline'] as const;
 
 type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 const STATUS_TONE: Record<HorseStatus, Tone> = {
@@ -34,9 +34,9 @@ export default function AnimalProfile() {
         <Card>
           <div className="xs-empty">
             <span className="xs-empty__icon"><HorsesIcon width={26} height={26} /></span>
-            <div className="xs-empty__title">Animal not found</div>
-            <div className="xs-empty__sub">This record may have been removed. Return to the roster to pick another animal.</div>
-            <ActionButton variant="primary" onClick={() => navigate('/animals')}>Back to animals</ActionButton>
+            <div className="xs-empty__title">Horse not found</div>
+            <div className="xs-empty__sub">This record may have been removed. Go back to your horses to pick another one.</div>
+            <ActionButton variant="primary" onClick={() => navigate('/animals')}>Back to horses</ActionButton>
           </div>
         </Card>
       </>
@@ -61,7 +61,7 @@ export default function AnimalProfile() {
             <div className="xs-objhead__meta">{animal.breed || 'Horse'} · {animal.sex} · {animal.age} yrs · {location}</div>
             <div className="xs-objhead__chips">
               <StatusChip tone={STATUS_TONE[animal.status] ?? 'neutral'}>{animal.status}</StatusChip>
-              {forSale ? <StatusChip tone={packetReady ? 'success' : 'warning'}>Sale {packetReady ? 'Ready' : 'Prep'}</StatusChip> : <span className="xs-chip xs-chip--neutral">Not for sale</span>}
+              {forSale ? <StatusChip tone={packetReady ? 'success' : 'warning'}>{packetReady ? 'Ready to sell' : 'Getting ready'}</StatusChip> : <span className="xs-chip xs-chip--neutral">Not for sale</span>}
             </div>
           </div>
         </div>
@@ -69,7 +69,7 @@ export default function AnimalProfile() {
           <ActionButton size="sm" icon={<Move size={14} />} onClick={() => toast('Move drawer opened')}>Move</ActionButton>
           <ActionButton size="sm" icon={<HeartPulse size={14} />} onClick={() => toast('Health record added')}>Add Health</ActionButton>
           <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents-vault')}>Upload Doc</ActionButton>
-          <ActionButton size="sm" variant="primary" icon={<FileText size={14} />} onClick={() => navigate('/sale-packet-studio')}>Start Sale Packet</ActionButton>
+          <ActionButton size="sm" variant="primary" icon={<FileText size={14} />} onClick={() => navigate('/sale-packet-studio')}>Build Sale Packet</ActionButton>
         </div>
       </div>
 
@@ -93,18 +93,18 @@ export default function AnimalProfile() {
               <dt>Segment</dt><dd>{animal.segment}</dd>
             </dl>
           </Card>
-          <Card title="Next required action">
-            <div className="xs-nba"><div className="xs-nba__label">Recommended</div><div className="xs-nba__title">{animal.readiness?.blockers?.[0] ?? `Keep ${animal.name}'s records current`}</div></div>
+          <Card title="What to do next">
+            <div className="xs-nba"><div className="xs-nba__label">Suggested next step</div><div className="xs-nba__title">{animal.readiness?.blockers?.[0] ?? `Keep ${animal.name}'s records current`}</div></div>
             <div className="xs-toolbar" style={{ marginTop: 12 }}>
               <ActionButton size="sm" onClick={() => navigate('/today')}>Add Task</ActionButton>
-              <ActionButton size="sm" variant="primary" onClick={() => navigate('/sale-packet-studio')}>Open Sale Packet</ActionButton>
+              <ActionButton size="sm" variant="primary" onClick={() => navigate('/sale-packet-studio')}>Build sale packet</ActionButton>
             </div>
           </Card>
         </div>
       ) : null}
 
       {tab === 'Health' ? (
-        <Card title="Health & Compliance" link="Open Health & Care" onLink={() => navigate('/health-care')}>
+        <Card title="Health &amp; Care" link="Open Health &amp; Care" onLink={() => navigate('/health-care')}>
           {animal.medicalTimeline.length ? (
             <div className="xs-mlist">
               {animal.medicalTimeline.slice(0, 8).map((e) => (
@@ -122,7 +122,7 @@ export default function AnimalProfile() {
       ) : null}
 
       {tab === 'Documents' ? (
-        <Card title="Documents" link="Open Documents" onLink={() => navigate('/documents-vault')}>
+        <Card title="Paperwork" link="Open paperwork" onLink={() => navigate('/documents-vault')}>
           {animal.documentFacts.length ? (
             <div className="xs-mlist">
               {animal.documentFacts.slice(0, 10).map((f) => (
@@ -133,7 +133,7 @@ export default function AnimalProfile() {
               ))}
             </div>
           ) : (
-            <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>No documents linked to this animal yet.</p>
+            <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>No paperwork linked to this horse yet.</p>
           )}
         </Card>
       ) : null}
@@ -191,22 +191,22 @@ export default function AnimalProfile() {
         </Card>
       ) : null}
 
-      {tab === 'Sale Readiness' ? (
-        <Card title="Sale Readiness" link="Open Builder" onLink={() => navigate('/sale-packet-studio')}>
+      {tab === 'Ready to Sell' ? (
+        <Card title="Ready to Sell" link="Open sale packet" onLink={() => navigate('/sale-packet-studio')}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
             <span className="xs-finbar__track" style={{ flex: 1 }}><span className="xs-finbar__fill" style={{ width: `${readiness}%`, background: readiness >= 95 ? 'var(--xbar-success)' : 'var(--xbar-warning)' }} /></span>
             <strong>{readiness}%</strong>
           </div>
           <div className="xs-mlist">
             <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Packet status</span></span><StatusChip tone={packetReady ? 'success' : 'warning'}>{animal.readiness?.packetStatus ?? 'Review'}</StatusChip></div>
-            <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Share With Buyer</span></span><StatusChip tone={packetReady ? 'success' : 'warning'}>{packetReady ? 'Verified' : 'Pending'}</StatusChip></div>
+            <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Ready to share with buyers</span></span><StatusChip tone={packetReady ? 'success' : 'warning'}>{packetReady ? 'Verified' : 'Pending'}</StatusChip></div>
             <div className="xs-mrow"><span className="xs-mrow__main"><span className="xs-mrow__title">Release blockers</span></span><StatusChip tone={animal.readiness?.blockers?.length ? 'danger' : 'success'}>{animal.readiness?.blockers?.length ? `${animal.readiness.blockers.length} blocker${animal.readiness.blockers.length === 1 ? '' : 's'}` : 'Clear'}</StatusChip></div>
           </div>
         </Card>
       ) : null}
 
-      {tab === 'Buyer Activity' ? (
-        <Card title="Buyer Activity" link="Open Buyer Folder" onLink={() => navigate('/buyer-deal-room')}>
+      {tab === 'Buyers' ? (
+        <Card title="Buyers" link="Open buyer folder" onLink={() => navigate('/buyer-deal-room')}>
           <dl className="xs-kv">
             <dt>Ask price</dt><dd>{animal.sale?.askPrice ? formatCurrency(animal.sale.askPrice) : '—'}</dd>
             <dt>Inquiries</dt><dd>{animal.sale?.inquiryCount ?? 0}</dd>

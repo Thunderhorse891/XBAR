@@ -43,17 +43,17 @@ export default function Animals() {
     return (
       <>
         <PageHead
-          eyebrow="Operations"
-          title="Animals"
-          subtitle="Every animal on the operation — identity, location, care status, and sale readiness in one roster."
-          actions={<ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>Add Animal</ActionButton>}
+          eyebrow="Ranch"
+          title="Horses"
+          subtitle="All your horses in one place — who they are, where they live, care status, and whether they're ready to sell."
+          actions={<ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>Add Horse</ActionButton>}
         />
         <Card>
           <div className="xs-empty">
             <span className="xs-empty__icon"><HorsesIcon width={26} height={26} /></span>
-            <div className="xs-empty__title">No animals yet</div>
-            <div className="xs-empty__sub">Add your first animal to start building sale readiness, documents, and ownership proof.</div>
-            <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>Add first animal</ActionButton>
+            <div className="xs-empty__title">No horses yet</div>
+            <div className="xs-empty__sub">Add your first horse to start tracking care, paperwork, and ownership history.</div>
+            <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>Add first horse</ActionButton>
           </div>
         </Card>
       </>
@@ -63,10 +63,10 @@ export default function Animals() {
   return (
     <>
       <PageHead
-        eyebrow="Operations"
-        title="Animals"
-        subtitle="Every animal on the operation — identity, location, care status, and sale readiness in one roster."
-        actions={<ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>Add Animal</ActionButton>}
+        eyebrow="Ranch"
+        title="Horses"
+        subtitle="All your horses in one place — who they are, where they live, care status, and whether they're ready to sell."
+        actions={<ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>Add Horse</ActionButton>}
       />
 
       <div className="xs-stickybar">
@@ -78,14 +78,14 @@ export default function Animals() {
         <span style={{ flex: 1 }} />
         <label className="xs-search" style={{ maxWidth: 260 }}>
           <Search size={15} className="xs-search__icon" />
-          <input className="xs-search__input" placeholder="Search animals" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className="xs-search__input" placeholder="Search horses" value={q} onChange={(e) => setQ(e.target.value)} />
         </label>
       </div>
 
       <div className="xs-tablewrap">
         <table className="xs-table">
           <thead>
-            <tr><th>Animal</th><th>Segment</th><th>Location</th><th>Owner</th><th>Status</th><th>Readiness</th></tr>
+            <tr><th>Horse</th><th>Segment</th><th>Location</th><th>Owner</th><th>Status</th><th>Readiness</th></tr>
           </thead>
           <tbody>
             {rows.map((h) => {
@@ -116,7 +116,7 @@ export default function Animals() {
           </tbody>
         </table>
       </div>
-      {rows.length === 0 ? <Card><div className="xs-empty">No animals match this filter.</div></Card> : null}
+      {rows.length === 0 ? <Card><div className="xs-empty">No horses match this filter.</div></Card> : null}
     </>
   );
 }
