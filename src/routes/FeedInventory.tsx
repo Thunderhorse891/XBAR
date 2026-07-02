@@ -16,10 +16,15 @@ export default function FeedInventory() {
 
   const model = useMemo(() => {
     const feed = expenseReceipts.filter((r) => r.category === 'Feed' || r.category === 'Supplements' || r.category === 'Bedding');
-    const total = feed.reduce((sum, r) => sum + r.amount, 0);
-    const perHorseDay = horses.length ? total / (horses.length * 30) : 0;
+    // Scope the spend total to the current month so it matches the per-day divisor.
+    const now = new Date();
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const monthFeed = feed.filter((r) => (r.receiptDate ?? '').startsWith(monthKey));
+    const monthTotal = monthFeed.reduce((sum, r) => sum + r.amount, 0);
+    const daysElapsed = now.getDate(); // days so far this month
+    const perHorseDay = horses.length && daysElapsed ? monthTotal / (horses.length * daysElapsed) : 0;
     const recent = [...feed].sort((a, b) => b.receiptDate.localeCompare(a.receiptDate)).slice(0, 8);
-    return { total, perHorseDay, recent };
+    return { monthTotal, perHorseDay, recent, purchases: feed.length };
   }, [expenseReceipts, horses.length]);
 
   return (
@@ -38,16 +43,16 @@ export default function FeedInventory() {
 
       <div className="xs-grid-3">
         <Card>
-          <div className="xs-card__sub">Feed &amp; supply spend</div>
-          <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 30, fontWeight: 700 }}>{usd(model.total)}</div>
+          <div className="xs-card__sub">Feed &amp; supply spend (this month)</div>
+          <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 30, fontWeight: 700 }}>{usd(model.monthTotal)}</div>
         </Card>
         <Card>
-          <div className="xs-card__sub">Roughly per horse / day</div>
+          <div className="xs-card__sub">Roughly per horse / day (this month)</div>
           <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 30, fontWeight: 700 }}>{horses.length ? usd(model.perHorseDay) : '—'}</div>
         </Card>
         <Card>
           <div className="xs-card__sub">Purchases logged</div>
-          <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 30, fontWeight: 700 }}>{model.recent.length}</div>
+          <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 30, fontWeight: 700 }}>{model.purchases}</div>
         </Card>
       </div>
 

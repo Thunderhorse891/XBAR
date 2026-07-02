@@ -18,8 +18,14 @@ export default function BreedingFoaling() {
 
   const rows = useMemo(
     () => mares.map((m) => {
+      // Newest event first (addBreedingEvent prepends) reflects current status.
       const latest = m.breedingTimeline[0];
-      const inFoal = m.breedingTimeline.some((e) => /foal/i.test(e.title) || /foal/i.test(e.status ?? ''));
+      const statusText = latest ? `${latest.status ?? ''} ${latest.title ?? ''}`.toLowerCase() : '';
+      // Only a confirmed, still-active pregnancy counts as in foal — exclude
+      // foaling outcomes and open/negative checks (both contain "foal").
+      const inFoal =
+        /(in foal|confirmed|pregnan|positive)/.test(statusText) &&
+        !/(not in foal|open|foaled|lost|slipped|negative|weaned)/.test(statusText);
       return { id: m.id, mare: m.name, stage: latest?.status ?? latest?.title ?? 'No records', due: latest?.date ?? '—', inFoal, hasRecords: m.breedingTimeline.length > 0 };
     }),
     [mares],

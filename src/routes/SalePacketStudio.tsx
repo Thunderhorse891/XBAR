@@ -36,7 +36,6 @@ export default function SalePacketStudio() {
   const [step, setStep] = useState(0);
   const [horseId, setHorseId] = useState(() => horses[0]?.id ?? '');
   const [packetType, setPacketType] = useState(PACKET_TYPES[1]);
-  const [fixedBlockers, setFixedBlockers] = useState<string[]>([]);
 
   const horse = horses.find((h) => h.id === horseId) ?? horses[0];
 
@@ -53,13 +52,14 @@ export default function SalePacketStudio() {
   }, [documents, horse]);
 
   const missing = REQUIRED.filter((d) => !present.includes(d.id));
-  const blockers = (horse?.readiness?.blockers ?? []).filter((b) => !fixedBlockers.includes(b));
+  // Blockers reflect the real horse readiness — they clear only when the
+  // underlying record is fixed, so the packet can't be faked to "Ready" here.
+  const blockers = horse?.readiness?.blockers ?? [];
   const state: 'Ready' | 'Review' | 'Blocked' = blockers.length ? 'Blocked' : missing.length ? 'Review' : 'Ready';
   const tone = state === 'Ready' ? 'success' : state === 'Review' ? 'warning' : 'danger';
 
   const next = () => setStep((s) => Math.min(s + 1, STEPS.length - 1));
   const back = () => setStep((s) => Math.max(s - 1, 0));
-  const fixBlocker = (b: string) => setFixedBlockers((cur) => (cur.includes(b) ? cur : [...cur, b]));
 
   if (!horse) {
     return (
@@ -89,7 +89,7 @@ export default function SalePacketStudio() {
           <div className="xs-form" style={{ maxWidth: 520 }}>
             <label>
               <span className="xs-field-label">Animal</span>
-              <select className="xs-select" value={horseId} onChange={(e) => { setHorseId(e.target.value); setFixedBlockers([]); }}>
+              <select className="xs-select" value={horseId} onChange={(e) => setHorseId(e.target.value)}>
                 {horses.map((h) => <option key={h.id} value={h.id}>{h.name} — {h.segment}</option>)}
               </select>
             </label>
@@ -139,7 +139,7 @@ export default function SalePacketStudio() {
               {blockers.map((b) => (
                 <div key={b} className="xs-row">
                   <span className="xs-row__main"><span className="xs-row__title">{b}</span><span className="xs-row__meta">Blocks buyer-safe release</span></span>
-                  <ActionButton size="sm" variant="primary" icon={<Upload size={14} />} onClick={() => { fixBlocker(b); pushToast({ title: 'Resolved', message: `${b} cleared`, tone: 'success' }); }}>Fix</ActionButton>
+                  <ActionButton size="sm" variant="primary" icon={<Upload size={14} />} onClick={() => navigate(`/animals/${horse.id}`)}>Fix on profile</ActionButton>
                 </div>
               ))}
               {missing.map((m) => (
