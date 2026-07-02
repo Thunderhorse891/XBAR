@@ -46,8 +46,8 @@ export function featureGate(subscription: SubscriptionProfile, feature: Commerci
 }
 
 export function featureLabel(feature: CommercialFeature) {
-  if (feature === 'buyerDealRoom') return 'the Buyer Folder';
-  if (feature === 'packetExport') return 'buyer packet export';
+  if (feature === 'buyerDealRoom') return 'buyer follow-up';
+  if (feature === 'packetExport') return 'sale document export';
   if (feature === 'teamInvites') return 'team invitations';
   if (feature === 'profitIntelligence') return 'profit intelligence';
   if (feature === 'breedingRevenue') return 'breeding revenue workflows';
@@ -73,7 +73,7 @@ export function buildUsageMeters(subscription: SubscriptionProfile): UsageMeter[
   const inputs: Array<Pick<UsageMeter, 'key' | 'label' | 'used' | 'limit'>> = [
     { key: 'horses', label: 'Horses', used: usage.horsesUsed, limit: usage.horseLimit },
     { key: 'documents', label: 'Documents', used: usage.documentsProcessed, limit: usage.documentLimit },
-    { key: 'salePackets', label: 'Sale packets', used: usage.salePacketsGenerated, limit: usage.salePacketLimit },
+    { key: 'salePackets', label: 'Sale documents', used: usage.salePacketsGenerated, limit: usage.salePacketLimit },
     { key: 'seats', label: 'Team seats', used: usage.seatsUsed, limit: usage.seatLimit },
   ];
 

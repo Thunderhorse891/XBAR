@@ -32,7 +32,7 @@ export const subscriptionTierConfig: Record<
       'Keep clean records — horses, care, documents, expenses, reminders',
       'Documents with OCR intake and review',
       '1 team seat',
-      '250 document capacity · 25 GB storage',
+      '250 documents and 25 GB storage',
     ],
     limits: {
       horseLimit: 5,
@@ -48,10 +48,10 @@ export const subscriptionTierConfig: Record<
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Starter',
-      'Make money: watermarked sale packets and buyer folders',
-      'Sale listings — publish buyer-ready horse profiles to shared access',
-      '5 team seats · 10 shared-access seats',
-      '1,000 document capacity · 100 GB storage',
+      'Share approved sale documents and keep buyer follow-up in one place',
+      'Sale listings for buyer-ready horse profiles',
+      '5 team seats and 10 buyer seats',
+      '1,000 documents and 100 GB storage',
     ],
     limits: {
       horseLimit: 30,
@@ -67,9 +67,9 @@ export const subscriptionTierConfig: Record<
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Professional',
-      'Run the operation: team roles, breeding program, equipment at scale',
-      '20 team seats · 40 shared-access seats',
-      '5,000 document capacity · 500 GB storage',
+      'Run the operation: team roles, breeding, equipment, and supplies',
+      '20 team seats and 40 buyer seats',
+      '5,000 documents and 500 GB storage',
     ],
     limits: {
       horseLimit: 200,
@@ -86,8 +86,8 @@ export const subscriptionTierConfig: Record<
     featureFlags: [
       'Everything in Ranch Ops',
       'Scale and control for large rosters and teams',
-      '60 team seats · 200 shared-access seats',
-      '20,000 document capacity · 2,500 GB storage',
+      '60 team seats and 200 buyer seats',
+      '20,000 documents and 2,500 GB storage',
     ],
     limits: {
       horseLimit: 2000,

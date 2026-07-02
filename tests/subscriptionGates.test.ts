@@ -23,6 +23,6 @@ test('Enterprise promises only concrete enforced capacity', () => {
   const features = subscriptionPlans.Enterprise.featureFlags.join(' ');
   assert.doesNotMatch(features, /Custom integrations|Priority support|Unlimited users|audit log|white-label|onboarding/i);
   assert.match(features, /60 team seats/);
-  assert.match(features, /20,000 document capacity/);
-  assert.match(features, /200 shared-access seats/);
+  assert.match(features, /20,000 documents/);
+  assert.match(features, /200 buyer seats/);
 });

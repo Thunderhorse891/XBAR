@@ -8,8 +8,8 @@ import { useXbarStore } from '@/store/useXbarStore';
 import { events, track } from '@/lib/telemetry';
 import type { DocumentType } from '@/types/xbar';
 
-const STEPS = ['Select animal', 'Packet type', 'Required documents', 'Fix issues', 'Preview', 'Share'];
-const PACKET_TYPES = ['Sale Prospect Packet', 'Buyer Review Packet', 'Release Packet', 'Vet/Transport Packet', 'Boarding/Client Packet'];
+const STEPS = ['Select animal', 'Document set', 'Required documents', 'Fix issues', 'Preview', 'Share'];
+const PACKET_TYPES = ['Sale documents', 'Buyer review documents', 'Release documents', 'Vet and travel documents', 'Boarding documents'];
 
 const REQUIRED = [
   { id: 'coggins', label: 'Coggins (negative)' },
@@ -64,12 +64,12 @@ export default function SalePacketStudio() {
   if (!horse) {
     return (
       <>
-        <PageHead eyebrow="Selling · Sale Packets" title="Sale Packet Studio" subtitle="Build a sale packet one horse at a time — we check the paperwork and get it ready to share with buyers." />
+        <PageHead eyebrow="Selling / Sale documents" title="Sale documents" subtitle="Choose the horse, check the paperwork, and share only approved records with buyers." />
         <Card>
           <div className="xs-empty">
             <span className="xs-empty__icon"><FileText size={26} /></span>
-            <div className="xs-empty__title">No horses to package yet</div>
-            <div className="xs-empty__sub">Add a horse and its paperwork, then build a sale packet to share with buyers in a few easy steps.</div>
+            <div className="xs-empty__title">No horses to prepare yet</div>
+            <div className="xs-empty__sub">Add a horse and its paperwork, then choose the records a buyer can see.</div>
             <ActionButton variant="primary" onClick={() => navigate('/horses?new=1')}>Add first horse</ActionButton>
           </div>
         </Card>
@@ -79,7 +79,7 @@ export default function SalePacketStudio() {
 
   return (
     <>
-      <PageHead eyebrow="Selling · Sale Packets" title={`${horse.name}`} subtitle="Build a sale packet one horse at a time — we check the paperwork and get it ready to share with buyers." actions={<StatusChip tone={tone}>{state}</StatusChip>} />
+      <PageHead eyebrow="Selling / Sale documents" title={`${horse.name}`} subtitle="Choose the horse, check the paperwork, and share only approved records with buyers." actions={<StatusChip tone={tone}>{state}</StatusChip>} />
 
       <Card>
         <Stepper steps={STEPS} current={step} />
@@ -101,10 +101,10 @@ export default function SalePacketStudio() {
           </div>
         ) : null}
 
-        {/* Step 2 — packet type */}
+        {/* Step 2 - document set */}
         {step === 1 ? (
           <div className="xs-form" style={{ maxWidth: 520 }}>
-            <div className="xs-section-label">Choose packet type</div>
+            <div className="xs-section-label">Choose document set</div>
             {PACKET_TYPES.map((t) => (
               <button key={t} type="button" className={`xs-checkitem${packetType === t ? ' xs-checkitem--done' : ''}`} onClick={() => setPacketType(t)} style={{ cursor: 'pointer', textAlign: 'left' }}>
                 <span className={`xs-check${packetType === t ? ' xs-check--done' : ''}`}>{packetType === t ? <Check size={14} /> : null}</span>
@@ -144,7 +144,7 @@ export default function SalePacketStudio() {
               ))}
               {missing.map((m) => (
                 <div key={m.id} className="xs-row">
-                  <span className="xs-row__main"><span className="xs-row__title">{m.label} missing</span><span className="xs-row__meta">Upload to complete the packet</span></span>
+                  <span className="xs-row__main"><span className="xs-row__title">{m.label} missing</span><span className="xs-row__meta">Upload to complete the sale documents</span></span>
                   <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate(`/documents?upload=1&horse=${horse.id}`)}>Upload</ActionButton>
                 </div>
               ))}
@@ -160,7 +160,7 @@ export default function SalePacketStudio() {
               <div className="xs-railcard">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span className="xs-banner__icon"><FileText size={18} /></span>
-                  <div style={{ flex: 1 }}><div style={{ fontWeight: 700 }}>{horse.name} — {packetType}</div><div className="xs-card__sub">Watermarked · seller controls applied</div></div>
+                  <div style={{ flex: 1 }}><div style={{ fontWeight: 700 }}>{horse.name} - {packetType}</div><div className="xs-card__sub">Watermarked and seller controls applied</div></div>
                   <StatusChip tone={tone}>{state}</StatusChip>
                 </div>
               </div>
@@ -182,13 +182,13 @@ export default function SalePacketStudio() {
         {step === 5 ? (
           <div style={{ maxWidth: 560 }}>
             <div className="xs-okbanner" style={state === 'Ready' ? undefined : { borderColor: 'rgba(201,130,34,0.35)', background: 'var(--xbar-warning-soft)', color: 'var(--xbar-warning)' }}>
-              {state === 'Ready' ? <><Check size={16} /> Packet is ready to share.</> : <>Resolve remaining items for a fully buyer-safe packet.</>}
+              {state === 'Ready' ? <><Check size={16} /> Sale documents are ready to share.</> : <>Resolve remaining items before sharing with a buyer.</>}
             </div>
             <div className="xs-form" style={{ marginTop: 14 }}>
               <label><span className="xs-field-label">Share link</span><input className="xs-input" readOnly value={`https://xbar.app/packet/${horse.id}`} /></label>
               <div style={{ display: 'flex', gap: 8 }}>
                 <ActionButton icon={<Link2 size={15} />} onClick={() => pushToast({ title: 'Copied', message: 'Share link copied', tone: 'success' })}>Copy Link</ActionButton>
-                <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={() => { track(events.packetShared, { horse: horse.id, packetType }); navigate('/buyer-deal-room'); }}>Open Buyer Deal Room</ActionButton>
+                <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={() => { track(events.packetShared, { horse: horse.id, packetType }); navigate('/buyer-deal-room'); }}>Open buyer follow-up</ActionButton>
               </div>
             </div>
           </div>
@@ -200,7 +200,7 @@ export default function SalePacketStudio() {
           {step < STEPS.length - 1 ? (
             <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={next}>Continue</ActionButton>
           ) : (
-            <ActionButton variant="primary" onClick={() => { track(events.packetShared, { horse: horse.id, packetType }); navigate('/buyer-deal-room'); }}>Share & Open Deal Room</ActionButton>
+            <ActionButton variant="primary" onClick={() => { track(events.packetShared, { horse: horse.id, packetType }); navigate('/buyer-deal-room'); }}>Share and open follow-up</ActionButton>
           )}
         </div>
       </Card>

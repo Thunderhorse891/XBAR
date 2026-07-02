@@ -44,15 +44,15 @@ const navGroups: NavGroup[] = [
       { label: 'Dashboard', path: '/', icon: LayoutDashboard },
       { label: 'Care Tasks', path: '/today', icon: ClipboardList },
       { label: 'Horses', path: '/animals', icon: Home },
-      { label: 'Herd Groups', path: '/herd-groups', icon: Users },
+      { label: 'Groups', path: '/herd-groups', icon: Users },
       { label: 'Pastures', path: '/pastures', icon: Map },
     ],
   },
   {
     heading: 'Care',
     items: [
-      { label: 'Health & Care', path: '/health-care', icon: Stethoscope, badgeKey: 'care' },
-      { label: 'Breeding & Foaling', path: '/breeding-foaling', icon: Sprout },
+      { label: 'Health', path: '/health-care', icon: Stethoscope, badgeKey: 'care' },
+      { label: 'Breeding', path: '/breeding-foaling', icon: Sprout },
       { label: 'Feed & Supplies', path: '/feed', icon: Wheat },
     ],
   },
@@ -60,9 +60,9 @@ const navGroups: NavGroup[] = [
     heading: 'Selling',
     items: [
       { label: 'Sales', path: '/sales-pipeline', icon: Gauge },
-      { label: 'Buyer Folders', path: '/buyer-deal-room', icon: Users },
-      { label: 'Sale Packets', path: '/sale-packet-studio', icon: FileText },
-      { label: 'Ownership History', path: '/ownership-chain', icon: ShieldCheck, badgeKey: 'transfers' },
+      { label: 'Buyer follow-up', path: '/buyer-deal-room', icon: Users },
+      { label: 'Sale documents', path: '/sale-packet-studio', icon: FileText },
+      { label: 'Ownership', path: '/ownership-chain', icon: ShieldCheck, badgeKey: 'transfers' },
     ],
   },
   {
@@ -78,18 +78,18 @@ const navGroups: NavGroup[] = [
     heading: 'Account',
     items: [
       { label: 'Settings', path: '/settings', icon: SettingsIcon },
-      { label: 'Plan & Billing', path: '/plans', icon: Rocket },
+      { label: 'Plan', path: '/plans', icon: Rocket },
     ],
   },
 ];
 
-const whatsNew = ['Missing paperwork alerts', 'Buyer Folders', 'Sale Packets'];
+const whatsNew = ['Paperwork to check', 'Buyer follow-ups', 'Sale documents'];
 
 const mobileItems: { label: string; path: string; icon: LucideIcon }[] = [
   { label: 'Home', path: '/', icon: LayoutDashboard },
   { label: 'Work', path: '/today', icon: ClipboardList },
   { label: 'Animals', path: '/animals', icon: Home },
-  { label: 'Pipeline', path: '/sales-pipeline', icon: Gauge },
+  { label: 'Sales', path: '/sales-pipeline', icon: Gauge },
   { label: 'Docs', path: '/documents', icon: FolderOpen },
 ];
 
@@ -238,8 +238,8 @@ export default function MainLayout() {
 
           <div className="xs-topbar__right">
             <div className="xs-toggle" role="tablist" aria-label="Workspace mode">
-              <button type="button" className={`xs-toggle__btn${mode === 'ops' ? ' xs-toggle__btn--active' : ''}`} onClick={() => handleMode('ops')}>Ranch Ops</button>
-              <button type="button" className={`xs-toggle__btn${mode === 'buyer' ? ' xs-toggle__btn--active' : ''}`} onClick={() => handleMode('buyer')}>Buyer Portal</button>
+              <button type="button" className={`xs-toggle__btn${mode === 'ops' ? ' xs-toggle__btn--active' : ''}`} onClick={() => handleMode('ops')}>Ranch work</button>
+              <button type="button" className={`xs-toggle__btn${mode === 'buyer' ? ' xs-toggle__btn--active' : ''}`} onClick={() => handleMode('buyer')}>Buyer view</button>
             </div>
 
             <QuickCreateMenu
@@ -259,8 +259,8 @@ export default function MainLayout() {
               <CircleHelp size={17} />
             </button>
 
-            <button type="button" className="xs-btn" onClick={() => navigate('/settings')}><Users size={15} /> Invite Team</button>
-            <button type="button" className="xs-btn xs-btn--brass" onClick={() => navigate('/plans')}><Rocket size={15} /> Upgrade</button>
+            <button type="button" className="xs-btn" onClick={() => navigate('/settings')}><Users size={15} /> Invite team</button>
+            <button type="button" className="xs-btn xs-btn--brass" onClick={() => navigate('/plans')}><Rocket size={15} /> Plan</button>
 
             <button type="button" className="xs-avatar" aria-label="Account" title={cloudSession?.user?.email ?? 'Account'} onClick={() => (cloudSession ? void handleSignOut() : navigate('/settings'))}>
               {accountInitials}
