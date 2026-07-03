@@ -26,6 +26,8 @@ export default function BuyerDealRoom() {
   const leads = useXbarStore((s) => s.salesLeads);
   const horses = useXbarStore((s) => s.horses);
   const updateSalesLead = useXbarStore((s) => s.updateSalesLead);
+  const logBuyerRoomEvent = useXbarStore((state) => state.logBuyerRoomEvent);
+  const currentRole = useXbarStore((state) => state.currentRole);
   const [selectedId, setSelectedId] = useState<string>(() => routeLeadId ?? leads[0]?.id ?? '');
   const [recordingOffer, setRecordingOffer] = useState(false);
   const [offerDraft, setOfferDraft] = useState<BuyerOfferDraft>(() => createBuyerOfferDraft());
@@ -148,8 +150,8 @@ export default function BuyerDealRoom() {
               </div>
             </div>
             <div className="xs-toolbar">
-              <ActionButton size="sm" icon={<Ban size={14} />} disabled={!selected.shareReady} onClick={() => { track(events.buyerAccessRevoked, { id: selected.id }); updateSalesLead(selected.id, { shareReady: false }); toast('Access revoked'); }}>Revoke</ActionButton>
-              <ActionButton size="sm" variant="primary" icon={<ShieldCheck size={14} />} onClick={() => navigate('/sale-packets')}>Prepare documents</ActionButton>
+              <ActionButton size="sm" icon={<Ban size={14} />} disabled={!selected.shareReady} onClick={() => { track(events.buyerAccessRevoked, { id: selected.id }); updateSalesLead(selected.id, { shareReady: false }); if (selected.horseId) { logBuyerRoomEvent({ horseId: selected.horseId, kind: 'deal-status', actor: currentRole, note: `Access revoked for ${selected.name}` }); } toast('Access revoked'); }}>Revoke</ActionButton>
+              <ActionButton size="sm" variant="primary" icon={<ShieldCheck size={14} />} onClick={() => navigate(selected.horseId ? `/sale-packets?horse=${selected.horseId}` : '/sale-packets')}>Prepare documents</ActionButton>
             </div>
           </div>
 
@@ -236,7 +238,7 @@ export default function BuyerDealRoom() {
             <div className="xs-toolbar" style={{ marginTop: 12 }}>
               <ActionButton size="sm" icon={<MessageSquare size={14} />} onClick={() => navigate(`/follow-ups?lead=${selected.id}`)}>Open follow-up</ActionButton>
               <ActionButton size="sm" icon={<Phone size={14} />} onClick={() => navigate(`/follow-ups?lead=${selected.id}`)}>Plan call</ActionButton>
-              <ActionButton size="sm" icon={<Send size={14} />} onClick={() => navigate('/sale-packets')}>Share documents</ActionButton>
+              <ActionButton size="sm" icon={<Send size={14} />} onClick={() => navigate(selected.horseId ? `/sale-packets?horse=${selected.horseId}` : '/sale-packets')}>Share documents</ActionButton>
             </div>
           </Card>
         </div>
