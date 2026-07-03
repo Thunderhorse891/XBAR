@@ -208,7 +208,7 @@ export default function Sales() {
             ? { label: 'Follow-ups overdue', tone: 'rose' }
             : transferBlockedHorses.length
               ? { label: 'Transfer paperwork pending', tone: 'amber' }
-              : { label: 'Pipeline current', tone: 'blue' }
+              : { label: 'On track', tone: 'blue' }
         }
         summary={`${saleHorses.length} active listings with ${openProspects.length} open prospects and ${liveShareCount} live sale links.`}
         evidence={[

@@ -35,7 +35,7 @@ function createHorseFormDefaults(params: {
   };
 }
 
-type ViewMode = 'Horses' | 'Registry Matrix';
+type ViewMode = 'Horses' | 'Registry';
 type SegmentFilter = 'All' | HorseSegment;
 
 const statusTone: Record<HorseStatus, 'blue' | 'slate' | 'amber' | 'rose' | 'emerald'> = {
@@ -51,12 +51,6 @@ const segments: SegmentFilter[] = ['All', 'Sale Prospect', 'Broodmare', 'Stud', 
 const horseSegments: HorseSegment[] = ['Broodmare', 'Stud', 'Show String', 'Sale Prospect', 'Young Stock', 'Retired'];
 const horseStatuses: HorseStatus[] = ['In Training', 'Broodmare Program', 'Sale Prep', 'Medical Review', 'Pasture', 'Retired'];
 const horseSexes: HorseSex[] = ['Mare', 'Stud', 'Gelding', 'Filly', 'Colt'];
-const portfolioFallbackCards = [
-  { title: 'Horse Record', meta: 'Name, owner, barn', status: 'Ready', metric: '01' },
-  { title: 'Documents', meta: 'Coggins, papers, receipts', status: 'Next', metric: '02' },
-  { title: 'Health', meta: 'Vet, dental, wormer', status: 'Planned', metric: '03' },
-  { title: 'Sales', meta: 'Profile and release checks', status: 'Optional', metric: '04' },
-];
 
 export default function Horses() {
   const navigate = useNavigate();
@@ -126,14 +120,6 @@ export default function Horses() {
   const buyerReadyCount = horses.filter((horse) => horse.readiness.packetStatus === 'Ready').length;
   const salePrepCount = horses.filter((horse) => horse.status === 'Sale Prep' || horse.segment === 'Sale Prospect').length;
   const proofGapCount = commandPackets.reduce((sum, item) => sum + item.packet.saleSlots.filter((slot) => slot.status !== 'ready').length, 0);
-  const proofReadinessScore = commandPackets.length
-    ? Math.round(commandPackets.reduce((sum, item) => sum + item.packet.score, 0) / commandPackets.length)
-    : 0;
-  const portfolioSignals = [
-    { label: 'Document readiness', value: proofReadinessScore, detail: `${proofGapCount} open gaps` },
-    { label: 'Buyer-ready files', value: salePrepCount ? Math.round((buyerReadyCount / salePrepCount) * 100) : 0, detail: `${buyerReadyCount}/${salePrepCount || 0} sale files` },
-    { label: 'Medical clarity', value: horses.length ? Math.round(((horses.length - medicalWatchCount) / horses.length) * 100) : 0, detail: `${medicalWatchCount} watch files` },
-  ];
 
   const handleSavedHorseToggle = async (horseId: string) => {
     setTogglingListingId(horseId);
@@ -241,12 +227,12 @@ export default function Horses() {
 
   return (
     <>
-      <div className="surface-hero surface-hero--dark command-files-hero">
+      <div className="surface-hero command-files-hero">
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Horses</span>
             <h1>Horse records with identity, documents, care, and sales readiness.</h1>
-            <p className="command-center-briefing__copy">
+            <p className="page-description">
               Each file connects legal owner, location, care status, documents, sales readiness, buyer packet status, and next action.
             </p>
           </div>
@@ -262,48 +248,6 @@ export default function Horses() {
           </div>
         </div>
       </div>
-
-      <section className="portfolio-signal-deck" aria-label="Horse portfolio overview">
-        <div className="portfolio-signal-deck__copy">
-          <span>Horse Cards</span>
-          <strong>Every card shows the details that matter.</strong>
-          <p>Documents, owner, location, buyer release, medical status, and sale readiness stay visible before anyone opens a record.</p>
-        </div>
-        <div className="portfolio-signal-deck__bars">
-          {portfolioSignals.map((signal) => (
-            <div className="portfolio-signal-bar" key={signal.label}>
-              <div><span>{signal.label}</span><strong>{formatPercent(signal.value)}</strong></div>
-              <i><span style={{ width: formatPercent(signal.value) }} /></i>
-              <small>{signal.detail}</small>
-            </div>
-          ))}
-        </div>
-        <div className="portfolio-mini-carousel" aria-label="Horse card preview">
-          {(commandPackets.length ? commandPackets.slice(0, 4) : portfolioFallbackCards).map((item, index) => {
-            const isHorse = 'horse' in item;
-            const title = isHorse ? item.horse.name : item.title;
-            const meta = isHorse ? `${item.horse.segment} | ${item.horse.location.barn}` : item.meta;
-            const status = isHorse ? item.packet.buyerProfileStatus : item.status;
-            const metric = isHorse ? formatPercent(item.packet.score) : item.metric;
-            return (
-              <button
-                type="button"
-                className="portfolio-mini-card"
-                key={`${title}-${index}`}
-                disabled={!isHorse}
-                onClick={() => {
-                  if (isHorse) navigate(`/horses/${item.horse.id}`);
-                }}
-              >
-                <span>{metric}</span>
-                <strong>{title}</strong>
-                <small>{meta}</small>
-                <em>{status}</em>
-              </button>
-            );
-          })}
-        </div>
-      </section>
 
       {createOpen ? (
         <section className="panel">
@@ -333,7 +277,7 @@ export default function Horses() {
 
       <section className="portfolio-toolbar">
         <div className="portfolio-toolbar__controls">
-          <SurfaceTabs items={['Horses', 'Registry Matrix']} active={viewMode} onChange={(mode) => setViewMode(mode as ViewMode)} />
+          <SurfaceTabs items={['Horses', 'Registry']} active={viewMode} onChange={(mode) => setViewMode(mode as ViewMode)} />
           <SurfaceTabs items={segments} active={segmentFilter} onChange={(segment) => setSegmentFilter(segment as SegmentFilter)} className="surface-tabs--wrap" />
         </div>
         <input value={search} onChange={(event) => setSearch(event.target.value)} className="field-input field-input--wide" placeholder="Search horse record, owner, AQHA, barn, or documents" aria-label="Search horse records" />
@@ -411,7 +355,7 @@ export default function Horses() {
             })}
           </div>
         ) : (
-          <EmptyState title="No horse records match this control view" description="Adjust filters, clear search, or create a new horse record." action={<button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>Create horse record</button>} />
+          <EmptyState title="No horses match these filters" description="Adjust filters, clear search, or create a new horse record." action={<button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>Create horse record</button>} />
         )
       ) : filtered.length ? (
         <div className="table-shell">

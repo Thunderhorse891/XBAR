@@ -237,7 +237,7 @@ export default function DocumentLibrary() {
 
   return (
     <>
-      <div className="surface-hero surface-hero--dark">
+      <div className="surface-hero">
         <div className="surface-hero__top">
           <div>
             <span className="surface-hero__eyebrow">Sale Packet Generator</span>

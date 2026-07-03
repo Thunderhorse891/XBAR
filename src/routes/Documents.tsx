@@ -125,10 +125,10 @@ export default function Documents() {
 
   const heroStatus =
     staleReviewCount > 0 || unmatchedDocuments.length > 0
-      ? { label: 'Pipeline blocked', tone: 'rose' as const }
+      ? { label: 'Needs attention', tone: 'rose' as const }
       : reviewQueue.length > 0
         ? { label: 'Review pending', tone: 'amber' as const }
-        : { label: 'Pipeline clear', tone: 'blue' as const };
+        : { label: 'All caught up', tone: 'blue' as const };
 
   const heroRisks = [
     ...(reviewQueue.length
