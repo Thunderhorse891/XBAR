@@ -1,7 +1,15 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Ban, MessageSquare, Phone, Send, ShieldCheck, Users } from 'lucide-react';
 import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
+import {
+  buildBuyerOfferPatch,
+  buyerDepositStatuses,
+  buyerOfferStatuses,
+  createBuyerOfferDraft,
+  type BuyerOfferDraft,
+} from '@/lib/buyerOffers';
+import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import { events, track } from '@/lib/telemetry';
@@ -13,16 +21,19 @@ const initials = (s: string) => s.split(' ').map((w) => w[0]).slice(0, 2).join('
 
 export default function BuyerDealRoom() {
   const navigate = useNavigate();
+  const { leadId: routeLeadId } = useParams<{ leadId?: string }>();
   const pushToast = useUiStore((s) => s.pushToast);
   const leads = useXbarStore((s) => s.salesLeads);
   const horses = useXbarStore((s) => s.horses);
   const updateSalesLead = useXbarStore((s) => s.updateSalesLead);
-  const [selectedId, setSelectedId] = useState<string>(() => leads[0]?.id ?? '');
+  const [selectedId, setSelectedId] = useState<string>(() => routeLeadId ?? leads[0]?.id ?? '');
+  const [recordingOffer, setRecordingOffer] = useState(false);
+  const [offerDraft, setOfferDraft] = useState<BuyerOfferDraft>(() => createBuyerOfferDraft());
   const toast = (m: string) => pushToast({ title: 'Buyer follow-up', message: m, tone: 'success' });
 
   const horseName = useMemo(() => {
     const map = new Map(horses.map((h) => [h.id, h.name]));
-    return (l: SalesLead) => map.get(l.horseId) ?? 'Unlinked animal';
+    return (l: SalesLead) => map.get(l.horseId) ?? 'Unlinked horse';
   }, [horses]);
 
   // Access + offer come straight from the persisted lead so other views (sales
@@ -30,7 +41,51 @@ export default function BuyerDealRoom() {
   const accessOf = (l: SalesLead): Access => (l.shareReady ? 'Active' : 'Pending');
   const offerOf = (l: SalesLead) => l.offerAmount;
 
-  const selected = leads.find((r) => r.id === selectedId) ?? leads[0];
+  const selected = useMemo(() => {
+    const targetId = routeLeadId ?? selectedId;
+    return leads.find((r) => r.id === targetId) ?? leads[0];
+  }, [leads, routeLeadId, selectedId]);
+
+  useEffect(() => {
+    if (!selected) return;
+    if (!routeLeadId && !selectedId) setSelectedId(selected.id);
+    if (routeLeadId && selected.id !== routeLeadId) navigate(buyerFollowUpPath(selected.id), { replace: true });
+  }, [navigate, routeLeadId, selected, selectedId]);
+
+  useEffect(() => {
+    setRecordingOffer(false);
+    setOfferDraft(createBuyerOfferDraft(selected));
+  }, [selected?.id]);
+
+  function updateOfferDraft<K extends keyof BuyerOfferDraft>(key: K, value: BuyerOfferDraft[K]) {
+    setOfferDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  function openOfferForm() {
+    setOfferDraft(createBuyerOfferDraft(selected));
+    setRecordingOffer(true);
+  }
+
+  function saveOffer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selected) return;
+
+    const built = buildBuyerOfferPatch({ ...offerDraft, existingNotes: selected.notes });
+    if (!built.ok) {
+      pushToast({ title: 'Offer not saved', message: built.message, tone: 'error' });
+      return;
+    }
+
+    const saved = updateSalesLead(selected.id, built.patch);
+    if (!saved.ok) {
+      pushToast({ title: 'Offer not saved', message: saved.message, tone: 'error' });
+      return;
+    }
+
+    track(events.buyerOfferRecorded, { id: selected.id, amount: built.amount, status: built.patch.offerStatus });
+    toast('Offer recorded');
+    setRecordingOffer(false);
+  }
 
   if (!selected) {
     return (
@@ -70,7 +125,7 @@ export default function BuyerDealRoom() {
         <div className="xs-md__list">
           <div className="xs-md__listhead"><span>Buyers</span><span>{leads.length}</span></div>
           {leads.map((r) => (
-            <button key={r.id} type="button" className={`xs-mdrow${r.id === selected.id ? ' xs-mdrow--active' : ''}`} onClick={() => { track(events.buyerSelected, { id: r.id }); setSelectedId(r.id); }}>
+            <button key={r.id} type="button" className={`xs-mdrow${r.id === selected.id ? ' xs-mdrow--active' : ''}`} onClick={() => { track(events.buyerSelected, { id: r.id }); setSelectedId(r.id); navigate(buyerFollowUpPath(r.id)); }}>
               <span className="xs-mdrow__avatar">{initials(r.name)}</span>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span className="xs-mdrow__name">{r.name}</span>
@@ -105,18 +160,72 @@ export default function BuyerDealRoom() {
           </div>
 
           <Card title="Offer">
-            {selOffer ? (
+            {recordingOffer ? (
+              <form className="xs-form" onSubmit={saveOffer}>
+                <div className="xs-grid-3">
+                  <label>
+                    <span className="xs-field-label">Offer amount</span>
+                    <input className="xs-input" type="number" min="1" step="1" inputMode="decimal" value={offerDraft.amount} onChange={(e) => updateOfferDraft('amount', e.target.value)} required />
+                  </label>
+                  <label>
+                    <span className="xs-field-label">Status</span>
+                    <select className="xs-select" value={offerDraft.status} onChange={(e) => updateOfferDraft('status', e.target.value as BuyerOfferDraft['status'])}>
+                      {buyerOfferStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span className="xs-field-label">Follow-up date</span>
+                    <input className="xs-input" type="date" value={offerDraft.followUpDate} onChange={(e) => updateOfferDraft('followUpDate', e.target.value)} />
+                  </label>
+                </div>
+
+                <div className="xs-grid-3">
+                  <label>
+                    <span className="xs-field-label">Counteroffer</span>
+                    <input className="xs-input" type="number" min="1" step="1" inputMode="decimal" value={offerDraft.counterOffer} onChange={(e) => updateOfferDraft('counterOffer', e.target.value)} />
+                  </label>
+                  <label>
+                    <span className="xs-field-label">Deposit amount</span>
+                    <input className="xs-input" type="number" min="1" step="1" inputMode="decimal" value={offerDraft.depositAmount} onChange={(e) => updateOfferDraft('depositAmount', e.target.value)} />
+                  </label>
+                  <label>
+                    <span className="xs-field-label">Deposit status</span>
+                    <select className="xs-select" value={offerDraft.depositStatus} onChange={(e) => updateOfferDraft('depositStatus', e.target.value as BuyerOfferDraft['depositStatus'])}>
+                      {buyerDepositStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
+                    </select>
+                  </label>
+                </div>
+
+                <label>
+                  <span className="xs-field-label">Buyer note</span>
+                  <textarea className="xs-textarea" rows={3} value={offerDraft.buyerNote} onChange={(e) => updateOfferDraft('buyerNote', e.target.value)} placeholder="Terms, contingencies, timing, or seller notes." />
+                </label>
+
+                <div className="xs-toolbar">
+                  <button type="button" className="xs-btn xs-btn--ghost xs-btn--sm" onClick={() => setRecordingOffer(false)}>Cancel</button>
+                  <button type="submit" className="xs-btn xs-btn--primary xs-btn--sm">Save offer</button>
+                </div>
+              </form>
+            ) : selOffer ? (
               <dl className="xs-kv">
                 <dt>Status</dt><dd><StatusChip tone="success">{selected.offerStatus ?? 'Offer received'}</StatusChip></dd>
                 <dt>Amount</dt><dd style={{ fontWeight: 700 }}>${selOffer.toLocaleString()}</dd>
                 {selected.counterOfferAmount ? <><dt>Counter</dt><dd>${selected.counterOfferAmount.toLocaleString()}</dd></> : null}
+                {selected.depositAmount ? <><dt>Deposit</dt><dd>${selected.depositAmount.toLocaleString()} · {selected.depositStatus ?? 'Not Requested'}</dd></> : null}
+                {selected.nextFollowUp ? <><dt>Next follow-up</dt><dd>{selected.nextFollowUp}</dd></> : null}
+                <dt>Updated</dt><dd>{selected.offerUpdatedAt ? new Date(selected.offerUpdatedAt).toLocaleDateString() : selected.lastTouch}</dd>
               </dl>
             ) : (
               <>
                 <p className="xs-muted" style={{ fontSize: 13, margin: '0 0 12px' }}>No offer recorded yet for this buyer.</p>
-                <ActionButton size="sm" variant="primary" onClick={() => { track(events.buyerOfferRecorded, { id: selected.id, amount: 22000 }); updateSalesLead(selected.id, { offerAmount: 22000, offerStatus: 'Submitted', offerUpdatedAt: new Date().toISOString() }); toast('Offer recorded'); }}>Record Offer</ActionButton>
+                <ActionButton size="sm" variant="primary" onClick={openOfferForm}>Record Offer</ActionButton>
               </>
             )}
+            {!recordingOffer && selOffer ? (
+              <div className="xs-toolbar" style={{ marginTop: 12 }}>
+                <ActionButton size="sm" onClick={openOfferForm}>Update offer</ActionButton>
+              </div>
+            ) : null}
           </Card>
 
           <Card title="Follow-up & notes">

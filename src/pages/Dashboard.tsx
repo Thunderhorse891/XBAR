@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { HorsesIcon } from '@/components/icons';
 import { ActionButton } from '@/components/saas';
+import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { buildBudgetSummary, buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
 import { formatCompactCurrency } from '@/lib/format';
 import { events, track } from '@/lib/telemetry';
@@ -77,7 +78,7 @@ export default function Dashboard() {
             { v: 0, l: 'Animals', to: '/animals' },
             { v: 0, l: 'Sale prospects', to: '/sales-pipeline' },
             { v: 0, l: 'Documents', to: '/documents-vault' },
-            { v: 0, l: 'Deal rooms', to: '/buyer-deal-room' },
+            { v: 0, l: 'Buyer follow-up', to: buyerFollowUpPath() },
             { v: '—', l: 'Readiness', to: '/reports' },
           ].map((r) => (
             <button key={r.l} type="button" className="xs-ribbon__item" onClick={() => navigate(r.to)}>
@@ -256,7 +257,7 @@ export default function Dashboard() {
               <ActionButton size="sm" icon={<Plus size={14} />} onClick={() => navigate('/today')}>Task</ActionButton>
               <ActionButton size="sm" icon={<HorsesIcon width={14} height={14} />} onClick={() => navigate('/horses?new=1')}>Horse</ActionButton>
               <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents?upload=1')}>Paperwork</ActionButton>
-              <ActionButton size="sm" icon={<Users size={14} />} onClick={() => navigate('/buyer-deal-room')}>Buyer</ActionButton>
+              <ActionButton size="sm" icon={<Users size={14} />} onClick={() => navigate(buyerFollowUpPath())}>Buyer</ActionButton>
             </div>
           </div>
         </div>

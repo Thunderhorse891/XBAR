@@ -6,6 +6,7 @@ import { ActionButton, Card, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
 import { useHorseRecord } from '@/store/useXbarStore';
 import { formatCurrency } from '@/lib/format';
+import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import type { HorseStatus } from '@/types/xbar';
 
 const TABS = ['Overview', 'Health', 'Documents', 'Ownership', 'Breeding', 'Location', 'Tasks', 'Ready to Sell', 'Buyers', 'Timeline'] as const;
@@ -206,7 +207,7 @@ export default function AnimalProfile() {
       ) : null}
 
       {tab === 'Buyers' ? (
-        <Card title="Buyers" link="Open buyer folder" onLink={() => navigate('/buyer-deal-room')}>
+        <Card title="Buyers" link="Open buyer follow-up" onLink={() => navigate(buyerFollowUpPath())}>
           <dl className="xs-kv">
             <dt>Ask price</dt><dd>{animal.sale?.askPrice ? formatCurrency(animal.sale.askPrice) : '—'}</dd>
             <dt>Inquiries</dt><dd>{animal.sale?.inquiryCount ?? 0}</dd>
