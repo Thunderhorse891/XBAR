@@ -28,10 +28,10 @@ export type CheckoutReadiness = {
   /**
    * How the plan change happens when ready:
    * - 'checkout': a secure Stripe checkout (managed session or payment link) completes first.
-   * - 'direct': no online checkout is configured, so the plan is applied to the
-   *   workspace immediately and billing is arranged outside the app.
+   * - 'manual': online checkout is not configured, so an admin/manual billing
+   *   state must explicitly activate the plan before capacity changes.
    */
-  mode: 'checkout' | 'direct';
+  mode: 'checkout' | 'manual';
   reason: string;
 };
 
@@ -47,9 +47,9 @@ export function getCheckoutReadiness(params: {
   if (params.hasPaymentLink) return { ready: true, mode: 'checkout', reason: 'Secure checkout opens next. XBAR never stores raw card numbers.' };
   if (!params.billingEnabled) {
     return {
-      ready: true,
-      mode: 'direct',
-      reason: 'The plan applies to this workspace right away. Online checkout is not set up yet, so billing is arranged directly.',
+      ready: false,
+      mode: 'manual',
+      reason: 'Online checkout is not configured. Contact support/manual billing required.',
     };
   }
   if (!params.hasManagedIdentity) return { ready: false, mode: 'checkout', reason: 'Sign in to this workspace before choosing a paid plan.' };

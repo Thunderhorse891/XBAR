@@ -6,6 +6,7 @@ import { ContextMenu } from '@/components/ContextMenu';
 import { Panel, Pill } from '@/components/app-ui';
 import { EmptyState } from '@/components/EmptyState';
 import { SalePacketWizard } from '@/components/SalePacketWizard';
+import { billingPath, billingPathForTier } from '@/lib/billingRoutes';
 import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { formatDateTimeLabel } from '@/lib/format';
 import { downloadLegalHtml, legalDocuments, openPrintableLegalDocument } from '@/lib/legalDocuments';
@@ -329,8 +330,8 @@ export default function Documents() {
                 },
                 {
                   id: 'open-subscriptions',
-                  label: 'Open Subscriptions page (storage plan)',
-                  onSelect: () => navigate('/subscriptions'),
+                  label: 'Open Billing page',
+                  onSelect: () => navigate(billingPath),
                 },
               ]
             : []),
@@ -1012,8 +1013,8 @@ export default function Documents() {
             {subscription.tier === 'Starter' ? (
               <p className="panel__description" style={{ marginBottom: 12 }}>
                 Starter records the packet build. Upgrading to Professional unlocks the watermarked PDF and the buyer folder.{' '}
-                <button className="button button--ghost button--compact" type="button" onClick={() => navigate('/subscriptions?plan=Professional')}>
-                  View Plan &amp; Billing
+                <button className="button button--ghost button--compact" type="button" onClick={() => navigate(billingPathForTier('Professional'))}>
+                  View Billing
                 </button>
               </p>
             ) : null}

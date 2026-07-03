@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useId, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { XbarMark } from '@/components/BrandMark';
+import { billingPath } from '@/lib/billingRoutes';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { productEvent, productEventNames } from '@/lib/productEvents';
 import { trackRuntimeEvent } from '@/lib/runtimeEvents';
@@ -31,7 +32,7 @@ export default function Login() {
   const redirectTarget = useMemo(() => {
     const from = (location.state as { from?: string } | null)?.from;
     if (from) return from;
-    return selectedPlan ? `/subscribe?plan=${encodeURIComponent(selectedPlan)}` : '/subscribe';
+    return selectedPlan ? `${billingPath}?plan=${encodeURIComponent(selectedPlan)}` : billingPath;
   }, [location.state, selectedPlan]);
   const supabaseReady = isSupabaseConfigured();
 

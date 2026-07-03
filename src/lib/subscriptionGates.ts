@@ -1,7 +1,8 @@
 import type { SubscriptionProfile } from '../types/xbar.js';
+import { billingPath } from './billingRoutes.js';
 import { featureGate, usageGate } from './commercialEngine.js';
 
-export const subscriptionUpgradePath = '/subscriptions';
+export const subscriptionUpgradePath = billingPath;
 
 export function sharedListingGate(subscription: SubscriptionProfile) {
   return subscription.sharedAccessEnabled

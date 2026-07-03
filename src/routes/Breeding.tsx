@@ -6,6 +6,7 @@ import { ContextMenu } from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { DocumentBlock, Timeline } from '@/components/InteractionSystem';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
+import { billingPath } from '@/lib/billingRoutes';
 import { buildBreedingRevenueProfile, emptyBreedingEconomics } from '@/lib/breedingRevenue';
 import { buildBreedingProgram, type MareStatus } from '@/lib/breedingIntelligence';
 import { formatCompactCurrency, formatDateLabel } from '@/lib/format';
@@ -264,7 +265,7 @@ export default function Breeding() {
                 <MetricCard label="Program ROI" value={`${Math.round(selectedRevenue.roi)}%`} detail={`${formatCompactCurrency(selectedRevenue.totalCosts)} total linked costs`} tone={selectedRevenue.roi >= 0 ? 'emerald' : 'rose'} />
               </div>
               {revenueGate ? (
-                <div className="stack-item"><div className="stack-item__title">Unlock premium breeding-operation controls</div><div className="stack-item__copy">{revenueGate}</div><button className="button button--primary button--compact" type="button" onClick={() => navigate('/subscriptions')}>Upgrade to unlock</button></div>
+                <div className="stack-item"><div className="stack-item__title">Unlock premium breeding-operation controls</div><div className="stack-item__copy">{revenueGate}</div><button className="button button--primary button--compact" type="button" onClick={() => navigate(billingPath)}>Upgrade to unlock</button></div>
               ) : (
                 <div className="form-grid form-grid--tight">
                   {([

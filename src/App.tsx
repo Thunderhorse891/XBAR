@@ -7,6 +7,7 @@ import { RequireWorkspaceSetup } from './components/RequireWorkspaceSetup';
 import { SubscriptionEnforcement } from './components/SubscriptionEnforcement';
 import { InteractionShell } from './components/InteractionSystem';
 import { Toaster } from './components/ui/sonner';
+import { billingPath } from './lib/billingRoutes';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
 import { useCloudStore } from './store/useCloudStore';
 import './routes/operationsHierarchy.css';
@@ -36,7 +37,6 @@ const HealthCare = lazy(() => import('./routes/HealthCare'));
 const OwnershipChain = lazy(() => import('./routes/OwnershipChain'));
 const EquipmentPage = lazy(() => import('./routes/Equipment'));
 const BreedingFoaling = lazy(() => import('./routes/BreedingFoaling'));
-const Plans = lazy(() => import('./routes/Plans'));
 const Breeding = lazy(() => import('./routes/Breeding'));
 const BuyerProfile = lazy(() => import('./routes/BuyerProfile'));
 const DocumentLibrary = lazy(() => import('./routes/DocumentLibrary'));
@@ -75,7 +75,8 @@ const ROUTE_LABELS: Record<string, string> = {
   '/ownership-chain': 'Ownership',
   '/equipment': 'Equipment',
   '/breeding-foaling': 'Breeding',
-  '/plans': 'Plan',
+  '/billing': 'Billing',
+  '/plans': 'Billing',
   '/sales-pipeline': 'Sales',
   '/buyer-deal-room': 'Buyer follow-up',
   '/buyer-follow-up': 'Buyer follow-up',
@@ -98,8 +99,8 @@ const ROUTE_LABELS: Record<string, string> = {
   '/settings': 'Settings',
   '/setup': 'Setup',
   '/shared-access': 'Listings',
-  '/subscribe': 'Choose plan',
-  '/subscriptions': 'Plan',
+  '/subscribe': 'Billing',
+  '/subscriptions': 'Billing',
   '/weather': 'Weather',
 };
 
@@ -196,7 +197,7 @@ export default function App() {
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/subscribe" element={<RequireCloudAuth><Subscriptions /></RequireCloudAuth>} />
+            <Route path="/subscribe" element={<Navigate to={billingPath} replace />} />
             <Route path="/setup" element={<RequireCloudAuth><SetupWorkspace /></RequireCloudAuth>} />
             <Route path="/" element={<RequireCloudAuth><RequireWorkspaceSetup><MainLayout /></RequireWorkspaceSetup></RequireCloudAuth>}>
               <Route index element={<Dashboard />} />
@@ -219,7 +220,7 @@ export default function App() {
               <Route path="ownership-chain" element={<OwnershipChain />} />
               <Route path="equipment" element={<EquipmentPage />} />
               <Route path="breeding-foaling" element={<BreedingFoaling />} />
-              <Route path="plans" element={<Plans />} />
+              <Route path="plans" element={<Navigate to={billingPath} replace />} />
               <Route path="horses" element={<Horses />} />
               <Route path="horses/:id" element={<HorseDetail />} />
               <Route path="assets-equipment" element={<RanchAssets />} />
@@ -234,7 +235,8 @@ export default function App() {
               <Route path="expenses" element={<Expenses />} />
               <Route path="reminders" element={<Reminders />} />
               <Route path="assets" element={<RanchAssets />} />
-              <Route path="subscriptions" element={<Subscriptions />} />
+              <Route path="billing" element={<Subscriptions />} />
+              <Route path="subscriptions" element={<Navigate to={billingPath} replace />} />
               <Route path="shared-access" element={<RequireSharedListings><SharedAccess /></RequireSharedListings>} />
               <Route path="settings" element={<Settings />} />
               <Route path="*" element={<NotFound />} />

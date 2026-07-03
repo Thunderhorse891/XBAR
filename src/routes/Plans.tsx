@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check } from 'lucide-react';
 import { ActionButton, PageHead } from '@/components/saas';
+import { billingPath, billingPathForTier } from '@/lib/billingRoutes';
 import { formatCurrency } from '@/lib/format';
 import { revenuePlanMatrix } from '@/lib/revenuePlanMatrix';
 import { subscriptionPlans } from '@/lib/subscriptionPlans';
@@ -59,7 +60,7 @@ export default function Plans() {
                   onClick={() => {
                     track(events.planSelected, { plan: tier });
                     pushToast({ title: 'Plan selected', message: `${tier} plan selected.`, tone: 'success' });
-                    navigate(`/subscriptions?plan=${encodeURIComponent(tier)}`);
+                    navigate(billingPathForTier(tier));
                   }}
                 >
                   Choose {tier}
@@ -70,7 +71,7 @@ export default function Plans() {
         })}
       </div>
 
-      <button type="button" className="xs-back" onClick={() => navigate('/subscriptions')} style={{ marginTop: 4 }}>Open checkout and invoices</button>
+      <button type="button" className="xs-back" onClick={() => navigate(billingPath)} style={{ marginTop: 4 }}>Open billing</button>
     </>
   );
 }

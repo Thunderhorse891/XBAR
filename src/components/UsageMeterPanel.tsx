@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Panel, Pill, ProgressBar } from '@/components/app-ui';
+import { billingPathForTier } from '@/lib/billingRoutes';
 import { buildUsageMeters, highestUsagePressure, nextPlan, type UsagePressure } from '@/lib/commercialEngine';
 import { useXbarStore } from '@/store/useXbarStore';
 
@@ -29,7 +30,7 @@ export function UsageMeterPanel({ compact = false }: { compact?: boolean }) {
       title="Usage meters"
       description={compact ? undefined : 'Operational limits that drive upgrade timing. Warnings start at 80%, upgrade pressure at 90%, and hard gates at 100%.'}
       meta={<Pill tone={pressureTone(pressure?.pressure ?? 'clear')}>{pressureCopy(pressure?.pressure ?? 'clear')}</Pill>}
-      action={!pressure || pressure.pressure === 'clear' ? null : <Link className="button button--primary button--compact" to={`/subscriptions?plan=${encodeURIComponent(upgradeTier)}`}>Upgrade to {upgradeTier}</Link>}
+      action={!pressure || pressure.pressure === 'clear' ? null : <Link className="button button--primary button--compact" to={billingPathForTier(upgradeTier)}>Upgrade to {upgradeTier}</Link>}
     >
       <div className="stack-list">
         <div className="stack-item">

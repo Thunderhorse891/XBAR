@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency } from '@/lib/format';
 import { getStripePaymentLink, stripeConfig } from '@/lib/platformConfig';
@@ -12,7 +12,6 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useWorkspaceReady, useXbarStore } from '@/store/useXbarStore';
 import type { SubscriptionTier } from '@/types/xbar';
-import { XBAR_MAIN_LOGO_SRC } from '@/components/BrandMark';
 import './checkoutExperience.css';
 
 const tiers: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
@@ -26,14 +25,11 @@ function formatLimit(value: number, noun: string) {
 }
 
 export default function Subscriptions() {
-  const location = useLocation();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const requestedValue = params.get('plan');
   const requestedTier = tiers.find((tier) => tier === requestedValue);
-  const standalone = location.pathname === '/subscribe';
   const subscription = useXbarStore((state) => state.subscription);
-  const applySubscriptionTier = useXbarStore((state) => state.applySubscriptionTier);
   const workspaceReady = useWorkspaceReady();
   const canManageBilling = useCurrentRoleCapability('manageBilling');
   const session = useCloudStore((state) => state.session);
@@ -44,18 +40,19 @@ export default function Subscriptions() {
   const decisionConfig = subscriptionPlans[decisionTier];
   const decisionProfile = revenuePlanMatrix[decisionTier];
   const hasManagedIdentity = Boolean(session?.access_token && workspaceId);
-  const anyPaymentLink = Object.values(stripeConfig.paymentLinks).some(Boolean);
   const billingEnabled = stripeConfig.managedBillingEnabled;
-  const trialActive = subscription.tier === 'Starter' && subscription.monthlyRate === 0;
+  const selectedPaymentLink = Boolean(getStripePaymentLink(decisionTier));
+  const selectedCheckoutConfigured = billingEnabled || selectedPaymentLink;
+  const starterSetup = subscription.tier === 'Starter' && subscription.monthlyRate === 0;
   const continuePath = workspaceReady ? '/' : '/setup';
-  const checkoutReadinessLabel = billingEnabled || anyPaymentLink
+  const checkoutReadinessLabel = selectedCheckoutConfigured
     ? 'Secure checkout opens next.'
-    : 'Plans apply to this workspace right away. Billing is arranged directly until online checkout is set up.';
+    : 'Online checkout is not configured. Contact support/manual billing required.';
   const selectedReadiness = getCheckoutReadiness({
     billingEnabled,
     canManageBilling,
     hasManagedIdentity,
-    hasPaymentLink: Boolean(getStripePaymentLink(decisionTier)),
+    hasPaymentLink: selectedPaymentLink,
     checkoutInProgress: checkoutTier !== null,
   });
   const selectedPaidCurrent = decisionTier === subscription.tier && subscription.monthlyRate === decisionConfig.monthlyRate && subscription.monthlyRate > 0;
@@ -66,19 +63,22 @@ export default function Subscriptions() {
 
   const beginCheckout = async (tier: SubscriptionTier) => {
     setCheckoutTier(tier);
-    emit(productEventNames.checkoutStarted, { tier, currentTier: subscription.tier, source: requestedTier ? 'selected_plan' : standalone ? 'onboarding' : 'plans' });
+    emit(productEventNames.checkoutStarted, { tier, currentTier: subscription.tier, source: requestedTier ? 'selected_plan' : 'billing' });
 
-    // No online checkout configured: apply the plan to the workspace directly
-    // so choosing a tier actually changes capacity and features.
-    if (!billingEnabled && !getStripePaymentLink(tier)) {
-      const applied = applySubscriptionTier(tier);
-      if (applied.ok) {
-        emit(productEventNames.planApplied, { tier, method: 'direct' });
-        pushToast({ title: `${tier} plan active`, message: applied.message, tone: 'success' });
-      } else {
-        emit(productEventNames.checkoutFailed, { tier, reason: applied.message }, 'warning');
-        pushToast({ title: 'Plan not changed', message: applied.message, tone: 'error' });
-      }
+    const readiness = getCheckoutReadiness({
+      billingEnabled,
+      canManageBilling,
+      hasManagedIdentity,
+      hasPaymentLink: Boolean(getStripePaymentLink(tier)),
+      checkoutInProgress: false,
+    });
+    if (!readiness.ready) {
+      emit(productEventNames.checkoutFailed, { tier, reason: readiness.reason }, 'warning');
+      pushToast({
+        title: readiness.mode === 'manual' ? 'Manual billing required' : 'Checkout needs attention',
+        message: `${readiness.reason} Your workspace and current plan were not changed.`,
+        tone: 'warning',
+      });
       setCheckoutTier(null);
       return;
     }
@@ -111,6 +111,7 @@ export default function Subscriptions() {
     const profile = revenuePlanMatrix[tier];
     const highlighted = tier === decisionTier;
     const paidCurrent = tier === subscription.tier && subscription.monthlyRate === config.monthlyRate && subscription.monthlyRate > 0;
+    const setupCurrent = tier === 'Starter' && starterSetup;
     const busy = checkoutTier === tier;
     const readiness = getCheckoutReadiness({
       billingEnabled,
@@ -123,7 +124,7 @@ export default function Subscriptions() {
     return (
       <article
         id={planAnchor(tier)}
-        className={`checkout-plan${highlighted ? ' checkout-plan--selected' : ''}${paidCurrent ? ' checkout-plan--active' : ''}`}
+        className={`checkout-plan${highlighted ? ' checkout-plan--selected' : ''}${paidCurrent || setupCurrent ? ' checkout-plan--active' : ''}`}
         key={tier}
       >
         <div>
@@ -140,37 +141,38 @@ export default function Subscriptions() {
           <li>{formatLimit(config.limits.seatLimit, 'team seats')}</li>
           <li>{formatLimit(config.limits.documentLimit, 'documents')}</li>
         </ul>
-        {paidCurrent ? (
-          <button type="button" disabled>Current plan</button>
+        {paidCurrent || setupCurrent ? (
+          <button type="button" disabled>{paidCurrent ? 'Current plan' : 'Current setup'}</button>
         ) : (
           <button type="button" disabled={!readiness.ready} title={readiness.reason} onClick={() => void beginCheckout(tier)}>
-            {busy ? (readiness.mode === 'direct' ? 'Activating...' : 'Opening checkout...') : `Choose ${tier}`}
+            {busy ? 'Opening checkout...' : readiness.mode === 'manual' ? 'Manual billing required' : `Choose ${tier}`}
           </button>
         )}
-        <small>{paidCurrent ? 'Your active paid capacity.' : readiness.reason}</small>
+        <small>{paidCurrent ? 'Your active paid capacity.' : setupCurrent ? 'No paid Starter subscription is active yet.' : readiness.reason}</small>
       </article>
     );
   };
 
-  const content = (
+  return (
+    <section className="checkout-route checkout-route--embedded">
     <div className="checkout-grid">
       <section className="checkout-panel checkout-panel--plans" aria-labelledby="checkout-title">
         <div className="checkout-heading">
-          <p>Subscription tiers</p>
-          <h1 id="checkout-title">Select Your Plan</h1>
+          <p>Billing</p>
+          <h1 id="checkout-title">Review Billing</h1>
           <span>
-            Choose the tier that fits your workflow. All plans include secure checkout readiness and clean operating controls for modern horse operations.
+            Choose the tier that fits your workflow. Paid plans change only after checkout succeeds or manual billing is explicitly activated.
           </span>
         </div>
 
         <div className="checkout-trial">
           <div>
-            <span>Free trial</span>
+            <span>Starter setup</span>
             <h2>Start with XBAR</h2>
-            <p>No card required. Use Starter while you set up your records.</p>
+            <p>No payment is collected in this local setup flow. Paid plans require checkout or manual billing activation.</p>
           </div>
-          <button type="button" onClick={startTrial}>{workspaceReady ? 'Continue' : 'Start trial'}</button>
-          <small>{trialActive ? 'Trial active' : `${formatLimit(subscriptionPlans.Starter.limits.horseLimit, 'horses')} and ${formatLimit(subscriptionPlans.Starter.limits.documentLimit, 'documents')}`}</small>
+          <button type="button" onClick={startTrial}>{workspaceReady ? 'Continue' : 'Continue setup'}</button>
+          <small>{starterSetup ? 'Setup active' : `${formatLimit(subscriptionPlans.Starter.limits.horseLimit, 'horses')} and ${formatLimit(subscriptionPlans.Starter.limits.documentLimit, 'documents')}`}</small>
         </div>
 
         <div className="checkout-plan-list" aria-label="Paid plans">
@@ -180,24 +182,24 @@ export default function Subscriptions() {
 
       <aside className="checkout-panel checkout-panel--payment" aria-label="Payment method">
         <div className="checkout-heading checkout-heading--compact">
-          <p>Order summary</p>
+          <p>Billing summary</p>
           <h2>{decisionTier}</h2>
           <span>{decisionProfile.fit}</span>
         </div>
 
         <div className="checkout-total">
-          <span>Due today</span>
+          <span>{selectedCheckoutConfigured ? 'Due at checkout' : 'Monthly price'}</span>
           <strong>{formatCurrency(decisionConfig.monthlyRate)}</strong>
-          <small>then monthly</small>
+          <small>{selectedCheckoutConfigured ? 'then monthly' : 'not charged in app'}</small>
         </div>
 
-        {selectedReadiness.mode === 'direct' ? (
+        {selectedReadiness.mode === 'manual' ? (
           <div className="checkout-card-box" aria-label="Billing details">
             <div className="checkout-card-box__top">
               <span>Billing</span>
-              <strong>Arranged directly</strong>
+              <strong>Manual billing required</strong>
             </div>
-            <p>No card is collected in the app. Activating a plan updates this workspace's capacity right away; billing is handled directly until online checkout is set up.</p>
+            <p>Online checkout is not configured. Contact support/manual billing required. Your workspace and plan will not change in the app until manual billing is recorded by an admin.</p>
           </div>
         ) : (
           <div className="checkout-card-box" aria-label="Secure payment details">
@@ -223,19 +225,38 @@ export default function Subscriptions() {
           </div>
         )}
 
-        <div className="checkout-status-list" aria-label="Plan details">
-          <div>
-            <span>Billing</span>
-            <strong>Monthly</strong>
-          </div>
-          <div>
-            <span>Card</span>
-            <strong>Protected</strong>
-          </div>
-          <div>
-            <span>Receipt</span>
-            <strong>Emailed</strong>
-          </div>
+        <div className="checkout-status-list" aria-label="Billing details">
+          {selectedCheckoutConfigured ? (
+            <>
+              <div>
+                <span>Billing</span>
+                <strong>Monthly</strong>
+              </div>
+              <div>
+                <span>Payment</span>
+                <strong>Handled at checkout</strong>
+              </div>
+              <div>
+                <span>Receipt</span>
+                <strong>After checkout</strong>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <span>Checkout</span>
+                <strong>Not configured</strong>
+              </div>
+              <div>
+                <span>Activation</span>
+                <strong>Manual billing only</strong>
+              </div>
+              <div>
+                <span>Workspace</span>
+                <strong>No plan change</strong>
+              </div>
+            </>
+          )}
         </div>
 
         <button
@@ -246,44 +267,19 @@ export default function Subscriptions() {
           onClick={() => void beginCheckout(decisionTier)}
         >
           {checkoutTier === decisionTier
-            ? (selectedReadiness.mode === 'direct' ? 'Activating plan...' : 'Opening secure checkout...')
+            ? 'Opening checkout...'
             : selectedPaidCurrent
               ? 'Current plan'
-              : selectedReadiness.mode === 'direct'
-                ? `Activate ${decisionTier}`
+              : selectedReadiness.mode === 'manual'
+                ? 'Manual billing required'
                 : 'Continue to secure checkout'}
         </button>
         <button className="checkout-secondary-action" type="button" onClick={startTrial}>
-          Start free trial instead
+          Continue with Starter setup
         </button>
         <p className="checkout-note">{selectedPaidCurrent ? 'This paid plan is already active.' : selectedReadiness.reason || checkoutReadinessLabel}</p>
       </aside>
     </div>
-  );
-
-  if (!standalone) {
-    return <section className="checkout-route checkout-route--embedded">{content}</section>;
-  }
-
-  return (
-    <main className="checkout-route">
-      <header className="checkout-nav">
-        <Link className="checkout-brand" to="/landing" aria-label="XBAR overview">
-          <img src={XBAR_MAIN_LOGO_SRC} alt="" />
-          <span>XBAR</span>
-        </Link>
-        <nav aria-label="Checkout sections">
-          <a href="#starter">Starter</a>
-          <a href="#professional">Professional</a>
-          <a href="#ranch-ops">Ranch Ops</a>
-          <a href="#enterprise">Enterprise</a>
-        </nav>
-        <Link className="checkout-nav__action" to={continuePath}>
-          {workspaceReady ? 'Open XBAR' : 'Set up workspace'}
-        </Link>
-      </header>
-
-      <div className="checkout-container">{content}</div>
-    </main>
+    </section>
   );
 }
