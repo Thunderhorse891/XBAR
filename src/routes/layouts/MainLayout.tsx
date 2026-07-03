@@ -45,7 +45,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Dashboard', path: '/', icon: LayoutDashboard },
       { label: 'Care Tasks', path: '/today', icon: ClipboardList },
-      { label: 'Horses', path: '/animals', icon: Home },
+      { label: 'Horses', path: '/horses', icon: Home },
       { label: 'Groups', path: '/herd-groups', icon: Users },
       { label: 'Pastures', path: '/pastures', icon: Map },
     ],
@@ -61,16 +61,16 @@ const navGroups: NavGroup[] = [
   {
     heading: 'Selling',
     items: [
-      { label: 'Sales', path: '/sales-pipeline', icon: Gauge },
+      { label: 'Sales', path: '/sales', icon: Gauge },
       { label: 'Buyer follow-up', path: buyerFollowUpPath(), icon: Users },
-      { label: 'Sale documents', path: '/sale-packet-studio', icon: FileText },
+      { label: 'Sale Packets', path: '/sale-packets', icon: FileText },
       { label: 'Ownership', path: '/ownership-chain', icon: ShieldCheck, badgeKey: 'transfers' },
     ],
   },
   {
     heading: 'Records',
     items: [
-      { label: 'Paperwork', path: '/documents-vault', icon: FolderOpen, badgeKey: 'docs' },
+      { label: 'Documents', path: '/documents', icon: FolderOpen, badgeKey: 'docs' },
       { label: 'Equipment', path: '/equipment', icon: Boxes },
       { label: 'Expenses', path: '/expenses', icon: Coins },
       { label: 'Reports', path: '/reports', icon: Gauge },
@@ -85,14 +85,12 @@ const navGroups: NavGroup[] = [
   },
 ];
 
-const whatsNew = ['Paperwork to check', 'Buyer follow-ups', 'Sale documents'];
-
 const mobileItems: { label: string; path: string; icon: LucideIcon }[] = [
   { label: 'Home', path: '/', icon: LayoutDashboard },
   { label: 'Work', path: '/today', icon: ClipboardList },
-  { label: 'Animals', path: '/animals', icon: Home },
-  { label: 'Sales', path: '/sales-pipeline', icon: Gauge },
-  { label: 'Docs', path: '/documents', icon: FolderOpen },
+  { label: 'Horses', path: '/horses', icon: Home },
+  { label: 'Sales', path: '/sales', icon: Gauge },
+  { label: 'Documents', path: '/documents', icon: FolderOpen },
 ];
 
 export default function MainLayout() {
@@ -207,14 +205,6 @@ export default function MainLayout() {
               <div className="xs-ranchcard__meta">{planTier} plan</div>
             </span>
           </div>
-          <div className="xs-whatsnew">
-            <div className="xs-whatsnew__title"><Sparkles size={13} /> What's New</div>
-            <div className="xs-whatsnew__list">
-              {whatsNew.map((item) => (
-                <div key={item} className="xs-whatsnew__row"><span className="xs-whatsnew__dot" /> {item}</div>
-              ))}
-            </div>
-          </div>
           <div className="xs-version">XBAR Platform · v2.0</div>
         </div>
       </aside>
@@ -233,7 +223,7 @@ export default function MainLayout() {
 
           <label className="xs-search">
             <Search size={15} className="xs-search__icon" />
-            <input className="xs-search__input" placeholder="Search horses, paperwork, buyers…" onKeyDown={handleSearchKey} aria-label="Search" />
+            <input className="xs-search__input" placeholder="Search horses, documents, buyers…" onKeyDown={handleSearchKey} aria-label="Search" />
           </label>
 
           <div className="xs-topbar__spacer" />
@@ -264,9 +254,18 @@ export default function MainLayout() {
             <button type="button" className="xs-btn" onClick={() => navigate('/settings')}><Users size={15} /> Invite team</button>
             <button type="button" className="xs-btn xs-btn--brass" onClick={() => navigate(billingPath)}><Rocket size={15} /> Billing</button>
 
-            <button type="button" className="xs-avatar" aria-label="Account" title={cloudSession?.user?.email ?? 'Account'} onClick={() => (cloudSession ? void handleSignOut() : navigate('/settings'))}>
-              {accountInitials}
-            </button>
+            <QuickCreateMenu
+              items={[
+                { label: 'Settings', onSelect: () => navigate('/settings') },
+                { label: 'Billing', onSelect: () => navigate(billingPath) },
+                ...(cloudSession ? [{ label: 'Sign out', onSelect: () => void handleSignOut() }] : []),
+              ]}
+              trigger={(open) => (
+                <button type="button" className="xs-avatar" aria-label="Account menu" title={cloudSession?.user?.email ?? 'Account'} onClick={open}>
+                  {accountInitials}
+                </button>
+              )}
+            />
           </div>
         </header>
 

@@ -62,7 +62,7 @@ export default function GettingStarted() {
       detail: salePacketBuilds.length ? `${salePacketBuilds.length} set${salePacketBuilds.length === 1 ? '' : 's'} prepared.` : 'Choose the records a buyer can see before a sale.',
       done: salePacketBuilds.length > 0,
       action: 'Prepare',
-      to: '/sale-packet-studio',
+      to: '/sale-packets',
     },
     {
       id: 'buyer',

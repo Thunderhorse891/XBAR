@@ -39,12 +39,12 @@ export default function TodayWork() {
   const tasks = useMemo<Task[]>(() => {
     const out: Task[] = [];
     buildTransferGapRows(horses, ownershipRecords, documents).forEach((g) =>
-      out.push({ id: `gap-${g.horseId}`, title: `Finish ownership paperwork — ${g.horseName}`, detail: g.reasons.slice(0, 2).join(' · ') || 'Missing transfer paperwork', category: 'Paperwork', priority: 'Blocker', linkedName: g.horseName, to: `/animals/${g.horseId}`, due: g.dueDate || 'Now' }),
+      out.push({ id: `gap-${g.horseId}`, title: `Finish ownership paperwork — ${g.horseName}`, detail: g.reasons.slice(0, 2).join(' · ') || 'Missing transfer paperwork', category: 'Paperwork', priority: 'Blocker', linkedName: g.horseName, to: `/horses/${g.horseId}`, due: g.dueDate || 'Now' }),
     );
     buildCareBoardRows(horses, documents, expenseReceipts).forEach((row) => {
       const due = row.signals.filter((s) => s.status === 'due');
       if (due.length) {
-        out.push({ id: `care-${row.horseId}`, title: `Care due — ${row.horseName}`, detail: due.map((s) => s.label).join(' · '), category: 'Care', priority: 'High', linkedName: row.horseName, to: `/animals/${row.horseId}`, due: due[0].dueDate ?? 'Today' });
+        out.push({ id: `care-${row.horseId}`, title: `Care due — ${row.horseName}`, detail: due.map((s) => s.label).join(' · '), category: 'Care', priority: 'High', linkedName: row.horseName, to: `/horses/${row.horseId}`, due: due[0].dueDate ?? 'Today' });
       }
     });
     documents.filter((d) => d.state === 'Needs Review' || d.state === 'Queued' || d.state === 'Matched').forEach((d) =>

@@ -126,7 +126,7 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
       pushToast({ title: 'Add Animal', message: `${name} added to the herd`, tone: 'success' });
       setF({});
       onClose();
-      navigate(result.id ? `/animals/${result.id}` : '/animals');
+      navigate(result.id ? `/horses/${result.id}` : '/horses');
     } else {
       pushToast({ title: 'Add Animal', message: result.message, tone: 'warning' });
     }
@@ -196,7 +196,7 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
           <Text label="Expiration date" placeholder="YYYY-MM-DD" value={f.exp ?? ''} onChange={set('exp')} />
         </div>
       );
-      footer = <ActionButton variant="primary" onClick={() => submit(`${f.type || 'Document'} uploaded`, '/documents-vault')}>Upload</ActionButton>;
+      footer = <ActionButton variant="primary" onClick={() => submit(`${f.type || 'Document'} uploaded`, '/documents')}>Upload</ActionButton>;
       break;
     case 'Add Health Record':
       body = (
@@ -221,7 +221,7 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
       break;
     case 'Prepare Sale Documents':
       body = <div className="xs-form"><Pick label="Animal" value={f.animal ?? animalNames[0]} onChange={set('animal')} options={animalNames} /><Pick label="Document set" value={f.type ?? 'Buyer review documents'} onChange={set('type')} options={['Sale documents', 'Buyer review documents', 'Release documents', 'Vet and travel documents']} /></div>;
-      footer = <ActionButton variant="primary" onClick={() => submit('Opening sale documents', '/sale-packet-studio')}>Open sale documents</ActionButton>;
+      footer = <ActionButton variant="primary" onClick={() => submit('Opening sale documents', '/sale-packets')}>Open sale documents</ActionButton>;
       break;
     case 'Add Buyer Follow-up':
       body = <div className="xs-form"><Text label="Buyer name" placeholder="e.g. Marlow Ranch Partners" value={f.name ?? ''} onChange={set('name')} /><Text label="Email" placeholder="buyer@email.com" value={f.email ?? ''} onChange={set('email')} /><Pick label="Animal" value={f.animal ?? animalNames[0]} onChange={set('animal')} options={animalNames} /></div>;

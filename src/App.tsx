@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter, HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import { RequireCloudAuth } from './components/RequireCloudAuth';
 import { RequireSharedListings } from './components/RequireSubscriptionFeature';
@@ -22,7 +22,6 @@ import './styles/xbarSaas.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const GettingStarted = lazy(() => import('./routes/GettingStarted'));
-const SalesPipeline = lazy(() => import('./routes/SalesPipeline'));
 const BuyerDealRoom = lazy(() => import('./routes/BuyerDealRoom'));
 const SalePacketStudio = lazy(() => import('./routes/SalePacketStudio'));
 const Reports = lazy(() => import('./routes/Reports'));
@@ -30,8 +29,6 @@ const TodayWork = lazy(() => import('./routes/TodayWork'));
 const HerdGroups = lazy(() => import('./routes/HerdGroups'));
 const Pastures = lazy(() => import('./routes/Pastures'));
 const FeedInventory = lazy(() => import('./routes/FeedInventory'));
-const DocumentsVault = lazy(() => import('./routes/DocumentsVault'));
-const Animals = lazy(() => import('./routes/Animals'));
 const AnimalProfile = lazy(() => import('./routes/AnimalProfile'));
 const HealthCare = lazy(() => import('./routes/HealthCare'));
 const OwnershipChain = lazy(() => import('./routes/OwnershipChain'));
@@ -39,11 +36,9 @@ const EquipmentPage = lazy(() => import('./routes/Equipment'));
 const BreedingFoaling = lazy(() => import('./routes/BreedingFoaling'));
 const Breeding = lazy(() => import('./routes/Breeding'));
 const BuyerProfile = lazy(() => import('./routes/BuyerProfile'));
-const DocumentLibrary = lazy(() => import('./routes/DocumentLibrary'));
 const Documents = lazy(() => import('./routes/Documents'));
 const Expenses = lazy(() => import('./routes/Expenses'));
 const FollowUps = lazy(() => import('./routes/FollowUps'));
-const HorseDetail = lazy(() => import('./routes/HorseDetail'));
 const Horses = lazy(() => import('./routes/Horses'));
 const Landing = lazy(() => import('./routes/Landing'));
 const Login = lazy(() => import('./routes/Login'));
@@ -69,26 +64,19 @@ const ROUTE_LABELS: Record<string, string> = {
   '/herd-groups': 'Herd Groups',
   '/pastures': 'Pastures',
   '/feed': 'Feed & Supplies',
-  '/documents-vault': 'Paperwork',
-  '/animals': 'Horses',
   '/health-care': 'Health',
   '/ownership-chain': 'Ownership',
   '/equipment': 'Equipment',
   '/breeding-foaling': 'Breeding',
   '/billing': 'Billing',
-  '/plans': 'Billing',
-  '/sales-pipeline': 'Sales',
-  '/buyer-deal-room': 'Buyer follow-up',
-  '/buyer-follow-up': 'Buyer follow-up',
-  '/buyers': 'Buyer follow-up',
-  '/sale-packet-studio': 'Sale documents',
+  '/buyers': 'Buyer Follow-up',
+  '/sale-packets': 'Sale Packets',
   '/reports': 'Reports',
   '/assets': 'Equipment',
   '/breeding': 'Breeding',
-  '/document-library': 'Document Library',
   '/documents': 'Documents',
   '/expenses': 'Expenses',
-  '/follow-ups': 'Buyer Follow-ups',
+  '/follow-ups': 'Buyer Follow-up',
   '/horses': 'Horses',
   '/landing': 'Ranch records',
   '/login': 'Login',
@@ -99,10 +87,13 @@ const ROUTE_LABELS: Record<string, string> = {
   '/settings': 'Settings',
   '/setup': 'Setup',
   '/shared-access': 'Listings',
-  '/subscribe': 'Billing',
-  '/subscriptions': 'Billing',
   '/weather': 'Weather',
 };
+
+function LegacyHorseRedirect() {
+  const { id } = useParams();
+  return <Navigate to={id ? `/horses/${id}` : '/horses'} replace />;
+}
 
 function useHashRouting() {
   if (typeof window === 'undefined' || import.meta.env.MODE === 'e2e') return false;
@@ -206,26 +197,27 @@ export default function App() {
               <Route path="herd-groups" element={<HerdGroups />} />
               <Route path="pastures" element={<Pastures />} />
               <Route path="feed" element={<FeedInventory />} />
-              <Route path="documents-vault" element={<DocumentsVault />} />
-              <Route path="sales-pipeline" element={<SalesPipeline />} />
+              <Route path="documents-vault" element={<Navigate to="/documents" replace />} />
+              <Route path="sales-pipeline" element={<Navigate to="/sales" replace />} />
               <Route path="buyer-deal-room" element={<Navigate to="/buyers" replace />} />
               <Route path="buyer-follow-up" element={<Navigate to="/buyers" replace />} />
               <Route path="buyers" element={<BuyerDealRoom />} />
               <Route path="buyers/:leadId" element={<BuyerDealRoom />} />
-              <Route path="sale-packet-studio" element={<SalePacketStudio />} />
+              <Route path="sale-packets" element={<SalePacketStudio />} />
+              <Route path="sale-packet-studio" element={<Navigate to="/sale-packets" replace />} />
               <Route path="reports" element={<Reports />} />
-              <Route path="animals" element={<Animals />} />
-              <Route path="animals/:id" element={<AnimalProfile />} />
+              <Route path="animals" element={<Navigate to="/horses" replace />} />
+              <Route path="animals/:id" element={<LegacyHorseRedirect />} />
               <Route path="health-care" element={<HealthCare />} />
               <Route path="ownership-chain" element={<OwnershipChain />} />
               <Route path="equipment" element={<EquipmentPage />} />
               <Route path="breeding-foaling" element={<BreedingFoaling />} />
               <Route path="plans" element={<Navigate to={billingPath} replace />} />
               <Route path="horses" element={<Horses />} />
-              <Route path="horses/:id" element={<HorseDetail />} />
+              <Route path="horses/:id" element={<AnimalProfile />} />
               <Route path="assets-equipment" element={<RanchAssets />} />
               <Route path="documents" element={<Documents />} />
-              <Route path="document-library" element={<DocumentLibrary />} />
+              <Route path="document-library" element={<Navigate to="/documents" replace />} />
               <Route path="weather" element={<Weather />} />
               <Route path="ownership" element={<Ownership />} />
               <Route path="medical" element={<Medical />} />

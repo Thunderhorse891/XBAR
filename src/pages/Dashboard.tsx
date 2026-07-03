@@ -75,9 +75,9 @@ export default function Dashboard() {
 
         <div className="xs-ribbon">
           {[
-            { v: 0, l: 'Animals', to: '/animals' },
-            { v: 0, l: 'Sale prospects', to: '/sales-pipeline' },
-            { v: 0, l: 'Documents', to: '/documents-vault' },
+            { v: 0, l: 'Animals', to: '/horses' },
+            { v: 0, l: 'Sale prospects', to: '/sales' },
+            { v: 0, l: 'Documents', to: '/documents' },
             { v: 0, l: 'Buyer follow-up', to: buyerFollowUpPath() },
             { v: '—', l: 'Readiness', to: '/reports' },
           ].map((r) => (
@@ -93,7 +93,7 @@ export default function Dashboard() {
             <div className="xs-sectlabel"><span className="xs-sectlabel__title">First steps</span></div>
             {[
               { icon: <HorsesIcon width={20} height={20} />, title: 'Add your first horse', meta: 'Name, sex, age, and where it lives — the record everything hangs off.', to: '/horses?new=1' },
-              { icon: <Upload size={20} />, title: 'Add paperwork', meta: 'Coggins, registration papers, and health records — we read them and file them for you.', to: '/documents?upload=1' },
+              { icon: <Upload size={20} />, title: 'Upload documents', meta: 'Coggins, registration papers, and health records — we read them and file them for you.', to: '/documents?upload=1' },
               { icon: <ShieldCheck size={20} />, title: 'Set up your ranch', meta: 'Owner, barn, and who else can help.', to: '/settings' },
             ].map((s) => (
               <button key={s.title} type="button" className="xs-signal xs-signal--info" onClick={() => navigate(s.to)}>
@@ -109,14 +109,14 @@ export default function Dashboard() {
             <div className="xs-intel__nba">
               <div className="xs-intel__sec-label" style={{ color: 'var(--xbar-cyan-ink)' }}>Start here</div>
               <div className="xs-intel__nba-title">Add your first horse</div>
-              <div className="xs-intel__nba-reason">Your care tasks, paperwork, and sale-ready status all fill in from your own records.</div>
+              <div className="xs-intel__nba-reason">Your care tasks, documents, and sale-ready status all fill in from your own records.</div>
               <ActionButton variant="primary" size="sm" icon={<Plus size={14} />} onClick={() => navigate('/horses?new=1')}>Add horse</ActionButton>
             </div>
             <div className="xs-intel__sec">
               <div className="xs-intel__sec-label">Quick add</div>
               <div className="xs-intel__qc">
                 <ActionButton size="sm" icon={<HorsesIcon width={14} height={14} />} onClick={() => navigate('/horses?new=1')}>Horse</ActionButton>
-                <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents?upload=1')}>Paperwork</ActionButton>
+                <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents?upload=1')}>Documents</ActionButton>
               </div>
             </div>
           </div>
@@ -130,41 +130,41 @@ export default function Dashboard() {
 
   const signals: Signal[] = [];
   transferGaps.slice(0, 2).forEach((g) =>
-    signals.push({ key: `t-${g.horseId}`, tone: 'danger', icon: 'shield', title: `Ownership paperwork — ${g.horseName}`, meta: g.reasons.slice(0, 2).join(' · '), chip: "Can't sell yet", to: `/animals/${g.horseId}` }),
+    signals.push({ key: `t-${g.horseId}`, tone: 'danger', icon: 'shield', title: `Ownership documents — ${g.horseName}`, meta: g.reasons.slice(0, 2).join(' · '), chip: "Can't sell yet", to: `/horses/${g.horseId}` }),
   );
   careDue.slice(0, 2).forEach((c) =>
-    signals.push({ key: `c-${c.horseId}`, tone: 'warning', icon: 'stethoscope', title: `Care due — ${c.horseName}`, meta: c.signals.filter((s) => s.status !== 'clear').map((s) => s.label).join(' · ') || 'Needs care', chip: 'Due', to: `/animals/${c.horseId}` }),
+    signals.push({ key: `c-${c.horseId}`, tone: 'warning', icon: 'stethoscope', title: `Care due — ${c.horseName}`, meta: c.signals.filter((s) => s.status !== 'clear').map((s) => s.label).join(' · ') || 'Needs care', chip: 'Due', to: `/horses/${c.horseId}` }),
   );
   if (reviewQueue.length) {
-    signals.push({ key: 'docs', tone: 'info', icon: 'doc', title: `${reviewQueue.length} piece${reviewQueue.length === 1 ? '' : 's'} of paperwork to check`, meta: reviewQueue.slice(0, 3).map((d) => d.title).join(' · '), chip: 'Check', to: '/documents' });
+    signals.push({ key: 'docs', tone: 'info', icon: 'doc', title: `${reviewQueue.length} document${reviewQueue.length === 1 ? '' : 's'} to review`, meta: reviewQueue.slice(0, 3).map((d) => d.title).join(' · '), chip: 'Check', to: '/documents' });
   }
   if (!signals.length) {
-    signals.push({ key: 'clear', tone: 'neutral', icon: 'horse', title: 'Everything looks good', meta: 'No missing paperwork, overdue care, or paperwork waiting to be checked.', chip: 'All set', to: '/animals' });
+    signals.push({ key: 'clear', tone: 'neutral', icon: 'horse', title: 'Everything looks good', meta: 'No missing documents, overdue care, or documents waiting for review.', chip: 'All set', to: '/horses' });
   }
 
   const primary = signals[0];
   const heroLine = primary.tone === 'danger'
-    ? <>Missing paperwork is holding up a sale — <em>{transferGaps.length} to finish</em>.</>
+    ? <>Missing documents are holding up a sale — <em>{transferGaps.length} to finish</em>.</>
     : primary.tone === 'warning'
       ? <>{careDue.length} horse{careDue.length === 1 ? '' : 's'} need care today.</>
       : primary.tone === 'info'
-        ? <>{reviewQueue.length} piece{reviewQueue.length === 1 ? '' : 's'} of paperwork need checking.</>
+        ? <>{reviewQueue.length} document{reviewQueue.length === 1 ? '' : 's'} need review.</>
         : <>Everything looks good across {horses.length} horses.</>;
 
   const workItems = [
-    ...transferGaps.map((g) => ({ id: `t-${g.horseId}`, title: `Finish ownership paperwork — ${g.horseName}`, chip: 'Paperwork', to: `/animals/${g.horseId}` })),
-    ...careDue.map((c) => ({ id: `c-${c.horseId}`, title: `Take care of — ${c.horseName}`, chip: 'Care', to: `/animals/${c.horseId}` })),
-    ...reviewQueue.map((d) => ({ id: `d-${d.id}`, title: `Check ${d.title}`, chip: 'Paperwork', to: '/documents' })),
+    ...transferGaps.map((g) => ({ id: `t-${g.horseId}`, title: `Finish ownership documents — ${g.horseName}`, chip: 'Documents', to: `/horses/${g.horseId}` })),
+    ...careDue.map((c) => ({ id: `c-${c.horseId}`, title: `Take care of — ${c.horseName}`, chip: 'Care', to: `/horses/${c.horseId}` })),
+    ...reviewQueue.map((d) => ({ id: `d-${d.id}`, title: `Check ${d.title}`, chip: 'Documents', to: '/documents' })),
   ].slice(0, 5);
 
   const iconFor = (k: Signal['icon']) =>
     k === 'coins' ? <Coins size={20} /> : k === 'stethoscope' ? <Stethoscope size={20} /> : k === 'doc' ? <FileWarning size={20} /> : k === 'shield' ? <ShieldCheck size={20} /> : <HorsesIcon width={20} height={20} />;
 
   const ribbon = [
-    { v: horses.length, l: 'Horses', to: '/animals' },
-    { v: activeSales.length, l: 'For sale', to: '/sales-pipeline' },
-    { v: reviewQueue.length, l: 'Paperwork to check', to: '/documents-vault', warn: reviewQueue.length > 0 },
-    { v: transferGaps.length, l: 'Missing paperwork', to: '/ownership-chain', danger: transferGaps.length > 0 },
+    { v: horses.length, l: 'Horses', to: '/horses' },
+    { v: activeSales.length, l: 'For sale', to: '/sales' },
+    { v: reviewQueue.length, l: 'Needs Review', to: '/documents', warn: reviewQueue.length > 0 },
+    { v: transferGaps.length, l: 'Missing documents', to: '/ownership-chain', danger: transferGaps.length > 0 },
     { v: `${readiness}%`, l: 'Ready to sell', to: '/reports' },
   ];
 
@@ -182,7 +182,7 @@ export default function Dashboard() {
           </p>
           <div className="xs-hero__actions">
             <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={() => navigate(primary.to)}>Start here</ActionButton>
-            <ActionButton onClick={() => navigate('/animals')}>Horses</ActionButton>
+            <ActionButton onClick={() => navigate('/horses')}>Horses</ActionButton>
             <ActionButton variant="ghost" onClick={() => navigate('/reports')}>Ready-to-sell report</ActionButton>
           </div>
         </div>
@@ -241,10 +241,10 @@ export default function Dashboard() {
             <ActionButton variant="primary" size="sm" icon={<ArrowRight size={14} />} onClick={() => navigate(primary.to)}>Take care of it</ActionButton>
           </div>
           <div className="xs-intel__sec">
-            <div className="xs-intel__sec-label">Paperwork &amp; care</div>
-            <div className="xs-intel__line"><ShieldCheck size={14} /><span>{transferGaps.length} horse{transferGaps.length === 1 ? '' : 's'} with missing ownership paperwork</span></div>
+            <div className="xs-intel__sec-label">Documents &amp; care</div>
+            <div className="xs-intel__line"><ShieldCheck size={14} /><span>{transferGaps.length} horse{transferGaps.length === 1 ? '' : 's'} with missing ownership documents</span></div>
             <div className="xs-intel__line"><Stethoscope size={14} /><span>{careDue.length} horse{careDue.length === 1 ? '' : 's'} with care due</span></div>
-            <div className="xs-intel__line"><FileWarning size={14} /><span>{reviewQueue.length} piece{reviewQueue.length === 1 ? '' : 's'} of paperwork to check</span></div>
+            <div className="xs-intel__line"><FileWarning size={14} /><span>{reviewQueue.length} document{reviewQueue.length === 1 ? '' : 's'} to review</span></div>
           </div>
           <div className="xs-intel__sec">
             <div className="xs-intel__sec-label">Selling &amp; costs</div>
@@ -256,7 +256,7 @@ export default function Dashboard() {
             <div className="xs-intel__qc">
               <ActionButton size="sm" icon={<Plus size={14} />} onClick={() => navigate('/today')}>Task</ActionButton>
               <ActionButton size="sm" icon={<HorsesIcon width={14} height={14} />} onClick={() => navigate('/horses?new=1')}>Horse</ActionButton>
-              <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents?upload=1')}>Paperwork</ActionButton>
+              <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents?upload=1')}>Documents</ActionButton>
               <ActionButton size="sm" icon={<Users size={14} />} onClick={() => navigate(buyerFollowUpPath())}>Buyer</ActionButton>
             </div>
           </div>

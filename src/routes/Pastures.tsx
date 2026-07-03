@@ -86,7 +86,7 @@ export default function Pastures() {
             {selected.animals.length ? (
               <div className="xs-mlist">
                 {selected.animals.map((h) => (
-                  <button key={h.id} type="button" className="xs-mrow" style={{ width: '100%', textAlign: 'left', cursor: 'pointer' }} onClick={() => { setSelectedId(null); navigate(`/animals/${h.id}`); }}>
+                  <button key={h.id} type="button" className="xs-mrow" style={{ width: '100%', textAlign: 'left', cursor: 'pointer' }} onClick={() => { setSelectedId(null); navigate(`/horses/${h.id}`); }}>
                     <span className="xs-mrow__main"><span className="xs-mrow__title">{h.name}</span><span className="xs-mrow__detail">{h.sex} · {h.segment}</span></span>
                     <StatusChip tone="info">{h.status}</StatusChip>
                   </button>

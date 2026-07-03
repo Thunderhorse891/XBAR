@@ -109,3 +109,31 @@ test('every /brand/ image referenced on login & dashboard resolves (no 404)', as
     expect(body.byteLength, `${src} body size`).toBeGreaterThan(0);
   }
 });
+
+test('legacy routes redirect to canonical product routes', async ({ page }) => {
+  // Complete local-first onboarding so the app shell (where legacy redirects
+  // live) is reachable.
+  await page.goto('/login', { waitUntil: 'load' });
+  await page.getByRole('button', { name: 'Create workspace' }).click();
+  await expect(page).toHaveURL(/\/setup/, { timeout: 15_000 });
+  await page.getByLabel('Business name').fill('XBAR LLC');
+  await page.getByLabel('Ranch name').fill('Primary Ranch');
+  await page.getByRole('button', { name: 'Create workspace' }).click();
+  await page.waitForURL((url) => !url.pathname.includes('/setup'), { timeout: 20_000 });
+
+  const redirects: Array<[string, string]> = [
+    ['/animals', '/horses'],
+    ['/documents-vault', '/documents'],
+    ['/document-library', '/documents'],
+    ['/sales-pipeline', '/sales'],
+    ['/buyer-deal-room', '/buyers'],
+    ['/buyer-follow-up', '/buyers'],
+    ['/sale-packet-studio', '/sale-packets'],
+    ['/plans', '/billing'],
+    ['/subscriptions', '/billing'],
+  ];
+  for (const [legacy, canonical] of redirects) {
+    await page.goto(legacy, { waitUntil: 'load' });
+    await page.waitForURL((url) => url.pathname === canonical, { timeout: 15_000 });
+  }
+});

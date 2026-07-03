@@ -92,7 +92,7 @@ function setupTasks(input: TodayWorkInput): WorkTask[] {
       status: 'Open',
       category: 'Setup',
       detail: 'Start the operating record that documents, care, ownership, and buyer activity connect to.',
-      route: '/animals',
+      route: '/horses',
       source: 'Workspace Setup',
     });
   }

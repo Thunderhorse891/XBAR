@@ -98,7 +98,7 @@ export default function HealthCare() {
           <thead><tr><th>Animal</th><th>Record</th><th>Due</th><th>Detail</th><th>Status</th></tr></thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id} onClick={() => navigate(`/animals/${r.horseId}`)}>
+              <tr key={r.id} onClick={() => navigate(`/horses/${r.horseId}`)}>
                 <td style={{ fontWeight: 600 }}>{r.animal}</td>
                 <td>{r.type}</td>
                 <td className="xs-muted">{r.dueDate ?? '—'}</td>

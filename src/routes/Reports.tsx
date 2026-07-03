@@ -61,7 +61,7 @@ export default function Reports() {
               {horses.map((h) => {
                 const score = h.readiness?.score ?? 0;
                 return (
-                  <div key={h.id} className="xs-row" role="button" tabIndex={0} onClick={() => navigate(`/animals/${h.id}`)} onKeyDown={(e) => e.key === 'Enter' && navigate(`/animals/${h.id}`)} style={{ cursor: 'pointer' }}>
+                  <div key={h.id} className="xs-row" role="button" tabIndex={0} onClick={() => navigate(`/horses/${h.id}`)} onKeyDown={(e) => e.key === 'Enter' && navigate(`/horses/${h.id}`)} style={{ cursor: 'pointer' }}>
                     <span className="xs-row__main">
                       <span className="xs-row__title">{h.name}</span>
                       <span className="xs-row__meta">{score}% ready</span>
@@ -79,7 +79,7 @@ export default function Reports() {
             <span className="xs-bigstat__num">{model.needsReview}</span>
             <span className="xs-bigstat__txt">to check</span>
           </div>
-          <button type="button" className="xs-btn xs-btn--block" onClick={() => navigate('/documents-vault')}>
+          <button type="button" className="xs-btn xs-btn--block" onClick={() => navigate('/documents')}>
             Open Paperwork
           </button>
         </Card>

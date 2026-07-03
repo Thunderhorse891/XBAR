@@ -140,7 +140,7 @@ export default function SalePacketStudio() {
               {blockers.map((b) => (
                 <div key={b} className="xs-row">
                   <span className="xs-row__main"><span className="xs-row__title">{b}</span><span className="xs-row__meta">Blocks buyer-safe release</span></span>
-                  <ActionButton size="sm" variant="primary" icon={<Upload size={14} />} onClick={() => navigate(`/animals/${horse.id}`)}>Fix on profile</ActionButton>
+                  <ActionButton size="sm" variant="primary" icon={<Upload size={14} />} onClick={() => navigate(`/horses/${horse.id}`)}>Fix on profile</ActionButton>
                 </div>
               ))}
               {missing.map((m) => (
