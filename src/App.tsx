@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter, HashRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import { RequireCloudAuth } from './components/RequireCloudAuth';
 import { RequireSharedListings } from './components/RequireSubscriptionFeature';
@@ -78,6 +78,8 @@ const ROUTE_LABELS: Record<string, string> = {
   '/plans': 'Plan',
   '/sales-pipeline': 'Sales',
   '/buyer-deal-room': 'Buyer follow-up',
+  '/buyer-follow-up': 'Buyer follow-up',
+  '/buyers': 'Buyer follow-up',
   '/sale-packet-studio': 'Sale documents',
   '/reports': 'Reports',
   '/assets': 'Equipment',
@@ -109,6 +111,7 @@ function useHashRouting() {
 function routeTitle(path: string) {
   if (path.startsWith('/profiles/')) return 'XBAR | Listings';
   if (path.startsWith('/horses/')) return 'XBAR | Horse';
+  if (path.startsWith('/buyers/')) return 'XBAR | Buyer Follow-up';
   return `XBAR | ${ROUTE_LABELS[path] ?? 'Ranch'}`;
 }
 
@@ -204,7 +207,10 @@ export default function App() {
               <Route path="feed" element={<FeedInventory />} />
               <Route path="documents-vault" element={<DocumentsVault />} />
               <Route path="sales-pipeline" element={<SalesPipeline />} />
-              <Route path="buyer-deal-room" element={<BuyerDealRoom />} />
+              <Route path="buyer-deal-room" element={<Navigate to="/buyers" replace />} />
+              <Route path="buyer-follow-up" element={<Navigate to="/buyers" replace />} />
+              <Route path="buyers" element={<BuyerDealRoom />} />
+              <Route path="buyers/:leadId" element={<BuyerDealRoom />} />
               <Route path="sale-packet-studio" element={<SalePacketStudio />} />
               <Route path="reports" element={<Reports />} />
               <Route path="animals" element={<Animals />} />

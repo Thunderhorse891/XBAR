@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { ProgressRing, QuickCreateMenu } from '@/components/saas';
 import { GlobalCreateDrawer, createActions, type CreateKey } from '@/components/saas/flows';
+import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { buildCareBoardRows } from '@/lib/dashboardOps';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -60,7 +61,7 @@ const navGroups: NavGroup[] = [
     heading: 'Selling',
     items: [
       { label: 'Sales', path: '/sales-pipeline', icon: Gauge },
-      { label: 'Buyer follow-up', path: '/buyer-deal-room', icon: Users },
+      { label: 'Buyer follow-up', path: buyerFollowUpPath(), icon: Users },
       { label: 'Sale documents', path: '/sale-packet-studio', icon: FileText },
       { label: 'Ownership', path: '/ownership-chain', icon: ShieldCheck, badgeKey: 'transfers' },
     ],
@@ -136,7 +137,7 @@ export default function MainLayout() {
 
   function handleMode(next: 'ops' | 'buyer') {
     setMode(next);
-    if (next === 'buyer') navigate('/buyer-deal-room');
+    if (next === 'buyer') navigate(buyerFollowUpPath());
   }
 
   function handleSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {

@@ -5,6 +5,7 @@ import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
 import { Stepper } from '@/components/saas/flows';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
+import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { events, track } from '@/lib/telemetry';
 import type { DocumentType } from '@/types/xbar';
 
@@ -188,7 +189,7 @@ export default function SalePacketStudio() {
               <label><span className="xs-field-label">Share link</span><input className="xs-input" readOnly value={`https://xbar.app/packet/${horse.id}`} /></label>
               <div style={{ display: 'flex', gap: 8 }}>
                 <ActionButton icon={<Link2 size={15} />} onClick={() => pushToast({ title: 'Copied', message: 'Share link copied', tone: 'success' })}>Copy Link</ActionButton>
-                <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={() => { track(events.packetShared, { horse: horse.id, packetType }); navigate('/buyer-deal-room'); }}>Open buyer follow-up</ActionButton>
+                <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={() => { track(events.packetShared, { horse: horse.id, packetType }); navigate(buyerFollowUpPath()); }}>Open buyer follow-up</ActionButton>
               </div>
             </div>
           </div>
@@ -200,7 +201,7 @@ export default function SalePacketStudio() {
           {step < STEPS.length - 1 ? (
             <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={next}>Continue</ActionButton>
           ) : (
-            <ActionButton variant="primary" onClick={() => { track(events.packetShared, { horse: horse.id, packetType }); navigate('/buyer-deal-room'); }}>Share and open follow-up</ActionButton>
+            <ActionButton variant="primary" onClick={() => { track(events.packetShared, { horse: horse.id, packetType }); navigate(buyerFollowUpPath()); }}>Share and open follow-up</ActionButton>
           )}
         </div>
       </Card>

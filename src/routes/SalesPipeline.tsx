@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutGrid, List, Plus } from 'lucide-react';
 import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
+import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { useXbarStore } from '@/store/useXbarStore';
 import type { HorseRecord, SalesLead } from '@/types/xbar';
 
@@ -25,7 +26,7 @@ export default function SalesPipeline() {
 
   const horseMap = useMemo(() => new Map(horses.map((h) => [h.id, h])), [horses]);
   const targetFor = (l: SalesLead) => (horseMap.get(l.horseId) as HorseRecord | undefined)?.sale?.askPrice ?? 0;
-  const horseNameFor = (l: SalesLead) => horseMap.get(l.horseId)?.name ?? 'Unlinked animal';
+  const horseNameFor = (l: SalesLead) => horseMap.get(l.horseId)?.name ?? 'Unlinked horse';
 
   const openValue = leads.filter((l) => l.stage !== 'Closed').reduce((s, l) => s + (l.offerAmount ?? targetFor(l)), 0);
   const activeCount = leads.filter((l) => l.stage !== 'Closed').length;
@@ -60,7 +61,7 @@ export default function SalesPipeline() {
                 </div>
                 <div className="xs-kcol__drop">
                   {deals.length === 0 ? <div className="xs-kcol__empty">—</div> : deals.map((d) => (
-                    <button key={d.id} type="button" className="xs-kcard" onClick={() => navigate('/buyer-deal-room')}>
+                    <button key={d.id} type="button" className="xs-kcard" onClick={() => navigate(buyerFollowUpPath(d.id))}>
                       <div className="xs-kcard__name">{horseNameFor(d)}</div>
                       <div className="xs-kcard__price">{usd(targetFor(d))} target{d.offerAmount ? ` · ${usd(d.offerAmount)} offer` : ''}</div>
                       <StatusChip tone={STAGE_TONE[d.stage]}>{d.name} · {d.channel}</StatusChip>
@@ -76,10 +77,10 @@ export default function SalesPipeline() {
       ) : (
         <div className="xs-tablewrap">
           <table className="xs-table">
-            <thead><tr><th>Animal</th><th>Buyer</th><th>Stage</th><th>Target</th><th>Offer</th></tr></thead>
+            <thead><tr><th>Horse</th><th>Buyer</th><th>Stage</th><th>Target</th><th>Offer</th></tr></thead>
             <tbody>
               {leads.map((d) => (
-                <tr key={d.id} onClick={() => navigate('/buyer-deal-room')}>
+                <tr key={d.id} onClick={() => navigate(buyerFollowUpPath(d.id))}>
                   <td style={{ fontWeight: 600 }}>{horseNameFor(d)}</td>
                   <td className="xs-muted">{d.name}</td>
                   <td><StatusChip tone={STAGE_TONE[d.stage]}>{d.stage}</StatusChip></td>

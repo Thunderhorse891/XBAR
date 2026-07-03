@@ -4,6 +4,7 @@ import { ArrowRight, Check, CheckCircle2, Plus, Timer } from 'lucide-react';
 import { ActionButton, Card, PageHead, SlideOverDrawer, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
+import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
 import { track, events } from '@/lib/telemetry';
 
@@ -50,7 +51,7 @@ export default function TodayWork() {
       out.push({ id: `doc-${d.id}`, title: `Review paperwork — ${d.title}`, detail: `${d.type} waiting to be checked`, category: 'Paperwork', priority: 'Normal', linkedName: d.title, to: '/documents', due: 'Today' }),
     );
     salesLeads.filter((l) => l.stage !== 'Closed' && l.nextFollowUp).forEach((l) =>
-      out.push({ id: `lead-${l.id}`, title: `Follow up with ${l.name}`, detail: l.notes ?? 'Buyer follow-up', category: 'Sales', priority: 'Normal', linkedName: l.name, to: '/buyer-deal-room', due: l.nextFollowUp ?? 'Soon' }),
+      out.push({ id: `lead-${l.id}`, title: `Follow up with ${l.name}`, detail: l.notes ?? 'Buyer follow-up', category: 'Sales', priority: 'Normal', linkedName: l.name, to: buyerFollowUpPath(l.id), due: l.nextFollowUp ?? 'Soon' }),
     );
     return out.filter((t) => !done.has(t.id));
   }, [horses, documents, ownershipRecords, expenseReceipts, salesLeads, done]);
