@@ -13,6 +13,7 @@ import { useUiStore } from '@/store/useUiStore';
 import { buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { HorseSegment, HorseSex, HorseStatus } from '@/types/xbar';
+import './horsesCommand.css';
 
 function createHorseFormDefaults(params: {
   defaultOwnerName: string;
@@ -35,7 +36,7 @@ function createHorseFormDefaults(params: {
   };
 }
 
-type ViewMode = 'Horses' | 'Registry';
+type ViewMode = 'Cards' | 'Table';
 type SegmentFilter = 'All' | HorseSegment;
 
 const statusTone: Record<HorseStatus, 'blue' | 'slate' | 'amber' | 'rose' | 'emerald'> = {
@@ -67,7 +68,7 @@ export default function Horses() {
   const canCreateHorse = useCurrentRoleCapability('createHorse');
   const canManageSharedAccess = useCurrentRoleCapability('manageSharedAccess');
   const [searchParams, setSearchParams] = useSearchParams();
-  const [viewMode, setViewMode] = useState<ViewMode>('Horses');
+  const [viewMode, setViewMode] = useState<ViewMode>('Cards');
   const [segmentFilter, setSegmentFilter] = useState<SegmentFilter>('All');
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [formErrors, setFormErrors] = useState<Partial<Record<'name' | 'barnName' | 'owner' | 'ownerEntity' | 'barn' | 'pasture', string>>>({});
@@ -84,7 +85,6 @@ export default function Horses() {
 
   const createOpen = searchParams.get('new') === '1';
   const activeSharedHorseIds = new Set(sharedListings.filter((listing) => listing.state !== 'Archived').map((listing) => listing.horseId));
-  void activeSharedHorseIds;
 
   useEffect(() => {
     setSearch(searchParams.get('search') ?? '');
@@ -116,10 +116,16 @@ export default function Horses() {
       ownershipRecords.find((record) => record.horseId === horse.id),
     ),
   }));
-  const medicalWatchCount = horses.filter((horse) => horse.status === 'Medical Review').length;
-  const buyerReadyCount = horses.filter((horse) => horse.readiness.packetStatus === 'Ready').length;
-  const salePrepCount = horses.filter((horse) => horse.status === 'Sale Prep' || horse.segment === 'Sale Prospect').length;
-  const proofGapCount = commandPackets.reduce((sum, item) => sum + item.packet.saleSlots.filter((slot) => slot.status !== 'ready').length, 0);
+  const readyToListCount = horses.filter((horse) => horse.readiness.packetStatus === 'Ready').length;
+  // A sale-track horse is blocked when it is on medical review or its sale
+  // packet still has unmet document slots.
+  const blockedFromSaleCount = commandPackets.filter(
+    ({ horse, packet }) =>
+      (horse.segment === 'Sale Prospect' || horse.status === 'Sale Prep') &&
+      (horse.status === 'Medical Review' || packet.saleSlots.some((slot) => slot.status !== 'ready')),
+  ).length;
+  const missingDocumentCount = commandPackets.reduce((sum, item) => sum + item.packet.saleSlots.filter((slot) => slot.status !== 'ready').length, 0);
+  const buyerPacketsLiveCount = activeSharedHorseIds.size;
 
   const handleSavedHorseToggle = async (horseId: string) => {
     setTogglingListingId(horseId);
@@ -230,17 +236,25 @@ export default function Horses() {
       <div className="surface-hero command-files-hero">
         <div className="surface-hero__top">
           <div>
-            <span className="surface-hero__eyebrow">Horses</span>
-            <h1>Horse records with identity, documents, care, and sales readiness.</h1>
+            <span className="surface-hero__eyebrow">Sale readiness</span>
+            <h1>Every horse, ready to sell before the buyer asks.</h1>
             <p className="page-description">
-              Each file connects legal owner, location, care status, documents, sales readiness, buyer packet status, and next action.
+              XBAR builds each horse record from its paperwork, scores sale readiness, and flags exactly which documents stand between a horse and a clean sale.
             </p>
+            <ol className="hc-hero-flow" aria-label="How XBAR builds sale-ready records">
+              <li>Upload papers</li>
+              <li>Build the horse profile</li>
+              <li>Detect missing documents</li>
+              <li>Generate the sale packet</li>
+              <li>Share the buyer room</li>
+            </ol>
           </div>
-          <div className="surface-hero__stats">
-            <div className="surface-hero__stat"><span>Horse records</span><strong>{horses.length}</strong></div>
-            <div className="surface-hero__stat"><span>Care holds</span><strong style={{ color: medicalWatchCount ? 'var(--rose)' : 'var(--emerald)' }}>{medicalWatchCount}</strong></div>
-            <div className="surface-hero__stat"><span>Buyer ready</span><strong>{buyerReadyCount}/{salePrepCount}</strong></div>
-            <div className="surface-hero__stat"><span>Document gaps</span><strong style={{ color: proofGapCount ? 'var(--amber)' : 'var(--emerald)' }}>{proofGapCount}</strong></div>
+          <div className="hc-kpis" aria-label="Sale readiness overview">
+            <div className="hc-kpi"><span>Total Horses</span><strong>{horses.length}</strong></div>
+            <div className="hc-kpi hc-kpi--ready"><span>Ready to List</span><strong>{readyToListCount}</strong></div>
+            <div className={`hc-kpi${blockedFromSaleCount ? ' hc-kpi--blocked' : ' hc-kpi--quiet'}`}><span>Blocked from Sale</span><strong>{blockedFromSaleCount}</strong></div>
+            <div className={`hc-kpi${missingDocumentCount ? ' hc-kpi--gaps' : ' hc-kpi--quiet'}`}><span>Missing Documents</span><strong>{missingDocumentCount}</strong></div>
+            <div className="hc-kpi"><span>Buyer Packets Live</span><strong>{buyerPacketsLiveCount}</strong></div>
           </div>
           <div className="inline-actions" style={{ marginTop: '16px' }}>
             <Link to="/documents?upload=1" className="button button--ghost button--compact">Upload Documents</Link>
@@ -275,15 +289,55 @@ export default function Horses() {
         </section>
       ) : null}
 
+      {horses.length === 0 && !createOpen ? (
+        <section className="hc-onboard" aria-label="Get started with sale-ready horse records">
+          <span className="hc-onboard__eyebrow">Start here</span>
+          <h2 className="hc-onboard__title">Build your first sale-ready horse record.</h2>
+          <p className="hc-onboard__copy">
+            XBAR is more than a records shelf. Bring in a horse&apos;s paperwork and it assembles the profile,
+            checks the sale packet for missing documents, and keeps the horse ready to show to buyers.
+          </p>
+          <div className="hc-onboard__paths">
+            <button className="hc-path" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>
+              <span className="hc-path__step">Start fast</span>
+              <strong>Add a horse</strong>
+              <p>Name, owner, and barn is enough. The sale-readiness checklist appears on the record immediately.</p>
+              <em>Add Horse →</em>
+            </button>
+            <Link className="hc-path" to="/documents?upload=1">
+              <span className="hc-path__step">Start from paperwork</span>
+              <strong>Upload documents</strong>
+              <p>Drop registration papers, Coggins, and vet records. XBAR reads them and files each one toward a horse&apos;s sale packet.</p>
+              <em>Upload Documents →</em>
+            </Link>
+            <Link className="hc-path" to="/documents?upload=1">
+              <span className="hc-path__step">Coming from a spreadsheet</span>
+              <strong>Import a CSV</strong>
+              <p>Upload a CSV export from your old system and work through it in the document review queue.</p>
+              <em>Import CSV →</em>
+            </Link>
+          </div>
+          <ol className="hc-onboard__flow" aria-label="The XBAR path to a clean sale">
+            <li>Upload papers</li>
+            <li>Horse profile</li>
+            <li>Missing-document check</li>
+            <li>Sale packet</li>
+            <li>Buyer room</li>
+            <li>Close cleaner</li>
+          </ol>
+        </section>
+      ) : null}
+
+      {horses.length > 0 ? (<>
       <section className="portfolio-toolbar">
         <div className="portfolio-toolbar__controls">
-          <SurfaceTabs items={['Horses', 'Registry']} active={viewMode} onChange={(mode) => setViewMode(mode as ViewMode)} />
+          <SurfaceTabs items={['Cards', 'Table']} active={viewMode} onChange={(mode) => setViewMode(mode as ViewMode)} />
           <SurfaceTabs items={segments} active={segmentFilter} onChange={(segment) => setSegmentFilter(segment as SegmentFilter)} className="surface-tabs--wrap" />
         </div>
         <input value={search} onChange={(event) => setSearch(event.target.value)} className="field-input field-input--wide" placeholder="Search horse record, owner, AQHA, barn, or documents" aria-label="Search horse records" />
       </section>
 
-      {viewMode === 'Horses' ? (
+      {viewMode === 'Cards' ? (
         filtered.length ? (
           <div className="horse-grid">
             {filtered.map((horse) => {
@@ -377,8 +431,9 @@ export default function Horses() {
           </table>
         </div>
       ) : (
-        <EmptyState title="No horse records match this matrix" description="Adjust filters, clear search, or create a horse record." action={<button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>Create horse record</button>} />
+        <EmptyState title="No horses match these filters" description="Adjust filters, clear search, or create a horse record." action={<button className="button button--primary button--compact" type="button" onClick={() => setNewHorseParam(true)} disabled={!canCreateHorse}>Create horse record</button>} />
       )}
+      </>) : null}
 
       <ContextMenu open={Boolean(menuState && menuHorse)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
     </>
