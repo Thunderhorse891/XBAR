@@ -133,7 +133,9 @@ test('legacy routes redirect to canonical product routes', async ({ page }) => {
     ['/subscriptions', '/billing'],
   ];
   for (const [legacy, canonical] of redirects) {
-    await page.goto(legacy, { waitUntil: 'load' });
+    // domcontentloaded: the assertion is the SPA redirect (waitForURL); a
+    // slow-loading subresource must not stall the whole walk.
+    await page.goto(legacy, { waitUntil: 'domcontentloaded' });
     await page.waitForURL((url) => url.pathname === canonical, { timeout: 15_000 });
   }
 });
