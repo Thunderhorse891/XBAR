@@ -90,7 +90,7 @@ export default function SalePacketStudio() {
         <div className="xs-mlist">
           {readiness.map(({ horse, missing, blockers, state, readyDocs }) => (
             <div key={horse.id} className="xs-mrow">
-              <span className="xs-mrow__main">
+              <span className="xs-mrow__main" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <span className="xs-mrow__title">{horse.name}</span>
                 <span className="xs-mrow__meta">
                   {readyDocs.length} approved document{readyDocs.length === 1 ? '' : 's'}
@@ -116,7 +116,7 @@ export default function SalePacketStudio() {
               const horse = horses.find((h) => h.id === packet.horseId);
               return (
                 <div key={packet.id} className="xs-mrow">
-                  <span className="xs-mrow__main">
+                  <span className="xs-mrow__main" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     <span className="xs-mrow__title">{horse?.name ?? 'Horse record removed'} · {formatDate(packet.createdAt)}</span>
                     <span className="xs-mrow__meta">
                       {packet.documentIds.length} document{packet.documentIds.length === 1 ? '' : 's'}
