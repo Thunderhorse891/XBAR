@@ -6,7 +6,6 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { InteractionBootstrap } from './components/InteractionBootstrap';
 import { registerOfflineRuntime } from './lib/offlineRuntime';
 import './index.css';
-import './premiumCommandCenter.css';
 import './mobilePolish.css';
 
 const rootElement = document.getElementById('root');

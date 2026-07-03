@@ -15,6 +15,7 @@ import {
 import {
   buildDocumentRecord,
   buildSharePath,
+  buildSubscriptionForTier,
   createId,
   createShareAccessToken,
   deriveSharedAccessSnapshot,
@@ -86,6 +87,7 @@ import type {
   RoleWorkspace,
   SalePacketBuild,
   SubscriptionProfile,
+  SubscriptionTier,
 } from '@/types/xbar';
 import type { AssetPatch, DocumentIntakeInput, ExpenseReceiptInput, LeadInput, LocationPatch, MediaUploadInput, NewHorseInput } from '@/store/xbarStoreLogic';
 
@@ -120,6 +122,7 @@ type XbarStore = {
   setCurrentRole: (role: UserRole) => void;
   initializeWorkspace: (profile: Partial<WorkspaceProfile>) => ActionResult;
   updateWorkspaceProfile: (patch: Partial<WorkspaceProfile>) => ActionResult;
+  applySubscriptionTier: (tier: SubscriptionTier, options?: { billingState?: SubscriptionProfile['billingState'] }) => ActionResult;
   toggleSharedListing: (horseId: string) => Promise<ActionResult>;
   confirmSharedListingRelease: (horseId: string, confirmedBy: string) => Promise<ActionResult>;
   recordSharedChannel: (horseId: string, channel: SharedChannel) => Promise<ActionResult>;
@@ -971,6 +974,36 @@ export const useXbarStore = create<XbarStore>()(
           horses: derived.horses,
         });
         return { ok: true, message: 'Workspace profile updated.' };
+      },
+      applySubscriptionTier: (tier, options = {}) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'manageBilling');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
+        const state = get();
+        if (state.subscription.tier === tier && state.subscription.monthlyRate > 0) {
+          return { ok: false, message: `${tier} is already the active plan.` };
+        }
+
+        const subscription = buildSubscriptionForTier(state.subscription, tier, {
+          billingState: options.billingState ?? 'Manual Billing',
+        });
+        const derived = syncDerivedValues({
+          horses: state.horses,
+          salesLeads: state.salesLeads,
+          sharedListings: state.sharedListings,
+          sharedAccess: state.sharedAccess,
+          workspaceMembers: state.workspaceMembers,
+          workspaceInvitations: state.workspaceInvitations,
+          subscription,
+        });
+        set({
+          subscription: derived.subscription,
+          sharedAccess: derived.sharedAccess,
+          horses: derived.horses,
+        });
+        return { ok: true, message: `${tier} is now active for this workspace. Limits and features updated.` };
       },
       toggleSharedListing: async (horseId) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageSharedAccess');

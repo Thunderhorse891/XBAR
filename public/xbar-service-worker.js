@@ -1,8 +1,9 @@
 const XBAR_RUNTIME_CACHE_PREFIX = 'xbar-runtime-';
-const XBAR_CACHE = 'xbar-runtime-v20260702-stabilization';
+const XBAR_CACHE = 'xbar-runtime-v20260703-ocr-light';
 const NETWORK_FIRST_ASSET_PATHS = [
   /^\/assets\//,
   /^\/brand\//,
+  /^\/ocr\//,
   /^\/favicon\.svg$/,
   /^\/site\.webmanifest$/,
   /^\/manifest\.webmanifest$/,

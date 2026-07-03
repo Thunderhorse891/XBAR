@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "node scripts/prepare-ocr-assets.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/prepare-ocr-assets.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "npm run supabase:prepare && tsc -p tsconfig.test.json && node .codex-test-dist/tests/xbarStoreLogic.test.js && node .codex-test-dist/tests/xbarPhaseTwo.test.js && node .codex-test-dist/tests/xbarGrowth.test.js && node .codex-test-dist/tests/permissions.test.js && node .codex-test-dist/tests/facebookSharing.test.js && node .codex-test-dist/tests/workspaceAccess.test.js && node .codex-test-dist/tests/dashboardOps.test.js && node .codex-test-dist/tests/operationalValuePulse.test.js && node .codex-test-dist/tests/activation.test.js && node .codex-test-dist/tests/operationsPriority.test.js && node .codex-test-dist/tests/salesFollowUp.test.js && node .codex-test-dist/tests/cloudSyncPolicy.test.js && node .codex-test-dist/tests/productEvents.test.js && node .codex-test-dist/tests/subscriptionGates.test.js && node .codex-test-dist/tests/subscriptionDecision.test.js && node .codex-test-dist/tests/interactionState.test.js && node .codex-test-dist/tests/connectionSecurity.test.js && node .codex-test-dist/tests/ownershipProof.test.js && node .codex-test-dist/tests/businessIntelligence.test.js && node .codex-test-dist/tests/breedingIntelligence.test.js && node .codex-test-dist/tests/commercialEngine.test.js && node tests/api/documentPipeline.test.mjs",
@@ -58,6 +60,7 @@
   },
   "devDependencies": {
     "@playwright/test": "1.58.2",
+    "@tesseract.js-data/eng": "^1.0.0",
     "@types/node": "20.19.37",
     "@types/react": "18.3.28",
     "@types/react-dom": "18.3.7",

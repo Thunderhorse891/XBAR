@@ -1,4 +1,15 @@
-const TEXT_PREVIEW_LIMIT = 1200;
+const TEXT_PREVIEW_LIMIT = 12000;
+const PDF_TEXT_PAGE_LIMIT = 8;
+const PDF_OCR_PAGE_LIMIT = 3;
+
+// OCR runtime files are staged same-origin by scripts/prepare-ocr-assets.mjs
+// (see that file). Never fall back to the jsdelivr CDN defaults: they break
+// behind firewalls/content blockers and defeat offline support.
+const OCR_ASSET_PATHS = {
+  workerPath: '/ocr/worker.min.js',
+  corePath: '/ocr',
+  langPath: '/ocr/lang',
+};
 
 type OcrWorker = {
   recognize: (
@@ -42,7 +53,9 @@ async function extractPlainText(file: File) {
 
 async function getOcrWorker() {
   if (!ocrWorkerPromise) {
-    ocrWorkerPromise = import('tesseract.js').then(async ({ createWorker }) => createWorker('eng'));
+    ocrWorkerPromise = import('tesseract.js').then(async ({ createWorker }) =>
+      createWorker('eng', undefined, OCR_ASSET_PATHS),
+    );
   }
 
   return ocrWorkerPromise;
@@ -68,17 +81,15 @@ function collectTextItems(items: Array<{ str?: string }>) {
     .trim();
 }
 
-async function renderPdfPageToCanvas(file: File) {
+type PdfDocument = Awaited<ReturnType<typeof import('pdfjs-dist')['getDocument']>['promise']>;
+
+async function renderPdfPageToCanvas(pdf: PdfDocument, pageNumber: number) {
   if (typeof document === 'undefined') {
     return null;
   }
 
   try {
-    await ensurePdfWorkerConfigured();
-    const { getDocument } = await getPdfJs();
-    const buffer = new Uint8Array(await file.arrayBuffer());
-    const pdf = await getDocument({ data: buffer }).promise;
-    const page = await pdf.getPage(1);
+    const page = await pdf.getPage(pageNumber);
     const viewport = page.getViewport({ scale: 2 });
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
@@ -97,7 +108,7 @@ async function renderPdfPageToCanvas(file: File) {
 
     return canvas;
   } catch (error) {
-    console.error('PDF render failed for OCR', error);
+    console.error(`PDF render failed for OCR (page ${pageNumber})`, error);
     return null;
   }
 }
@@ -108,7 +119,7 @@ async function extractPdfText(file: File) {
     const { getDocument } = await getPdfJs();
     const buffer = new Uint8Array(await file.arrayBuffer());
     const pdf = await getDocument({ data: buffer }).promise;
-    const pageCount = Math.min(pdf.numPages, 3);
+    const pageCount = Math.min(pdf.numPages, PDF_TEXT_PAGE_LIMIT);
     const chunks: string[] = [];
 
     for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
@@ -128,12 +139,24 @@ async function extractPdfText(file: File) {
       return combined;
     }
 
-    const canvas = await renderPdfPageToCanvas(file);
-    if (!canvas) {
-      return '';
+    // No text layer — scanned document. OCR the first few pages.
+    const ocrPageCount = Math.min(pdf.numPages, PDF_OCR_PAGE_LIMIT);
+    const ocrChunks: string[] = [];
+    for (let pageNumber = 1; pageNumber <= ocrPageCount; pageNumber += 1) {
+      const canvas = await renderPdfPageToCanvas(pdf, pageNumber);
+      if (!canvas) {
+        continue;
+      }
+      const text = await runImageOcr(canvas);
+      if (text) {
+        ocrChunks.push(text);
+      }
+      if (ocrChunks.join(' ').length >= TEXT_PREVIEW_LIMIT) {
+        break;
+      }
     }
 
-    return runImageOcr(canvas);
+    return ocrChunks.join(' ').trim();
   } catch (error) {
     console.error('PDF extraction failed', error);
     return '';

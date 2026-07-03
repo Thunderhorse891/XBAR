@@ -115,7 +115,7 @@ export default function SetupWorkspace() {
           <div className="clean-auth-card__header">
             <p>Workspace setup</p>
             <h1 id="setup-title">Configure Workspace</h1>
-            <span>Initialize the ranch identity protocol before adding horses, documents, owners, care, and sale packets.</span>
+            <span>Set up your ranch details before adding horses, documents, owners, care, and sale packets.</span>
           </div>
 
           <ol className="clean-step-list" aria-label="Setup steps">
@@ -133,7 +133,7 @@ export default function SetupWorkspace() {
           <form className="clean-form clean-setup-form" onSubmit={handleSubmit}>
             <div className="clean-auth-card__header">
               <p>Required first</p>
-              <h2>Ranch identity protocol.</h2>
+              <h2>Your ranch details.</h2>
               <span>Everything else can be edited later in Account Settings.</span>
             </div>
 
@@ -143,7 +143,7 @@ export default function SetupWorkspace() {
                 <input value={form.businessName} onChange={(event) => setForm((current) => ({ ...current, businessName: event.target.value }))} placeholder="XBAR LLC" />
               </label>
               <label className="clean-field">
-                <span>Ranch_Identity_Protocol</span>
+                <span>Ranch name</span>
                 <input value={form.ranchName} onChange={(event) => setForm((current) => ({ ...current, ranchName: event.target.value }))} placeholder="Primary Ranch" />
               </label>
               <label className="clean-field">
@@ -167,7 +167,7 @@ export default function SetupWorkspace() {
                 <input value={form.defaultBarn} onChange={(event) => setForm((current) => ({ ...current, defaultBarn: event.target.value }))} placeholder="Barn A" />
               </label>
               <label className="clean-field">
-                <span>Geo_Location</span>
+                <span>Default pasture</span>
                 <input value={form.defaultPasture} onChange={(event) => setForm((current) => ({ ...current, defaultPasture: event.target.value }))} placeholder="Pasture 1" />
               </label>
             </div>

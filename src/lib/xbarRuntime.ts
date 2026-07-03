@@ -100,6 +100,32 @@ export const subscriptionTierConfig: Record<
   },
 };
 
+export function buildSubscriptionForTier(
+  current: SubscriptionProfile,
+  tier: SubscriptionTier,
+  options: { billingState?: SubscriptionProfile['billingState']; renewalDate?: string } = {},
+): SubscriptionProfile {
+  const config = subscriptionTierConfig[tier];
+  return {
+    ...current,
+    tier,
+    monthlyRate: config.monthlyRate,
+    renewalDate: options.renewalDate ?? current.renewalDate,
+    billingState: options.billingState ?? current.billingState,
+    sharedAccessEnabled: config.sharedAccessEnabled,
+    featureFlags: [...config.featureFlags],
+    usage: {
+      ...current.usage,
+      horseLimit: config.limits.horseLimit,
+      seatLimit: config.limits.seatLimit,
+      documentLimit: config.limits.documentLimit,
+      salePacketLimit: config.limits.salePacketLimit,
+      storageLimitGb: config.limits.storageLimitGb,
+      sharedAccessSeatLimit: config.limits.sharedAccessSeatLimit,
+    },
+  };
+}
+
 function getCryptoApi() {
   return typeof globalThis !== 'undefined' ? globalThis.crypto : undefined;
 }
