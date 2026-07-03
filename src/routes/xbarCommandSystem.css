@@ -6,8 +6,8 @@
 
    Rules encoded here:
    - Main canvas, panels, tables, and forms are light and readable.
-   - Dark graphite appears only on: sidebar, mobile dock, command modules
-     (.surface-hero--dark, .ops-briefing-header, .command-brief), and auth shells.
+   - Dark graphite appears only on: sidebar, mobile dock, and auth shells.
+     Page heroes and briefs are light like every other workspace surface.
    - Electric blue is the only action color. No green anywhere — verified /
      clear states render in XBAR blue.
 ═══════════════════════════════════════════════ */
@@ -50,12 +50,6 @@
   --brand-gunmetal: #111a26;
   --brand-charcoal: #09111c;
   --brand-dark: #05080d;
-  /* Dark command-module tokens shared by .command-brief / hero modules. */
-  --command-bg: linear-gradient(145deg, rgba(13, 22, 34, 0.96), rgba(5, 9, 16, 0.98));
-  --command-border: rgba(206, 221, 234, 0.24);
-  --command-text: #edf5ff;
-  --command-heading: #f2f7ff;
-  --command-muted: #8aa0b8;
 }
 
 html,
@@ -565,78 +559,6 @@ tbody tr[data-state='selected'],
 
 .progress-bar--rose {
   background: linear-gradient(90deg, #a8343e, #d8666c) !important;
-}
-
-/* ═══════════════════════════════════════════════
-   DARK COMMAND MODULES
-   The only dark surfaces inside the workspace. Higher-specificity scoped
-   overrides win against the global light rules above (and against the
-   light rules in metalBrandSystem.css) regardless of file order.
-═══════════════════════════════════════════════ */
-
-.surface-hero--dark,
-.ops-briefing-header,
-.command-brief {
-  border: 1px solid var(--command-border) !important;
-  background: var(--command-bg) !important;
-  color: var(--command-text) !important;
-  box-shadow: 0 26px 60px -30px rgba(3, 7, 13, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
-  border-radius: var(--radius-xl);
-}
-
-:is(.surface-hero--dark, .ops-briefing-header, .command-brief) :is(h1, h2, h3, .surface-hero__title, .ops-briefing-header__title) {
-  color: var(--command-heading) !important;
-}
-
-:is(.surface-hero--dark, .ops-briefing-header, .command-brief) p,
-:is(.surface-hero--dark, .ops-briefing-header, .command-brief) .surface-hero__description {
-  color: rgba(190, 210, 233, 0.74) !important;
-}
-
-:is(.surface-hero--dark, .ops-briefing-header, .command-brief) :is(.surface-hero__eyebrow, .eyebrow, [class*="uppercase"][class*="tracking"]) {
-  color: #58a8ff !important;
-}
-
-:is(.surface-hero--dark, .ops-briefing-header, .command-brief) label {
-  color: rgba(180, 204, 231, 0.78) !important;
-}
-
-:is(.surface-hero--dark, .ops-briefing-header, .command-brief) :is(input, select, textarea) {
-  border-color: rgba(120, 165, 220, 0.26) !important;
-  background: rgba(4, 8, 14, 0.72) !important;
-  color: #edf5ff !important;
-}
-
-:is(.surface-hero--dark, .ops-briefing-header, .command-brief) :is(.pill, .ops-briefing-chip, [class*="rounded-full"]) {
-  border-color: rgba(120, 165, 220, 0.22) !important;
-  background: rgba(10, 18, 30, 0.68) !important;
-  color: rgba(214, 228, 244, 0.88) !important;
-}
-
-:is(.surface-hero--dark, .ops-briefing-header, .command-brief) :is(.button, button[class*="border"]):not(.button--primary) {
-  border-color: rgba(120, 165, 220, 0.26) !important;
-  background: rgba(12, 21, 34, 0.82) !important;
-  color: rgba(230, 240, 252, 0.92) !important;
-}
-
-:is(.surface-hero--dark, .ops-briefing-header, .command-brief) :is(.metric-card, .ops-briefing-stat, .surface-hero__stat, .dashboard-kpi) {
-  border-color: rgba(120, 165, 220, 0.18) !important;
-  background: rgba(5, 10, 18, 0.66) !important;
-  color: var(--command-text) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
-}
-
-:is(.surface-hero--dark, .ops-briefing-header, .command-brief) :is(.metric-card__value, .surface-hero__stat-value) {
-  color: #f5f9ff !important;
-}
-
-:is(.surface-hero--dark, .ops-briefing-header, .command-brief) :is(.metric-card__label, .surface-hero__stat-label) {
-  color: rgba(176, 199, 224, 0.66) !important;
-}
-
-.ops-briefing-header__title {
-  color: #ffffff !important;
-  font-size: clamp(1.8rem, 3.4vw, 3.2rem) !important;
 }
 
 /* ── Auth / setup continuity (kept dark-band) ── */

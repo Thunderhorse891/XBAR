@@ -165,7 +165,7 @@ export default function Subscriptions() {
 
         <div className="checkout-trial">
           <div>
-            <span>Trial protocol</span>
+            <span>Free trial</span>
             <h2>Start with XBAR</h2>
             <p>No card required. Use Starter while you set up your records.</p>
           </div>
@@ -180,7 +180,7 @@ export default function Subscriptions() {
 
       <aside className="checkout-panel checkout-panel--payment" aria-label="Payment method">
         <div className="checkout-heading checkout-heading--compact">
-          <p>Secure gateway</p>
+          <p>Order summary</p>
           <h2>{decisionTier}</h2>
           <span>{decisionProfile.fit}</span>
         </div>

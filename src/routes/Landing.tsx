@@ -166,7 +166,7 @@ function Wordmark() {
       <span className="xbar-wordmark__mark" aria-hidden="true"><XbarMark tone="mono" /></span>
       <span className="xbar-wordmark__copy">
         <strong>XBAR</strong>
-        <span>Equine operations infrastructure</span>
+        <span>Horse records &amp; sales software</span>
       </span>
     </span>
   );
@@ -367,7 +367,7 @@ export default function Landing() {
 
       <section className="revenue-hero revenue-hero--editorial" aria-labelledby="hero-heading">
         <div className="revenue-hero__copy">
-          <p className="revenue-kicker">Equine operations infrastructure</p>
+          <p className="revenue-kicker">Plans for every operation</p>
           <h1 id="hero-heading">
             <span>Simple record-keeping for horse ranches and breeders.</span>
           </h1>
