@@ -33,6 +33,7 @@ export default function Subscriptions() {
   const requestedTier = tiers.find((tier) => tier === requestedValue);
   const standalone = location.pathname === '/subscribe';
   const subscription = useXbarStore((state) => state.subscription);
+  const applySubscriptionTier = useXbarStore((state) => state.applySubscriptionTier);
   const workspaceReady = useWorkspaceReady();
   const canManageBilling = useCurrentRoleCapability('manageBilling');
   const session = useCloudStore((state) => state.session);
@@ -47,7 +48,9 @@ export default function Subscriptions() {
   const billingEnabled = stripeConfig.managedBillingEnabled;
   const trialActive = subscription.tier === 'Starter' && subscription.monthlyRate === 0;
   const continuePath = workspaceReady ? '/' : '/setup';
-  const checkoutReadinessLabel = billingEnabled || anyPaymentLink ? 'Secure checkout opens next.' : 'Secure checkout is not active yet.';
+  const checkoutReadinessLabel = billingEnabled || anyPaymentLink
+    ? 'Secure checkout opens next.'
+    : 'Plans apply to this workspace right away. Billing is arranged directly until online checkout is set up.';
   const selectedReadiness = getCheckoutReadiness({
     billingEnabled,
     canManageBilling,
@@ -64,6 +67,21 @@ export default function Subscriptions() {
   const beginCheckout = async (tier: SubscriptionTier) => {
     setCheckoutTier(tier);
     emit(productEventNames.checkoutStarted, { tier, currentTier: subscription.tier, source: requestedTier ? 'selected_plan' : standalone ? 'onboarding' : 'plans' });
+
+    // No online checkout configured: apply the plan to the workspace directly
+    // so choosing a tier actually changes capacity and features.
+    if (!billingEnabled && !getStripePaymentLink(tier)) {
+      const applied = applySubscriptionTier(tier);
+      if (applied.ok) {
+        emit(productEventNames.planApplied, { tier, method: 'direct' });
+        pushToast({ title: `${tier} plan active`, message: applied.message, tone: 'success' });
+      } else {
+        emit(productEventNames.checkoutFailed, { tier, reason: applied.message }, 'warning');
+        pushToast({ title: 'Plan not changed', message: applied.message, tone: 'error' });
+      }
+      setCheckoutTier(null);
+      return;
+    }
 
     const managed = await startManagedCheckout({ tier, workspaceId, accessToken: session?.access_token ?? '' });
     if (managed.ok) {
@@ -126,10 +144,10 @@ export default function Subscriptions() {
           <button type="button" disabled>Current plan</button>
         ) : (
           <button type="button" disabled={!readiness.ready} title={readiness.reason} onClick={() => void beginCheckout(tier)}>
-            {busy ? 'Opening checkout...' : `Choose ${tier}`}
+            {busy ? (readiness.mode === 'direct' ? 'Activating...' : 'Opening checkout...') : `Choose ${tier}`}
           </button>
         )}
-        <small>{paidCurrent ? 'Your active paid capacity.' : readiness.ready ? 'Secure checkout opens next.' : readiness.reason}</small>
+        <small>{paidCurrent ? 'Your active paid capacity.' : readiness.reason}</small>
       </article>
     );
   };
@@ -173,27 +191,37 @@ export default function Subscriptions() {
           <small>then monthly</small>
         </div>
 
-        <div className="checkout-card-box" aria-label="Secure payment details">
-          <div className="checkout-card-box__top">
-            <span>Card details</span>
-            <strong>Secure checkout</strong>
+        {selectedReadiness.mode === 'direct' ? (
+          <div className="checkout-card-box" aria-label="Billing details">
+            <div className="checkout-card-box__top">
+              <span>Billing</span>
+              <strong>Arranged directly</strong>
+            </div>
+            <p>No card is collected in the app. Activating a plan updates this workspace's capacity right away; billing is handled directly until online checkout is set up.</p>
           </div>
-          <label>
-            <span>Card number</span>
-            <div>Entered on the next secure step</div>
-          </label>
-          <div className="checkout-card-box__row">
+        ) : (
+          <div className="checkout-card-box" aria-label="Secure payment details">
+            <div className="checkout-card-box__top">
+              <span>Card details</span>
+              <strong>Secure checkout</strong>
+            </div>
             <label>
-              <span>Expiration</span>
-              <div>Next step</div>
+              <span>Card number</span>
+              <div>Entered on the next secure step</div>
             </label>
-            <label>
-              <span>CVC</span>
-              <div>Next step</div>
-            </label>
+            <div className="checkout-card-box__row">
+              <label>
+                <span>Expiration</span>
+                <div>Next step</div>
+              </label>
+              <label>
+                <span>CVC</span>
+                <div>Next step</div>
+              </label>
+            </div>
+            <p>Your card details are handled by the payment processor. XBAR never stores raw card numbers.</p>
           </div>
-          <p>Your card details are handled by the payment processor. XBAR never stores raw card numbers.</p>
-        </div>
+        )}
 
         <div className="checkout-status-list" aria-label="Plan details">
           <div>
@@ -217,7 +245,13 @@ export default function Subscriptions() {
           title={selectedPaidCurrent ? 'This plan is already active.' : selectedReadiness.reason}
           onClick={() => void beginCheckout(decisionTier)}
         >
-          {checkoutTier === decisionTier ? 'Opening secure checkout...' : selectedPaidCurrent ? 'Current plan' : 'Continue to secure checkout'}
+          {checkoutTier === decisionTier
+            ? (selectedReadiness.mode === 'direct' ? 'Activating plan...' : 'Opening secure checkout...')
+            : selectedPaidCurrent
+              ? 'Current plan'
+              : selectedReadiness.mode === 'direct'
+                ? `Activate ${decisionTier}`
+                : 'Continue to secure checkout'}
         </button>
         <button className="checkout-secondary-action" type="button" onClick={startTrial}>
           Start free trial instead

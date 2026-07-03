@@ -26,3 +26,27 @@ test('Enterprise promises only concrete enforced capacity', () => {
   assert.match(features, /20,000 documents/);
   assert.match(features, /200 buyer seats/);
 });
+
+test('applying a tier upgrades limits and features while preserving usage counts', async () => {
+  const { buildSubscriptionForTier } = await import('../src/lib/xbarRuntime.js');
+  const starter = subscription('Starter');
+  starter.monthlyRate = 0;
+  starter.usage.horsesUsed = 4;
+  starter.usage.documentsProcessed = 200;
+
+  const upgraded = buildSubscriptionForTier(starter, 'Professional', { billingState: 'Manual Billing' });
+  assert.equal(upgraded.tier, 'Professional');
+  assert.equal(upgraded.monthlyRate, subscriptionPlans.Professional.monthlyRate);
+  assert.equal(upgraded.billingState, 'Manual Billing');
+  assert.equal(upgraded.sharedAccessEnabled, true);
+  assert.equal(upgraded.usage.horseLimit, subscriptionPlans.Professional.limits.horseLimit);
+  assert.equal(upgraded.usage.documentLimit, subscriptionPlans.Professional.limits.documentLimit);
+  assert.equal(upgraded.usage.seatLimit, subscriptionPlans.Professional.limits.seatLimit);
+  assert.equal(upgraded.usage.sharedAccessSeatLimit, subscriptionPlans.Professional.limits.sharedAccessSeatLimit);
+  // Usage counters carry over untouched.
+  assert.equal(upgraded.usage.horsesUsed, 4);
+  assert.equal(upgraded.usage.documentsProcessed, 200);
+  // An upgrade unlocks gates that blocked the lower tier.
+  assert.equal(sharedListingGate(upgraded), null);
+  assert.equal(documentIntakeGate(upgraded, 200, 300), null);
+});

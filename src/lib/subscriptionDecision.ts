@@ -23,19 +23,37 @@ export const planOutcomes: Record<SubscriptionTier, string[]> = {
   ],
 };
 
+export type CheckoutReadiness = {
+  ready: boolean;
+  /**
+   * How the plan change happens when ready:
+   * - 'checkout': a secure Stripe checkout (managed session or payment link) completes first.
+   * - 'direct': no online checkout is configured, so the plan is applied to the
+   *   workspace immediately and billing is arranged outside the app.
+   */
+  mode: 'checkout' | 'direct';
+  reason: string;
+};
+
 export function getCheckoutReadiness(params: {
   billingEnabled: boolean;
   canManageBilling: boolean;
   hasManagedIdentity: boolean;
   hasPaymentLink: boolean;
   checkoutInProgress: boolean;
-}) {
-  if (!params.canManageBilling) return { ready: false, reason: 'Ask a workspace owner to change plans.' };
-  if (params.checkoutInProgress) return { ready: false, reason: 'A secure checkout session is already opening.' };
-  if (params.hasPaymentLink) return { ready: true, reason: 'Secure checkout opens next. XBAR never stores raw card numbers.' };
-  if (!params.billingEnabled) return { ready: false, reason: 'Secure checkout is not active yet.' };
-  if (!params.hasManagedIdentity) return { ready: false, reason: 'Sign in to this workspace before choosing a paid plan.' };
-  return { ready: true, reason: 'Your plan changes only after secure checkout is complete.' };
+}): CheckoutReadiness {
+  if (!params.canManageBilling) return { ready: false, mode: 'checkout', reason: 'Ask a workspace owner to change plans.' };
+  if (params.checkoutInProgress) return { ready: false, mode: 'checkout', reason: 'A secure checkout session is already opening.' };
+  if (params.hasPaymentLink) return { ready: true, mode: 'checkout', reason: 'Secure checkout opens next. XBAR never stores raw card numbers.' };
+  if (!params.billingEnabled) {
+    return {
+      ready: true,
+      mode: 'direct',
+      reason: 'The plan applies to this workspace right away. Online checkout is not set up yet, so billing is arranged directly.',
+    };
+  }
+  if (!params.hasManagedIdentity) return { ready: false, mode: 'checkout', reason: 'Sign in to this workspace before choosing a paid plan.' };
+  return { ready: true, mode: 'checkout', reason: 'Your plan changes only after secure checkout is complete.' };
 }
 
 export function recommendedTier(currentTier: SubscriptionTier, requestedTier?: SubscriptionTier) {
