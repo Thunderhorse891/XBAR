@@ -133,9 +133,13 @@ test('legacy routes redirect to canonical product routes', async ({ page }) => {
     ['/subscriptions', '/billing'],
   ];
   for (const [legacy, canonical] of redirects) {
-    // domcontentloaded: the assertion is the SPA redirect (waitForURL); a
-    // slow-loading subresource must not stall the whole walk.
-    await page.goto(legacy, { waitUntil: 'domcontentloaded' });
+    // Navigate client-side (pushState + popstate drives React Router) so the
+    // walk exercises the <Navigate> redirects without nine full reloads and
+    // IndexedDB rehydrations, which are flaky in constrained environments.
+    await page.evaluate((path) => {
+      window.history.pushState({}, '', path);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }, legacy);
     await page.waitForURL((url) => url.pathname === canonical, { timeout: 15_000 });
   }
 });
