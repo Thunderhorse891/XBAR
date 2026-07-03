@@ -75,12 +75,12 @@ export default function OwnershipChain() {
           <thead><tr><th>Animal</th><th>Current owner</th><th>Proof</th><th>Status</th><th /></tr></thead>
           <tbody>
             {ownershipRecords.map((o) => (
-              <tr key={o.id} onClick={() => navigate(`/animals/${o.horseId}`)}>
+              <tr key={o.id} onClick={() => navigate(`/horses/${o.horseId}`)}>
                 <td style={{ fontWeight: 600 }}>{horseName(o.horseId)}</td>
                 <td>{o.legalOwner}</td>
                 <td className="xs-muted">{o.pendingDocuments.length ? `${o.pendingDocuments.length} pending` : `${Math.round(o.confidence * 100)}% verified`}</td>
                 <td><StatusChip tone={STATUS_TONE[o.transferStatus]}>{o.transferStatus}</StatusChip></td>
-                <td onClick={(e) => e.stopPropagation()}>{o.transferStatus === 'Clear' ? <span className="xs-chip xs-chip--success"><ShieldCheck size={12} /> Verified</span> : <ActionButton size="sm" onClick={() => navigate(`/animals/${o.horseId}`)}>Resolve</ActionButton>}</td>
+                <td onClick={(e) => e.stopPropagation()}>{o.transferStatus === 'Clear' ? <span className="xs-chip xs-chip--success"><ShieldCheck size={12} /> Verified</span> : <ActionButton size="sm" onClick={() => navigate(`/horses/${o.horseId}`)}>Resolve</ActionButton>}</td>
               </tr>
             ))}
           </tbody>

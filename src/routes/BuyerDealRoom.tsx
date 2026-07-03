@@ -94,14 +94,14 @@ export default function BuyerDealRoom() {
           eyebrow="Selling"
           title="Buyer follow-up"
           subtitle="See what each buyer has, what they offered, and what needs a reply."
-          actions={<ActionButton variant="primary" icon={<Send size={15} />} onClick={() => navigate('/sale-packet-studio')}>Open sale documents</ActionButton>}
+          actions={<ActionButton variant="primary" icon={<Send size={15} />} onClick={() => navigate('/sale-packets')}>Open sale documents</ActionButton>}
         />
         <Card>
           <div className="xs-empty">
             <span className="xs-empty__icon"><Users size={26} /></span>
             <div className="xs-empty__title">No buyers yet</div>
             <div className="xs-empty__sub">Prepare sale documents and add buyer notes so offers and next steps stay together.</div>
-            <ActionButton variant="primary" onClick={() => navigate('/sale-packet-studio')}>Prepare sale documents</ActionButton>
+            <ActionButton variant="primary" onClick={() => navigate('/sale-packets')}>Prepare sale documents</ActionButton>
           </div>
         </Card>
       </>
@@ -149,7 +149,7 @@ export default function BuyerDealRoom() {
             </div>
             <div className="xs-toolbar">
               <ActionButton size="sm" icon={<Ban size={14} />} disabled={!selected.shareReady} onClick={() => { track(events.buyerAccessRevoked, { id: selected.id }); updateSalesLead(selected.id, { shareReady: false }); toast('Access revoked'); }}>Revoke</ActionButton>
-              <ActionButton size="sm" variant="primary" icon={<ShieldCheck size={14} />} onClick={() => navigate('/sale-packet-studio')}>Prepare documents</ActionButton>
+              <ActionButton size="sm" variant="primary" icon={<ShieldCheck size={14} />} onClick={() => navigate('/sale-packets')}>Prepare documents</ActionButton>
             </div>
           </div>
 
@@ -236,7 +236,7 @@ export default function BuyerDealRoom() {
             <div className="xs-toolbar" style={{ marginTop: 12 }}>
               <ActionButton size="sm" icon={<MessageSquare size={14} />} onClick={() => navigate(`/follow-ups?lead=${selected.id}`)}>Open follow-up</ActionButton>
               <ActionButton size="sm" icon={<Phone size={14} />} onClick={() => navigate(`/follow-ups?lead=${selected.id}`)}>Plan call</ActionButton>
-              <ActionButton size="sm" icon={<Send size={14} />} onClick={() => navigate('/sale-packet-studio')}>Share documents</ActionButton>
+              <ActionButton size="sm" icon={<Send size={14} />} onClick={() => navigate('/sale-packets')}>Share documents</ActionButton>
             </div>
           </Card>
         </div>

@@ -16,7 +16,7 @@ test('buyer workflow links do not navigate to the legacy deal-room page', async 
     'src/pages/Dashboard.tsx',
     'src/routes/AnimalProfile.tsx',
     'src/routes/SalePacketStudio.tsx',
-    'src/routes/SalesPipeline.tsx',
+    'src/routes/Sales.tsx',
     'src/routes/TodayWork.tsx',
     'src/routes/layouts/MainLayout.tsx',
   ];

@@ -84,7 +84,7 @@ export default function HerdGroups() {
               <div className="xs-stattile"><div className={`xs-stattile__num${g.needsCare ? ' xs-stattile__num--warning' : ''}`}>{g.needsCare}</div><div className="xs-stattile__label">Need care</div></div>
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <ActionButton size="sm" onClick={() => navigate('/animals')}>Open Group</ActionButton>
+              <ActionButton size="sm" onClick={() => navigate('/horses')}>Open Group</ActionButton>
               <ActionButton size="sm" onClick={() => navigate('/today')}>Care Tasks</ActionButton>
             </div>
           </Card>

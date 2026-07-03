@@ -79,7 +79,7 @@ export default function BreedingFoaling() {
           <thead><tr><th>Mare</th><th>Latest record</th><th>Date</th><th>Status</th></tr></thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id} onClick={() => navigate(`/animals/${r.id}`)}>
+              <tr key={r.id} onClick={() => navigate(`/horses/${r.id}`)}>
                 <td style={{ fontWeight: 600 }}>{r.mare}</td>
                 <td className="xs-muted">{r.stage}</td>
                 <td className="xs-muted">{r.due}</td>

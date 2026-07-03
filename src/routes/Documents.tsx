@@ -485,7 +485,7 @@ export default function Documents() {
   return (
     <>
       <CommandBrief
-        eyebrow="Document Vault"
+        eyebrow="Documents"
         entity="Your Documents"
         status={heroStatus}
         summary="Every file moves through one path: upload, local OCR, human review, ownership support, then watermarked sharing."

@@ -31,13 +31,13 @@ export default function AnimalProfile() {
   if (!animal) {
     return (
       <>
-        <button type="button" className="xs-back" onClick={() => navigate('/animals')}><ArrowLeft size={14} /> Animals</button>
+        <button type="button" className="xs-back" onClick={() => navigate('/horses')}><ArrowLeft size={14} /> Animals</button>
         <Card>
           <div className="xs-empty">
             <span className="xs-empty__icon"><HorsesIcon width={26} height={26} /></span>
             <div className="xs-empty__title">Horse not found</div>
             <div className="xs-empty__sub">This record may have been removed. Go back to your horses to pick another one.</div>
-            <ActionButton variant="primary" onClick={() => navigate('/animals')}>Back to horses</ActionButton>
+            <ActionButton variant="primary" onClick={() => navigate('/horses')}>Back to horses</ActionButton>
           </div>
         </Card>
       </>
@@ -52,7 +52,7 @@ export default function AnimalProfile() {
 
   return (
     <>
-      <button type="button" className="xs-back" onClick={() => navigate('/animals')}><ArrowLeft size={14} /> Animals</button>
+      <button type="button" className="xs-back" onClick={() => navigate('/horses')}><ArrowLeft size={14} /> Animals</button>
 
       <div className="xs-objhead">
         <div className="xs-objhead__id">
@@ -69,8 +69,8 @@ export default function AnimalProfile() {
         <div className="xs-objhead__actions">
           <ActionButton size="sm" icon={<Move size={14} />} onClick={() => toast('Move drawer opened')}>Move</ActionButton>
           <ActionButton size="sm" icon={<HeartPulse size={14} />} onClick={() => toast('Health record added')}>Add Health</ActionButton>
-          <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents-vault')}>Upload Doc</ActionButton>
-          <ActionButton size="sm" variant="primary" icon={<FileText size={14} />} onClick={() => navigate('/sale-packet-studio')}>Build Sale Packet</ActionButton>
+          <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents')}>Upload Doc</ActionButton>
+          <ActionButton size="sm" variant="primary" icon={<FileText size={14} />} onClick={() => navigate('/sale-packets')}>Build Sale Packet</ActionButton>
         </div>
       </div>
 
@@ -98,7 +98,7 @@ export default function AnimalProfile() {
             <div className="xs-nba"><div className="xs-nba__label">Suggested next step</div><div className="xs-nba__title">{animal.readiness?.blockers?.[0] ?? `Keep ${animal.name}'s records current`}</div></div>
             <div className="xs-toolbar" style={{ marginTop: 12 }}>
               <ActionButton size="sm" onClick={() => navigate('/today')}>Add Task</ActionButton>
-              <ActionButton size="sm" variant="primary" onClick={() => navigate('/sale-packet-studio')}>Build sale packet</ActionButton>
+              <ActionButton size="sm" variant="primary" onClick={() => navigate('/sale-packets')}>Build sale packet</ActionButton>
             </div>
           </Card>
         </div>
@@ -123,7 +123,7 @@ export default function AnimalProfile() {
       ) : null}
 
       {tab === 'Documents' ? (
-        <Card title="Paperwork" link="Open paperwork" onLink={() => navigate('/documents-vault')}>
+        <Card title="Paperwork" link="Open paperwork" onLink={() => navigate('/documents')}>
           {animal.documentFacts.length ? (
             <div className="xs-mlist">
               {animal.documentFacts.slice(0, 10).map((f) => (
@@ -193,7 +193,7 @@ export default function AnimalProfile() {
       ) : null}
 
       {tab === 'Ready to Sell' ? (
-        <Card title="Ready to Sell" link="Open sale packet" onLink={() => navigate('/sale-packet-studio')}>
+        <Card title="Ready to Sell" link="Open sale packet" onLink={() => navigate('/sale-packets')}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
             <span className="xs-finbar__track" style={{ flex: 1 }}><span className="xs-finbar__fill" style={{ width: `${readiness}%`, background: readiness >= 95 ? 'var(--xbar-success)' : 'var(--xbar-warning)' }} /></span>
             <strong>{readiness}%</strong>
