@@ -146,9 +146,9 @@ test('sales renders a kanban board', async ({ page }) => {
   await expect(page.locator('.xs-kcol').first()).toBeVisible();
 });
 
-test('plans page shows plan cards', async ({ page }) => {
+test('billing page shows tier cards', async ({ page }) => {
   await bootstrapWorkspace(page);
-  await page.getByRole('button', { name: 'Plan' }).click();
-  await expect(page.getByRole('heading', { name: 'Choose a plan' })).toBeVisible();
-  await expect(page.locator('.xs-plancard')).toHaveCount(4);
+  await page.getByRole('button', { name: 'Billing' }).click();
+  await expect(page.getByRole('heading', { name: 'Review Billing' })).toBeVisible();
+  await expect(page.locator('.checkout-plan')).toHaveCount(4);
 });

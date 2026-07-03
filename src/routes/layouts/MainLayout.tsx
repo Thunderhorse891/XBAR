@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { ProgressRing, QuickCreateMenu } from '@/components/saas';
 import { GlobalCreateDrawer, createActions, type CreateKey } from '@/components/saas/flows';
+import { billingPath } from '@/lib/billingRoutes';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { buildCareBoardRows } from '@/lib/dashboardOps';
 import { useCloudStore } from '@/store/useCloudStore';
@@ -79,7 +80,7 @@ const navGroups: NavGroup[] = [
     heading: 'Account',
     items: [
       { label: 'Settings', path: '/settings', icon: SettingsIcon },
-      { label: 'Plan', path: '/plans', icon: Rocket },
+      { label: 'Billing', path: billingPath, icon: Rocket },
     ],
   },
 ];
@@ -261,7 +262,7 @@ export default function MainLayout() {
             </button>
 
             <button type="button" className="xs-btn" onClick={() => navigate('/settings')}><Users size={15} /> Invite team</button>
-            <button type="button" className="xs-btn xs-btn--brass" onClick={() => navigate('/plans')}><Rocket size={15} /> Plan</button>
+            <button type="button" className="xs-btn xs-btn--brass" onClick={() => navigate(billingPath)}><Rocket size={15} /> Billing</button>
 
             <button type="button" className="xs-avatar" aria-label="Account" title={cloudSession?.user?.email ?? 'Account'} onClick={() => (cloudSession ? void handleSignOut() : navigate('/settings'))}>
               {accountInitials}

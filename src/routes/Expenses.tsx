@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { CommandBrief } from '@/components/CommandBrief';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill, ProgressBar } from '@/components/app-ui';
+import { billingPath } from '@/lib/billingRoutes';
 import { formatCompactCurrency, formatCurrency, formatDateLabel } from '@/lib/format';
 import { buildProfitPortfolio } from '@/lib/profitIntelligence';
 import { profitIntelligenceGate } from '@/lib/subscriptionGates';
@@ -266,7 +267,7 @@ export default function Expenses() {
         </section>
         <aside className="ops-panel ops-panel--form">
           <div className="ops-section-heading ops-section-heading--compact"><div><span className="section-eyebrow">Pricing action</span><h2>{profitHorse?.name ?? 'Select horse'}</h2></div><Pill tone={profitGate ? 'amber' : 'blue'}>{profitGate ? 'Upgrade to unlock' : 'Editable'}</Pill></div>
-          {profitGate ? <div className="stack-item"><div className="stack-item__title">Turn receipts into pricing decisions</div><div className="stack-item__copy">{profitGate}</div><button className="button button--primary button--compact" type="button" onClick={() => navigate('/subscriptions')}>Upgrade to unlock</button></div> : (
+          {profitGate ? <div className="stack-item"><div className="stack-item__title">Turn receipts into pricing decisions</div><div className="stack-item__copy">{profitGate}</div><button className="button button--primary button--compact" type="button" onClick={() => navigate(billingPath)}>Upgrade to unlock</button></div> : (
             <div className="ops-form">
               <label className="field-stack"><span className="field-label">Cost basis</span><input className="field-input" type="number" min="0" value={costBasis} onChange={(event) => setCostBasis(event.target.value)} /></label>
               <label className="field-stack"><span className="field-label">Asking price</span><input className="field-input" type="number" min="0" value={askingPrice} onChange={(event) => setAskingPrice(event.target.value)} /></label>

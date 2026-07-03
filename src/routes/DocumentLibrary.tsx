@@ -5,6 +5,7 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill, SurfaceTabs } from '@/components/app-ui';
 import { UsageMeterPanel } from '@/components/UsageMeterPanel';
+import { billingPath, billingPathForTier } from '@/lib/billingRoutes';
 import { buildPrefilledDocument, documentTemplateLibrary, downloadHtmlFile, type DocumentTemplate, type DocumentTemplateTier } from '@/lib/documentTemplateLibrary';
 import { downloadLegalHtml, legalDocuments, openPrintableLegalDocument } from '@/lib/legalDocuments';
 import { buildLocalSalePacket, getBuyerSafePacketDocuments } from '@/lib/localSalePacketGenerator';
@@ -141,7 +142,7 @@ export default function DocumentLibrary() {
     });
     if (!build.ok) {
       pushToast({ title: 'Packet export blocked', message: build.message, tone: 'warning' });
-      if (build.message.toLowerCase().includes('upgrade')) navigate('/subscriptions');
+      if (build.message.toLowerCase().includes('upgrade')) navigate(billingPath);
       return;
     }
     downloadSalePacketHtml(localSalePacket.fileName, localSalePacket.html);
@@ -193,7 +194,7 @@ export default function DocumentLibrary() {
         message: remote.message,
         tone: 'warning',
       });
-      navigate(`/subscriptions?plan=${encodeURIComponent(remote.tierBlock.requiredPlan)}`);
+      navigate(billingPathForTier(remote.tierBlock.requiredPlan));
       return;
     }
     pushToast({ title: 'PDF generation failed', message: remote.message, tone: 'error' });

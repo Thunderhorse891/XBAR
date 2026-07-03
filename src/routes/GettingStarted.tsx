@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Check } from 'lucide-react';
 import { Card, PageHead, ProgressRing } from '@/components/saas';
+import { billingPath } from '@/lib/billingRoutes';
 import { useXbarStore } from '@/store/useXbarStore';
 
 type Step = {
@@ -73,11 +74,11 @@ export default function GettingStarted() {
     },
     {
       id: 'plan',
-      title: 'Choose a plan',
-      detail: `${subscription.tier} plan is active for this workspace.`,
+      title: 'Review billing',
+      detail: `${subscription.tier} billing is set for this workspace.`,
       done: subscription.billingState === 'Active' || subscription.monthlyRate > 0,
-      action: 'View plans',
-      to: '/subscriptions',
+      action: 'Open billing',
+      to: billingPath,
     },
   ];
 

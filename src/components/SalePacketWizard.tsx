@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { createSalePacketRemote, hasBackendIdentity } from '@/lib/backendApi';
+import { billingPathForTier } from '@/lib/billingRoutes';
 import { assessRevenueAtRisk, computeHorseEconomics } from '@/lib/businessIntelligence';
 import { formatCompactCurrency } from '@/lib/format';
 import { useCloudStore } from '@/store/useCloudStore';
@@ -131,7 +132,7 @@ export function SalePacketWizard({
         if (remote.tierBlock) {
           pushToast({ title: `Sale packets need the ${remote.tierBlock.requiredPlan} plan`, message: remote.message, tone: 'warning' });
           close();
-          navigate(`/subscriptions?plan=${encodeURIComponent(remote.tierBlock.requiredPlan)}`);
+          navigate(billingPathForTier(remote.tierBlock.requiredPlan));
           return;
         }
         pushToast({ title: 'Packet PDF failed', message: remote.message, tone: 'error' });
