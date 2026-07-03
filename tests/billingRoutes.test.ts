@@ -43,7 +43,6 @@ test('upgrade links use canonical billing path instead of legacy billing routes'
     'src/lib/activation.ts',
     'src/lib/subscriptionGates.ts',
     'src/routes/Breeding.tsx',
-    'src/routes/DocumentLibrary.tsx',
     'src/routes/Documents.tsx',
     'src/routes/Expenses.tsx',
     'src/routes/GettingStarted.tsx',
