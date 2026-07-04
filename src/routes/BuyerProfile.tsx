@@ -18,9 +18,9 @@ import { useUiStore } from '@/store/useUiStore';
 import { useHorseRecord, useXbarStore } from '@/store/useXbarStore';
 
 
-// Buyer folder actions: questions, call requests, and offers flow back to
+// Buyer follow-up actions: questions, call requests, and offers flow back to
 // the seller — through the public API on real shared links, or straight into
-// the workspace buyer folder during internal/local preview.
+// workspace buyer follow-up during internal/local preview.
 function BuyerActionPanel({
   sharePath,
   shareToken,
@@ -441,7 +441,7 @@ export default function BuyerProfile() {
           onLocalLog={(input) => {
             if (id) {
               logBuyerRoomEvent({ horseId: id, kind: input.kind, actor: input.actor, note: input.note, amount: input.amount });
-              pushToast({ title: 'Buyer activity logged', message: 'This buyer action is now in the buyer folder timeline.', tone: 'success' });
+              pushToast({ title: 'Buyer activity logged', message: 'This buyer action is now in Buyer follow-up.', tone: 'success' });
             }
           }}
         />

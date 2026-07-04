@@ -16,7 +16,7 @@ import './confirmActionDialog.css';
 /*
  * Replaces window.confirm for destructive and legal actions. The confirm
  * button stays disabled until every acknowledgement is checked and, when
- * requireText is set, the operator has typed the exact phrase — a proof
+ * requireText is set, the user has typed the exact phrase — a proof
  * check, not a reflex click.
  */
 

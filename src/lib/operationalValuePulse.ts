@@ -135,7 +135,7 @@ export function buildOperationalValuePulse(input: OperationalValuePulseInput): O
   } else if (input.reviewQueueCount > 0) {
     nextAction = {
       label: 'Clear document review',
-      detail: `${plural(input.reviewQueueCount, 'document')} are waiting for an operator decision.`,
+      detail: `${plural(input.reviewQueueCount, 'document')} are waiting for a team decision.`,
       path: '/documents',
     };
   } else if (!input.currentMonthReceiptCount) {

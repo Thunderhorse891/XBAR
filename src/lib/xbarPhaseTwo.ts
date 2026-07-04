@@ -171,7 +171,7 @@ function buildSalePacketSlot(params: {
 
 function describeDuplicateRisk(document: DocumentTrustInput) {
   if (document.duplicateRisk === 'Possible Duplicate') {
-    return 'Possible duplicate against an existing vault record.';
+    return 'Possible duplicate against an existing document record.';
   }
   if (document.duplicateRisk === 'Review') {
     return 'Related document already exists and needs side-by-side review.';

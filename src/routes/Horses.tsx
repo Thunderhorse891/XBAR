@@ -239,14 +239,14 @@ export default function Horses() {
             <span className="surface-hero__eyebrow">Sale readiness</span>
             <h1>Every horse, ready to sell before the buyer asks.</h1>
             <p className="page-description">
-              XBAR builds each horse record from its paperwork, scores sale readiness, and flags exactly which documents stand between a horse and a clean sale.
+              XBAR builds each horse record from its documents, scores sale readiness, and flags exactly which records stand between a horse and a clean sale.
             </p>
             <ol className="hc-hero-flow" aria-label="How XBAR builds sale-ready records">
-              <li>Upload papers</li>
+              <li>Upload documents</li>
               <li>Build the horse profile</li>
               <li>Detect missing documents</li>
               <li>Generate the sale packet</li>
-              <li>Share the buyer room</li>
+              <li>Start buyer follow-up</li>
             </ol>
           </div>
           <div className="hc-kpis" aria-label="Sale readiness overview">
@@ -294,7 +294,7 @@ export default function Horses() {
           <span className="hc-onboard__eyebrow">Start here</span>
           <h2 className="hc-onboard__title">Build your first sale-ready horse record.</h2>
           <p className="hc-onboard__copy">
-            XBAR is more than a records shelf. Bring in a horse&apos;s paperwork and it assembles the profile,
+            XBAR is more than a records shelf. Bring in a horse&apos;s documents and it assembles the profile,
             checks the sale packet for missing documents, and keeps the horse ready to show to buyers.
           </p>
           <div className="hc-onboard__paths">
@@ -305,7 +305,7 @@ export default function Horses() {
               <em>Add Horse →</em>
             </button>
             <Link className="hc-path" to="/documents?upload=1">
-              <span className="hc-path__step">Start from paperwork</span>
+              <span className="hc-path__step">Start from documents</span>
               <strong>Upload documents</strong>
               <p>Drop registration papers, Coggins, and vet records. XBAR reads them and files each one toward a horse&apos;s sale packet.</p>
               <em>Upload Documents →</em>
@@ -318,11 +318,11 @@ export default function Horses() {
             </Link>
           </div>
           <ol className="hc-onboard__flow" aria-label="The XBAR path to a clean sale">
-            <li>Upload papers</li>
+            <li>Upload documents</li>
             <li>Horse profile</li>
             <li>Missing-document check</li>
             <li>Sale packet</li>
-            <li>Buyer room</li>
+            <li>Buyer follow-up</li>
             <li>Close cleaner</li>
           </ol>
         </section>

@@ -42,7 +42,7 @@ export default function GettingStarted() {
     },
     {
       id: 'documents',
-      title: 'Add paperwork',
+      title: 'Upload documents',
       detail: documents.length ? `${documents.length} document${documents.length === 1 ? '' : 's'} uploaded.` : 'Upload Coggins, registration, health records, or bills of sale.',
       done: documents.length > 0,
       action: 'Upload',
@@ -50,15 +50,15 @@ export default function GettingStarted() {
     },
     {
       id: 'review',
-      title: 'Check uploaded paperwork',
+      title: 'Review uploaded documents',
       detail: documents.length ? `${documentsToCheck} item${documentsToCheck === 1 ? '' : 's'} still need checking.` : 'Review starts after the first upload.',
       done: documents.length > 0 && documentsToCheck === 0,
       action: 'Review',
       to: '/documents',
     },
     {
-      id: 'sale-documents',
-      title: 'Prepare sale documents',
+      id: 'sale-packets',
+      title: 'Prepare sale packet',
       detail: salePacketBuilds.length ? `${salePacketBuilds.length} set${salePacketBuilds.length === 1 ? '' : 's'} prepared.` : 'Choose the records a buyer can see before a sale.',
       done: salePacketBuilds.length > 0,
       action: 'Prepare',

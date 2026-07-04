@@ -207,7 +207,7 @@ export default function Sales() {
           overdueLeads.length
             ? { label: 'Follow-ups overdue', tone: 'rose' }
             : transferBlockedHorses.length
-              ? { label: 'Transfer paperwork pending', tone: 'amber' }
+              ? { label: 'Transfer documents pending', tone: 'amber' }
               : { label: 'On track', tone: 'blue' }
         }
         summary={`${saleHorses.length} active listings with ${openProspects.length} open prospects and ${liveShareCount} live sale links.`}
@@ -238,7 +238,7 @@ export default function Sales() {
         <MetricCard label="Sale horses" value={`${saleHorses.length}`} detail="Active pricing or pending review" />
         <MetricCard label="Prospects" value={`${openProspects.length}`} detail="Open inquiries across all channels" tone="blue" />
         <MetricCard label="Shared records" value={`${sharedAccess.savedHorses}`} detail="Listings open in shared access" tone="blue" />
-        <MetricCard label="Transfer blockers" value={`${transferBlockedHorses.length}`} detail="Listings with ownership or paperwork friction" tone="amber" />
+        <MetricCard label="Transfer blockers" value={`${transferBlockedHorses.length}`} detail="Listings with ownership or document friction" tone="amber" />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">

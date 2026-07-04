@@ -48,7 +48,7 @@ export const subscriptionTierConfig: Record<
     sharedAccessEnabled: true,
     featureFlags: [
       'Everything in Starter',
-      'Share approved sale documents and keep buyer follow-up in one place',
+      'Share approved sale packets and keep buyer follow-up in one place',
       'Sale listings for buyer-ready horse profiles',
       '5 team seats and 10 buyer seats',
       '1,000 documents and 100 GB storage',

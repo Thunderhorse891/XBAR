@@ -1012,7 +1012,7 @@ export default function Documents() {
           >
             {subscription.tier === 'Starter' ? (
               <p className="panel__description" style={{ marginBottom: 12 }}>
-                Starter records the packet build. Upgrading to Professional unlocks the watermarked PDF and the buyer folder.{' '}
+                Starter records the packet build. Upgrading to Professional unlocks the watermarked PDF and Buyer follow-up.{' '}
                 <button className="button button--ghost button--compact" type="button" onClick={() => navigate(billingPathForTier('Professional'))}>
                   View Billing
                 </button>

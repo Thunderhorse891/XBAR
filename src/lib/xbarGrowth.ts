@@ -146,7 +146,7 @@ export function buildFieldTools(params: {
       id: 'scan-intake',
       eyebrow: 'Mobile capture',
       title: 'Add files',
-      summary: 'Upload documents to the vault.',
+      summary: 'Upload documents to Documents.',
       metric: `${unresolvedDocs} docs still in review`,
       href: '/documents?upload=1',
       tone: unresolvedDocs ? 'amber' : 'emerald',

@@ -21,7 +21,7 @@ export default function Login() {
   const passwordId = useId();
   const pushToast = useUiStore((state) => state.pushToast);
   const cloud = useCloudStore();
-  const initializeWorkspace = useXbarStore((state) => state.initializeWorkspace);
+  const setUpWorkspace = useXbarStore((state) => state.initializeWorkspace);
   const [email, setEmail] = useState(() => localStorage.getItem('xbar-remembered-email') ?? '');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(() => localStorage.getItem('xbar-remember-me') === 'true');
@@ -66,7 +66,7 @@ export default function Login() {
 
   const openBrowserWorkspace = () => {
     markLocalWorkspaceIntent();
-    initializeWorkspace({ businessName: 'XBAR Ranch', ranchName: 'XBAR Ranch' });
+    setUpWorkspace({ businessName: 'XBAR Ranch', ranchName: 'XBAR Ranch' });
     navigate(redirectTarget, { replace: true });
   };
 
@@ -105,7 +105,7 @@ export default function Login() {
     toast(result.ok ? 'Reset email sent' : 'Reset unavailable', result);
     setBusy('');
   };
-  const label = authMode === 'signin' ? 'System access' : selectedPlan ? `${selectedPlan} tier` : 'New operator';
+  const label = authMode === 'signin' ? 'System access' : selectedPlan ? `${selectedPlan} tier` : 'New workspace';
   const title = authMode === 'signin' ? 'Sign In' : 'Create Account';
   const description = selectedPlan
     ? `Create credentials, then continue to the ${selectedPlan} plan.`
@@ -122,7 +122,7 @@ export default function Login() {
           <div className="clean-login-visual__copy">
             <img className="clean-login-visual__wordmark" src="/brand/xbar-wordmark.png" width="420" height="120" alt="XBAR" />
             <h2>XBAR Ranch Management</h2>
-            <p>Keep your horse records, paperwork, and sale documents organized in one place.</p>
+            <p>Keep your horse records, documents, and sale packets organized in one place.</p>
           </div>
           <dl className="clean-login-proof" aria-label="XBAR workspace">
             <div>

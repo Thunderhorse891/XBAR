@@ -64,9 +64,9 @@ export default function Dashboard() {
           <div className="xs-hero__body">
             <div className="xs-hero__eyebrow"><Sparkles size={13} /> {ranchName} · Getting started</div>
             <h1 className="xs-hero__headline">Get your horse records in order.</h1>
-            <p className="xs-hero__sub">Add your first horse and its papers. XBAR keeps your health records, registration, ownership history, and buyer folders in one place — and tells you when a horse is ready to sell.</p>
+            <p className="xs-hero__sub">Add your first horse and its documents. XBAR keeps your health records, registration, ownership history, and buyer follow-up in one place — and tells you when a horse is ready to sell.</p>
             <div className="xs-hero__actions">
-              <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>Add first animal</ActionButton>
+              <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>Add first horse</ActionButton>
               <ActionButton onClick={() => navigate('/documents?upload=1')}>Upload documents</ActionButton>
               <ActionButton variant="ghost" onClick={() => navigate('/getting-started')}>Getting started</ActionButton>
             </div>
@@ -75,7 +75,7 @@ export default function Dashboard() {
 
         <div className="xs-ribbon">
           {[
-            { v: 0, l: 'Animals', to: '/horses' },
+            { v: 0, l: 'Horses', to: '/horses' },
             { v: 0, l: 'Sale prospects', to: '/sales' },
             { v: 0, l: 'Documents', to: '/documents' },
             { v: 0, l: 'Buyer follow-up', to: buyerFollowUpPath() },

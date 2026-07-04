@@ -56,12 +56,12 @@ export function Stepper({ steps, current }: { steps: string[]; current: number }
 
 /* ------------------------------------------------- Global Create (drawer) */
 export type CreateKey =
-  | 'Add Animal' | 'Add Task' | 'Upload Document' | 'Add Health Record' | 'Move Animals'
-  | 'Prepare Sale Documents' | 'Add Buyer Follow-up' | 'Add Expense' | 'Add Equipment' | 'Report Pasture Issue';
+  | 'Add Horse' | 'Add Task' | 'Upload Document' | 'Add Health Record' | 'Move Horses'
+  | 'Prepare Sale Packet' | 'Add Buyer Follow-up' | 'Add Expense' | 'Add Equipment' | 'Report Pasture Issue';
 
 export const createActions: CreateKey[] = [
-  'Add Animal', 'Add Task', 'Upload Document', 'Add Health Record', 'Move Animals',
-  'Prepare Sale Documents', 'Add Buyer Follow-up', 'Add Expense', 'Add Equipment', 'Report Pasture Issue',
+  'Add Horse', 'Add Task', 'Upload Document', 'Add Health Record', 'Move Horses',
+  'Prepare Sale Packet', 'Add Buyer Follow-up', 'Add Expense', 'Add Equipment', 'Report Pasture Issue',
 ];
 
 const locationNames = ['Main Barn', 'North Pasture', 'South Pasture', 'Foaling Pen', 'Quarantine Pen', 'Round Pen'];
@@ -89,7 +89,7 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
   const [busy, setBusy] = useState(false);
   const set = (k: string) => (v: string) => setF((cur) => ({ ...cur, [k]: v }));
 
-  const animalNames = horses.length ? horses.map((h) => h.name) : ['(add a horse first)'];
+  const horseNames = horses.length ? horses.map((h) => h.name) : ['(add a horse first)'];
 
   if (!action) return null;
 
@@ -104,7 +104,7 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
   const submitAnimal = () => {
     const name = (f.name ?? '').trim();
     if (name.length < 2) {
-      pushToast({ title: 'Add Animal', message: 'Enter a name to add the animal.', tone: 'warning' });
+      pushToast({ title: 'Add Horse', message: 'Enter a name to add the horse.', tone: 'warning' });
       return;
     }
     const segment = (f.segment as HorseSegment) ?? 'Sale Prospect';
@@ -123,12 +123,12 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
     });
     track(events.createSubmitted, { action });
     if (result.ok) {
-      pushToast({ title: 'Add Animal', message: `${name} added to the herd`, tone: 'success' });
+      pushToast({ title: 'Add Horse', message: `${name} added to the herd`, tone: 'success' });
       setF({});
       onClose();
       navigate(result.id ? `/horses/${result.id}` : '/horses');
     } else {
-      pushToast({ title: 'Add Animal', message: result.message, tone: 'warning' });
+      pushToast({ title: 'Add Horse', message: result.message, tone: 'warning' });
     }
   };
 
@@ -164,7 +164,7 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
   let footer: ReactNode = null;
 
   switch (action) {
-    case 'Add Animal':
+    case 'Add Horse':
       body = (
         <div className="xs-form">
           <Text label="Name" placeholder="e.g. THR Copper Canyon" value={f.name ?? ''} onChange={set('name')} />
@@ -174,7 +174,7 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
           <Pick label="Location" value={f.loc ?? workspaceProfile.defaultBarn ?? locationNames[0]} onChange={set('loc')} options={locationNames} />
         </div>
       );
-      footer = <ActionButton variant="primary" onClick={submitAnimal}>Add Animal</ActionButton>;
+      footer = <ActionButton variant="primary" onClick={submitAnimal}>Add Horse</ActionButton>;
       break;
     case 'Add Task':
       body = (
@@ -192,7 +192,7 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
         <div className="xs-form">
           <div className="xs-drop"><FileUp size={20} style={{ display: 'block', margin: '0 auto 8px' }} />Drop a file or click to browse (PDF, JPG)</div>
           <Pick label="Document type" value={f.type ?? 'Health Certificate'} onChange={set('type')} options={['Health Certificate', 'Coggins', 'Registration', 'Bill of Sale', 'Photos', 'Contract']} />
-          <Pick label="Link to animal" value={f.animal ?? animalNames[0]} onChange={set('animal')} options={animalNames} />
+          <Pick label="Link to horse" value={f.animal ?? horseNames[0]} onChange={set('animal')} options={horseNames} />
           <Text label="Expiration date" placeholder="YYYY-MM-DD" value={f.exp ?? ''} onChange={set('exp')} />
         </div>
       );
@@ -201,7 +201,7 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
     case 'Add Health Record':
       body = (
         <div className="xs-form">
-          <Pick label="Animal" value={f.animal ?? animalNames[0]} onChange={set('animal')} options={animalNames} />
+          <Pick label="Horse" value={f.animal ?? horseNames[0]} onChange={set('animal')} options={horseNames} />
           <Pick label="Record type" value={f.type ?? 'Vaccine'} onChange={set('type')} options={['Vaccine', 'Deworming', 'Coggins', 'Dental', 'Farrier', 'Vet visit', 'Medication']} />
           <Text label="Date" placeholder="YYYY-MM-DD" value={f.date ?? ''} onChange={set('date')} />
           <Area label="Notes" placeholder="Withdrawal date, dosage, vet…" value={f.notes ?? ''} onChange={set('notes')} />
@@ -209,7 +209,7 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
       );
       footer = <ActionButton variant="primary" onClick={() => submit('Health record added')}>Add Record</ActionButton>;
       break;
-    case 'Move Animals':
+    case 'Move Horses':
       body = (
         <div className="xs-form">
           <Pick label="From" value={f.from ?? locationNames[1]} onChange={set('from')} options={locationNames} />
@@ -217,14 +217,14 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
           <Text label="How many" placeholder="e.g. 14" value={f.count ?? ''} onChange={set('count')} />
         </div>
       );
-      footer = <ActionButton variant="primary" onClick={() => submit(`Moved ${f.count || 'animals'} → ${f.to || 'new location'}`, '/pastures')}>Move Animals</ActionButton>;
+      footer = <ActionButton variant="primary" onClick={() => submit(`Moved ${f.count || 'horses'} → ${f.to || 'new location'}`, '/pastures')}>Move Horses</ActionButton>;
       break;
-    case 'Prepare Sale Documents':
-      body = <div className="xs-form"><Pick label="Animal" value={f.animal ?? animalNames[0]} onChange={set('animal')} options={animalNames} /><Pick label="Document set" value={f.type ?? 'Buyer review documents'} onChange={set('type')} options={['Sale documents', 'Buyer review documents', 'Release documents', 'Vet and travel documents']} /></div>;
-      footer = <ActionButton variant="primary" onClick={() => submit('Opening sale documents', '/sale-packets')}>Open sale documents</ActionButton>;
+    case 'Prepare Sale Packet':
+      body = <div className="xs-form"><Pick label="Horse" value={f.animal ?? horseNames[0]} onChange={set('animal')} options={horseNames} /><Pick label="Packet type" value={f.type ?? 'Buyer review packet'} onChange={set('type')} options={['Sale packet', 'Buyer review packet', 'Release packet', 'Vet and travel packet']} /></div>;
+      footer = <ActionButton variant="primary" onClick={() => submit('Opening sale packets', '/sale-packets')}>Open Sale Packets</ActionButton>;
       break;
     case 'Add Buyer Follow-up':
-      body = <div className="xs-form"><Text label="Buyer name" placeholder="e.g. Marlow Ranch Partners" value={f.name ?? ''} onChange={set('name')} /><Text label="Email" placeholder="buyer@email.com" value={f.email ?? ''} onChange={set('email')} /><Pick label="Animal" value={f.animal ?? animalNames[0]} onChange={set('animal')} options={animalNames} /></div>;
+      body = <div className="xs-form"><Text label="Buyer name" placeholder="e.g. Marlow Ranch Partners" value={f.name ?? ''} onChange={set('name')} /><Text label="Email" placeholder="buyer@email.com" value={f.email ?? ''} onChange={set('email')} /><Pick label="Horse" value={f.animal ?? horseNames[0]} onChange={set('animal')} options={horseNames} /></div>;
       footer = <ActionButton variant="primary" onClick={() => submit(`Open sales to save follow-up for ${f.name || 'buyer'}`, '/sales')}>Open sales</ActionButton>;
       break;
     case 'Add Expense':

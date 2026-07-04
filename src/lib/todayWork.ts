@@ -142,7 +142,7 @@ function setupTasks(input: TodayWorkInput): WorkTask[] {
       due: 'This week',
       status: 'Planned',
       category: 'Sales',
-      detail: 'Create a controlled listing or buyer-ready packet from a real horse record when the paperwork is ready.',
+      detail: 'Create a controlled listing or buyer-ready packet from a real horse record when the documents are ready.',
       route: '/sales',
       source: 'Workspace Setup',
     });
