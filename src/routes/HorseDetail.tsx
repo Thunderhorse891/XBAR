@@ -320,27 +320,21 @@ export default function HorseDetail() {
     <>
       <Link
         to="/horses"
-        className="inline-flex w-fit items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#6888a4] transition-all duration-150 ease-[ease] hover:text-[#98bcd8]"
+        className="inline-flex w-fit items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#76777d] transition-all duration-150 ease-[ease] hover:text-[#1b1b1d]"
       >
         <ChevronLeftIcon className="h-3.5 w-3.5" />
         Horses
       </Link>
 
-      {/* Horse Identity Hero — cinematic horse record */}
-      <section className="relative overflow-hidden rounded-[18px] border border-[rgba(148,184,224,0.1)] bg-[linear-gradient(135deg,#030810_0%,#081626_55%,#091830_100%)] shadow-[0_40px_80px_rgba(0,0,0,0.18),0_12px_32px_rgba(0,0,0,0.10),inset_0_1px_0_rgba(255,255,255,0.04)]">
-        {/* Background radials */}
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_40%,rgba(34,102,238,0.14),transparent_26rem)]" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_15%,rgba(91,141,190,0.08),transparent_20rem)]" />
-        </div>
-
+      {/* Horse Identity Hero — flagship horse record header */}
+      <section className="relative overflow-hidden rounded-[14px] border border-[#c6c6cd] bg-white shadow-[0_10px_30px_rgba(27,27,29,0.05)]">
         <div className="relative z-10 flex flex-col gap-5 p-6 xl:flex-row xl:items-end xl:justify-between xl:gap-8">
           <div className="min-w-0 flex-1">
             <div className="mb-3 flex items-center gap-3">
-              <span className="text-[10px] font-bold uppercase tracking-[0.26em] text-[rgba(120,170,220,0.65)]">{horse.ownerEntity}</span>
+              <span className="font-[Geist] text-[10px] font-semibold uppercase tracking-[0.26em] text-[#76777d]">{horse.ownerEntity}</span>
               {hasRestrictedActions ? (
                 <span
-                  className="inline-flex h-7 w-7 items-center justify-center rounded border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.05)] text-[rgba(180,210,240,0.5)] transition-all duration-150 ease-[ease]"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded border border-[#c6c6cd] bg-[#f6f3f5] text-[#76777d] transition-all duration-150 ease-[ease]"
                   title={`${currentRole} access limits some profile actions.`}
                 >
                   <LockIcon className="h-3.5 w-3.5" />
@@ -348,15 +342,15 @@ export default function HorseDetail() {
               ) : null}
             </div>
 
-            <h1 className="text-[clamp(2.2rem,5vw,3.8rem)] font-extrabold leading-[0.92] tracking-[-0.07em] text-[#f0f7ff]">
+            <h1 className="text-[clamp(1.6rem,2.6vw,2.4rem)] font-bold leading-[1.08] tracking-[-0.02em] text-[#1b1b1d]">
               {horse.name}
             </h1>
 
             <div className="mt-4 flex flex-wrap gap-2">
               {[
-                { label: horse.segment, color: 'border-[rgba(12,111,151,0.3)] bg-[rgba(12,111,151,0.12)] text-[#7dcef0]' },
-                { label: horse.status, color: 'border-[rgba(112,129,148,0.3)] bg-[rgba(112,129,148,0.1)] text-[#a0b8cc]' },
-                { label: horse.location.barn, color: 'border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.05)] text-[rgba(200,220,244,0.75)]' },
+                { label: horse.segment, color: 'border-[#000000] bg-[#000000] text-white' },
+                { label: horse.status, color: 'border-[#c6c6cd] bg-[#f6f3f5] text-[#45464d]' },
+                { label: horse.location.barn, color: 'border-[#c6c6cd] bg-white text-[#45464d]' },
               ].map(({ label, color }) => (
                 <span
                   key={label}
@@ -372,30 +366,30 @@ export default function HorseDetail() {
 
             {/* Packet readiness + quick stats */}
             <div className="mt-5 flex flex-wrap gap-3">
-              <div className="flex items-center gap-2 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.04)] px-3 py-2">
-                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Packet</span>
+              <div className="flex items-center gap-2 rounded-lg border border-[#e4e2e4] bg-[#f6f3f5] px-3 py-2">
+                <span className="font-[Geist] text-[10px] font-semibold uppercase tracking-[0.18em] text-[#76777d]">Packet</span>
                 <span className={classNames(
                   'text-[13px] font-bold tabular-nums',
-                  packet.score >= 75 ? 'text-[#58c0ff]' : packet.score >= 50 ? 'text-[#fbbf24]' : 'text-[#ff8a8a]',
+                  packet.score >= 75 ? 'text-[#1b1b1d]' : packet.score >= 50 ? 'text-[#8a5a00]' : 'text-[#93000a]',
                 )}>{packet.score}%</span>
               </div>
-              <div className="flex items-center gap-2 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.04)] px-3 py-2">
-                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Docs</span>
-                <span className="text-[13px] font-bold tabular-nums text-[#e8f2ff]">{documents.length}</span>
+              <div className="flex items-center gap-2 rounded-lg border border-[#e4e2e4] bg-[#f6f3f5] px-3 py-2">
+                <span className="font-[Geist] text-[10px] font-semibold uppercase tracking-[0.18em] text-[#76777d]">Docs</span>
+                <span className="text-[13px] font-bold tabular-nums text-[#1b1b1d]">{documents.length}</span>
               </div>
-              <div className="flex items-center gap-2 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.04)] px-3 py-2">
-                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Status</span>
+              <div className="flex items-center gap-2 rounded-lg border border-[#e4e2e4] bg-[#f6f3f5] px-3 py-2">
+                <span className="font-[Geist] text-[10px] font-semibold uppercase tracking-[0.18em] text-[#76777d]">Status</span>
                 <span className={classNames(
                   'inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-bold',
                   shareBadgeStyles,
                 )}>{packet.buyerProfileStatus}</span>
               </div>
               {ownershipRecord ? (
-                <div className="flex items-center gap-2 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.04)] px-3 py-2">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(120,160,200,0.6)]">Ownership</span>
+                <div className="flex items-center gap-2 rounded-lg border border-[#e4e2e4] bg-[#f6f3f5] px-3 py-2">
+                  <span className="font-[Geist] text-[10px] font-semibold uppercase tracking-[0.18em] text-[#76777d]">Ownership</span>
                   <span className={classNames(
                     'text-[13px] font-bold',
-                    ownershipRecord.transferStatus === 'Clear' ? 'text-[#58c0ff]' : 'text-[#ff8a8a]',
+                    ownershipRecord.transferStatus === 'Clear' ? 'text-[#1b1b1d]' : 'text-[#93000a]',
                   )}>{ownershipRecord.transferStatus}</span>
                 </div>
               ) : null}
@@ -405,7 +399,7 @@ export default function HorseDetail() {
           <div className="flex shrink-0 flex-wrap gap-2 xl:flex-col">
             {saved ? (
               <a
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[rgba(80,140,255,0.4)] bg-[rgba(17,85,221,0.78)] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[rgba(17,85,221,0.95)]"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#000000] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#1b1b1d]"
                 href={publicShareUrl}
                 target="_blank"
                 rel="noreferrer"
@@ -425,7 +419,7 @@ export default function HorseDetail() {
               </a>
             ) : (
               <button
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[rgba(80,140,255,0.35)] bg-[rgba(17,85,221,0.7)] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[rgba(17,85,221,0.9)] disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#000000] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-150 ease-[ease] hover:bg-[#1b1b1d] disabled:cursor-not-allowed disabled:opacity-40"
                 type="button"
                 onClick={() => void handleSavedHorseToggle()}
                 disabled={!canManageSharedAccess}
@@ -435,7 +429,7 @@ export default function HorseDetail() {
             )}
             {saved && (
               <button
-                className="inline-flex h-10 items-center justify-center rounded-lg border border-[rgba(148,184,224,0.18)] bg-[rgba(255,255,255,0.06)] px-5 text-sm font-semibold text-[rgba(208,228,252,0.88)] transition-all duration-150 ease-[ease] hover:bg-[rgba(255,255,255,0.1)] disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-10 items-center justify-center rounded-lg border border-[#c6c6cd] bg-white px-5 text-sm font-semibold text-[#1b1b1d] transition-all duration-150 ease-[ease] hover:border-[#000000] hover:bg-[#f6f3f5] disabled:cursor-not-allowed disabled:opacity-40"
                 type="button"
                 onClick={() => void handleSavedHorseToggle()}
                 disabled={!canManageSharedAccess}
@@ -445,7 +439,7 @@ export default function HorseDetail() {
             )}
             {canEditHorse && (
               <button
-                className="inline-flex h-10 items-center justify-center rounded-lg border border-[rgba(255,80,80,0.3)] bg-transparent px-4 text-sm font-semibold text-[rgba(255,140,140,0.8)] transition-all duration-150 ease-[ease] hover:bg-[rgba(255,80,80,0.1)] disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-10 items-center justify-center rounded-lg border border-[rgba(186,26,26,0.35)] bg-transparent px-4 text-sm font-semibold text-[#93000a] transition-all duration-150 ease-[ease] hover:bg-[#ffdad6]/50 disabled:cursor-not-allowed disabled:opacity-40"
                 type="button"
                 onClick={() => setHorsePendingDelete(true)}
               >

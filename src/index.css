@@ -909,36 +909,37 @@ a:focus-visible,
   box-shadow: 0 8px 32px rgba(15, 23, 42, 0.08), 0 2px 8px rgba(15, 23, 42, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
+/* Historical "--dark" hero variant now renders as the standard light hero. */
 .surface-hero--dark {
-  background: linear-gradient(135deg, #071120 0%, #0c1f3a 60%, #0f2548 100%);
-  border-color: rgba(100, 160, 220, 0.1);
-  color: #f0f7ff;
-  box-shadow: 0 20px 48px rgba(6, 15, 35, 0.32), 0 6px 18px rgba(6, 15, 35, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  background: linear-gradient(180deg, #ffffff 0%, #f6f3f5 100%);
+  border-color: #c6c6cd;
+  color: #1b1b1d;
+  box-shadow: 0 10px 30px rgba(27, 27, 29, 0.05);
 }
 
 .surface-hero--dark .surface-hero__title {
-  color: #f0f7ff;
+  color: #1b1b1d;
 }
 
 .surface-hero--dark .surface-hero__eyebrow {
-  color: rgba(120, 180, 235, 0.8);
+  color: #76777d;
 }
 
 .surface-hero--dark .page-description {
-  color: rgba(180, 210, 240, 0.65) !important;
+  color: #45464d !important;
 }
 
 .surface-hero--dark .surface-hero__stat {
-  border-color: rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.05);
+  border-color: #e4e2e4;
+  background: #f6f3f5;
 }
 
 .surface-hero--dark .surface-hero__stat span {
-  color: rgba(160, 200, 235, 0.65);
+  color: #76777d;
 }
 
 .surface-hero--dark .surface-hero__stat strong {
-  color: #f0f7ff;
+  color: #1b1b1d;
 }
 
 .surface-hero__top {

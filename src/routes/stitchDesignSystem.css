@@ -54,6 +54,7 @@ html body #root .xbar-command-shell aside [class*="tracking-[0.24em]"] {
 /* Repaint the main work surface to a clean Stitch canvas with a faint
    architectural grid instead of the old blue command-center gradient. */
 html body #root .xbar-command-main {
+  min-height: calc(100vh - 62px);
   background:
     linear-gradient(rgba(27, 27, 29, 0.022) 1px, transparent 1px),
     linear-gradient(90deg, rgba(27, 27, 29, 0.022) 1px, transparent 1px),
@@ -506,6 +507,35 @@ html body #root .portfolio-mini-card em {
   html body #root .portfolio-mini-carousel {
     grid-template-columns: 1fr;
   }
+}
+
+/* -------------------------------------------------- List row overflow ----- */
+/* Member/invite rows render inside narrow nested panels; without wrapping,
+   their status pills and actions clip outside the card (visible on Settings).
+   Let the header rows wrap and keep long emails from forcing overflow. */
+html body #root .stack-item {
+  min-width: 0;
+  overflow: hidden;
+}
+
+html body #root .stack-item__top,
+html body #root .status-inline,
+html body #root .inline-actions {
+  flex-wrap: wrap;
+}
+
+html body #root .stack-item__top > div {
+  min-width: 0;
+}
+
+html body #root .stack-item__title {
+  overflow-wrap: anywhere;
+}
+
+/* Panels in two-column detail grids should hug their content instead of
+   stretching to the tallest sibling (avoids large blank card bottoms). */
+html body #root .detail-grid {
+  align-items: start;
 }
 
 /* --------------------------------------------- Generic content panels ----- */

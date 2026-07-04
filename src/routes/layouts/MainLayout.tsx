@@ -310,7 +310,7 @@ export default function MainLayout() {
           </div>
           <div className="mt-2.5 flex flex-wrap gap-1.5">
             <span className="inline-flex min-h-[24px] items-center rounded-full border border-[#c6c6cd] bg-[#f6f3f5] px-2.5 py-0.5 font-[Geist] text-[10px] font-semibold uppercase tracking-[0.12em] text-[#45464d]">{subscription.tier}</span>
-            <span className="inline-flex min-h-[24px] items-center rounded-full border border-[#1b1b1d] bg-[#1b1b1d] px-2.5 py-0.5 font-[Geist] text-[10px] font-semibold uppercase tracking-[0.12em] text-white">{localStatus}</span>
+            <span className="inline-flex min-h-[24px] items-center rounded-full border border-[#c6c6cd] bg-white px-2.5 py-0.5 font-[Geist] text-[10px] font-semibold uppercase tracking-[0.12em] text-[#45464d]">{localStatus}</span>
           </div>
         </div>
 

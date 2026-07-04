@@ -1,5 +1,5 @@
-/* Dark graphite command module on the light workspace. Self-contained:
-   colors are explicit so this module stays dark regardless of theme layers. */
+/* Page-brief header card on the light workspace. Self-contained: colors are
+   explicit so this module reads correctly regardless of theme layers. */
 
 .command-brief {
   position: relative;
@@ -8,23 +8,12 @@
   gap: clamp(16px, 2.4vw, 32px);
   align-items: start;
   padding: clamp(18px, 2.4vw, 28px);
-  border-radius: 18px;
-  border: 1px solid rgba(206, 221, 234, 0.24);
-  background: linear-gradient(145deg, rgba(13, 22, 34, 0.96), rgba(5, 9, 16, 0.98));
-  color: #edf5ff;
-  box-shadow: 0 26px 60px -30px rgba(3, 7, 13, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  border: 1px solid #c6c6cd;
+  background: #ffffff;
+  color: #1b1b1d;
+  box-shadow: 0 10px 30px rgba(27, 27, 29, 0.05);
   isolation: isolate;
-}
-
-.command-brief::before {
-  content: '';
-  position: absolute;
-  left: 18px;
-  right: 18px;
-  top: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(24, 168, 255, 0.6), transparent);
-  pointer-events: none;
 }
 
 .command-brief--split {
@@ -37,11 +26,12 @@
 
 .command-brief__eyebrow {
   display: block;
+  font-family: 'Geist', 'Outfit', sans-serif;
   font-size: 0.66rem;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: #58a8ff;
+  color: #76777d;
 }
 
 .command-brief__entity-row {
@@ -54,10 +44,11 @@
 
 .command-brief__entity {
   margin: 0;
-  font-size: clamp(1.35rem, 2.6vw, 2rem);
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  color: #f2f7ff;
+  font-family: 'Hanken Grotesk', 'Outfit', sans-serif;
+  font-size: clamp(1.35rem, 2.1vw, 1.9rem);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: #1b1b1d;
 }
 
 .command-brief__status {
@@ -71,27 +62,27 @@
 }
 
 .command-brief__status--blue {
-  color: #8ec5ff;
-  border-color: rgba(45, 140, 255, 0.5);
-  background: rgba(45, 140, 255, 0.13);
+  color: #1e5fae;
+  border-color: rgba(40, 104, 169, 0.35);
+  background: rgba(40, 104, 169, 0.08);
 }
 
 .command-brief__status--amber {
-  color: #ffd894;
-  border-color: rgba(214, 167, 77, 0.4);
-  background: rgba(214, 167, 77, 0.12);
+  color: #8a5a00;
+  border-color: rgba(154, 103, 0, 0.35);
+  background: rgba(214, 167, 77, 0.14);
 }
 
 .command-brief__status--rose {
-  color: #ffb5bb;
-  border-color: rgba(216, 102, 108, 0.42);
-  background: rgba(216, 102, 108, 0.13);
+  color: #93000a;
+  border-color: rgba(186, 26, 26, 0.35);
+  background: rgba(255, 218, 214, 0.6);
 }
 
 .command-brief__status--steel {
-  color: #c7d6e6;
-  border-color: rgba(174, 185, 197, 0.36);
-  background: rgba(174, 185, 197, 0.12);
+  color: #45464d;
+  border-color: #c6c6cd;
+  background: #f6f3f5;
 }
 
 .command-brief__summary {
@@ -99,7 +90,7 @@
   max-width: 56ch;
   font-size: 0.9rem;
   line-height: 1.5;
-  color: rgba(190, 210, 233, 0.74);
+  color: #45464d;
 }
 
 .command-brief__evidence {
@@ -108,15 +99,16 @@
   gap: 10px 26px;
   margin: 16px 0 0;
   padding-top: 14px;
-  border-top: 1px solid rgba(120, 165, 220, 0.16);
+  border-top: 1px solid #e4e2e4;
 }
 
 .command-brief__evidence-item dt {
+  font-family: 'Geist', 'Outfit', sans-serif;
   font-size: 0.62rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgba(138, 160, 184, 0.9);
+  color: #76777d;
 }
 
 .command-brief__evidence-item dd {
@@ -124,13 +116,13 @@
   font-size: 0.92rem;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
-  color: #f2f7ff;
+  color: #1b1b1d;
 }
 
 .command-brief__evidence-item dd a {
-  color: #8ec5ff;
+  color: #1e5fae;
   text-decoration: none;
-  border-bottom: 1px solid rgba(45, 140, 255, 0.4);
+  border-bottom: 1px solid rgba(40, 104, 169, 0.4);
 }
 
 .command-brief__risks {
@@ -155,19 +147,19 @@
 }
 
 .command-brief__risk--amber {
-  color: #ffd894;
-  border-color: rgba(214, 167, 77, 0.4);
-  background: rgba(214, 167, 77, 0.1);
+  color: #8a5a00;
+  border-color: rgba(154, 103, 0, 0.35);
+  background: rgba(214, 167, 77, 0.12);
 }
 
 .command-brief__risk--rose {
-  color: #ffb5bb;
-  border-color: rgba(216, 102, 108, 0.44);
-  background: rgba(216, 102, 108, 0.12);
+  color: #93000a;
+  border-color: rgba(186, 26, 26, 0.35);
+  background: rgba(255, 218, 214, 0.55);
 }
 
 a.command-brief__risk:hover {
-  filter: brightness(1.15);
+  filter: brightness(0.95);
 }
 
 .command-brief__side {
@@ -214,7 +206,7 @@ a.command-brief__risk:hover {
   margin: 0;
   font-size: 0.72rem;
   line-height: 1.4;
-  color: #ffd894;
+  color: #8a5a00;
 }
 
 .command-brief__secondary-row {
