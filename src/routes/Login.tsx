@@ -104,9 +104,8 @@ export default function Login() {
       <section className="clean-login-layout" aria-label={authMode === 'signin' ? 'Sign in to XBAR' : 'Create an XBAR account'}>
         <aside className="clean-login-visual" aria-label="XBAR brand">
           <img className="clean-login-visual__horse" src="/brand/xbar-horse-outline-safe.png" width="980" height="331" alt="" />
-          <img className="clean-login-visual__logo" src="/brand/xbar-x-watermark-main.png" width="512" height="512" alt="" />
           <div className="clean-login-visual__copy">
-            <span>XBAR</span>
+            <img className="clean-login-visual__wordmark" src="/brand/xbar-wordmark.png" width="550" height="150" alt="XBAR" />
             <h2>Horse records that stay organized.</h2>
             <p>Sign in to manage horses, documents, sale packets, and billing.</p>
           </div>

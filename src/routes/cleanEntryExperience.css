@@ -115,28 +115,23 @@
 
 .clean-login-visual__horse {
   position: absolute;
-  z-index: 0;
-  width: min(620px, 82%);
+  z-index: 1;
+  width: min(560px, 78%);
   height: auto;
-  right: clamp(12px, 4vw, 42px);
-  top: 18px;
-  opacity: 0.08;
-  filter: grayscale(1);
+  right: clamp(-40px, -1vw, 0px);
+  top: clamp(24px, 6vh, 70px);
+  opacity: 0.9;
   mix-blend-mode: multiply;
   object-fit: contain;
   pointer-events: none;
 }
 
-.clean-login-visual__logo {
-  position: relative;
-  z-index: 2;
-  width: min(240px, 46%);
+.clean-login-visual__wordmark {
+  width: min(220px, 60%);
   height: auto;
-  aspect-ratio: 1;
-  align-self: start;
+  margin-bottom: 4px;
   object-fit: contain;
-  opacity: 0.06;
-  filter: grayscale(1);
+  mix-blend-mode: multiply;
 }
 
 .clean-login-visual__copy {

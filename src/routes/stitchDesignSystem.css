@@ -33,6 +33,24 @@ html body #root .xbar-command-shell {
   font-family: var(--stitch-sans);
 }
 
+/* Sidebar: a legacy layer paints it dark and its brand text white with
+   !important, while a later layer re-lightens the background — leaving the
+   XBAR lockup invisible. Re-assert light surface + ink text here. */
+html body #root .xbar-command-shell > aside {
+  background: var(--stitch-surface) !important;
+  color: var(--stitch-text) !important;
+  border-color: var(--stitch-outline) !important;
+  box-shadow: none !important;
+}
+
+html body #root .xbar-command-shell aside [class*="tracking-[0.14em]"] {
+  color: #000000 !important;
+}
+
+html body #root .xbar-command-shell aside [class*="tracking-[0.24em]"] {
+  color: var(--stitch-faint) !important;
+}
+
 /* Repaint the main work surface to a clean Stitch canvas with a faint
    architectural grid instead of the old blue command-center gradient. */
 html body #root .xbar-command-main {
@@ -55,32 +73,13 @@ html body #root .xbar-shell-motifs {
   overflow: hidden;
 }
 
-html body #root .xbar-shell-x {
-  background-image: url('/brand/xbar-x-watermark-main.png');
-  background-repeat: no-repeat;
-  background-size: contain;
-  background-position: center;
-  opacity: 0.04;
-  filter: grayscale(1);
-}
-
-html body #root .xbar-shell-x::before,
-html body #root .xbar-shell-x::after {
-  content: none !important;
-}
-
-html body #root .xbar-shell-x--one {
-  right: -14%;
-  bottom: -30%;
-  width: min(52vw, 760px);
-}
-
-html body #root .xbar-shell-x--two {
-  display: none;
-}
-
-/* The horse outline becomes a quiet, intentional accent in the upper-right
-   negative space — snout and ears intact, low contrast, never centered. */
+/* The metallic X is a dark-surface asset and cannot read on a light canvas,
+   so the light shell uses the blue-glow horse line-art as its brand motif —
+   placed in the hero's upper-right negative space where no body copy sits, so
+   it is clearly present but never competes with text. */
+html body #root .xbar-shell-x,
+html body #root .xbar-shell-x--one,
+html body #root .xbar-shell-x--two,
 html body #root .xbar-shell-horse-line {
   display: none;
 }
@@ -88,16 +87,23 @@ html body #root .xbar-shell-horse-line {
 html body #root .xbar-shell-motifs::after {
   content: "";
   position: absolute;
-  right: max(20px, 5vw);
-  top: 8%;
-  width: min(40vw, 560px);
+  right: max(28px, 4vw);
+  top: 96px;
+  width: min(38vw, 620px);
   aspect-ratio: 980 / 331;
   background-image: url('/brand/xbar-horse-outline-safe.png');
   background-repeat: no-repeat;
   background-size: contain;
   background-position: top right;
-  opacity: 0.05;
-  filter: grayscale(1);
+  opacity: 0.14;
+  mix-blend-mode: multiply;
+}
+
+@media (max-width: 1180px) {
+  html body #root .xbar-shell-motifs::after {
+    opacity: 0.08;
+    width: min(52vw, 460px);
+  }
 }
 
 /* --------------------------------------------------- Page context strip --- */
@@ -226,6 +232,104 @@ html body #root .xbar-command-topbar button[class*="bg-[#000000]"] * {
 html body #root .xbar-command-shell aside a[class*="bg-[#f0edef]"] {
   color: #1b1b1d !important;
   background: #f0edef !important;
+}
+
+/* ------------------------------------------------ Editorial type scale ---- */
+/* The legacy layers blow page-hero titles up to 5rem+ with -0.08em tracking,
+   which reads like a billboard dashboard. The Stitch templates cap display
+   type at 48px with calm tracking. Impose one editorial scale on every hero
+   so pages feel like a polished product, not a marketing splash. */
+html body #root .xbar-route-surface :is(.surface-hero, .surface-hero--dark, .ops-hero, .ops-briefing-header, .command-brief, .page-header) :is(h1, h2),
+html body #root .xbar-route-surface :is(.surface-hero__title, .ops-briefing-header__title, .command-brief__entity),
+html body #root .xbar-command-main :is(.ops-briefing-header__title, .surface-hero--dark h1, .surface-hero h1) {
+  font-family: 'Hanken Grotesk', 'Outfit', sans-serif !important;
+  font-size: clamp(1.45rem, 2.1vw, 2rem) !important;
+  font-weight: 650 !important;
+  line-height: 1.14 !important;
+  letter-spacing: -0.02em !important;
+  max-width: 720px !important;
+  text-transform: none !important;
+}
+
+html body #root .xbar-route-surface :is(.surface-hero, .surface-hero--dark, .ops-hero, .ops-briefing-header, .command-brief, .page-header) :is(p, .surface-hero__copy, .surface-hero__description, .command-brief__summary, .command-center-briefing__copy),
+html body #root .xbar-command-main .surface-hero--dark p {
+  font-size: 0.92rem !important;
+  line-height: 1.6 !important;
+  max-width: 620px !important;
+  color: #45464d !important;
+}
+
+/* Eyebrows/kickers: quiet mono labels, not bright blue shouting. */
+html body #root .xbar-route-surface :is(.surface-hero__eyebrow, .ops-kicker, .revenue-kicker, .eyebrow, .panel__eyebrow, .section-eyebrow, .command-brief__eyebrow),
+html body #root .xbar-command-main :is(.surface-hero__eyebrow, .ops-briefing-header__ranch, .panel__eyebrow) {
+  font-family: 'Geist', 'Outfit', sans-serif !important;
+  font-size: 0.66rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.18em !important;
+  text-transform: uppercase !important;
+  color: #76777d !important;
+}
+
+/* Panel/section titles inside the page body stay a step below the hero. */
+html body #root .xbar-route-surface .panel__title,
+html body #root .xbar-route-surface .panel h2 {
+  font-size: 1.15rem !important;
+  font-weight: 650 !important;
+  letter-spacing: -0.015em !important;
+}
+
+/* First-run welcome heading: keep presence, drop the billboard. */
+html body #root .xbar-firstrun__hero h1 {
+  font-size: clamp(1.8rem, 2.9vw, 2.6rem) !important;
+  line-height: 1.12 !important;
+  letter-spacing: -0.025em !important;
+}
+
+/* Ops-hero side ledger: was white-on-dark; the hero now renders light, so
+   flip the ledger to ink for readability. */
+html body #root .ops-hero__ledger {
+  border-left: 1px solid #c6c6cd;
+  background: #f6f3f5;
+  border-radius: 0 12px 12px 0;
+}
+
+html body #root .ops-hero__ledger span,
+html body #root .ops-hero__ledger small,
+html body #root .ops-hero__mini-grid span {
+  color: #76777d;
+}
+
+html body #root .ops-hero__ledger strong {
+  color: #1b1b1d;
+  font-size: clamp(1.9rem, 3vw, 2.6rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+html body #root .ops-hero__mini-grid div {
+  border: 1px solid #c6c6cd;
+  background: #ffffff;
+}
+
+html body #root .ops-hero__mini-grid b {
+  color: #1b1b1d;
+}
+
+/* Dashboard sale-readiness hero: same discipline. */
+html body #root .xbar-readiness-hero__lead strong {
+  font-size: clamp(1.6rem, 2.4vw, 2.2rem) !important;
+  font-weight: 700 !important;
+  line-height: 1.12 !important;
+  letter-spacing: -0.02em !important;
+}
+
+html body #root .xbar-readiness-hero__lead span {
+  font-family: 'Geist', 'Outfit', sans-serif !important;
+  font-size: 0.66rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.18em !important;
+  color: #76777d !important;
 }
 
 /* ----------------------------------- Horses "portfolio signal deck" ------- */
