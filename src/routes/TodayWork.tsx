@@ -8,7 +8,7 @@ import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
 import { track, events } from '@/lib/telemetry';
 
-type TaskCategory = 'Paperwork' | 'Care' | 'Sales';
+type TaskCategory = 'Documents' | 'Care' | 'Sales';
 type Task = {
   id: string;
   title: string;
@@ -20,7 +20,7 @@ type Task = {
   due: string;
 };
 
-const TABS: Array<'All' | TaskCategory> = ['All', 'Paperwork', 'Care', 'Sales'];
+const TABS: Array<'All' | TaskCategory> = ['All', 'Documents', 'Care', 'Sales'];
 const priorityTone = { Blocker: 'danger', High: 'warning', Normal: 'neutral' } as const;
 
 export default function TodayWork() {
@@ -39,7 +39,7 @@ export default function TodayWork() {
   const tasks = useMemo<Task[]>(() => {
     const out: Task[] = [];
     buildTransferGapRows(horses, ownershipRecords, documents).forEach((g) =>
-      out.push({ id: `gap-${g.horseId}`, title: `Finish ownership paperwork — ${g.horseName}`, detail: g.reasons.slice(0, 2).join(' · ') || 'Missing transfer paperwork', category: 'Paperwork', priority: 'Blocker', linkedName: g.horseName, to: `/horses/${g.horseId}`, due: g.dueDate || 'Now' }),
+      out.push({ id: `gap-${g.horseId}`, title: `Finish ownership documents — ${g.horseName}`, detail: g.reasons.slice(0, 2).join(' · ') || 'Missing transfer documents', category: 'Documents', priority: 'Blocker', linkedName: g.horseName, to: `/horses/${g.horseId}`, due: g.dueDate || 'Now' }),
     );
     buildCareBoardRows(horses, documents, expenseReceipts).forEach((row) => {
       const due = row.signals.filter((s) => s.status === 'due');
@@ -48,7 +48,7 @@ export default function TodayWork() {
       }
     });
     documents.filter((d) => d.state === 'Needs Review' || d.state === 'Queued' || d.state === 'Matched').forEach((d) =>
-      out.push({ id: `doc-${d.id}`, title: `Review paperwork — ${d.title}`, detail: `${d.type} waiting to be checked`, category: 'Paperwork', priority: 'Normal', linkedName: d.title, to: '/documents', due: 'Today' }),
+      out.push({ id: `doc-${d.id}`, title: `Review document — ${d.title}`, detail: `${d.type} waiting to be checked`, category: 'Documents', priority: 'Normal', linkedName: d.title, to: '/documents', due: 'Today' }),
     );
     salesLeads.filter((l) => l.stage !== 'Closed' && l.nextFollowUp).forEach((l) =>
       out.push({ id: `lead-${l.id}`, title: `Follow up with ${l.name}`, detail: l.notes ?? 'Buyer follow-up', category: 'Sales', priority: 'Normal', linkedName: l.name, to: buyerFollowUpPath(l.id), due: l.nextFollowUp ?? 'Soon' }),
@@ -64,7 +64,7 @@ export default function TodayWork() {
       <PageHead
         eyebrow="Daily work"
         title="Care Tasks"
-        subtitle="Everything that needs doing today — paperwork to finish, care that's due, and buyers to follow up with."
+        subtitle="Everything that needs doing today — documents to finish, care that's due, and buyers to follow up with."
         actions={<ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>Add Horse</ActionButton>}
       />
 
@@ -73,7 +73,7 @@ export default function TodayWork() {
           <div className="xs-empty">
             <span className="xs-empty__icon"><CheckCircle2 size={26} /></span>
             <div className="xs-empty__title">Nothing to do yet</div>
-            <div className="xs-empty__sub">Add your horses and their paperwork — XBAR will show you what care is due and what needs finishing before a sale.</div>
+            <div className="xs-empty__sub">Add your horses and their documents — XBAR will show you what care is due and what needs finishing before a sale.</div>
             <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>Add first horse</ActionButton>
           </div>
         </Card>

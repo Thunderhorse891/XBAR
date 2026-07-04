@@ -2980,7 +2980,7 @@ export const useXbarStore = create<XbarStore>()(
             activity: [createTimelineEvent({
               title: `OCR fact ${decision.toLowerCase()}`,
               summary: `${factId} was ${decision.toLowerCase()} into the horse record.`,
-              owner: 'Document Vault',
+              owner: 'Documents',
               date: todayStamp(),
               category: 'Operations',
             }), ...item.activity],

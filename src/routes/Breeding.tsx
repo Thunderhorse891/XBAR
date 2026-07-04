@@ -104,7 +104,7 @@ export default function Breeding() {
 
       <div className="metric-grid">
         <MetricCard label="Program horses" value={`${breedingHorses.length}`} detail="Mares and studs tracked in active breeding context" />
-        <MetricCard label="Contract docs" value={`${breedingDocs.length}`} detail="Breeding-specific paperwork linked into the record model" tone="blue" />
+        <MetricCard label="Contract docs" value={`${breedingDocs.length}`} detail="Breeding-specific documents linked into the record model" tone="blue" />
         <MetricCard label="Live milestones" value={`${milestoneCount}`} detail="Timeline entries currently supporting the program" tone="blue" />
         <MetricCard label="Missing records" value={`${blockedHorses.length}`} detail="Horses still missing packet elements or imagery" tone="amber" />
       </div>
@@ -373,7 +373,7 @@ export default function Breeding() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Contracts" title="Contract coverage" description="Linked paperwork.">
+        <Panel eyebrow="Contracts" title="Contract coverage" description="Linked documents.">
           {breedingDocs.length ? (
             <div className="stack-list">
               {breedingDocs.map((document) => (
@@ -381,7 +381,7 @@ export default function Breeding() {
               ))}
             </div>
           ) : (
-            <EmptyState compact title="No breeding contracts linked" description="Upload breeding contracts in Documents to tie program paperwork into this lane." />
+            <EmptyState compact title="No breeding contracts linked" description="Upload breeding contracts in Documents to tie program records into this lane." />
           )}
         </Panel>
       </div>

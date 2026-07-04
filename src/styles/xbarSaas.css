@@ -627,7 +627,7 @@
 }
 
 /* =========================================================================
-   Command Center — operational ranch home
+   Dashboard — operational ranch home
    ========================================================================= */
 
 /* Quick-create dropdown */
@@ -688,7 +688,7 @@
 .xs-prio__sub strong { color: var(--xbar-text); font-weight: 700; }
 .xs-prio__btn { margin-top: auto; }
 
-/* command center grid rows */
+/* dashboard grid rows */
 .xs-cc-rows { display: flex; flex-direction: column; gap: 16px; }
 .xs-r-8-4 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; align-items: start; }
 .xs-r-5-4-3 { display: grid; grid-template-columns: 5fr 4fr 3fr; gap: 16px; align-items: start; }

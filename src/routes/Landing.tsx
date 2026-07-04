@@ -19,7 +19,7 @@ const planFit: Record<SubscriptionTier, string> = {
 
 const pipeline = [
   { step: 'Upload', copy: 'Bring in registration papers, transfer forms, vet records, and media.' },
-  { step: 'Local OCR', copy: 'Documents are read on-device so intake keeps pace with real paperwork volume.' },
+  { step: 'Local OCR', copy: 'Documents are read on-device so intake keeps pace with real record volume.' },
   { step: 'Human review', copy: 'Nothing becomes part of the record until a person verifies it.' },
   { step: 'Ownership review', copy: 'Approved documents link into each horse ownership record.' },
   { step: 'Watermarked sharing', copy: 'Approved records bundle into watermarked sale packets for buyers.' },
@@ -33,7 +33,7 @@ const pillars = [
   },
   {
     title: 'Ownership integrity',
-    copy: 'Track legal owner, co-owner structure, transfer status, and compliance deadlines before paperwork blocks a sale.',
+    copy: 'Track legal owner, co-owner structure, transfer status, and compliance deadlines before missing documents block a sale.',
     details: ['Ownership documents per horse', 'Transfer status and deadlines surfaced', 'Every change lands in the audit log'],
   },
   {
@@ -50,7 +50,7 @@ const pillars = [
 
 const painPoints = [
   'Buyer packets take too long to assemble',
-  'Ownership and transfer paperwork gets messy',
+  'Ownership and transfer documents get messy',
   'Horse documents live in too many places',
   'Medical and sale records are hard to trust quickly',
   'Internal handoffs create delays and risk',
@@ -59,7 +59,7 @@ const painPoints = [
 const segments = [
   {
     title: 'Breeding & broodmare programs',
-    copy: 'Keep registration papers, foaling history, and ownership structure attached to each animal so breeding decisions and transfers never stall on missing paperwork.',
+    copy: 'Keep registration papers, foaling history, and ownership structure attached to each horse so breeding decisions and transfers never stall on missing documents.',
   },
   {
     title: 'Sale barns & consignors',
@@ -117,7 +117,7 @@ const operationalPreviewRows = [
     detail: 'Only verified records leave the private workspace.',
   },
   {
-    label: 'Missing Paperwork',
+    label: 'Missing Documents',
     value: '2 reviews',
     detail: 'Registration and transfer files are waiting on human approval.',
   },
@@ -142,7 +142,7 @@ const showcaseHorseCards = [
   { name: 'Silver Mesa', role: 'Sale Prospect', proof: '18 docs', signal: 'Packet ready', value: '$48k ask' },
   { name: 'Blue Hancock', role: 'Rope Horse', proof: '12 docs', signal: 'Farrier due', value: '$32k insured' },
   { name: 'Mesa Drift', role: 'Broodmare', proof: '24 docs', signal: 'Foal window', value: 'May 14' },
-  { name: 'Copper Line', role: 'Prospect', proof: '9 docs', signal: 'Buyer room', value: '3 inquiries' },
+  { name: 'Copper Line', role: 'Prospect', proof: '9 docs', signal: 'Buyer follow-up', value: '3 inquiries' },
 ];
 
 const heroSignals = [
@@ -153,7 +153,7 @@ const heroSignals = [
 ] as const;
 
 const nextActions = [
-  'Release watermarked packet to buyer room',
+  'Release watermarked packet for buyer follow-up',
   'Confirm renewal owner signature',
   'Schedule post-sale follow-up',
 ];
@@ -193,7 +193,7 @@ function CommandPreview() {
         </div>
         <div className="revenue-console__row">
           <dt>Transfer status</dt>
-          <dd>Clear &middot; no open transfer paperwork</dd>
+          <dd>Clear &middot; no open transfer documents</dd>
           <span className="revenue-chip revenue-chip--blue">Clear</span>
         </div>
         <div className="revenue-console__row">
@@ -275,7 +275,7 @@ function RevenueIntelligenceShowcase() {
     <section className="revenue-intelligence-showcase" aria-labelledby="revenue-intelligence-title">
       <div className="revenue-intelligence-showcase__copy">
         <p className="revenue-kicker">Operational preview</p>
-        <h2 id="revenue-intelligence-title">Health records, paperwork, and ownership — all in one place.</h2>
+        <h2 id="revenue-intelligence-title">Health records, documents, and ownership — all in one place.</h2>
         <p>
           XBAR is organized around the moments that decide whether a horse can be trusted,
           transferred, shown, or sold. Every module answers a real operating question.
@@ -372,7 +372,7 @@ export default function Landing() {
             <span>Simple record-keeping for horse ranches and breeders.</span>
           </h1>
           <p className="revenue-hero__lead">
-            One trusted record for every horse, document, buyer, and transfer. XBAR turns scattered paperwork into sale-ready proof your team can actually operate from.
+            One trusted record for every horse, document, buyer, and transfer. XBAR turns scattered documents into sale-ready proof your team can actually operate from.
           </p>
           <div className="revenue-hero__actions">
             <Link className="public-action public-action--primary" to={signupPath('Professional')} onClick={() => trackPlan('Professional')}>
@@ -409,7 +409,7 @@ export default function Landing() {
         <div className="revenue-section__header">
           <div>
             <p className="revenue-kicker">One path for every document</p>
-            <h2 id="pipeline-heading">From paperwork to ready records, in five steps.</h2>
+            <h2 id="pipeline-heading">From documents to ready records, in five steps.</h2>
           </div>
           <p>Every file moves through one pipeline: upload, local OCR, human review, ownership review, then watermarked sharing. No shortcuts, no untracked copies.</p>
         </div>
@@ -431,7 +431,7 @@ export default function Landing() {
               <p className="revenue-kicker">What ranchers get</p>
               <h2 id="pillars-heading">Built around the workflows that cost horse businesses time and money.</h2>
             </div>
-            <p>XBAR is not trying to be every kind of horse software. It is designed to solve the record, paperwork, and buyer-confidence problems that directly affect operations and sales.</p>
+            <p>XBAR is not trying to be every kind of horse software. It is designed to solve the record, document, and buyer-confidence problems that directly affect operations and sales.</p>
           </div>
           <div className="revenue-pillars">
             {pillars.map((pillar) => (
@@ -454,7 +454,7 @@ export default function Landing() {
           <div className="revenue-pain__copy">
             <p className="revenue-kicker">Why now</p>
             <h2 id="pain-heading">Most horse businesses still run critical records through email, folders, binders, and memory.</h2>
-            <p>That works until a buyer asks for documentation, ownership details need to be verified, or transfer paperwork slows down a sale. XBAR reduces that chaos and gives your team one trusted operational record for every horse.</p>
+            <p>That works until a buyer asks for documentation, ownership details need to be verified, or transfer documents slow down a sale. XBAR reduces that chaos and gives your team one trusted operational record for every horse.</p>
           </div>
           <ul className="revenue-pain__list">
             {painPoints.map((point) => (
@@ -489,7 +489,7 @@ export default function Landing() {
           <div className="revenue-section__header">
             <div>
               <p className="revenue-kicker">Who it's for</p>
-              <h2 id="segments-heading">Built for the operations where paperwork decides the deal.</h2>
+              <h2 id="segments-heading">Built for the operations where documents decide the deal.</h2>
             </div>
             <p>From a single broodmare program to a multi-rider barn, XBAR gives every horse one record your team and your buyers can trust.</p>
           </div>
@@ -508,7 +508,7 @@ export default function Landing() {
         <div className="revenue-section__header">
           <div>
             <p className="revenue-kicker">Pricing</p>
-            <h2 id="pricing-heading">Built for operations where paperwork has real financial consequences.</h2>
+            <h2 id="pricing-heading">Built for operations where documents have real financial consequences.</h2>
           </div>
           <p>Every plan protects the core horse record. Higher levels add collaboration, shared access, and substantially more document and storage capacity.</p>
         </div>

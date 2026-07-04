@@ -496,7 +496,7 @@ export default function Expenses() {
       <div className="ops-workspace ops-workspace--columns">
         <Panel title="Where this connects" meta={<Pill tone="slate">Operating system</Pill>}>
           <div className="ops-link-list">
-            <button type="button" onClick={() => navigate('/documents?upload=1')}>Go to document upload (Document Vault)</button>
+            <button type="button" onClick={() => navigate('/documents?upload=1')}>Go to document upload</button>
             <button type="button" onClick={() => navigate('/medical')}>Review care costs beside health records</button>
             <button type="button" onClick={() => navigate('/horses')}>Open the horse profiles tied to spending</button>
           </div>

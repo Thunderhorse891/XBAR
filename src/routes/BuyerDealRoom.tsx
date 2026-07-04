@@ -96,14 +96,14 @@ export default function BuyerDealRoom() {
           eyebrow="Selling"
           title="Buyer follow-up"
           subtitle="See what each buyer has, what they offered, and what needs a reply."
-          actions={<ActionButton variant="primary" icon={<Send size={15} />} onClick={() => navigate('/sale-packets')}>Open sale documents</ActionButton>}
+          actions={<ActionButton variant="primary" icon={<Send size={15} />} onClick={() => navigate('/sale-packets')}>Open Sale Packets</ActionButton>}
         />
         <Card>
           <div className="xs-empty">
             <span className="xs-empty__icon"><Users size={26} /></span>
             <div className="xs-empty__title">No buyers yet</div>
-            <div className="xs-empty__sub">Prepare sale documents and add buyer notes so offers and next steps stay together.</div>
-            <ActionButton variant="primary" onClick={() => navigate('/sale-packets')}>Prepare sale documents</ActionButton>
+            <div className="xs-empty__sub">Prepare sale packets and add buyer notes so offers and next steps stay together.</div>
+            <ActionButton variant="primary" onClick={() => navigate('/sale-packets')}>Prepare Sale Packet</ActionButton>
           </div>
         </Card>
       </>

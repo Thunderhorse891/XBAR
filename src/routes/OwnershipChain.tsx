@@ -20,7 +20,7 @@ export default function OwnershipChain() {
 
   const horseName = useMemo(() => {
     const map = new Map(horses.map((h) => [h.id, h.name]));
-    return (id: string) => map.get(id) ?? 'Unlinked animal';
+    return (id: string) => map.get(id) ?? 'Unlinked horse';
   }, [horses]);
 
   const counts = useMemo(() => ({
@@ -35,8 +35,8 @@ export default function OwnershipChain() {
         <PageHead
           eyebrow="Selling"
           title="Ownership History"
-          subtitle="The full ownership history for every horse — who owned it, what's been signed, and what paperwork is still missing."
-          actions={<ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>Add Animal</ActionButton>}
+          subtitle="The full ownership history for every horse — who owned it, what's been signed, and what documents are still missing."
+          actions={<ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>Add Horse</ActionButton>}
         />
         <Card>
           <div className="xs-empty">
@@ -55,7 +55,7 @@ export default function OwnershipChain() {
       <PageHead
         eyebrow="Selling"
         title="Ownership History"
-        subtitle="The full ownership history for every horse — who owned it, what's been signed, and what paperwork is still missing."
+        subtitle="The full ownership history for every horse — who owned it, what's been signed, and what documents are still missing."
         actions={
           <>
             <ActionButton icon={<Upload size={15} />} onClick={() => navigate('/documents?upload=1')}>Upload Proof</ActionButton>

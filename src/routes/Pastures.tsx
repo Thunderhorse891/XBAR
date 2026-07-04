@@ -6,7 +6,7 @@ import { useXbarStore } from '@/store/useXbarStore';
 import { ActionButton, Card, PageHead, SlideOverDrawer, StatusChip } from '@/components/saas';
 import type { HorseRecord } from '@/types/xbar';
 
-type Location = { id: string; name: string; kind: 'Barn' | 'Pasture'; animals: HorseRecord[] };
+type Location = { id: string; name: string; kind: 'Barn' | 'Pasture'; horses: HorseRecord[] };
 
 export default function Pastures() {
   const pushToast = useUiStore((state) => state.pushToast);
@@ -29,7 +29,7 @@ export default function Pastures() {
       id: `${kind}:${name}`,
       name,
       kind,
-      animals: horses.filter((h) => (kind === 'Barn' ? h.location.barn === name : h.location.pasture === name)),
+      horses: horses.filter((h) => (kind === 'Barn' ? h.location.barn === name : h.location.pasture === name)),
     });
     return [
       ...Array.from(barns).map((n) => mk(n, 'Barn')),
@@ -44,10 +44,10 @@ export default function Pastures() {
       <PageHead
         eyebrow="Ranch"
         title="Pastures"
-        subtitle="Where every animal is, what needs attention, and which locations have open issues."
+        subtitle="Where every horse is, what needs attention, and which locations have open issues."
         actions={
           <>
-            <ActionButton icon={<Move size={15} />} onClick={() => toast('Use an animal profile to move it between locations')}>Move Animals</ActionButton>
+            <ActionButton icon={<Move size={15} />} onClick={() => toast('Use a horse profile to move it between locations')}>Move Horses</ActionButton>
             <ActionButton variant="primary" icon={<AlertTriangle size={15} />} onClick={() => toast('Pasture issue reported')}>Report Issue</ActionButton>
           </>
         }
@@ -55,7 +55,7 @@ export default function Pastures() {
 
       <Card>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--xbar-text-muted)', fontSize: 13 }}>
-          <MapPin size={16} /> {locations.length} location{locations.length === 1 ? '' : 's'} configured. Click a location to see the animals currently there.
+          <MapPin size={16} /> {locations.length} location{locations.length === 1 ? '' : 's'} configured. Click a location to see the horses currently there.
         </div>
       </Card>
 
@@ -65,9 +65,9 @@ export default function Pastures() {
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
               <div>
                 <h2 className="xs-card__title" style={{ fontSize: 17 }}>{p.name}</h2>
-                <div className="xs-card__sub">{p.kind} · {p.animals.length} animal{p.animals.length === 1 ? '' : 's'}</div>
+                <div className="xs-card__sub">{p.kind} · {p.horses.length} horse{p.horses.length === 1 ? '' : 's'}</div>
               </div>
-              <StatusChip tone={p.animals.length ? 'info' : 'neutral'}>{p.animals.length ? 'Occupied' : 'Empty'}</StatusChip>
+              <StatusChip tone={p.horses.length ? 'info' : 'neutral'}>{p.horses.length ? 'Occupied' : 'Empty'}</StatusChip>
             </div>
           </button>
         ))}
@@ -76,16 +76,16 @@ export default function Pastures() {
       <SlideOverDrawer
         open={Boolean(selected)}
         title={selected?.name ?? ''}
-        subtitle={selected ? `${selected.kind} · ${selected.animals.length} animals` : ''}
+        subtitle={selected ? `${selected.kind} · ${selected.horses.length} horses` : ''}
         onClose={() => setSelectedId(null)}
-        footer={selected ? (<><ActionButton icon={<Move size={15} />} onClick={() => toast(`Move from ${selected.name}`)}>Move Animals</ActionButton><ActionButton variant="primary" icon={<AlertTriangle size={15} />} onClick={() => { toast(`Issue reported at ${selected.name}`); setSelectedId(null); }}>Report Issue</ActionButton></>) : null}
+        footer={selected ? (<><ActionButton icon={<Move size={15} />} onClick={() => toast(`Move from ${selected.name}`)}>Move Horses</ActionButton><ActionButton variant="primary" icon={<AlertTriangle size={15} />} onClick={() => { toast(`Issue reported at ${selected.name}`); setSelectedId(null); }}>Report Issue</ActionButton></>) : null}
       >
         {selected ? (
           <>
-            <div className="xs-section-label">Animals currently here</div>
-            {selected.animals.length ? (
+            <div className="xs-section-label">Horses currently here</div>
+            {selected.horses.length ? (
               <div className="xs-mlist">
-                {selected.animals.map((h) => (
+                {selected.horses.map((h) => (
                   <button key={h.id} type="button" className="xs-mrow" style={{ width: '100%', textAlign: 'left', cursor: 'pointer' }} onClick={() => { setSelectedId(null); navigate(`/horses/${h.id}`); }}>
                     <span className="xs-mrow__main"><span className="xs-mrow__title">{h.name}</span><span className="xs-mrow__detail">{h.sex} · {h.segment}</span></span>
                     <StatusChip tone="info">{h.status}</StatusChip>
@@ -93,7 +93,7 @@ export default function Pastures() {
                 ))}
               </div>
             ) : (
-              <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>No animals currently in this location.</p>
+              <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>No horses currently in this location.</p>
             )}
           </>
         ) : null}

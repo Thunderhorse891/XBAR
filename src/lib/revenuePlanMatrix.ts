@@ -24,7 +24,7 @@ export const revenuePlanMatrix: Record<SubscriptionTier, RevenuePlanProfile> = {
   },
   Professional: {
     fit: 'For trainers, sellers, and barns that need clients, buyers, and team coordination.',
-    revenueRole: 'Core paid tier for professional operators that need collaboration, buyer readiness, and client communication.',
+    revenueRole: 'Core paid tier for professional teams that need collaboration, buyer readiness, and client communication.',
     features: [
       { label: 'Owner and buyer sharing', detail: 'Controlled profiles, sale listings, document sharing, and owner visibility without exposing the full workspace.' },
       { label: 'Scheduling workflow', detail: 'Vet, farrier, lesson, show, follow-up, and appointment reminders tied to the right horse or client.' },

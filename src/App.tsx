@@ -108,7 +108,7 @@ function routeTitle(path: string) {
 }
 
 const DEFAULT_META_DESCRIPTION =
-  'XBAR turns scattered horse paperwork into trusted, buyer-ready digital records — OCR-assisted intake, ownership integrity, compliance deadlines, and watermarked sale packets in one command system.';
+  'XBAR turns scattered horse documents into trusted, buyer-ready digital records — OCR-assisted intake, ownership integrity, compliance deadlines, and watermarked sale packets in one place.';
 
 // Distinct titles and descriptions for the publicly indexable routes. These
 // compound the static SEO in index.html so each crawlable page presents its

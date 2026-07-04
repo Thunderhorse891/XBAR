@@ -64,7 +64,7 @@ test('blocks duplicate or over-capacity invites', () => {
   );
 });
 
-test('buyer room access honors private tokens and public links', () => {
+test('buyer access honors private tokens and public links', () => {
   const listing: SharedListingRecord = {
     id: 'listing-1',
     horseId: 'horse-1',

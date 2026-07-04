@@ -30,8 +30,8 @@ export default function Reports() {
   if (horses.length === 0) {
     return (
       <>
-        <PageHead eyebrow="Account" title="Reports" subtitle="See how ready your horses are to sell, and what paperwork needs attention." />
-        <Card><div className="xs-empty">Add horses and paperwork to see your reports here.</div></Card>
+        <PageHead eyebrow="Account" title="Reports" subtitle="See how ready your horses are to sell, and what documents need attention." />
+        <Card><div className="xs-empty">Add horses and documents to see your reports here.</div></Card>
       </>
     );
   }
@@ -41,7 +41,7 @@ export default function Reports() {
       <PageHead
         eyebrow="Account"
         title="Reports"
-        subtitle="See how ready your horses are to sell, and what paperwork needs attention."
+        subtitle="See how ready your horses are to sell, and what documents need attention."
       />
 
       <div className="xs-grid-2">
@@ -74,13 +74,13 @@ export default function Reports() {
           </div>
         </Card>
 
-        <Card title="Paperwork" subtitle="What needs checking">
+        <Card title="Documents" subtitle="What needs checking">
           <div className="xs-bigstat">
             <span className="xs-bigstat__num">{model.needsReview}</span>
             <span className="xs-bigstat__txt">to check</span>
           </div>
           <button type="button" className="xs-btn xs-btn--block" onClick={() => navigate('/documents')}>
-            Open Paperwork
+            Open Documents
           </button>
         </Card>
       </div>

@@ -31,7 +31,7 @@ export default function AnimalProfile() {
   if (!animal) {
     return (
       <>
-        <button type="button" className="xs-back" onClick={() => navigate('/horses')}><ArrowLeft size={14} /> Animals</button>
+        <button type="button" className="xs-back" onClick={() => navigate('/horses')}><ArrowLeft size={14} /> Horses</button>
         <Card>
           <div className="xs-empty">
             <span className="xs-empty__icon"><HorsesIcon width={26} height={26} /></span>
@@ -52,7 +52,7 @@ export default function AnimalProfile() {
 
   return (
     <>
-      <button type="button" className="xs-back" onClick={() => navigate('/horses')}><ArrowLeft size={14} /> Animals</button>
+      <button type="button" className="xs-back" onClick={() => navigate('/horses')}><ArrowLeft size={14} /> Horses</button>
 
       <div className="xs-objhead">
         <div className="xs-objhead__id">
@@ -123,7 +123,7 @@ export default function AnimalProfile() {
       ) : null}
 
       {tab === 'Documents' ? (
-        <Card title="Paperwork" link="Open paperwork" onLink={() => navigate('/documents')}>
+        <Card title="Documents" link="Open documents" onLink={() => navigate('/documents')}>
           {animal.documentFacts.length ? (
             <div className="xs-mlist">
               {animal.documentFacts.slice(0, 10).map((f) => (
@@ -134,7 +134,7 @@ export default function AnimalProfile() {
               ))}
             </div>
           ) : (
-            <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>No paperwork linked to this horse yet.</p>
+            <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>No documents linked to this horse yet.</p>
           )}
         </Card>
       ) : null}
@@ -165,7 +165,7 @@ export default function AnimalProfile() {
               ))}
             </div>
           ) : (
-            <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>No active breeding records for this animal.</p>
+            <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>No active breeding records for this horse.</p>
           )}
           <ActionButton size="sm" icon={<Plus size={14} />} onClick={() => toast('Breeding record added')}>Add Breeding Record</ActionButton>
         </Card>
@@ -174,7 +174,7 @@ export default function AnimalProfile() {
       {tab === 'Location' ? (
         <Card title="Location" link="Open Pastures" onLink={() => navigate('/pastures')}>
           <dl className="xs-kv"><dt>Ranch</dt><dd>{animal.location.ranch || '—'}</dd><dt>Barn</dt><dd>{animal.location.barn || '—'}</dd><dt>Pasture</dt><dd>{animal.location.pasture || '—'}</dd><dt>Stall</dt><dd>{animal.location.stall || '—'}</dd></dl>
-          <ActionButton size="sm" icon={<Move size={14} />} onClick={() => toast('Move drawer opened')}>Move Animal</ActionButton>
+          <ActionButton size="sm" icon={<Move size={14} />} onClick={() => toast('Move drawer opened')}>Move Horse</ActionButton>
         </Card>
       ) : null}
 
@@ -187,7 +187,7 @@ export default function AnimalProfile() {
               ))}
             </div>
           ) : (
-            <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>No open tasks for this animal.</p>
+            <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>No open tasks for this horse.</p>
           )}
         </Card>
       ) : null}

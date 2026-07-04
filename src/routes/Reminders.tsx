@@ -100,13 +100,13 @@ export default function Reminders() {
         <div className="priority-briefing__heading">
           <div>
             <span className="ops-kicker">Sale Readiness</span>
-            <h2 id="revenue-title">Sale value blocked by paperwork</h2>
+            <h2 id="revenue-title">Sale value blocked by documents</h2>
           </div>
           <p>
             {revenueRisk.items.length
               ? `${formatCompactCurrency(revenueRisk.valueAtRisk)} of ${formatCompactCurrency(revenueRisk.totalListedValue)} listed value cannot close today. Each blocker below has a one-click fix.`
               : revenueRisk.totalListedValue > 0
-                ? `All ${formatCompactCurrency(revenueRisk.totalListedValue)} of listed value is paperwork-ready for buyers.`
+                ? `All ${formatCompactCurrency(revenueRisk.totalListedValue)} of listed value is document-ready for buyers.`
                 : 'List a horse with an asking price and XBAR will track what stands between it and a closed sale.'}
           </p>
         </div>

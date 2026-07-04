@@ -87,13 +87,13 @@ export function latestDealStatus(events: BuyerRoomEvent[]): DealStatus | 'quiet'
 }
 
 function buildDealRoomAction(params: { openQuestions: number; highestOffer: number; packetDownloads: number; latestStatus: DealStatus | 'quiet'; lead?: SalesLead }): BuyerDealRoomAction {
-  if (params.latestStatus === 'closed-won') return { label: 'Closed won', tone: 'emerald', reason: 'Buyer room has a won deal status.' };
-  if (params.latestStatus === 'closed-lost') return { label: 'Closed lost', tone: 'slate', reason: 'Buyer room has a lost deal status.' };
+  if (params.latestStatus === 'closed-won') return { label: 'Closed won', tone: 'emerald', reason: 'Buyer follow-up has a won deal status.' };
+  if (params.latestStatus === 'closed-lost') return { label: 'Closed lost', tone: 'slate', reason: 'Buyer follow-up has a lost deal status.' };
   if (params.openQuestions > 0) return { label: 'Answer buyer', tone: 'amber', reason: `${params.openQuestions} buyer request needs a seller response.` };
   if (params.highestOffer > 0) return { label: 'Work offer', tone: 'blue', reason: `Highest open offer is $${params.highestOffer.toLocaleString()}.` };
   if (params.packetDownloads > 0) return { label: 'Follow up', tone: 'blue', reason: `${params.packetDownloads} buyer packet download${params.packetDownloads === 1 ? '' : 's'} signal active review.` };
   if (params.lead?.nextFollowUp) return { label: 'Follow up', tone: 'blue', reason: 'Lead has a scheduled next follow-up.' };
-  return { label: 'Create movement', tone: 'slate', reason: 'No active buyer-room pressure yet.' };
+  return { label: 'Create movement', tone: 'slate', reason: 'No active buyer follow-up pressure yet.' };
 }
 
 export function buildBuyerDealRoomSummaries(params: { horses: HorseRecord[]; leads: SalesLead[]; events: BuyerRoomEvent[] }) {

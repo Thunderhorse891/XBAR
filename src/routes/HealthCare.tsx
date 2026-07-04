@@ -55,7 +55,7 @@ export default function HealthCare() {
           eyebrow="Care"
           title="Health & Care"
           subtitle="Vaccines, Coggins, farrier, dental, and medications — everything that keeps a horse healthy and sale-ready."
-          actions={<ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>Add Animal</ActionButton>}
+          actions={<ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>Add Horse</ActionButton>}
         />
         <Card>
           <div className="xs-empty">
