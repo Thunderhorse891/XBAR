@@ -1741,18 +1741,30 @@ a:focus-visible,
 }
 
 .sale-packet-slot--ready {
-  border-color: rgba(12, 111, 151, 0.18);
-  background: rgba(12, 111, 151, 0.07);
+  border-color: #c6c6cd;
+  background: #ffffff;
+}
+
+.sale-packet-slot--ready .sale-packet-slot__state {
+  color: #1b1b1d;
 }
 
 .sale-packet-slot--review {
-  border-color: rgba(42, 69, 86, 0.16);
-  background: rgba(42, 69, 86, 0.04);
+  border-color: rgba(154, 103, 0, 0.3);
+  background: rgba(214, 167, 77, 0.08);
+}
+
+.sale-packet-slot--review .sale-packet-slot__state {
+  color: #8a5a00;
 }
 
 .sale-packet-slot--missing {
-  border-color: rgba(204, 51, 51, 0.16);
-  background: rgba(204, 51, 51, 0.05);
+  border-color: rgba(186, 26, 26, 0.3);
+  background: rgba(255, 218, 214, 0.4);
+}
+
+.sale-packet-slot--missing .sale-packet-slot__state {
+  color: #93000a;
 }
 
 .sale-packet-slot__head {
@@ -1764,8 +1776,9 @@ a:focus-visible,
 
 .sale-packet-slot__label,
 .sale-packet-slot__state {
-  font-size: 0.7rem;
-  font-weight: 700;
+  font-family: 'Geist', 'Outfit', sans-serif;
+  font-size: 0.68rem;
+  font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }

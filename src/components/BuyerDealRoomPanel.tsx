@@ -24,7 +24,7 @@ export function BuyerDealRoomPanel({ compact = false }: { compact?: boolean }) {
       title="Deal pressure"
       description={compact ? undefined : 'Buyer activity by horse: unanswered questions, document requests, packet downloads, open offers, latest status, and the next seller action.'}
       meta={<Pill tone={activeQuestionCount ? 'amber' : highestOffer || packetDownloadCount ? 'blue' : 'slate'}>{activeQuestionCount ? `${activeQuestionCount} response needed` : highestOffer ? 'Offer pressure' : packetDownloadCount ? `${packetDownloadCount} packet download${packetDownloadCount === 1 ? '' : 's'}` : 'Quiet'}</Pill>}
-      action={<Link className="button button--ghost button--compact" to="/sales">Sales</Link>}
+      action={<Link className="button button--ghost button--compact" to="/documents?packet=1">Build a buyer packet</Link>}
     >
       {visibleSummaries.length ? (
         <div className="stack-list">
@@ -51,8 +51,13 @@ export function BuyerDealRoomPanel({ compact = false }: { compact?: boolean }) {
       ) : (
         <div className="stack-list">
           <div className="stack-item">
-            <div className="stack-item__title">No buyer pressure yet</div>
-            <div className="stack-item__copy">Share a buyer packet or move a lead into offer status to start buyer follow-up tracking.</div>
+            <div className="stack-item__title">No buyer activity yet</div>
+            <div className="stack-item__copy">
+              Pick a horse, build its buyer packet, and share it — buyer questions, downloads, and offers will show up here.
+            </div>
+            <div className="inline-actions" style={{ marginTop: 10 }}>
+              <Link className="button button--primary button--compact" to="/documents?packet=1">Build a buyer packet</Link>
+            </div>
           </div>
         </div>
       )}

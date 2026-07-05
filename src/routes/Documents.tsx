@@ -78,6 +78,8 @@ export default function Documents() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const uploadOpen = searchParams.get('upload') === '1';
+  const packetParamOpen = searchParams.get('packet') === '1';
+  const [packetWizardOpen, setPacketWizardOpen] = useState(packetParamOpen);
   const [activeStage, setActiveStage] = useState<PipelineStage>(uploadOpen ? 'Upload' : 'Review');
 
   useEffect(() => {
@@ -85,6 +87,12 @@ export default function Documents() {
       setActiveStage('Upload');
     }
   }, [uploadOpen]);
+
+  useEffect(() => {
+    if (packetParamOpen) {
+      setPacketWizardOpen(true);
+    }
+  }, [packetParamOpen]);
 
   // Stage buckets — each document lives in exactly one workflow stage.
   const queuedDocuments = documents.filter((document) => document.state === 'Queued');
@@ -1133,9 +1141,17 @@ export default function Documents() {
       ) : null}
 
       <SalePacketWizard
-        open={Boolean(packetBuildingHorseId)}
+        open={Boolean(packetBuildingHorseId) || packetWizardOpen}
         initialHorseId={packetBuildingHorseId || null}
-        onClose={() => setPacketBuildingHorseId('')}
+        onClose={() => {
+          setPacketBuildingHorseId('');
+          setPacketWizardOpen(false);
+          if (packetParamOpen) {
+            const next = new URLSearchParams(searchParams);
+            next.delete('packet');
+            setSearchParams(next, { replace: true });
+          }
+        }}
       />
       <ContextMenu open={Boolean(menuItems.length)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
     </>

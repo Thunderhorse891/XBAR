@@ -229,6 +229,7 @@ export default function Sales() {
           })),
         ].slice(0, 5)}
         nextAction={{ label: 'Open follow-up queue', to: '/follow-ups' }}
+        secondaryActions={[{ label: 'Build a buyer packet', to: '/documents?packet=1' }]}
       />
 
       <BuyerDealRoomPanel />

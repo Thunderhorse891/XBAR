@@ -194,14 +194,14 @@ export function SalePacketWizard({
         style={{ width: 'min(640px, 100%)' }}
       >
         <DialogHeader>
-          <DialogTitle className="confirm-dialog__title">Sale packet generator</DialogTitle>
-          <DialogDescription>Build a legally gated buyer packet, open the buyer deal room, and protect margin.</DialogDescription>
+          <DialogTitle className="confirm-dialog__title">Sale Packet Studio</DialogTitle>
+          <DialogDescription>Choose the horse, confirm what is provable, pick the documents, and send a watermarked buyer packet.</DialogDescription>
         </DialogHeader>
         <div style={{ display: 'flex', gap: 6, marginTop: 12 }} aria-label={`Step ${step + 1} of ${STEPS.length}`}>
           {STEPS.map((label, index) => (
             <div key={label} style={{ flex: 1 }}>
-              <div style={{ height: 4, borderRadius: 2, background: index <= step ? '#18a8ff' : 'rgba(96,124,154,0.3)' }} />
-              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: index === step ? '#1466d8' : '#8aa0b8' }}>{label}</span>
+              <div style={{ height: 3, borderRadius: 2, background: index <= step ? '#000000' : '#e4e2e4' }} />
+              <span style={{ fontFamily: "'Geist', 'Outfit', sans-serif", fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: index === step ? '#1b1b1d' : '#76777d' }}>{label}</span>
             </div>
           ))}
         </div>

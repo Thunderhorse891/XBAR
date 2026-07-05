@@ -149,8 +149,12 @@
 }
 
 .confirm-dialog__confirm--legal {
-  background: linear-gradient(180deg, #2d8cff, #166fe4);
-  border-color: rgba(45, 140, 255, 0.66);
+  background: #000000;
+  border-color: #000000;
+}
+
+.confirm-dialog__confirm--legal:hover:not(:disabled) {
+  background: #1b1b1d;
 }
 
 .confirm-dialog__confirm:disabled {
