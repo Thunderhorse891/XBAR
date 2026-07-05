@@ -645,3 +645,41 @@ html body #root .xbar-firstrun__hero-actions button:not(:first-child) {
   border: 1px solid #c6c6cd !important;
   color: #1b1b1d !important;
 }
+
+/* -------------------------------------------------- Horse cards (light) ---- */
+/* A legacy layer painted the horse-card media near-black and the metric
+   strips dark navy, which breaks the card's own light design (its title sits
+   on a light scrim in dark ink) and clashes with real photos. Restore the
+   intended light treatment so populated cards read as premium records. */
+html body #root .xbar-command-main .horse-card__media {
+  background:
+    linear-gradient(145deg, #f6f3f5 0%, #ffffff 52%, #eef1f5 100%) !important;
+}
+
+html body #root .xbar-command-main .horse-card__metric-band,
+html body #root .xbar-command-main .dashboard-budget-strip,
+html body #root .xbar-command-main .ownership-proof-strip {
+  border: 1px solid #e4e2e4 !important;
+  border-radius: 12px !important;
+  background: #f6f3f5 !important;
+  color: #1b1b1d !important;
+  padding: 12px 14px !important;
+}
+
+html body #root .xbar-command-main .horse-card__metric span,
+html body #root .xbar-command-main .horse-card__packet-head span,
+html body #root .xbar-command-main .ownership-proof-strip span {
+  color: #76777d !important;
+}
+
+html body #root .xbar-command-main .horse-card__metric strong,
+html body #root .xbar-command-main .horse-card__packet-head strong,
+html body #root .xbar-command-main .ownership-proof-strip strong {
+  color: #1b1b1d !important;
+}
+
+/* No-photo placeholder mark sits quietly on the light media. */
+html body #root .xbar-command-main .horse-card__image-fallback {
+  background: transparent !important;
+  color: #76777d !important;
+}

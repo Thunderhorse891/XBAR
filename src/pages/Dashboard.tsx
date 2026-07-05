@@ -346,12 +346,12 @@ export default function Dashboard() {
         </section>
       </main>
 
-      <aside className="xbar-intelligence-rail-v2" aria-label="Intelligence rail">
+      <aside className="xbar-intelligence-rail-v2" aria-label="Sale summary">
         <div className="xbar-intelligence-rail-v2__inner">
           <div className="xbar-intelligence-rail-v2__brand">
             <img src={XBAR_MAIN_LOGO_SRC} alt="" aria-hidden="true" />
             <div>
-              <span>Intelligence</span>
+              <span>Sale summary</span>
               <strong>{statusLabel(focusPacket?.buyerProfileStatus ?? 'Private')}</strong>
             </div>
           </div>

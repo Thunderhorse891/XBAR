@@ -1653,3 +1653,97 @@ html body #root main.revenue-landing.revenue-landing .revenue-hero-console__acti
     grid-template-columns: 1fr !important;
   }
 }
+
+/* --------------------------------------------------------------------------
+ * Horse-record preview cards — explicit layout so the role label, name, and
+ * document/signal/value rows read cleanly (they previously inherited only
+ * color from the light override and collapsed into overlapping text).
+ * ------------------------------------------------------------------------ */
+html body #root main.revenue-landing.revenue-landing .revenue-horse-card {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+  padding: 16px 18px !important;
+  border: 1px solid #c6c6cd !important;
+  background: #ffffff !important;
+}
+
+html body #root main.revenue-landing.revenue-landing .revenue-horse-card > div:first-child {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+}
+
+html body #root main.revenue-landing.revenue-landing .revenue-horse-card span {
+  font-family: 'Geist', 'Outfit', sans-serif !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.16em !important;
+  color: #76777d !important;
+}
+
+html body #root main.revenue-landing.revenue-landing .revenue-horse-card strong {
+  font-size: 1rem !important;
+  font-weight: 650 !important;
+  letter-spacing: -0.01em !important;
+  color: #1b1b1d !important;
+}
+
+html body #root main.revenue-landing.revenue-landing .revenue-horse-card dl {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  margin: 0 !important;
+  padding-top: 12px !important;
+  border-top: 1px solid #e4e2e4 !important;
+}
+
+html body #root main.revenue-landing.revenue-landing .revenue-horse-card dl > div {
+  display: flex !important;
+  align-items: baseline !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+}
+
+html body #root main.revenue-landing.revenue-landing .revenue-horse-card dt {
+  font-size: 0.8rem !important;
+  color: #76777d !important;
+}
+
+html body #root main.revenue-landing.revenue-landing .revenue-horse-card dd {
+  margin: 0 !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  color: #1b1b1d !important;
+  text-align: right !important;
+}
+
+/* --------------------------------------------------------------------------
+ * Refined editorial scale — the marketing headings inherited up to ~5.8rem,
+ * which reads as a billboard rather than premium SaaS. Cap the hero and
+ * section headings to a sleeker scale and prevent long words from
+ * overflowing their grid column into neighbouring cards.
+ * ------------------------------------------------------------------------ */
+html body #root main.revenue-landing.revenue-landing .revenue-hero h1 {
+  font-size: clamp(2.5rem, 4.6vw, 3.9rem) !important;
+  line-height: 1.03 !important;
+  letter-spacing: -0.025em !important;
+}
+
+html body #root main.revenue-landing.revenue-landing :is(.revenue-section h2, .revenue-cta h2, .revenue-reveal__copy h2) {
+  font-size: clamp(1.85rem, 3vw, 2.75rem) !important;
+  line-height: 1.08 !important;
+  letter-spacing: -0.02em !important;
+}
+
+html body #root main.revenue-landing.revenue-landing .revenue-intelligence-showcase__copy {
+  min-width: 0 !important;
+}
+
+html body #root main.revenue-landing.revenue-landing .revenue-intelligence-showcase__copy h2 {
+  max-width: none !important;
+  font-size: clamp(1.7rem, 2.4vw, 2.35rem) !important;
+  line-height: 1.1 !important;
+  letter-spacing: -0.02em !important;
+  overflow-wrap: anywhere !important;
+}
