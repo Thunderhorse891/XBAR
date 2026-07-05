@@ -89,6 +89,10 @@
   font-size: clamp(2.6rem, 5.4vw, 4.9rem);
   line-height: 1.0;
   letter-spacing: -0.055em;
+  word-break: normal;
+  overflow-wrap: normal;
+  hyphens: none;
+  text-wrap: balance;
 }
 
 .revenue-hero__lead {
@@ -292,6 +296,10 @@
   font-size: clamp(1.9rem, 3.8vw, 3.2rem);
   line-height: 1.04;
   letter-spacing: -0.045em;
+  word-break: normal;
+  overflow-wrap: normal;
+  hyphens: none;
+  text-wrap: balance;
 }
 
 .revenue-section__header > p {
@@ -1093,7 +1101,7 @@ html body #root main.revenue-landing.revenue-landing :is(.revenue-pipeline__inde
 
 html body #root main.revenue-landing.revenue-landing .revenue-intelligence-showcase {
   display: grid !important;
-  grid-template-columns: minmax(260px, 0.8fr) minmax(420px, 1.34fr) minmax(250px, 0.74fr) !important;
+  grid-template-columns: minmax(320px, 0.92fr) minmax(400px, 1.26fr) minmax(240px, 0.72fr) !important;
   align-items: center !important;
   gap: 18px !important;
   width: min(1200px, calc(100% - 44px)) !important;
@@ -1719,31 +1727,17 @@ html body #root main.revenue-landing.revenue-landing .revenue-horse-card dd {
 }
 
 /* --------------------------------------------------------------------------
- * Refined editorial scale — the marketing headings inherited up to ~5.8rem,
- * which reads as a billboard rather than premium SaaS. Cap the hero and
- * section headings to a sleeker scale and prevent long words from
- * overflowing their grid column into neighbouring cards.
+ * Headline wrap safety — the operational-preview headline lived in a column
+ * too narrow for its type scale, so a long word ("ownership") either spilled
+ * into the neighbouring card or split letter-by-letter. Give the copy column
+ * room and force whole-word wrapping. Cinematic Fable type is preserved.
  * ------------------------------------------------------------------------ */
-html body #root main.revenue-landing.revenue-landing .revenue-hero h1 {
-  font-size: clamp(2.5rem, 4.6vw, 3.9rem) !important;
-  line-height: 1.03 !important;
-  letter-spacing: -0.025em !important;
-}
-
-html body #root main.revenue-landing.revenue-landing :is(.revenue-section h2, .revenue-cta h2, .revenue-reveal__copy h2) {
-  font-size: clamp(1.85rem, 3vw, 2.75rem) !important;
-  line-height: 1.08 !important;
-  letter-spacing: -0.02em !important;
-}
-
-html body #root main.revenue-landing.revenue-landing .revenue-intelligence-showcase__copy {
-  min-width: 0 !important;
-}
-
 html body #root main.revenue-landing.revenue-landing .revenue-intelligence-showcase__copy h2 {
-  max-width: none !important;
-  font-size: clamp(1.7rem, 2.4vw, 2.35rem) !important;
-  line-height: 1.1 !important;
-  letter-spacing: -0.02em !important;
-  overflow-wrap: anywhere !important;
+  max-width: 16ch !important;
+  font-size: clamp(1.9rem, 3vw, 2.9rem) !important;
+  line-height: 1.05 !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+  hyphens: none !important;
+  text-wrap: balance !important;
 }
