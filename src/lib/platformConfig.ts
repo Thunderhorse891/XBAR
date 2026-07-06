@@ -1,6 +1,9 @@
 import type { SubscriptionTier } from '../types/xbar.js';
 
-const env = ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {}) as Record<string, string | undefined>;
+const env = ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {}) as Record<
+  string,
+  string | undefined
+>;
 const isE2eMode = env.MODE === 'e2e';
 
 function readEnv(value: string | undefined) {

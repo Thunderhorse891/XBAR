@@ -16,11 +16,11 @@
 
 .xbar-command-main .ops-briefing-header {
   border-color: rgba(45, 140, 255, 0.24);
-  background:
-    linear-gradient(135deg, rgba(11, 23, 39, 0.96), rgba(7, 16, 29, 0.98)),
-    #080f1c;
+  background: linear-gradient(135deg, rgba(11, 23, 39, 0.96), rgba(7, 16, 29, 0.98)), #080f1c;
   color: #edf5ff;
-  box-shadow: 0 24px 64px rgba(1, 2, 4, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 24px 64px rgba(1, 2, 4, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .xbar-command-main .ops-briefing-header__title,

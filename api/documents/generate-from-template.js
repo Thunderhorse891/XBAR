@@ -7,7 +7,8 @@ import { loadHorseContext } from '../_lib/horse-context.js';
 import { createSectionedPdf } from '../_lib/pdf.js';
 import { recordAuditEvent } from '../_lib/audit.js';
 
-const DOCUMENT_BUCKET = process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
+const DOCUMENT_BUCKET =
+  process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
 const SIGNED_URL_TTL_SECONDS = 3600;
 
 export default async function handler(req, res) {
@@ -72,7 +73,8 @@ export default async function handler(req, res) {
     const context = { ...loaded.context };
     if (templateId === 'sales-packet') {
       context.packet = {
-        documentList: loaded.documents.map((doc) => `${doc.document_type}: ${doc.title}`).join('; ') || 'No documents attached yet',
+        documentList:
+          loaded.documents.map((doc) => `${doc.document_type}: ${doc.title}`).join('; ') || 'No documents attached yet',
       };
     }
     // Caller-supplied placeholder values ({"buyer.name": "...", "sale.price": "..."}).

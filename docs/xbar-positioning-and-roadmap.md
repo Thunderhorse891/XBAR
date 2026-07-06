@@ -300,4 +300,3 @@ If development continues right now, the next order should be:
 ## Simple Pitch Draft
 
 XBAR Records gives performance horse businesses one trusted place for horse records, ownership documentation, intake review, and buyer-ready sale profiles. Instead of hunting through folders, spreadsheets, email threads, and transfer paperwork, your team gets a clean operational record for every horse and a faster path to confident sales.
-

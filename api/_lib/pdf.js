@@ -49,7 +49,13 @@ export async function createSectionedPdf({ title, sections, footer = '' }) {
     const lines = wrapLine(text, options.font, options.size, maxWidth);
     for (const line of lines) {
       ensureRoom(options.size + LINE_GAP);
-      page.drawText(line, { x: MARGIN, y: y - options.size, size: options.size, font: options.font, color: rgb(0.1, 0.1, 0.12) });
+      page.drawText(line, {
+        x: MARGIN,
+        y: y - options.size,
+        size: options.size,
+        font: options.font,
+        color: rgb(0.1, 0.1, 0.12),
+      });
       y -= options.size + LINE_GAP;
     }
   };
@@ -115,7 +121,9 @@ async function appendAttachment(pdf, attachment, fallbackNotes) {
     return false;
   }
 
-  fallbackNotes.push(`${attachment.label || 'Attachment'}: unsupported format (${mime || 'unknown'}), available separately.`);
+  fallbackNotes.push(
+    `${attachment.label || 'Attachment'}: unsupported format (${mime || 'unknown'}), available separately.`,
+  );
   return false;
 }
 

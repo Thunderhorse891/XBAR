@@ -199,5 +199,14 @@ export function computeHorseEconomics(
   const projectedMargin = askPrice > 0 ? askPrice - breakEvenPrice : 0;
   const marginPercent = askPrice > 0 ? Math.round((projectedMargin / askPrice) * 100) : 0;
 
-  return { horseId: horse.id, costToDate, monthlyBurn, askPrice, projectedMargin, breakEvenPrice, safeDiscountFloor, marginPercent };
+  return {
+    horseId: horse.id,
+    costToDate,
+    monthlyBurn,
+    askPrice,
+    projectedMargin,
+    breakEvenPrice,
+    safeDiscountFloor,
+    marginPercent,
+  };
 }

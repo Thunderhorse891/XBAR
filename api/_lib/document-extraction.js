@@ -16,12 +16,18 @@ export const DOCUMENT_TYPE_LABELS = {
 
 const CLASSIFIERS = [
   { type: 'coggins', pattern: /equine\s+infectious\s+anemia|coggins|\bEIA\b|AGID|ELISA\s+test/i, weight: 0.97 },
-  { type: 'health_cert', pattern: /certificate\s+of\s+veterinary\s+inspection|health\s+certificate|\bCVI\b|interstate\s+(travel|movement|shipment)/i, weight: 0.95 },
+  {
+    type: 'health_cert',
+    pattern:
+      /certificate\s+of\s+veterinary\s+inspection|health\s+certificate|\bCVI\b|interstate\s+(travel|movement|shipment)/i,
+    weight: 0.95,
+  },
   { type: 'transfer', pattern: /transfer\s+of\s+ownership|transfer\s+report|ownership\s+transfer/i, weight: 0.95 },
   { type: 'bill_of_sale', pattern: /bill\s+of\s+sale|purchase\s+agreement/i, weight: 0.95 },
   {
     type: 'registration',
-    pattern: /certificate\s+of\s+registration|registration\s+certificate|breed\s+registry|jockey\s+club|arabian\s+horse\s+association|\bAHA\b|\bAQHA\b|\bUSEF\b|\bAPHA\b/i,
+    pattern:
+      /certificate\s+of\s+registration|registration\s+certificate|breed\s+registry|jockey\s+club|arabian\s+horse\s+association|\bAHA\b|\bAQHA\b|\bUSEF\b|\bAPHA\b/i,
     weight: 0.93,
   },
 ];
@@ -83,7 +89,20 @@ export function normalizeDate(raw) {
     return `${year}-${us[1].padStart(2, '0')}-${us[2].padStart(2, '0')}`;
   }
 
-  const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+  const months = [
+    'january',
+    'february',
+    'march',
+    'april',
+    'may',
+    'june',
+    'july',
+    'august',
+    'september',
+    'october',
+    'november',
+    'december',
+  ];
   const written = value.match(/^([a-z]+)\.?\s+(\d{1,2}),?\s+(\d{4})$/i);
   if (written) {
     const monthIndex = months.findIndex((month) => month.startsWith(written[1].toLowerCase()));
@@ -105,7 +124,8 @@ export function addOneYear(isoDate) {
   return `${Number(match[1]) + 1}-${match[2]}-${match[3]}`;
 }
 
-const DATE_VALUE = '([A-Za-z]+\\.?\\s+\\d{1,2},?\\s+\\d{4}|\\d{1,2}[-/]\\d{1,2}[-/]\\d{2,4}|\\d{4}[-/]\\d{1,2}[-/]\\d{1,2})';
+const DATE_VALUE =
+  '([A-Za-z]+\\.?\\s+\\d{1,2},?\\s+\\d{4}|\\d{1,2}[-/]\\d{1,2}[-/]\\d{2,4}|\\d{4}[-/]\\d{1,2}[-/]\\d{1,2})';
 const NAME_VALUE = "([A-Za-z][A-Za-z0-9 .,'&-]{1,60})";
 const LINE_END = '(?:\\r?\\n|$)';
 
@@ -128,15 +148,23 @@ export function extractRegistrationFields(text) {
   const name = nameField(text, ['(?:horse\\s+)?name(?:\\s+of\\s+horse)?', 'registered\\s+name'], { maxLength: 60 });
   if (name) fields.name = name;
 
-  const registration = captureField(text, [
-    /registration\s*(?:no|number|#)\.?\s*[:#-]?\s*([A-Z]{0,4}[\s-]?\d{4,10}[A-Z]?)/i,
-    /reg\.?\s*(?:no|#)\.?\s*[:#-]?\s*([A-Z]{0,4}[\s-]?\d{4,10}[A-Z]?)/i,
-  ], { uppercase: true, maxLength: 20 });
+  const registration = captureField(
+    text,
+    [
+      /registration\s*(?:no|number|#)\.?\s*[:#-]?\s*([A-Z]{0,4}[\s-]?\d{4,10}[A-Z]?)/i,
+      /reg\.?\s*(?:no|#)\.?\s*[:#-]?\s*([A-Z]{0,4}[\s-]?\d{4,10}[A-Z]?)/i,
+    ],
+    { uppercase: true, maxLength: 20 },
+  );
   if (registration) fields.registrationNumber = { ...registration, value: registration.value.replace(/\s+/g, '') };
 
-  const registry = captureField(text, [
-    /(arabian\s+horse\s+association|jockey\s+club|american\s+quarter\s+horse\s+association|american\s+paint\s+horse\s+association|\bAHA\b|\bAQHA\b|\bAPHA\b|\bUSEF\b)/i,
-  ], { maxLength: 50 });
+  const registry = captureField(
+    text,
+    [
+      /(arabian\s+horse\s+association|jockey\s+club|american\s+quarter\s+horse\s+association|american\s+paint\s+horse\s+association|\bAHA\b|\bAQHA\b|\bAPHA\b|\bUSEF\b)/i,
+    ],
+    { maxLength: 50 },
+  );
   if (registry) fields.registry = registry;
 
   const breed = nameField(text, ['breed'], { maxLength: 40 });
@@ -148,7 +176,9 @@ export function extractRegistrationFields(text) {
   const markings = nameField(text, ['markings'], { maxLength: 120 });
   if (markings) fields.markings = markings;
 
-  const gender = captureField(text, [/\b(?:sex|gender)\s*[:#-]?\s*(stallion|mare|gelding|colt|filly|male|female)/i], { maxLength: 12 });
+  const gender = captureField(text, [/\b(?:sex|gender)\s*[:#-]?\s*(stallion|mare|gelding|colt|filly|male|female)/i], {
+    maxLength: 12,
+  });
   if (gender) fields.gender = gender;
 
   const birthdate = dateField(text, ['(?:date\\s+)?foaled', 'foaling\\s+date', 'date\\s+of\\s+birth', 'birth\\s*date']);
@@ -160,7 +190,11 @@ export function extractRegistrationFields(text) {
   const dam = nameField(text, ['dam'], { maxLength: 60 });
   if (dam) fields.dam = dam;
 
-  const dna = captureField(text, [/DNA\s*(?:status|test(?:ed)?)?\s*[:#-]?\s*(on\s+file|verified|parent\s+qualified|pending|not\s+on\s+file)/i], { maxLength: 30 });
+  const dna = captureField(
+    text,
+    [/DNA\s*(?:status|test(?:ed)?)?\s*[:#-]?\s*(on\s+file|verified|parent\s+qualified|pending|not\s+on\s+file)/i],
+    { maxLength: 30 },
+  );
   if (dna) fields.dnaStatus = dna;
 
   const microchip = captureField(text, [/microchip\s*(?:no|number|#)?\.?\s*[:#-]?\s*(\d{9,15})/i], { maxLength: 15 });
@@ -174,7 +208,11 @@ export function extractCogginsFields(text) {
   const name = nameField(text, ['(?:horse\\s+|animal\\s+)?name'], { maxLength: 60 });
   if (name) fields.name = name;
 
-  const testDate = dateField(text, ['(?:test|sample|collection|drawn?)\\s*date', 'date\\s+(?:of\\s+)?(?:test|sample|collection)', 'date\\s+drawn']);
+  const testDate = dateField(text, [
+    '(?:test|sample|collection|drawn?)\\s*date',
+    'date\\s+(?:of\\s+)?(?:test|sample|collection)',
+    'date\\s+drawn',
+  ]);
   if (testDate) {
     fields.testDate = testDate;
     const nextDue = addOneYear(testDate.value);
@@ -183,18 +221,30 @@ export function extractCogginsFields(text) {
     }
   }
 
-  const labId = captureField(text, [
-    /(?:lab(?:oratory)?|accession|case)\s*(?:id|no|number|#)\.?\s*[:#-]?\s*([A-Z0-9-]{4,20})/i,
-  ], { uppercase: true, maxLength: 20 });
+  const labId = captureField(
+    text,
+    [/(?:lab(?:oratory)?|accession|case)\s*(?:id|no|number|#)\.?\s*[:#-]?\s*([A-Z0-9-]{4,20})/i],
+    { uppercase: true, maxLength: 20 },
+  );
   if (labId) fields.labId = labId;
 
-  const result = captureField(text, [/(?:test\s+)?results?\s*[:#-]?\s*(negative|positive)/i, /\b(negative|positive)\b/i], { maxLength: 10 });
+  const result = captureField(
+    text,
+    [/(?:test\s+)?results?\s*[:#-]?\s*(negative|positive)/i, /\b(negative|positive)\b/i],
+    { maxLength: 10 },
+  );
   if (result) fields.result = { ...result, value: result.value.toLowerCase() };
 
-  const registration = captureField(text, [/registration\s*(?:no|number|#)\.?\s*[:#-]?\s*([A-Z]{0,4}[\s-]?\d{4,10}[A-Z]?)/i], { uppercase: true, maxLength: 20 });
+  const registration = captureField(
+    text,
+    [/registration\s*(?:no|number|#)\.?\s*[:#-]?\s*([A-Z]{0,4}[\s-]?\d{4,10}[A-Z]?)/i],
+    { uppercase: true, maxLength: 20 },
+  );
   if (registration) fields.registrationNumber = { ...registration, value: registration.value.replace(/\s+/g, '') };
 
-  const vet = nameField(text, ['veterinarian', 'vet(?:erinary)?\\s+name', 'attending\\s+veterinarian', 'DVM'], { maxLength: 60 });
+  const vet = nameField(text, ['veterinarian', 'vet(?:erinary)?\\s+name', 'attending\\s+veterinarian', 'DVM'], {
+    maxLength: 60,
+  });
   if (vet) fields.veterinarian = vet;
 
   return fields;
@@ -205,13 +255,20 @@ export function extractHealthCertFields(text) {
   const name = nameField(text, ['(?:horse\\s+|animal\\s+)?name'], { maxLength: 60 });
   if (name) fields.name = name;
 
-  const examDate = dateField(text, ['(?:exam(?:ination)?|inspection)\\s*date', 'date\\s+of\\s+(?:exam(?:ination)?|inspection)']);
+  const examDate = dateField(text, [
+    '(?:exam(?:ination)?|inspection)\\s*date',
+    'date\\s+of\\s+(?:exam(?:ination)?|inspection)',
+  ]);
   if (examDate) fields.examDate = examDate;
 
-  const vet = nameField(text, ['veterinarian', 'issuing\\s+veterinarian', 'attending\\s+veterinarian', 'DVM'], { maxLength: 60 });
+  const vet = nameField(text, ['veterinarian', 'issuing\\s+veterinarian', 'attending\\s+veterinarian', 'DVM'], {
+    maxLength: 60,
+  });
   if (vet) fields.veterinarian = vet;
 
-  const destination = nameField(text, ['destination', 'consignee(?:\\s+address)?', 'shipping\\s+to'], { maxLength: 120 });
+  const destination = nameField(text, ['destination', 'consignee(?:\\s+address)?', 'shipping\\s+to'], {
+    maxLength: 120,
+  });
   if (destination) fields.destination = destination;
 
   const expiry = dateField(text, ['expir(?:y|ation)\\s*date', 'valid\\s+(?:through|until)', 'expires']);
@@ -225,22 +282,37 @@ export function extractTransferFields(text) {
   const name = nameField(text, ['(?:horse\\s+)?name'], { maxLength: 60 });
   if (name) fields.name = name;
 
-  const previousOwner = nameField(text, ['(?:previous|current|transferor|seller)\\s+owner(?:\\s+name)?', 'seller(?:\\s+name)?', 'transferor'], { maxLength: 80 });
+  const previousOwner = nameField(
+    text,
+    ['(?:previous|current|transferor|seller)\\s+owner(?:\\s+name)?', 'seller(?:\\s+name)?', 'transferor'],
+    { maxLength: 80 },
+  );
   if (previousOwner) fields.previousOwner = previousOwner;
 
   const previousOwnerAddress = nameField(text, ['(?:previous|seller)\\s+(?:owner\\s+)?address'], { maxLength: 140 });
   if (previousOwnerAddress) fields.previousOwnerAddress = previousOwnerAddress;
 
-  const newOwner = nameField(text, ['(?:new|transferee)\\s+owner(?:\\s+name)?', 'buyer(?:\\s+name)?', 'transferee'], { maxLength: 80 });
+  const newOwner = nameField(text, ['(?:new|transferee)\\s+owner(?:\\s+name)?', 'buyer(?:\\s+name)?', 'transferee'], {
+    maxLength: 80,
+  });
   if (newOwner) fields.newOwner = newOwner;
 
   const newOwnerAddress = nameField(text, ['(?:new\\s+owner|buyer|transferee)\\s+address'], { maxLength: 140 });
   if (newOwnerAddress) fields.newOwnerAddress = newOwnerAddress;
 
-  const saleDate = dateField(text, ['date\\s+of\\s+sale', 'sale\\s+date', 'transfer\\s+date', 'date\\s+of\\s+transfer']);
+  const saleDate = dateField(text, [
+    'date\\s+of\\s+sale',
+    'sale\\s+date',
+    'transfer\\s+date',
+    'date\\s+of\\s+transfer',
+  ]);
   if (saleDate) fields.saleDate = saleDate;
 
-  const registration = captureField(text, [/registration\s*(?:no|number|#)\.?\s*[:#-]?\s*([A-Z]{0,4}[\s-]?\d{4,10}[A-Z]?)/i], { uppercase: true, maxLength: 20 });
+  const registration = captureField(
+    text,
+    [/registration\s*(?:no|number|#)\.?\s*[:#-]?\s*([A-Z]{0,4}[\s-]?\d{4,10}[A-Z]?)/i],
+    { uppercase: true, maxLength: 20 },
+  );
   if (registration) fields.registrationNumber = { ...registration, value: registration.value.replace(/\s+/g, '') };
 
   return fields;
@@ -266,7 +338,9 @@ const EXTRACTORS = {
 export function detectMultipleHorses(text) {
   const source = String(text || '');
   const names = new Set();
-  const nameMatches = source.matchAll(new RegExp(`(?:horse|registered|animal)\\s+name\\s*[:#-]?\\s*${NAME_VALUE}`, 'gi'));
+  const nameMatches = source.matchAll(
+    new RegExp(`(?:horse|registered|animal)\\s+name\\s*[:#-]?\\s*${NAME_VALUE}`, 'gi'),
+  );
   for (const match of nameMatches) {
     const value = cleanValue(match[1], { maxLength: 60 }).toLowerCase();
     if (value) names.add(value);
@@ -294,7 +368,9 @@ export function extractDocument({ text, ocrConfidence = 1 }) {
   const fieldConfidence = confidences.length
     ? confidences.reduce((sum, value) => sum + value, 0) / confidences.length
     : 0;
-  const overallConfidence = Number((Math.min(1, Math.max(0, ocrConfidence)) * fieldConfidence * classification.confidence ** 0.5).toFixed(4));
+  const overallConfidence = Number(
+    (Math.min(1, Math.max(0, ocrConfidence)) * fieldConfidence * classification.confidence ** 0.5).toFixed(4),
+  );
 
   const confidenceMap = {};
   const extractedData = {};
@@ -324,11 +400,16 @@ export function extractDocument({ text, ocrConfidence = 1 }) {
 }
 
 function normalizeIdentity(value) {
-  return String(value || '').replace(/\s+/g, '').toUpperCase();
+  return String(value || '')
+    .replace(/\s+/g, '')
+    .toUpperCase();
 }
 
 function normalizeName(value) {
-  return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 }
 
 // Group a batch of extractions into horse profile candidates. Documents that

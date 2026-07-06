@@ -10,7 +10,10 @@ export default function NotFound() {
         description="The route you opened does not exist in this workspace."
       />
 
-      <Panel title="Return to a live module" description="Use one of the primary product areas instead of landing in a blank shell.">
+      <Panel
+        title="Return to a live module"
+        description="Use one of the primary product areas instead of landing in a blank shell."
+      >
         <div className="inline-actions">
           <Link to="/" className="button button--primary">
             Dashboard

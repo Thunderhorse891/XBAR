@@ -19,11 +19,14 @@ const item = (overrides: Partial<OperationsPriorityItem>): OperationsPriorityIte
 });
 
 test('alert digest includes overdue and due-soon operational alerts', () => {
-  const digest = buildAlertDigest([
-    item({ id: 'overdue', timing: 'Overdue' }),
-    item({ id: 'soon', timing: 'This week', urgency: 'Watch', dueDate: '2026-06-12' }),
-    item({ id: 'later', timing: 'Later', urgency: 'Watch', dueDate: '2026-08-01' }),
-  ], new Date('2026-06-09T12:00:00Z'));
+  const digest = buildAlertDigest(
+    [
+      item({ id: 'overdue', timing: 'Overdue' }),
+      item({ id: 'soon', timing: 'This week', urgency: 'Watch', dueDate: '2026-06-12' }),
+      item({ id: 'later', timing: 'Later', urgency: 'Watch', dueDate: '2026-08-01' }),
+    ],
+    new Date('2026-06-09T12:00:00Z'),
+  );
 
   assert.equal(digest.alerts.length, 2);
   assert.equal(digest.overdueCount, 1);

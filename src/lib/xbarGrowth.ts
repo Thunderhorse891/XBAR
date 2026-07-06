@@ -32,12 +32,13 @@ export type FieldToolCard = {
 };
 
 function buyerReadyProfiles(horses: HorseRecord[], documents: DocumentRecord[], ownershipRecords: OwnershipRecord[]) {
-  return horses.filter((horse) =>
-    buildHorsePacketCompleteness(
-      horse,
-      documents.filter((document) => document.horseId === horse.id),
-      ownershipRecords.find((record) => record.horseId === horse.id),
-    ).buyerSafe,
+  return horses.filter(
+    (horse) =>
+      buildHorsePacketCompleteness(
+        horse,
+        documents.filter((document) => document.horseId === horse.id),
+        ownershipRecords.find((record) => record.horseId === horse.id),
+      ).buyerSafe,
   );
 }
 
@@ -62,7 +63,9 @@ export function buildCommandCenter(params: {
   });
   const activeOffers = salesLeads.filter((lead) => lead.stage === 'Offer' || lead.stage === 'Qualified');
   const ownershipAttention = ownershipRecords.filter((record) => record.transferStatus !== 'Clear');
-  const serviceRisk = ranchAssets.filter((asset) => asset.condition === 'Attention Required' || asset.status === 'In Service');
+  const serviceRisk = ranchAssets.filter(
+    (asset) => asset.condition === 'Attention Required' || asset.status === 'In Service',
+  );
   const slowBatches = intakeBatches.filter((batch) => batch.state !== 'Completed');
 
   const items: CommandCenterItem[] = [
@@ -139,7 +142,9 @@ export function buildFieldTools(params: {
 }) {
   const { horses, documents, ownershipRecords, salesLeads, sharedAccess } = params;
   const buyerReady = buyerReadyProfiles(horses, documents, ownershipRecords).length;
-  const unresolvedDocs = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched').length;
+  const unresolvedDocs = documents.filter(
+    (document) => document.state === 'Needs Review' || document.state === 'Matched',
+  ).length;
 
   return [
     {

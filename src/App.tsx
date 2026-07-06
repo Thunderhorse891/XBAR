@@ -189,8 +189,24 @@ export default function App() {
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/login" element={<Login />} />
             <Route path="/subscribe" element={<Navigate to={billingPath} replace />} />
-            <Route path="/setup" element={<RequireCloudAuth><SetupWorkspace /></RequireCloudAuth>} />
-            <Route path="/" element={<RequireCloudAuth><RequireWorkspaceSetup><MainLayout /></RequireWorkspaceSetup></RequireCloudAuth>}>
+            <Route
+              path="/setup"
+              element={
+                <RequireCloudAuth>
+                  <SetupWorkspace />
+                </RequireCloudAuth>
+              }
+            />
+            <Route
+              path="/"
+              element={
+                <RequireCloudAuth>
+                  <RequireWorkspaceSetup>
+                    <MainLayout />
+                  </RequireWorkspaceSetup>
+                </RequireCloudAuth>
+              }
+            >
               <Route index element={<Dashboard />} />
               <Route path="getting-started" element={<GettingStarted />} />
               <Route path="today" element={<TodayWork />} />
@@ -229,7 +245,14 @@ export default function App() {
               <Route path="assets" element={<RanchAssets />} />
               <Route path="billing" element={<Subscriptions />} />
               <Route path="subscriptions" element={<Navigate to={billingPath} replace />} />
-              <Route path="shared-access" element={<RequireSharedListings><SharedAccess /></RequireSharedListings>} />
+              <Route
+                path="shared-access"
+                element={
+                  <RequireSharedListings>
+                    <SharedAccess />
+                  </RequireSharedListings>
+                }
+              />
               <Route path="settings" element={<Settings />} />
               <Route path="*" element={<NotFound />} />
             </Route>

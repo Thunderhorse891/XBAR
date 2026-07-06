@@ -7,7 +7,13 @@ import type { DocumentRecord, ExpenseReceipt, HorseRecord, OwnershipRecord } fro
 const now = new Date('2026-06-10T12:00:00Z');
 
 function horse(id: string, name: string, askPrice: number, status: HorseRecord['status'] = 'Sale Prep'): HorseRecord {
-  return { id, name, status, owner: 'Erin', sale: { askPrice, listingState: 'Market Ready' } } as unknown as HorseRecord;
+  return {
+    id,
+    name,
+    status,
+    owner: 'Erin',
+    sale: { askPrice, listingState: 'Market Ready' },
+  } as unknown as HorseRecord;
 }
 
 function cogginsDoc(horseId: string, daysAgo: number): DocumentRecord {
@@ -31,16 +37,16 @@ function clearRecord(horseId: string): OwnershipRecord {
 
 function receipt(category: ExpenseReceipt['category'], amount: number, monthsAgo: number): ExpenseReceipt {
   const date = new Date(now.getFullYear(), now.getMonth() - monthsAgo, 5);
-  return { id: `r-${category}-${monthsAgo}-${amount}`, category, amount, receiptDate: date.toISOString() } as ExpenseReceipt;
+  return {
+    id: `r-${category}-${monthsAgo}-${amount}`,
+    category,
+    amount,
+    receiptDate: date.toISOString(),
+  } as ExpenseReceipt;
 }
 
 test('listed horse with verified proof and current Coggins is sale-ready', () => {
-  const result = assessRevenueAtRisk(
-    [horse('h1', 'Spirit', 18500)],
-    [clearRecord('h1')],
-    [cogginsDoc('h1', 90)],
-    now,
-  );
+  const result = assessRevenueAtRisk([horse('h1', 'Spirit', 18500)], [clearRecord('h1')], [cogginsDoc('h1', 90)], now);
   assert.equal(result.totalListedValue, 18500);
   assert.equal(result.valueAtRisk, 0);
   assert.equal(result.items.length, 0);
@@ -64,7 +70,13 @@ test('stale Coggins blocks the sale and routes to a pre-filled upload', () => {
 });
 
 test('horses without sale intent are ignored', () => {
-  const pastured = { id: 'h1', name: 'Pasture Pal', status: 'Pasture', owner: 'Erin', sale: { askPrice: 0, listingState: 'Private' } } as unknown as HorseRecord;
+  const pastured = {
+    id: 'h1',
+    name: 'Pasture Pal',
+    status: 'Pasture',
+    owner: 'Erin',
+    sale: { askPrice: 0, listingState: 'Private' },
+  } as unknown as HorseRecord;
   const result = assessRevenueAtRisk([pastured], [], [], now);
   assert.equal(result.totalListedValue, 0);
   assert.equal(result.items.length, 0);
@@ -96,9 +108,27 @@ test('trivial or trendless spend is not flagged', () => {
 test('horse economics compute burn, break-even, and the safe discount floor', async () => {
   const { computeHorseEconomics } = await import('../src/lib/businessIntelligence.js');
   const receipts: ExpenseReceipt[] = [
-    { id: 'e1', horseId: 'h1', category: 'Feed', amount: 300, receiptDate: new Date(now.getFullYear(), now.getMonth(), 2).toISOString() } as ExpenseReceipt,
-    { id: 'e2', horseId: 'h1', category: 'Vet Care', amount: 600, receiptDate: new Date(now.getFullYear(), now.getMonth() - 1, 2).toISOString() } as ExpenseReceipt,
-    { id: 'e3', horseId: 'h1', category: 'Farrier', amount: 1500, receiptDate: new Date(now.getFullYear() - 1, 0, 2).toISOString() } as ExpenseReceipt,
+    {
+      id: 'e1',
+      horseId: 'h1',
+      category: 'Feed',
+      amount: 300,
+      receiptDate: new Date(now.getFullYear(), now.getMonth(), 2).toISOString(),
+    } as ExpenseReceipt,
+    {
+      id: 'e2',
+      horseId: 'h1',
+      category: 'Vet Care',
+      amount: 600,
+      receiptDate: new Date(now.getFullYear(), now.getMonth() - 1, 2).toISOString(),
+    } as ExpenseReceipt,
+    {
+      id: 'e3',
+      horseId: 'h1',
+      category: 'Farrier',
+      amount: 1500,
+      receiptDate: new Date(now.getFullYear() - 1, 0, 2).toISOString(),
+    } as ExpenseReceipt,
     { id: 'e4', horseId: 'other', category: 'Feed', amount: 999, receiptDate: now.toISOString() } as ExpenseReceipt,
   ];
   const economics = computeHorseEconomics(horse('h1', 'Spirit', 12000), receipts, now);
@@ -111,7 +141,13 @@ test('horse economics compute burn, break-even, and the safe discount floor', as
 });
 
 test('an active medical review prices the listing as blocked with disclosure required', () => {
-  const held = { id: 'h1', name: 'Spirit', status: 'Medical Review', owner: 'Erin', sale: { askPrice: 9000, listingState: 'Market Ready' } } as unknown as HorseRecord;
+  const held = {
+    id: 'h1',
+    name: 'Spirit',
+    status: 'Medical Review',
+    owner: 'Erin',
+    sale: { askPrice: 9000, listingState: 'Market Ready' },
+  } as unknown as HorseRecord;
   const result = assessRevenueAtRisk([held], [clearRecord('h1')], [cogginsDoc('h1', 30)], now);
   assert.equal(result.valueAtRisk, 9000);
   assert.match(result.items[0]!.blockers[0] ?? '', /medical review/);

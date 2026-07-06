@@ -21,13 +21,7 @@ const RECENT_OVERDUE_WINDOW_DAYS = 21;
 const DAY_MS = 86_400_000;
 
 export type MareStatus =
-  | 'open'
-  | 'bred-awaiting-check'
-  | 'in-foal'
-  | 'near-term'
-  | 'foaled-live'
-  | 'foaled-loss'
-  | 'not-breeding';
+  'open' | 'bred-awaiting-check' | 'in-foal' | 'near-term' | 'foaled-live' | 'foaled-loss' | 'not-breeding';
 
 export type GuaranteeState = 'none' | 'covered' | 'fulfilled' | 'rebreed-owed';
 
@@ -111,11 +105,14 @@ function resolveRecordType(event: TimelineEvent): BreedingRecordDetails['recordT
   // a cover. It outranks result words like "open"/"in foal", which often just
   // describe the mare's prior state in the same note ("open mare bred to
   // Thunder"). An explicit scan/check term flips it back to a pregnancy check.
-  const hasBreedingVerb = /\bbred\b|\bbreed\b|\bcover\b|\bserved\b|insemin|\bai\b|\bmated\b|\bbooked\b|\bstud\b/.test(text);
+  const hasBreedingVerb = /\bbred\b|\bbreed\b|\bcover\b|\bserved\b|insemin|\bai\b|\bmated\b|\bbooked\b|\bstud\b/.test(
+    text,
+  );
   const hasCheckTerm = /ultrasound|sonogram|preg(?:nancy)?.?check|vet.?check|\bscan\b|heartbeat|\bchecked\b/.test(text);
   if (hasBreedingVerb && !hasCheckTerm) return 'breeding';
 
-  if (hasCheckTerm || /in.?foal|\bopen\b|barren|confirm|pregnant|positive|negative/.test(text)) return 'pregnancy-check';
+  if (hasCheckTerm || /in.?foal|\bopen\b|barren|confirm|pregnant|positive|negative/.test(text))
+    return 'pregnancy-check';
   if (hasBreedingVerb) return 'breeding';
   return undefined;
 }
@@ -157,7 +154,10 @@ export function buildCheckpoints(bredOn: Date, now: Date): BreedingCheckpoint[] 
   });
 }
 
-function latestByRecordType(events: TimelineEvent[], recordType: BreedingRecordDetails['recordType']): TimelineEvent | undefined {
+function latestByRecordType(
+  events: TimelineEvent[],
+  recordType: BreedingRecordDetails['recordType'],
+): TimelineEvent | undefined {
   return events
     .filter((event) => resolveRecordType(event) === recordType)
     .sort((a, b) => (a.date < b.date ? 1 : -1))[0];

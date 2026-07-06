@@ -124,7 +124,9 @@ export default function RanchAssets() {
           { label: 'Available', value: `${ranchAssets.length - assigned.length}` },
         ]}
         risks={[
-          ...attentionRequired.slice(0, 2).map((asset) => ({ label: `${asset.name}: attention required`, severity: 'rose' as const })),
+          ...attentionRequired
+            .slice(0, 2)
+            .map((asset) => ({ label: `${asset.name}: attention required`, severity: 'rose' as const })),
           ...serviceSoon
             .filter((asset) => asset.condition === 'Service Soon')
             .slice(0, 2)
@@ -167,44 +169,60 @@ export default function RanchAssets() {
                   </tr>
                 </thead>
                 <tbody>
-                  {ranchAssets.filter((a) => !assetQuery.trim() || a.name.toLowerCase().includes(assetQuery.toLowerCase()) || a.category.toLowerCase().includes(assetQuery.toLowerCase()) || a.assignedTo.toLowerCase().includes(assetQuery.toLowerCase())).map((asset) => (
-                    <tr
-                      key={asset.id}
-                      tabIndex={0}
-                      aria-label={`Select ${asset.name}`}
-                      title="Press Enter to select. Press Shift+F10 for actions."
-                      onClick={() => handleAssetSelection(asset.id)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
+                  {ranchAssets
+                    .filter(
+                      (a) =>
+                        !assetQuery.trim() ||
+                        a.name.toLowerCase().includes(assetQuery.toLowerCase()) ||
+                        a.category.toLowerCase().includes(assetQuery.toLowerCase()) ||
+                        a.assignedTo.toLowerCase().includes(assetQuery.toLowerCase()),
+                    )
+                    .map((asset) => (
+                      <tr
+                        key={asset.id}
+                        tabIndex={0}
+                        aria-label={`Select ${asset.name}`}
+                        title="Press Enter to select. Press Shift+F10 for actions."
+                        onClick={() => handleAssetSelection(asset.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            handleAssetSelection(asset.id);
+                          }
+                          if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+                            event.preventDefault();
+                            const bounds = event.currentTarget.getBoundingClientRect();
+                            handleAssetSelection(asset.id);
+                            setMenuState({ assetId: asset.id, x: bounds.left + 32, y: bounds.top + 32 });
+                          }
+                        }}
+                        onContextMenu={(event) => {
                           event.preventDefault();
                           handleAssetSelection(asset.id);
-                        }
-                        if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
-                          event.preventDefault();
-                          const bounds = event.currentTarget.getBoundingClientRect();
-                          handleAssetSelection(asset.id);
-                          setMenuState({ assetId: asset.id, x: bounds.left + 32, y: bounds.top + 32 });
-                        }
-                      }}
-                      onContextMenu={(event) => {
-                        event.preventDefault();
-                        handleAssetSelection(asset.id);
-                        setMenuState({ assetId: asset.id, x: event.clientX, y: event.clientY });
-                      }}
-                      className={`${asset.id === selectedAssetId ? 'table-row--selected ' : ''}table-row--interactive`.trim()}
-                    >
-                      <td>{asset.name}</td>
-                      <td>{asset.category}</td>
-                      <td>{asset.status}</td>
-                      <td>
-                        <Pill tone={asset.condition === 'Attention Required' ? 'rose' : asset.condition === 'Service Soon' ? 'amber' : 'emerald'}>
-                          {asset.condition}
-                        </Pill>
-                      </td>
-                      <td>{asset.assignedTo}</td>
-                      <td>{formatDateLabel(asset.nextService)}</td>
-                    </tr>
-                  ))}
+                          setMenuState({ assetId: asset.id, x: event.clientX, y: event.clientY });
+                        }}
+                        className={`${asset.id === selectedAssetId ? 'table-row--selected ' : ''}table-row--interactive`.trim()}
+                      >
+                        <td>{asset.name}</td>
+                        <td>{asset.category}</td>
+                        <td>{asset.status}</td>
+                        <td>
+                          <Pill
+                            tone={
+                              asset.condition === 'Attention Required'
+                                ? 'rose'
+                                : asset.condition === 'Service Soon'
+                                  ? 'amber'
+                                  : 'emerald'
+                            }
+                          >
+                            {asset.condition}
+                          </Pill>
+                        </td>
+                        <td>{asset.assignedTo}</td>
+                        <td>{formatDateLabel(asset.nextService)}</td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             </div>
@@ -217,7 +235,12 @@ export default function RanchAssets() {
           <div className="form-grid form-grid--tight">
             <label className="field-stack">
               <span className="field-label">Asset</span>
-              <select className="field-input" value={selectedAssetId} onChange={(event) => handleAssetSelection(event.target.value)} disabled={!canManageAssets}>
+              <select
+                className="field-input"
+                value={selectedAssetId}
+                onChange={(event) => handleAssetSelection(event.target.value)}
+                disabled={!canManageAssets}
+              >
                 {ranchAssets.map((asset) => (
                   <option key={asset.id} value={asset.id}>
                     {asset.name}
@@ -227,7 +250,12 @@ export default function RanchAssets() {
             </label>
             <label className="field-stack">
               <span className="field-label">Status</span>
-              <select className="field-input" value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as AssetStatus }))} disabled={!canManageAssets}>
+              <select
+                className="field-input"
+                value={form.status}
+                onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as AssetStatus }))}
+                disabled={!canManageAssets}
+              >
                 {statuses.map((status) => (
                   <option key={status} value={status}>
                     {status}
@@ -237,7 +265,14 @@ export default function RanchAssets() {
             </label>
             <label className="field-stack">
               <span className="field-label">Condition</span>
-              <select className="field-input" value={form.condition} onChange={(event) => setForm((current) => ({ ...current, condition: event.target.value as AssetCondition }))} disabled={!canManageAssets}>
+              <select
+                className="field-input"
+                value={form.condition}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, condition: event.target.value as AssetCondition }))
+                }
+                disabled={!canManageAssets}
+              >
                 {conditions.map((condition) => (
                   <option key={condition} value={condition}>
                     {condition}
@@ -247,23 +282,50 @@ export default function RanchAssets() {
             </label>
             <label className="field-stack">
               <span className="field-label">Assigned to</span>
-              <input className="field-input" value={form.assignedTo} onChange={(event) => setForm((current) => ({ ...current, assignedTo: event.target.value }))} disabled={!canManageAssets} />
+              <input
+                className="field-input"
+                value={form.assignedTo}
+                onChange={(event) => setForm((current) => ({ ...current, assignedTo: event.target.value }))}
+                disabled={!canManageAssets}
+              />
             </label>
             <label className="field-stack">
               <span className="field-label">Location</span>
-              <input className="field-input" value={form.location} onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))} disabled={!canManageAssets} />
+              <input
+                className="field-input"
+                value={form.location}
+                onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))}
+                disabled={!canManageAssets}
+              />
             </label>
             <label className="field-stack">
               <span className="field-label">Next service</span>
-              <input className="field-input" type="date" value={form.nextService} onChange={(event) => setForm((current) => ({ ...current, nextService: event.target.value }))} disabled={!canManageAssets} />
+              <input
+                className="field-input"
+                type="date"
+                value={form.nextService}
+                onChange={(event) => setForm((current) => ({ ...current, nextService: event.target.value }))}
+                disabled={!canManageAssets}
+              />
             </label>
             <label className="field-stack field-stack--wide">
               <span className="field-label">Notes</span>
-              <textarea className="field-textarea" rows={4} value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} disabled={!canManageAssets} />
+              <textarea
+                className="field-textarea"
+                rows={4}
+                value={form.notes}
+                onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
+                disabled={!canManageAssets}
+              />
             </label>
           </div>
           <div className="inline-actions">
-            <button className="button button--primary button--compact" type="button" onClick={handleSave} disabled={!canManageAssets}>
+            <button
+              className="button button--primary button--compact"
+              type="button"
+              onClick={handleSave}
+              disabled={!canManageAssets}
+            >
               Save asset changes
             </button>
             <button
@@ -282,44 +344,75 @@ export default function RanchAssets() {
       </div>
 
       <div ref={addAssetFormRef}>
-      <Panel eyebrow="Add to inventory" title="New asset">
-        <div className="form-grid form-grid--tight">
-          <label className="field-stack field-stack--wide">
-            <span className="field-label">Asset name</span>
-            <input className="field-input" value={newAsset.name} onChange={(e) => { setNewAsset((f) => ({ ...f, name: e.target.value })); setNewAssetError(''); }} placeholder="e.g. Western Saddle #3" disabled={!canManageAssets} />
-          </label>
-          <label className="field-stack">
-            <span className="field-label">Category</span>
-            <select className="field-input" value={newAsset.category} onChange={(e) => setNewAsset((f) => ({ ...f, category: e.target.value as AssetCategory }))} disabled={!canManageAssets}>
-              {assetCategories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
-            </select>
-          </label>
-          <label className="field-stack">
-            <span className="field-label">Location</span>
-            <input className="field-input" value={newAsset.location} onChange={(e) => setNewAsset((f) => ({ ...f, location: e.target.value }))} placeholder="e.g. Tack room" disabled={!canManageAssets} />
-          </label>
-        </div>
-        {newAssetError ? <div className="field-error">{newAssetError}</div> : null}
-        <div className="inline-actions">
-          <button
-            className="button button--primary button--compact"
-            type="button"
-            disabled={!canManageAssets}
-            onClick={() => {
-              if (!newAsset.name.trim()) { setNewAssetError('Asset name is required.'); return; }
-              const result = addRanchAsset(newAsset);
-              pushToast({ title: result.ok ? 'Asset added' : 'Add blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
-              if (result.ok) {
-                setNewAsset({ name: '', category: 'Equipment', location: '' });
-                setNewAssetError('');
-                if (result.id) setSelectedAssetId(result.id);
-              }
-            }}
-          >
-            Add asset
-          </button>
-        </div>
-      </Panel>
+        <Panel eyebrow="Add to inventory" title="New asset">
+          <div className="form-grid form-grid--tight">
+            <label className="field-stack field-stack--wide">
+              <span className="field-label">Asset name</span>
+              <input
+                className="field-input"
+                value={newAsset.name}
+                onChange={(e) => {
+                  setNewAsset((f) => ({ ...f, name: e.target.value }));
+                  setNewAssetError('');
+                }}
+                placeholder="e.g. Western Saddle #3"
+                disabled={!canManageAssets}
+              />
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Category</span>
+              <select
+                className="field-input"
+                value={newAsset.category}
+                onChange={(e) => setNewAsset((f) => ({ ...f, category: e.target.value as AssetCategory }))}
+                disabled={!canManageAssets}
+              >
+                {assetCategories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Location</span>
+              <input
+                className="field-input"
+                value={newAsset.location}
+                onChange={(e) => setNewAsset((f) => ({ ...f, location: e.target.value }))}
+                placeholder="e.g. Tack room"
+                disabled={!canManageAssets}
+              />
+            </label>
+          </div>
+          {newAssetError ? <div className="field-error">{newAssetError}</div> : null}
+          <div className="inline-actions">
+            <button
+              className="button button--primary button--compact"
+              type="button"
+              disabled={!canManageAssets}
+              onClick={() => {
+                if (!newAsset.name.trim()) {
+                  setNewAssetError('Asset name is required.');
+                  return;
+                }
+                const result = addRanchAsset(newAsset);
+                pushToast({
+                  title: result.ok ? 'Asset added' : 'Add blocked',
+                  message: result.message,
+                  tone: result.ok ? 'success' : 'error',
+                });
+                if (result.ok) {
+                  setNewAsset({ name: '', category: 'Equipment', location: '' });
+                  setNewAssetError('');
+                  if (result.id) setSelectedAssetId(result.id);
+                }
+              }}
+            >
+              Add asset
+            </button>
+          </div>
+        </Panel>
       </div>
 
       <ConfirmActionDialog
@@ -338,13 +431,23 @@ export default function RanchAssets() {
         onConfirm={() => {
           if (!assetPendingDelete) return;
           const result = deleteAsset(assetPendingDelete.id);
-          pushToast({ title: result.ok ? 'Asset removed' : 'Remove blocked', message: result.message, tone: result.ok ? 'warning' : 'error' });
+          pushToast({
+            title: result.ok ? 'Asset removed' : 'Remove blocked',
+            message: result.message,
+            tone: result.ok ? 'warning' : 'error',
+          });
           if (result.ok && selectedAssetId === assetPendingDelete.id) setSelectedAssetId('');
           setAssetPendingDelete(null);
         }}
       />
 
-      <ContextMenu open={Boolean(menuAsset)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
+      <ContextMenu
+        open={Boolean(menuAsset)}
+        x={menuState?.x ?? 0}
+        y={menuState?.y ?? 0}
+        items={menuItems}
+        onClose={() => setMenuState(null)}
+      />
     </>
   );
 }

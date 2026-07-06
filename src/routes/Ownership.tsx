@@ -12,11 +12,21 @@ import { formatDateLabel, formatDateTimeLabel } from '@/lib/format';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import { normalizeOwnershipRecord } from '@/store/xbarStoreLogic';
-import type { OwnershipProofRequirement, OwnershipRecord, OwnershipStake, ProofStatus, TransferStatus } from '@/types/xbar';
+import type {
+  OwnershipProofRequirement,
+  OwnershipRecord,
+  OwnershipStake,
+  ProofStatus,
+  TransferStatus,
+} from '@/types/xbar';
 import { ownershipRoles, transferStatuses } from '@/features/ownership/constants';
 import type { SortMode } from '@/features/ownership/constants';
 import { scrollToSection } from '@/features/ownership/helpers';
-import { createOwnerRegistry, createRelationshipRows, filterAndSortRelationshipRows } from '@/features/ownership/selectors';
+import {
+  createOwnerRegistry,
+  createRelationshipRows,
+  filterAndSortRelationshipRows,
+} from '@/features/ownership/selectors';
 import type { OwnerRegistryRow, RelationshipRow } from '@/features/ownership/types';
 import './ownershipExperience.css';
 
@@ -94,7 +104,12 @@ export default function Ownership() {
   const [legalOwner, setLegalOwner] = useState('');
   const [complianceDeadline, setComplianceDeadline] = useState('');
   const [auditNote, setAuditNote] = useState('');
-  const [coOwner, setCoOwner] = useState({ name: '', share: '25', role: 'Co-Owner' as OwnershipStake['role'], contact: '' });
+  const [coOwner, setCoOwner] = useState({
+    name: '',
+    share: '25',
+    role: 'Co-Owner' as OwnershipStake['role'],
+    contact: '',
+  });
   const [detailsError, setDetailsError] = useState('');
   const [statusError, setStatusError] = useState('');
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
@@ -108,7 +123,9 @@ export default function Ownership() {
   const selectedRecord = records.find((record) => record.id === selectedRecordId) ?? records[0];
   const selectedHorse = horses.find((horse) => horse.id === selectedRecord?.horseId);
   const selectedHorseName = selectedHorse?.name ?? selectedRecord?.legalOwner ?? 'record';
-  const selectedHorseTotalShare = selectedHorse ? selectedHorse.ownership.reduce((sum, stake) => sum + stake.share, 0) : 0;
+  const selectedHorseTotalShare = selectedHorse
+    ? selectedHorse.ownership.reduce((sum, stake) => sum + stake.share, 0)
+    : 0;
   const remainingShare = Math.max(0, 100 - selectedHorseTotalShare);
 
   useEffect(() => {
@@ -172,7 +189,9 @@ export default function Ownership() {
     ? [...records].sort((left, right) => {
         const severityGap = recordSeverity(right) - recordSeverity(left);
         if (severityGap !== 0) return severityGap;
-        return Date.parse(left.complianceDeadline || '9999-12-31') - Date.parse(right.complianceDeadline || '9999-12-31');
+        return (
+          Date.parse(left.complianceDeadline || '9999-12-31') - Date.parse(right.complianceDeadline || '9999-12-31')
+        );
       })[0]
     : undefined;
   const worstHorse = horses.find((horse) => horse.id === worstRecord?.horseId);
@@ -184,7 +203,10 @@ export default function Ownership() {
       horses.find((horse) => horse.id === record.horseId)?.name ?? record.legalOwner;
     records.forEach((record) => {
       if (isPastDeadline(record)) {
-        risks.push({ label: `${nameFor(record)}: deadline ${formatDateLabel(record.complianceDeadline)} passed`, severity: 'rose' });
+        risks.push({
+          label: `${nameFor(record)}: deadline ${formatDateLabel(record.complianceDeadline)} passed`,
+          severity: 'rose',
+        });
       }
     });
     records.forEach((record) => {
@@ -194,7 +216,10 @@ export default function Ownership() {
     });
     records.forEach((record) => {
       if (record.transferStatus === 'Pending Signatures' || record.transferStatus === 'AQHA Review') {
-        risks.push({ label: `${nameFor(record)}: ${record.transferStatus.toLowerCase()} in progress`, severity: 'amber' });
+        risks.push({
+          label: `${nameFor(record)}: ${record.transferStatus.toLowerCase()} in progress`,
+          severity: 'amber',
+        });
       }
     });
     return risks.slice(0, 4);
@@ -206,7 +231,8 @@ export default function Ownership() {
   };
 
   // ---- Quick view drawer + context menus ------------------------------------
-  const menuRecord = menuState?.type === 'record' ? records.find((record) => record.id === menuState.recordId) : undefined;
+  const menuRecord =
+    menuState?.type === 'record' ? records.find((record) => record.id === menuState.recordId) : undefined;
   const menuHorse = horses.find((horse) => horse.id === menuRecord?.horseId);
 
   const openOwnershipDetails = (recordId: string) => {
@@ -239,7 +265,11 @@ export default function Ownership() {
   const menuItems = menuRecord
     ? [
         { id: 'quick-view', label: 'Quick view', onSelect: () => openOwnershipDetails(menuRecord.id) },
-        { id: 'open-workspace', label: 'Open transfer workspace', onSelect: () => selectRecordAndScroll(menuRecord.id) },
+        {
+          id: 'open-workspace',
+          label: 'Open transfer workspace',
+          onSelect: () => selectRecordAndScroll(menuRecord.id),
+        },
         ...(menuHorse
           ? [{ id: 'open-horse', label: 'Open horse profile', onSelect: () => navigate(`/horses/${menuHorse.id}`) }]
           : []),
@@ -264,19 +294,31 @@ export default function Ownership() {
   const handleLinkProof = (requirementId: string, documentId: string) => {
     if (!selectedRecord || !documentId) return;
     const result = linkOwnershipProof(selectedRecord.id, requirementId, documentId);
-    pushToast({ title: result.ok ? 'Document linked' : 'Link blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+    pushToast({
+      title: result.ok ? 'Document linked' : 'Link blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
   };
 
   const handleVerifyProof = (requirementId: string) => {
     if (!selectedRecord) return;
     const result = verifyOwnershipProof(selectedRecord.id, requirementId, currentRole);
-    pushToast({ title: result.ok ? 'Document verified' : 'Verify blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+    pushToast({
+      title: result.ok ? 'Document verified' : 'Verify blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
   };
 
   const handleUnlinkProof = (requirementId: string) => {
     if (!selectedRecord) return;
     const result = unlinkOwnershipProof(selectedRecord.id, requirementId);
-    pushToast({ title: result.ok ? 'Document unlinked' : 'Unlink blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+    pushToast({
+      title: result.ok ? 'Document unlinked' : 'Unlink blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
   };
 
   // ---- Transfer status -------------------------------------------------------
@@ -287,19 +329,29 @@ export default function Ownership() {
       return;
     }
     const result = applyTransferStatus(selectedRecord.id, status, currentRole);
-    pushToast({ title: result.ok ? 'Transfer status updated' : 'Status change blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+    pushToast({
+      title: result.ok ? 'Transfer status updated' : 'Status change blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
     setStatusError(result.ok ? '' : result.message);
   };
 
   const confirmMarkClear = () => {
     if (!selectedRecord) return;
     const result = applyTransferStatus(selectedRecord.id, 'Clear', currentRole);
-    pushToast({ title: result.ok ? 'Transfer marked Clear' : 'Clear refused', message: result.message, tone: result.ok ? 'success' : 'error' });
+    pushToast({
+      title: result.ok ? 'Transfer marked Clear' : 'Clear refused',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
     setStatusError(result.ok ? '' : result.message);
     setClearDialogOpen(false);
   };
 
-  const verifiedRequirements = (selectedRecord?.proofRequirements ?? []).filter((requirement) => requirement.status === 'verified');
+  const verifiedRequirements = (selectedRecord?.proofRequirements ?? []).filter(
+    (requirement) => requirement.status === 'verified',
+  );
   const unverifiedCount = (selectedRecord?.proofRequirements ?? []).length - verifiedRequirements.length;
 
   // ---- Record details / audit / stakes ----------------------------------------
@@ -310,14 +362,22 @@ export default function Ownership() {
       return;
     }
     const result = updateOwnershipRecord(selectedRecord.id, { legalOwner, complianceDeadline });
-    pushToast({ title: result.ok ? 'Record details saved' : 'Save blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+    pushToast({
+      title: result.ok ? 'Record details saved' : 'Save blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
     if (result.ok) setDetailsError('');
   };
 
   const saveAuditNote = () => {
     if (!selectedRecord) return;
     const result = addOwnershipAuditEntry(selectedRecord.id, auditNote);
-    pushToast({ title: result.ok ? 'Audit note added' : 'Audit note blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+    pushToast({
+      title: result.ok ? 'Audit note added' : 'Audit note blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
     if (result.ok) setAuditNote('');
   };
 
@@ -329,13 +389,19 @@ export default function Ownership() {
       role: coOwner.role,
       contact: coOwner.contact,
     });
-    pushToast({ title: result.ok ? 'Owner added' : 'Owner blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+    pushToast({
+      title: result.ok ? 'Owner added' : 'Owner blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
     if (result.ok) {
       setCoOwner({ name: '', share: '25', role: 'Co-Owner', contact: '' });
     }
   };
 
-  const sortedAuditEvents = [...(selectedRecord?.auditEvents ?? [])].sort((left, right) => Date.parse(right.at) - Date.parse(left.at));
+  const sortedAuditEvents = [...(selectedRecord?.auditEvents ?? [])].sort(
+    (left, right) => Date.parse(right.at) - Date.parse(left.at),
+  );
 
   const renderProofRow = (requirement: OwnershipProofRequirement) => (
     <div key={requirement.id} className={`ownership-proof-row ownership-proof-row--${requirement.status}`}>
@@ -376,12 +442,22 @@ export default function Ownership() {
           </select>
         ) : null}
         {requirement.status === 'linked' ? (
-          <button className="button button--primary button--compact" type="button" onClick={() => handleVerifyProof(requirement.id)} disabled={!canManageOwnership}>
+          <button
+            className="button button--primary button--compact"
+            type="button"
+            onClick={() => handleVerifyProof(requirement.id)}
+            disabled={!canManageOwnership}
+          >
             Verify document
           </button>
         ) : null}
         {requirement.status !== 'missing' ? (
-          <button className="button button--ghost button--compact" type="button" onClick={() => handleUnlinkProof(requirement.id)} disabled={!canManageOwnership}>
+          <button
+            className="button button--ghost button--compact"
+            type="button"
+            onClick={() => handleUnlinkProof(requirement.id)}
+            disabled={!canManageOwnership}
+          >
             Unlink
           </button>
         ) : null}
@@ -406,7 +482,10 @@ export default function Ownership() {
         risks={heroRisks}
         nextAction={
           worstRecord
-            ? { label: `Open transfer workspace for ${worstName}`, onClick: () => selectRecordAndScroll(worstRecord.id) }
+            ? {
+                label: `Open transfer workspace for ${worstName}`,
+                onClick: () => selectRecordAndScroll(worstRecord.id),
+              }
             : { label: 'Open transfer workspace', disabledReason: 'No ownership records yet — add a horse first.' }
         }
         secondaryActions={[
@@ -418,7 +497,11 @@ export default function Ownership() {
       />
 
       <div className="ownership-workspace ownership-workspace--main">
-        <section id="ownership-registry" className="ownership-panel" onContextMenu={(event) => openSectionMenu('registry', event)}>
+        <section
+          id="ownership-registry"
+          className="ownership-panel"
+          onContextMenu={(event) => openSectionMenu('registry', event)}
+        >
           <div className="ownership-section-heading">
             <div>
               <span className="section-eyebrow">Registry</span>
@@ -430,9 +513,17 @@ export default function Ownership() {
           <div className="ownership-toolbar">
             <label className="ownership-search">
               <span className="sr-only">Search ownership records</span>
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search horse, owner, contact, document gap..." />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search horse, owner, contact, document gap..."
+              />
             </label>
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as TransferStatus | 'All')} aria-label="Filter by transfer status">
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as TransferStatus | 'All')}
+              aria-label="Filter by transfer status"
+            >
               <option value="All">All statuses</option>
               {transferStatuses.map((status) => (
                 <option key={status} value={status}>
@@ -440,7 +531,11 @@ export default function Ownership() {
                 </option>
               ))}
             </select>
-            <select value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)} aria-label="Sort ownership rows">
+            <select
+              value={sortMode}
+              onChange={(event) => setSortMode(event.target.value as SortMode)}
+              aria-label="Sort ownership rows"
+            >
               <option value="Deadline">Sort by deadline</option>
               <option value="Horse">Sort by horse</option>
               <option value="Status">Sort by status</option>
@@ -492,7 +587,9 @@ export default function Ownership() {
                       </span>
                       <span>
                         <strong>{row.currentOwner}</strong>
-                        <small>{row.horse.ownership.length} stakeholder{row.horse.ownership.length === 1 ? '' : 's'}</small>
+                        <small>
+                          {row.horse.ownership.length} stakeholder{row.horse.ownership.length === 1 ? '' : 's'}
+                        </small>
                       </span>
                       <span>
                         <strong>{row.totalShare || 0}%</strong>
@@ -505,8 +602,12 @@ export default function Ownership() {
                       <span>
                         {rowRecord ? (
                           <>
-                            <strong>{verifiedCount} / {requirements.length} verified</strong>
-                            <small>{verifiedCount === requirements.length ? 'Documents complete' : 'Documents open'}</small>
+                            <strong>
+                              {verifiedCount} / {requirements.length} verified
+                            </strong>
+                            <small>
+                              {verifiedCount === requirements.length ? 'Documents complete' : 'Documents open'}
+                            </small>
                           </>
                         ) : (
                           <>
@@ -530,10 +631,17 @@ export default function Ownership() {
               })}
             </div>
           ) : relationshipRows.length ? (
-            <EmptyState compact title="No ownership rows match" description="Clear the search or choose a different transfer status." />
+            <EmptyState
+              compact
+              title="No ownership rows match"
+              description="Clear the search or choose a different transfer status."
+            />
           ) : (
             <div className="ownership-empty-state">
-              <EmptyState title="Start by adding a horse, then add ownership documents." description="The registry shows owner shares, transfer status, and the ownership document checklist once horse records exist." />
+              <EmptyState
+                title="Start by adding a horse, then add ownership documents."
+                description="The registry shows owner shares, transfer status, and the ownership document checklist once horse records exist."
+              />
               <button className="button button--primary" type="button" onClick={() => navigate('/horses?new=1')}>
                 Go to horses
               </button>
@@ -541,7 +649,11 @@ export default function Ownership() {
           )}
         </section>
 
-        <section id={RECORD_WORKSPACE_ID} className="ownership-panel ownership-record-panel" onContextMenu={(event) => openSectionMenu('workspace', event)}>
+        <section
+          id={RECORD_WORKSPACE_ID}
+          className="ownership-panel ownership-record-panel"
+          onContextMenu={(event) => openSectionMenu('workspace', event)}
+        >
           {selectedRecord ? (
             <>
               <div className="ownership-section-heading ownership-section-heading--compact">
@@ -554,15 +666,23 @@ export default function Ownership() {
 
               <div className="ownership-subsection">
                 <h3 className="ownership-subsection__title">Ownership Documents</h3>
-                <div className="ownership-proof-list">{(selectedRecord.proofRequirements ?? []).map(renderProofRow)}</div>
+                <div className="ownership-proof-list">
+                  {(selectedRecord.proofRequirements ?? []).map(renderProofRow)}
+                </div>
               </div>
 
-              <div className="ownership-confidence" aria-label={`Document-backed confidence ${selectedRecord.confidence}%`}>
+              <div
+                className="ownership-confidence"
+                aria-label={`Document-backed confidence ${selectedRecord.confidence}%`}
+              >
                 <div className="ownership-confidence__caption">
                   <span>Document-backed confidence</span>
                   <strong>{selectedRecord.confidence}%</strong>
                 </div>
-                <ProgressBar value={selectedRecord.confidence} tone={selectedRecord.confidence >= 100 ? 'blue' : selectedRecord.confidence >= 50 ? 'amber' : 'rose'} />
+                <ProgressBar
+                  value={selectedRecord.confidence}
+                  tone={selectedRecord.confidence >= 100 ? 'blue' : selectedRecord.confidence >= 50 ? 'amber' : 'rose'}
+                />
                 <small>Computed from linked and verified documents. Not editable.</small>
               </div>
 
@@ -581,7 +701,9 @@ export default function Ownership() {
                     </button>
                   ))}
                 </div>
-                <p className="ownership-status-hint">Clear requires every ownership document requirement to be verified and opens a signed confirmation.</p>
+                <p className="ownership-status-hint">
+                  Clear requires every ownership document requirement to be verified and opens a signed confirmation.
+                </p>
                 {statusError ? <div className="field-error">{statusError}</div> : null}
               </div>
 
@@ -590,15 +712,31 @@ export default function Ownership() {
                 <div className="form-grid form-grid--tight">
                   <label className="field-stack">
                     <span className="field-label">Legal owner</span>
-                    <input className="field-input" value={legalOwner} onChange={(event) => setLegalOwner(event.target.value)} disabled={!canManageOwnership} />
+                    <input
+                      className="field-input"
+                      value={legalOwner}
+                      onChange={(event) => setLegalOwner(event.target.value)}
+                      disabled={!canManageOwnership}
+                    />
                   </label>
                   <label className="field-stack">
                     <span className="field-label">Compliance deadline</span>
-                    <input className="field-input" type="date" value={complianceDeadline} onChange={(event) => setComplianceDeadline(event.target.value)} disabled={!canManageOwnership} />
+                    <input
+                      className="field-input"
+                      type="date"
+                      value={complianceDeadline}
+                      onChange={(event) => setComplianceDeadline(event.target.value)}
+                      disabled={!canManageOwnership}
+                    />
                   </label>
                 </div>
                 {detailsError ? <div className="field-error">{detailsError}</div> : null}
-                <button className="button button--primary ownership-full-button" type="button" onClick={saveRecordDetails} disabled={!canManageOwnership}>
+                <button
+                  className="button button--primary ownership-full-button"
+                  type="button"
+                  onClick={saveRecordDetails}
+                  disabled={!canManageOwnership}
+                >
                   Save record details
                 </button>
               </div>
@@ -618,15 +756,30 @@ export default function Ownership() {
                     ))}
                   </div>
                 ) : (
-                  <EmptyState compact title="No audit events yet" description="Document links, verifications, and status changes are recorded here." />
+                  <EmptyState
+                    compact
+                    title="No audit events yet"
+                    description="Document links, verifications, and status changes are recorded here."
+                  />
                 )}
 
                 <div className="ownership-note-box">
                   <label className="field-stack">
                     <span className="field-label">Add audit note</span>
-                    <textarea className="field-textarea" rows={3} value={auditNote} onChange={(event) => setAuditNote(event.target.value)} disabled={!canManageOwnership} />
+                    <textarea
+                      className="field-textarea"
+                      rows={3}
+                      value={auditNote}
+                      onChange={(event) => setAuditNote(event.target.value)}
+                      disabled={!canManageOwnership}
+                    />
                   </label>
-                  <button className="button button--ghost ownership-full-button" type="button" onClick={saveAuditNote} disabled={!canManageOwnership}>
+                  <button
+                    className="button button--ghost ownership-full-button"
+                    type="button"
+                    onClick={saveAuditNote}
+                    disabled={!canManageOwnership}
+                  >
                     Add audit note
                   </button>
                 </div>
@@ -644,7 +797,10 @@ export default function Ownership() {
               </div>
             </>
           ) : (
-            <EmptyState title="No ownership record loaded" description="Select a registry row to open its transfer workspace." />
+            <EmptyState
+              title="No ownership record loaded"
+              description="Select a registry row to open its transfer workspace."
+            />
           )}
         </section>
       </div>
@@ -673,20 +829,32 @@ export default function Ownership() {
                     </Pill>
                   </div>
                   <div className="ownership-owner-card__meta">
-                    <span>{owner.horses.length} horse{owner.horses.length === 1 ? '' : 's'}</span>
+                    <span>
+                      {owner.horses.length} horse{owner.horses.length === 1 ? '' : 's'}
+                    </span>
                     <span>{owner.roles.join(', ')}</span>
-                    <span>{owner.shares.length ? `${Math.round(owner.shares.reduce((sum, share) => sum + share, 0) / owner.shares.length)}% avg share` : 'Share pending'}</span>
+                    <span>
+                      {owner.shares.length
+                        ? `${Math.round(owner.shares.reduce((sum, share) => sum + share, 0) / owner.shares.length)}% avg share`
+                        : 'Share pending'}
+                    </span>
                   </div>
                   <div className="token-row">
                     {owner.horses.slice(0, 4).map((horseName) => (
-                      <Pill key={horseName} tone="slate">{horseName}</Pill>
+                      <Pill key={horseName} tone="slate">
+                        {horseName}
+                      </Pill>
                     ))}
                   </div>
                 </article>
               ))}
             </div>
           ) : (
-            <EmptyState compact title="No owners on file yet" description="Owner names, shares, and contacts appear once horses carry ownership stakes." />
+            <EmptyState
+              compact
+              title="No owners on file yet"
+              description="Owner names, shares, and contacts appear once horses carry ownership stakes."
+            />
           )}
         </section>
 
@@ -703,12 +871,16 @@ export default function Ownership() {
             <>
               {selectedHorse.ownership.length > 0 && (
                 <div className="ownership-stake-list">
-                  <span className="field-label">{selectedHorseTotalShare}% allocated · {remainingShare}% remaining</span>
+                  <span className="field-label">
+                    {selectedHorseTotalShare}% allocated · {remainingShare}% remaining
+                  </span>
                   {selectedHorse.ownership.map((stake) => (
                     <div key={stake.id} className="ownership-stake-row">
                       <div className="ownership-stake-row__info">
                         <strong>{stake.name}</strong>
-                        <span>{stake.share}% · {stake.role}</span>
+                        <span>
+                          {stake.share}% · {stake.role}
+                        </span>
                         {stake.contact ? <small>{stake.contact}</small> : null}
                       </div>
                       {canManageOwnership ? (
@@ -717,7 +889,11 @@ export default function Ownership() {
                           type="button"
                           onClick={() => {
                             const result = removeOwnershipStake(selectedHorse.id, stake.id);
-                            pushToast({ title: result.ok ? 'Owner removed' : 'Remove blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                            pushToast({
+                              title: result.ok ? 'Owner removed' : 'Remove blocked',
+                              message: result.message,
+                              tone: result.ok ? 'success' : 'error',
+                            });
                           }}
                         >
                           Remove
@@ -733,26 +909,58 @@ export default function Ownership() {
                   <div className="form-grid form-grid--tight">
                     <label className="field-stack field-stack--wide">
                       <span className="field-label">Owner name</span>
-                      <input className="field-input" value={coOwner.name} onChange={(event) => setCoOwner((current) => ({ ...current, name: event.target.value }))} disabled={!canManageOwnership} />
+                      <input
+                        className="field-input"
+                        value={coOwner.name}
+                        onChange={(event) => setCoOwner((current) => ({ ...current, name: event.target.value }))}
+                        disabled={!canManageOwnership}
+                      />
                     </label>
                     <label className="field-stack">
                       <span className="field-label">Share (max {remainingShare}%)</span>
-                      <input className="field-input" type="number" min="1" max={remainingShare} value={coOwner.share} onChange={(event) => setCoOwner((current) => ({ ...current, share: event.target.value }))} disabled={!canManageOwnership} />
+                      <input
+                        className="field-input"
+                        type="number"
+                        min="1"
+                        max={remainingShare}
+                        value={coOwner.share}
+                        onChange={(event) => setCoOwner((current) => ({ ...current, share: event.target.value }))}
+                        disabled={!canManageOwnership}
+                      />
                     </label>
                     <label className="field-stack">
                       <span className="field-label">Role</span>
-                      <select className="field-input" value={coOwner.role} onChange={(event) => setCoOwner((current) => ({ ...current, role: event.target.value as OwnershipStake['role'] }))} disabled={!canManageOwnership}>
+                      <select
+                        className="field-input"
+                        value={coOwner.role}
+                        onChange={(event) =>
+                          setCoOwner((current) => ({ ...current, role: event.target.value as OwnershipStake['role'] }))
+                        }
+                        disabled={!canManageOwnership}
+                      >
                         {ownershipRoles.map((role) => (
-                          <option key={role} value={role}>{role}</option>
+                          <option key={role} value={role}>
+                            {role}
+                          </option>
                         ))}
                       </select>
                     </label>
                     <label className="field-stack field-stack--wide">
                       <span className="field-label">Contact</span>
-                      <input className="field-input" value={coOwner.contact} onChange={(event) => setCoOwner((current) => ({ ...current, contact: event.target.value }))} disabled={!canManageOwnership} />
+                      <input
+                        className="field-input"
+                        value={coOwner.contact}
+                        onChange={(event) => setCoOwner((current) => ({ ...current, contact: event.target.value }))}
+                        disabled={!canManageOwnership}
+                      />
                     </label>
                   </div>
-                  <button className="button button--primary ownership-full-button" type="button" onClick={addCoOwner} disabled={!canManageOwnership}>
+                  <button
+                    className="button button--primary ownership-full-button"
+                    type="button"
+                    onClick={addCoOwner}
+                    disabled={!canManageOwnership}
+                  >
                     Add owner to horse
                   </button>
                 </>
@@ -761,7 +969,11 @@ export default function Ownership() {
               )}
             </>
           ) : (
-            <EmptyState compact title="No horse selected" description="Select an ownership row before adding contact details." />
+            <EmptyState
+              compact
+              title="No horse selected"
+              description="Select an ownership row before adding contact details."
+            />
           )}
         </aside>
       </div>
@@ -789,7 +1001,8 @@ export default function Ownership() {
             ))}
             {unverifiedCount > 0 ? (
               <li className="ownership-clear-proof__warning">
-                {unverifiedCount} requirement{unverifiedCount === 1 ? '' : 's'} not verified yet — Clear will be refused.
+                {unverifiedCount} requirement{unverifiedCount === 1 ? '' : 's'} not verified yet — Clear will be
+                refused.
               </li>
             ) : null}
           </ul>
@@ -800,7 +1013,13 @@ export default function Ownership() {
         onCancel={() => setClearDialogOpen(false)}
       />
 
-      <ContextMenu open={Boolean(menuItems.length)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
+      <ContextMenu
+        open={Boolean(menuItems.length)}
+        x={menuState?.x ?? 0}
+        y={menuState?.y ?? 0}
+        items={menuItems}
+        onClose={() => setMenuState(null)}
+      />
     </div>
   );
 }

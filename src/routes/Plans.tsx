@@ -27,8 +27,20 @@ export default function Plans() {
         subtitle="Pick the plan that matches your horse count, documents, team seats, and buyer follow-up needs."
         actions={
           <div className="xs-toggle" role="tablist" aria-label="Billing period">
-            <button type="button" className={`xs-toggle__btn${billing === 'mo' ? ' xs-toggle__btn--active' : ''}`} onClick={() => setBilling('mo')}>Monthly</button>
-            <button type="button" className={`xs-toggle__btn${billing === 'yr' ? ' xs-toggle__btn--active' : ''}`} onClick={() => setBilling('yr')}>Yearly, save 2 months</button>
+            <button
+              type="button"
+              className={`xs-toggle__btn${billing === 'mo' ? ' xs-toggle__btn--active' : ''}`}
+              onClick={() => setBilling('mo')}
+            >
+              Monthly
+            </button>
+            <button
+              type="button"
+              className={`xs-toggle__btn${billing === 'yr' ? ' xs-toggle__btn--active' : ''}`}
+              onClick={() => setBilling('yr')}
+            >
+              Yearly, save 2 months
+            </button>
           </div>
         }
       />
@@ -44,15 +56,22 @@ export default function Plans() {
           return (
             <div key={tier} className={`xs-plancard${featured ? ' xs-plancard--featured' : ''}`}>
               <div className="xs-plancard__name">{tier}</div>
-              <div className="xs-plancard__price">{price}<small>{cadence}</small></div>
+              <div className="xs-plancard__price">
+                {price}
+                <small>{cadence}</small>
+              </div>
               <div className="xs-card__sub">{profile.fit}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
                 {plan.featureFlags.map((feature) => (
-                  <div key={feature} className="xs-plancard__feat"><Check size={14} /> {feature}</div>
+                  <div key={feature} className="xs-plancard__feat">
+                    <Check size={14} /> {feature}
+                  </div>
                 ))}
               </div>
               {isCurrent ? (
-                <span className="xs-chip xs-chip--success" style={{ justifyContent: 'center' }}>Current plan</span>
+                <span className="xs-chip xs-chip--success" style={{ justifyContent: 'center' }}>
+                  Current plan
+                </span>
               ) : (
                 <ActionButton
                   variant={featured ? 'primary' : 'default'}
@@ -71,7 +90,9 @@ export default function Plans() {
         })}
       </div>
 
-      <button type="button" className="xs-back" onClick={() => navigate(billingPath)} style={{ marginTop: 4 }}>Open billing</button>
+      <button type="button" className="xs-back" onClick={() => navigate(billingPath)} style={{ marginTop: 4 }}>
+        Open billing
+      </button>
     </>
   );
 }

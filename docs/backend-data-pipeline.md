@@ -32,7 +32,7 @@ Design decisions:
   Supabase access token and workspace membership (`requireWorkspaceAccess`),
   the same pattern as `api/invite.js` and `api/stripe/*`.
 - **Documents are private.** Originals live in the `horse-documents` bucket;
-  assembled packets live in the new `sale-packets` bucket which has *no*
+  assembled packets live in the new `sale-packets` bucket which has _no_
   client policies — files are only reachable through 1-hour signed URLs
   minted by the API.
 - **OCR is provider-pluggable.** The default path uses the text the client
@@ -53,35 +53,35 @@ single executable file at `supabase/production-schema.generated.sql`.
 
 `horses` (new columns)
 
-| Column | Type | Notes |
-|---|---|---|
-| `breed`, `color`, `birthdate`, `gender`, `microchip`, `registry` | text | identity fields filled by OCR or CSV import |
-| `created_from_document_id` | text | document that auto-created this profile |
-| `ocr_confidence` | double | overall confidence of the creating extraction |
+| Column                                                           | Type   | Notes                                         |
+| ---------------------------------------------------------------- | ------ | --------------------------------------------- |
+| `breed`, `color`, `birthdate`, `gender`, `microchip`, `registry` | text   | identity fields filled by OCR or CSV import   |
+| `created_from_document_id`                                       | text   | document that auto-created this profile       |
+| `ocr_confidence`                                                 | double | overall confidence of the creating extraction |
 
 `documents` (new columns)
 
-| Column | Type | Notes |
-|---|---|---|
-| `original_filename`, `storage_path`, `mime_type` | text | original upload, stored for audit alongside OCR text |
-| `ocr_text` | text | full extracted text (capped at 20k chars) |
-| `ocr_confidence_map` | jsonb | per-field confidence (0–1) |
-| `extracted_data` | jsonb | parsed fields per document type |
-| `needs_review` | boolean | true when overall confidence < 0.9, multiple horses detected, or OCR failed |
-| `review_notes` | text | human-readable reason for the review flag |
-| `intake_batch_id` | text | links back to `intake_batches` |
-| `uploaded_by_user_id` | uuid | auth user who uploaded |
+| Column                                           | Type    | Notes                                                                       |
+| ------------------------------------------------ | ------- | --------------------------------------------------------------------------- |
+| `original_filename`, `storage_path`, `mime_type` | text    | original upload, stored for audit alongside OCR text                        |
+| `ocr_text`                                       | text    | full extracted text (capped at 20k chars)                                   |
+| `ocr_confidence_map`                             | jsonb   | per-field confidence (0–1)                                                  |
+| `extracted_data`                                 | jsonb   | parsed fields per document type                                             |
+| `needs_review`                                   | boolean | true when overall confidence < 0.9, multiple horses detected, or OCR failed |
+| `review_notes`                                   | text    | human-readable reason for the review flag                                   |
+| `intake_batch_id`                                | text    | links back to `intake_batches`                                              |
+| `uploaded_by_user_id`                            | uuid    | auth user who uploaded                                                      |
 
 ### New tables
 
-| Table | Purpose | RLS |
-|---|---|---|
-| `document_templates` | tier-gated catalog (15 templates); `template_content` is an optional per-deployment HTML override — when empty the API renders the built-in definition from `api/_lib/document-templates.js` | read: all authenticated; write: service role |
-| `sale_packets` | assembled packet per horse: `packet_pdf_path`, `watermark_text`, `shared_with_email`, `document_ids` | read: workspace member; write: owner/Admin |
-| `reminders` | `type` (coggins, vaccination, deworming, farrier, health_cert), `due_date` (date), `notification_sent` | read: member; write: owner/Admin |
-| `notifications` | in-app inbox written by the reminder job | read: own or workspace; update (mark read): own |
-| `horse_vet_access` | per-horse vet grants; also grants the vet SELECT on that horse + its documents | manage: owner/Admin |
-| `audit_logs` | who viewed/edited/generated what (`action`, `entity_type`, `entity_id`, `metadata`) | read: owner/Admin; insert: member (self) or service role |
+| Table                | Purpose                                                                                                                                                                                      | RLS                                                      |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `document_templates` | tier-gated catalog (15 templates); `template_content` is an optional per-deployment HTML override — when empty the API renders the built-in definition from `api/_lib/document-templates.js` | read: all authenticated; write: service role             |
+| `sale_packets`       | assembled packet per horse: `packet_pdf_path`, `watermark_text`, `shared_with_email`, `document_ids`                                                                                         | read: workspace member; write: owner/Admin               |
+| `reminders`          | `type` (coggins, vaccination, deworming, farrier, health_cert), `due_date` (date), `notification_sent`                                                                                       | read: member; write: owner/Admin                         |
+| `notifications`      | in-app inbox written by the reminder job                                                                                                                                                     | read: own or workspace; update (mark read): own          |
+| `horse_vet_access`   | per-horse vet grants; also grants the vet SELECT on that horse + its documents                                                                                                               | manage: owner/Admin                                      |
+| `audit_logs`         | who viewed/edited/generated what (`action`, `entity_type`, `entity_id`, `metadata`)                                                                                                          | read: owner/Admin; insert: member (self) or service role |
 
 ## API reference
 
@@ -97,16 +97,18 @@ Bulk PDF/image/ZIP ingestion → OCR → extraction → horse matching.
 ```jsonc
 {
   "workspaceId": "…",
-  "mode": "auto",            // "auto" | "preview" | "commit"
+  "mode": "auto", // "auto" | "preview" | "commit"
   "batchLabel": "March intake",
-  "files": [{
-    "fileName": "spirit-registration.pdf",
-    "mimeType": "application/pdf",
-    "contentBase64": "…",          // or:
-    "storagePath": "uid/ws/…",     // file already in the horse-documents bucket
-    "providedText": "…",           // client-side OCR text (preferred path)
-    "providedConfidence": 0.97
-  }]
+  "files": [
+    {
+      "fileName": "spirit-registration.pdf",
+      "mimeType": "application/pdf",
+      "contentBase64": "…", // or:
+      "storagePath": "uid/ws/…", // file already in the horse-documents bucket
+      "providedText": "…", // client-side OCR text (preferred path)
+      "providedConfidence": 0.97,
+    },
+  ],
 }
 ```
 
@@ -144,10 +146,13 @@ reviews with:
   "mode": "commit",
   "assignments": [
     { "documentIds": ["doc-…"], "action": "attach-horse", "horseId": "horse-…" },
-    { "documentIds": ["doc-…", "doc-…"], "action": "create-horse",
-      "overrides": { "name": "Spirit", "birthdate": "2019-04-12" } },
-    { "documentIds": ["doc-…"], "action": "skip" }
-  ]
+    {
+      "documentIds": ["doc-…", "doc-…"],
+      "action": "create-horse",
+      "overrides": { "name": "Spirit", "birthdate": "2019-04-12" },
+    },
+    { "documentIds": ["doc-…"], "action": "skip" },
+  ],
 }
 ```
 
@@ -162,8 +167,8 @@ reviews with:
   "workspaceId": "…",
   "templateId": "bill-of-sale",
   "horseId": "horse-…",
-  "output": "pdf",                          // or "html"
-  "fields": { "buyer.name": "John Smith", "sale.price": "$18,500" }
+  "output": "pdf", // or "html"
+  "fields": { "buyer.name": "John Smith", "sale.price": "$18,500" },
 }
 ```
 
@@ -181,10 +186,10 @@ reviews with:
 
 Template/tier matrix (5 per tier, higher tiers include lower):
 
-| Plan | Templates |
-|---|---|
-| Starter (Basic) | Bill of Sale, Boarding Agreement, Lease Agreement, Veterinary Care Log, Coggins & Health Certificate Form |
-| Professional (Pro) | + Breeding Contract, Training Agreement, Foaling & Mare Record, Sales Packet, Client Onboarding |
+| Plan                 | Templates                                                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Starter (Basic)      | Bill of Sale, Boarding Agreement, Lease Agreement, Veterinary Care Log, Coggins & Health Certificate Form                      |
+| Professional (Pro)   | + Breeding Contract, Training Agreement, Foaling & Mare Record, Sales Packet, Client Onboarding                                |
 | Ranch Ops (Business) | + Professional Services Agreement, Liability Waiver, Multi-Owner Transfer, Branded Barn Asset Pack, Vet Invoice & Payment Plan |
 
 ### POST `/api/sale-packets` (requires Professional+)
@@ -193,10 +198,10 @@ Template/tier matrix (5 per tier, higher tiers include lower):
 {
   "workspaceId": "…",
   "horseId": "horse-…",
-  "buyerName": "John Smith",          // optional
-  "buyerEmail": "john@example.com",   // optional: emails the signed link
-  "watermarkText": "",                // default: "Copy for <buyer> - <date>"
-  "documentIds": []                    // optional subset; default: all stored docs
+  "buyerName": "John Smith", // optional
+  "buyerEmail": "john@example.com", // optional: emails the signed link
+  "watermarkText": "", // default: "Copy for <buyer> - <date>"
+  "documentIds": [], // optional subset; default: all stored docs
 }
 ```
 
@@ -273,7 +278,7 @@ template rendering, PDF/watermark assembly). Run with `npm test`.
 2. **Vercel env vars** (Server scope): existing Supabase/Stripe vars plus
    `CRON_SECRET` (required for the reminder cron), and optionally
    `OCR_PROVIDER=textract` + `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` /
-   `AWS_REGION`, `RESEND_API_KEY` *or* `SENDGRID_API_KEY` +
+   `AWS_REGION`, `RESEND_API_KEY` _or_ `SENDGRID_API_KEY` +
    `EMAIL_FROM_ADDRESS`, `SUPABASE_SALE_PACKET_BUCKET` (defaults to
    `sale-packets`). See `.env.example`.
 3. **Deploy**: `vercel deploy` (the SPA rewrite and the daily cron are in

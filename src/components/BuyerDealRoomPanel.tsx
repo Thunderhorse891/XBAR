@@ -22,19 +22,44 @@ export function BuyerDealRoomPanel({ compact = false }: { compact?: boolean }) {
     <Panel
       eyebrow="Buyer follow-up"
       title="Buyer follow-up"
-      description={compact ? undefined : 'Buyer activity by horse: unanswered questions, document requests, packet downloads, open offers, latest status, and the next seller action.'}
-      meta={<Pill tone={activeQuestionCount ? 'amber' : highestOffer || packetDownloadCount ? 'blue' : 'slate'}>{activeQuestionCount ? `${activeQuestionCount} response needed` : highestOffer ? 'Offer pressure' : packetDownloadCount ? `${packetDownloadCount} packet download${packetDownloadCount === 1 ? '' : 's'}` : 'Quiet'}</Pill>}
-      action={<Link className="button button--ghost button--compact" to="/sales">Sales</Link>}
+      description={
+        compact
+          ? undefined
+          : 'Buyer activity by horse: unanswered questions, document requests, packet downloads, open offers, latest status, and the next seller action.'
+      }
+      meta={
+        <Pill tone={activeQuestionCount ? 'amber' : highestOffer || packetDownloadCount ? 'blue' : 'slate'}>
+          {activeQuestionCount
+            ? `${activeQuestionCount} response needed`
+            : highestOffer
+              ? 'Offer pressure'
+              : packetDownloadCount
+                ? `${packetDownloadCount} packet download${packetDownloadCount === 1 ? '' : 's'}`
+                : 'Quiet'}
+        </Pill>
+      }
+      action={
+        <Link className="button button--ghost button--compact" to="/sales">
+          Sales
+        </Link>
+      }
     >
       {visibleSummaries.length ? (
         <div className="stack-list">
           {visibleSummaries.map((summary) => (
-            <Link key={summary.horseId} to={`/horses/${summary.horseId}`} className="stack-item stack-item--interactive">
+            <Link
+              key={summary.horseId}
+              to={`/horses/${summary.horseId}`}
+              className="stack-item stack-item--interactive"
+            >
               <div className="stack-item__top">
                 <div>
                   <div className="stack-item__title">{summary.horseName}</div>
                   <div className="stack-item__copy">
-                    {summary.eventCount} buyer event{summary.eventCount === 1 ? '' : 's'} · {summary.packetDownloads} packet download{summary.packetDownloads === 1 ? '' : 's'} · {summary.offers} offer{summary.offers === 1 ? '' : 's'} · {summary.latestActivityAt ? `Last ${formatDateLabel(summary.latestActivityAt)}` : 'No activity yet'}
+                    {summary.eventCount} buyer event{summary.eventCount === 1 ? '' : 's'} · {summary.packetDownloads}{' '}
+                    packet download{summary.packetDownloads === 1 ? '' : 's'} · {summary.offers} offer
+                    {summary.offers === 1 ? '' : 's'} ·{' '}
+                    {summary.latestActivityAt ? `Last ${formatDateLabel(summary.latestActivityAt)}` : 'No activity yet'}
                   </div>
                 </div>
                 <Pill tone={actionTone(summary.action.tone)}>{summary.action.label}</Pill>
@@ -42,9 +67,15 @@ export function BuyerDealRoomPanel({ compact = false }: { compact?: boolean }) {
               <div className="inline-metrics">
                 <span>Ask {formatCompactCurrency(summary.askPrice)}</span>
                 <span>High offer {summary.highestOffer ? formatCompactCurrency(summary.highestOffer) : 'none'}</span>
-                <span>{summary.openQuestions} open request{summary.openQuestions === 1 ? '' : 's'}</span>
+                <span>
+                  {summary.openQuestions} open request{summary.openQuestions === 1 ? '' : 's'}
+                </span>
               </div>
-              {!compact ? <div className="stack-item__copy" style={{ marginTop: 8 }}>{summary.action.reason}</div> : null}
+              {!compact ? (
+                <div className="stack-item__copy" style={{ marginTop: 8 }}>
+                  {summary.action.reason}
+                </div>
+              ) : null}
             </Link>
           ))}
         </div>
@@ -52,7 +83,9 @@ export function BuyerDealRoomPanel({ compact = false }: { compact?: boolean }) {
         <div className="stack-list">
           <div className="stack-item">
             <div className="stack-item__title">No buyer pressure yet</div>
-            <div className="stack-item__copy">Share a buyer packet or move a lead into offer status to start buyer follow-up tracking.</div>
+            <div className="stack-item__copy">
+              Share a buyer packet or move a lead into offer status to start buyer follow-up tracking.
+            </div>
           </div>
         </div>
       )}

@@ -53,6 +53,10 @@ test('upgrade links use canonical billing path instead of legacy billing routes'
   const legacyLiteral = /['"`]\/(?:plans|subscribe|subscriptions)(?:[?'"`]|$)/;
 
   for (const filePath of checkedFiles) {
-    assert.equal(legacyLiteral.test(readRepoFile(filePath)), false, `${filePath} should route billing actions through /billing`);
+    assert.equal(
+      legacyLiteral.test(readRepoFile(filePath)),
+      false,
+      `${filePath} should route billing actions through /billing`,
+    );
   }
 });

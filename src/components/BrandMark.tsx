@@ -42,7 +42,13 @@ export function XbarWordmark({ title = 'XBAR', tone = 'color', ...props }: Brand
       >
         XBAR
       </text>
-      <path d="M84 49.5h126" stroke={mono ? 'currentColor' : '#3D8EFF'} strokeLinecap="round" strokeWidth="1.5" opacity="0.58" />
+      <path
+        d="M84 49.5h126"
+        stroke={mono ? 'currentColor' : '#3D8EFF'}
+        strokeLinecap="round"
+        strokeWidth="1.5"
+        opacity="0.58"
+      />
     </svg>
   );
 }

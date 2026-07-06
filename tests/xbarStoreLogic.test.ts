@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {
-  buildDocumentRecord,
-} from '../src/lib/xbarRuntime.js';
+import { buildDocumentRecord } from '../src/lib/xbarRuntime.js';
 import {
   summarizeBatch,
   validateAssetPatch,

@@ -20,15 +20,15 @@ npm run dev
 
 ## Core Scripts
 
-| Script | Description |
-|---|---|
-| `npm run dev` | Start the web app locally |
-| `npm run build` | Typecheck and build the production web bundle |
-| `npm run preview` | Preview the production web bundle |
-| `npm run test` | Prepare the Supabase schema, typecheck, and run unit tests |
-| `npm run test:e2e` | Run Playwright end-to-end tests |
+| Script                     | Description                                                    |
+| -------------------------- | -------------------------------------------------------------- |
+| `npm run dev`              | Start the web app locally                                      |
+| `npm run build`            | Typecheck and build the production web bundle                  |
+| `npm run preview`          | Preview the production web bundle                              |
+| `npm run test`             | Prepare the Supabase schema, typecheck, and run unit tests     |
+| `npm run test:e2e`         | Run Playwright end-to-end tests                                |
 | `npm run supabase:prepare` | Generate the executable, idempotent production Supabase schema |
-| `npm run mobile:sync` | Build and sync the app into Capacitor targets |
+| `npm run mobile:sync`      | Build and sync the app into Capacitor targets                  |
 
 ## Deployment
 

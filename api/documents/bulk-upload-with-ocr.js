@@ -11,7 +11,8 @@ import { extractZipEntries, isZipBuffer, guessMimeType } from '../_lib/zip.js';
 import { getWorkspaceEntitlements, checkDocumentCapacity } from '../_lib/entitlements.js';
 import { recordAuditEvent } from '../_lib/audit.js';
 
-const DOCUMENT_BUCKET = process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
+const DOCUMENT_BUCKET =
+  process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
 const MAX_FILES_PER_BATCH = 25;
 const MAX_OCR_TEXT_CHARS = 20000;
 
@@ -81,7 +82,13 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
         const archive = extractZipEntries(content);
         skipped.push(...archive.skipped.map((entry) => ({ fileName: entry.fileName, reason: entry.reason })));
         for (const entry of archive.entries) {
-          expanded.push({ fileName: entry.fileName, mimeType: entry.mimeType, content: entry.content, providedText: '', storagePath: '' });
+          expanded.push({
+            fileName: entry.fileName,
+            mimeType: entry.mimeType,
+            content: entry.content,
+            providedText: '',
+            storagePath: '',
+          });
         }
         continue;
       } catch (error) {
@@ -114,7 +121,10 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
   }
 
   const batchId = `batch-${randomUUID()}`;
-  const batchLabel = typeof body.batchLabel === 'string' && body.batchLabel ? body.batchLabel : `OCR intake ${new Date().toISOString().slice(0, 10)}`;
+  const batchLabel =
+    typeof body.batchLabel === 'string' && body.batchLabel
+      ? body.batchLabel
+      : `OCR intake ${new Date().toISOString().slice(0, 10)}`;
   await supabase.from('intake_batches').upsert({
     workspace_id: workspaceId,
     intake_batch_id: batchId,
@@ -291,10 +301,16 @@ async function commitAssignments({ supabase, workspaceId, user, assignments }) {
 
   const results = [];
   for (const assignment of list) {
-    const documentIds = Array.isArray(assignment.documentIds) ? assignment.documentIds.filter((id) => typeof id === 'string') : [];
+    const documentIds = Array.isArray(assignment.documentIds)
+      ? assignment.documentIds.filter((id) => typeof id === 'string')
+      : [];
     const action = assignment.action;
     if (!documentIds.length || !['create-horse', 'attach-horse', 'skip'].includes(action)) {
-      results.push({ ok: false, documentIds, message: 'Each assignment needs documentIds[] and an action of create-horse, attach-horse, or skip.' });
+      results.push({
+        ok: false,
+        documentIds,
+        message: 'Each assignment needs documentIds[] and an action of create-horse, attach-horse, or skip.',
+      });
       continue;
     }
 
@@ -370,9 +386,16 @@ async function commitAssignments({ supabase, workspaceId, user, assignments }) {
 function buildReviewNotes(extraction, ocr) {
   const notes = [];
   if (!ocr.ok) notes.push(`OCR provider ${ocr.provider} returned no text${ocr.error ? ` (${ocr.error})` : ''}.`);
-  if (extraction.multiHorse.multiple) notes.push(`Possible multiple horses detected: ${extraction.multiHorse.horseNames.join(', ') || extraction.multiHorse.registrationNumbers.join(', ')}.`);
-  if (extraction.lowConfidenceFields.length) notes.push(`Low-confidence fields: ${extraction.lowConfidenceFields.join(', ')}.`);
-  if (extraction.overallConfidence < NEEDS_REVIEW_THRESHOLD) notes.push(`Overall confidence ${Math.round(extraction.overallConfidence * 100)}% is below the ${Math.round(NEEDS_REVIEW_THRESHOLD * 100)}% auto-accept threshold.`);
+  if (extraction.multiHorse.multiple)
+    notes.push(
+      `Possible multiple horses detected: ${extraction.multiHorse.horseNames.join(', ') || extraction.multiHorse.registrationNumbers.join(', ')}.`,
+    );
+  if (extraction.lowConfidenceFields.length)
+    notes.push(`Low-confidence fields: ${extraction.lowConfidenceFields.join(', ')}.`);
+  if (extraction.overallConfidence < NEEDS_REVIEW_THRESHOLD)
+    notes.push(
+      `Overall confidence ${Math.round(extraction.overallConfidence * 100)}% is below the ${Math.round(NEEDS_REVIEW_THRESHOLD * 100)}% auto-accept threshold.`,
+    );
   return notes.join(' ');
 }
 

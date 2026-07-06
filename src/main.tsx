@@ -9,7 +9,7 @@ import './index.css';
 import './mobilePolish.css';
 
 const rootElement = document.getElementById('root');
-if (!rootElement) throw new Error("Root element not found.");
+if (!rootElement) throw new Error('Root element not found.');
 
 void registerOfflineRuntime();
 
@@ -20,5 +20,5 @@ ReactDOM.createRoot(rootElement).render(
       <InteractionBootstrap />
       <App />
     </ErrorBoundary>
-  </React.StrictMode>
+  </React.StrictMode>,
 );

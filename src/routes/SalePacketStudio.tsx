@@ -25,7 +25,9 @@ const DOC_TYPE_TO_REQ: Partial<Record<DocumentType, string>> = {
 
 function formatDate(value: string) {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export default function SalePacketStudio() {
@@ -47,7 +49,11 @@ export default function SalePacketStudio() {
         const presentSlots = new Set(readyDocs.map((d) => DOC_TYPE_TO_REQ[d.type]).filter(Boolean));
         const missing = REQUIRED.filter((slot) => !presentSlots.has(slot.id));
         const blockers = horse.readiness?.blockers ?? [];
-        const state: 'Ready' | 'Needs Review' | 'Blocked' = blockers.length ? 'Blocked' : missing.length ? 'Needs Review' : 'Ready';
+        const state: 'Ready' | 'Needs Review' | 'Blocked' = blockers.length
+          ? 'Blocked'
+          : missing.length
+            ? 'Needs Review'
+            : 'Ready';
         return { horse, readyDocs, missing, blockers, state };
       }),
     [horses, documents],
@@ -64,13 +70,23 @@ export default function SalePacketStudio() {
   if (!horses.length) {
     return (
       <>
-        <PageHead eyebrow="Selling" title="Sale Packets" subtitle="Build a watermarked packet from approved documents and share it with a buyer." />
+        <PageHead
+          eyebrow="Selling"
+          title="Sale Packets"
+          subtitle="Build a watermarked packet from approved documents and share it with a buyer."
+        />
         <Card>
           <div className="xs-empty">
-            <span className="xs-empty__icon"><FileText size={26} /></span>
+            <span className="xs-empty__icon">
+              <FileText size={26} />
+            </span>
             <div className="xs-empty__title">No horses to prepare yet</div>
-            <div className="xs-empty__sub">Add a horse and its documents, then build a sale packet from the approved records.</div>
-            <ActionButton variant="primary" onClick={() => navigate('/horses?new=1')}>Add first horse</ActionButton>
+            <div className="xs-empty__sub">
+              Add a horse and its documents, then build a sale packet from the approved records.
+            </div>
+            <ActionButton variant="primary" onClick={() => navigate('/horses?new=1')}>
+              Add first horse
+            </ActionButton>
           </div>
         </Card>
       </>
@@ -83,10 +99,14 @@ export default function SalePacketStudio() {
         eyebrow="Selling"
         title="Sale Packets"
         subtitle={`${readyCount} of ${horses.length} horses have every required document approved${blockedCount ? ` · ${blockedCount} blocked` : ''}.`}
-        actions={<ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => openWizard()}>Build packet</ActionButton>}
+        actions={
+          <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => openWizard()}>
+            Build packet
+          </ActionButton>
+        }
       />
 
-      <Card title="Horse readiness" >
+      <Card title="Horse readiness">
         <div className="xs-mlist">
           {readiness.map(({ horse, missing, blockers, state, readyDocs }) => (
             <div key={horse.id} className="xs-mrow">
@@ -94,22 +114,38 @@ export default function SalePacketStudio() {
                 <span className="xs-mrow__title">{horse.name}</span>
                 <span className="xs-mrow__meta">
                   {readyDocs.length} approved document{readyDocs.length === 1 ? '' : 's'}
-                  {blockers.length ? ` · ${blockers[0]}` : missing.length ? ` · missing: ${missing.map((m) => m.label).join(', ')}` : ' · all required documents approved'}
+                  {blockers.length
+                    ? ` · ${blockers[0]}`
+                    : missing.length
+                      ? ` · missing: ${missing.map((m) => m.label).join(', ')}`
+                      : ' · all required documents approved'}
                 </span>
               </span>
-              <StatusChip tone={state === 'Ready' ? 'success' : state === 'Needs Review' ? 'warning' : 'danger'}>{state}</StatusChip>
+              <StatusChip tone={state === 'Ready' ? 'success' : state === 'Needs Review' ? 'warning' : 'danger'}>
+                {state}
+              </StatusChip>
               {state === 'Blocked' ? (
-                <ActionButton size="sm" onClick={() => navigate(`/horses/${horse.id}`)}>Fix on record</ActionButton>
+                <ActionButton size="sm" onClick={() => navigate(`/horses/${horse.id}`)}>
+                  Fix on record
+                </ActionButton>
               ) : state === 'Needs Review' ? (
-                <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate(`/documents?upload=1&horse=${horse.id}`)}>Upload</ActionButton>
+                <ActionButton
+                  size="sm"
+                  icon={<Upload size={14} />}
+                  onClick={() => navigate(`/documents?upload=1&horse=${horse.id}`)}
+                >
+                  Upload
+                </ActionButton>
               ) : null}
-              <ActionButton size="sm" variant="primary" onClick={() => openWizard(horse.id)}>Build packet</ActionButton>
+              <ActionButton size="sm" variant="primary" onClick={() => openWizard(horse.id)}>
+                Build packet
+              </ActionButton>
             </div>
           ))}
         </div>
       </Card>
 
-      <Card title="Generated packets" >
+      <Card title="Generated packets">
         {salePacketBuilds.length ? (
           <div className="xs-mlist">
             {salePacketBuilds.map((packet) => {
@@ -117,7 +153,9 @@ export default function SalePacketStudio() {
               return (
                 <div key={packet.id} className="xs-mrow">
                   <span className="xs-mrow__main" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span className="xs-mrow__title">{horse?.name ?? 'Horse record removed'} · {formatDate(packet.createdAt)}</span>
+                    <span className="xs-mrow__title">
+                      {horse?.name ?? 'Horse record removed'} · {formatDate(packet.createdAt)}
+                    </span>
                     <span className="xs-mrow__meta">
                       {packet.documentIds.length} document{packet.documentIds.length === 1 ? '' : 's'}
                       {packet.includesBillOfSale ? ' + Bill of Sale' : ''}
@@ -125,9 +163,13 @@ export default function SalePacketStudio() {
                       {` · watermark "${packet.watermark}"`}
                     </span>
                   </span>
-                  <StatusChip tone={packet.status === 'shared' ? 'info' : 'success'}>{packet.status === 'shared' ? 'Shared' : 'Generated'}</StatusChip>
+                  <StatusChip tone={packet.status === 'shared' ? 'info' : 'success'}>
+                    {packet.status === 'shared' ? 'Shared' : 'Generated'}
+                  </StatusChip>
                   {packet.downloadUrl ? (
-                    <a className="xs-btn xs-btn--sm" href={packet.downloadUrl} download={packet.fileName}>Download</a>
+                    <a className="xs-btn xs-btn--sm" href={packet.downloadUrl} download={packet.fileName}>
+                      Download
+                    </a>
                   ) : null}
                 </div>
               );
@@ -135,7 +177,8 @@ export default function SalePacketStudio() {
           </div>
         ) : (
           <p className="xs-muted" style={{ fontSize: 13, margin: 0 }}>
-            No packets yet. Build one from a horse with approved documents — the packet is watermarked, logged, and saved here.
+            No packets yet. Build one from a horse with approved documents — the packet is watermarked, logged, and
+            saved here.
           </p>
         )}
       </Card>
@@ -143,7 +186,10 @@ export default function SalePacketStudio() {
       <SalePacketWizard
         open={wizardOpen}
         initialHorseId={wizardHorseId}
-        onClose={() => { setWizardOpen(false); setWizardHorseId(null); }}
+        onClose={() => {
+          setWizardOpen(false);
+          setWizardHorseId(null);
+        }}
       />
     </>
   );

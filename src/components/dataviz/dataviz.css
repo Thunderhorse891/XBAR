@@ -96,7 +96,9 @@
   background: rgba(120, 130, 150, 0.16);
 }
 
-.xbar-stackbar__seg { height: 100%; }
+.xbar-stackbar__seg {
+  height: 100%;
+}
 
 .xbar-stackbar__legend {
   display: flex;

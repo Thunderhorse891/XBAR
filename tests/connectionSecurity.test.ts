@@ -7,7 +7,10 @@ const fromRoot = (filePath: string) => path.resolve(process.cwd(), filePath);
 const checkoutSource = await readFile(fromRoot('api/stripe/checkout.js'), 'utf8');
 const plansSource = await readFile(fromRoot('api/_lib/subscription-plans.js'), 'utf8');
 const migrationSource = await readFile(fromRoot('supabase/migrations/20260605_harden_workspace_rls.sql'), 'utf8');
-const commercialMigrationSource = await readFile(fromRoot('supabase/migrations/20260611_commercial_entitlements.sql'), 'utf8');
+const commercialMigrationSource = await readFile(
+  fromRoot('supabase/migrations/20260611_commercial_entitlements.sql'),
+  'utf8',
+);
 const cloudWorkspaceSource = await readFile(fromRoot('src/lib/cloudWorkspace.ts'), 'utf8');
 const prepareSchemaSource = await readFile(fromRoot('scripts/prepare-supabase-schema.mjs'), 'utf8');
 const telemetrySource = await readFile(fromRoot('api/telemetry.js'), 'utf8');

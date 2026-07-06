@@ -58,7 +58,10 @@ export default async function handler(req, res) {
   if ((kind === 'question' || kind === 'proof-requested') && !message) {
     return sendJson(res, 400, {
       ok: false,
-      message: kind === 'proof-requested' ? 'Describe the proof or document you want to review.' : 'Enter your question for the seller.',
+      message:
+        kind === 'proof-requested'
+          ? 'Describe the proof or document you want to review.'
+          : 'Enter your question for the seller.',
     });
   }
 
@@ -110,10 +113,10 @@ export default async function handler(req, res) {
         ? 'Your offer was delivered to the seller.'
         : kind === 'packet-downloaded'
           ? 'Your buyer packet is ready and the seller was notified.'
-        : kind === 'call-requested'
-          ? 'Your call request was delivered to the seller.'
-          : kind === 'proof-requested'
-            ? 'Your proof request was delivered to the seller.'
-          : 'Your message was delivered to the seller.',
+          : kind === 'call-requested'
+            ? 'Your call request was delivered to the seller.'
+            : kind === 'proof-requested'
+              ? 'Your proof request was delivered to the seller.'
+              : 'Your message was delivered to the seller.',
   });
 }

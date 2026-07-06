@@ -28,16 +28,34 @@ export function UsageMeterPanel({ compact = false }: { compact?: boolean }) {
     <Panel
       eyebrow="Plan pressure"
       title="Usage meters"
-      description={compact ? undefined : 'Operational limits that drive upgrade timing. Warnings start at 80%, upgrade pressure at 90%, and hard gates at 100%.'}
-      meta={<Pill tone={pressureTone(pressure?.pressure ?? 'clear')}>{pressureCopy(pressure?.pressure ?? 'clear')}</Pill>}
-      action={!pressure || pressure.pressure === 'clear' ? null : <Link className="button button--primary button--compact" to={billingPathForTier(upgradeTier)}>Upgrade to {upgradeTier}</Link>}
+      description={
+        compact
+          ? undefined
+          : 'Operational limits that drive upgrade timing. Warnings start at 80%, upgrade pressure at 90%, and hard gates at 100%.'
+      }
+      meta={
+        <Pill tone={pressureTone(pressure?.pressure ?? 'clear')}>{pressureCopy(pressure?.pressure ?? 'clear')}</Pill>
+      }
+      action={
+        !pressure || pressure.pressure === 'clear' ? null : (
+          <Link className="button button--primary button--compact" to={billingPathForTier(upgradeTier)}>
+            Upgrade to {upgradeTier}
+          </Link>
+        )
+      }
     >
       <div className="stack-list">
         <div className="stack-item">
           <div className="stack-item__top">
             <div>
-              <div className="stack-item__title">{!pressure || pressure.pressure === 'clear' ? 'Plan capacity is healthy.' : `${pressure.label} needs attention.`}</div>
-              <div className="stack-item__copy">{pressure?.message ?? `${subscription.tier} still has operating room.`}</div>
+              <div className="stack-item__title">
+                {!pressure || pressure.pressure === 'clear'
+                  ? 'Plan capacity is healthy.'
+                  : `${pressure.label} needs attention.`}
+              </div>
+              <div className="stack-item__copy">
+                {pressure?.message ?? `${subscription.tier} still has operating room.`}
+              </div>
             </div>
             <Pill tone={pressureTone(pressure?.pressure ?? 'clear')}>{subscription.tier}</Pill>
           </div>
@@ -48,10 +66,14 @@ export function UsageMeterPanel({ compact = false }: { compact?: boolean }) {
           <div className="subscription-usage-card" key={meter.key}>
             <div className="subscription-usage-card__top">
               <span>{meter.label}</span>
-              <strong>{meter.used.toLocaleString()} / {meter.limit.toLocaleString()}</strong>
+              <strong>
+                {meter.used.toLocaleString()} / {meter.limit.toLocaleString()}
+              </strong>
             </div>
             <ProgressBar value={meter.percent} tone={pressureTone(meter.pressure)} />
-            <div className="stack-item__copy" style={{ marginTop: 8 }}>{meter.percent}% used · {pressureCopy(meter.pressure)}</div>
+            <div className="stack-item__copy" style={{ marginTop: 8 }}>
+              {meter.percent}% used · {pressureCopy(meter.pressure)}
+            </div>
           </div>
         ))}
       </div>

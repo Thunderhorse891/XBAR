@@ -61,7 +61,7 @@ export function Panel({
   surfaceId?: string;
   style?: CSSProperties;
 }) {
-  const mode = useUiStore((state) => (surfaceId ? state.surfaceModes[surfaceId] ?? 'expanded' : 'expanded'));
+  const mode = useUiStore((state) => (surfaceId ? (state.surfaceModes[surfaceId] ?? 'expanded') : 'expanded'));
   const sendSurfaceEvent = useUiStore((state) => state.sendSurfaceEvent);
   const statefulClassName = surfaceId ? `panel--stateful panel--${mode}` : '';
 
@@ -148,46 +148,55 @@ export function MetricCard({
   return (
     <Card
       className={`metric-card metric-card--${tone}${interactive ? ' metric-card--interactive' : ''}${edge ? ` metric-card--edge-${edge}` : ''} ${className}`.trim()}
-      title={title ?? (interactive ? `${label}. Press Enter to open${onContextMenu ? ' or Shift+F10 for actions' : ''}.` : undefined)}
+      title={
+        title ??
+        (interactive ? `${label}. Press Enter to open${onContextMenu ? ' or Shift+F10 for actions' : ''}.` : undefined)
+      }
       onClick={onClick}
       onContextMenu={onContextMenu}
       role={interactive ? 'button' : undefined}
       tabIndex={interactive ? 0 : undefined}
       aria-label={interactive ? `${label}: ${value}` : undefined}
-      onKeyDown={interactive ? (event: KeyboardEvent<HTMLDivElement>) => {
-        if ((event.key === 'Enter' || event.key === ' ') && onClick) {
-          event.preventDefault();
-          onClick(event as unknown as Parameters<MouseEventHandler<HTMLDivElement>>[0]);
-          return;
-        }
-        if ((event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) && onContextMenu) {
-          event.preventDefault();
-          const bounds = event.currentTarget.getBoundingClientRect();
-          onContextMenu({
-            ...event,
-            preventDefault: () => event.preventDefault(),
-            clientX: bounds.left + 24,
-            clientY: bounds.top + 24,
-          } as unknown as Parameters<MouseEventHandler<HTMLDivElement>>[0]);
-        }
-      } : undefined}
+      onKeyDown={
+        interactive
+          ? (event: KeyboardEvent<HTMLDivElement>) => {
+              if ((event.key === 'Enter' || event.key === ' ') && onClick) {
+                event.preventDefault();
+                onClick(event as unknown as Parameters<MouseEventHandler<HTMLDivElement>>[0]);
+                return;
+              }
+              if ((event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) && onContextMenu) {
+                event.preventDefault();
+                const bounds = event.currentTarget.getBoundingClientRect();
+                onContextMenu({
+                  ...event,
+                  preventDefault: () => event.preventDefault(),
+                  clientX: bounds.left + 24,
+                  clientY: bounds.top + 24,
+                } as unknown as Parameters<MouseEventHandler<HTMLDivElement>>[0]);
+              }
+            }
+          : undefined
+      }
     >
       <div className="metric-card__label">{label}</div>
       <div className="metric-card__value">{value}</div>
       {showDetail && detail ? <div className="metric-card__detail">{detail}</div> : null}
-      {interactive ? <span className="interactive-cue" aria-hidden="true">{onContextMenu ? 'Open / actions' : 'Open'}</span> : null}
+      {interactive ? (
+        <span className="interactive-cue" aria-hidden="true">
+          {onContextMenu ? 'Open / actions' : 'Open'}
+        </span>
+      ) : null}
     </Card>
   );
 }
 
-export function Pill({
-  children,
-  tone = 'slate',
-}: {
-  children: ReactNode;
-  tone?: Tone;
-}) {
-  return <Badge variant="outline" className={`pill pill--${tone}`}>{children}</Badge>;
+export function Pill({ children, tone = 'slate' }: { children: ReactNode; tone?: Tone }) {
+  return (
+    <Badge variant="outline" className={`pill pill--${tone}`}>
+      {children}
+    </Badge>
+  );
 }
 
 export function SurfaceTabs({
@@ -218,27 +227,18 @@ export function SurfaceTabs({
   );
 }
 
-export function ProgressBar({
-  value,
-  tone = 'blue',
-}: {
-  value: number;
-  tone?: Tone;
-}) {
+export function ProgressBar({ value, tone = 'blue' }: { value: number; tone?: Tone }) {
   return (
     <div className="progress-track" aria-hidden="true">
-      <div className={`progress-bar progress-bar--${tone}`} style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
+      <div
+        className={`progress-bar progress-bar--${tone}`}
+        style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
+      />
     </div>
   );
 }
 
-export function KeyValue({
-  label,
-  value,
-}: {
-  label: string;
-  value: ReactNode;
-}) {
+export function KeyValue({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="key-value">
       <span className="key-value__label">{label}</span>

@@ -1,10 +1,10 @@
 .clean-entry-shell {
-  --entry-bg: #F5F2EC;
+  --entry-bg: #f5f2ec;
   --entry-panel: #ffffff;
   --entry-ink: #121518;
   --entry-muted: #596168;
   --entry-line: rgba(16, 20, 24, 0.14);
-  --entry-blue: #0078D7;
+  --entry-blue: #0078d7;
   --entry-success: #059669;
   --entry-warning: #d97706;
   --entry-error: #bf4040;
@@ -15,7 +15,10 @@
     linear-gradient(rgba(16, 20, 24, 0.024) 1px, transparent 1px),
     linear-gradient(90deg, rgba(16, 20, 24, 0.02) 1px, transparent 1px),
     linear-gradient(180deg, #ffffff 0%, var(--entry-bg) 100%);
-  background-size: 88px 88px, 88px 88px, auto;
+  background-size:
+    88px 88px,
+    88px 88px,
+    auto;
   color: var(--entry-ink);
   padding: clamp(20px, 4vw, 48px);
 }
@@ -30,20 +33,23 @@
 }
 
 .clean-entry-shell--brand-auth {
-  --entry-bg: #F5F2EC;
+  --entry-bg: #f5f2ec;
   --entry-panel: #ffffff;
   --entry-ink: #121518;
   --entry-muted: #596168;
   --entry-line: rgba(11, 13, 15, 0.14);
-  --entry-blue: #0078D7;
+  --entry-blue: #0078d7;
   --entry-steel: #596168;
   align-items: center;
   background:
     linear-gradient(rgba(11, 13, 15, 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(11, 13, 15, 0.03) 1px, transparent 1px),
-    radial-gradient(circle at 14% 18%, rgba(0, 120, 215, 0.055), transparent 24rem),
-    #F5F2EC;
-  background-size: 68px 68px, 68px 68px, auto, auto;
+    radial-gradient(circle at 14% 18%, rgba(0, 120, 215, 0.055), transparent 24rem), #f5f2ec;
+  background-size:
+    68px 68px,
+    68px 68px,
+    auto,
+    auto;
   justify-items: center;
   overflow: hidden;
   padding: clamp(18px, 4vw, 56px);
@@ -54,7 +60,7 @@
   inset: 0;
   pointer-events: none;
   background: none;
-  content: "";
+  content: '';
   opacity: 0;
 }
 
@@ -83,8 +89,11 @@
   background:
     linear-gradient(rgba(11, 13, 15, 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(11, 13, 15, 0.03) 1px, transparent 1px),
-    linear-gradient(180deg, #ffffff 0%, #F5F2EC 100%);
-  background-size: 42px 42px, 42px 42px, auto;
+    linear-gradient(180deg, #ffffff 0%, #f5f2ec 100%);
+  background-size:
+    42px 42px,
+    42px 42px,
+    auto;
   color: #121518;
   padding: clamp(26px, 4vw, 46px);
 }
@@ -93,7 +102,7 @@
 .clean-login-visual::after {
   position: absolute;
   pointer-events: none;
-  content: "";
+  content: '';
 }
 
 .clean-login-visual::before {
@@ -236,7 +245,9 @@
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.94);
   padding: clamp(24px, 4vw, 36px);
-  box-shadow: 0 26px 70px -52px rgba(16, 20, 24, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 26px 70px -52px rgba(16, 20, 24, 0.72),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
 }
 
 .clean-auth-card--login {
@@ -244,9 +255,7 @@
   justify-self: center;
   width: min(100% - 48px, 420px);
   border-color: rgba(215, 221, 228, 0.72);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 248, 249, 0.98)),
-    #f8f8f9;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 248, 249, 0.98)), #f8f8f9;
   box-shadow:
     0 32px 80px -54px rgba(0, 0, 0, 0.9),
     0 0 0 1px rgba(255, 255, 255, 0.8),
@@ -279,9 +288,7 @@
 
 .clean-brand--login .clean-brand__mark {
   border-color: rgba(0, 120, 215, 0.24);
-  background:
-    radial-gradient(circle at 65% 70%, rgba(0, 120, 215, 0.24), transparent 48%),
-    #0d1116;
+  background: radial-gradient(circle at 65% 70%, rgba(0, 120, 215, 0.24), transparent 48%), #0d1116;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
@@ -448,8 +455,8 @@
 }
 
 .clean-entry-shell--brand-auth .clean-primary-button {
-  border-color: #0B0D0F;
-  background: #0B0D0F;
+  border-color: #0b0d0f;
+  background: #0b0d0f;
   color: #ffffff;
   box-shadow: 0 14px 30px -22px rgba(0, 120, 215, 0.48);
 }
@@ -489,7 +496,7 @@
 .clean-divider::after {
   height: 1px;
   background: var(--entry-line);
-  content: "";
+  content: '';
 }
 
 .clean-social-grid {
@@ -522,7 +529,7 @@
   margin-top: 7px;
   border-radius: 50%;
   background: var(--entry-blue);
-  content: "";
+  content: '';
 }
 
 .clean-local-start p,

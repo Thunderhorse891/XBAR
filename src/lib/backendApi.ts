@@ -12,9 +12,7 @@ export type TierBlock = {
   currentPlan: string;
 };
 
-export type BackendResult<T> =
-  | ({ ok: true } & T)
-  | { ok: false; message: string; tierBlock?: TierBlock };
+export type BackendResult<T> = ({ ok: true } & T) | { ok: false; message: string; tierBlock?: TierBlock };
 
 type AuthParams = {
   workspaceId: string;

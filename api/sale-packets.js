@@ -7,7 +7,8 @@ import { createSectionedPdf, assemblePacketPdf } from './_lib/pdf.js';
 import { sendEmail } from './_lib/email.js';
 import { recordAuditEvent } from './_lib/audit.js';
 
-const DOCUMENT_BUCKET = process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
+const DOCUMENT_BUCKET =
+  process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
 const PACKET_BUCKET = process.env.SUPABASE_SALE_PACKET_BUCKET || 'sale-packets';
 const SIGNED_URL_TTL_SECONDS = 3600;
 const MAX_PACKET_ATTACHMENTS = 20;
@@ -78,11 +79,12 @@ export default async function handler(req, res) {
 
     const buyerName = typeof body.buyerName === 'string' ? body.buyerName.trim() : '';
     const buyerEmail = typeof body.buyerEmail === 'string' ? body.buyerEmail.trim().toLowerCase() : '';
-    const watermarkText = typeof body.watermarkText === 'string' && body.watermarkText.trim()
-      ? body.watermarkText.trim()
-      : buyerName
-        ? `Copy for ${buyerName} - ${new Date().toISOString().slice(0, 10)}`
-        : '';
+    const watermarkText =
+      typeof body.watermarkText === 'string' && body.watermarkText.trim()
+        ? body.watermarkText.trim()
+        : buyerName
+          ? `Copy for ${buyerName} - ${new Date().toISOString().slice(0, 10)}`
+          : '';
 
     // Select the documents to bundle: caller-specified list, or every stored
     // document attached to the horse (originals + generated templates).
@@ -187,7 +189,12 @@ export default async function handler(req, res) {
       action: 'sale_packet.created',
       entityType: 'sale_packet',
       entityId: packetId,
-      metadata: { horseId, documents: packetDocs.length, buyerEmail: buyerEmail ? 'set' : '', emailed: Boolean(emailResult.ok) },
+      metadata: {
+        horseId,
+        documents: packetDocs.length,
+        buyerEmail: buyerEmail ? 'set' : '',
+        emailed: Boolean(emailResult.ok),
+      },
     });
 
     return sendJson(res, 200, {

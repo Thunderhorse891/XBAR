@@ -13,6 +13,7 @@ The old mark leans on a glossy blue horse illustration, lens flare, thick metal 
 Recommended direction. A sharp abstract X with a horizontal ranch bar through the center and a subtle negative-space horse neck curve in the upper right. It reads first as XBAR, then as equestrian software on second glance.
 
 Use for:
+
 - app icon
 - favicon
 - navigation mark
@@ -21,6 +22,7 @@ Use for:
 - merchandise
 
 Assets added:
+
 - `public/brand/xbar-app-icon.png`
 - `public/brand/xbar-icon-mark.png`
 - `public/brand/xbar-favicon.png`
@@ -31,6 +33,7 @@ Assets added:
 A minimal X built from two intersecting horizon rails, with a low cinematic line suggesting land, fence, and movement. This is the most SaaS-forward option and would work well for enterprise documents, decks, and investor-facing material.
 
 Use for:
+
 - monochrome stamp
 - footer lockups
 - document covers
@@ -41,6 +44,7 @@ Use for:
 A refined single-line mark where the X is created from two tensioned strokes, one stroke carrying the horse profile through negative space. This is the most luxury-equestrian option, but it is less robust at favicon size.
 
 Use for:
+
 - premium merch
 - animated splash
 - editorial landing moments
@@ -57,18 +61,18 @@ Use for:
 
 ### Core
 
-| Token | Hex | Use |
-| --- | --- | --- |
-| Night Black | `#03060b` | app shell, splash, cinematic backgrounds |
-| Matte Black | `#050910` | primary dark surface |
-| Deep Graphite | `#09111d` | panels, sidebar, hero depth |
-| Charcoal Steel | `#182331` | secondary surfaces |
-| Warm White | `#f8fbff` | text on dark, app icon highlight |
-| Soft Silver | `#8fa5b8` | secondary type, borders, metallic edge |
-| Muted Steel Blue | `#375a78` | quiet UI accents |
-| Electric Blue | `#2f8dff` | focus, active state, motion highlight |
-| Deep Signal Blue | `#1649ff` | high contrast glow depth |
-| Dark Bronze | `#8a6a3f` | optional premium accent, very limited |
+| Token            | Hex       | Use                                      |
+| ---------------- | --------- | ---------------------------------------- |
+| Night Black      | `#03060b` | app shell, splash, cinematic backgrounds |
+| Matte Black      | `#050910` | primary dark surface                     |
+| Deep Graphite    | `#09111d` | panels, sidebar, hero depth              |
+| Charcoal Steel   | `#182331` | secondary surfaces                       |
+| Warm White       | `#f8fbff` | text on dark, app icon highlight         |
+| Soft Silver      | `#8fa5b8` | secondary type, borders, metallic edge   |
+| Muted Steel Blue | `#375a78` | quiet UI accents                         |
+| Electric Blue    | `#2f8dff` | focus, active state, motion highlight    |
+| Deep Signal Blue | `#1649ff` | high contrast glow depth                 |
+| Dark Bronze      | `#8a6a3f` | optional premium accent, very limited    |
 
 ### Usage Ratio
 
@@ -84,10 +88,12 @@ Avoid saturated red, bright green, rustic brown, fake leather, distressed textur
 ### Product UI
 
 Use a geometric sans with excellent small-size readability:
+
 - Preferred: Geist, Inter Variable, or Satoshi.
 - Current safe implementation: Inter.
 
 Rules:
+
 - Navigation: 12 to 14 px, semibold, normal tracking.
 - Labels: uppercase only for true metadata, 0.12em to 0.18em tracking.
 - Buttons: 13 to 14 px, 600 or 700 weight.
@@ -96,10 +102,12 @@ Rules:
 ### Brand Display
 
 Use editorial typography sparingly:
+
 - Preferred: Canela, Editorial New, Reckless, or a licensed equivalent.
 - Open-source fallback: Instrument Serif for landing headlines.
 
 Rules:
+
 - Use display serif for landing and onboarding emotion, not dense app UI.
 - Keep lockups uppercase, wide, and quiet.
 - No western display fonts.
@@ -111,12 +119,12 @@ Motion should feel like precision equipment, not entertainment UI.
 
 ### Timing
 
-| Motion | Duration | Easing |
-| --- | --- | --- |
-| Button hover | 150 ms | `cubic-bezier(.2,.8,.2,1)` |
-| Panel reveal | 220 ms | `cubic-bezier(.16,1,.3,1)` |
-| Page transition | 260 ms | `cubic-bezier(.16,1,.3,1)` |
-| Hero object drift | 300 ms to 800 ms | spring or eased transform |
+| Motion            | Duration         | Easing                     |
+| ----------------- | ---------------- | -------------------------- |
+| Button hover      | 150 ms           | `cubic-bezier(.2,.8,.2,1)` |
+| Panel reveal      | 220 ms           | `cubic-bezier(.16,1,.3,1)` |
+| Page transition   | 260 ms           | `cubic-bezier(.16,1,.3,1)` |
+| Hero object drift | 300 ms to 800 ms | spring or eased transform  |
 
 ### Patterns
 
@@ -130,6 +138,7 @@ Motion should feel like precision equipment, not entertainment UI.
 ### Logo Motion
 
 Recommended loading animation:
+
 1. Bar line draws left to right.
 2. X planes resolve from 8 px offset with 0 to 1 opacity.
 3. Horse curve appears as a short light pass.
@@ -144,6 +153,7 @@ The landing page should feel like a luxury automotive launch page crossed with a
 ### Hero
 
 Composition:
+
 - Full-bleed dark cinematic background.
 - XBAR mark top left, minimal nav, one primary CTA.
 - H1: `XBAR`
@@ -154,6 +164,7 @@ Composition:
 - Bottom of viewport: a visible hint of the next section.
 
 Visual:
+
 - Matte black background.
 - Soft silver type.
 - One electric blue rim-light line.
@@ -176,6 +187,7 @@ Visual:
 Use `public/brand/xbar-app-icon.png` as the new source of truth.
 
 Rules:
+
 - Background must remain dark, not white.
 - Mark must be centered with safe padding.
 - Blue glow must be restrained and never become neon.
@@ -186,6 +198,7 @@ Rules:
 Use `public/brand/xbar-favicon.png`.
 
 Rules:
+
 - No horse curve at favicon size.
 - Use the X and center bar only.
 - Keep contrast high on browser tabs.
@@ -195,6 +208,7 @@ Rules:
 XBAR should be dark-first and light-compatible.
 
 Dark mode:
+
 - shell: matte black
 - panels: deep graphite
 - borders: silver at 10 to 18 percent opacity
@@ -202,6 +216,7 @@ Dark mode:
 - warnings: amber and rose, muted
 
 Light mode:
+
 - background: warm white, not cream
 - panels: white with cool silver borders
 - active states: blue with low opacity
@@ -212,12 +227,14 @@ Light mode:
 Use 3D only where it adds confidence and product memory.
 
 Recommended:
+
 - a lightweight hero scene with layered X mark planes
 - subtle parallax on product UI sheets
 - mouse-reactive light across the X mark
 - CSS 3D transforms for cards and product cockpit
 
 Avoid:
+
 - animated horse models
 - full WebGL environments
 - scroll-jacking
@@ -229,12 +246,14 @@ Avoid:
 Onboarding should feel like a private setup room, not a checklist wizard.
 
 Screens:
+
 - `Create ranch workspace`
 - `Import verified records`
 - `Invite trusted roles`
 - `Open buyer rooms`
 
 Visual motif:
+
 - dark surface
 - thin silver progress rail
 - one cinematic ranch horizon line
@@ -277,6 +296,7 @@ Use a layered system:
 5. Optional Three.js only for one lightweight hero mark scene.
 
 Performance rules:
+
 - no layout animation for large sections
 - no animated shadows on scroll
 - no permanent blur animation
@@ -290,6 +310,7 @@ The new mark is intentionally vector-first. The cinematic rendering is added thr
 ## Reference Scan
 
 These references informed the direction at a language level only:
+
 - Awwwards Sites of the Day category language around 3D, parallax, typography, and motion: https://www.awwwards.com/websites/sites_of_the_day/
 - 2025 trend coverage emphasizing immersive 3D, dark mode, and cinematic web experiences: https://www.webdesignawards.io/blogs/top-web-design-trends-for-2025-whats-new-and-whats-next
 - Current design caution: advanced motion should support hierarchy and usability, not replace it.

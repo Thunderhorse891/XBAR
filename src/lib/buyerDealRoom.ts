@@ -86,19 +86,52 @@ export function latestDealStatus(events: BuyerRoomEvent[]): DealStatus | 'quiet'
   return 'quiet';
 }
 
-function buildDealRoomAction(params: { openQuestions: number; highestOffer: number; packetDownloads: number; latestStatus: DealStatus | 'quiet'; lead?: SalesLead }): BuyerDealRoomAction {
-  if (params.latestStatus === 'closed-won') return { label: 'Closed won', tone: 'emerald', reason: 'Buyer follow-up has a won deal status.' };
-  if (params.latestStatus === 'closed-lost') return { label: 'Closed lost', tone: 'slate', reason: 'Buyer follow-up has a lost deal status.' };
-  if (params.openQuestions > 0) return { label: 'Answer buyer', tone: 'amber', reason: `${params.openQuestions} buyer request needs a seller response.` };
-  if (params.highestOffer > 0) return { label: 'Work offer', tone: 'blue', reason: `Highest open offer is $${params.highestOffer.toLocaleString()}.` };
-  if (params.packetDownloads > 0) return { label: 'Follow up', tone: 'blue', reason: `${params.packetDownloads} buyer packet download${params.packetDownloads === 1 ? '' : 's'} signal active review.` };
-  if (params.lead?.nextFollowUp) return { label: 'Follow up', tone: 'blue', reason: 'Lead has a scheduled next follow-up.' };
+function buildDealRoomAction(params: {
+  openQuestions: number;
+  highestOffer: number;
+  packetDownloads: number;
+  latestStatus: DealStatus | 'quiet';
+  lead?: SalesLead;
+}): BuyerDealRoomAction {
+  if (params.latestStatus === 'closed-won')
+    return { label: 'Closed won', tone: 'emerald', reason: 'Buyer follow-up has a won deal status.' };
+  if (params.latestStatus === 'closed-lost')
+    return { label: 'Closed lost', tone: 'slate', reason: 'Buyer follow-up has a lost deal status.' };
+  if (params.openQuestions > 0)
+    return {
+      label: 'Answer buyer',
+      tone: 'amber',
+      reason: `${params.openQuestions} buyer request needs a seller response.`,
+    };
+  if (params.highestOffer > 0)
+    return {
+      label: 'Work offer',
+      tone: 'blue',
+      reason: `Highest open offer is $${params.highestOffer.toLocaleString()}.`,
+    };
+  if (params.packetDownloads > 0)
+    return {
+      label: 'Follow up',
+      tone: 'blue',
+      reason: `${params.packetDownloads} buyer packet download${params.packetDownloads === 1 ? '' : 's'} signal active review.`,
+    };
+  if (params.lead?.nextFollowUp)
+    return { label: 'Follow up', tone: 'blue', reason: 'Lead has a scheduled next follow-up.' };
   return { label: 'Create movement', tone: 'slate', reason: 'No active buyer follow-up pressure yet.' };
 }
 
-export function buildBuyerDealRoomSummaries(params: { horses: HorseRecord[]; leads: SalesLead[]; events: BuyerRoomEvent[] }) {
+export function buildBuyerDealRoomSummaries(params: {
+  horses: HorseRecord[];
+  leads: SalesLead[];
+  events: BuyerRoomEvent[];
+}) {
   return params.horses
-    .filter((horse) => horse.sale.askPrice > 0 || params.leads.some((lead) => lead.horseId === horse.id) || params.events.some((event) => event.horseId === horse.id))
+    .filter(
+      (horse) =>
+        horse.sale.askPrice > 0 ||
+        params.leads.some((lead) => lead.horseId === horse.id) ||
+        params.events.some((event) => event.horseId === horse.id),
+    )
     .map((horse): BuyerDealRoomHorseSummary => {
       const horseEvents = params.events.filter((event) => event.horseId === horse.id);
       const horseLeads = params.leads.filter((lead) => lead.horseId === horse.id && lead.stage !== 'Closed');
@@ -112,12 +145,25 @@ export function buildBuyerDealRoomSummaries(params: { horses: HorseRecord[]; lea
         askPrice: horse.sale.askPrice || horse.insuredValue,
         eventCount: horseEvents.length,
         openQuestions,
-        offers: horseEvents.filter((event) => event.kind === 'offer').length + horseLeads.filter((lead) => (lead.offerAmount ?? 0) > 0).length,
+        offers:
+          horseEvents.filter((event) => event.kind === 'offer').length +
+          horseLeads.filter((lead) => (lead.offerAmount ?? 0) > 0).length,
         packetDownloads,
         highestOffer,
-        latestActivityAt: sortBuyerRoomEvents(horseEvents)[0]?.at ?? horseLeads.map((lead) => lead.lastTouch).sort().at(-1),
+        latestActivityAt:
+          sortBuyerRoomEvents(horseEvents)[0]?.at ??
+          horseLeads
+            .map((lead) => lead.lastTouch)
+            .sort()
+            .at(-1),
         status: latestStatus,
-        action: buildDealRoomAction({ openQuestions, highestOffer, packetDownloads, latestStatus, lead: horseLeads[0] }),
+        action: buildDealRoomAction({
+          openQuestions,
+          highestOffer,
+          packetDownloads,
+          latestStatus,
+          lead: horseLeads[0],
+        }),
       };
     })
     .sort((a, b) => {
@@ -162,7 +208,9 @@ export function publicShareEventToBuyerRoomEvent(row: PublicShareEventRow): Buye
     buyerEmail ? `Contact: ${buyerEmail}` : '',
     kind === 'packet-viewed' ? 'Opened the shared buyer profile.' : '',
     kind === 'packet-downloaded' ? 'Downloaded the buyer packet.' : '',
-  ].filter(Boolean).join(' — ');
+  ]
+    .filter(Boolean)
+    .join(' — ');
 
   return {
     id: `public-share-${row.id}`,

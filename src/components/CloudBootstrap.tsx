@@ -24,8 +24,12 @@ export function CloudBootstrap() {
 
   useEffect(() => {
     let dispose: (() => void) | void;
-    void initialize().then((cleanup) => { dispose = cleanup; });
-    return () => { dispose?.(); };
+    void initialize().then((cleanup) => {
+      dispose = cleanup;
+    });
+    return () => {
+      dispose?.();
+    };
   }, [initialize]);
 
   useEffect(() => {
@@ -65,12 +69,19 @@ export function CloudBootstrap() {
       setSyncState('syncing', 'Reconciling this ranch with cloud records...');
       const remote = await loadWorkspaceBackupFromCloud();
       if (cancelled) return;
-      const decision = decideCloudReconciliation({ local, ...(remote.ok ? { remote: remote.backup } : { remoteError: remote.message }) });
+      const decision = decideCloudReconciliation({
+        local,
+        ...(remote.ok ? { remote: remote.backup } : { remoteError: remote.message }),
+      });
 
       if (decision === 'import-remote' && remote.ok) {
         const imported = importWorkspaceBackup(remote.backup);
         if (imported.ok && remote.updatedAt) setLastSyncAt(remote.updatedAt);
-        finish(imported.ok, imported.ok ? 'idle' : 'error', imported.ok ? 'Cloud workspace loaded safely.' : imported.message);
+        finish(
+          imported.ok,
+          imported.ok ? 'idle' : 'error',
+          imported.ok ? 'Cloud workspace loaded safely.' : imported.message,
+        );
         return;
       }
 
@@ -93,14 +104,32 @@ export function CloudBootstrap() {
         return;
       }
 
-      finish(false, 'error', decision === 'conflict-lock'
-        ? 'Local and cloud both contain different ranch work. Autosave is locked until you choose Push cloud or Pull cloud in Settings.'
-        : remote.ok ? 'Cloud workspace needs review.' : remote.message);
+      finish(
+        false,
+        'error',
+        decision === 'conflict-lock'
+          ? 'Local and cloud both contain different ranch work. Autosave is locked until you choose Push cloud or Pull cloud in Settings.'
+          : remote.ok
+            ? 'Cloud workspace needs review.'
+            : remote.message,
+      );
     };
 
     void hydrate();
-    return () => { cancelled = true; };
-  }, [cloudStatus, exportWorkspaceBackup, importWorkspaceBackup, session?.user.id, setAutosaveReady, setLastSyncAt, setSyncState, workspaceHydrated, workspaceId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    cloudStatus,
+    exportWorkspaceBackup,
+    importWorkspaceBackup,
+    session?.user.id,
+    setAutosaveReady,
+    setLastSyncAt,
+    setSyncState,
+    workspaceHydrated,
+    workspaceId,
+  ]);
 
   useEffect(() => {
     if (!workspaceHydrated) return;
@@ -134,7 +163,9 @@ export function CloudBootstrap() {
 
     const queuePersist = () => {
       if (syncTimeout) window.clearTimeout(syncTimeout);
-      syncTimeout = window.setTimeout(() => { void persistCurrent(); }, 1600);
+      syncTimeout = window.setTimeout(() => {
+        void persistCurrent();
+      }, 1600);
     };
     const unsubscribe = useXbarStore.subscribe(queuePersist);
     window.addEventListener('online', queuePersist);

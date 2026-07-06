@@ -23,7 +23,15 @@ import { useXbarStore } from '@/store/useXbarStore';
 const XBAR_ICON = '/brand/xbar-app-icon.png';
 
 type Tone = 'danger' | 'warning' | 'info' | 'neutral';
-type Signal = { key: string; tone: Tone; title: string; meta: string; chip: string; to: string; icon: 'coins' | 'stethoscope' | 'doc' | 'horse' | 'shield' };
+type Signal = {
+  key: string;
+  tone: Tone;
+  title: string;
+  meta: string;
+  chip: string;
+  to: string;
+  icon: 'coins' | 'stethoscope' | 'doc' | 'horse' | 'shield';
+};
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -62,13 +70,22 @@ export default function Dashboard() {
         <section className="xs-hero">
           <img className="xs-hero__wm" src={XBAR_ICON} alt="" aria-hidden="true" />
           <div className="xs-hero__body">
-            <div className="xs-hero__eyebrow"><Sparkles size={13} /> {ranchName} · Getting started</div>
+            <div className="xs-hero__eyebrow">
+              <Sparkles size={13} /> {ranchName} · Getting started
+            </div>
             <h1 className="xs-hero__headline">Get your horse records in order.</h1>
-            <p className="xs-hero__sub">Add your first horse and its documents. XBAR keeps your health records, registration, ownership history, and buyer follow-up in one place — and tells you when a horse is ready to sell.</p>
+            <p className="xs-hero__sub">
+              Add your first horse and its documents. XBAR keeps your health records, registration, ownership history,
+              and buyer follow-up in one place — and tells you when a horse is ready to sell.
+            </p>
             <div className="xs-hero__actions">
-              <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>Add first horse</ActionButton>
+              <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>
+                Add first horse
+              </ActionButton>
               <ActionButton onClick={() => navigate('/documents?upload=1')}>Upload documents</ActionButton>
-              <ActionButton variant="ghost" onClick={() => navigate('/getting-started')}>Getting started</ActionButton>
+              <ActionButton variant="ghost" onClick={() => navigate('/getting-started')}>
+                Getting started
+              </ActionButton>
             </div>
           </div>
         </section>
@@ -90,33 +107,76 @@ export default function Dashboard() {
 
         <div className="xs-homegrid">
           <div>
-            <div className="xs-sectlabel"><span className="xs-sectlabel__title">First steps</span></div>
+            <div className="xs-sectlabel">
+              <span className="xs-sectlabel__title">First steps</span>
+            </div>
             {[
-              { icon: <HorsesIcon width={20} height={20} />, title: 'Add your first horse', meta: 'Name, sex, age, and where it lives — the record everything hangs off.', to: '/horses?new=1' },
-              { icon: <Upload size={20} />, title: 'Upload documents', meta: 'Coggins, registration papers, and health records — we read them and file them for you.', to: '/documents?upload=1' },
-              { icon: <ShieldCheck size={20} />, title: 'Set up your ranch', meta: 'Owner, barn, and who else can help.', to: '/settings' },
+              {
+                icon: <HorsesIcon width={20} height={20} />,
+                title: 'Add your first horse',
+                meta: 'Name, sex, age, and where it lives — the record everything hangs off.',
+                to: '/horses?new=1',
+              },
+              {
+                icon: <Upload size={20} />,
+                title: 'Upload documents',
+                meta: 'Coggins, registration papers, and health records — we read them and file them for you.',
+                to: '/documents?upload=1',
+              },
+              {
+                icon: <ShieldCheck size={20} />,
+                title: 'Set up your ranch',
+                meta: 'Owner, barn, and who else can help.',
+                to: '/settings',
+              },
             ].map((s) => (
               <button key={s.title} type="button" className="xs-signal xs-signal--info" onClick={() => navigate(s.to)}>
                 <span className="xs-signal__icon">{s.icon}</span>
-                <span className="xs-signal__body"><span className="xs-signal__title">{s.title}</span><span className="xs-signal__meta">{s.meta}</span></span>
-                <span className="xs-signal__cta"><ArrowRight size={16} className="xs-muted" /></span>
+                <span className="xs-signal__body">
+                  <span className="xs-signal__title">{s.title}</span>
+                  <span className="xs-signal__meta">{s.meta}</span>
+                </span>
+                <span className="xs-signal__cta">
+                  <ArrowRight size={16} className="xs-muted" />
+                </span>
               </button>
             ))}
           </div>
 
           <div className="xs-intel">
-            <div className="xs-intel__head"><Sparkles size={13} /> Smart Help</div>
+            <div className="xs-intel__head">
+              <Sparkles size={13} /> Smart Help
+            </div>
             <div className="xs-intel__nba">
-              <div className="xs-intel__sec-label" style={{ color: 'var(--xbar-cyan-ink)' }}>Start here</div>
+              <div className="xs-intel__sec-label" style={{ color: 'var(--xbar-cyan-ink)' }}>
+                Start here
+              </div>
               <div className="xs-intel__nba-title">Add your first horse</div>
-              <div className="xs-intel__nba-reason">Your care tasks, documents, and sale-ready status all fill in from your own records.</div>
-              <ActionButton variant="primary" size="sm" icon={<Plus size={14} />} onClick={() => navigate('/horses?new=1')}>Add horse</ActionButton>
+              <div className="xs-intel__nba-reason">
+                Your care tasks, documents, and sale-ready status all fill in from your own records.
+              </div>
+              <ActionButton
+                variant="primary"
+                size="sm"
+                icon={<Plus size={14} />}
+                onClick={() => navigate('/horses?new=1')}
+              >
+                Add horse
+              </ActionButton>
             </div>
             <div className="xs-intel__sec">
               <div className="xs-intel__sec-label">Quick add</div>
               <div className="xs-intel__qc">
-                <ActionButton size="sm" icon={<HorsesIcon width={14} height={14} />} onClick={() => navigate('/horses?new=1')}>Horse</ActionButton>
-                <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents?upload=1')}>Documents</ActionButton>
+                <ActionButton
+                  size="sm"
+                  icon={<HorsesIcon width={14} height={14} />}
+                  onClick={() => navigate('/horses?new=1')}
+                >
+                  Horse
+                </ActionButton>
+                <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents?upload=1')}>
+                  Documents
+                </ActionButton>
               </div>
             </div>
           </div>
@@ -130,35 +190,103 @@ export default function Dashboard() {
 
   const signals: Signal[] = [];
   transferGaps.slice(0, 2).forEach((g) =>
-    signals.push({ key: `t-${g.horseId}`, tone: 'danger', icon: 'shield', title: `Ownership documents — ${g.horseName}`, meta: g.reasons.slice(0, 2).join(' · '), chip: "Can't sell yet", to: `/horses/${g.horseId}` }),
+    signals.push({
+      key: `t-${g.horseId}`,
+      tone: 'danger',
+      icon: 'shield',
+      title: `Ownership documents — ${g.horseName}`,
+      meta: g.reasons.slice(0, 2).join(' · '),
+      chip: "Can't sell yet",
+      to: `/horses/${g.horseId}`,
+    }),
   );
   careDue.slice(0, 2).forEach((c) =>
-    signals.push({ key: `c-${c.horseId}`, tone: 'warning', icon: 'stethoscope', title: `Care due — ${c.horseName}`, meta: c.signals.filter((s) => s.status !== 'clear').map((s) => s.label).join(' · ') || 'Needs care', chip: 'Due', to: `/horses/${c.horseId}` }),
+    signals.push({
+      key: `c-${c.horseId}`,
+      tone: 'warning',
+      icon: 'stethoscope',
+      title: `Care due — ${c.horseName}`,
+      meta:
+        c.signals
+          .filter((s) => s.status !== 'clear')
+          .map((s) => s.label)
+          .join(' · ') || 'Needs care',
+      chip: 'Due',
+      to: `/horses/${c.horseId}`,
+    }),
   );
   if (reviewQueue.length) {
-    signals.push({ key: 'docs', tone: 'info', icon: 'doc', title: `${reviewQueue.length} document${reviewQueue.length === 1 ? '' : 's'} to review`, meta: reviewQueue.slice(0, 3).map((d) => d.title).join(' · '), chip: 'Check', to: '/documents' });
+    signals.push({
+      key: 'docs',
+      tone: 'info',
+      icon: 'doc',
+      title: `${reviewQueue.length} document${reviewQueue.length === 1 ? '' : 's'} to review`,
+      meta: reviewQueue
+        .slice(0, 3)
+        .map((d) => d.title)
+        .join(' · '),
+      chip: 'Check',
+      to: '/documents',
+    });
   }
   if (!signals.length) {
-    signals.push({ key: 'clear', tone: 'neutral', icon: 'horse', title: 'Everything looks good', meta: 'No missing documents, overdue care, or documents waiting for review.', chip: 'All set', to: '/horses' });
+    signals.push({
+      key: 'clear',
+      tone: 'neutral',
+      icon: 'horse',
+      title: 'Everything looks good',
+      meta: 'No missing documents, overdue care, or documents waiting for review.',
+      chip: 'All set',
+      to: '/horses',
+    });
   }
 
   const primary = signals[0];
-  const heroLine = primary.tone === 'danger'
-    ? <>Missing documents are holding up a sale — <em>{transferGaps.length} to finish</em>.</>
-    : primary.tone === 'warning'
-      ? <>{careDue.length} horse{careDue.length === 1 ? '' : 's'} need care today.</>
-      : primary.tone === 'info'
-        ? <>{reviewQueue.length} document{reviewQueue.length === 1 ? '' : 's'} need review.</>
-        : <>Everything looks good across {horses.length} horses.</>;
+  const heroLine =
+    primary.tone === 'danger' ? (
+      <>
+        Missing documents are holding up a sale — <em>{transferGaps.length} to finish</em>.
+      </>
+    ) : primary.tone === 'warning' ? (
+      <>
+        {careDue.length} horse{careDue.length === 1 ? '' : 's'} need care today.
+      </>
+    ) : primary.tone === 'info' ? (
+      <>
+        {reviewQueue.length} document{reviewQueue.length === 1 ? '' : 's'} need review.
+      </>
+    ) : (
+      <>Everything looks good across {horses.length} horses.</>
+    );
 
   const workItems = [
-    ...transferGaps.map((g) => ({ id: `t-${g.horseId}`, title: `Finish ownership documents — ${g.horseName}`, chip: 'Documents', to: `/horses/${g.horseId}` })),
-    ...careDue.map((c) => ({ id: `c-${c.horseId}`, title: `Take care of — ${c.horseName}`, chip: 'Care', to: `/horses/${c.horseId}` })),
+    ...transferGaps.map((g) => ({
+      id: `t-${g.horseId}`,
+      title: `Finish ownership documents — ${g.horseName}`,
+      chip: 'Documents',
+      to: `/horses/${g.horseId}`,
+    })),
+    ...careDue.map((c) => ({
+      id: `c-${c.horseId}`,
+      title: `Take care of — ${c.horseName}`,
+      chip: 'Care',
+      to: `/horses/${c.horseId}`,
+    })),
     ...reviewQueue.map((d) => ({ id: `d-${d.id}`, title: `Check ${d.title}`, chip: 'Documents', to: '/documents' })),
   ].slice(0, 5);
 
   const iconFor = (k: Signal['icon']) =>
-    k === 'coins' ? <Coins size={20} /> : k === 'stethoscope' ? <Stethoscope size={20} /> : k === 'doc' ? <FileWarning size={20} /> : k === 'shield' ? <ShieldCheck size={20} /> : <HorsesIcon width={20} height={20} />;
+    k === 'coins' ? (
+      <Coins size={20} />
+    ) : k === 'stethoscope' ? (
+      <Stethoscope size={20} />
+    ) : k === 'doc' ? (
+      <FileWarning size={20} />
+    ) : k === 'shield' ? (
+      <ShieldCheck size={20} />
+    ) : (
+      <HorsesIcon width={20} height={20} />
+    );
 
   const ribbon = [
     { v: horses.length, l: 'Horses', to: '/horses' },
@@ -173,7 +301,9 @@ export default function Dashboard() {
       <section className="xs-hero">
         <img className="xs-hero__wm" src={XBAR_ICON} alt="" aria-hidden="true" />
         <div className="xs-hero__body">
-          <div className="xs-hero__eyebrow"><Sparkles size={13} /> {ranchName} · Dashboard</div>
+          <div className="xs-hero__eyebrow">
+            <Sparkles size={13} /> {ranchName} · Dashboard
+          </div>
           <h1 className="xs-hero__headline">{heroLine}</h1>
           <p className="xs-hero__sub">
             {openItems > 0
@@ -181,9 +311,13 @@ export default function Dashboard() {
               : `Nothing needs attention right now. ${activeSales.length} buyer${activeSales.length === 1 ? '' : 's'} in progress.`}
           </p>
           <div className="xs-hero__actions">
-            <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={() => navigate(primary.to)}>Start here</ActionButton>
+            <ActionButton variant="primary" icon={<ArrowRight size={15} />} onClick={() => navigate(primary.to)}>
+              Start here
+            </ActionButton>
             <ActionButton onClick={() => navigate('/horses')}>Horses</ActionButton>
-            <ActionButton variant="ghost" onClick={() => navigate('/reports')}>Ready-to-sell report</ActionButton>
+            <ActionButton variant="ghost" onClick={() => navigate('/reports')}>
+              Ready-to-sell report
+            </ActionButton>
           </div>
         </div>
       </section>
@@ -191,7 +325,11 @@ export default function Dashboard() {
       <div className="xs-ribbon">
         {ribbon.map((r) => (
           <button key={r.l} type="button" className="xs-ribbon__item" onClick={() => navigate(r.to)}>
-            <span className={`xs-ribbon__value${r.warn ? ' xs-ribbon__value--warn' : ''}${r.danger ? ' xs-ribbon__value--danger' : ''}`}>{r.v}</span>
+            <span
+              className={`xs-ribbon__value${r.warn ? ' xs-ribbon__value--warn' : ''}${r.danger ? ' xs-ribbon__value--danger' : ''}`}
+            >
+              {r.v}
+            </span>
             <span className="xs-ribbon__label">{r.l}</span>
           </button>
         ))}
@@ -201,13 +339,33 @@ export default function Dashboard() {
         <div>
           <div className="xs-sectlabel">
             <span className="xs-sectlabel__title">Needs your attention</span>
-            <button type="button" className="xs-card__link" onClick={() => navigate('/today')}>See all tasks</button>
+            <button type="button" className="xs-card__link" onClick={() => navigate('/today')}>
+              See all tasks
+            </button>
           </div>
           {signals.map((s) => (
-            <button key={s.key} type="button" className={`xs-signal xs-signal--${s.tone === 'neutral' ? 'info' : s.tone}`} onClick={() => navigate(s.to)}>
-              <span className={`xs-signal__icon${s.tone === 'danger' ? ' xs-signal__icon--danger' : s.tone === 'warning' ? ' xs-signal__icon--warning' : ''}`}>{iconFor(s.icon)}</span>
-              <span className="xs-signal__body"><span className="xs-signal__title">{s.title}</span><span className="xs-signal__meta">{s.meta}</span></span>
-              <span className="xs-signal__cta"><span className={`xs-chip xs-chip--${s.tone === 'danger' ? 'danger' : s.tone === 'warning' ? 'warning' : s.tone === 'info' ? 'info' : 'success'}`}>{s.chip}</span></span>
+            <button
+              key={s.key}
+              type="button"
+              className={`xs-signal xs-signal--${s.tone === 'neutral' ? 'info' : s.tone}`}
+              onClick={() => navigate(s.to)}
+            >
+              <span
+                className={`xs-signal__icon${s.tone === 'danger' ? ' xs-signal__icon--danger' : s.tone === 'warning' ? ' xs-signal__icon--warning' : ''}`}
+              >
+                {iconFor(s.icon)}
+              </span>
+              <span className="xs-signal__body">
+                <span className="xs-signal__title">{s.title}</span>
+                <span className="xs-signal__meta">{s.meta}</span>
+              </span>
+              <span className="xs-signal__cta">
+                <span
+                  className={`xs-chip xs-chip--${s.tone === 'danger' ? 'danger' : s.tone === 'warning' ? 'warning' : s.tone === 'info' ? 'info' : 'success'}`}
+                >
+                  {s.chip}
+                </span>
+              </span>
             </button>
           ))}
 
@@ -215,12 +373,21 @@ export default function Dashboard() {
             <>
               <div className="xs-sectlabel" style={{ marginTop: 26 }}>
                 <span className="xs-sectlabel__title">Today's tasks</span>
-                <button type="button" className="xs-card__link" onClick={() => navigate('/today')}>{workItems.length} to do</button>
+                <button type="button" className="xs-card__link" onClick={() => navigate('/today')}>
+                  {workItems.length} to do
+                </button>
               </div>
               <div className="xs-card" style={{ padding: '6px 18px' }}>
                 <div className="xs-workmini">
                   {workItems.map((w) => (
-                    <div key={w.id} className="xs-workmini__row" role="button" tabIndex={0} onClick={() => navigate(w.to)} onKeyDown={(e) => e.key === 'Enter' && navigate(w.to)}>
+                    <div
+                      key={w.id}
+                      className="xs-workmini__row"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => navigate(w.to)}
+                      onKeyDown={(e) => e.key === 'Enter' && navigate(w.to)}
+                    >
                       <span className="xs-chip xs-chip--neutral">{w.chip}</span>
                       <span className="xs-workmini__title">{w.title}</span>
                       <ArrowRight size={15} className="xs-muted" />
@@ -233,31 +400,77 @@ export default function Dashboard() {
         </div>
 
         <div className="xs-intel">
-          <div className="xs-intel__head"><Sparkles size={13} /> Smart Help</div>
+          <div className="xs-intel__head">
+            <Sparkles size={13} /> Smart Help
+          </div>
           <div className="xs-intel__nba">
-            <div className="xs-intel__sec-label" style={{ color: 'var(--xbar-cyan-ink)' }}>Start here</div>
+            <div className="xs-intel__sec-label" style={{ color: 'var(--xbar-cyan-ink)' }}>
+              Start here
+            </div>
             <div className="xs-intel__nba-title">{primary.title}</div>
             <div className="xs-intel__nba-reason">{primary.meta}</div>
-            <ActionButton variant="primary" size="sm" icon={<ArrowRight size={14} />} onClick={() => navigate(primary.to)}>Take care of it</ActionButton>
+            <ActionButton
+              variant="primary"
+              size="sm"
+              icon={<ArrowRight size={14} />}
+              onClick={() => navigate(primary.to)}
+            >
+              Take care of it
+            </ActionButton>
           </div>
           <div className="xs-intel__sec">
             <div className="xs-intel__sec-label">Documents &amp; care</div>
-            <div className="xs-intel__line"><ShieldCheck size={14} /><span>{transferGaps.length} horse{transferGaps.length === 1 ? '' : 's'} with missing ownership documents</span></div>
-            <div className="xs-intel__line"><Stethoscope size={14} /><span>{careDue.length} horse{careDue.length === 1 ? '' : 's'} with care due</span></div>
-            <div className="xs-intel__line"><FileWarning size={14} /><span>{reviewQueue.length} document{reviewQueue.length === 1 ? '' : 's'} to review</span></div>
+            <div className="xs-intel__line">
+              <ShieldCheck size={14} />
+              <span>
+                {transferGaps.length} horse{transferGaps.length === 1 ? '' : 's'} with missing ownership documents
+              </span>
+            </div>
+            <div className="xs-intel__line">
+              <Stethoscope size={14} />
+              <span>
+                {careDue.length} horse{careDue.length === 1 ? '' : 's'} with care due
+              </span>
+            </div>
+            <div className="xs-intel__line">
+              <FileWarning size={14} />
+              <span>
+                {reviewQueue.length} document{reviewQueue.length === 1 ? '' : 's'} to review
+              </span>
+            </div>
           </div>
           <div className="xs-intel__sec">
             <div className="xs-intel__sec-label">Selling &amp; costs</div>
-            <div className="xs-intel__line"><Coins size={14} /><span>{activeSales.length} buyer{activeSales.length === 1 ? '' : 's'} in progress</span></div>
-            <div className="xs-intel__line"><CalendarClock size={14} /><span>{formatCompactCurrency(budget.total)} spent this month</span></div>
+            <div className="xs-intel__line">
+              <Coins size={14} />
+              <span>
+                {activeSales.length} buyer{activeSales.length === 1 ? '' : 's'} in progress
+              </span>
+            </div>
+            <div className="xs-intel__line">
+              <CalendarClock size={14} />
+              <span>{formatCompactCurrency(budget.total)} spent this month</span>
+            </div>
           </div>
           <div className="xs-intel__sec">
             <div className="xs-intel__sec-label">Quick add</div>
             <div className="xs-intel__qc">
-              <ActionButton size="sm" icon={<Plus size={14} />} onClick={() => navigate('/today')}>Task</ActionButton>
-              <ActionButton size="sm" icon={<HorsesIcon width={14} height={14} />} onClick={() => navigate('/horses?new=1')}>Horse</ActionButton>
-              <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents?upload=1')}>Documents</ActionButton>
-              <ActionButton size="sm" icon={<Users size={14} />} onClick={() => navigate(buyerFollowUpPath())}>Buyer</ActionButton>
+              <ActionButton size="sm" icon={<Plus size={14} />} onClick={() => navigate('/today')}>
+                Task
+              </ActionButton>
+              <ActionButton
+                size="sm"
+                icon={<HorsesIcon width={14} height={14} />}
+                onClick={() => navigate('/horses?new=1')}
+              >
+                Horse
+              </ActionButton>
+              <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents?upload=1')}>
+                Documents
+              </ActionButton>
+              <ActionButton size="sm" icon={<Users size={14} />} onClick={() => navigate(buyerFollowUpPath())}>
+                Buyer
+              </ActionButton>
             </div>
           </div>
         </div>

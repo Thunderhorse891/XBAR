@@ -129,7 +129,10 @@
   border: 0;
   outline: 1px solid var(--border);
   outline-offset: -1px;
-  transition: background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  transition:
+    background 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .operational-value-signal:hover {

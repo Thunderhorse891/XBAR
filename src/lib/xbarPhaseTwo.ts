@@ -118,7 +118,10 @@ function isDocumentResolved(document: PacketDocumentInput) {
   return document.state === 'Ready' || document.state === 'Matched' || document.state === 'Archived';
 }
 
-function collectDocuments<TDocument extends PacketDocumentInput>(documents: TDocument[], types: DocumentRecord['type'][]) {
+function collectDocuments<TDocument extends PacketDocumentInput>(
+  documents: TDocument[],
+  types: DocumentRecord['type'][],
+) {
   return documents.filter((document) => types.includes(document.type));
 }
 
@@ -199,7 +202,8 @@ export function buildDocumentTrustProfile(document: DocumentTrustInput, horses: 
   if (document.confidence < 0.9) reviewReasons.push('Document confidence is still below the preferred sale threshold');
   if (!document.horseId) reviewReasons.push('The document is not attached to a horse profile yet');
 
-  const duplicatePenalty = document.duplicateRisk === 'Possible Duplicate' ? 18 : document.duplicateRisk === 'Review' ? 8 : 0;
+  const duplicatePenalty =
+    document.duplicateRisk === 'Possible Duplicate' ? 18 : document.duplicateRisk === 'Review' ? 8 : 0;
   const trustScore = Math.max(
     TRUST_SCORE_FLOOR,
     Math.min(
@@ -235,7 +239,9 @@ export function buildHorsePacketCompleteness(
   const medicalDocs = collectDocuments(documents, ['Vet Record', 'Coggins']);
   const mediaDocs = collectDocuments(documents, ['Media Kit']);
   const hasApprovedHero = horse.gallery.some((asset) => asset.kind === 'Hero' && asset.status === 'Approved');
-  const hasApprovedSaleStill = horse.gallery.some((asset) => asset.kind === 'Sale Still' && asset.status === 'Approved');
+  const hasApprovedSaleStill = horse.gallery.some(
+    (asset) => asset.kind === 'Sale Still' && asset.status === 'Approved',
+  );
   const hasApprovedConformation = horse.gallery.some(
     (asset) => asset.kind === 'Conformation' && asset.status === 'Approved',
   );
@@ -307,7 +313,7 @@ export function buildHorsePacketCompleteness(
           ? 'Medical review is still open on the horse profile.'
           : hasResolvedDocumentMissingCurrentDate(vetDocs, CURRENT_HEALTH_SUPPORT_DAYS)
             ? 'Health support is attached but needs a current exam date before use.'
-          : 'Health support is attached but still needs final review.',
+            : 'Health support is attached but still needs final review.',
       missingDetail: 'No health certification is attached yet.',
     }),
     buildSalePacketSlot({
@@ -372,9 +378,9 @@ export function buildHorsePacketCompleteness(
             ? 'A medical review is still open on the horse profile.'
             : hasResolvedDocumentMissingCurrentDate(medicalDocs, CURRENT_HEALTH_SUPPORT_DAYS)
               ? 'Medical support exists but needs a current exam date before use.'
-            : medicalDocs.length
-              ? 'Medical support exists, but it is not fully ready to share.'
-              : 'No approved medical support is attached yet.',
+              : medicalDocs.length
+                ? 'Medical support exists, but it is not fully ready to share.'
+                : 'No approved medical support is attached yet.',
       weight: 20,
       tone: 'slate',
     },
@@ -389,7 +395,7 @@ export function buildHorsePacketCompleteness(
             : 'missing',
       detail:
         hasApprovedHero && (hasApprovedSaleStill || mediaDocs.some(isDocumentReady))
-        ? 'Hero imagery and packet media are approved for sale presentation.'
+          ? 'Hero imagery and packet media are approved for sale presentation.'
           : horse.gallery.length || mediaDocs.length
             ? 'Visual assets exist, but the packet still needs stronger coverage.'
             : 'No media packet is attached yet.',

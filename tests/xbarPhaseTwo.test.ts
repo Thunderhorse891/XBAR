@@ -4,7 +4,13 @@ import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '../src/
 import { rankHorseMatches } from '../src/lib/xbarRuntime.js';
 import type { DocumentRecord, HorseRecord, OwnershipRecord } from '../src/types/xbar.js';
 
-function createHorse(overrides: Partial<HorseRecord> & Pick<HorseRecord, 'id' | 'name' | 'barnName' | 'owner' | 'ownerEntity' | 'aqhaNumber' | 'registrationNumber' | 'registered'>): HorseRecord {
+function createHorse(
+  overrides: Partial<HorseRecord> &
+    Pick<
+      HorseRecord,
+      'id' | 'name' | 'barnName' | 'owner' | 'ownerEntity' | 'aqhaNumber' | 'registrationNumber' | 'registered'
+    >,
+): HorseRecord {
   const { id, name, barnName, owner, ownerEntity, aqhaNumber, registrationNumber, registered, ...rest } = overrides;
   return {
     id,
@@ -74,7 +80,9 @@ function createHorse(overrides: Partial<HorseRecord> & Pick<HorseRecord, 'id' | 
   };
 }
 
-function createDocument(overrides: Partial<DocumentRecord> & Pick<DocumentRecord, 'id' | 'title' | 'type'>): DocumentRecord {
+function createDocument(
+  overrides: Partial<DocumentRecord> & Pick<DocumentRecord, 'id' | 'title' | 'type'>,
+): DocumentRecord {
   const { id, title, type, ...rest } = overrides;
   return {
     id,

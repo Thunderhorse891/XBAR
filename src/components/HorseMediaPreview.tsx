@@ -15,7 +15,12 @@ function buildInitials(name: string) {
     .filter(Boolean)
     .slice(0, 2);
 
-  return parts.map((part) => part[0]).join('').toUpperCase() || 'XR';
+  return (
+    parts
+      .map((part) => part[0])
+      .join('')
+      .toUpperCase() || 'XR'
+  );
 }
 
 export function HorseMediaPreview({
@@ -34,8 +39,12 @@ export function HorseMediaPreview({
 
   return (
     <div className={`horse-media-fallback ${fallbackClassName}`.trim()} role="img" aria-label={name}>
-      <span className="horse-media-fallback__mark" aria-hidden="true">{buildInitials(name)}</span>
-      <span className="horse-media-fallback__label" aria-hidden="true">{emptyLabel}</span>
+      <span className="horse-media-fallback__mark" aria-hidden="true">
+        {buildInitials(name)}
+      </span>
+      <span className="horse-media-fallback__label" aria-hidden="true">
+        {emptyLabel}
+      </span>
     </div>
   );
 }

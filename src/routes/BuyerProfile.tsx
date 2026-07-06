@@ -11,12 +11,18 @@ import { buildPublicShareUrl, openFacebookShareDialog } from '@/lib/facebookShar
 import { formatCompactCurrency, formatPercent } from '@/lib/format';
 import { apiConfig, isPublicShareLocalPreviewEnabled } from '@/lib/platformConfig';
 import { buildPublicBuyerPacketArtifact, downloadPublicBuyerPacketArtifact } from '@/lib/publicBuyerPacket';
-import { loadPublicBuyerProfile, sanitizeDocumentForBuyerView, sanitizeHorseForBuyerView, sanitizeSharedListingForBuyerView, trackPublicBuyerProfileView, type PublicBuyerProfilePayload } from '@/lib/publicShare';
+import {
+  loadPublicBuyerProfile,
+  sanitizeDocumentForBuyerView,
+  sanitizeHorseForBuyerView,
+  sanitizeSharedListingForBuyerView,
+  trackPublicBuyerProfileView,
+  type PublicBuyerProfilePayload,
+} from '@/lib/publicShare';
 import { hasBuyerShareAccess } from '@/lib/workspaceAccess';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
 import { useHorseRecord, useXbarStore } from '@/store/useXbarStore';
-
 
 // Buyer follow-up actions: questions, call requests, and offers flow back to
 // the seller — through the public API on real shared links, or straight into
@@ -31,10 +37,17 @@ function BuyerActionPanel({
   sharePath: string;
   shareToken: string;
   source: 'rpc' | 'local';
-  onLocalLog: (input: { kind: 'question' | 'call-requested' | 'proof-requested' | 'offer' | 'packet-downloaded'; actor: string; note?: string; amount?: number }) => void;
+  onLocalLog: (input: {
+    kind: 'question' | 'call-requested' | 'proof-requested' | 'offer' | 'packet-downloaded';
+    actor: string;
+    note?: string;
+    amount?: number;
+  }) => void;
   onDownloadPacket: () => void;
 }) {
-  const [mode, setMode] = useState<null | 'question' | 'call-requested' | 'proof-requested' | 'offer' | 'packet-downloaded'>(null);
+  const [mode, setMode] = useState<
+    null | 'question' | 'call-requested' | 'proof-requested' | 'offer' | 'packet-downloaded'
+  >(null);
   const [buyerName, setBuyerName] = useState('');
   const [buyerEmail, setBuyerEmail] = useState('');
   const [message, setMessage] = useState('');
@@ -54,7 +67,11 @@ function BuyerActionPanel({
       return;
     }
     if ((mode === 'question' || mode === 'proof-requested') && !message.trim()) {
-      setStatusText(mode === 'proof-requested' ? 'Describe the document you want to review.' : 'Enter your question for the seller.');
+      setStatusText(
+        mode === 'proof-requested'
+          ? 'Describe the document you want to review.'
+          : 'Enter your question for the seller.',
+      );
       return;
     }
     setSubmitting(true);
@@ -64,14 +81,20 @@ function BuyerActionPanel({
       onLocalLog({
         kind: mode,
         actor: buyerName.trim(),
-        note: [message.trim(), buyerEmail.trim() ? `Contact: ${buyerEmail.trim()}` : ''].filter(Boolean).join(' — ') || undefined,
+        note:
+          [message.trim(), buyerEmail.trim() ? `Contact: ${buyerEmail.trim()}` : ''].filter(Boolean).join(' — ') ||
+          undefined,
         amount: mode === 'offer' ? offerAmount : undefined,
       });
       if (mode === 'packet-downloaded') {
         onDownloadPacket();
       }
       setSubmitting(false);
-      setStatusText(mode === 'packet-downloaded' ? 'Buyer packet downloaded and seller notified.' : 'Delivered to the seller. They will respond using your contact details.');
+      setStatusText(
+        mode === 'packet-downloaded'
+          ? 'Buyer packet downloaded and seller notified.'
+          : 'Delivered to the seller. They will respond using your contact details.',
+      );
       setMode(null);
       return;
     }
@@ -111,19 +134,44 @@ function BuyerActionPanel({
   return (
     <Panel eyebrow="Interested?" title="Contact the seller">
       <div className="flex flex-wrap gap-2" role="group" aria-label="Buyer actions">
-        <Button variant={mode === 'packet-downloaded' ? 'default' : 'outline'} size="sm" type="button" onClick={() => setMode('packet-downloaded')}>
+        <Button
+          variant={mode === 'packet-downloaded' ? 'default' : 'outline'}
+          size="sm"
+          type="button"
+          onClick={() => setMode('packet-downloaded')}
+        >
           Download buyer packet
         </Button>
-        <Button variant={mode === 'question' ? 'default' : 'outline'} size="sm" type="button" onClick={() => setMode('question')}>
+        <Button
+          variant={mode === 'question' ? 'default' : 'outline'}
+          size="sm"
+          type="button"
+          onClick={() => setMode('question')}
+        >
           Ask a question
         </Button>
-        <Button variant={mode === 'call-requested' ? 'default' : 'outline'} size="sm" type="button" onClick={() => setMode('call-requested')}>
+        <Button
+          variant={mode === 'call-requested' ? 'default' : 'outline'}
+          size="sm"
+          type="button"
+          onClick={() => setMode('call-requested')}
+        >
           Request a call
         </Button>
-        <Button variant={mode === 'proof-requested' ? 'default' : 'outline'} size="sm" type="button" onClick={() => setMode('proof-requested')}>
+        <Button
+          variant={mode === 'proof-requested' ? 'default' : 'outline'}
+          size="sm"
+          type="button"
+          onClick={() => setMode('proof-requested')}
+        >
           Request document
         </Button>
-        <Button variant={mode === 'offer' ? 'default' : 'outline'} size="sm" type="button" onClick={() => setMode('offer')}>
+        <Button
+          variant={mode === 'offer' ? 'default' : 'outline'}
+          size="sm"
+          type="button"
+          onClick={() => setMode('offer')}
+        >
           Submit an offer
         </Button>
       </div>
@@ -131,36 +179,83 @@ function BuyerActionPanel({
         <FieldGroup className="mt-3 grid gap-3 md:grid-cols-2">
           <Field>
             <FieldLabel htmlFor="buyer-name">Your name</FieldLabel>
-            <Input id="buyer-name" value={buyerName} onChange={(event) => setBuyerName(event.target.value)} placeholder="John Smith" />
+            <Input
+              id="buyer-name"
+              value={buyerName}
+              onChange={(event) => setBuyerName(event.target.value)}
+              placeholder="John Smith"
+            />
           </Field>
           <Field>
             <FieldLabel htmlFor="buyer-contact">Email or phone</FieldLabel>
-            <Input id="buyer-contact" value={buyerEmail} onChange={(event) => setBuyerEmail(event.target.value)} placeholder="you@example.com" />
+            <Input
+              id="buyer-contact"
+              value={buyerEmail}
+              onChange={(event) => setBuyerEmail(event.target.value)}
+              placeholder="you@example.com"
+            />
           </Field>
           {mode === 'offer' && (
             <Field>
               <FieldLabel htmlFor="buyer-offer">Offer amount (USD)</FieldLabel>
-              <Input id="buyer-offer" type="number" min="1" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="15000" />
+              <Input
+                id="buyer-offer"
+                type="number"
+                min="1"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                placeholder="15000"
+              />
             </Field>
           )}
           <Field className="md:col-span-2">
-            <FieldLabel htmlFor="buyer-message">{mode === 'question' ? 'Your question' : mode === 'proof-requested' ? 'Document requested' : mode === 'offer' ? 'Terms or notes (optional)' : mode === 'packet-downloaded' ? 'Note for seller (optional)' : 'Best time to call'}</FieldLabel>
+            <FieldLabel htmlFor="buyer-message">
+              {mode === 'question'
+                ? 'Your question'
+                : mode === 'proof-requested'
+                  ? 'Document requested'
+                  : mode === 'offer'
+                    ? 'Terms or notes (optional)'
+                    : mode === 'packet-downloaded'
+                      ? 'Note for seller (optional)'
+                      : 'Best time to call'}
+            </FieldLabel>
             <Input
               id="buyer-message"
               value={message}
               onChange={(event) => setMessage(event.target.value)}
-              placeholder={mode === 'question' ? 'Is she up to date on vaccinations?' : mode === 'proof-requested' ? 'Current Coggins and registration certificate' : mode === 'packet-downloaded' ? 'I am reviewing this with my trainer.' : 'Weekday afternoons'}
+              placeholder={
+                mode === 'question'
+                  ? 'Is she up to date on vaccinations?'
+                  : mode === 'proof-requested'
+                    ? 'Current Coggins and registration certificate'
+                    : mode === 'packet-downloaded'
+                      ? 'I am reviewing this with my trainer.'
+                      : 'Weekday afternoons'
+              }
             />
           </Field>
           <div className="flex flex-wrap gap-2 md:col-span-2">
             <Button type="button" disabled={submitting} onClick={() => void submit()}>
-              {submitting ? 'Sending...' : mode === 'packet-downloaded' ? 'Download packet' : mode === 'offer' ? 'Send offer to seller' : 'Send to seller'}
+              {submitting
+                ? 'Sending...'
+                : mode === 'packet-downloaded'
+                  ? 'Download packet'
+                  : mode === 'offer'
+                    ? 'Send offer to seller'
+                    : 'Send to seller'}
             </Button>
-            <Button variant="ghost" type="button" onClick={() => setMode(null)}>Cancel</Button>
+            <Button variant="ghost" type="button" onClick={() => setMode(null)}>
+              Cancel
+            </Button>
           </div>
         </FieldGroup>
       )}
-      {statusText && <p className="panel__description" role="status" style={{ marginTop: 10 }}>{statusText}</p>}
+      {statusText && (
+        <p className="panel__description" role="status" style={{ marginTop: 10 }}>
+          {statusText}
+        </p>
+      )}
     </Panel>
   );
 }
@@ -171,7 +266,9 @@ export default function BuyerProfile() {
   const localHorse = useHorseRecord(id);
   const pushToast = useUiStore((state) => state.pushToast);
   const documentsInWorkspace = useXbarStore((state) => state.documents);
-  const localSharedListing = useXbarStore((state) => state.sharedListings.find((listing) => listing.horseId === id && listing.state !== 'Archived'));
+  const localSharedListing = useXbarStore((state) =>
+    state.sharedListings.find((listing) => listing.horseId === id && listing.state !== 'Archived'),
+  );
   const logBuyerRoomEvent = useXbarStore((state) => state.logBuyerRoomEvent);
   const shareToken = searchParams.get('t')?.trim() ?? '';
   const localPreviewAllowed = isPublicShareLocalPreviewEnabled() && searchParams.get('preview') === 'local';
@@ -267,17 +364,27 @@ export default function BuyerProfile() {
   useEffect(() => {
     if (!horse) return;
     const title = `${horse.name} — XBAR Horse Profile`;
-    const description = [horse.breed, horse.sex, horse.age > 0 ? `${horse.age} yrs` : null, horse.color].filter(Boolean).join(' · ');
+    const description = [horse.breed, horse.sex, horse.age > 0 ? `${horse.age} yrs` : null, horse.color]
+      .filter(Boolean)
+      .join(' · ');
     const image = horse.profileImage || horse.gallery?.[0]?.url || '';
 
     const setMeta = (property: string, content: string) => {
       let el = document.querySelector<HTMLMetaElement>(`meta[property="${property}"]`);
-      if (!el) { el = document.createElement('meta'); el.setAttribute('property', property); document.head.appendChild(el); }
+      if (!el) {
+        el = document.createElement('meta');
+        el.setAttribute('property', property);
+        document.head.appendChild(el);
+      }
       el.setAttribute('content', content);
     };
     const setNameMeta = (name: string, content: string) => {
       let el = document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`);
-      if (!el) { el = document.createElement('meta'); el.setAttribute('name', name); document.head.appendChild(el); }
+      if (!el) {
+        el = document.createElement('meta');
+        el.setAttribute('name', name);
+        document.head.appendChild(el);
+      }
       el.setAttribute('content', content);
     };
 
@@ -292,22 +399,26 @@ export default function BuyerProfile() {
     setNameMeta('twitter:description', description);
     if (image) setNameMeta('twitter:image', image);
 
-    return () => { document.title = 'XBAR'; };
+    return () => {
+      document.title = 'XBAR';
+    };
   }, [horse]);
   const documents = resolvedPayload?.documents ?? [];
   const sharedListing = resolvedPayload?.sharedListing;
 
   if (!horse) {
-    const title = remoteState.status === 'loading'
-      ? 'Loading sale packet'
-      : localPreviewAllowed && localHorse && localSharedListing
-        ? 'Share link locked'
-        : 'Sale profile unavailable';
-    const description = remoteState.status === 'loading'
-      ? 'Loading listing and packet data.'
-      : localPreviewAllowed && localHorse && localSharedListing && !localAccessAllowed
-        ? 'This sale packet requires a valid access link from the ranch.'
-        : remoteState.message ?? 'Record not found in this workspace.';
+    const title =
+      remoteState.status === 'loading'
+        ? 'Loading sale packet'
+        : localPreviewAllowed && localHorse && localSharedListing
+          ? 'Share link locked'
+          : 'Sale profile unavailable';
+    const description =
+      remoteState.status === 'loading'
+        ? 'Loading listing and packet data.'
+        : localPreviewAllowed && localHorse && localSharedListing && !localAccessAllowed
+          ? 'This sale packet requires a valid access link from the ranch.'
+          : (remoteState.message ?? 'Record not found in this workspace.');
 
     return (
       <main className="buyer-shell">
@@ -328,24 +439,37 @@ export default function BuyerProfile() {
   // Cast to satisfy the helper signature — only uses the fields present in PublicHorseDTO.
   // Inject empty alerts — PublicHorseDTO omits them intentionally; the packet
   // scorer needs the field but buyers must never see internal alert data.
-  const packet = buildHorsePacketCompleteness({ ...horse, alerts: [] } as unknown as Parameters<typeof buildHorsePacketCompleteness>[0], documents as Parameters<typeof buildHorsePacketCompleteness>[1], undefined);
+  const packet = buildHorsePacketCompleteness(
+    { ...horse, alerts: [] } as unknown as Parameters<typeof buildHorsePacketCompleteness>[0],
+    documents as Parameters<typeof buildHorsePacketCompleteness>[1],
+    undefined,
+  );
   const publicShareToken = sharedListing?.accessMode === 'Private Token' ? sharedListing.shareToken : undefined;
   const publicShareUrl = buildPublicShareUrl(packet.sharePath, publicShareToken);
   const visibleDocuments = documents
     .map((document) => ({
       document,
-      trust: buildDocumentTrustProfile(document as Parameters<typeof buildDocumentTrustProfile>[0], horse ? [horse as Parameters<typeof buildDocumentTrustProfile>[1][0]] : []),
+      trust: buildDocumentTrustProfile(
+        document as Parameters<typeof buildDocumentTrustProfile>[0],
+        horse ? [horse as Parameters<typeof buildDocumentTrustProfile>[1][0]] : [],
+      ),
     }))
     .filter(({ trust }) => trust.readyForProfile);
-  const salePhotoAssets = horse.gallery.filter(
-    (asset) => asset.status === 'Approved' && (asset.kind === 'Hero' || asset.kind === 'Conformation' || asset.kind === 'Sale Still'),
-  ).slice(0, 4);
+  const salePhotoAssets = horse.gallery
+    .filter(
+      (asset) =>
+        asset.status === 'Approved' &&
+        (asset.kind === 'Hero' || asset.kind === 'Conformation' || asset.kind === 'Sale Still'),
+    )
+    .slice(0, 4);
   const downloadBuyerPacket = () => {
-    downloadPublicBuyerPacketArtifact(buildPublicBuyerPacketArtifact({
-      horse,
-      documents: visibleDocuments.map(({ document }) => document),
-      sharedListing,
-    }));
+    downloadPublicBuyerPacketArtifact(
+      buildPublicBuyerPacketArtifact({
+        horse,
+        documents: visibleDocuments.map(({ document }) => document),
+        sharedListing,
+      }),
+    );
   };
 
   return (
@@ -379,7 +503,12 @@ export default function BuyerProfile() {
               </Pill>
             </div>
             <div className="inline-actions">
-              <a className="button button--ghost button--compact" href={publicShareUrl} target="_blank" rel="noreferrer">
+              <a
+                className="button button--ghost button--compact"
+                href={publicShareUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
                 Open public view
               </a>
               <button
@@ -412,13 +541,13 @@ export default function BuyerProfile() {
         </section>
 
         <div className="metric-grid">
-          <MetricCard label="Record Complete" value={formatPercent(packet.score)} detail={packet.trustSummary} tone={packet.tone} />
           <MetricCard
-            label="Inquiry count"
-            value="—"
-            detail="Buyer posture not disclosed"
-            tone="slate"
+            label="Record Complete"
+            value={formatPercent(packet.score)}
+            detail={packet.trustSummary}
+            tone={packet.tone}
           />
+          <MetricCard label="Inquiry count" value="—" detail="Buyer posture not disclosed" tone="slate" />
           <MetricCard
             label="Verified documents"
             value={`${visibleDocuments.length}`}
@@ -440,8 +569,18 @@ export default function BuyerProfile() {
           onDownloadPacket={downloadBuyerPacket}
           onLocalLog={(input) => {
             if (id) {
-              logBuyerRoomEvent({ horseId: id, kind: input.kind, actor: input.actor, note: input.note, amount: input.amount });
-              pushToast({ title: 'Buyer activity logged', message: 'This buyer action is now in Buyer follow-up.', tone: 'success' });
+              logBuyerRoomEvent({
+                horseId: id,
+                kind: input.kind,
+                actor: input.actor,
+                note: input.note,
+                amount: input.amount,
+              });
+              pushToast({
+                title: 'Buyer activity logged',
+                message: 'This buyer action is now in Buyer follow-up.',
+                tone: 'success',
+              });
             }
           }}
         />
@@ -454,12 +593,15 @@ export default function BuyerProfile() {
           <Panel eyebrow="Horse profile" title="Profile">
             <div className="key-grid key-grid--wide">
               {horse.registry || horse.registrationNumber ? (
-                <KeyValue label="Registry" value={`${horse.registry}${horse.registrationNumber ? ` · ${horse.registrationNumber}` : ''}`} />
+                <KeyValue
+                  label="Registry"
+                  value={`${horse.registry}${horse.registrationNumber ? ` · ${horse.registrationNumber}` : ''}`}
+                />
               ) : null}
               <KeyValue label="Breed / sex" value={[horse.breed, horse.sex].filter(Boolean).join(' · ') || '—'} />
               {horse.age > 0 ? <KeyValue label="Age" value={`${horse.age}`} /> : null}
               {horse.color ? <KeyValue label="Color" value={horse.color} /> : null}
-              {(horse.bloodline.sire || horse.bloodline.dam) ? (
+              {horse.bloodline.sire || horse.bloodline.dam ? (
                 <KeyValue label="Bloodline" value={`${horse.bloodline.sire || '—'} / ${horse.bloodline.dam || '—'}`} />
               ) : null}
               {horse.bloodline.family ? <KeyValue label="Family" value={horse.bloodline.family} /> : null}
@@ -484,7 +626,11 @@ export default function BuyerProfile() {
                   </div>
                 ))
               ) : (
-                <EmptyState compact title="No approved docs" description="No linked files clear the buyer-ready threshold yet." />
+                <EmptyState
+                  compact
+                  title="No approved docs"
+                  description="No linked files clear the buyer-ready threshold yet."
+                />
               )}
             </div>
           </Panel>
@@ -506,14 +652,37 @@ export default function BuyerProfile() {
                 ))}
               </div>
             ) : (
-              <EmptyState compact title="No AQHA photos" description="Add approved hero and conformation photos before sharing." />
+              <EmptyState
+                compact
+                title="No AQHA photos"
+                description="Add approved hero and conformation photos before sharing."
+              />
             )}
           </Panel>
         </div>
-      <footer style={{ textAlign: 'center', padding: '24px 0 8px', color: 'rgba(100,130,160,0.45)', fontSize: '11px', letterSpacing: '0.06em' }}>
-        <p>© {new Date().getFullYear()} XBAR LLC™ · Information provided by seller. Buyer is responsible for independent verification of registration and health status.</p>
-        <p style={{ marginTop: '6px' }}><a href='/terms' style={{ color: 'rgba(100,140,180,0.45)', textDecoration: 'none' }}>Terms</a> · <a href='/privacy' style={{ color: 'rgba(100,140,180,0.45)', textDecoration: 'none' }}>Privacy</a></p>
-      </footer>
+        <footer
+          style={{
+            textAlign: 'center',
+            padding: '24px 0 8px',
+            color: 'rgba(100,130,160,0.45)',
+            fontSize: '11px',
+            letterSpacing: '0.06em',
+          }}
+        >
+          <p>
+            © {new Date().getFullYear()} XBAR LLC™ · Information provided by seller. Buyer is responsible for
+            independent verification of registration and health status.
+          </p>
+          <p style={{ marginTop: '6px' }}>
+            <a href="/terms" style={{ color: 'rgba(100,140,180,0.45)', textDecoration: 'none' }}>
+              Terms
+            </a>{' '}
+            ·{' '}
+            <a href="/privacy" style={{ color: 'rgba(100,140,180,0.45)', textDecoration: 'none' }}>
+              Privacy
+            </a>
+          </p>
+        </footer>
       </div>
     </main>
   );

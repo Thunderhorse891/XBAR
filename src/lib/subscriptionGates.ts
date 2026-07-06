@@ -10,7 +10,11 @@ export function sharedListingGate(subscription: SubscriptionProfile) {
     : 'Sale listings are available on Professional and higher plans. Upgrade to publish buyer-ready horse profiles.';
 }
 
-export function documentIntakeGate(subscription: SubscriptionProfile, currentDocumentCount: number, incomingDocumentCount: number) {
+export function documentIntakeGate(
+  subscription: SubscriptionProfile,
+  currentDocumentCount: number,
+  incomingDocumentCount: number,
+) {
   const nextCount = currentDocumentCount + incomingDocumentCount;
   return nextCount <= subscription.usage.documentLimit
     ? null
@@ -22,13 +26,17 @@ export function horseCreationGate(subscription: SubscriptionProfile, currentHors
 }
 
 export function packetExportGate(subscription: SubscriptionProfile) {
-  return featureGate(subscription, 'packetExport')
-    ?? usageGate('Sale packet', subscription.usage.salePacketsGenerated, subscription.usage.salePacketLimit);
+  return (
+    featureGate(subscription, 'packetExport') ??
+    usageGate('Sale packet', subscription.usage.salePacketsGenerated, subscription.usage.salePacketLimit)
+  );
 }
 
 export function teamInviteGate(subscription: SubscriptionProfile) {
-  return featureGate(subscription, 'teamInvites')
-    ?? usageGate('Team seat', subscription.usage.seatsUsed, subscription.usage.seatLimit);
+  return (
+    featureGate(subscription, 'teamInvites') ??
+    usageGate('Team seat', subscription.usage.seatsUsed, subscription.usage.seatLimit)
+  );
 }
 
 export function breedingRevenueGate(subscription: SubscriptionProfile) {

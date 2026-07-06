@@ -86,7 +86,9 @@ export function buildOperationalValuePulse(input: OperationalValuePulseInput): O
     {
       label: 'Transfer control',
       value: input.transferGapCount ? plural(input.transferGapCount, 'gap') : 'Clear',
-      detail: input.transferGapCount ? 'Ownership or transfer support needs resolution' : 'No ownership or transfer gaps detected',
+      detail: input.transferGapCount
+        ? 'Ownership or transfer support needs resolution'
+        : 'No ownership or transfer gaps detected',
       state: input.transferGapCount ? 'risk' : 'positive',
       path: '/ownership',
     },

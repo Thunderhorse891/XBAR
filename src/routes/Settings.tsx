@@ -2,7 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { PageHeader, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
-import { isBillingConfigured, isFacebookSharingConfigured, isRelationalCloudEnabled, isSupabaseConfigured, isSnapshotFallbackEnabled } from '@/lib/platformConfig';
+import {
+  isBillingConfigured,
+  isFacebookSharingConfigured,
+  isRelationalCloudEnabled,
+  isSupabaseConfigured,
+  isSnapshotFallbackEnabled,
+} from '@/lib/platformConfig';
 import { isBrowserOnline } from '@/lib/offlineRuntime';
 import { workspaceStorageDriverLabel } from '@/lib/workspaceStorage';
 import { useCloudStore } from '@/store/useCloudStore';
@@ -15,8 +21,10 @@ function roleLabel(role: UserRole) {
 }
 
 function roleValue(role: UserRole) {
-  if (role === 'Admin') return 'Full workspace control, billing, records, users, imports, exports, and final approvals.';
-  if (role === 'Ranch Manager') return 'Daily operating control for care, documents, horses, expenses, assets, and team workflow.';
+  if (role === 'Admin')
+    return 'Full workspace control, billing, records, users, imports, exports, and final approvals.';
+  if (role === 'Ranch Manager')
+    return 'Daily operating control for care, documents, horses, expenses, assets, and team workflow.';
   if (role === 'Owner') return 'Client-facing access for assigned horse records and approved shared materials only.';
   if (role === 'Medical Lead') return 'Care, treatment, vet record, Coggins, medication, and medical timeline control.';
   if (role === 'Sales Lead') return 'Buyer follow-up, sale profiles, inquiries, listings, and shared buyer packets.';
@@ -94,7 +102,11 @@ export default function Settings() {
     try {
       const text = await file.text();
       const result = importWorkspaceBackup(JSON.parse(text));
-      pushToast({ title: result.ok ? 'Backup imported' : 'Import blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+      pushToast({
+        title: result.ok ? 'Backup imported' : 'Import blocked',
+        message: result.message,
+        tone: result.ok ? 'success' : 'error',
+      });
     } catch {
       pushToast({ title: 'Import failed', message: 'Choose a valid XBAR backup JSON file.', tone: 'error' });
     } finally {
@@ -107,25 +119,40 @@ export default function Settings() {
       pushToast({ title: 'Profile not saved', message: 'Business name and ranch name are required.', tone: 'error' });
       return;
     }
-    if (profileDraft.operationsEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profileDraft.operationsEmail.trim())) {
+    if (
+      profileDraft.operationsEmail.trim() &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profileDraft.operationsEmail.trim())
+    ) {
       pushToast({ title: 'Profile not saved', message: 'Operations email must be a valid address.', tone: 'error' });
       return;
     }
     const result = updateWorkspaceProfile(profileDraft);
-    pushToast({ title: result.ok ? 'Profile saved' : 'Profile not saved', message: result.message, tone: result.ok ? 'success' : 'error' });
+    pushToast({
+      title: result.ok ? 'Profile saved' : 'Profile not saved',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
   };
 
   const handleSendMagicLink = async () => {
     setCloudBusy(true);
     const result = await sendMagicLink(authEmail);
-    pushToast({ title: result.ok ? 'Magic link sent' : 'Sign-in blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+    pushToast({
+      title: result.ok ? 'Magic link sent' : 'Sign-in blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
     setCloudBusy(false);
   };
 
   const handlePushCloud = async () => {
     setCloudBusy(true);
     const result = await saveWorkspaceBackupToCloud(exportWorkspaceBackup());
-    pushToast({ title: result.ok ? 'Cloud sync complete' : 'Cloud sync failed', message: result.message, tone: result.ok ? 'success' : 'error' });
+    pushToast({
+      title: result.ok ? 'Cloud sync complete' : 'Cloud sync failed',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
     if (result.ok && result.updatedAt) setLastCloudSyncAt(result.updatedAt);
     setCloudBusy(false);
   };
@@ -139,7 +166,11 @@ export default function Settings() {
       return;
     }
     const result = importWorkspaceBackup(remote.backup);
-    pushToast({ title: result.ok ? 'Cloud workspace loaded' : 'Cloud import blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+    pushToast({
+      title: result.ok ? 'Cloud workspace loaded' : 'Cloud import blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
     if (result.ok && remote.updatedAt) setLastCloudSyncAt(remote.updatedAt);
     setCloudBusy(false);
   };
@@ -147,20 +178,32 @@ export default function Settings() {
   const handleSignOutCloud = async () => {
     setCloudBusy(true);
     const result = await signOutCloud();
-    pushToast({ title: result.ok ? 'Signed out' : 'Sign-out failed', message: result.message, tone: result.ok ? 'success' : 'error' });
+    pushToast({
+      title: result.ok ? 'Signed out' : 'Sign-out failed',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
     setCloudBusy(false);
   };
 
   const handleFacebookConnect = async () => {
     setCloudBusy(true);
     const result = await signInWithFacebook();
-    pushToast({ title: result.ok ? 'Facebook connect started' : 'Facebook connect failed', message: result.message, tone: result.ok ? 'success' : 'error' });
+    pushToast({
+      title: result.ok ? 'Facebook connect started' : 'Facebook connect failed',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
     setCloudBusy(false);
   };
 
   const handleInviteMember = async () => {
     const result = await inviteWorkspaceMember(inviteEmail, inviteRole);
-    pushToast({ title: result.ok ? 'Invite created' : 'Invite blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+    pushToast({
+      title: result.ok ? 'Invite created' : 'Invite blocked',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
     if (result.ok) {
       setInviteEmail('');
       setInviteRole('Owner');
@@ -175,12 +218,25 @@ export default function Settings() {
         <Panel eyebrow="Access model" title="Commercial barn permissions">
           <div className="stack-list">
             <div className="stack-item">
-              <div className="stack-item__top"><div className="stack-item__title">Role-based access protects the business model</div><Pill tone="blue">Multi-user</Pill></div>
-              <div className="stack-item__copy">Owners, vets, medical leads, sales leads, and staff should never need full admin access. XBAR separates workspace control from horse/client-facing access so commercial barns can invite people without exposing the whole operation.</div>
+              <div className="stack-item__top">
+                <div className="stack-item__title">Role-based access protects the business model</div>
+                <Pill tone="blue">Multi-user</Pill>
+              </div>
+              <div className="stack-item__copy">
+                Owners, vets, medical leads, sales leads, and staff should never need full admin access. XBAR separates
+                workspace control from horse/client-facing access so commercial barns can invite people without exposing
+                the whole operation.
+              </div>
             </div>
             <div className="stack-item">
-              <div className="stack-item__top"><div className="stack-item__title">Offline-capable browser workspace</div><Pill tone={online ? 'emerald' : 'amber'}>{online ? 'Online' : 'Offline'}</Pill></div>
-              <div className="stack-item__copy">The app registers an offline shell and keeps local workspace data available in the browser. Barn staff can keep working through poor signal, then use cloud sync when service is available.</div>
+              <div className="stack-item__top">
+                <div className="stack-item__title">Offline-capable browser workspace</div>
+                <Pill tone={online ? 'emerald' : 'amber'}>{online ? 'Online' : 'Offline'}</Pill>
+              </div>
+              <div className="stack-item__copy">
+                The app registers an offline shell and keeps local workspace data available in the browser. Barn staff
+                can keep working through poor signal, then use cloud sync when service is available.
+              </div>
             </div>
           </div>
         </Panel>
@@ -189,45 +245,541 @@ export default function Settings() {
           {isSupabaseConfigured() ? (
             cloudSession ? (
               <>
-                <div className="stack-list"><div className="stack-item"><div className="stack-item__top"><div className="stack-item__title">{cloudSession.user.email ?? 'Signed-in user'}</div><div className="status-inline"><Pill tone="emerald">{cloudStatus === 'signed-in' ? 'Connected' : 'Ready'}</Pill><Pill tone={cloudSyncState === 'error' ? 'rose' : cloudSyncState === 'syncing' ? 'amber' : 'blue'}>{cloudSyncState === 'syncing' ? 'Syncing' : cloudSyncState === 'error' ? 'Sync issue' : 'Autosave on'}</Pill></div></div><div className="inline-metrics"><span>{workspaceId ? `Ranch ${workspaceId.slice(0, 8)}` : `User ${cloudSession.user.id.slice(0, 8)}`}</span><span>{lastCloudSyncAt ? `Last sync ${formatDateLabel(lastCloudSyncAt)}` : 'No cloud sync yet'}</span><span>{cloudSyncState === 'syncing' ? 'Saving relational records' : cloudSyncState === 'error' ? 'Needs retry' : 'Watching workspace changes'}</span></div></div></div>
-                <div className="inline-actions"><button className="button button--primary button--compact" type="button" onClick={handlePushCloud} disabled={!canSyncCloud || cloudBusy}>{cloudBusy ? 'Working...' : 'Push cloud'}</button><button className="button button--ghost button--compact" type="button" onClick={handlePullCloud} disabled={!canSyncCloud || cloudBusy}>Pull cloud</button><button className="button button--ghost button--compact" type="button" onClick={handleSignOutCloud} disabled={!canSyncCloud || cloudBusy}>Sign out</button></div>
+                <div className="stack-list">
+                  <div className="stack-item">
+                    <div className="stack-item__top">
+                      <div className="stack-item__title">{cloudSession.user.email ?? 'Signed-in user'}</div>
+                      <div className="status-inline">
+                        <Pill tone="emerald">{cloudStatus === 'signed-in' ? 'Connected' : 'Ready'}</Pill>
+                        <Pill
+                          tone={cloudSyncState === 'error' ? 'rose' : cloudSyncState === 'syncing' ? 'amber' : 'blue'}
+                        >
+                          {cloudSyncState === 'syncing'
+                            ? 'Syncing'
+                            : cloudSyncState === 'error'
+                              ? 'Sync issue'
+                              : 'Autosave on'}
+                        </Pill>
+                      </div>
+                    </div>
+                    <div className="inline-metrics">
+                      <span>
+                        {workspaceId ? `Ranch ${workspaceId.slice(0, 8)}` : `User ${cloudSession.user.id.slice(0, 8)}`}
+                      </span>
+                      <span>
+                        {lastCloudSyncAt ? `Last sync ${formatDateLabel(lastCloudSyncAt)}` : 'No cloud sync yet'}
+                      </span>
+                      <span>
+                        {cloudSyncState === 'syncing'
+                          ? 'Saving relational records'
+                          : cloudSyncState === 'error'
+                            ? 'Needs retry'
+                            : 'Watching workspace changes'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="inline-actions">
+                  <button
+                    className="button button--primary button--compact"
+                    type="button"
+                    onClick={handlePushCloud}
+                    disabled={!canSyncCloud || cloudBusy}
+                  >
+                    {cloudBusy ? 'Working...' : 'Push cloud'}
+                  </button>
+                  <button
+                    className="button button--ghost button--compact"
+                    type="button"
+                    onClick={handlePullCloud}
+                    disabled={!canSyncCloud || cloudBusy}
+                  >
+                    Pull cloud
+                  </button>
+                  <button
+                    className="button button--ghost button--compact"
+                    type="button"
+                    onClick={handleSignOutCloud}
+                    disabled={!canSyncCloud || cloudBusy}
+                  >
+                    Sign out
+                  </button>
+                </div>
               </>
             ) : (
-              <><div className="form-grid form-grid--tight"><label className="field-stack"><span className="field-label">Email</span><input className="field-input" type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} disabled={!canSyncCloud} /></label></div><div className="inline-actions"><button className="button button--primary button--compact" type="button" onClick={handleSendMagicLink} disabled={!canSyncCloud || cloudBusy || !authEmail.trim()}>{cloudBusy ? 'Sending...' : 'Send magic link'}</button></div></>
+              <>
+                <div className="form-grid form-grid--tight">
+                  <label className="field-stack">
+                    <span className="field-label">Email</span>
+                    <input
+                      className="field-input"
+                      type="email"
+                      value={authEmail}
+                      onChange={(event) => setAuthEmail(event.target.value)}
+                      disabled={!canSyncCloud}
+                    />
+                  </label>
+                </div>
+                <div className="inline-actions">
+                  <button
+                    className="button button--primary button--compact"
+                    type="button"
+                    onClick={handleSendMagicLink}
+                    disabled={!canSyncCloud || cloudBusy || !authEmail.trim()}
+                  >
+                    {cloudBusy ? 'Sending...' : 'Send magic link'}
+                  </button>
+                </div>
+              </>
             )
-          ) : <div className="bullet-list"><div className="bullet-list__item">Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to turn on cloud auth and sync.</div><div className="bullet-list__item">Until then, this ranch data stays local to this browser.</div></div>}
+          ) : (
+            <div className="bullet-list">
+              <div className="bullet-list__item">
+                Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to turn on cloud auth and sync.
+              </div>
+              <div className="bullet-list__item">Until then, this ranch data stays local to this browser.</div>
+            </div>
+          )}
         </Panel>
 
         <Panel eyebrow="Ranch profile" title="Profile">
           <div className="form-grid form-grid--tight">
-            <label className="field-stack"><span className="field-label">Business name</span><input className="field-input" value={profileDraft.businessName} onChange={(event) => setProfileDraft((current) => ({ ...current, businessName: event.target.value }))} disabled={!canManageSettings} /></label>
-            <label className="field-stack"><span className="field-label">Ranch name</span><input className="field-input" value={profileDraft.ranchName} onChange={(event) => setProfileDraft((current) => ({ ...current, ranchName: event.target.value }))} disabled={!canManageSettings} /></label>
-            <label className="field-stack"><span className="field-label">Default owner</span><input className="field-input" value={profileDraft.defaultOwnerName} onChange={(event) => setProfileDraft((current) => ({ ...current, defaultOwnerName: event.target.value }))} disabled={!canManageSettings} /></label>
-            <label className="field-stack"><span className="field-label">Default owner entity</span><input className="field-input" value={profileDraft.defaultOwnerEntity} onChange={(event) => setProfileDraft((current) => ({ ...current, defaultOwnerEntity: event.target.value }))} disabled={!canManageSettings} /></label>
-            <label className="field-stack"><span className="field-label">Ranch manager</span><input className="field-input" value={profileDraft.ranchManagerName} onChange={(event) => setProfileDraft((current) => ({ ...current, ranchManagerName: event.target.value }))} disabled={!canManageSettings} /></label>
-            <label className="field-stack"><span className="field-label">Default barn</span><input className="field-input" value={profileDraft.defaultBarn} onChange={(event) => setProfileDraft((current) => ({ ...current, defaultBarn: event.target.value }))} disabled={!canManageSettings} /></label>
-            <label className="field-stack"><span className="field-label">Default pasture</span><input className="field-input" value={profileDraft.defaultPasture} onChange={(event) => setProfileDraft((current) => ({ ...current, defaultPasture: event.target.value }))} disabled={!canManageSettings} /></label>
-            <label className="field-stack"><span className="field-label">Operations email</span><input className="field-input" value={profileDraft.operationsEmail} onChange={(event) => setProfileDraft((current) => ({ ...current, operationsEmail: event.target.value }))} disabled={!canManageSettings} /></label>
+            <label className="field-stack">
+              <span className="field-label">Business name</span>
+              <input
+                className="field-input"
+                value={profileDraft.businessName}
+                onChange={(event) => setProfileDraft((current) => ({ ...current, businessName: event.target.value }))}
+                disabled={!canManageSettings}
+              />
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Ranch name</span>
+              <input
+                className="field-input"
+                value={profileDraft.ranchName}
+                onChange={(event) => setProfileDraft((current) => ({ ...current, ranchName: event.target.value }))}
+                disabled={!canManageSettings}
+              />
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Default owner</span>
+              <input
+                className="field-input"
+                value={profileDraft.defaultOwnerName}
+                onChange={(event) =>
+                  setProfileDraft((current) => ({ ...current, defaultOwnerName: event.target.value }))
+                }
+                disabled={!canManageSettings}
+              />
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Default owner entity</span>
+              <input
+                className="field-input"
+                value={profileDraft.defaultOwnerEntity}
+                onChange={(event) =>
+                  setProfileDraft((current) => ({ ...current, defaultOwnerEntity: event.target.value }))
+                }
+                disabled={!canManageSettings}
+              />
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Ranch manager</span>
+              <input
+                className="field-input"
+                value={profileDraft.ranchManagerName}
+                onChange={(event) =>
+                  setProfileDraft((current) => ({ ...current, ranchManagerName: event.target.value }))
+                }
+                disabled={!canManageSettings}
+              />
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Default barn</span>
+              <input
+                className="field-input"
+                value={profileDraft.defaultBarn}
+                onChange={(event) => setProfileDraft((current) => ({ ...current, defaultBarn: event.target.value }))}
+                disabled={!canManageSettings}
+              />
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Default pasture</span>
+              <input
+                className="field-input"
+                value={profileDraft.defaultPasture}
+                onChange={(event) => setProfileDraft((current) => ({ ...current, defaultPasture: event.target.value }))}
+                disabled={!canManageSettings}
+              />
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Operations email</span>
+              <input
+                className="field-input"
+                value={profileDraft.operationsEmail}
+                onChange={(event) =>
+                  setProfileDraft((current) => ({ ...current, operationsEmail: event.target.value }))
+                }
+                disabled={!canManageSettings}
+              />
+            </label>
           </div>
-          <div className="inline-actions"><button className="button button--primary button--compact" type="button" onClick={handleProfileSave} disabled={!canManageSettings}>Save profile</button></div>
+          <div className="inline-actions">
+            <button
+              className="button button--primary button--compact"
+              type="button"
+              onClick={handleProfileSave}
+              disabled={!canManageSettings}
+            >
+              Save profile
+            </button>
+          </div>
         </Panel>
 
         <Panel eyebrow="Ranch access" title="Access">
-          <div className="stack-list"><div className="stack-item"><div className="stack-item__top"><div className="stack-item__title">Seats</div><div className="status-inline"><Pill tone={subscription.usage.seatsUsed >= subscription.usage.seatLimit ? 'rose' : 'blue'}>{subscription.usage.seatsUsed}/{subscription.usage.seatLimit}</Pill><Pill tone={subscription.usage.sharedAccessSeatsUsed >= subscription.usage.sharedAccessSeatLimit && subscription.usage.sharedAccessSeatLimit > 0 ? 'rose' : 'emerald'}>{subscription.usage.sharedAccessSeatsUsed}/{subscription.usage.sharedAccessSeatLimit} shared</Pill></div></div><div className="inline-metrics"><span>{activeMembers.length} active members</span><span>{pendingInvites.length} pending invites</span><span>{isSupabaseConfigured() ? 'Email sign-in accepts invites automatically' : 'Browser access can confirm invites manually'}</span></div></div></div>
-          <div className="form-grid form-grid--tight"><label className="field-stack"><span className="field-label">Invite email</span><input className="field-input" type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} disabled={!canManageSettings} /></label><label className="field-stack"><span className="field-label">Role</span><select className="field-input" value={inviteRole} onChange={(event) => setInviteRole(event.target.value as UserRole)} disabled={!canManageSettings}><option value="Admin">Admin</option><option value="Ranch Manager">Ranch Manager</option><option value="Owner">Horse Owner / Client</option><option value="Medical Lead">Medical Lead</option><option value="Sales Lead">Sales Lead</option></select></label></div>
-          <div className="stack-item"><div className="stack-item__title">Selected role: {roleLabel(inviteRole)}</div><div className="stack-item__copy">{roleValue(inviteRole)}</div></div>
-          <div className="inline-actions"><button className="button button--primary button--compact" type="button" onClick={handleInviteMember} disabled={!canManageSettings || !inviteEmail.trim()}>Invite member</button></div>
-          <div className="detail-grid"><div className="panel panel--nested"><div className="panel__header panel__header--compact"><div><div className="panel__eyebrow">Members</div><h3 className="panel__title">Active team</h3></div></div><div className="stack-list">{activeMembers.length ? activeMembers.map((member) => <div key={member.id} className="stack-item"><div className="stack-item__top"><div><div className="stack-item__title">{member.email}</div><div className="stack-item__copy">{roleLabel(member.role)} · {member.source === 'Owner' ? 'Ranch owner' : `Joined ${formatDateLabel(member.joinedAt)}`}</div></div><div className="status-inline"><Pill tone={member.role === 'Admin' ? 'blue' : member.role === 'Owner' ? 'emerald' : 'slate'}>{roleLabel(member.role)}</Pill><Pill tone="emerald">Active</Pill></div></div><div className="stack-item__copy">{roleValue(member.role)}</div><div className="inline-actions"><button className="button button--ghost button--compact" type="button" onClick={async () => { const result = await removeWorkspaceMember(member.id); pushToast({ title: result.ok ? 'Member removed' : 'Removal blocked', message: result.message, tone: result.ok ? 'success' : 'error' }); }} disabled={!canManageSettings}>Remove</button></div></div>) : <div className="stack-item"><div className="stack-item__copy">No active members yet.</div></div>}</div></div><div className="panel panel--nested"><div className="panel__header panel__header--compact"><div><div className="panel__eyebrow">Invites</div><h3 className="panel__title">Pending</h3></div></div><div className="stack-list">{pendingInvites.length ? pendingInvites.map((invite) => <div key={invite.id} className="stack-item"><div className="stack-item__top"><div><div className="stack-item__title">{invite.email}</div><div className="stack-item__copy">{roleLabel(invite.role)} · Sent {formatDateLabel(invite.invitedAt)}</div></div><Pill tone={invite.role === 'Owner' ? 'emerald' : 'blue'}>{roleLabel(invite.role)}</Pill></div><div className="stack-item__copy">{roleValue(invite.role)}</div><div className="stack-item__copy" style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--muted)', wordBreak: 'break-all' }}>Invite code: {invite.id}</div><div className="inline-actions"><button className="button button--ghost button--compact" type="button" onClick={() => { void navigator.clipboard.writeText(invite.id).then(() => { pushToast({ title: 'Invite code copied', message: 'Share this code with the invitee so they can join the workspace.', tone: 'success' }); }).catch(() => { pushToast({ title: 'Copy failed', message: 'Copy the invite code manually.', tone: 'error' }); }); }}>Copy code</button>{!isSupabaseConfigured() ? <button className="button button--ghost button--compact" type="button" onClick={() => { const result = activateWorkspaceInvitation(invite.id); pushToast({ title: result.ok ? 'Invite activated' : 'Activation blocked', message: result.message, tone: result.ok ? 'success' : 'error' }); }} disabled={!canManageSettings}>Mark joined</button> : null}<button className="button button--ghost button--compact" type="button" onClick={async () => { const result = await revokeWorkspaceInvitation(invite.id); pushToast({ title: result.ok ? 'Invite revoked' : 'Revoke blocked', message: result.message, tone: result.ok ? 'success' : 'error' }); }} disabled={!canManageSettings}>Revoke</button></div></div>) : <div className="stack-item"><div className="stack-item__copy">No invites are holding seats right now.</div></div>}</div></div></div>
+          <div className="stack-list">
+            <div className="stack-item">
+              <div className="stack-item__top">
+                <div className="stack-item__title">Seats</div>
+                <div className="status-inline">
+                  <Pill tone={subscription.usage.seatsUsed >= subscription.usage.seatLimit ? 'rose' : 'blue'}>
+                    {subscription.usage.seatsUsed}/{subscription.usage.seatLimit}
+                  </Pill>
+                  <Pill
+                    tone={
+                      subscription.usage.sharedAccessSeatsUsed >= subscription.usage.sharedAccessSeatLimit &&
+                      subscription.usage.sharedAccessSeatLimit > 0
+                        ? 'rose'
+                        : 'emerald'
+                    }
+                  >
+                    {subscription.usage.sharedAccessSeatsUsed}/{subscription.usage.sharedAccessSeatLimit} shared
+                  </Pill>
+                </div>
+              </div>
+              <div className="inline-metrics">
+                <span>{activeMembers.length} active members</span>
+                <span>{pendingInvites.length} pending invites</span>
+                <span>
+                  {isSupabaseConfigured()
+                    ? 'Email sign-in accepts invites automatically'
+                    : 'Browser access can confirm invites manually'}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="form-grid form-grid--tight">
+            <label className="field-stack">
+              <span className="field-label">Invite email</span>
+              <input
+                className="field-input"
+                type="email"
+                value={inviteEmail}
+                onChange={(event) => setInviteEmail(event.target.value)}
+                disabled={!canManageSettings}
+              />
+            </label>
+            <label className="field-stack">
+              <span className="field-label">Role</span>
+              <select
+                className="field-input"
+                value={inviteRole}
+                onChange={(event) => setInviteRole(event.target.value as UserRole)}
+                disabled={!canManageSettings}
+              >
+                <option value="Admin">Admin</option>
+                <option value="Ranch Manager">Ranch Manager</option>
+                <option value="Owner">Horse Owner / Client</option>
+                <option value="Medical Lead">Medical Lead</option>
+                <option value="Sales Lead">Sales Lead</option>
+              </select>
+            </label>
+          </div>
+          <div className="stack-item">
+            <div className="stack-item__title">Selected role: {roleLabel(inviteRole)}</div>
+            <div className="stack-item__copy">{roleValue(inviteRole)}</div>
+          </div>
+          <div className="inline-actions">
+            <button
+              className="button button--primary button--compact"
+              type="button"
+              onClick={handleInviteMember}
+              disabled={!canManageSettings || !inviteEmail.trim()}
+            >
+              Invite member
+            </button>
+          </div>
+          <div className="detail-grid">
+            <div className="panel panel--nested">
+              <div className="panel__header panel__header--compact">
+                <div>
+                  <div className="panel__eyebrow">Members</div>
+                  <h3 className="panel__title">Active team</h3>
+                </div>
+              </div>
+              <div className="stack-list">
+                {activeMembers.length ? (
+                  activeMembers.map((member) => (
+                    <div key={member.id} className="stack-item">
+                      <div className="stack-item__top">
+                        <div>
+                          <div className="stack-item__title">{member.email}</div>
+                          <div className="stack-item__copy">
+                            {roleLabel(member.role)} ·{' '}
+                            {member.source === 'Owner' ? 'Ranch owner' : `Joined ${formatDateLabel(member.joinedAt)}`}
+                          </div>
+                        </div>
+                        <div className="status-inline">
+                          <Pill tone={member.role === 'Admin' ? 'blue' : member.role === 'Owner' ? 'emerald' : 'slate'}>
+                            {roleLabel(member.role)}
+                          </Pill>
+                          <Pill tone="emerald">Active</Pill>
+                        </div>
+                      </div>
+                      <div className="stack-item__copy">{roleValue(member.role)}</div>
+                      <div className="inline-actions">
+                        <button
+                          className="button button--ghost button--compact"
+                          type="button"
+                          onClick={async () => {
+                            const result = await removeWorkspaceMember(member.id);
+                            pushToast({
+                              title: result.ok ? 'Member removed' : 'Removal blocked',
+                              message: result.message,
+                              tone: result.ok ? 'success' : 'error',
+                            });
+                          }}
+                          disabled={!canManageSettings}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="stack-item">
+                    <div className="stack-item__copy">No active members yet.</div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="panel panel--nested">
+              <div className="panel__header panel__header--compact">
+                <div>
+                  <div className="panel__eyebrow">Invites</div>
+                  <h3 className="panel__title">Pending</h3>
+                </div>
+              </div>
+              <div className="stack-list">
+                {pendingInvites.length ? (
+                  pendingInvites.map((invite) => (
+                    <div key={invite.id} className="stack-item">
+                      <div className="stack-item__top">
+                        <div>
+                          <div className="stack-item__title">{invite.email}</div>
+                          <div className="stack-item__copy">
+                            {roleLabel(invite.role)} · Sent {formatDateLabel(invite.invitedAt)}
+                          </div>
+                        </div>
+                        <Pill tone={invite.role === 'Owner' ? 'emerald' : 'blue'}>{roleLabel(invite.role)}</Pill>
+                      </div>
+                      <div className="stack-item__copy">{roleValue(invite.role)}</div>
+                      <div
+                        className="stack-item__copy"
+                        style={{
+                          fontFamily: 'monospace',
+                          fontSize: '12px',
+                          color: 'var(--muted)',
+                          wordBreak: 'break-all',
+                        }}
+                      >
+                        Invite code: {invite.id}
+                      </div>
+                      <div className="inline-actions">
+                        <button
+                          className="button button--ghost button--compact"
+                          type="button"
+                          onClick={() => {
+                            void navigator.clipboard
+                              .writeText(invite.id)
+                              .then(() => {
+                                pushToast({
+                                  title: 'Invite code copied',
+                                  message: 'Share this code with the invitee so they can join the workspace.',
+                                  tone: 'success',
+                                });
+                              })
+                              .catch(() => {
+                                pushToast({
+                                  title: 'Copy failed',
+                                  message: 'Copy the invite code manually.',
+                                  tone: 'error',
+                                });
+                              });
+                          }}
+                        >
+                          Copy code
+                        </button>
+                        {!isSupabaseConfigured() ? (
+                          <button
+                            className="button button--ghost button--compact"
+                            type="button"
+                            onClick={() => {
+                              const result = activateWorkspaceInvitation(invite.id);
+                              pushToast({
+                                title: result.ok ? 'Invite activated' : 'Activation blocked',
+                                message: result.message,
+                                tone: result.ok ? 'success' : 'error',
+                              });
+                            }}
+                            disabled={!canManageSettings}
+                          >
+                            Mark joined
+                          </button>
+                        ) : null}
+                        <button
+                          className="button button--ghost button--compact"
+                          type="button"
+                          onClick={async () => {
+                            const result = await revokeWorkspaceInvitation(invite.id);
+                            pushToast({
+                              title: result.ok ? 'Invite revoked' : 'Revoke blocked',
+                              message: result.message,
+                              tone: result.ok ? 'success' : 'error',
+                            });
+                          }}
+                          disabled={!canManageSettings}
+                        >
+                          Revoke
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="stack-item">
+                    <div className="stack-item__copy">No invites are holding seats right now.</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </Panel>
 
-        <Panel eyebrow="Role matrix" title="Roles"><div className="stack-list">{roleWorkspaces.map((workspace) => <div key={workspace.role} className="stack-item"><div className="stack-item__top"><div className="stack-item__title">{workspace.role}</div><Pill tone="blue">{workspace.primaryModules.length} modules</Pill></div><div className="stack-item__copy">{roleValue(workspace.role)}</div><div className="token-row">{workspace.permissions.map((permission) => <Pill key={permission}>{permission}</Pill>)}</div></div>)}</div></Panel>
+        <Panel eyebrow="Role matrix" title="Roles">
+          <div className="stack-list">
+            {roleWorkspaces.map((workspace) => (
+              <div key={workspace.role} className="stack-item">
+                <div className="stack-item__top">
+                  <div className="stack-item__title">{workspace.role}</div>
+                  <Pill tone="blue">{workspace.primaryModules.length} modules</Pill>
+                </div>
+                <div className="stack-item__copy">{roleValue(workspace.role)}</div>
+                <div className="token-row">
+                  {workspace.permissions.map((permission) => (
+                    <Pill key={permission}>{permission}</Pill>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
 
-        <Panel eyebrow="Channels" title="Facebook"><div className="stack-list"><div className="stack-item"><div className="stack-item__top"><div className="stack-item__title">Share dialog</div><div className="status-inline"><Pill tone={isFacebookSharingConfigured() ? 'emerald' : 'slate'}>{isFacebookSharingConfigured() ? 'Configured' : 'App ID missing'}</Pill><Pill tone={facebookConnected ? 'emerald' : 'slate'}>{facebookConnected ? 'Connected' : 'Not connected'}</Pill></div></div><div className="inline-metrics"><span>Sale listing links can open in Facebook</span><span>Post flow uses Facebook&apos;s own share window</span></div></div></div><div className="inline-actions"><button className="button button--primary button--compact" type="button" onClick={handleFacebookConnect} disabled={!canSyncCloud || cloudBusy || !isSupabaseConfigured()}>{facebookConnected ? 'Reconnect Facebook' : 'Connect Facebook'}</button></div></Panel>
+        <Panel eyebrow="Channels" title="Facebook">
+          <div className="stack-list">
+            <div className="stack-item">
+              <div className="stack-item__top">
+                <div className="stack-item__title">Share dialog</div>
+                <div className="status-inline">
+                  <Pill tone={isFacebookSharingConfigured() ? 'emerald' : 'slate'}>
+                    {isFacebookSharingConfigured() ? 'Configured' : 'App ID missing'}
+                  </Pill>
+                  <Pill tone={facebookConnected ? 'emerald' : 'slate'}>
+                    {facebookConnected ? 'Connected' : 'Not connected'}
+                  </Pill>
+                </div>
+              </div>
+              <div className="inline-metrics">
+                <span>Sale listing links can open in Facebook</span>
+                <span>Post flow uses Facebook&apos;s own share window</span>
+              </div>
+            </div>
+          </div>
+          <div className="inline-actions">
+            <button
+              className="button button--primary button--compact"
+              type="button"
+              onClick={handleFacebookConnect}
+              disabled={!canSyncCloud || cloudBusy || !isSupabaseConfigured()}
+            >
+              {facebookConnected ? 'Reconnect Facebook' : 'Connect Facebook'}
+            </button>
+          </div>
+        </Panel>
 
-        <Panel eyebrow="Runtime" title="Capabilities"><div className="token-row"><Pill tone={isSupabaseConfigured() ? 'blue' : 'slate'}>{isSupabaseConfigured() ? 'Cloud auth on' : 'Cloud auth off'}</Pill><Pill tone={cloudSession ? 'emerald' : 'slate'}>{cloudSession ? 'Cloud session live' : 'Local session'}</Pill><Pill tone={online ? 'emerald' : 'amber'}>{online ? 'Browser online' : 'Browser offline'}</Pill><Pill tone="blue">Offline shell registered</Pill><Pill tone={isRelationalCloudEnabled() ? 'emerald' : 'slate'}>{isRelationalCloudEnabled() ? 'Relational sync on' : 'Snapshot-only sync'}</Pill><Pill tone={isSnapshotFallbackEnabled() ? 'blue' : 'slate'}>{isSnapshotFallbackEnabled() ? 'Snapshot fallback on' : 'Snapshot fallback off'}</Pill><Pill tone={isBillingConfigured() ? 'emerald' : 'slate'}>{isBillingConfigured() ? 'Managed billing live' : 'Managed billing paused'}</Pill><Pill tone={isFacebookSharingConfigured() ? 'emerald' : 'slate'}>{isFacebookSharingConfigured() ? 'Facebook share live' : 'Facebook share off'}</Pill><Pill tone="blue">{workspaceStorageDriverLabel}</Pill><Pill tone="slate">Review queue</Pill></div></Panel>
+        <Panel eyebrow="Runtime" title="Capabilities">
+          <div className="token-row">
+            <Pill tone={isSupabaseConfigured() ? 'blue' : 'slate'}>
+              {isSupabaseConfigured() ? 'Cloud auth on' : 'Cloud auth off'}
+            </Pill>
+            <Pill tone={cloudSession ? 'emerald' : 'slate'}>
+              {cloudSession ? 'Cloud session live' : 'Local session'}
+            </Pill>
+            <Pill tone={online ? 'emerald' : 'amber'}>{online ? 'Browser online' : 'Browser offline'}</Pill>
+            <Pill tone="blue">Offline shell registered</Pill>
+            <Pill tone={isRelationalCloudEnabled() ? 'emerald' : 'slate'}>
+              {isRelationalCloudEnabled() ? 'Relational sync on' : 'Snapshot-only sync'}
+            </Pill>
+            <Pill tone={isSnapshotFallbackEnabled() ? 'blue' : 'slate'}>
+              {isSnapshotFallbackEnabled() ? 'Snapshot fallback on' : 'Snapshot fallback off'}
+            </Pill>
+            <Pill tone={isBillingConfigured() ? 'emerald' : 'slate'}>
+              {isBillingConfigured() ? 'Managed billing live' : 'Managed billing paused'}
+            </Pill>
+            <Pill tone={isFacebookSharingConfigured() ? 'emerald' : 'slate'}>
+              {isFacebookSharingConfigured() ? 'Facebook share live' : 'Facebook share off'}
+            </Pill>
+            <Pill tone="blue">{workspaceStorageDriverLabel}</Pill>
+            <Pill tone="slate">Review queue</Pill>
+          </div>
+        </Panel>
       </div>
 
-      <Panel eyebrow="Ranch backup" title="Backups"><input ref={importRef} type="file" accept="application/json,.json" className="hidden" onChange={(event) => void handleImport(event.target.files?.[0])} /><div className="stack-list"><div className="stack-item"><div className="stack-item__top"><div className="stack-item__title">Storage driver</div><Pill tone="blue">{workspaceStorageDriverLabel}</Pill></div></div></div><div className="inline-actions"><button className="button button--primary button--compact" type="button" onClick={handleExport} disabled={!canManageSettings}>Export backup</button><button className="button button--ghost button--compact" type="button" onClick={() => importRef.current?.click()} disabled={!canManageSettings}>Import backup</button></div></Panel>
+      <Panel eyebrow="Ranch backup" title="Backups">
+        <input
+          ref={importRef}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          onChange={(event) => void handleImport(event.target.files?.[0])}
+        />
+        <div className="stack-list">
+          <div className="stack-item">
+            <div className="stack-item__top">
+              <div className="stack-item__title">Storage driver</div>
+              <Pill tone="blue">{workspaceStorageDriverLabel}</Pill>
+            </div>
+          </div>
+        </div>
+        <div className="inline-actions">
+          <button
+            className="button button--primary button--compact"
+            type="button"
+            onClick={handleExport}
+            disabled={!canManageSettings}
+          >
+            Export backup
+          </button>
+          <button
+            className="button button--ghost button--compact"
+            type="button"
+            onClick={() => importRef.current?.click()}
+            disabled={!canManageSettings}
+          >
+            Import backup
+          </button>
+        </div>
+      </Panel>
     </>
   );
 }

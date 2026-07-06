@@ -20,11 +20,23 @@ export function RequireCloudAuth({ children }: { children: ReactNode }) {
   }
 
   if (!isSupabaseConfigured() && isLocalModeEnabled()) {
-    return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}`, reason: 'local-entry-required' }} />;
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ from: `${location.pathname}${location.search}`, reason: 'local-entry-required' }}
+      />
+    );
   }
 
   if (isCloudAuthRequired()) {
-    return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}`, reason: 'cloud-required' }} />;
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ from: `${location.pathname}${location.search}`, reason: 'cloud-required' }}
+      />
+    );
   }
 
   if (!isSupabaseConfigured()) {

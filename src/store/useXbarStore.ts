@@ -24,7 +24,12 @@ import {
   nowStamp,
   todayStamp,
 } from '@/lib/xbarRuntime';
-import { countReservedSharedAccessSeats, countReservedWorkspaceSeats, normalizeWorkspaceEmail, validateWorkspaceInvitation } from '@/lib/workspaceAccess';
+import {
+  countReservedSharedAccessSeats,
+  countReservedWorkspaceSeats,
+  normalizeWorkspaceEmail,
+  validateWorkspaceInvitation,
+} from '@/lib/workspaceAccess';
 import { apiConfig, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { getCapabilityDeniedMessage, hasRoleCapability } from '@/lib/permissions';
@@ -89,7 +94,15 @@ import type {
   SubscriptionProfile,
   SubscriptionTier,
 } from '@/types/xbar';
-import type { AssetPatch, DocumentIntakeInput, ExpenseReceiptInput, LeadInput, LocationPatch, MediaUploadInput, NewHorseInput } from '@/store/xbarStoreLogic';
+import type {
+  AssetPatch,
+  DocumentIntakeInput,
+  ExpenseReceiptInput,
+  LeadInput,
+  LocationPatch,
+  MediaUploadInput,
+  NewHorseInput,
+} from '@/store/xbarStoreLogic';
 
 type ActionResult = {
   ok: boolean;
@@ -98,7 +111,23 @@ type ActionResult = {
   createdHorseIds?: string[];
 };
 
-type HorsePatch = Partial<Pick<HorseRecord, 'name' | 'breed' | 'color' | 'sex' | 'registrationNumber' | 'registry' | 'aqhaNumber' | 'owner' | 'ownerEntity' | 'segment' | 'status' | 'costBasis'>> & { askPrice?: number };
+type HorsePatch = Partial<
+  Pick<
+    HorseRecord,
+    | 'name'
+    | 'breed'
+    | 'color'
+    | 'sex'
+    | 'registrationNumber'
+    | 'registry'
+    | 'aqhaNumber'
+    | 'owner'
+    | 'ownerEntity'
+    | 'segment'
+    | 'status'
+    | 'costBasis'
+  >
+> & { askPrice?: number };
 
 type XbarStore = {
   currentRole: UserRole;
@@ -122,12 +151,18 @@ type XbarStore = {
   setCurrentRole: (role: UserRole) => void;
   initializeWorkspace: (profile: Partial<WorkspaceProfile>) => ActionResult;
   updateWorkspaceProfile: (patch: Partial<WorkspaceProfile>) => ActionResult;
-  applySubscriptionTier: (tier: SubscriptionTier, options?: { billingState?: SubscriptionProfile['billingState'] }) => ActionResult;
+  applySubscriptionTier: (
+    tier: SubscriptionTier,
+    options?: { billingState?: SubscriptionProfile['billingState'] },
+  ) => ActionResult;
   toggleSharedListing: (horseId: string) => Promise<ActionResult>;
   confirmSharedListingRelease: (horseId: string, confirmedBy: string) => Promise<ActionResult>;
   recordSharedChannel: (horseId: string, channel: SharedChannel) => Promise<ActionResult>;
   rotateSharedListingToken: (horseId: string) => Promise<ActionResult>;
-  updateSharedListingAccessMode: (horseId: string, accessMode: SharedListingRecord['accessMode']) => Promise<ActionResult>;
+  updateSharedListingAccessMode: (
+    horseId: string,
+    accessMode: SharedListingRecord['accessMode'],
+  ) => Promise<ActionResult>;
   inviteWorkspaceMember: (email: string, role: UserRole) => Promise<ActionResult>;
   revokeWorkspaceInvitation: (invitationId: string) => Promise<ActionResult>;
   activateWorkspaceInvitation: (invitationId: string) => ActionResult;
@@ -141,7 +176,24 @@ type XbarStore = {
   createSalesLead: (input: LeadInput) => ActionResult;
   updateSalesLead: (
     leadId: string,
-    patch: Partial<Pick<SalesLead, 'stage' | 'lastTouch' | 'nextFollowUp' | 'notes' | 'offerAmount' | 'counterOfferAmount' | 'offerStatus' | 'depositAmount' | 'depositStatus' | 'offerUpdatedAt' | 'savedListing' | 'shareReady' | 'outcome'>>,
+    patch: Partial<
+      Pick<
+        SalesLead,
+        | 'stage'
+        | 'lastTouch'
+        | 'nextFollowUp'
+        | 'notes'
+        | 'offerAmount'
+        | 'counterOfferAmount'
+        | 'offerStatus'
+        | 'depositAmount'
+        | 'depositStatus'
+        | 'offerUpdatedAt'
+        | 'savedListing'
+        | 'shareReady'
+        | 'outcome'
+      >
+    >,
   ) => ActionResult;
   addRanchAsset: (asset: Pick<RanchAsset, 'name' | 'category' | 'location'>) => ActionResult;
   updateAsset: (assetId: string, patch: AssetPatch) => ActionResult;
@@ -151,13 +203,20 @@ type XbarStore = {
     horseId: string,
     event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string; type: MedicalEventType },
   ) => ActionResult;
-  addBreedingEvent: (horseId: string, event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string }) => ActionResult;
+  addBreedingEvent: (
+    horseId: string,
+    event: Pick<HorseNote, 'title' | 'body' | 'author'> & { date: string },
+  ) => ActionResult;
   updateBreedingEconomics: (horseId: string, economics: BreedingEconomics) => ActionResult;
   deleteBreedingEvent: (horseId: string, eventId: string) => ActionResult;
   updateHorseLocation: (horseId: string, patch: LocationPatch) => ActionResult;
   updateHorse: (horseId: string, patch: HorsePatch) => ActionResult;
   deleteHorse: (horseId: string) => ActionResult;
-  updateMedicalEvent: (horseId: string, eventId: string, patch: Partial<Pick<TimelineEvent, 'title' | 'summary' | 'date' | 'status'>>) => ActionResult;
+  updateMedicalEvent: (
+    horseId: string,
+    eventId: string,
+    patch: Partial<Pick<TimelineEvent, 'title' | 'summary' | 'date' | 'status'>>,
+  ) => ActionResult;
   deleteMedicalEvent: (horseId: string, eventId: string) => ActionResult;
   updateOwnershipRecord: (
     recordId: string,
@@ -236,7 +295,14 @@ type WorkspaceBackup = {
 };
 
 const WORKSPACE_SCHEMA_VERSION = 8;
-const legacyDemoHorseIds = new Set(['horse-wiggy', 'horse-hancock', 'horse-bonny', 'horse-dolly', 'horse-thunder', 'horse-shadow']);
+const legacyDemoHorseIds = new Set([
+  'horse-wiggy',
+  'horse-hancock',
+  'horse-bonny',
+  'horse-dolly',
+  'horse-thunder',
+  'horse-shadow',
+]);
 const legacyDemoWorkspaceNames = new Set(['', 'XBAR']);
 const legacyDemoRanchNames = new Set(['', 'Primary Ranch']);
 
@@ -268,7 +334,16 @@ const initialState = {
 };
 
 function syncDerivedValues(
-  state: Pick<XbarStore, 'horses' | 'salesLeads' | 'sharedListings' | 'sharedAccess' | 'workspaceMembers' | 'workspaceInvitations' | 'subscription'>,
+  state: Pick<
+    XbarStore,
+    | 'horses'
+    | 'salesLeads'
+    | 'sharedListings'
+    | 'sharedAccess'
+    | 'workspaceMembers'
+    | 'workspaceInvitations'
+    | 'subscription'
+  >,
 ) {
   const horses = state.horses.map((horse) => {
     const leadCount = state.salesLeads.filter((lead) => lead.horseId === horse.id && lead.stage !== 'Closed').length;
@@ -306,7 +381,13 @@ function syncDerivedValues(
 }
 
 function normalizeDocumentState(value: unknown): DocumentRecord['state'] {
-  if (value === 'Queued' || value === 'Needs Review' || value === 'Matched' || value === 'Ready' || value === 'Archived') {
+  if (
+    value === 'Queued' ||
+    value === 'Needs Review' ||
+    value === 'Matched' ||
+    value === 'Ready' ||
+    value === 'Archived'
+  ) {
     return value;
   }
   return 'Needs Review';
@@ -502,9 +583,9 @@ function restorePersistedState(raw: unknown): PersistedXbarState {
     ? (state.horses as HorseRecord[]).map((horse) => ({
         ...horse,
         documentFacts: Array.isArray((horse as HorseRecord & { documentFacts?: DocumentFact[] }).documentFacts)
-          ? (horse as HorseRecord & { documentFacts?: DocumentFact[] }).documentFacts ?? []
+          ? ((horse as HorseRecord & { documentFacts?: DocumentFact[] }).documentFacts ?? [])
           : Array.isArray((horse as HorseRecord & { ocrFacts?: DocumentFact[] }).ocrFacts)
-            ? (horse as HorseRecord & { ocrFacts?: DocumentFact[] }).ocrFacts ?? []
+            ? ((horse as HorseRecord & { ocrFacts?: DocumentFact[] }).ocrFacts ?? [])
             : [],
       }))
     : initialState.horses;
@@ -524,38 +605,47 @@ function restorePersistedState(raw: unknown): PersistedXbarState {
     state: normalizeBatchState(batch.state),
   }));
   const salePacketBuilds = Array.isArray(state.salePacketBuilds) ? (state.salePacketBuilds as SalePacketBuild[]) : [];
-  const usage = ((state.subscription as SubscriptionProfile | undefined)?.usage ?? {}) as Partial<SubscriptionProfile['usage']> & {
+  const usage = ((state.subscription as SubscriptionProfile | undefined)?.usage ?? {}) as Partial<
+    SubscriptionProfile['usage']
+  > & {
     ocrProcessed?: number;
     ocrLimit?: number;
     portalSeatsUsed?: number;
     portalSeatLimit?: number;
   };
-  const subscription = state.subscription && typeof state.subscription === 'object'
-    ? {
-        ...(state.subscription as SubscriptionProfile),
-        billingState: normalizeBillingState((state.subscription as SubscriptionProfile).billingState),
-        sharedAccessEnabled:
-          (state.subscription as SubscriptionProfile).sharedAccessEnabled ??
-          (state.subscription as SubscriptionProfile & { ownerPortalEnabled?: boolean }).ownerPortalEnabled ??
-          initialState.subscription.sharedAccessEnabled,
-        usage: {
-          ...(state.subscription as SubscriptionProfile).usage,
-          horsesUsed: usage.horsesUsed ?? horses.length,
-          horseLimit: usage.horseLimit ?? initialState.subscription.usage.horseLimit,
-          documentsProcessed: documents.filter((document) => document.state !== 'Archived').length,
-          documentLimit: usage.documentLimit ?? usage.ocrLimit ?? initialState.subscription.usage.documentLimit,
-          salePacketsGenerated: salePacketBuilds.length,
-          salePacketLimit: usage.salePacketLimit ?? initialState.subscription.usage.salePacketLimit,
-          sharedAccessSeatsUsed:
-            usage.sharedAccessSeatsUsed ?? usage.portalSeatsUsed ?? initialState.subscription.usage.sharedAccessSeatsUsed,
-          sharedAccessSeatLimit:
-            usage.sharedAccessSeatLimit ?? usage.portalSeatLimit ?? initialState.subscription.usage.sharedAccessSeatLimit,
-        },
-      }
-    : initialState.subscription;
+  const subscription =
+    state.subscription && typeof state.subscription === 'object'
+      ? {
+          ...(state.subscription as SubscriptionProfile),
+          billingState: normalizeBillingState((state.subscription as SubscriptionProfile).billingState),
+          sharedAccessEnabled:
+            (state.subscription as SubscriptionProfile).sharedAccessEnabled ??
+            (state.subscription as SubscriptionProfile & { ownerPortalEnabled?: boolean }).ownerPortalEnabled ??
+            initialState.subscription.sharedAccessEnabled,
+          usage: {
+            ...(state.subscription as SubscriptionProfile).usage,
+            horsesUsed: usage.horsesUsed ?? horses.length,
+            horseLimit: usage.horseLimit ?? initialState.subscription.usage.horseLimit,
+            documentsProcessed: documents.filter((document) => document.state !== 'Archived').length,
+            documentLimit: usage.documentLimit ?? usage.ocrLimit ?? initialState.subscription.usage.documentLimit,
+            salePacketsGenerated: salePacketBuilds.length,
+            salePacketLimit: usage.salePacketLimit ?? initialState.subscription.usage.salePacketLimit,
+            sharedAccessSeatsUsed:
+              usage.sharedAccessSeatsUsed ??
+              usage.portalSeatsUsed ??
+              initialState.subscription.usage.sharedAccessSeatsUsed,
+            sharedAccessSeatLimit:
+              usage.sharedAccessSeatLimit ??
+              usage.portalSeatLimit ??
+              initialState.subscription.usage.sharedAccessSeatLimit,
+          },
+        }
+      : initialState.subscription;
   const legacySavedHorseIds = Array.isArray(state.savedHorseIds) ? (state.savedHorseIds as string[]) : [];
   const sharedListings = Array.isArray(state.sharedListings)
-    ? (state.sharedListings as SharedListingRecord[]).map((listing) => createSharedListingRecord(listing.horseId, listing))
+    ? (state.sharedListings as SharedListingRecord[]).map((listing) =>
+        createSharedListingRecord(listing.horseId, listing),
+      )
     : legacySavedHorseIds.length
       ? legacySavedHorseIds.map((horseId) => createSharedListingRecord(horseId, { state: 'Draft' }))
       : initialState.sharedListings;
@@ -576,19 +666,20 @@ function restorePersistedState(raw: unknown): PersistedXbarState {
     auditEvents: Array.isArray(state.auditEvents) ? (state.auditEvents as AuditEvent[]) : [],
     salePacketBuilds,
     buyerRoomEvents: Array.isArray(state.buyerRoomEvents) ? (state.buyerRoomEvents as BuyerRoomEvent[]) : [],
-    expenseReceipts: Array.isArray(state.expenseReceipts) ? (state.expenseReceipts as ExpenseReceipt[]) : initialState.expenseReceipts,
+    expenseReceipts: Array.isArray(state.expenseReceipts)
+      ? (state.expenseReceipts as ExpenseReceipt[])
+      : initialState.expenseReceipts,
     ranchAssets: Array.isArray(state.ranchAssets) ? (state.ranchAssets as RanchAsset[]) : initialState.ranchAssets,
     subscription,
-    roleWorkspaces: Array.isArray(state.roleWorkspaces) ? (state.roleWorkspaces as RoleWorkspace[]) : initialState.roleWorkspaces,
+    roleWorkspaces: Array.isArray(state.roleWorkspaces)
+      ? (state.roleWorkspaces as RoleWorkspace[])
+      : initialState.roleWorkspaces,
     salesLeads: Array.isArray(state.salesLeads)
       ? (state.salesLeads as SalesLead[]).map((lead) => ({
           ...lead,
           offerStatus: lead.offerStatus ?? (lead.offerAmount ? 'Submitted' : 'Draft'),
           depositStatus: lead.depositStatus ?? 'Not Requested',
-          shareReady:
-            lead.shareReady ??
-            (lead as SalesLead & { ownerPortalReady?: boolean }).ownerPortalReady ??
-            false,
+          shareReady: lead.shareReady ?? (lead as SalesLead & { ownerPortalReady?: boolean }).ownerPortalReady ?? false,
         }))
       : initialState.salesLeads,
     sharedListings,
@@ -687,7 +778,12 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
     },
     readiness: {
       score: 0,
-      blockers: ['Registration not verified', 'Ownership packet not uploaded', 'Medical summary not reviewed', 'Sale photos missing'],
+      blockers: [
+        'Registration not verified',
+        'Ownership packet not uploaded',
+        'Medical summary not reviewed',
+        'Sale photos missing',
+      ],
       packetStatus: 'Needs Transfer Docs',
     },
     medicalNotes: '',
@@ -710,7 +806,8 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
       {
         id: createId('alert'),
         title: 'Complete horse record',
-        summary: 'Registration, media, medical, and ownership details must be verified before this record is ready to share.',
+        summary:
+          'Registration, media, medical, and ownership details must be verified before this record is ready to share.',
         severity: 'medium',
         module: 'Documents',
       },
@@ -720,7 +817,8 @@ function createHorseRecord(input: NewHorseInput, workspaceProfile: WorkspaceProf
 }
 
 function guessHorseSexFromDocuments(documents: DocumentRecord[]): NewHorseInput['sex'] {
-  const haystack = `${documents.map((document) => `${document.title} ${document.extractedTextPreview}`).join(' ')}`.toLowerCase();
+  const haystack =
+    `${documents.map((document) => `${document.title} ${document.extractedTextPreview}`).join(' ')}`.toLowerCase();
   if (haystack.includes('gelding')) return 'Gelding';
   if (haystack.includes('stud') || haystack.includes('stallion') || haystack.includes('colt')) return 'Stud';
   if (haystack.includes('filly')) return 'Filly';
@@ -730,7 +828,10 @@ function guessHorseSexFromDocuments(documents: DocumentRecord[]): NewHorseInput[
 function inferHorseNameFromDocumentTitle(title: string) {
   const normalized = title
     .replace(/[-_]/g, ' ')
-    .replace(/\b(registration|certificate|papers?|coggins|health|bill\s+of\s+sale|transfer|packet|vet|record|scan|copy|document|doc|pdf|jpg|jpeg|png)\b/gi, ' ')
+    .replace(
+      /\b(registration|certificate|papers?|coggins|health|bill\s+of\s+sale|transfer|packet|vet|record|scan|copy|document|doc|pdf|jpg|jpeg|png)\b/gi,
+      ' ',
+    )
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -741,19 +842,22 @@ function inferHorseNameFromDocumentTitle(title: string) {
   return normalized;
 }
 
-function buildHorseInputFromDocuments(documents: DocumentRecord[], workspaceProfile: WorkspaceProfile): NewHorseInput | null {
+function buildHorseInputFromDocuments(
+  documents: DocumentRecord[],
+  workspaceProfile: WorkspaceProfile,
+): NewHorseInput | null {
   const horseName =
     documents.map((document) => document.entities.horseName?.trim()).find(Boolean) ??
-    documents
-      .map((document) => inferHorseNameFromDocumentTitle(document.title))
-      .find((title) => title.length >= 3) ??
+    documents.map((document) => inferHorseNameFromDocumentTitle(document.title)).find((title) => title.length >= 3) ??
     '';
-  const registrationNumber = documents.map((document) => document.entities.registrationNumber?.trim()).find(Boolean) ?? '';
+  const registrationNumber =
+    documents.map((document) => document.entities.registrationNumber?.trim()).find(Boolean) ?? '';
   const ownerName =
     documents.map((document) => document.entities.ownerName?.trim()).find(Boolean) ??
     workspaceProfile.defaultOwnerName.trim() ??
     '';
-  const ownerEntity = workspaceProfile.defaultOwnerEntity.trim() || workspaceProfile.businessName.trim() || ownerName || '';
+  const ownerEntity =
+    workspaceProfile.defaultOwnerEntity.trim() || workspaceProfile.businessName.trim() || ownerName || '';
 
   if (!horseName && !registrationNumber) {
     return null;
@@ -862,7 +966,8 @@ function promoteDocument(horse: HorseRecord, document: DocumentRecord): HorseRec
         title: `${document.type} attached`,
         summary: `${document.title} was promoted into the horse profile.`,
         owner: document.uploadedBy,
-        category: document.type === 'Vet Record' ? 'Medical' : document.type === 'Transfer Packet' ? 'Ownership' : 'Operations',
+        category:
+          document.type === 'Vet Record' ? 'Medical' : document.type === 'Transfer Packet' ? 'Ownership' : 'Operations',
       },
       ...horse.activity,
     ],
@@ -916,7 +1021,9 @@ export const useXbarStore = create<XbarStore>()(
         });
         const resetLegacyDemo = looksLikeLegacyDemoWorkspace(selectPersistedState(current));
         const seedState = resetLegacyDemo ? createEmptyWorkspaceState() : selectPersistedState(current);
-        const workspaceMembers = seedState.workspaceMembers.length ? seedState.workspaceMembers : [createInitialWorkspaceMember(nextProfile)];
+        const workspaceMembers = seedState.workspaceMembers.length
+          ? seedState.workspaceMembers
+          : [createInitialWorkspaceMember(nextProfile)];
         const derived = syncDerivedValues({
           horses: seedState.horses,
           salesLeads: seedState.salesLeads,
@@ -938,7 +1045,9 @@ export const useXbarStore = create<XbarStore>()(
 
         return {
           ok: true,
-          message: resetLegacyDemo ? 'Workspace created and legacy starter records were cleared.' : 'Workspace created.',
+          message: resetLegacyDemo
+            ? 'Workspace created and legacy starter records were cleared.'
+            : 'Workspace created.',
         };
       },
       updateWorkspaceProfile: (patch) => {
@@ -1016,7 +1125,9 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Horse record not found for shared access.' };
         }
 
-        const existingListing = state.sharedListings.find((listing) => listing.horseId === horseId && listing.state !== 'Archived');
+        const existingListing = state.sharedListings.find(
+          (listing) => listing.horseId === horseId && listing.state !== 'Archived',
+        );
         const isActive = Boolean(existingListing);
         const cloudListing = existingListing
           ? {
@@ -1044,10 +1155,7 @@ export const useXbarStore = create<XbarStore>()(
                     }
                   : listing,
               )
-            : [
-                cloudListing,
-                ...state.sharedListings,
-              ];
+            : [cloudListing, ...state.sharedListings];
 
           const horses = state.horses.map((horse) =>
             horse.id === horseId
@@ -1087,9 +1195,14 @@ export const useXbarStore = create<XbarStore>()(
         const horse = state.horses.find((item) => item.id === horseId);
         const listing = state.sharedListings.find((item) => item.horseId === horseId && item.state !== 'Archived');
         if (!horse || !listing) return { ok: false, message: 'Create the buyer listing before confirming release.' };
-        const hold = buildSaleHold(horse, state.documents, state.ownershipRecords.find((record) => record.horseId === horseId));
+        const hold = buildSaleHold(
+          horse,
+          state.documents,
+          state.ownershipRecords.find((record) => record.horseId === horseId),
+        );
         if (hold.held) return { ok: false, message: `Release blocked: ${hold.reasons[0]}` };
-        if (!confirmedBy.trim()) return { ok: false, message: 'Authorized seller name is required for legal release confirmation.' };
+        if (!confirmedBy.trim())
+          return { ok: false, message: 'Authorized seller name is required for legal release confirmation.' };
 
         const nextListing = {
           ...listing,
@@ -1111,7 +1224,7 @@ export const useXbarStore = create<XbarStore>()(
           context: { horseId, releaseVersion: 'buyer-packet-release-v1' },
         });
         set((current) => ({
-          sharedListings: current.sharedListings.map((item) => item.id === listing.id ? nextListing : item),
+          sharedListings: current.sharedListings.map((item) => (item.id === listing.id ? nextListing : item)),
           auditEvents: [auditEvent, ...current.auditEvents].slice(0, 500),
         }));
         return { ok: true, message: `${confirmedBy.trim()} confirmed the buyer packet release.`, id: horseId };
@@ -1121,15 +1234,25 @@ export const useXbarStore = create<XbarStore>()(
         const horse = state.horses.find((item) => item.id === horseId);
         const listing = state.sharedListings.find((item) => item.horseId === horseId && item.state !== 'Archived');
         if (!horse || !listing) return { ok: false, message: 'Create the buyer listing before sharing.' };
-        const hold = buildSaleHold(horse, state.documents, state.ownershipRecords.find((record) => record.horseId === horseId));
+        const hold = buildSaleHold(
+          horse,
+          state.documents,
+          state.ownershipRecords.find((record) => record.horseId === horseId),
+        );
         if (hold.held) return { ok: false, message: `Buyer packet is on hold: ${hold.reasons[0]}` };
         if (!listing.releaseConfirmedAt || !listing.releaseConfirmedBy) {
-          return { ok: false, message: 'Authorized seller release confirmation is required before sharing the buyer packet.' };
+          return {
+            ok: false,
+            message: 'Authorized seller release confirmation is required before sharing the buyer packet.',
+          };
         }
         if (isSupabaseConfigured()) {
           const cloudResult = await updateSharedListingChannelsInCloud({ horseId, channel });
           if (!cloudResult.ok) {
-            return { ok: false, message: `Buyer packet share was not recorded in the cloud audit trail: ${cloudResult.message}` };
+            return {
+              ok: false,
+              message: `Buyer packet share was not recorded in the cloud audit trail: ${cloudResult.message}`,
+            };
           }
         }
 
@@ -1164,7 +1287,9 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const state = get();
-        const existingListing = state.sharedListings.find((listing) => listing.horseId === horseId && listing.state !== 'Archived');
+        const existingListing = state.sharedListings.find(
+          (listing) => listing.horseId === horseId && listing.state !== 'Archived',
+        );
         if (!existingListing) {
           return { ok: false, message: 'Shared listing not found for this horse.' };
         }
@@ -1202,7 +1327,9 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const state = get();
-        const existingListing = state.sharedListings.find((listing) => listing.horseId === horseId && listing.state !== 'Archived');
+        const existingListing = state.sharedListings.find(
+          (listing) => listing.horseId === horseId && listing.state !== 'Archived',
+        );
         if (!existingListing) {
           return { ok: false, message: 'Shared listing not found for this horse.' };
         }
@@ -1261,7 +1388,10 @@ export const useXbarStore = create<XbarStore>()(
           email: normalizeWorkspaceEmail(email),
           role,
           status: 'Pending',
-          invitedBy: state.workspaceProfile.ranchManagerName.trim() || state.workspaceProfile.businessName.trim() || 'Workspace Admin',
+          invitedBy:
+            state.workspaceProfile.ranchManagerName.trim() ||
+            state.workspaceProfile.businessName.trim() ||
+            'Workspace Admin',
           invitedAt: nowStamp(),
         };
 
@@ -1279,9 +1409,16 @@ export const useXbarStore = create<XbarStore>()(
             await fetch(`${apiBase}/api/invite`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-              body: JSON.stringify({ email: invite.email, role: invite.role, workspaceId: useCloudStore.getState().workspaceId, invitationId: invite.id }),
+              body: JSON.stringify({
+                email: invite.email,
+                role: invite.role,
+                workspaceId: useCloudStore.getState().workspaceId,
+                invitationId: invite.id,
+              }),
             });
-          } catch { /* non-critical */ }
+          } catch {
+            /* non-critical */
+          }
         }
 
         const workspaceInvitations = [invite, ...state.workspaceInvitations];
@@ -1488,7 +1625,10 @@ export const useXbarStore = create<XbarStore>()(
         const state = get();
         const storageIncrease = estimateStorageGb(fileList);
         if (state.subscription.usage.storageUsedGb + storageIncrease > state.subscription.usage.storageLimitGb) {
-          return { ok: false, message: 'Storage limit reached for the current plan. Upgrade before adding more files.' };
+          return {
+            ok: false,
+            message: 'Storage limit reached for the current plan. Upgrade before adding more files.',
+          };
         }
 
         try {
@@ -1569,7 +1709,9 @@ export const useXbarStore = create<XbarStore>()(
 
           if (createdHorseBundles.length) {
             const createdDocumentMap = new Map(
-              createdHorseBundles.flatMap((bundle) => bundle.documents.map((document) => [document.id, document] as const)),
+              createdHorseBundles.flatMap((bundle) =>
+                bundle.documents.map((document) => [document.id, document] as const),
+              ),
             );
             documents = documents.map((document) => createdDocumentMap.get(document.id) ?? document);
           }
@@ -1585,17 +1727,17 @@ export const useXbarStore = create<XbarStore>()(
             fileCount: documents.length,
             processedCount: documents.length,
             needsReviewCount: documents.filter((document) => document.state === 'Needs Review').length,
-            matchedCount: documents.filter((document) => document.state === 'Matched' || document.state === 'Ready').length,
-            state: documents.some((document) => document.state === 'Needs Review')
-              ? 'Reviewing'
-              : 'Completed',
+            matchedCount: documents.filter((document) => document.state === 'Matched' || document.state === 'Ready')
+              .length,
+            state: documents.some((document) => document.state === 'Needs Review') ? 'Reviewing' : 'Completed',
           };
 
           set((current) => {
             const allDocuments = [...documents, ...current.documents];
             const nextHorses = current.horses.map((horse) => {
               const matchedDocuments = documents.filter(
-                (document) => document.horseId === horse.id && (document.state === 'Matched' || document.state === 'Ready'),
+                (document) =>
+                  document.horseId === horse.id && (document.state === 'Matched' || document.state === 'Ready'),
               );
               return matchedDocuments.reduce(promoteDocument, horse);
             });
@@ -1667,7 +1809,9 @@ export const useXbarStore = create<XbarStore>()(
 
         set((current) => {
           const nextDocuments = current.documents.map((item) => (item.id === documentId ? nextDocument : item));
-          const nextHorses = current.horses.map((horse) => (horse.id === matchedHorse.id ? promoteDocument(horse, nextDocument) : horse));
+          const nextHorses = current.horses.map((horse) =>
+            horse.id === matchedHorse.id ? promoteDocument(horse, nextDocument) : horse,
+          );
           const nextBatches = current.intakeBatches.map((batch) => summarizeBatch(batch, nextDocuments));
 
           return {
@@ -1763,12 +1907,13 @@ export const useXbarStore = create<XbarStore>()(
               horse.id === horseId
                 ? {
                     ...horse,
-                    profileImage: makePrimary ? assets[0]?.url ?? horse.profileImage : horse.profileImage,
+                    profileImage: makePrimary ? (assets[0]?.url ?? horse.profileImage) : horse.profileImage,
                     gallery: [...assets, ...horse.gallery],
                     readiness: {
                       ...horse.readiness,
                       score: Math.min(100, horse.readiness.score + 5),
-                      packetStatus: horse.readiness.packetStatus === 'Needs Photos' ? 'Ready' : horse.readiness.packetStatus,
+                      packetStatus:
+                        horse.readiness.packetStatus === 'Needs Photos' ? 'Ready' : horse.readiness.packetStatus,
                       blockers: horse.readiness.blockers.filter((blocker) => blocker !== 'Hero image missing'),
                     },
                     sale: {
@@ -1826,8 +1971,14 @@ export const useXbarStore = create<XbarStore>()(
 
         const fileList = input.file ? [input.file] : [];
         const storageIncrease = estimateStorageGb(fileList);
-        if (fileList.length && state.subscription.usage.storageUsedGb + storageIncrease > state.subscription.usage.storageLimitGb) {
-          return { ok: false, message: 'Storage limit reached for the current plan. Remove files or upgrade before adding more receipts.' };
+        if (
+          fileList.length &&
+          state.subscription.usage.storageUsedGb + storageIncrease > state.subscription.usage.storageLimitGb
+        ) {
+          return {
+            ok: false,
+            message: 'Storage limit reached for the current plan. Remove files or upgrade before adding more receipts.',
+          };
         }
 
         try {
@@ -2039,17 +2190,20 @@ export const useXbarStore = create<XbarStore>()(
         if (!asset.name.trim()) return { ok: false, message: 'Asset name is required.' };
         const id = crypto.randomUUID();
         set((state) => ({
-          ranchAssets: [...state.ranchAssets, {
-            id,
-            name: asset.name.trim(),
-            category: asset.category,
-            status: 'Available' as const,
-            condition: 'Excellent' as const,
-            assignedTo: '',
-            location: asset.location.trim(),
-            nextService: '',
-            notes: '',
-          }],
+          ranchAssets: [
+            ...state.ranchAssets,
+            {
+              id,
+              name: asset.name.trim(),
+              category: asset.category,
+              status: 'Available' as const,
+              condition: 'Excellent' as const,
+              assignedTo: '',
+              location: asset.location.trim(),
+              nextService: '',
+              notes: '',
+            },
+          ],
         }));
         return { ok: true, message: 'Asset added.', id };
       },
@@ -2147,7 +2301,13 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: deniedMessage };
         }
 
-        if (!event.title.trim() || !event.body.trim() || !event.author.trim() || !event.date.trim() || !event.type.trim()) {
+        if (
+          !event.title.trim() ||
+          !event.body.trim() ||
+          !event.author.trim() ||
+          !event.date.trim() ||
+          !event.type.trim()
+        ) {
           return { ok: false, message: 'Medical events need a type, title, note, owner, and date.' };
         }
 
@@ -2224,12 +2384,15 @@ export const useXbarStore = create<XbarStore>()(
         if (deniedMessage) return { ok: false, message: deniedMessage };
         const planBlocked = featureGate(get().subscription, 'breedingRevenue');
         if (planBlocked) return { ok: false, message: planBlocked };
-        if (!get().horses.some((horse) => horse.id === horseId)) return { ok: false, message: 'Horse record not found.' };
+        if (!get().horses.some((horse) => horse.id === horseId))
+          return { ok: false, message: 'Horse record not found.' };
         const normalized = Object.fromEntries(
           Object.entries(economics).map(([key, value]) => [key, Math.max(0, Number(value) || 0)]),
         ) as unknown as BreedingEconomics;
         set((state) => ({
-          horses: state.horses.map((horse) => horse.id === horseId ? { ...horse, breedingEconomics: normalized } : horse),
+          horses: state.horses.map((horse) =>
+            horse.id === horseId ? { ...horse, breedingEconomics: normalized } : horse,
+          ),
         }));
         return { ok: true, message: 'Breeding revenue profile updated.', id: horseId };
       },
@@ -2248,7 +2411,9 @@ export const useXbarStore = create<XbarStore>()(
           context: { horseId },
         });
         set({
-          horses: get().horses.map((h) => h.id === horseId ? { ...h, breedingTimeline: h.breedingTimeline.filter((e) => e.id !== eventId) } : h),
+          horses: get().horses.map((h) =>
+            h.id === horseId ? { ...h, breedingTimeline: h.breedingTimeline.filter((e) => e.id !== eventId) } : h,
+          ),
           auditEvents: [breedingAudit, ...get().auditEvents].slice(0, 500),
         });
         return { ok: true, message: 'Breeding event removed.' };
@@ -2354,12 +2519,8 @@ export const useXbarStore = create<XbarStore>()(
             h.id === horseId
               ? {
                   ...h,
-                  medicalTimeline: h.medicalTimeline.map((ev) =>
-                    ev.id === eventId ? { ...ev, ...patch } : ev,
-                  ),
-                  activity: h.activity.map((ev) =>
-                    ev.id === eventId ? { ...ev, ...patch } : ev,
-                  ),
+                  medicalTimeline: h.medicalTimeline.map((ev) => (ev.id === eventId ? { ...ev, ...patch } : ev)),
+                  activity: h.activity.map((ev) => (ev.id === eventId ? { ...ev, ...patch } : ev)),
                 }
               : h,
           ),
@@ -2663,7 +2824,11 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'Horse record not found for this packet.' };
         }
 
-        const slug = horse.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'horse';
+        const slug =
+          horse.name
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-|-$/g, '') || 'horse';
         const packet: SalePacketBuild = {
           id: createId('packet'),
           horseId: input.horseId,
@@ -2691,7 +2856,10 @@ export const useXbarStore = create<XbarStore>()(
           salePacketBuilds: [packet, ...state.salePacketBuilds],
           subscription: {
             ...state.subscription,
-            usage: { ...state.subscription.usage, salePacketsGenerated: state.subscription.usage.salePacketsGenerated + 1 },
+            usage: {
+              ...state.subscription.usage,
+              salePacketsGenerated: state.subscription.usage.salePacketsGenerated + 1,
+            },
           },
           auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
         }));
@@ -2749,7 +2917,9 @@ export const useXbarStore = create<XbarStore>()(
         set({ buyerRoomEvents: merged });
         return {
           ok: true,
-          message: events.length ? `${events.length} public buyer event${events.length === 1 ? '' : 's'} refreshed.` : 'Buyer activity is current.',
+          message: events.length
+            ? `${events.length} public buyer event${events.length === 1 ? '' : 's'} refreshed.`
+            : 'Buyer activity is current.',
         };
       },
       captureBuyerRoomOffer: (eventId) => {
@@ -2788,7 +2958,9 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const offerNote = event.note?.trim() ?? '';
-        const notes = [lead.notes?.trim(), offerNote && !lead.notes?.includes(offerNote) ? offerNote : ''].filter(Boolean).join('\n\n');
+        const notes = [lead.notes?.trim(), offerNote && !lead.notes?.includes(offerNote) ? offerNote : '']
+          .filter(Boolean)
+          .join('\n\n');
         const updated = get().updateSalesLead(lead.id, {
           stage: 'Offer',
           lastTouch: todayStamp(),
@@ -2824,7 +2996,10 @@ export const useXbarStore = create<XbarStore>()(
 
         const normalizedActor = event.actor.trim().toLowerCase();
         let lead = get().salesLeads.find(
-          (item) => item.stage !== 'Closed' && item.horseId === event.horseId && item.name.trim().toLowerCase() === normalizedActor,
+          (item) =>
+            item.stage !== 'Closed' &&
+            item.horseId === event.horseId &&
+            item.name.trim().toLowerCase() === normalizedActor,
         );
         if (!lead) {
           const created = get().createSalesLead({
@@ -2972,19 +3147,27 @@ export const useXbarStore = create<XbarStore>()(
         if (deniedMessage) return { ok: false, message: deniedMessage };
         const horse = get().horses.find((item) => item.id === horseId);
         if (!horse) return { ok: false, message: 'Horse record not found.' };
-        if (!horse.documentFacts.some((fact) => fact.id === factId)) return { ok: false, message: 'OCR fact not found.' };
+        if (!horse.documentFacts.some((fact) => fact.id === factId))
+          return { ok: false, message: 'OCR fact not found.' };
         set((state) => ({
-          horses: state.horses.map((item) => item.id === horseId ? {
-            ...item,
-            documentFacts: item.documentFacts.map((fact) => fact.id === factId ? { ...fact, decision } : fact),
-            activity: [createTimelineEvent({
-              title: `OCR fact ${decision.toLowerCase()}`,
-              summary: `${factId} was ${decision.toLowerCase()} into the horse record.`,
-              owner: 'Documents',
-              date: todayStamp(),
-              category: 'Operations',
-            }), ...item.activity],
-          } : item),
+          horses: state.horses.map((item) =>
+            item.id === horseId
+              ? {
+                  ...item,
+                  documentFacts: item.documentFacts.map((fact) => (fact.id === factId ? { ...fact, decision } : fact)),
+                  activity: [
+                    createTimelineEvent({
+                      title: `OCR fact ${decision.toLowerCase()}`,
+                      summary: `${factId} was ${decision.toLowerCase()} into the horse record.`,
+                      owner: 'Documents',
+                      date: todayStamp(),
+                      category: 'Operations',
+                    }),
+                    ...item.activity,
+                  ],
+                }
+              : item,
+          ),
         }));
         return { ok: true, message: `OCR fact ${decision.toLowerCase()}.`, id: factId };
       },

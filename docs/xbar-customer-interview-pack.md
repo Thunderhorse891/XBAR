@@ -195,4 +195,3 @@ After 5 to 10 interviews:
 2. choose one exact wedge
 3. rewrite homepage copy around that wedge
 4. update roadmap so engineering supports that offer directly
-

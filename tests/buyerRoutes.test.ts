@@ -23,6 +23,10 @@ test('buyer workflow links do not navigate to the legacy deal-room page', async 
 
   for (const file of files) {
     const source = await readFile(file, 'utf8');
-    assert.doesNotMatch(source, /['"`]\/buyer-deal-room['"`]/, `${file} should use buyerFollowUpPath() instead of the legacy route`);
+    assert.doesNotMatch(
+      source,
+      /['"`]\/buyer-deal-room['"`]/,
+      `${file} should use buyerFollowUpPath() instead of the legacy route`,
+    );
   }
 });

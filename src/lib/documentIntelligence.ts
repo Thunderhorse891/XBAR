@@ -81,7 +81,7 @@ function collectTextItems(items: Array<{ str?: string }>) {
     .trim();
 }
 
-type PdfDocument = Awaited<ReturnType<typeof import('pdfjs-dist')['getDocument']>['promise']>;
+type PdfDocument = Awaited<ReturnType<(typeof import('pdfjs-dist'))['getDocument']>['promise']>;
 
 async function renderPdfPageToCanvas(pdf: PdfDocument, pageNumber: number) {
   if (typeof document === 'undefined') {

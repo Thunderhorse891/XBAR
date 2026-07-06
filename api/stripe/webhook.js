@@ -13,7 +13,18 @@ const stripeSecretKey = process.env.STRIPE_SECRET_KEY || '';
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026-02-25.clover' }) : null;
 
-async function syncWorkspaceSubscription({ workspaceId, customerId, subscriptionId, priceId, status, currentPeriodEnd, quantity, eventId, eventType, payload }) {
+async function syncWorkspaceSubscription({
+  workspaceId,
+  customerId,
+  subscriptionId,
+  priceId,
+  status,
+  currentPeriodEnd,
+  quantity,
+  eventId,
+  eventType,
+  payload,
+}) {
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     throw new Error('Supabase admin credentials are not configured.');

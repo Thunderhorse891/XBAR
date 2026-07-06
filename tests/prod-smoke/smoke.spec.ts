@@ -19,7 +19,8 @@ import { expect, test, type Page } from '@playwright/test';
  */
 
 // Runtime errors that indicate a broken production bundle. Never whitelisted.
-const CRITICAL_ERROR = /__SECRET_INTERNALS|Cannot read (?:property|properties)|is not a function|is not defined|Minified React error|ChunkLoadError|Loading chunk \S+ failed|Failed to fetch dynamically imported module|SyntaxError|Unexpected (?:token|identifier)|Rendered fewer hooks|Maximum update depth/i;
+const CRITICAL_ERROR =
+  /__SECRET_INTERNALS|Cannot read (?:property|properties)|is not a function|is not defined|Minified React error|ChunkLoadError|Loading chunk \S+ failed|Failed to fetch dynamically imported module|SyntaxError|Unexpected (?:token|identifier)|Rendered fewer hooks|Maximum update depth/i;
 
 type Collected = { pageErrors: string[]; criticalConsole: string[]; chunkFailures: string[] };
 

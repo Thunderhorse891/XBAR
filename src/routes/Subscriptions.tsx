@@ -55,15 +55,26 @@ export default function Subscriptions() {
     hasPaymentLink: selectedPaymentLink,
     checkoutInProgress: checkoutTier !== null,
   });
-  const selectedPaidCurrent = decisionTier === subscription.tier && subscription.monthlyRate === decisionConfig.monthlyRate && subscription.monthlyRate > 0;
+  const selectedPaidCurrent =
+    decisionTier === subscription.tier &&
+    subscription.monthlyRate === decisionConfig.monthlyRate &&
+    subscription.monthlyRate > 0;
 
-  const emit = (eventName: Parameters<typeof productEvent>[0], payload: Record<string, unknown>, severity: 'info' | 'warning' = 'info') => {
+  const emit = (
+    eventName: Parameters<typeof productEvent>[0],
+    payload: Record<string, unknown>,
+    severity: 'info' | 'warning' = 'info',
+  ) => {
     void trackRuntimeEvent({ workspaceId, severity, ...productEvent(eventName, payload) });
   };
 
   const beginCheckout = async (tier: SubscriptionTier) => {
     setCheckoutTier(tier);
-    emit(productEventNames.checkoutStarted, { tier, currentTier: subscription.tier, source: requestedTier ? 'selected_plan' : 'billing' });
+    emit(productEventNames.checkoutStarted, {
+      tier,
+      currentTier: subscription.tier,
+      source: requestedTier ? 'selected_plan' : 'billing',
+    });
 
     const readiness = getCheckoutReadiness({
       billingEnabled,
@@ -92,13 +103,21 @@ export default function Subscriptions() {
 
     const fallback = getStripePaymentLink(tier);
     if (fallback) {
-      emit(productEventNames.checkoutRedirected, { tier, method: 'payment_link', managedFailure: managed.message }, 'warning');
+      emit(
+        productEventNames.checkoutRedirected,
+        { tier, method: 'payment_link', managedFailure: managed.message },
+        'warning',
+      );
       window.location.assign(fallback);
       return;
     }
 
     emit(productEventNames.checkoutFailed, { tier, reason: managed.message }, 'warning');
-    pushToast({ title: 'Checkout needs attention', message: `${managed.message} Your workspace and current plan were not changed.`, tone: 'error' });
+    pushToast({
+      title: 'Checkout needs attention',
+      message: `${managed.message} Your workspace and current plan were not changed.`,
+      tone: 'error',
+    });
     setCheckoutTier(null);
   };
 
@@ -110,7 +129,8 @@ export default function Subscriptions() {
     const config = subscriptionPlans[tier];
     const profile = revenuePlanMatrix[tier];
     const highlighted = tier === decisionTier;
-    const paidCurrent = tier === subscription.tier && subscription.monthlyRate === config.monthlyRate && subscription.monthlyRate > 0;
+    const paidCurrent =
+      tier === subscription.tier && subscription.monthlyRate === config.monthlyRate && subscription.monthlyRate > 0;
     const setupCurrent = tier === 'Starter' && starterSetup;
     const busy = checkoutTier === tier;
     const readiness = getCheckoutReadiness({
@@ -142,144 +162,174 @@ export default function Subscriptions() {
           <li>{formatLimit(config.limits.documentLimit, 'documents')}</li>
         </ul>
         {paidCurrent || setupCurrent ? (
-          <button type="button" disabled>{paidCurrent ? 'Current plan' : 'Current setup'}</button>
+          <button type="button" disabled>
+            {paidCurrent ? 'Current plan' : 'Current setup'}
+          </button>
         ) : (
-          <button type="button" disabled={!readiness.ready} title={readiness.reason} onClick={() => void beginCheckout(tier)}>
+          <button
+            type="button"
+            disabled={!readiness.ready}
+            title={readiness.reason}
+            onClick={() => void beginCheckout(tier)}
+          >
             {busy ? 'Opening checkout...' : readiness.mode === 'manual' ? 'Manual billing required' : `Choose ${tier}`}
           </button>
         )}
-        <small>{paidCurrent ? 'Your active paid capacity.' : setupCurrent ? 'No paid Starter subscription is active yet.' : readiness.reason}</small>
+        <small>
+          {paidCurrent
+            ? 'Your active paid capacity.'
+            : setupCurrent
+              ? 'No paid Starter subscription is active yet.'
+              : readiness.reason}
+        </small>
       </article>
     );
   };
 
   return (
     <section className="checkout-route checkout-route--embedded">
-    <div className="checkout-grid">
-      <section className="checkout-panel checkout-panel--plans" aria-labelledby="checkout-title">
-        <div className="checkout-heading">
-          <p>Billing</p>
-          <h1 id="checkout-title">Review Billing</h1>
-          <span>
-            Choose the tier that fits your workflow. Paid plans change only after checkout succeeds or manual billing is explicitly activated.
-          </span>
-        </div>
-
-        <div className="checkout-trial">
-          <div>
-            <span>Starter setup</span>
-            <h2>Start with XBAR</h2>
-            <p>No payment is collected in this local setup flow. Paid plans require checkout or manual billing activation.</p>
+      <div className="checkout-grid">
+        <section className="checkout-panel checkout-panel--plans" aria-labelledby="checkout-title">
+          <div className="checkout-heading">
+            <p>Billing</p>
+            <h1 id="checkout-title">Review Billing</h1>
+            <span>
+              Choose the tier that fits your workflow. Paid plans change only after checkout succeeds or manual billing
+              is explicitly activated.
+            </span>
           </div>
-          <button type="button" onClick={startTrial}>{workspaceReady ? 'Continue' : 'Continue setup'}</button>
-          <small>{starterSetup ? 'Setup active' : `${formatLimit(subscriptionPlans.Starter.limits.horseLimit, 'horses')} and ${formatLimit(subscriptionPlans.Starter.limits.documentLimit, 'documents')}`}</small>
-        </div>
 
-        <div className="checkout-plan-list" aria-label="Paid plans">
-          {tiers.map(renderPaidPlan)}
-        </div>
-      </section>
-
-      <aside className="checkout-panel checkout-panel--payment" aria-label="Payment method">
-        <div className="checkout-heading checkout-heading--compact">
-          <p>Billing summary</p>
-          <h2>{decisionTier}</h2>
-          <span>{decisionProfile.fit}</span>
-        </div>
-
-        <div className="checkout-total">
-          <span>{selectedCheckoutConfigured ? 'Due at checkout' : 'Monthly price'}</span>
-          <strong>{formatCurrency(decisionConfig.monthlyRate)}</strong>
-          <small>{selectedCheckoutConfigured ? 'then monthly' : 'not charged in app'}</small>
-        </div>
-
-        {selectedReadiness.mode === 'manual' ? (
-          <div className="checkout-card-box" aria-label="Billing details">
-            <div className="checkout-card-box__top">
-              <span>Billing</span>
-              <strong>Manual billing required</strong>
+          <div className="checkout-trial">
+            <div>
+              <span>Starter setup</span>
+              <h2>Start with XBAR</h2>
+              <p>
+                No payment is collected in this local setup flow. Paid plans require checkout or manual billing
+                activation.
+              </p>
             </div>
-            <p>Online checkout is not configured. Contact support/manual billing required. Your workspace and plan will not change in the app until manual billing is recorded by an admin.</p>
+            <button type="button" onClick={startTrial}>
+              {workspaceReady ? 'Continue' : 'Continue setup'}
+            </button>
+            <small>
+              {starterSetup
+                ? 'Setup active'
+                : `${formatLimit(subscriptionPlans.Starter.limits.horseLimit, 'horses')} and ${formatLimit(subscriptionPlans.Starter.limits.documentLimit, 'documents')}`}
+            </small>
           </div>
-        ) : (
-          <div className="checkout-card-box" aria-label="Secure payment details">
-            <div className="checkout-card-box__top">
-              <span>Card details</span>
-              <strong>Secure checkout</strong>
-            </div>
-            <label>
-              <span>Card number</span>
-              <div>Entered on the next secure step</div>
-            </label>
-            <div className="checkout-card-box__row">
-              <label>
-                <span>Expiration</span>
-                <div>Next step</div>
-              </label>
-              <label>
-                <span>CVC</span>
-                <div>Next step</div>
-              </label>
-            </div>
-            <p>Your card details are handled by the payment processor. XBAR never stores raw card numbers.</p>
-          </div>
-        )}
 
-        <div className="checkout-status-list" aria-label="Billing details">
-          {selectedCheckoutConfigured ? (
-            <>
-              <div>
+          <div className="checkout-plan-list" aria-label="Paid plans">
+            {tiers.map(renderPaidPlan)}
+          </div>
+        </section>
+
+        <aside className="checkout-panel checkout-panel--payment" aria-label="Payment method">
+          <div className="checkout-heading checkout-heading--compact">
+            <p>Billing summary</p>
+            <h2>{decisionTier}</h2>
+            <span>{decisionProfile.fit}</span>
+          </div>
+
+          <div className="checkout-total">
+            <span>{selectedCheckoutConfigured ? 'Due at checkout' : 'Monthly price'}</span>
+            <strong>{formatCurrency(decisionConfig.monthlyRate)}</strong>
+            <small>{selectedCheckoutConfigured ? 'then monthly' : 'not charged in app'}</small>
+          </div>
+
+          {selectedReadiness.mode === 'manual' ? (
+            <div className="checkout-card-box" aria-label="Billing details">
+              <div className="checkout-card-box__top">
                 <span>Billing</span>
-                <strong>Monthly</strong>
+                <strong>Manual billing required</strong>
               </div>
-              <div>
-                <span>Payment</span>
-                <strong>Handled at checkout</strong>
-              </div>
-              <div>
-                <span>Receipt</span>
-                <strong>After checkout</strong>
-              </div>
-            </>
+              <p>
+                Online checkout is not configured. Contact support/manual billing required. Your workspace and plan will
+                not change in the app until manual billing is recorded by an admin.
+              </p>
+            </div>
           ) : (
-            <>
-              <div>
-                <span>Checkout</span>
-                <strong>Not configured</strong>
+            <div className="checkout-card-box" aria-label="Secure payment details">
+              <div className="checkout-card-box__top">
+                <span>Card details</span>
+                <strong>Secure checkout</strong>
               </div>
-              <div>
-                <span>Activation</span>
-                <strong>Manual billing only</strong>
+              <label>
+                <span>Card number</span>
+                <div>Entered on the next secure step</div>
+              </label>
+              <div className="checkout-card-box__row">
+                <label>
+                  <span>Expiration</span>
+                  <div>Next step</div>
+                </label>
+                <label>
+                  <span>CVC</span>
+                  <div>Next step</div>
+                </label>
               </div>
-              <div>
-                <span>Workspace</span>
-                <strong>No plan change</strong>
-              </div>
-            </>
+              <p>Your card details are handled by the payment processor. XBAR never stores raw card numbers.</p>
+            </div>
           )}
-        </div>
 
-        <button
-          className="checkout-primary-action"
-          type="button"
-          disabled={!selectedReadiness.ready || selectedPaidCurrent}
-          title={selectedPaidCurrent ? 'This plan is already active.' : selectedReadiness.reason}
-          onClick={() => void beginCheckout(decisionTier)}
-        >
-          {checkoutTier === decisionTier
-            ? 'Opening checkout...'
-            : selectedPaidCurrent
-              ? 'Current plan'
-              : selectedReadiness.mode === 'manual'
-                ? 'Manual billing required'
-                : 'Continue to secure checkout'}
-        </button>
-        <button className="checkout-secondary-action" type="button" onClick={startTrial}>
-          Continue with Starter setup
-        </button>
-        <p className="checkout-note">{selectedPaidCurrent ? 'This paid plan is already active.' : selectedReadiness.reason || checkoutReadinessLabel}</p>
-      </aside>
-    </div>
+          <div className="checkout-status-list" aria-label="Billing details">
+            {selectedCheckoutConfigured ? (
+              <>
+                <div>
+                  <span>Billing</span>
+                  <strong>Monthly</strong>
+                </div>
+                <div>
+                  <span>Payment</span>
+                  <strong>Handled at checkout</strong>
+                </div>
+                <div>
+                  <span>Receipt</span>
+                  <strong>After checkout</strong>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <span>Checkout</span>
+                  <strong>Not configured</strong>
+                </div>
+                <div>
+                  <span>Activation</span>
+                  <strong>Manual billing only</strong>
+                </div>
+                <div>
+                  <span>Workspace</span>
+                  <strong>No plan change</strong>
+                </div>
+              </>
+            )}
+          </div>
+
+          <button
+            className="checkout-primary-action"
+            type="button"
+            disabled={!selectedReadiness.ready || selectedPaidCurrent}
+            title={selectedPaidCurrent ? 'This plan is already active.' : selectedReadiness.reason}
+            onClick={() => void beginCheckout(decisionTier)}
+          >
+            {checkoutTier === decisionTier
+              ? 'Opening checkout...'
+              : selectedPaidCurrent
+                ? 'Current plan'
+                : selectedReadiness.mode === 'manual'
+                  ? 'Manual billing required'
+                  : 'Continue to secure checkout'}
+          </button>
+          <button className="checkout-secondary-action" type="button" onClick={startTrial}>
+            Continue with Starter setup
+          </button>
+          <p className="checkout-note">
+            {selectedPaidCurrent
+              ? 'This paid plan is already active.'
+              : selectedReadiness.reason || checkoutReadinessLabel}
+          </p>
+        </aside>
+      </div>
     </section>
   );
 }

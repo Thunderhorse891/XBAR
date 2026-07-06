@@ -1,6 +1,9 @@
 // Best-effort audit trail. Failures are swallowed so an audit outage never
 // blocks the user-facing operation.
-export async function recordAuditEvent(supabase, { workspaceId, actorUserId, action, entityType = '', entityId = '', metadata = {} }) {
+export async function recordAuditEvent(
+  supabase,
+  { workspaceId, actorUserId, action, entityType = '', entityId = '', metadata = {} },
+) {
   try {
     await supabase.from('audit_logs').insert({
       workspace_id: workspaceId,

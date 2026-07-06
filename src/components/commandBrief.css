@@ -12,7 +12,9 @@
   border: 1px solid #e0e6ee;
   background: linear-gradient(180deg, #ffffff, #f5f9fd);
   color: #131a24;
-  box-shadow: 0 18px 40px -26px rgba(17, 21, 27, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 18px 40px -26px rgba(17, 21, 27, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
   isolation: isolate;
 }
 

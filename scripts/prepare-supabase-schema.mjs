@@ -18,17 +18,14 @@ const migrations = await Promise.all(
 
 const compatibleSchema = schema.replace(
   /create policy if not exists ("[^"]+")\s+on ([^\n;]+)\n/g,
-  (_match, policyName, tableName) => `drop policy if exists ${policyName} on ${tableName};\ncreate policy ${policyName}\non ${tableName}\n`,
+  (_match, policyName, tableName) =>
+    `drop policy if exists ${policyName} on ${tableName};\ncreate policy ${policyName}\non ${tableName}\n`,
 );
 
 if (compatibleSchema.includes('create policy if not exists')) {
   throw new Error('Unable to convert every unsupported CREATE POLICY IF NOT EXISTS statement.');
 }
 
-await writeFile(
-  outputPath,
-  `${compatibleSchema.trim()}\n\n${migrations.join('\n\n')}\n`,
-  'utf8',
-);
+await writeFile(outputPath, `${compatibleSchema.trim()}\n\n${migrations.join('\n\n')}\n`, 'utf8');
 
 console.log(`Prepared executable Supabase schema: ${path.relative(root, outputPath)}`);

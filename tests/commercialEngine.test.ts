@@ -1,13 +1,25 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildBreedingRevenueProfile } from '../src/lib/breedingRevenue.js';
-import { buildBuyerDealRoomSummaries, hasSellerResponse, openBuyerRequests, publicShareEventToBuyerRoomEvent } from '../src/lib/buyerDealRoom.js';
+import {
+  buildBuyerDealRoomSummaries,
+  hasSellerResponse,
+  openBuyerRequests,
+  publicShareEventToBuyerRoomEvent,
+} from '../src/lib/buyerDealRoom.js';
 import { buildUsageMeters, featureGate, usagePressure } from '../src/lib/commercialEngine.js';
 import { buildHorseProfitProfile, buildOfferDecision } from '../src/lib/profitIntelligence.js';
 import { buildPublicBuyerPacketArtifact } from '../src/lib/publicBuyerPacket.js';
 import { buildSaleHold } from '../src/lib/saleTrustEngine.js';
 import { subscriptionPlans } from '../src/lib/subscriptionPlans.js';
-import type { BuyerRoomEvent, DocumentRecord, ExpenseReceipt, HorseRecord, OwnershipRecord, SubscriptionProfile } from '../src/types/xbar.js';
+import type {
+  BuyerRoomEvent,
+  DocumentRecord,
+  ExpenseReceipt,
+  HorseRecord,
+  OwnershipRecord,
+  SubscriptionProfile,
+} from '../src/types/xbar.js';
 
 function subscription(tier: SubscriptionProfile['tier'], used = 0): SubscriptionProfile {
   const config = subscriptionPlans[tier];
@@ -36,7 +48,13 @@ const horse = {
   status: 'Active',
   segment: 'Stud',
   costBasis: 10000,
-  breedingEconomics: { studFee: 1500, bookedMares: 4, breedingCosts: 500, mareProductionValue: 0, foalProjectedValue: 2000 },
+  breedingEconomics: {
+    studFee: 1500,
+    bookedMares: 4,
+    breedingCosts: 500,
+    mareProductionValue: 0,
+    foalProjectedValue: 2000,
+  },
   sale: { askPrice: 18000 },
   alerts: [],
 } as unknown as HorseRecord;
@@ -133,15 +151,17 @@ test('buyer packet downloads dispatch seller follow-up pressure', () => {
 });
 
 test('public buyer packet includes approved summaries without internal record data', () => {
-  const documents = [{
-    id: 'doc-1',
-    title: 'Current Coggins',
-    type: 'Coggins',
-    summary: 'Negative EIA test confirmed.',
-    fileName: 'private-source-file.pdf',
-    extractedTextPreview: 'PRIVATE OCR TEXT',
-    entities: { ownerName: 'PRIVATE OWNER' },
-  }] as unknown as Parameters<typeof buildPublicBuyerPacketArtifact>[0]['documents'];
+  const documents = [
+    {
+      id: 'doc-1',
+      title: 'Current Coggins',
+      type: 'Coggins',
+      summary: 'Negative EIA test confirmed.',
+      fileName: 'private-source-file.pdf',
+      extractedTextPreview: 'PRIVATE OCR TEXT',
+      entities: { ownerName: 'PRIVATE OWNER' },
+    },
+  ] as unknown as Parameters<typeof buildPublicBuyerPacketArtifact>[0]['documents'];
   const horseWithPrivateData = {
     ...horse,
     name: 'Blue Moon',
@@ -174,18 +194,48 @@ test('public buyer packet includes approved summaries without internal record da
 });
 
 test('seller responses resolve only the intended buyer request', () => {
-  const first = { id: 'request-1', horseId: horse.id, kind: 'question', at: '2026-06-11T14:00:00.000Z', actor: 'Buyer One' } as BuyerRoomEvent;
-  const second = { id: 'request-2', horseId: horse.id, kind: 'proof-requested', at: '2026-06-11T14:01:00.000Z', actor: 'Buyer Two' } as BuyerRoomEvent;
-  const response = { id: 'response-1', horseId: horse.id, kind: 'seller-response', at: '2026-06-11T14:02:00.000Z', actor: 'Sales Lead', replyToEventId: first.id } as BuyerRoomEvent;
+  const first = {
+    id: 'request-1',
+    horseId: horse.id,
+    kind: 'question',
+    at: '2026-06-11T14:00:00.000Z',
+    actor: 'Buyer One',
+  } as BuyerRoomEvent;
+  const second = {
+    id: 'request-2',
+    horseId: horse.id,
+    kind: 'proof-requested',
+    at: '2026-06-11T14:01:00.000Z',
+    actor: 'Buyer Two',
+  } as BuyerRoomEvent;
+  const response = {
+    id: 'response-1',
+    horseId: horse.id,
+    kind: 'seller-response',
+    at: '2026-06-11T14:02:00.000Z',
+    actor: 'Sales Lead',
+    replyToEventId: first.id,
+  } as BuyerRoomEvent;
 
   assert.equal(hasSellerResponse([first, second, response], first), true);
   assert.equal(hasSellerResponse([first, second, response], second), false);
-  assert.deepEqual(openBuyerRequests([first, second, response]).map((event) => event.id), [second.id]);
+  assert.deepEqual(
+    openBuyerRequests([first, second, response]).map((event) => event.id),
+    [second.id],
+  );
 });
 
 test('sale hold blocks missing Coggins and ownership proof', () => {
   assert.equal(buildSaleHold(horse, [], undefined).held, true);
-  const documents = [{ horseId: horse.id, type: 'Coggins', state: 'Ready', uploadedAt: new Date().toISOString(), entities: {} }, { horseId: horse.id, type: 'Registration', state: 'Ready', uploadedAt: new Date().toISOString(), entities: {} }] as DocumentRecord[];
-  const ownership = { horseId: horse.id, transferStatus: 'Clear', confidence: 96, pendingDocuments: [] } as unknown as OwnershipRecord;
+  const documents = [
+    { horseId: horse.id, type: 'Coggins', state: 'Ready', uploadedAt: new Date().toISOString(), entities: {} },
+    { horseId: horse.id, type: 'Registration', state: 'Ready', uploadedAt: new Date().toISOString(), entities: {} },
+  ] as DocumentRecord[];
+  const ownership = {
+    horseId: horse.id,
+    transferStatus: 'Clear',
+    confidence: 96,
+    pendingDocuments: [],
+  } as unknown as OwnershipRecord;
   assert.equal(buildSaleHold(horse, documents, ownership).held, false);
 });

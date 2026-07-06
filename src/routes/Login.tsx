@@ -47,7 +47,8 @@ export default function Login() {
     if (cloud.session && cloud.status === 'signed-in') navigate(redirectTarget, { replace: true });
   }, [cloud.session, cloud.status, navigate, redirectTarget]);
 
-  const toast = (title: string, result: { ok: boolean; message: string }) => pushToast({ title, message: result.message, tone: result.ok ? 'success' : 'error' });
+  const toast = (title: string, result: { ok: boolean; message: string }) =>
+    pushToast({ title, message: result.message, tone: result.ok ? 'success' : 'error' });
   const rememberEmailPreference = () => {
     if (remember) {
       localStorage.setItem('xbar-remember-me', 'true');
@@ -61,7 +62,12 @@ export default function Login() {
   const markLocalWorkspaceIntent = () => {
     localStorage.setItem('xbar-command-center-entry', 'true');
     if (selectedPlan) localStorage.setItem('xbar-local-plan-intent', selectedPlan);
-    void trackRuntimeEvent(productEvent(productEventNames.localWorkspaceEntered, { selectedPlan: selectedPlan || undefined, storage: 'browser-local' }));
+    void trackRuntimeEvent(
+      productEvent(productEventNames.localWorkspaceEntered, {
+        selectedPlan: selectedPlan || undefined,
+        storage: 'browser-local',
+      }),
+    );
   };
 
   const openBrowserWorkspace = () => {
@@ -89,13 +95,24 @@ export default function Login() {
       setBusy('');
       return;
     }
-    const result = authMode === 'signin' ? await cloud.signInWithPassword(email, password) : await cloud.signUpWithPassword(email, password);
-    toast(result.ok ? (authMode === 'signin' ? 'Welcome back' : 'Account created') : 'We could not complete that', result);
+    const result =
+      authMode === 'signin'
+        ? await cloud.signInWithPassword(email, password)
+        : await cloud.signUpWithPassword(email, password);
+    toast(
+      result.ok ? (authMode === 'signin' ? 'Welcome back' : 'Account created') : 'We could not complete that',
+      result,
+    );
     setBusy('');
   };
   const oauth = async (provider: 'google' | 'facebook' | 'apple') => {
     setBusy(provider);
-    const result = provider === 'google' ? await cloud.signInWithGoogle() : provider === 'facebook' ? await cloud.signInWithFacebook() : await cloud.signInWithApple();
+    const result =
+      provider === 'google'
+        ? await cloud.signInWithGoogle()
+        : provider === 'facebook'
+          ? await cloud.signInWithFacebook()
+          : await cloud.signInWithApple();
     toast(result.ok ? `Continue with ${provider}` : `${provider} sign-in unavailable`, result);
     setBusy('');
   };
@@ -115,12 +132,33 @@ export default function Login() {
 
   return (
     <main className="clean-entry-shell clean-entry-shell--brand-auth">
-      <section className="clean-login-layout" aria-label={authMode === 'signin' ? 'Sign in to XBAR' : 'Create an XBAR account'}>
+      <section
+        className="clean-login-layout"
+        aria-label={authMode === 'signin' ? 'Sign in to XBAR' : 'Create an XBAR account'}
+      >
         <aside className="clean-login-visual" aria-label="XBAR brand">
-          <img className="clean-login-visual__horse" src="/brand/xbar-horse-outline-safe.png" width="980" height="331" alt="" />
-          <img className="clean-login-visual__watermark" src="/brand/xbar-x-watermark-main.png" width="512" height="512" alt="" />
+          <img
+            className="clean-login-visual__horse"
+            src="/brand/xbar-horse-outline-safe.png"
+            width="980"
+            height="331"
+            alt=""
+          />
+          <img
+            className="clean-login-visual__watermark"
+            src="/brand/xbar-x-watermark-main.png"
+            width="512"
+            height="512"
+            alt=""
+          />
           <div className="clean-login-visual__copy">
-            <img className="clean-login-visual__wordmark" src="/brand/xbar-wordmark.png" width="420" height="120" alt="XBAR" />
+            <img
+              className="clean-login-visual__wordmark"
+              src="/brand/xbar-wordmark.png"
+              width="420"
+              height="120"
+              alt="XBAR"
+            />
             <h2>XBAR Ranch Management</h2>
             <p>Keep your horse records, documents, and sale packets organized in one place.</p>
           </div>
@@ -160,7 +198,14 @@ export default function Login() {
           <form className="clean-form" onSubmit={submit} aria-busy={busy !== ''}>
             <div className="clean-field">
               <label htmlFor={emailId}>Email or User ID</label>
-              <input id={emailId} type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required />
+              <input
+                id={emailId}
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                autoComplete="email"
+                required
+              />
             </div>
             <div className="clean-field">
               <label htmlFor={passwordId}>Password</label>
@@ -174,14 +219,19 @@ export default function Login() {
                   minLength={8}
                   required
                 />
-                <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Hide entered value' : 'Show entered value'}>
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((value) => !value)}
+                  aria-label={showPassword ? 'Hide entered value' : 'Show entered value'}
+                >
                   {showPassword ? 'Hide' : 'Show'}
                 </button>
               </div>
             </div>
             <div className="clean-auth-options">
               <label>
-                <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} /> Remember me
+                <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />{' '}
+                Remember me
               </label>
               {authMode === 'signin' && supabaseReady && (
                 <button type="button" disabled={!email || busy !== ''} onClick={reset}>
@@ -189,7 +239,11 @@ export default function Login() {
                 </button>
               )}
             </div>
-            <button className="clean-primary-button" type="submit" disabled={!email || password.length < 8 || busy !== ''}>
+            <button
+              className="clean-primary-button"
+              type="submit"
+              disabled={!email || password.length < 8 || busy !== ''}
+            >
               {busy === 'password' ? 'Authenticating...' : authMode === 'signin' ? 'Sign In' : 'Create Account'}
             </button>
             {supabaseReady && (

@@ -9,11 +9,9 @@ export const buyerOfferStatuses = [
   'Deposit Paid',
 ] as const satisfies readonly NonNullable<SalesLead['offerStatus']>[];
 
-export const buyerDepositStatuses = [
-  'Not Requested',
-  'Due',
-  'Paid',
-] as const satisfies readonly NonNullable<SalesLead['depositStatus']>[];
+export const buyerDepositStatuses = ['Not Requested', 'Due', 'Paid'] as const satisfies readonly NonNullable<
+  SalesLead['depositStatus']
+>[];
 
 export type BuyerOfferStatus = (typeof buyerOfferStatuses)[number];
 export type BuyerDepositStatus = (typeof buyerDepositStatuses)[number];

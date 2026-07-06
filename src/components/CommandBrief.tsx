@@ -79,9 +79,7 @@ export function CommandBrief({
             {evidence.map((item) => (
               <div key={item.label} className="command-brief__evidence-item">
                 <dt>{item.label}</dt>
-                <dd>
-                  {item.to ? <Link to={item.to}>{item.value}</Link> : item.value}
-                </dd>
+                <dd>{item.to ? <Link to={item.to}>{item.value}</Link> : item.value}</dd>
               </div>
             ))}
           </dl>

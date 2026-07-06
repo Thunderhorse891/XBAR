@@ -58,16 +58,14 @@ export function createOwnerRegistry(relationshipRows: RelationshipRow[]): OwnerR
       return;
     }
 
-    const existing: OwnerRegistryRow =
-      rows.get(key) ??
-      {
-        name: params.name.trim(),
-        contact: params.contact?.trim() ?? '',
-        horses: [],
-        roles: [],
-        shares: [],
-        statuses: [],
-      };
+    const existing: OwnerRegistryRow = rows.get(key) ?? {
+      name: params.name.trim(),
+      contact: params.contact?.trim() ?? '',
+      horses: [],
+      roles: [],
+      shares: [],
+      statuses: [],
+    };
 
     if (!existing.contact && params.contact?.trim()) {
       existing.contact = params.contact.trim();
@@ -132,7 +130,10 @@ export function filterAndSortRelationshipRows(
       .join(' ')
       .toLowerCase();
 
-    return (!normalizedQuery || haystack.includes(normalizedQuery)) && (statusFilter === 'All' || row.status === statusFilter);
+    return (
+      (!normalizedQuery || haystack.includes(normalizedQuery)) &&
+      (statusFilter === 'All' || row.status === statusFilter)
+    );
   });
 
   return [...matches].sort((left, right) => {
@@ -162,11 +163,7 @@ export function getHorsesWithOwnership(relationshipRows: RelationshipRow[]): num
   return relationshipRows.filter((row) => row.record).length;
 }
 
-export function getLatestOwnershipDocuments(
-  documents: DocumentRecord[],
-  types: string[],
-  limit = 6,
-): DocumentRecord[] {
+export function getLatestOwnershipDocuments(documents: DocumentRecord[], types: string[], limit = 6): DocumentRecord[] {
   return documents
     .filter((document) => types.includes(document.type))
     .slice()

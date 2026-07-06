@@ -23,7 +23,9 @@ export default async function handler(req, res) {
     return sendJson(res, 400, { ok: false, message: 'Workspace, buyer request, and response note are required.' });
   }
 
-  const accessToken = String(req.headers?.authorization || '').replace(/^Bearer\s+/i, '').trim();
+  const accessToken = String(req.headers?.authorization || '')
+    .replace(/^Bearer\s+/i, '')
+    .trim();
   const access = await requireWorkspaceAccess(accessToken, workspaceId);
   if (!access.ok) {
     return sendJson(res, access.status, { ok: false, message: access.message });

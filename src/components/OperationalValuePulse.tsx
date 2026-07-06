@@ -8,15 +8,23 @@ type OperationalValuePulseProps = {
 
 export function OperationalValuePulse({ pulse }: OperationalValuePulseProps) {
   return (
-    <section className={`operational-value-pulse operational-value-pulse--${pulse.tone}`} aria-labelledby="operational-value-title">
+    <section
+      className={`operational-value-pulse operational-value-pulse--${pulse.tone}`}
+      aria-labelledby="operational-value-title"
+    >
       <div className="operational-value-pulse__summary">
         <div className="operational-value-pulse__eyebrow">Operational value pulse</div>
         <div className="operational-value-pulse__heading-row">
           <div>
-            <h2 id="operational-value-title" className="operational-value-pulse__title">{pulse.headline}</h2>
+            <h2 id="operational-value-title" className="operational-value-pulse__title">
+              {pulse.headline}
+            </h2>
             <p className="operational-value-pulse__copy">{pulse.summary}</p>
           </div>
-          <div className="operational-value-pulse__score" aria-label={`Operational control score ${pulse.score} out of 100`}>
+          <div
+            className="operational-value-pulse__score"
+            aria-label={`Operational control score ${pulse.score} out of 100`}
+          >
             <strong>{pulse.score}</strong>
             <span>control score</span>
           </div>
@@ -35,7 +43,11 @@ export function OperationalValuePulse({ pulse }: OperationalValuePulseProps) {
 
       <div className="operational-value-pulse__signals" aria-label="Operational value signals">
         {pulse.signals.map((signal) => (
-          <Link key={signal.label} className={`operational-value-signal operational-value-signal--${signal.state}`} to={signal.path}>
+          <Link
+            key={signal.label}
+            className={`operational-value-signal operational-value-signal--${signal.state}`}
+            to={signal.path}
+          >
             <span className="operational-value-signal__label">{signal.label}</span>
             <strong className="operational-value-signal__value">{signal.value}</strong>
             <span className="operational-value-signal__detail">{signal.detail}</span>

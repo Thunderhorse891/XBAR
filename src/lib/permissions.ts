@@ -26,25 +26,9 @@ const roleCapabilityMap: Record<UserRole, RoleCapability[]> = {
     'manageAssets',
     'manageSharedAccess',
   ],
-  Owner: [
-    'editHorse',
-    'uploadDocuments',
-    'reviewDocuments',
-    'manageMedical',
-    'syncCloud',
-  ],
-  'Medical Lead': [
-    'uploadDocuments',
-    'reviewDocuments',
-    'manageMedical',
-  ],
-  'Sales Lead': [
-    'editHorse',
-    'uploadDocuments',
-    'uploadMedia',
-    'manageSales',
-    'manageSharedAccess',
-  ],
+  Owner: ['editHorse', 'uploadDocuments', 'reviewDocuments', 'manageMedical', 'syncCloud'],
+  'Medical Lead': ['uploadDocuments', 'reviewDocuments', 'manageMedical'],
+  'Sales Lead': ['editHorse', 'uploadDocuments', 'uploadMedia', 'manageSales', 'manageSharedAccess'],
 };
 
 const capabilityMessages: Record<RoleCapability, string> = {

@@ -131,9 +131,10 @@ export function hasMeaningfulPersistedWorkspace(value: string | null) {
   if (!state || typeof state !== 'object') return false;
 
   const workspace = state as Record<string, unknown>;
-  const profile = workspace.workspaceProfile && typeof workspace.workspaceProfile === 'object'
-    ? workspace.workspaceProfile as Record<string, unknown>
-    : null;
+  const profile =
+    workspace.workspaceProfile && typeof workspace.workspaceProfile === 'object'
+      ? (workspace.workspaceProfile as Record<string, unknown>)
+      : null;
 
   return Boolean(
     (typeof profile?.setupCompleteAt === 'string' && profile.setupCompleteAt.trim()) ||
@@ -170,7 +171,7 @@ export const workspaceStateStorage: StateStorage = {
   },
   async setItem(name, value) {
     if (name === LEGACY_KEY) {
-      const existingValue = await readIndexedValue(name) ?? readLegacyValue(name);
+      const existingValue = (await readIndexedValue(name)) ?? readLegacyValue(name);
       if (shouldProtectMeaningfulWorkspaceWrite(existingValue, value)) {
         return;
       }

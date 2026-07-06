@@ -15,7 +15,11 @@ function isoDaysAgo(days: number): string {
   return new Date(now.getTime() - days * DAY).toISOString().slice(0, 10);
 }
 
-function breedingEvent(daysAgo: number, recordType: BreedingRecordDetails['recordType'], extra: Partial<BreedingRecordDetails> = {}): TimelineEvent {
+function breedingEvent(
+  daysAgo: number,
+  recordType: BreedingRecordDetails['recordType'],
+  extra: Partial<BreedingRecordDetails> = {},
+): TimelineEvent {
   return {
     id: `ev-${recordType}-${daysAgo}`,
     date: isoDaysAgo(daysAgo),
@@ -27,7 +31,12 @@ function breedingEvent(daysAgo: number, recordType: BreedingRecordDetails['recor
   } as TimelineEvent;
 }
 
-function mare(id: string, name: string, timeline: TimelineEvent[], economics?: HorseRecord['breedingEconomics']): HorseRecord {
+function mare(
+  id: string,
+  name: string,
+  timeline: TimelineEvent[],
+  economics?: HorseRecord['breedingEconomics'],
+): HorseRecord {
   return { id, name, sex: 'Mare', breedingTimeline: timeline, breedingEconomics: economics } as unknown as HorseRecord;
 }
 
@@ -47,7 +56,10 @@ test('checkpoint cadence matches the standard equine prenatal schedule', () => {
 });
 
 test('a freshly bred mare awaits confirmation', () => {
-  const state = buildMareBreedingState(mare('m1', 'Glory', [breedingEvent(5, 'breeding', { mateName: 'Thunder', method: 'live-cover' })]), now);
+  const state = buildMareBreedingState(
+    mare('m1', 'Glory', [breedingEvent(5, 'breeding', { mateName: 'Thunder', method: 'live-cover' })]),
+    now,
+  );
   assert.equal(state.status, 'bred-awaiting-check');
   assert.equal(state.guarantee, 'covered');
   assert.equal(state.mateName, 'Thunder');
@@ -85,7 +97,10 @@ test('a confirmed mare inside 30 days of foaling is near-term with kit prep acti
 
 test('overdue critical checkpoints take action priority', () => {
   // Bred 35 days ago, no checks logged: day-15 and day-28 critical checks overdue.
-  const state = buildMareBreedingState(mare('m1', 'Glory', [breedingEvent(35, 'breeding', { mateName: 'Thunder' })]), now);
+  const state = buildMareBreedingState(
+    mare('m1', 'Glory', [breedingEvent(35, 'breeding', { mateName: 'Thunder' })]),
+    now,
+  );
   assert.ok(state.overdueCheckpoints.length >= 2);
   assert.match(state.actionLabel, /overdue/);
 });
@@ -187,12 +202,20 @@ test('a breeding past the latest foaling date with no outcome is not counted as 
   assert.equal(state.status, 'bred-awaiting-check');
   assert.match(state.actionLabel, /Record foaling outcome/);
 
-  const program = buildBreedingProgram([
-    mare('m1', 'Glory', [
-      breedingEvent(400, 'breeding', { mateName: 'Thunder' }),
-      breedingEvent(370, 'pregnancy-check', { result: 'in foal' }),
-    ], { studFee: 3000, bookedMares: 1, breedingCosts: 4000, mareProductionValue: 0, foalProjectedValue: 18000 }),
-  ], now);
+  const program = buildBreedingProgram(
+    [
+      mare(
+        'm1',
+        'Glory',
+        [
+          breedingEvent(400, 'breeding', { mateName: 'Thunder' }),
+          breedingEvent(370, 'pregnancy-check', { result: 'in foal' }),
+        ],
+        { studFee: 3000, bookedMares: 1, breedingCosts: 4000, mareProductionValue: 0, foalProjectedValue: 18000 },
+      ),
+    ],
+    now,
+  );
   assert.equal(program.nearTerm, 0);
   assert.equal(program.inFoal, 0);
 });
@@ -212,9 +235,10 @@ test('a logged pregnancy check satisfies earlier diagnostic checkpoints', () => 
 });
 
 test('a bred mare that went open stays in the program with a rebreed action', () => {
-  const program = buildBreedingProgram([
-    mare('m1', 'Glory', [breedingEvent(40, 'breeding'), breedingEvent(15, 'pregnancy-check', { result: 'open' })]),
-  ], now);
+  const program = buildBreedingProgram(
+    [mare('m1', 'Glory', [breedingEvent(40, 'breeding'), breedingEvent(15, 'pregnancy-check', { result: 'open' })])],
+    now,
+  );
   assert.equal(program.maresTracked, 1);
   assert.equal(program.mares[0]!.status, 'open');
   assert.match(program.mares[0]!.actionLabel, /[Rr]ebreed/);
@@ -223,8 +247,18 @@ test('a bred mare that went open stays in the program with a rebreed action', ()
 test('program rollup aggregates carriers, value, and overdue checks', () => {
   const program = buildBreedingProgram(
     [
-      mare('m1', 'Glory', [breedingEvent(320, 'breeding'), breedingEvent(290, 'pregnancy-check', { result: 'in foal' })], { studFee: 3000, bookedMares: 1, breedingCosts: 4000, mareProductionValue: 0, foalProjectedValue: 18000 }),
-      mare('m2', 'Star', [breedingEvent(60, 'breeding'), breedingEvent(30, 'pregnancy-check', { result: 'confirmed' })], { studFee: 3000, bookedMares: 1, breedingCosts: 4000, mareProductionValue: 0, foalProjectedValue: 12000 }),
+      mare(
+        'm1',
+        'Glory',
+        [breedingEvent(320, 'breeding'), breedingEvent(290, 'pregnancy-check', { result: 'in foal' })],
+        { studFee: 3000, bookedMares: 1, breedingCosts: 4000, mareProductionValue: 0, foalProjectedValue: 18000 },
+      ),
+      mare(
+        'm2',
+        'Star',
+        [breedingEvent(60, 'breeding'), breedingEvent(30, 'pregnancy-check', { result: 'confirmed' })],
+        { studFee: 3000, bookedMares: 1, breedingCosts: 4000, mareProductionValue: 0, foalProjectedValue: 12000 },
+      ),
       mare('m3', 'Dusty', [breedingEvent(35, 'breeding')]), // no checks → overdue criticals
       { id: 'g1', name: 'Comet', sex: 'Gelding', breedingTimeline: [] } as unknown as HorseRecord,
     ],

@@ -31,10 +31,7 @@ export default function Pastures() {
       kind,
       horses: horses.filter((h) => (kind === 'Barn' ? h.location.barn === name : h.location.pasture === name)),
     });
-    return [
-      ...Array.from(barns).map((n) => mk(n, 'Barn')),
-      ...Array.from(pastures).map((n) => mk(n, 'Pasture')),
-    ];
+    return [...Array.from(barns).map((n) => mk(n, 'Barn')), ...Array.from(pastures).map((n) => mk(n, 'Pasture'))];
   }, [horses, workspaceProfile]);
 
   const selected = locations.find((l) => l.id === selectedId) ?? null;
@@ -47,27 +44,51 @@ export default function Pastures() {
         subtitle="Where every horse is, what needs attention, and which locations have open issues."
         actions={
           <>
-            <ActionButton icon={<Move size={15} />} onClick={() => toast('Use a horse profile to move it between locations')}>Move Horses</ActionButton>
-            <ActionButton variant="primary" icon={<AlertTriangle size={15} />} onClick={() => toast('Pasture issue reported')}>Report Issue</ActionButton>
+            <ActionButton
+              icon={<Move size={15} />}
+              onClick={() => toast('Use a horse profile to move it between locations')}
+            >
+              Move Horses
+            </ActionButton>
+            <ActionButton
+              variant="primary"
+              icon={<AlertTriangle size={15} />}
+              onClick={() => toast('Pasture issue reported')}
+            >
+              Report Issue
+            </ActionButton>
           </>
         }
       />
 
       <Card>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--xbar-text-muted)', fontSize: 13 }}>
-          <MapPin size={16} /> {locations.length} location{locations.length === 1 ? '' : 's'} configured. Click a location to see the horses currently there.
+          <MapPin size={16} /> {locations.length} location{locations.length === 1 ? '' : 's'} configured. Click a
+          location to see the horses currently there.
         </div>
       </Card>
 
       <div className="xs-grid-2">
         {locations.map((p) => (
-          <button key={p.id} type="button" className="xs-card" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setSelectedId(p.id)}>
+          <button
+            key={p.id}
+            type="button"
+            className="xs-card"
+            style={{ textAlign: 'left', cursor: 'pointer' }}
+            onClick={() => setSelectedId(p.id)}
+          >
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
               <div>
-                <h2 className="xs-card__title" style={{ fontSize: 17 }}>{p.name}</h2>
-                <div className="xs-card__sub">{p.kind} · {p.horses.length} horse{p.horses.length === 1 ? '' : 's'}</div>
+                <h2 className="xs-card__title" style={{ fontSize: 17 }}>
+                  {p.name}
+                </h2>
+                <div className="xs-card__sub">
+                  {p.kind} · {p.horses.length} horse{p.horses.length === 1 ? '' : 's'}
+                </div>
               </div>
-              <StatusChip tone={p.horses.length ? 'info' : 'neutral'}>{p.horses.length ? 'Occupied' : 'Empty'}</StatusChip>
+              <StatusChip tone={p.horses.length ? 'info' : 'neutral'}>
+                {p.horses.length ? 'Occupied' : 'Empty'}
+              </StatusChip>
             </div>
           </button>
         ))}
@@ -78,7 +99,25 @@ export default function Pastures() {
         title={selected?.name ?? ''}
         subtitle={selected ? `${selected.kind} · ${selected.horses.length} horses` : ''}
         onClose={() => setSelectedId(null)}
-        footer={selected ? (<><ActionButton icon={<Move size={15} />} onClick={() => toast(`Move from ${selected.name}`)}>Move Horses</ActionButton><ActionButton variant="primary" icon={<AlertTriangle size={15} />} onClick={() => { toast(`Issue reported at ${selected.name}`); setSelectedId(null); }}>Report Issue</ActionButton></>) : null}
+        footer={
+          selected ? (
+            <>
+              <ActionButton icon={<Move size={15} />} onClick={() => toast(`Move from ${selected.name}`)}>
+                Move Horses
+              </ActionButton>
+              <ActionButton
+                variant="primary"
+                icon={<AlertTriangle size={15} />}
+                onClick={() => {
+                  toast(`Issue reported at ${selected.name}`);
+                  setSelectedId(null);
+                }}
+              >
+                Report Issue
+              </ActionButton>
+            </>
+          ) : null
+        }
       >
         {selected ? (
           <>
@@ -86,14 +125,30 @@ export default function Pastures() {
             {selected.horses.length ? (
               <div className="xs-mlist">
                 {selected.horses.map((h) => (
-                  <button key={h.id} type="button" className="xs-mrow" style={{ width: '100%', textAlign: 'left', cursor: 'pointer' }} onClick={() => { setSelectedId(null); navigate(`/horses/${h.id}`); }}>
-                    <span className="xs-mrow__main"><span className="xs-mrow__title">{h.name}</span><span className="xs-mrow__detail">{h.sex} · {h.segment}</span></span>
+                  <button
+                    key={h.id}
+                    type="button"
+                    className="xs-mrow"
+                    style={{ width: '100%', textAlign: 'left', cursor: 'pointer' }}
+                    onClick={() => {
+                      setSelectedId(null);
+                      navigate(`/horses/${h.id}`);
+                    }}
+                  >
+                    <span className="xs-mrow__main">
+                      <span className="xs-mrow__title">{h.name}</span>
+                      <span className="xs-mrow__detail">
+                        {h.sex} · {h.segment}
+                      </span>
+                    </span>
                     <StatusChip tone="info">{h.status}</StatusChip>
                   </button>
                 ))}
               </div>
             ) : (
-              <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>No horses currently in this location.</p>
+              <p className="xs-muted" style={{ fontSize: 13, marginTop: 0 }}>
+                No horses currently in this location.
+              </p>
             )}
           </>
         ) : null}
