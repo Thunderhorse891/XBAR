@@ -6,7 +6,6 @@ const NETWORK_FIRST_ASSET_PATHS = [
   /^\/ocr\//,
   /^\/favicon\.svg$/,
   /^\/site\.webmanifest$/,
-  /^\/manifest\.webmanifest$/,
 ];
 
 self.addEventListener('install', (event) => {

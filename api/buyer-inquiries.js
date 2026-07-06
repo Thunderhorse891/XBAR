@@ -1,6 +1,7 @@
 import { readJsonBody, sendJson } from './_lib/http.js';
 import { getSupabaseAdmin } from './_lib/supabase-admin.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
+import { applyCors } from './_lib/cors.js';
 
 /*
  * Public buyer folder intake. Anonymous buyers on a shared packet page can
@@ -18,6 +19,10 @@ const MAX_MESSAGE_CHARS = 1200;
 const RATE_LIMIT = { bucket: 'buyer-inquiries', limit: 12, windowSeconds: 60 };
 
 export default async function handler(req, res) {
+  if (!applyCors(req, res)) {
+    return;
+  }
+
   if (req.method !== 'POST') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
   }

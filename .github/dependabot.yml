@@ -1,0 +1,29 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      # Batch low-risk updates so security patches surface on their own.
+      dev-dependencies:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+      production-minor-patch:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+    labels:
+      - dependencies
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+      - github-actions

@@ -1,6 +1,8 @@
 import { readJsonBody, sendJson } from './_lib/http.js';
 import { getSupabaseAdmin, requireWorkspaceAccess } from './_lib/supabase-admin.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
+import { applyCors } from './_lib/cors.js';
+import { parseBody, telemetrySchema } from './_lib/validation.js';
 
 /*
  * Runtime telemetry intake. This runs with the Supabase service-role key, so a
@@ -12,18 +14,12 @@ import { enforceRateLimit } from './_lib/rate-limit.js';
  * prevent write amplification, and the endpoint is per-IP rate limited.
  */
 
-const ALLOWED_SEVERITIES = new Set(['info', 'warning', 'error']);
-const MAX_EVENT_NAME_CHARS = 120;
 const MAX_PAYLOAD_BYTES = 8_192;
 const RATE_LIMIT = { bucket: 'telemetry', limit: 60, windowSeconds: 60 };
 
-function sanitizePayload(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return {};
-  }
+function capPayload(value) {
   try {
-    const serialized = JSON.stringify(value);
-    if (Buffer.byteLength(serialized, 'utf8') > MAX_PAYLOAD_BYTES) {
+    if (Buffer.byteLength(JSON.stringify(value), 'utf8') > MAX_PAYLOAD_BYTES) {
       return { truncated: true };
     }
     return value;
@@ -33,6 +29,10 @@ function sanitizePayload(value) {
 }
 
 export default async function handler(req, res) {
+  if (!applyCors(req, res)) {
+    return;
+  }
+
   if (req.method !== 'POST') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
   }
@@ -53,11 +53,14 @@ export default async function handler(req, res) {
     return sendJson(res, 400, { ok: false, message: 'Request body must be valid JSON.' });
   }
 
-  const requestedWorkspaceId = typeof body.workspaceId === 'string' ? body.workspaceId : '';
-  const rawEventName = typeof body.eventName === 'string' ? body.eventName : 'runtime.event';
-  const eventName = rawEventName.slice(0, MAX_EVENT_NAME_CHARS) || 'runtime.event';
-  const severity = ALLOWED_SEVERITIES.has(body.severity) ? body.severity : 'info';
-  const payload = sanitizePayload(body.payload);
+  const parsed = parseBody(telemetrySchema, body);
+  if (!parsed.ok) {
+    return sendJson(res, 400, { ok: false, message: parsed.message });
+  }
+  const requestedWorkspaceId = parsed.data.workspaceId;
+  const eventName = parsed.data.eventName || 'runtime.event';
+  const severity = parsed.data.severity;
+  const payload = capPayload(parsed.data.payload);
 
   // Only associate the event with a workspace when the caller proves membership.
   let workspaceId = null;

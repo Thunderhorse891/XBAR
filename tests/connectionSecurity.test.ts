@@ -15,6 +15,8 @@ const inviteSource = await readFile(fromRoot('api/invite.js'), 'utf8');
 const buyerInquiriesSource = await readFile(fromRoot('api/buyer-inquiries.js'), 'utf8');
 const rateLimitSource = await readFile(fromRoot('api/_lib/rate-limit.js'), 'utf8');
 const vercelConfigSource = await readFile(fromRoot('vercel.json'), 'utf8');
+const validationSource = await readFile(fromRoot('api/_lib/validation.js'), 'utf8');
+const corsSource = await readFile(fromRoot('api/_lib/cors.js'), 'utf8');
 
 test('managed checkout is admin-only and validates return origins', () => {
   assert.match(checkoutSource, /MANAGED_BILLING_ENABLED/);
@@ -59,8 +61,24 @@ test('telemetry never trusts a client-supplied workspace and caps payloads', () 
 
 test('member invitations are admin-only with a bounded role set', () => {
   assert.match(inviteSource, /access\.role !== 'Admin'/);
-  assert.match(inviteSource, /ALLOWED_INVITE_ROLES/);
+  assert.match(inviteSource, /parseBody\(inviteSchema, body\)/);
   assert.match(inviteSource, /Only workspace admins can invite members\./);
+});
+
+test('API request bodies are validated with shared zod schemas', () => {
+  assert.match(validationSource, /export const inviteSchema/);
+  assert.match(validationSource, /export const checkoutSchema/);
+  assert.match(validationSource, /export const telemetrySchema/);
+  assert.match(inviteSource, /parseBody\(inviteSchema, body\)/);
+  assert.match(checkoutSource, /parseBody\(checkoutSchema, body\)/);
+  assert.match(telemetrySource, /parseBody\(telemetrySchema, body\)/);
+});
+
+test('public endpoints declare an explicit, allow-listed CORS policy', () => {
+  assert.match(corsSource, /Access-Control-Allow-Origin/);
+  assert.match(corsSource, /allowedOrigins\.includes\(origin\)/);
+  assert.match(buyerInquiriesSource, /applyCors\(req, res\)/);
+  assert.match(telemetrySource, /applyCors\(req, res\)/);
 });
 
 test('anonymous public endpoints are rate limited', () => {

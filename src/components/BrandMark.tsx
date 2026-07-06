@@ -7,7 +7,7 @@ type BrandMarkProps = SVGProps<SVGSVGElement> & {
 
 export const XBAR_MAIN_LOGO_SRC = '/brand/xbar-app-icon.png';
 
-export function XbarMark({ title, tone = 'color', ...props }: BrandMarkProps) {
+export function XbarMark({ title, tone: _tone = 'color', ...props }: BrandMarkProps) {
   return (
     <svg viewBox="0 0 64 64" role={title ? 'img' : undefined} aria-hidden={title ? undefined : true} {...props}>
       {title ? <title>{title}</title> : null}

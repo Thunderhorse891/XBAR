@@ -309,7 +309,7 @@ export function SalePacketWizard({
                             aria-label={`Include ${document.title}`}
                             checked={docSelection.includes(document.id)}
                             onCheckedChange={(value) =>
-                              setSelectedDocIds(Boolean(value) ? [...docSelection, document.id] : docSelection.filter((id) => id !== document.id))
+                              setSelectedDocIds(value ? [...docSelection, document.id] : docSelection.filter((id) => id !== document.id))
                             }
                           />
                         </TableCell>

@@ -43,7 +43,7 @@
       ]
     },
     {
-      "source": "/((?!api/|assets/|brand/|ocr/|favicon\\.svg|favicon\\.ico|site\\.webmanifest|manifest\\.webmanifest|xbar-service-worker\\.js|robots\\.txt|sitemap\\.xml).*)",
+      "source": "/((?!api/|assets/|brand/|ocr/|favicon\\.svg|favicon\\.ico|site\\.webmanifest|xbar-service-worker\\.js|robots\\.txt|sitemap\\.xml).*)",
       "headers": [
         {
           "key": "Cache-Control",
@@ -54,7 +54,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!api/|assets/|brand/|ocr/|favicon\\.svg|favicon\\.ico|site\\.webmanifest|manifest\\.webmanifest|xbar-service-worker\\.js|robots\\.txt|sitemap\\.xml).*)",
+      "source": "/((?!api/|assets/|brand/|ocr/|favicon\\.svg|favicon\\.ico|site\\.webmanifest|xbar-service-worker\\.js|robots\\.txt|sitemap\\.xml).*)",
       "destination": "/index.html"
     }
   ],
