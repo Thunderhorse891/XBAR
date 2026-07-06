@@ -1,5 +1,6 @@
 import { readJsonBody, sendJson } from './_lib/http.js';
 import { getSupabaseAdmin } from './_lib/supabase-admin.js';
+import { enforceRateLimit } from './_lib/rate-limit.js';
 
 /*
  * Public buyer folder intake. Anonymous buyers on a shared packet page can
@@ -7,14 +8,22 @@ import { getSupabaseAdmin } from './_lib/supabase-admin.js';
  * buyer packet. The share path/token is validated against the listing (same
  * RPC the public page uses) before anything is written, and events land in
  * public_share_events where the workspace's buyer folder reads them.
+ *
+ * This endpoint is anonymous by design, so it is per-IP rate limited to stop a
+ * single client from flooding a seller's buyer folder with spam events.
  */
 
 const ALLOWED_KINDS = new Set(['question', 'call-requested', 'proof-requested', 'offer', 'packet-downloaded']);
 const MAX_MESSAGE_CHARS = 1200;
+const RATE_LIMIT = { bucket: 'buyer-inquiries', limit: 12, windowSeconds: 60 };
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
+  }
+
+  if (!(await enforceRateLimit(req, res, RATE_LIMIT))) {
+    return;
   }
 
   let body;

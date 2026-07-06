@@ -10,6 +10,11 @@ const migrationSource = await readFile(fromRoot('supabase/migrations/20260605_ha
 const commercialMigrationSource = await readFile(fromRoot('supabase/migrations/20260611_commercial_entitlements.sql'), 'utf8');
 const cloudWorkspaceSource = await readFile(fromRoot('src/lib/cloudWorkspace.ts'), 'utf8');
 const prepareSchemaSource = await readFile(fromRoot('scripts/prepare-supabase-schema.mjs'), 'utf8');
+const telemetrySource = await readFile(fromRoot('api/telemetry.js'), 'utf8');
+const inviteSource = await readFile(fromRoot('api/invite.js'), 'utf8');
+const buyerInquiriesSource = await readFile(fromRoot('api/buyer-inquiries.js'), 'utf8');
+const rateLimitSource = await readFile(fromRoot('api/_lib/rate-limit.js'), 'utf8');
+const vercelConfigSource = await readFile(fromRoot('vercel.json'), 'utf8');
 
 test('managed checkout is admin-only and validates return origins', () => {
   assert.match(checkoutSource, /MANAGED_BILLING_ENABLED/);
@@ -40,6 +45,39 @@ test('schema preparation removes unsupported policy syntax', () => {
   assert.match(prepareSchemaSource, /create policy if not exists/);
   assert.match(prepareSchemaSource, /drop policy if exists/);
   assert.match(prepareSchemaSource, /production-schema\.generated\.sql/);
+});
+
+test('telemetry never trusts a client-supplied workspace and caps payloads', () => {
+  // A claimed workspace is only attached after membership is verified.
+  assert.match(telemetrySource, /requireWorkspaceAccess\(accessToken, requestedWorkspaceId\)/);
+  assert.match(telemetrySource, /let workspaceId = null/);
+  assert.match(telemetrySource, /MAX_PAYLOAD_BYTES/);
+  assert.match(telemetrySource, /enforceRateLimit\(req, res, RATE_LIMIT\)/);
+  // The raw request workspaceId must never be written directly.
+  assert.doesNotMatch(telemetrySource, /workspace_id: requestedWorkspaceId/);
+});
+
+test('member invitations are admin-only with a bounded role set', () => {
+  assert.match(inviteSource, /access\.role !== 'Admin'/);
+  assert.match(inviteSource, /ALLOWED_INVITE_ROLES/);
+  assert.match(inviteSource, /Only workspace admins can invite members\./);
+});
+
+test('anonymous public endpoints are rate limited', () => {
+  assert.match(buyerInquiriesSource, /enforceRateLimit\(req, res, RATE_LIMIT\)/);
+  assert.match(telemetrySource, /enforceRateLimit\(req, res, RATE_LIMIT\)/);
+  // The limiter uses a shared store when configured and fails open on error.
+  assert.match(rateLimitSource, /UPSTASH_REDIS_REST_URL/);
+  assert.match(rateLimitSource, /memoryBuckets/);
+});
+
+test('production responses carry hardened security headers', () => {
+  assert.match(vercelConfigSource, /Content-Security-Policy/);
+  assert.match(vercelConfigSource, /frame-ancestors 'none'/);
+  assert.match(vercelConfigSource, /Strict-Transport-Security/);
+  assert.match(vercelConfigSource, /X-Content-Type-Options/);
+  assert.match(vercelConfigSource, /Referrer-Policy/);
+  assert.match(vercelConfigSource, /Permissions-Policy/);
 });
 
 test('commercial entitlements are server-authoritative and audited', () => {
