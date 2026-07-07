@@ -15,21 +15,9 @@ export type RoleCapability =
   | 'manageBilling'
   | 'syncCloud';
 
-export type HorseSegment =
-  | 'Broodmare'
-  | 'Stud'
-  | 'Show String'
-  | 'Sale Prospect'
-  | 'Young Stock'
-  | 'Retired';
+export type HorseSegment = 'Broodmare' | 'Stud' | 'Show String' | 'Sale Prospect' | 'Young Stock' | 'Retired';
 
-export type HorseStatus =
-  | 'In Training'
-  | 'Broodmare Program'
-  | 'Sale Prep'
-  | 'Medical Review'
-  | 'Pasture'
-  | 'Retired';
+export type HorseStatus = 'In Training' | 'Broodmare Program' | 'Sale Prep' | 'Medical Review' | 'Pasture' | 'Retired';
 
 export type HorseSex = 'Mare' | 'Stud' | 'Gelding' | 'Filly' | 'Colt';
 
@@ -46,24 +34,12 @@ export type DocumentType =
 
 export type DocumentSource = 'Manual Upload' | 'Bulk Intake' | 'Shared Upload' | 'Sales Packet';
 
-export type ProcessingState =
-  | 'Queued'
-  | 'Needs Review'
-  | 'Matched'
-  | 'Ready'
-  | 'Archived';
+export type ProcessingState = 'Queued' | 'Needs Review' | 'Matched' | 'Ready' | 'Archived';
 
 export type Severity = 'low' | 'medium' | 'high';
 
 export type MedicalEventType =
-  | 'Vet visit'
-  | 'Vaccine'
-  | 'Coggins'
-  | 'Injury'
-  | 'Dental'
-  | 'Deworming'
-  | 'Treatment'
-  | 'Historical note';
+  'Vet visit' | 'Vaccine' | 'Coggins' | 'Injury' | 'Dental' | 'Deworming' | 'Treatment' | 'Historical note';
 
 export type TransferStatus = 'Clear' | 'Pending Signatures' | 'AQHA Review' | 'Attention Required';
 
@@ -76,14 +52,7 @@ export type AssetStatus = 'Available' | 'Assigned' | 'In Service';
 export type AssetCondition = 'Excellent' | 'Service Soon' | 'Attention Required';
 
 export type ExpenseCategory =
-  | 'Feed'
-  | 'Wormer'
-  | 'Dental Float'
-  | 'Farrier'
-  | 'Vet Care'
-  | 'Supplements'
-  | 'Bedding'
-  | 'Travel';
+  'Feed' | 'Wormer' | 'Dental Float' | 'Farrier' | 'Vet Care' | 'Supplements' | 'Bedding' | 'Travel';
 
 export interface GalleryAsset {
   id: string;
@@ -125,11 +94,7 @@ export interface OwnershipStake {
 export type ProofStatus = 'missing' | 'linked' | 'verified';
 
 export type OwnershipProofKind =
-  | 'bill_of_sale'
-  | 'registration_certificate'
-  | 'transfer_form'
-  | 'signature_page'
-  | 'supporting';
+  'bill_of_sale' | 'registration_certificate' | 'transfer_form' | 'signature_page' | 'supporting';
 
 export interface OwnershipProofRequirement {
   id: string;
@@ -145,14 +110,7 @@ export interface OwnershipProofRequirement {
 }
 
 export type AuditEntityType =
-  | 'ownership'
-  | 'document'
-  | 'horse'
-  | 'medical'
-  | 'breeding'
-  | 'sale-packet'
-  | 'asset'
-  | 'shared-access';
+  'ownership' | 'document' | 'horse' | 'medical' | 'breeding' | 'sale-packet' | 'asset' | 'shared-access';
 
 export type AuditAction =
   | 'created'

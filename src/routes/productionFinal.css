@@ -5,7 +5,11 @@ html body #root .xbar-command-main {
     linear-gradient(90deg, rgba(14, 23, 38, 0.03) 1px, transparent 1px),
     radial-gradient(circle at 11% 0%, rgba(36, 105, 214, 0.1), transparent 30%),
     linear-gradient(180deg, #f8fafc 0%, #f2f6fb 46%, #edf3f9 100%) !important;
-  background-size: 70px 70px, 70px 70px, auto, auto !important;
+  background-size:
+    70px 70px,
+    70px 70px,
+    auto,
+    auto !important;
 }
 
 html body #root .xbar-os-band {
@@ -90,7 +94,10 @@ html body #root .xbar-command-main .xbar-home-atelier {
     linear-gradient(rgba(17, 24, 39, 0.03) 1px, transparent 1px),
     linear-gradient(90deg, rgba(17, 24, 39, 0.026) 1px, transparent 1px),
     linear-gradient(135deg, #ffffff 0%, #f8fafc 54%, #f1f5f9 100%) !important;
-  background-size: 68px 68px, 68px 68px, auto !important;
+  background-size:
+    68px 68px,
+    68px 68px,
+    auto !important;
   border-radius: 8px !important;
 }
 

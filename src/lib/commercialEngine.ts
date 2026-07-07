@@ -1,12 +1,7 @@
 import type { SubscriptionProfile, SubscriptionTier } from '../types/xbar.js';
 
 export type CommercialFeature =
-  | 'buyerDealRoom'
-  | 'packetExport'
-  | 'teamInvites'
-  | 'profitIntelligence'
-  | 'breedingRevenue'
-  | 'ranchOps';
+  'buyerDealRoom' | 'packetExport' | 'teamInvites' | 'profitIntelligence' | 'breedingRevenue' | 'ranchOps';
 
 export type UsagePressure = 'clear' | 'warning' | 'upgrade' | 'blocked';
 
@@ -80,18 +75,21 @@ export function buildUsageMeters(subscription: SubscriptionProfile): UsageMeter[
   return inputs.map((meter) => {
     const percent = meter.limit > 0 ? Math.min(100, Math.round((meter.used / meter.limit) * 100)) : 100;
     const pressure = usagePressure(meter.used, meter.limit);
-    const message = pressure === 'blocked'
-      ? `${meter.label} capacity is full. Upgrade to unlock the next action.`
-      : pressure === 'upgrade'
-        ? `${meter.label} usage is at ${percent}%. Upgrade before the workflow stops.`
-        : pressure === 'warning'
-          ? `${meter.label} usage is at ${percent}%. Plan capacity now.`
-          : `${meter.limit - meter.used} ${meter.label.toLowerCase()} remaining.`;
+    const message =
+      pressure === 'blocked'
+        ? `${meter.label} capacity is full. Upgrade to unlock the next action.`
+        : pressure === 'upgrade'
+          ? `${meter.label} usage is at ${percent}%. Upgrade before the workflow stops.`
+          : pressure === 'warning'
+            ? `${meter.label} usage is at ${percent}%. Plan capacity now.`
+            : `${meter.limit - meter.used} ${meter.label.toLowerCase()} remaining.`;
     return { ...meter, percent, pressure, message };
   });
 }
 
 export function highestUsagePressure(subscription: SubscriptionProfile) {
   const rank: Record<UsagePressure, number> = { clear: 0, warning: 1, upgrade: 2, blocked: 3 };
-  return buildUsageMeters(subscription).sort((left, right) => rank[right.pressure] - rank[left.pressure] || right.percent - left.percent)[0];
+  return buildUsageMeters(subscription).sort(
+    (left, right) => rank[right.pressure] - rank[left.pressure] || right.percent - left.percent,
+  )[0];
 }

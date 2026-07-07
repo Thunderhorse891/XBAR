@@ -27,17 +27,17 @@
   --border: rgba(96, 124, 154, 0.24);
   --border-strong: rgba(96, 124, 154, 0.38);
   --blue: #1e73e8;
-  --blue-soft: rgba(30, 115, 232, 0.10);
+  --blue-soft: rgba(30, 115, 232, 0.1);
   --blue-line: rgba(45, 140, 255, 0.46);
   --slate: #62788f;
   --slate-soft: rgba(98, 120, 143, 0.12);
   /* No green: "emerald"/clear semantics resolve to verified blue. */
   --emerald: #1466d8;
-  --emerald-soft: rgba(20, 102, 216, 0.10);
+  --emerald-soft: rgba(20, 102, 216, 0.1);
   --amber: #9a6700;
   --amber-soft: rgba(154, 103, 0, 0.12);
   --rose: #c0444e;
-  --rose-soft: rgba(192, 68, 78, 0.10);
+  --rose-soft: rgba(192, 68, 78, 0.1);
   --shadow: 0 22px 48px -28px rgba(17, 21, 27, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.85);
   --shadow-soft: 0 14px 34px -24px rgba(17, 21, 27, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.8);
   --radius-xl: 18px;
@@ -79,8 +79,8 @@ body::selection {
 /* ── App shell / canvas ──────────────────────── */
 .app-shell,
 .shell-main,
-[class*="bg-[#eef3f8]"],
-[class*="bg-[#fbfdff]"] {
+[class*='bg-[#eef3f8]'],
+[class*='bg-[#fbfdff]'] {
   background: transparent !important;
   color: var(--text) !important;
 }
@@ -112,8 +112,8 @@ main.flex.flex-col {
 }
 
 .brand-lockup__title,
-.xbar-command-shell aside [class*="tracking-[0.14em]"],
-.xbar-command-shell aside [class*="tracking-[0.24em]"] {
+.xbar-command-shell aside [class*='tracking-[0.14em]'],
+.xbar-command-shell aside [class*='tracking-[0.24em]'] {
   color: #f3f8ff !important;
 }
 
@@ -121,16 +121,16 @@ main.flex.flex-col {
 .sidebar-card__eyebrow,
 .nav-section__title,
 .sidebar-footer__title,
-.xbar-command-shell aside [class*="text-[#52708d]"],
-.xbar-command-shell aside [class*="text-[#3d5870]"] {
+.xbar-command-shell aside [class*='text-[#52708d]'],
+.xbar-command-shell aside [class*='text-[#3d5870]'] {
   color: rgba(168, 194, 224, 0.58) !important;
 }
 
 .sidebar-card,
 .sidebar-footer,
-.xbar-command-shell aside [class*="bg-[#080f1c]"],
-.xbar-command-shell aside [class*="bg-[#08111d]"],
-.xbar-command-shell aside [class*="bg-[#0a1628]"] {
+.xbar-command-shell aside [class*='bg-[#080f1c]'],
+.xbar-command-shell aside [class*='bg-[#08111d]'],
+.xbar-command-shell aside [class*='bg-[#0a1628]'] {
   border-color: rgba(120, 165, 220, 0.13) !important;
   background: linear-gradient(145deg, rgba(12, 21, 34, 0.86), rgba(5, 10, 18, 0.92)) !important;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045) !important;
@@ -148,7 +148,7 @@ main.flex.flex-col {
 .xbar-command-shell aside button:hover {
   background: rgba(45, 140, 255, 0.09) !important;
   color: #f5f9ff !important;
-  border-color: rgba(45, 140, 255, 0.30) !important;
+  border-color: rgba(45, 140, 255, 0.3) !important;
 }
 
 .nav-link--active,
@@ -207,7 +207,7 @@ main > header:not(.topbar) {
 .dashboard-kpi__label,
 .ledger-stat__label,
 .horse-card__kicker,
-[class*="uppercase"][class*="tracking"] {
+[class*='uppercase'][class*='tracking'] {
   color: #1466d8 !important;
   font-weight: 800 !important;
   letter-spacing: 0.16em !important;
@@ -337,8 +337,8 @@ p {
 /* ── Pills / status chips on light surfaces ──── */
 .ops-briefing-chip,
 .pill,
-[class*="rounded-full"],
-[class*="rounded-md"][class*="uppercase"] {
+[class*='rounded-full'],
+[class*='rounded-md'][class*='uppercase'] {
   border: 1px solid var(--border) !important;
   background: #f1f7fc !important;
   color: var(--muted-strong) !important;
@@ -346,7 +346,7 @@ p {
 
 .pill--blue,
 .nav-badge--blue,
-[class*="text-[#1155dd]"] {
+[class*='text-[#1155dd]'] {
   color: #1466d8 !important;
 }
 
@@ -360,13 +360,13 @@ p {
 .pill--amber {
   color: #845607 !important;
   border-color: rgba(154, 103, 0, 0.32) !important;
-  background: rgba(154, 103, 0, 0.10) !important;
+  background: rgba(154, 103, 0, 0.1) !important;
 }
 
 .pill--rose {
   color: #a8343e !important;
   border-color: rgba(192, 68, 78, 0.34) !important;
-  background: rgba(192, 68, 78, 0.10) !important;
+  background: rgba(192, 68, 78, 0.1) !important;
 }
 
 .ops-briefing-stat,
@@ -417,31 +417,35 @@ label,
 .icon-button,
 .public-action,
 .ops-briefing-action,
-button[class*="border"],
-a[class*="border"] {
+button[class*='border'],
+a[class*='border'] {
   border-color: var(--border-strong) !important;
   background: linear-gradient(180deg, #ffffff, #eef4fa) !important;
   color: var(--muted-strong) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 6px 16px -10px rgba(17, 21, 27, 0.3) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 6px 16px -10px rgba(17, 21, 27, 0.3) !important;
 }
 
 .button--primary,
 .public-action--primary,
 .ops-briefing-action--primary,
-button[class*="bg-[#1155dd]"],
-a[class*="bg-[#1155dd]"] {
+button[class*='bg-[#1155dd]'],
+a[class*='bg-[#1155dd]'] {
   border-color: rgba(45, 140, 255, 0.72) !important;
   background: linear-gradient(180deg, #2d8cff 0%, #166fe4 100%) !important;
   color: #ffffff !important;
-  box-shadow: 0 12px 26px -12px rgba(22, 111, 228, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
+  box-shadow:
+    0 12px 26px -12px rgba(22, 111, 228, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
 }
 
 .button:hover,
 .icon-button:hover,
 .public-action:hover,
 .ops-briefing-action:hover,
-button[class*="border"]:hover,
-a[class*="border"]:hover {
+button[class*='border']:hover,
+a[class*='border']:hover {
   transform: translateY(-1px);
   border-color: rgba(45, 140, 255, 0.52) !important;
   background: linear-gradient(180deg, #ffffff, #e7f1fb) !important;
@@ -451,8 +455,8 @@ a[class*="border"]:hover {
 .button--primary:hover,
 .public-action--primary:hover,
 .ops-briefing-action--primary:hover,
-button[class*="bg-[#1155dd]"]:hover,
-a[class*="bg-[#1155dd]"]:hover {
+button[class*='bg-[#1155dd]']:hover,
+a[class*='bg-[#1155dd]']:hover {
   background: linear-gradient(180deg, #4aa0ff 0%, #207cff 100%) !important;
   color: #ffffff !important;
 }

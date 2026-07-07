@@ -28,12 +28,7 @@ export const subscriptionSeed: SubscriptionProfile = {
   renewalDate: '',
   billingState: 'Manual Billing',
   sharedAccessEnabled: false,
-  featureFlags: [
-    'First-run workspace setup',
-    'Manual document upload',
-    'Receipt logging',
-    'Horse ledger',
-  ],
+  featureFlags: ['First-run workspace setup', 'Manual document upload', 'Receipt logging', 'Horse ledger'],
   usage: {
     horsesUsed: 0,
     horseLimit: 5,

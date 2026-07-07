@@ -212,7 +212,16 @@ test('template catalog matches the tier matrix and renders placeholders', () => 
   const rendered = renderTemplate({
     template,
     context: {
-      horse: { name: 'Spirit', registrationNumber: 'AHA0654321', registry: 'AHA', breed: 'Arabian', color: 'Bay', birthdate: '2019-04-12', gender: 'Mare', microchip: '985112004567890' },
+      horse: {
+        name: 'Spirit',
+        registrationNumber: 'AHA0654321',
+        registry: 'AHA',
+        breed: 'Arabian',
+        color: 'Bay',
+        birthdate: '2019-04-12',
+        gender: 'Mare',
+        microchip: '985112004567890',
+      },
       owner: { name: 'Jane Doe' },
       workspace: { businessName: 'Triple Oak' },
       buyer: { name: 'John Smith' },

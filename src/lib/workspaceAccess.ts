@@ -13,13 +13,24 @@ export function normalizeWorkspaceEmail(value: string) {
   return value.trim().toLowerCase();
 }
 
-export function countReservedWorkspaceSeats(members: WorkspaceMemberRecord[], invitations: WorkspaceInvitationRecord[]) {
-  return members.filter((member) => member.status === 'Active').length + invitations.filter((invite) => invite.status === 'Pending').length;
+export function countReservedWorkspaceSeats(
+  members: WorkspaceMemberRecord[],
+  invitations: WorkspaceInvitationRecord[],
+) {
+  return (
+    members.filter((member) => member.status === 'Active').length +
+    invitations.filter((invite) => invite.status === 'Pending').length
+  );
 }
 
-export function countReservedSharedAccessSeats(members: WorkspaceMemberRecord[], invitations: WorkspaceInvitationRecord[]) {
+export function countReservedSharedAccessSeats(
+  members: WorkspaceMemberRecord[],
+  invitations: WorkspaceInvitationRecord[],
+) {
   const activeOwnerMembers = members.filter((member) => member.status === 'Active' && member.role === 'Owner').length;
-  const pendingOwnerInvites = invitations.filter((invite) => invite.status === 'Pending' && invite.role === 'Owner').length;
+  const pendingOwnerInvites = invitations.filter(
+    (invite) => invite.status === 'Pending' && invite.role === 'Owner',
+  ).length;
   return activeOwnerMembers + pendingOwnerInvites;
 }
 
@@ -29,12 +40,16 @@ export function validateWorkspaceInvitation(params: InviteValidationParams) {
     return 'Invite email is required.';
   }
 
-  const existingMember = params.members.find((member) => normalizeWorkspaceEmail(member.email) === normalizedEmail && member.status === 'Active');
+  const existingMember = params.members.find(
+    (member) => normalizeWorkspaceEmail(member.email) === normalizedEmail && member.status === 'Active',
+  );
   if (existingMember) {
     return `${normalizedEmail} already has workspace access.`;
   }
 
-  const existingInvite = params.invitations.find((invite) => normalizeWorkspaceEmail(invite.email) === normalizedEmail && invite.status === 'Pending');
+  const existingInvite = params.invitations.find(
+    (invite) => normalizeWorkspaceEmail(invite.email) === normalizedEmail && invite.status === 'Pending',
+  );
   if (existingInvite) {
     return `${normalizedEmail} already has a pending invite.`;
   }
@@ -45,7 +60,8 @@ export function validateWorkspaceInvitation(params: InviteValidationParams) {
 
   if (
     params.role === 'Owner' &&
-    (params.sharedAccessSeatLimit <= 0 || countReservedSharedAccessSeats(params.members, params.invitations) >= params.sharedAccessSeatLimit)
+    (params.sharedAccessSeatLimit <= 0 ||
+      countReservedSharedAccessSeats(params.members, params.invitations) >= params.sharedAccessSeatLimit)
   ) {
     return 'Shared access seat limit reached for the current plan.';
   }

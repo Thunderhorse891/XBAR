@@ -20,15 +20,18 @@ npm run dev
 
 ## Core Scripts
 
-| Script | Description |
-|---|---|
-| `npm run dev` | Start the web app locally |
-| `npm run build` | Typecheck and build the production web bundle |
-| `npm run preview` | Preview the production web bundle |
-| `npm run test` | Prepare the Supabase schema, typecheck, and run unit tests |
-| `npm run test:e2e` | Run Playwright end-to-end tests |
+| Script                     | Description                                                    |
+| -------------------------- | -------------------------------------------------------------- |
+| `npm run dev`              | Start the web app locally                                      |
+| `npm run build`            | Typecheck and build the production web bundle                  |
+| `npm run preview`          | Preview the production web bundle                              |
+| `npm run test`             | Prepare the Supabase schema, typecheck, and run unit tests     |
+| `npm run test:e2e`         | Run Playwright end-to-end tests                                |
+| `npm run test:prod-smoke`  | Build `dist` and smoke-test the production bundle in a browser |
+| `npm run lint`             | Run ESLint across the repo                                     |
+| `npm run format:check`     | Verify Prettier formatting (CI-gated)                          |
 | `npm run supabase:prepare` | Generate the executable, idempotent production Supabase schema |
-| `npm run mobile:sync` | Build and sync the app into Capacitor targets |
+| `npm run mobile:sync`      | Build and sync the app into Capacitor targets                  |
 
 ## Deployment
 
@@ -89,6 +92,14 @@ Required for managed Stripe billing and webhook reconciliation:
 - `PUBLIC_APP_URL`
 
 Optional browser configuration is documented in `.env.example`.
+
+### Operations
+
+- **Health probe**: `GET /api/health` returns liveness plus subsystem-configured booleans (no secrets, no database touch). Point uptime monitors here.
+- **Rate limiting**: every request-driven API endpoint is per-IP rate limited. Set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` so limits are shared across all serverless instances; without them the limiter degrades to per-instance in-memory counting.
+- **Crash telemetry**: uncaught browser errors and unhandled promise rejections are reported to `runtime_events` through `/api/telemetry` (rate limited, workspace-verified, capped at 20 reports per session).
+- **Webhook replays**: Stripe webhook deliveries are idempotent on `stripe_event_id` — retried events are acknowledged without re-running the subscription sync.
+- **CI**: every push runs lint, format check, production-dependency audit, typecheck, unit tests, build, and a browser smoke test of the built bundle; CodeQL scans weekly and on PRs; Dependabot files grouped weekly updates.
 
 ### Supabase Bootstrap
 

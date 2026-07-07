@@ -46,7 +46,9 @@ async function bootstrapWorkspace(page: Page) {
 
   await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
   // Fresh workspace lands on the plain-language getting-started dashboard (no seeded records).
-  await expect(page.getByRole('heading', { name: 'Get your horse records in order.' })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: 'Get your horse records in order.' })).toBeVisible({
+    timeout: 15_000,
+  });
 }
 
 // Seed one real horse through the global Create > Add Horse flow (persists to the store).
@@ -101,11 +103,17 @@ test('sale packets opens the real packet generator once a horse exists', async (
   await page.getByRole('link', { name: 'Sale Packets', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Sale Packets' })).toBeVisible();
   await expect(page.getByText('Horse readiness')).toBeVisible();
-  await page.locator('.xs-mrow').filter({ hasText: /packet horse/i }).getByRole('button', { name: 'Build packet' }).click();
+  await page
+    .locator('.xs-mrow')
+    .filter({ hasText: /packet horse/i })
+    .getByRole('button', { name: 'Build packet' })
+    .click();
   await expect(page.getByRole('dialog', { name: 'Sale packet generator' })).toBeVisible();
   await expect(page.getByText('is selected for release-gate review')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText('Release gate: this packet cannot be issued until title & transfer is provable.')).toBeVisible();
+  await expect(
+    page.getByText('Release gate: this packet cannot be issued until title & transfer is provable.'),
+  ).toBeVisible();
 });
 
 test('buyer follow-up shows an empty state on a fresh workspace', async ({ page }) => {

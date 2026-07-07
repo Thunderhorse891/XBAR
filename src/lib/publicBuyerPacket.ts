@@ -24,7 +24,12 @@ function escapeHtml(value: unknown) {
 }
 
 function cleanFileName(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'horse';
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'horse'
+  );
 }
 
 function row(label: string, value: unknown) {
@@ -40,14 +45,18 @@ export function buildPublicBuyerPacketArtifact(params: {
   const generatedOn = (params.generatedAt ?? new Date()).toISOString().slice(0, 10);
   const registration = params.horse.registrationNumber || params.horse.aqhaNumber;
   const documents = params.documents.length
-    ? params.documents.map((document) => `
+    ? params.documents
+        .map(
+          (document) => `
       <article>
         <div class="document-heading">
           <strong>${escapeHtml(document.title)}</strong>
           <span>${escapeHtml(document.type)}</span>
         </div>
         <p>${escapeHtml(document.summary || 'Approved buyer-facing record.')}</p>
-      </article>`).join('')
+      </article>`,
+        )
+        .join('')
     : '<p class="muted">No approved buyer-facing documents are included.</p>';
 
   const html = `<!doctype html>

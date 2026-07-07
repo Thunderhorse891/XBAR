@@ -219,4 +219,3 @@ After this, the next thing to create should be:
 - a one-page landing page implementation
 - a short demo narrative
 - a founder outreach email sequence
-

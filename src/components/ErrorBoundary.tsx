@@ -58,8 +58,8 @@ class ErrorBoundaryImpl extends Component<ErrorBoundaryProps, ErrorBoundaryState
           <div className="app-error-panel__eyebrow">Application error</div>
           <h1 className="app-error-panel__title">This screen hit a runtime problem</h1>
           <p className="app-error-panel__copy">
-            The app stopped a broken component before it could take down the whole workspace. Reload to retry, or clear the
-            browser workspace if the saved session is corrupted.
+            The app stopped a broken component before it could take down the whole workspace. Reload to retry, or clear
+            the browser workspace if the saved session is corrupted.
           </p>
           <div className="app-error-panel__message">{this.state.error.message}</div>
           <div className="inline-actions">

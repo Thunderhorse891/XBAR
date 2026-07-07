@@ -15,7 +15,9 @@ export default function FeedInventory() {
   const toast = (m: string) => pushToast({ title: 'Feed & Supplies', message: m, tone: 'success' });
 
   const model = useMemo(() => {
-    const feed = expenseReceipts.filter((r) => r.category === 'Feed' || r.category === 'Supplements' || r.category === 'Bedding');
+    const feed = expenseReceipts.filter(
+      (r) => r.category === 'Feed' || r.category === 'Supplements' || r.category === 'Bedding',
+    );
     // Scope the spend total to the current month so it matches the per-day divisor.
     const now = new Date();
     const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -35,8 +37,12 @@ export default function FeedInventory() {
         subtitle="Track what you spend on hay, grain, supplements, and bedding — and keep the receipts."
         actions={
           <>
-            <ActionButton icon={<Wheat size={15} />} onClick={() => toast('Feed logged')}>Log Feed</ActionButton>
-            <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/expenses')}>Add Expense</ActionButton>
+            <ActionButton icon={<Wheat size={15} />} onClick={() => toast('Feed logged')}>
+              Log Feed
+            </ActionButton>
+            <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/expenses')}>
+              Add Expense
+            </ActionButton>
           </>
         }
       />
@@ -44,11 +50,15 @@ export default function FeedInventory() {
       <div className="xs-grid-3">
         <Card>
           <div className="xs-card__sub">Feed &amp; supply spend (this month)</div>
-          <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 30, fontWeight: 700 }}>{usd(model.monthTotal)}</div>
+          <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 30, fontWeight: 700 }}>
+            {usd(model.monthTotal)}
+          </div>
         </Card>
         <Card>
           <div className="xs-card__sub">Roughly per horse / day (this month)</div>
-          <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 30, fontWeight: 700 }}>{horses.length ? usd(model.perHorseDay) : '—'}</div>
+          <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 30, fontWeight: 700 }}>
+            {horses.length ? usd(model.perHorseDay) : '—'}
+          </div>
         </Card>
         <Card>
           <div className="xs-card__sub">Purchases logged</div>
@@ -63,7 +73,9 @@ export default function FeedInventory() {
               <div key={r.id} className="xs-mrow">
                 <span className="xs-mrow__main">
                   <span className="xs-mrow__title">{r.title}</span>
-                  <span className="xs-mrow__detail">{r.vendor} · {r.receiptDate}</span>
+                  <span className="xs-mrow__detail">
+                    {r.vendor} · {r.receiptDate}
+                  </span>
                 </span>
                 <span style={{ fontWeight: 700 }}>{usd(r.amount)}</span>
               </div>
@@ -72,11 +84,17 @@ export default function FeedInventory() {
         ) : (
           <div className="xs-empty">
             <div className="xs-empty__title">No feed purchases yet</div>
-            <div className="xs-empty__sub">Add feed, supplement, and bedding expenses to track your monthly cost per horse.</div>
-            <ActionButton variant="primary" onClick={() => navigate('/expenses')}>Add an expense</ActionButton>
+            <div className="xs-empty__sub">
+              Add feed, supplement, and bedding expenses to track your monthly cost per horse.
+            </div>
+            <ActionButton variant="primary" onClick={() => navigate('/expenses')}>
+              Add an expense
+            </ActionButton>
           </div>
         )}
-        <ActionButton size="sm" block onClick={() => navigate('/expenses')}>Open expenses</ActionButton>
+        <ActionButton size="sm" block onClick={() => navigate('/expenses')}>
+          Open expenses
+        </ActionButton>
       </Card>
     </>
   );

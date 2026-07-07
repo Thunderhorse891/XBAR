@@ -1,29 +1,56 @@
 import { readJsonBody, sendJson } from './_lib/http.js';
 import { getSupabaseAdmin, requireWorkspaceAccess } from './_lib/supabase-admin.js';
+import { inviteSchema, parseBody } from './_lib/validation.js';
+import { enforceRateLimit } from './_lib/rate-limit.js';
+import { applyCors } from './_lib/cors.js';
+
+// The invited role is validated by inviteSchema; anything unrecognized is
+// coerced to the least privileged option so a caller cannot inject arbitrary
+// role metadata.
+
+const RATE_LIMIT = { bucket: 'invite', limit: 10, windowSeconds: 60 };
 
 export default async function handler(req, res) {
+  if (!applyCors(req, res)) {
+    return;
+  }
+
   if (req.method !== 'POST') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
   }
 
+  if (!(await enforceRateLimit(req, res, RATE_LIMIT))) {
+    return;
+  }
+
   const accessToken = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim() || '';
   const body = await readJsonBody(req);
-  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
-  const role = typeof body.role === 'string' ? body.role : 'Viewer';
-  const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId : '';
-  const invitationId = typeof body.invitationId === 'string' ? body.invitationId : '';
-
-  if (!email || !workspaceId) {
-    return sendJson(res, 400, { ok: false, message: 'Email and workspace id are required.' });
+  const parsed = parseBody(inviteSchema, body);
+  if (!parsed.ok) {
+    return sendJson(res, 400, { ok: false, message: parsed.message });
   }
+  const { email, role, workspaceId, invitationId } = parsed.data;
 
   const access = await requireWorkspaceAccess(accessToken, workspaceId);
   if (!access.ok) {
     return sendJson(res, access.status, { ok: false, message: access.message });
   }
 
+  // Sending an invite provisions Supabase auth access and assigns a role, so it
+  // is an admin-only action — consistent with managed billing.
+  if (access.role !== 'Admin') {
+    return sendJson(res, 403, { ok: false, message: 'Only workspace admins can invite members.' });
+  }
+
   const supabase = getSupabaseAdmin();
-  const redirectTo = `${process.env.VITE_PUBLIC_APP_URL || ''}/login?invite=${encodeURIComponent(invitationId)}&workspace=${encodeURIComponent(workspaceId)}`;
+  // Server-side config first: PUBLIC_APP_URL is the documented server var,
+  // with the VITE_ mirror and the deployment origin as fallbacks so invite
+  // links never come out relative.
+  const appOrigin =
+    process.env.PUBLIC_APP_URL ||
+    process.env.VITE_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
+  const redirectTo = `${appOrigin}/login?invite=${encodeURIComponent(invitationId)}&workspace=${encodeURIComponent(workspaceId)}`;
 
   const { data, error } = await supabase.auth.admin.inviteUserByEmail(email, {
     redirectTo,

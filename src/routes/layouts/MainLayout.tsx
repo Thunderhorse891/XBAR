@@ -123,14 +123,33 @@ export default function MainLayout() {
 
   const ranchName = workspaceProfile.ranchName || workspaceProfile.businessName || 'Your ranch';
   const planTier = subscription?.tier || 'Starter';
-  const accountInitials = (cloudSession?.user?.email ?? currentRole ?? 'XB').replace(/@.*/, '').slice(0, 2).toUpperCase();
-  const ranchInitials = ranchName.split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'XB';
-  const setupSteps = [Boolean(workspaceProfile.ranchName), horses.length > 0, documents.length > 0, Boolean(workspaceProfile.defaultOwnerName)];
+  const accountInitials = (cloudSession?.user?.email ?? currentRole ?? 'XB')
+    .replace(/@.*/, '')
+    .slice(0, 2)
+    .toUpperCase();
+  const ranchInitials =
+    ranchName
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((w) => w[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase() || 'XB';
+  const setupSteps = [
+    Boolean(workspaceProfile.ranchName),
+    horses.length > 0,
+    documents.length > 0,
+    Boolean(workspaceProfile.defaultOwnerName),
+  ];
   const setupProgress = Math.round((setupSteps.filter(Boolean).length / setupSteps.length) * 100);
 
   async function handleSignOut() {
     const result = await signOutCloud();
-    pushToast({ title: result.ok ? 'Signed out' : 'Sign-out failed', message: result.message, tone: result.ok ? 'success' : 'error' });
+    pushToast({
+      title: result.ok ? 'Signed out' : 'Sign-out failed',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
     if (result.ok) navigate('/login', { replace: true });
   }
 
@@ -164,7 +183,9 @@ export default function MainLayout() {
           <span className="xs-workspace__logo">{ranchInitials}</span>
           <span className="xs-workspace__body">
             <span className="xs-workspace__name">{ranchName}</span>
-            <span className="xs-workspace__plan"><Sparkles size={11} /> {planTier}</span>
+            <span className="xs-workspace__plan">
+              <Sparkles size={11} /> {planTier}
+            </span>
           </span>
           <ChevronDown size={16} className="xs-workspace__chev" />
         </button>
@@ -183,9 +204,14 @@ export default function MainLayout() {
               <div className="xs-nav__section">{group.heading}</div>
               {group.items.map((item) => {
                 const Icon = item.icon;
-                const badge = item.badgeKey ? badges[item.badgeKey] ?? 0 : 0;
+                const badge = item.badgeKey ? (badges[item.badgeKey] ?? 0) : 0;
                 return (
-                  <NavLink key={item.path} to={item.path} end={item.path === '/'} className={({ isActive }) => `xs-nav__item${isActive ? ' xs-nav__item--active' : ''}`}>
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    end={item.path === '/'}
+                    className={({ isActive }) => `xs-nav__item${isActive ? ' xs-nav__item--active' : ''}`}
+                  >
                     <Icon size={17} className="xs-nav__icon" />
                     <span className="xs-nav__label">{item.label}</span>
                     {badge > 0 ? <span className="xs-nav__badge">{badge}</span> : null}
@@ -213,9 +239,13 @@ export default function MainLayout() {
       <div className="xs-main">
         <header className="xs-topbar">
           <div className="xs-topbar__left">
-            <span className="xs-seasonchip"><Sparkles size={14} /> {ranchName}</span>
+            <span className="xs-seasonchip">
+              <Sparkles size={14} /> {ranchName}
+            </span>
             {notifications > 0 ? (
-              <span className="xs-weatherchip">{notifications} need{notifications === 1 ? 's' : ''} attention</span>
+              <span className="xs-weatherchip">
+                {notifications} need{notifications === 1 ? 's' : ''} attention
+              </span>
             ) : (
               <span className="xs-weatherchip">Everything looks good</span>
             )}
@@ -223,15 +253,32 @@ export default function MainLayout() {
 
           <label className="xs-search">
             <Search size={15} className="xs-search__icon" />
-            <input className="xs-search__input" placeholder="Search horses, documents, buyers…" onKeyDown={handleSearchKey} aria-label="Search" />
+            <input
+              className="xs-search__input"
+              placeholder="Search horses, documents, buyers…"
+              onKeyDown={handleSearchKey}
+              aria-label="Search"
+            />
           </label>
 
           <div className="xs-topbar__spacer" />
 
           <div className="xs-topbar__right">
             <div className="xs-toggle" role="tablist" aria-label="Workspace mode">
-              <button type="button" className={`xs-toggle__btn${mode === 'ops' ? ' xs-toggle__btn--active' : ''}`} onClick={() => handleMode('ops')}>Ranch work</button>
-              <button type="button" className={`xs-toggle__btn${mode === 'buyer' ? ' xs-toggle__btn--active' : ''}`} onClick={() => handleMode('buyer')}>Buyer view</button>
+              <button
+                type="button"
+                className={`xs-toggle__btn${mode === 'ops' ? ' xs-toggle__btn--active' : ''}`}
+                onClick={() => handleMode('ops')}
+              >
+                Ranch work
+              </button>
+              <button
+                type="button"
+                className={`xs-toggle__btn${mode === 'buyer' ? ' xs-toggle__btn--active' : ''}`}
+                onClick={() => handleMode('buyer')}
+              >
+                Buyer view
+              </button>
             </div>
 
             <QuickCreateMenu
@@ -243,7 +290,12 @@ export default function MainLayout() {
               )}
             />
 
-            <button type="button" className="xs-iconbtn" aria-label="Notifications" onClick={() => navigate('/reminders')}>
+            <button
+              type="button"
+              className="xs-iconbtn"
+              aria-label="Notifications"
+              onClick={() => navigate('/reminders')}
+            >
               <Bell size={17} />
               {notifications > 0 ? <span className="xs-iconbtn__badge">{notifications}</span> : null}
             </button>
@@ -251,8 +303,12 @@ export default function MainLayout() {
               <CircleHelp size={17} />
             </button>
 
-            <button type="button" className="xs-btn" onClick={() => navigate('/settings')}><Users size={15} /> Invite team</button>
-            <button type="button" className="xs-btn xs-btn--brass" onClick={() => navigate(billingPath)}><Rocket size={15} /> Billing</button>
+            <button type="button" className="xs-btn" onClick={() => navigate('/settings')}>
+              <Users size={15} /> Invite team
+            </button>
+            <button type="button" className="xs-btn xs-btn--brass" onClick={() => navigate(billingPath)}>
+              <Rocket size={15} /> Billing
+            </button>
 
             <QuickCreateMenu
               items={[
@@ -261,7 +317,13 @@ export default function MainLayout() {
                 ...(cloudSession ? [{ label: 'Sign out', onSelect: () => void handleSignOut() }] : []),
               ]}
               trigger={(open) => (
-                <button type="button" className="xs-avatar" aria-label="Account menu" title={cloudSession?.user?.email ?? 'Account'} onClick={open}>
+                <button
+                  type="button"
+                  className="xs-avatar"
+                  aria-label="Account menu"
+                  title={cloudSession?.user?.email ?? 'Account'}
+                  onClick={open}
+                >
                   {accountInitials}
                 </button>
               )}
@@ -279,7 +341,12 @@ export default function MainLayout() {
           {mobileItems.map(({ label, path, icon: Icon }) => {
             const active = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
             return (
-              <NavLink key={path} to={path} end={path === '/'} className={`xs-mobilebar__btn${active ? ' xs-mobilebar__btn--active' : ''}`}>
+              <NavLink
+                key={path}
+                to={path}
+                end={path === '/'}
+                className={`xs-mobilebar__btn${active ? ' xs-mobilebar__btn--active' : ''}`}
+              >
                 <Icon size={18} />
                 {label}
               </NavLink>

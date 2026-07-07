@@ -7,9 +7,19 @@ const fromRoot = (filePath: string) => path.resolve(process.cwd(), filePath);
 const checkoutSource = await readFile(fromRoot('api/stripe/checkout.js'), 'utf8');
 const plansSource = await readFile(fromRoot('api/_lib/subscription-plans.js'), 'utf8');
 const migrationSource = await readFile(fromRoot('supabase/migrations/20260605_harden_workspace_rls.sql'), 'utf8');
-const commercialMigrationSource = await readFile(fromRoot('supabase/migrations/20260611_commercial_entitlements.sql'), 'utf8');
+const commercialMigrationSource = await readFile(
+  fromRoot('supabase/migrations/20260611_commercial_entitlements.sql'),
+  'utf8',
+);
 const cloudWorkspaceSource = await readFile(fromRoot('src/lib/cloudWorkspace.ts'), 'utf8');
 const prepareSchemaSource = await readFile(fromRoot('scripts/prepare-supabase-schema.mjs'), 'utf8');
+const telemetrySource = await readFile(fromRoot('api/telemetry.js'), 'utf8');
+const inviteSource = await readFile(fromRoot('api/invite.js'), 'utf8');
+const buyerInquiriesSource = await readFile(fromRoot('api/buyer-inquiries.js'), 'utf8');
+const rateLimitSource = await readFile(fromRoot('api/_lib/rate-limit.js'), 'utf8');
+const vercelConfigSource = await readFile(fromRoot('vercel.json'), 'utf8');
+const validationSource = await readFile(fromRoot('api/_lib/validation.js'), 'utf8');
+const corsSource = await readFile(fromRoot('api/_lib/cors.js'), 'utf8');
 
 test('managed checkout is admin-only and validates return origins', () => {
   assert.match(checkoutSource, /MANAGED_BILLING_ENABLED/);
@@ -40,6 +50,108 @@ test('schema preparation removes unsupported policy syntax', () => {
   assert.match(prepareSchemaSource, /create policy if not exists/);
   assert.match(prepareSchemaSource, /drop policy if exists/);
   assert.match(prepareSchemaSource, /production-schema\.generated\.sql/);
+});
+
+test('telemetry never trusts a client-supplied workspace and caps payloads', () => {
+  // A claimed workspace is only attached after membership is verified.
+  assert.match(telemetrySource, /requireWorkspaceAccess\(accessToken, requestedWorkspaceId\)/);
+  assert.match(telemetrySource, /let workspaceId = null/);
+  assert.match(telemetrySource, /MAX_PAYLOAD_BYTES/);
+  assert.match(telemetrySource, /enforceRateLimit\(req, res, RATE_LIMIT\)/);
+  // The raw request workspaceId must never be written directly.
+  assert.doesNotMatch(telemetrySource, /workspace_id: requestedWorkspaceId/);
+});
+
+test('member invitations are admin-only with a bounded role set', () => {
+  assert.match(inviteSource, /access\.role !== 'Admin'/);
+  assert.match(inviteSource, /parseBody\(inviteSchema, body\)/);
+  assert.match(inviteSource, /Only workspace admins can invite members\./);
+});
+
+test('API request bodies are validated with shared zod schemas', async () => {
+  assert.match(validationSource, /export const inviteSchema/);
+  assert.match(validationSource, /export const checkoutSchema/);
+  assert.match(validationSource, /export const telemetrySchema/);
+  assert.match(validationSource, /export const buyerInquirySchema/);
+  assert.match(validationSource, /export const buyerResponseSchema/);
+  assert.match(validationSource, /export const horsesImportSchema/);
+  assert.match(inviteSource, /parseBody\(inviteSchema, body\)/);
+  assert.match(checkoutSource, /parseBody\(checkoutSchema, body\)/);
+  assert.match(telemetrySource, /parseBody\(telemetrySchema, body\)/);
+  assert.match(buyerInquiriesSource, /parseBody\(buyerInquirySchema, body\)/);
+  const buyerResponsesSource = await readFile(fromRoot('api/buyer-responses.js'), 'utf8');
+  assert.match(buyerResponsesSource, /parseBody\(buyerResponseSchema, body\)/);
+  const importSource = await readFile(fromRoot('api/_lib/horses-import.js'), 'utf8');
+  assert.match(importSource, /parseBody\(horsesImportSchema, body\)/);
+  // CSV imports are size-capped so a single request cannot buffer unbounded input.
+  assert.match(validationSource, /MAX_IMPORT_CSV_CHARS/);
+});
+
+test('browser-called endpoints declare an explicit, allow-listed CORS policy', async () => {
+  assert.match(corsSource, /Access-Control-Allow-Origin/);
+  assert.match(corsSource, /allowedOrigins\.includes\(origin\)/);
+  const corsEndpoints = [
+    'api/telemetry.js',
+    'api/buyer-inquiries.js',
+    'api/invite.js',
+    'api/stripe/checkout.js',
+    'api/sale-packets.js',
+    'api/_lib/horses-import.js',
+    'api/_lib/horses-export.js',
+    'api/buyer-responses.js',
+    'api/_lib/documents-bulk-upload.js',
+    'api/_lib/documents-generate-template.js',
+  ];
+  for (const endpoint of corsEndpoints) {
+    const source = await readFile(fromRoot(endpoint), 'utf8');
+    assert.match(source, /applyCors\(req, res/, `${endpoint} is missing the CORS policy`);
+  }
+});
+
+test('anonymous public endpoints are rate limited', () => {
+  assert.match(buyerInquiriesSource, /enforceRateLimit\(req, res, RATE_LIMIT\)/);
+  assert.match(telemetrySource, /enforceRateLimit\(req, res, RATE_LIMIT\)/);
+  // The limiter uses a shared store when configured and fails open on error.
+  assert.match(rateLimitSource, /UPSTASH_REDIS_REST_URL/);
+  assert.match(rateLimitSource, /memoryBuckets/);
+});
+
+test('every request-driven endpoint enforces a per-IP rate limit', async () => {
+  // The Stripe webhook (signature-verified, retried by Stripe) and the cron
+  // runner (CRON_SECRET-gated, fired by Vercel) are intentionally exempt.
+  const rateLimitedEndpoints = [
+    'api/telemetry.js',
+    'api/buyer-inquiries.js',
+    'api/invite.js',
+    'api/stripe/checkout.js',
+    'api/sale-packets.js',
+    'api/_lib/horses-import.js',
+    'api/_lib/horses-export.js',
+    'api/buyer-responses.js',
+    'api/_lib/documents-bulk-upload.js',
+    'api/_lib/documents-generate-template.js',
+  ];
+  for (const endpoint of rateLimitedEndpoints) {
+    const source = await readFile(fromRoot(endpoint), 'utf8');
+    assert.match(source, /enforceRateLimit\(req, res, RATE_LIMIT\)/, `${endpoint} is missing rate limiting`);
+  }
+});
+
+test('cron secret comparison is constant-time and invite links use server config', async () => {
+  const remindersSource = await readFile(fromRoot('api/reminders/run.js'), 'utf8');
+  assert.match(remindersSource, /timingSafeEqual/);
+  assert.doesNotMatch(remindersSource, /provided !== cronSecret/);
+  // Invite redirect prefers the documented server-side PUBLIC_APP_URL.
+  assert.match(inviteSource, /process\.env\.PUBLIC_APP_URL \|\|\s*\n?\s*process\.env\.VITE_PUBLIC_APP_URL/);
+});
+
+test('production responses carry hardened security headers', () => {
+  assert.match(vercelConfigSource, /Content-Security-Policy/);
+  assert.match(vercelConfigSource, /frame-ancestors 'none'/);
+  assert.match(vercelConfigSource, /Strict-Transport-Security/);
+  assert.match(vercelConfigSource, /X-Content-Type-Options/);
+  assert.match(vercelConfigSource, /Referrer-Policy/);
+  assert.match(vercelConfigSource, /Permissions-Policy/);
 });
 
 test('commercial entitlements are server-authoritative and audited', () => {

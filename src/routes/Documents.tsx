@@ -17,19 +17,17 @@ import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import { normalizeOwnershipRecord } from '@/store/xbarStoreLogic';
 import type { DocumentRecord, DocumentSource } from '@/types/xbar';
 import { documentSources } from '@/features/documents/constants';
+import {
+  PIPELINE_STAGES,
+  buildProofLinks,
+  computeHeroRisks,
+  computeHeroStatus,
+  computeStageBuckets,
+  computeStageCounts,
+  type PipelineStage,
+} from '@/features/documents/pipeline';
 
 const SHARED_ACCESS_PATH = '/shared-access';
-const STALE_REVIEW_MS = 3 * 24 * 60 * 60 * 1000;
-
-type PipelineStage = 'Upload' | 'Processing' | 'Review' | 'Proof' | 'Share';
-
-const PIPELINE_STAGES: { id: PipelineStage; label: string; hint: string }[] = [
-  { id: 'Upload', label: 'Upload', hint: 'Bring files in: choose documents, tag a source, and optionally attach a horse.' },
-  { id: 'Processing', label: 'OCR / Processing', hint: 'OCR runs locally; extracted fields appear here while files are queued.' },
-  { id: 'Review', label: 'Review', hint: 'Confirm the extracted match, assign the right horse, then approve or discard.' },
-  { id: 'Proof', label: 'Ownership', hint: 'Use approved documents to support the horse ownership record.' },
-  { id: 'Share', label: 'Share', hint: 'Bundle approved documents into watermarked sale packets and hand off to Shared Access.' },
-];
 
 type SurfaceId = 'review' | 'buyer' | 'intake' | 'batches' | 'duplicates' | 'processing' | 'proof';
 
@@ -57,7 +55,12 @@ export default function Documents() {
   const canEditHorses = useCurrentRoleCapability('editHorse');
   const session = useCloudStore((state) => state.session);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
-  const currentUserName = session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || workspaceProfile.ranchManagerName || workspaceProfile.defaultOwnerName || 'Ranch Staff';
+  const currentUserName =
+    session?.user?.user_metadata?.full_name ||
+    session?.user?.email?.split('@')[0] ||
+    workspaceProfile.ranchManagerName ||
+    workspaceProfile.defaultOwnerName ||
+    'Ranch Staff';
 
   const [files, setFiles] = useState<File[]>([]);
   const [source, setSource] = useState<DocumentSource>('Bulk Intake');
@@ -88,63 +91,39 @@ export default function Documents() {
   }, [uploadOpen]);
 
   // Stage buckets — each document lives in exactly one workflow stage.
-  const queuedDocuments = documents.filter((document) => document.state === 'Queued');
-  const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched');
-  const readyDocuments = documents.filter((document) => document.state === 'Ready');
-  const proofDocuments = readyDocuments.filter((document) => Boolean(document.horseId));
-  const duplicates = documents.filter((document) => document.duplicateRisk === 'Possible Duplicate');
-  const buyerSafeDocuments = documents.filter((document) => buildDocumentTrustProfile(document, horses).readyForProfile);
-  const processingBatches = intakeBatches.filter((batch) => batch.state !== 'Completed');
-  const unmatchedDocuments = documents.filter((document) => !document.horseId && document.state !== 'Archived');
-  const staleReviewCount = reviewQueue.filter((document) => {
-    const uploaded = Date.parse(document.uploadedAt);
-    return Number.isFinite(uploaded) && Date.now() - uploaded > STALE_REVIEW_MS;
-  }).length;
+  const stageBuckets = useMemo(
+    () => computeStageBuckets(documents, horses, intakeBatches),
+    [documents, horses, intakeBatches],
+  );
+  const {
+    queuedDocuments,
+    reviewQueue,
+    readyDocuments,
+    proofDocuments,
+    duplicates,
+    buyerSafeDocuments,
+    processingBatches,
+  } = stageBuckets;
 
   // Proof chain context: which documents already back an ownership requirement.
-  const proofLinksByDocumentId = useMemo(() => {
-    const links = new Map<string, string[]>();
-    ownershipRecords.forEach((record) => {
-      const normalized = normalizeOwnershipRecord(record);
-      (normalized.proofRequirements ?? []).forEach((requirement) => {
-        if (requirement.documentId) {
-          links.set(requirement.documentId, [...(links.get(requirement.documentId) ?? []), requirement.label]);
-        }
-      });
-    });
-    return links;
-  }, [ownershipRecords]);
+  const proofLinksByDocumentId = useMemo(() => buildProofLinks(ownershipRecords), [ownershipRecords]);
   const proofLinkedCount = documents.filter((document) => proofLinksByDocumentId.has(document.id)).length;
 
-  const stageCounts: Record<PipelineStage, number> = {
-    Upload: documents.length,
-    Processing: queuedDocuments.length,
-    Review: reviewQueue.length,
-    Proof: proofDocuments.length,
-    Share: readyDocuments.length,
-  };
+  const stageCounts: Record<PipelineStage, number> = computeStageCounts(documents, stageBuckets);
 
-  const heroStatus =
-    staleReviewCount > 0 || unmatchedDocuments.length > 0
-      ? { label: 'Needs attention', tone: 'rose' as const }
-      : reviewQueue.length > 0
-        ? { label: 'Review pending', tone: 'amber' as const }
-        : { label: 'All caught up', tone: 'blue' as const };
+  const heroStatus = computeHeroStatus(stageBuckets);
 
-  const heroRisks = [
-    ...(reviewQueue.length
-      ? [{ label: `${reviewQueue.length} ${reviewQueue.length === 1 ? 'document needs' : 'documents need'} review`, severity: staleReviewCount > 0 ? ('rose' as const) : ('amber' as const) }]
-      : []),
-    ...(unmatchedDocuments.length
-      ? [{ label: `${unmatchedDocuments.length} ${unmatchedDocuments.length === 1 ? 'document' : 'documents'} not matched to a horse`, severity: 'rose' as const }]
-      : []),
-  ];
+  const heroRisks = computeHeroRisks(stageBuckets);
 
   const applyExtractedFacts = (document: DocumentRecord) => {
     const targetId = reviewAssignments[document.id] ?? document.horseId ?? '';
     const horse = horses.find((item) => item.id === targetId);
     if (!horse) {
-      pushToast({ title: 'Pick a horse first', message: 'Select which horse these facts belong to, then apply.', tone: 'warning' });
+      pushToast({
+        title: 'Pick a horse first',
+        message: 'Select which horse these facts belong to, then apply.',
+        tone: 'warning',
+      });
       return;
     }
     const applied: string[] = [];
@@ -158,7 +137,11 @@ export default function Documents() {
       applied.push(`owner ${document.entities.ownerName}`);
     }
     if (!applied.length) {
-      pushToast({ title: 'Nothing new to apply', message: `${horse.name} already has values for every fact this document extracted. Existing data is never overwritten.`, tone: 'info' });
+      pushToast({
+        title: 'Nothing new to apply',
+        message: `${horse.name} already has values for every fact this document extracted. Existing data is never overwritten.`,
+        tone: 'info',
+      });
       return;
     }
     const result = updateHorse(horse.id, patch);
@@ -179,8 +162,9 @@ export default function Documents() {
     });
   };
 
-  const menuDocument = menuState?.type === 'document' ? documents.find((document) => document.id === menuState.documentId) : undefined;
-  const menuHorseId = menuDocument ? reviewAssignments[menuDocument.id] ?? menuDocument.horseId : undefined;
+  const menuDocument =
+    menuState?.type === 'document' ? documents.find((document) => document.id === menuState.documentId) : undefined;
+  const menuHorseId = menuDocument ? (reviewAssignments[menuDocument.id] ?? menuDocument.horseId) : undefined;
 
   const goToStage = (stage: PipelineStage) => {
     setActiveStage(stage);
@@ -223,8 +207,7 @@ export default function Documents() {
     window.open(access.url, '_blank', 'noopener,noreferrer');
   };
 
-  const menuItems =
-    menuDocument
+  const menuItems = menuDocument
     ? [
         ...(menuDocument.fileUrl || menuDocument.storagePath
           ? [
@@ -459,7 +442,11 @@ export default function Documents() {
     }
     const requirementId = proofSelections[document.id];
     if (!requirementId) {
-      pushToast({ title: 'Pick a requirement', message: 'Choose which ownership requirement this document satisfies.', tone: 'warning' });
+      pushToast({
+        title: 'Pick a requirement',
+        message: 'Choose which ownership requirement this document satisfies.',
+        tone: 'warning',
+      });
       return;
     }
     const result = linkOwnershipProof(recordId, requirementId, document.id);
@@ -507,7 +494,12 @@ export default function Documents() {
       />
 
       <section className="surface-panel">
-        <div className="surface-tabs" role="tablist" aria-orientation="horizontal" aria-label="Document pipeline stages">
+        <div
+          className="surface-tabs"
+          role="tablist"
+          aria-orientation="horizontal"
+          aria-label="Document pipeline stages"
+        >
           {PIPELINE_STAGES.map((stage, index) => (
             <button
               key={stage.id}
@@ -521,7 +513,9 @@ export default function Documents() {
             </button>
           ))}
         </div>
-        <p className="panel__description" style={{ marginTop: 10, marginBottom: 0 }}>{activeStageMeta.hint}</p>
+        <p className="panel__description" style={{ marginTop: 10, marginBottom: 0 }}>
+          {activeStageMeta.hint}
+        </p>
       </section>
 
       {activeStage === 'Upload' ? (
@@ -530,7 +524,11 @@ export default function Documents() {
             title="Stage 1 · Upload"
             description="New files enter the pipeline here, then move to local OCR automatically."
             action={
-              <Pill tone={uploadOpen ? 'blue' : 'slate'}>{uploadOpen ? 'Top-bar launch' : `${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB used`}</Pill>
+              <Pill tone={uploadOpen ? 'blue' : 'slate'}>
+                {uploadOpen
+                  ? 'Top-bar launch'
+                  : `${subscription.usage.storageUsedGb}/${subscription.usage.storageLimitGb} GB used`}
+              </Pill>
             }
             className="cursor-context-menu"
             onContextMenu={(event) => openSurfaceMenu('intake', event)}
@@ -538,11 +536,21 @@ export default function Documents() {
             <div id="documents-intake" className="form-grid">
               <label className="field-stack">
                 <span className="field-label">Batch label</span>
-                <input className="field-input" value={batchLabel} onChange={(event) => setBatchLabel(event.target.value)} disabled={!canUploadDocuments} />
+                <input
+                  className="field-input"
+                  value={batchLabel}
+                  onChange={(event) => setBatchLabel(event.target.value)}
+                  disabled={!canUploadDocuments}
+                />
               </label>
               <label className="field-stack">
                 <span className="field-label">Source</span>
-                <select className="field-input" value={source} onChange={(event) => setSource(event.target.value as DocumentSource)} disabled={!canUploadDocuments}>
+                <select
+                  className="field-input"
+                  value={source}
+                  onChange={(event) => setSource(event.target.value as DocumentSource)}
+                  disabled={!canUploadDocuments}
+                >
                   {documentSources.map((item) => (
                     <option key={item} value={item}>
                       {item}
@@ -552,10 +560,15 @@ export default function Documents() {
               </label>
               <label className="field-stack">
                 <span className="field-label">Uploaded by</span>
-                <input className="field-input" value={uploadedBy} onChange={(event) => {
-                  setUploadedBy(event.target.value);
-                  setFormErrors((current) => ({ ...current, uploadedBy: undefined }));
-                }} disabled={!canUploadDocuments} />
+                <input
+                  className="field-input"
+                  value={uploadedBy}
+                  onChange={(event) => {
+                    setUploadedBy(event.target.value);
+                    setFormErrors((current) => ({ ...current, uploadedBy: undefined }));
+                  }}
+                  disabled={!canUploadDocuments}
+                />
                 {formErrors.uploadedBy ? <span className="field-error">{formErrors.uploadedBy}</span> : null}
               </label>
               <label className="field-stack">
@@ -609,7 +622,12 @@ export default function Documents() {
               </label>
             </div>
             <div className="inline-actions">
-              <button className="button button--primary" type="button" onClick={handleIntake} disabled={!canUploadDocuments || isSubmitting || !uploadedBy.trim() || !files.length}>
+              <button
+                className="button button--primary"
+                type="button"
+                onClick={handleIntake}
+                disabled={!canUploadDocuments || isSubmitting || !uploadedBy.trim() || !files.length}
+              >
                 {isSubmitting ? 'Adding...' : 'Add docs'}
               </button>
               <Pill tone={files.length ? 'blue' : 'slate'}>{files.length ? `${files.length} queued` : 'No files'}</Pill>
@@ -625,7 +643,11 @@ export default function Documents() {
             {intakeBatches.length ? (
               <div id="documents-batches" className="stack-list">
                 {intakeBatches.map((batch) => (
-                  <div key={batch.id} className="stack-item" onContextMenu={(event) => openSurfaceMenu('batches', event)}>
+                  <div
+                    key={batch.id}
+                    className="stack-item"
+                    onContextMenu={(event) => openSurfaceMenu('batches', event)}
+                  >
                     <div className="stack-item__top">
                       <div>
                         <div className="stack-item__title">{batch.label}</div>
@@ -636,7 +658,9 @@ export default function Documents() {
                       <Pill tone={batch.state === 'Completed' ? 'blue' : 'amber'}>{batch.state}</Pill>
                     </div>
                     <div className="inline-metrics">
-                      <span>{batch.processedCount}/{batch.fileCount} logged</span>
+                      <span>
+                        {batch.processedCount}/{batch.fileCount} logged
+                      </span>
                       <span>{batch.matchedCount} matched</span>
                       <span>{batch.needsReviewCount} waiting</span>
                     </div>
@@ -669,7 +693,8 @@ export default function Documents() {
                     <div>
                       <div className="stack-item__title">{batch.label}</div>
                       <div className="stack-item__copy">
-                        Batch still processing · {batch.processedCount}/{batch.fileCount} files logged · {formatDateTimeLabel(batch.receivedAt)}
+                        Batch still processing · {batch.processedCount}/{batch.fileCount} files logged ·{' '}
+                        {formatDateTimeLabel(batch.receivedAt)}
                       </div>
                     </div>
                     <Pill tone="amber">{batch.state}</Pill>
@@ -699,11 +724,15 @@ export default function Documents() {
                     {entityRows.length ? (
                       <div className="inline-metrics">
                         {entityRows.map((row) => (
-                          <span key={row.label}>{row.label}: {row.value}</span>
+                          <span key={row.label}>
+                            {row.label}: {row.value}
+                          </span>
                         ))}
                       </div>
                     ) : (
-                      <div className="stack-item__copy">No fields extracted yet — this file is still in the OCR queue.</div>
+                      <div className="stack-item__copy">
+                        No fields extracted yet — this file is still in the OCR queue.
+                      </div>
                     )}
                   </div>
                 );
@@ -715,7 +744,11 @@ export default function Documents() {
               title="Nothing is processing"
               description="OCR is idle. Upload documents in stage 1 to feed the queue."
               action={
-                <button className="button button--ghost button--compact" type="button" onClick={() => goToStage('Upload')}>
+                <button
+                  className="button button--ghost button--compact"
+                  type="button"
+                  onClick={() => goToStage('Upload')}
+                >
                   Go to Upload stage
                 </button>
               }
@@ -747,7 +780,9 @@ export default function Documents() {
                   <tbody>
                     {reviewQueue.map((document) => {
                       const trust = buildDocumentTrustProfile(document, horses);
-                      const selectedHorse = horses.find((horse) => horse.id === (reviewAssignments[document.id] ?? document.horseId));
+                      const selectedHorse = horses.find(
+                        (horse) => horse.id === (reviewAssignments[document.id] ?? document.horseId),
+                      );
                       return (
                         <tr
                           key={document.id}
@@ -760,18 +795,30 @@ export default function Documents() {
                             if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
                               event.preventDefault();
                               const bounds = event.currentTarget.getBoundingClientRect();
-                              setMenuState({ type: 'document', documentId: document.id, x: bounds.left + 32, y: bounds.top + 32 });
+                              setMenuState({
+                                type: 'document',
+                                documentId: document.id,
+                                x: bounds.left + 32,
+                                y: bounds.top + 32,
+                              });
                             }
                           }}
                           onContextMenu={(event) => {
                             event.preventDefault();
-                            setMenuState({ type: 'document', documentId: document.id, x: event.clientX, y: event.clientY });
+                            setMenuState({
+                              type: 'document',
+                              documentId: document.id,
+                              x: event.clientX,
+                              y: event.clientY,
+                            });
                           }}
                         >
                           <td>
                             <div className="table-cell__stack">
                               <strong>{document.title}</strong>
-                              <span>{document.type} · {Math.round(document.confidence * 100)}% OCR confidence</span>
+                              <span>
+                                {document.type} · {Math.round(document.confidence * 100)}% OCR confidence
+                              </span>
                             </div>
                           </td>
                           <td>
@@ -782,8 +829,20 @@ export default function Documents() {
                           </td>
                           <td>
                             <div className="table-cell__stack">
-                              <Pill tone={document.state === 'Ready' ? 'blue' : document.state === 'Matched' ? 'blue' : trust.tone}>{document.state}</Pill>
-                              <span>{document.duplicateRisk === 'Possible Duplicate' ? 'Duplicate check' : 'Manual match'}</span>
+                              <Pill
+                                tone={
+                                  document.state === 'Ready'
+                                    ? 'blue'
+                                    : document.state === 'Matched'
+                                      ? 'blue'
+                                      : trust.tone
+                                }
+                              >
+                                {document.state}
+                              </Pill>
+                              <span>
+                                {document.duplicateRisk === 'Possible Duplicate' ? 'Duplicate check' : 'Manual match'}
+                              </span>
                             </div>
                           </td>
                           <td>
@@ -835,7 +894,10 @@ export default function Documents() {
                                 className="button button--ghost button--compact"
                                 type="button"
                                 onClick={() => {
-                                  const result = reviewDocument(document.id, reviewAssignments[document.id] ?? document.horseId);
+                                  const result = reviewDocument(
+                                    document.id,
+                                    reviewAssignments[document.id] ?? document.horseId,
+                                  );
                                   pushToast({
                                     title: result.ok ? 'Document approved' : 'Approval blocked',
                                     message: result.message,
@@ -874,7 +936,11 @@ export default function Documents() {
                 title="Review queue is clear"
                 description="Approved documents continue to the Ownership stage; upload more files to keep the pipeline moving."
                 action={
-                  <button className="button button--ghost button--compact" type="button" onClick={() => goToStage('Upload')}>
+                  <button
+                    className="button button--ghost button--compact"
+                    type="button"
+                    onClick={() => goToStage('Upload')}
+                  >
                     Go to Upload stage
                   </button>
                 }
@@ -882,13 +948,21 @@ export default function Documents() {
             )}
           </Panel>
 
-          <Panel title="Duplicate flags" className="cursor-context-menu" onContextMenu={(event) => openSurfaceMenu('duplicates', event)}>
+          <Panel
+            title="Duplicate flags"
+            className="cursor-context-menu"
+            onContextMenu={(event) => openSurfaceMenu('duplicates', event)}
+          >
             {duplicates.length ? (
               <div id="documents-duplicates" className="stack-list">
                 {duplicates.map((document) => {
                   const trust = buildDocumentTrustProfile(document, horses);
                   return (
-                    <div key={document.id} className="stack-item" onContextMenu={(event) => openSurfaceMenu('duplicates', event)}>
+                    <div
+                      key={document.id}
+                      className="stack-item"
+                      onContextMenu={(event) => openSurfaceMenu('duplicates', event)}
+                    >
                       <div className="stack-item__top">
                         <div className="stack-item__title">{document.title}</div>
                         <Pill tone="rose">{document.duplicateRisk}</Pill>
@@ -899,7 +973,11 @@ export default function Documents() {
                 })}
               </div>
             ) : (
-              <EmptyState compact title="No duplicate flags" description="Possible duplicates surface here during review." />
+              <EmptyState
+                compact
+                title="No duplicate flags"
+                description="Possible duplicates surface here during review."
+              />
             )}
           </Panel>
         </>
@@ -926,13 +1004,16 @@ export default function Documents() {
                       <div>
                         <div className="stack-item__title">{document.title}</div>
                         <div className="stack-item__copy">
-                          {document.type} · {horse?.name ?? 'Unknown horse'} · approved {formatDateTimeLabel(document.uploadedAt)}
+                          {document.type} · {horse?.name ?? 'Unknown horse'} · approved{' '}
+                          {formatDateTimeLabel(document.uploadedAt)}
                         </div>
                       </div>
                       <div className="inline-actions inline-actions--card">
                         {linkedLabels.length ? (
                           linkedLabels.map((label) => (
-                            <Pill key={label} tone="blue">Linked: {label}</Pill>
+                            <Pill key={label} tone="blue">
+                              Linked: {label}
+                            </Pill>
                           ))
                         ) : (
                           <Pill tone="slate">Not linked yet</Pill>
@@ -969,7 +1050,9 @@ export default function Documents() {
                       </div>
                     ) : (
                       <div className="inline-actions">
-                        <span className="stack-item__copy">No ownership record exists for {horse?.name ?? 'this horse'} yet.</span>
+                        <span className="stack-item__copy">
+                          No ownership record exists for {horse?.name ?? 'this horse'} yet.
+                        </span>
                         <button
                           className="button button--ghost button--compact"
                           type="button"
@@ -988,7 +1071,11 @@ export default function Documents() {
               title="No approved documents ready for ownership"
               description="Approve documents in the Review stage with a horse assigned, and they appear here for ownership linking."
               action={
-                <button className="button button--ghost button--compact" type="button" onClick={() => goToStage('Review')}>
+                <button
+                  className="button button--ghost button--compact"
+                  type="button"
+                  onClick={() => goToStage('Review')}
+                >
                   Go to Review stage
                 </button>
               }
@@ -1003,7 +1090,11 @@ export default function Documents() {
             title="Stage 5 · Share"
             description="Bundle each horse's approved documents into a watermarked sale packet."
             action={
-              <button className="button button--ghost button--compact" type="button" onClick={() => navigate(SHARED_ACCESS_PATH)}>
+              <button
+                className="button button--ghost button--compact"
+                type="button"
+                onClick={() => navigate(SHARED_ACCESS_PATH)}
+              >
                 Open Shared Access workspace
               </button>
             }
@@ -1012,8 +1103,13 @@ export default function Documents() {
           >
             {subscription.tier === 'Starter' ? (
               <p className="panel__description" style={{ marginBottom: 12 }}>
-                Starter records the packet build. Upgrading to Professional unlocks the watermarked PDF and Buyer follow-up.{' '}
-                <button className="button button--ghost button--compact" type="button" onClick={() => navigate(billingPathForTier('Professional'))}>
+                Starter records the packet build. Upgrading to Professional unlocks the watermarked PDF and Buyer
+                follow-up.{' '}
+                <button
+                  className="button button--ghost button--compact"
+                  type="button"
+                  onClick={() => navigate(billingPathForTier('Professional'))}
+                >
                   View Billing
                 </button>
               </p>
@@ -1026,7 +1122,8 @@ export default function Documents() {
                       <div>
                         <div className="stack-item__title">{group.horse.name}</div>
                         <div className="stack-item__copy">
-                          {group.documents.length} approved {group.documents.length === 1 ? 'document' : 'documents'}: {group.documents.map((document) => document.title).join(', ')}
+                          {group.documents.length} approved {group.documents.length === 1 ? 'document' : 'documents'}:{' '}
+                          {group.documents.map((document) => document.title).join(', ')}
                         </div>
                       </div>
                       <button
@@ -1045,7 +1142,11 @@ export default function Documents() {
                 title="No documents are share-ready"
                 description="Approve documents and assign them to a horse, then bundle them here as a watermarked sale packet."
                 action={
-                  <button className="button button--ghost button--compact" type="button" onClick={() => goToStage('Review')}>
+                  <button
+                    className="button button--ghost button--compact"
+                    type="button"
+                    onClick={() => goToStage('Review')}
+                  >
                     Go to Review stage
                   </button>
                 }
@@ -1053,7 +1154,9 @@ export default function Documents() {
             )}
             {unassignedReadyDocuments.length ? (
               <p className="panel__description" style={{ marginTop: 12, marginBottom: 0 }}>
-                {unassignedReadyDocuments.length} approved {unassignedReadyDocuments.length === 1 ? 'document is' : 'documents are'} not matched to a horse and cannot join a packet yet.
+                {unassignedReadyDocuments.length} approved{' '}
+                {unassignedReadyDocuments.length === 1 ? 'document is' : 'documents are'} not matched to a horse and
+                cannot join a packet yet.
               </p>
             ) : null}
           </Panel>
@@ -1067,18 +1170,32 @@ export default function Documents() {
                     <div key={packet.id} className="stack-item">
                       <div className="stack-item__top">
                         <div>
-                          <div className="stack-item__title">{horse?.name ?? 'Unknown horse'} · {packet.fileName ?? 'Sale packet'}</div>
+                          <div className="stack-item__title">
+                            {horse?.name ?? 'Unknown horse'} · {packet.fileName ?? 'Sale packet'}
+                          </div>
                           <div className="stack-item__copy">
-                            {packet.documentIds.length} documents · watermark "{packet.watermark}" · {formatDateTimeLabel(packet.createdAt)} by {packet.createdBy}
+                            {packet.documentIds.length} documents · watermark "{packet.watermark}" ·{' '}
+                            {formatDateTimeLabel(packet.createdAt)} by {packet.createdBy}
                           </div>
                         </div>
                         <div className="inline-actions" style={{ alignItems: 'center' }}>
                           {packet.downloadUrl ? (
-                            <a className="button button--ghost button--compact" href={packet.downloadUrl} target="_blank" rel="noreferrer">
+                            <a
+                              className="button button--ghost button--compact"
+                              href={packet.downloadUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
                               Download PDF
                             </a>
                           ) : null}
-                          <Pill tone={packet.status === 'shared' ? 'blue' : packet.status === 'generated' ? 'blue' : 'amber'}>{packet.status}</Pill>
+                          <Pill
+                            tone={
+                              packet.status === 'shared' ? 'blue' : packet.status === 'generated' ? 'blue' : 'amber'
+                            }
+                          >
+                            {packet.status}
+                          </Pill>
                         </div>
                       </div>
                     </div>
@@ -1086,11 +1203,18 @@ export default function Documents() {
                 })}
               </div>
             ) : (
-              <EmptyState compact title="No sale packets yet" description="Generate a packet above and it will be listed here for hand-off." />
+              <EmptyState
+                compact
+                title="No sale packets yet"
+                description="Generate a packet above and it will be listed here for hand-off."
+              />
             )}
           </Panel>
 
-          <Panel title="Legal & commerce documents" description="XBAR LLC(TM) terms, policies, and the equine records disclaimer — include them with buyer hand-offs.">
+          <Panel
+            title="Legal & commerce documents"
+            description="XBAR LLC(TM) terms, policies, and the equine records disclaimer — include them with buyer hand-offs."
+          >
             <div className="stack-list">
               {legalDocuments.map((legalDoc) => (
                 <div key={legalDoc.id} className="stack-item">
@@ -1107,7 +1231,9 @@ export default function Documents() {
                           const opened = openPrintableLegalDocument(legalDoc);
                           pushToast({
                             title: opened ? 'Legal document opened' : 'Preview blocked',
-                            message: opened ? `${legalDoc.shortTitle} opened in a printable PDF-ready tab.` : 'Allow popups to preview and print the legal document.',
+                            message: opened
+                              ? `${legalDoc.shortTitle} opened in a printable PDF-ready tab.`
+                              : 'Allow popups to preview and print the legal document.',
                             tone: opened ? 'success' : 'error',
                           });
                         }}
@@ -1119,7 +1245,11 @@ export default function Documents() {
                         type="button"
                         onClick={() => {
                           downloadLegalHtml(legalDoc);
-                          pushToast({ title: 'Legal document exported', message: `${legalDoc.shortTitle} downloaded as a print-ready file.`, tone: 'success' });
+                          pushToast({
+                            title: 'Legal document exported',
+                            message: `${legalDoc.shortTitle} downloaded as a print-ready file.`,
+                            tone: 'success',
+                          });
                         }}
                       >
                         Download
@@ -1138,7 +1268,13 @@ export default function Documents() {
         initialHorseId={packetBuildingHorseId || null}
         onClose={() => setPacketBuildingHorseId('')}
       />
-      <ContextMenu open={Boolean(menuItems.length)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
+      <ContextMenu
+        open={Boolean(menuItems.length)}
+        x={menuState?.x ?? 0}
+        y={menuState?.y ?? 0}
+        items={menuItems}
+        onClose={() => setMenuState(null)}
+      />
     </>
   );
 }

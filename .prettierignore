@@ -1,0 +1,11 @@
+dist
+node_modules
+.codex-test-dist
+package-lock.json
+public/ocr
+web
+android
+ios
+coverage
+*.generated.*
+supabase/production-schema.generated.sql

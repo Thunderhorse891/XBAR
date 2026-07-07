@@ -33,7 +33,12 @@ export function ContextMenu({
   if (!open) return null;
 
   return (
-    <DropdownMenu open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
+    <DropdownMenu
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onClose();
+      }}
+    >
       <DropdownMenuTrigger asChild>
         <span
           aria-hidden="true"
@@ -56,7 +61,7 @@ export function ContextMenu({
             key={item.id}
             className={`context-menu__item${item.tone === 'danger' ? ' context-menu__item--danger' : ''}`}
             disabled={item.disabled}
-            title={item.disabled ? item.disabledReason ?? 'This action is unavailable.' : item.label}
+            title={item.disabled ? (item.disabledReason ?? 'This action is unavailable.') : item.label}
             onSelect={() => {
               if (item.disabled) return;
               item.onSelect();

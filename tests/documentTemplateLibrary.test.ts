@@ -44,7 +44,14 @@ const horse: HorseRecord = {
   assignments: { trainer: 'Trainer', ranchManager: 'Manager', veterinarian: 'Dr. Smith', farrier: 'Farrier' },
   ownership: [],
   gallery: [],
-  sale: { listingState: 'Market Ready', askPrice: 35000, buyerConfidence: 90, inquiryCount: 2, watchlistCount: 4, socialReady: true },
+  sale: {
+    listingState: 'Market Ready',
+    askPrice: 35000,
+    buyerConfidence: 90,
+    inquiryCount: 2,
+    watchlistCount: 4,
+    socialReady: true,
+  },
   readiness: { score: 88, blockers: [], packetStatus: 'Ready' },
   medicalNotes: 'No current limitations.',
   lastVetVisit: '2026-05-01',
@@ -77,7 +84,11 @@ test('document template library contains requested tiered templates', () => {
   assert.equal(documentTemplateLibrary.length, 15);
   assert.ok(documentTemplateLibrary.some((template) => template.id === 'bill-of-sale' && template.tier === 'Basic'));
   assert.ok(documentTemplateLibrary.some((template) => template.id === 'sales-packet' && template.tier === 'Pro'));
-  assert.ok(documentTemplateLibrary.some((template) => template.id === 'release-liability-waiver' && template.tier === 'Business'));
+  assert.ok(
+    documentTemplateLibrary.some(
+      (template) => template.id === 'release-liability-waiver' && template.tier === 'Business',
+    ),
+  );
 });
 
 test('prefilled sales packet uses horse and document data', () => {

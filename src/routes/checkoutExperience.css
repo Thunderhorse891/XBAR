@@ -1,10 +1,10 @@
 .checkout-route {
-  --checkout-bg: #F5F2EC;
+  --checkout-bg: #f5f2ec;
   --checkout-panel: #ffffff;
   --checkout-ink: #121518;
   --checkout-muted: #596168;
   --checkout-line: rgba(16, 20, 24, 0.14);
-  --checkout-blue: #0078D7;
+  --checkout-blue: #0078d7;
   --checkout-success: #059669;
   --checkout-warning: #d97706;
   --checkout-error: #bf4040;
@@ -14,7 +14,11 @@
     linear-gradient(90deg, rgba(16, 20, 24, 0.02) 1px, transparent 1px),
     radial-gradient(circle at 84% 12%, rgba(0, 120, 215, 0.065), transparent 26rem),
     linear-gradient(180deg, #ffffff 0%, var(--checkout-bg) 100%);
-  background-size: 88px 88px, 88px 88px, auto, auto;
+  background-size:
+    88px 88px,
+    88px 88px,
+    auto,
+    auto;
   color: var(--checkout-ink);
 }
 
@@ -99,7 +103,9 @@
   border: 1px solid var(--checkout-line);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 26px 70px -54px rgba(16, 20, 24, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 26px 70px -54px rgba(16, 20, 24, 0.72),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
 }
 
 .checkout-panel--plans {
@@ -302,7 +308,7 @@
   margin-top: 6px;
   border-radius: 50%;
   background: var(--checkout-blue);
-  content: "";
+  content: '';
 }
 
 .checkout-plan button:disabled,

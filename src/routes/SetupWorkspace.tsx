@@ -140,35 +140,68 @@ export default function SetupWorkspace() {
             <div className="clean-form-grid">
               <label className="clean-field">
                 <span>Business name</span>
-                <input value={form.businessName} onChange={(event) => setForm((current) => ({ ...current, businessName: event.target.value }))} placeholder="XBAR LLC" />
+                <input
+                  value={form.businessName}
+                  onChange={(event) => setForm((current) => ({ ...current, businessName: event.target.value }))}
+                  placeholder="XBAR LLC"
+                />
               </label>
               <label className="clean-field">
                 <span>Ranch name</span>
-                <input value={form.ranchName} onChange={(event) => setForm((current) => ({ ...current, ranchName: event.target.value }))} placeholder="Primary Ranch" />
+                <input
+                  value={form.ranchName}
+                  onChange={(event) => setForm((current) => ({ ...current, ranchName: event.target.value }))}
+                  placeholder="Primary Ranch"
+                />
               </label>
               <label className="clean-field">
                 <span>Ranch manager</span>
-                <input value={form.ranchManagerName} onChange={(event) => setForm((current) => ({ ...current, ranchManagerName: event.target.value }))} placeholder="Ranch manager" />
+                <input
+                  value={form.ranchManagerName}
+                  onChange={(event) => setForm((current) => ({ ...current, ranchManagerName: event.target.value }))}
+                  placeholder="Ranch manager"
+                />
               </label>
               <label className="clean-field">
                 <span>Ops email</span>
-                <input type="email" value={form.operationsEmail} onChange={(event) => setForm((current) => ({ ...current, operationsEmail: event.target.value }))} placeholder="ops@xbar.com" />
+                <input
+                  type="email"
+                  value={form.operationsEmail}
+                  onChange={(event) => setForm((current) => ({ ...current, operationsEmail: event.target.value }))}
+                  placeholder="ops@xbar.com"
+                />
               </label>
               <label className="clean-field">
                 <span>Default owner</span>
-                <input value={form.defaultOwnerName} onChange={(event) => setForm((current) => ({ ...current, defaultOwnerName: event.target.value }))} placeholder="Legal owner" />
+                <input
+                  value={form.defaultOwnerName}
+                  onChange={(event) => setForm((current) => ({ ...current, defaultOwnerName: event.target.value }))}
+                  placeholder="Legal owner"
+                />
               </label>
               <label className="clean-field">
                 <span>Owner entity</span>
-                <input value={form.defaultOwnerEntity} onChange={(event) => setForm((current) => ({ ...current, defaultOwnerEntity: event.target.value }))} placeholder="Owner entity" />
+                <input
+                  value={form.defaultOwnerEntity}
+                  onChange={(event) => setForm((current) => ({ ...current, defaultOwnerEntity: event.target.value }))}
+                  placeholder="Owner entity"
+                />
               </label>
               <label className="clean-field">
                 <span>Home barn</span>
-                <input value={form.defaultBarn} onChange={(event) => setForm((current) => ({ ...current, defaultBarn: event.target.value }))} placeholder="Barn A" />
+                <input
+                  value={form.defaultBarn}
+                  onChange={(event) => setForm((current) => ({ ...current, defaultBarn: event.target.value }))}
+                  placeholder="Barn A"
+                />
               </label>
               <label className="clean-field">
                 <span>Default pasture</span>
-                <input value={form.defaultPasture} onChange={(event) => setForm((current) => ({ ...current, defaultPasture: event.target.value }))} placeholder="Pasture 1" />
+                <input
+                  value={form.defaultPasture}
+                  onChange={(event) => setForm((current) => ({ ...current, defaultPasture: event.target.value }))}
+                  placeholder="Pasture 1"
+                />
               </label>
             </div>
 

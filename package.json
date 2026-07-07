@@ -2,14 +2,22 @@
   "name": "xbar-ranch-ledger",
   "version": "1.0.0",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
     "predev": "node scripts/prepare-ocr-assets.mjs",
     "dev": "vite",
     "prebuild": "node scripts/prepare-ocr-assets.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "npm run supabase:prepare && tsc -p tsconfig.test.json && node .codex-test-dist/tests/xbarStoreLogic.test.js && node .codex-test-dist/tests/xbarPhaseTwo.test.js && node .codex-test-dist/tests/xbarGrowth.test.js && node .codex-test-dist/tests/permissions.test.js && node .codex-test-dist/tests/facebookSharing.test.js && node .codex-test-dist/tests/workspaceAccess.test.js && node .codex-test-dist/tests/dashboardOps.test.js && node .codex-test-dist/tests/operationalValuePulse.test.js && node .codex-test-dist/tests/activation.test.js && node .codex-test-dist/tests/operationsPriority.test.js && node .codex-test-dist/tests/salesFollowUp.test.js && node .codex-test-dist/tests/buyerOffers.test.js && node .codex-test-dist/tests/buyerRoutes.test.js && node .codex-test-dist/tests/routeCanon.test.js && node .codex-test-dist/tests/salePackets.test.js && node .codex-test-dist/tests/cloudSyncPolicy.test.js && node .codex-test-dist/tests/productEvents.test.js && node .codex-test-dist/tests/subscriptionGates.test.js && node .codex-test-dist/tests/subscriptionDecision.test.js && node .codex-test-dist/tests/billingRoutes.test.js && node .codex-test-dist/tests/interactionState.test.js && node .codex-test-dist/tests/connectionSecurity.test.js && node .codex-test-dist/tests/ownershipProof.test.js && node .codex-test-dist/tests/businessIntelligence.test.js && node .codex-test-dist/tests/breedingIntelligence.test.js && node .codex-test-dist/tests/commercialEngine.test.js && node tests/api/documentPipeline.test.mjs",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "npm run supabase:prepare && tsc -p tsconfig.test.json && node .codex-test-dist/tests/xbarStoreLogic.test.js && node .codex-test-dist/tests/xbarPhaseTwo.test.js && node .codex-test-dist/tests/xbarGrowth.test.js && node .codex-test-dist/tests/permissions.test.js && node .codex-test-dist/tests/facebookSharing.test.js && node .codex-test-dist/tests/workspaceAccess.test.js && node .codex-test-dist/tests/dashboardOps.test.js && node .codex-test-dist/tests/operationalValuePulse.test.js && node .codex-test-dist/tests/activation.test.js && node .codex-test-dist/tests/operationsPriority.test.js && node .codex-test-dist/tests/salesFollowUp.test.js && node .codex-test-dist/tests/buyerOffers.test.js && node .codex-test-dist/tests/buyerRoutes.test.js && node .codex-test-dist/tests/routeCanon.test.js && node .codex-test-dist/tests/salePackets.test.js && node .codex-test-dist/tests/cloudSyncPolicy.test.js && node .codex-test-dist/tests/productEvents.test.js && node .codex-test-dist/tests/subscriptionGates.test.js && node .codex-test-dist/tests/subscriptionDecision.test.js && node .codex-test-dist/tests/billingRoutes.test.js && node .codex-test-dist/tests/interactionState.test.js && node .codex-test-dist/tests/connectionSecurity.test.js && node .codex-test-dist/tests/ownershipProof.test.js && node .codex-test-dist/tests/businessIntelligence.test.js && node .codex-test-dist/tests/breedingIntelligence.test.js && node .codex-test-dist/tests/commercialEngine.test.js && node .codex-test-dist/tests/documentsPipeline.test.js && node tests/api/documentPipeline.test.mjs && node tests/api/securityGates.test.mjs",
     "test:e2e": "playwright test",
     "build:local": "node scripts/build-local.mjs",
     "test:prod-smoke": "npm run build:local && playwright test --config=playwright.prod.config.ts",
@@ -49,7 +57,7 @@
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-hook-form": "^7.78.0",
-    "react-router-dom": "6.30.3",
+    "react-router-dom": "6.30.4",
     "sonner": "^2.0.7",
     "stripe": "21.0.1",
     "tailwind-merge": "^3.6.0",
@@ -59,16 +67,24 @@
     "zustand": "4.5.7"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@playwright/test": "1.58.2",
     "@tesseract.js-data/eng": "^1.0.0",
     "@types/node": "20.19.37",
     "@types/react": "18.3.28",
     "@types/react-dom": "18.3.7",
-    "@vitejs/plugin-react": "4.7.0",
+    "@vitejs/plugin-react": "^6.0.3",
     "autoprefixer": "10.4.27",
-    "postcss": "8.5.8",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^9.1.2",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.26",
+    "globals": "^15.15.0",
+    "postcss": "8.5.16",
+    "prettier": "^3.9.4",
     "tailwindcss": "3.4.19",
     "typescript": "5.9.3",
-    "vite": "5.4.21"
+    "typescript-eslint": "^8.62.1",
+    "vite": "^8.1.3"
   }
 }

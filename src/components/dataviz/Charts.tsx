@@ -232,7 +232,14 @@ export function RadialGauge({
 
   return (
     <div className="xbar-gauge">
-      <svg ref={ref} width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={caption ?? 'progress gauge'}>
+      <svg
+        ref={ref}
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
+        role="img"
+        aria-label={caption ?? 'progress gauge'}
+      >
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={stroke} />
         <circle
           cx={size / 2}
@@ -257,7 +264,13 @@ export function RadialGauge({
 }
 
 // Horizontal segmented progress for compositional data (e.g. status mix).
-export function StackBar({ segments, label }: { segments: { tone: Tone; value: number; label: string }[]; label?: string }) {
+export function StackBar({
+  segments,
+  label,
+}: {
+  segments: { tone: Tone; value: number; label: string }[];
+  label?: string;
+}) {
   const { ref, inView } = useInView<HTMLDivElement>();
   const total = segments.reduce((sum, s) => sum + s.value, 0) || 1;
   return (
@@ -277,12 +290,14 @@ export function StackBar({ segments, label }: { segments: { tone: Tone; value: n
         ))}
       </div>
       <div className="xbar-stackbar__legend">
-        {segments.filter((s) => s.value > 0).map((seg) => (
-          <span key={seg.label}>
-            <i style={{ background: PALETTE[seg.tone] }} />
-            {seg.label} {seg.value}
-          </span>
-        ))}
+        {segments
+          .filter((s) => s.value > 0)
+          .map((seg) => (
+            <span key={seg.label}>
+              <i style={{ background: PALETTE[seg.tone] }} />
+              {seg.label} {seg.value}
+            </span>
+          ))}
       </div>
     </div>
   );

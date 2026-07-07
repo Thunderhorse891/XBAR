@@ -2,7 +2,63 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { summarizeActivation } from '../src/lib/activation.js';
 
-test('activation recommends the first real operating action', () => { const result = summarizeActivation({ horses: 0, documents: 0, receipts: 0, members: 0, invitations: 0, sharedListings: 0, monthlyRate: 0, billingState: 'Manual Billing' }); assert.equal(result.percent, 0); assert.equal(result.next?.id, 'horse'); assert.equal(result.firstValueAchieved, false); assert.equal(result.complete, false); });
-test('connecting a horse and source document reaches first customer value', () => { const result = summarizeActivation({ horses: 1, documents: 1, receipts: 0, members: 0, invitations: 0, sharedListings: 0, monthlyRate: 0, billingState: 'Manual Billing' }); assert.equal(result.firstValueAchieved, true); assert.match(result.valueStatement, /same workspace/); assert.equal(result.next?.id, 'receipt'); });
-test('activation advances from real workspace data', () => { const result = summarizeActivation({ horses: 1, documents: 2, receipts: 1, members: 0, invitations: 1, sharedListings: 0, monthlyRate: 199, billingState: 'Active' }); assert.equal(result.percent, 100); assert.equal(result.next, undefined); assert.equal(result.complete, true); });
-test('a protected listing can satisfy collaboration activation', () => { const result = summarizeActivation({ horses: 1, documents: 1, receipts: 0, members: 0, invitations: 0, sharedListings: 1, monthlyRate: 0, billingState: 'Manual Billing' }); assert.equal(result.steps.find((step) => step.id === 'team')?.complete, true); assert.equal(result.next?.id, 'receipt'); });
+test('activation recommends the first real operating action', () => {
+  const result = summarizeActivation({
+    horses: 0,
+    documents: 0,
+    receipts: 0,
+    members: 0,
+    invitations: 0,
+    sharedListings: 0,
+    monthlyRate: 0,
+    billingState: 'Manual Billing',
+  });
+  assert.equal(result.percent, 0);
+  assert.equal(result.next?.id, 'horse');
+  assert.equal(result.firstValueAchieved, false);
+  assert.equal(result.complete, false);
+});
+test('connecting a horse and source document reaches first customer value', () => {
+  const result = summarizeActivation({
+    horses: 1,
+    documents: 1,
+    receipts: 0,
+    members: 0,
+    invitations: 0,
+    sharedListings: 0,
+    monthlyRate: 0,
+    billingState: 'Manual Billing',
+  });
+  assert.equal(result.firstValueAchieved, true);
+  assert.match(result.valueStatement, /same workspace/);
+  assert.equal(result.next?.id, 'receipt');
+});
+test('activation advances from real workspace data', () => {
+  const result = summarizeActivation({
+    horses: 1,
+    documents: 2,
+    receipts: 1,
+    members: 0,
+    invitations: 1,
+    sharedListings: 0,
+    monthlyRate: 199,
+    billingState: 'Active',
+  });
+  assert.equal(result.percent, 100);
+  assert.equal(result.next, undefined);
+  assert.equal(result.complete, true);
+});
+test('a protected listing can satisfy collaboration activation', () => {
+  const result = summarizeActivation({
+    horses: 1,
+    documents: 1,
+    receipts: 0,
+    members: 0,
+    invitations: 0,
+    sharedListings: 1,
+    monthlyRate: 0,
+    billingState: 'Manual Billing',
+  });
+  assert.equal(result.steps.find((step) => step.id === 'team')?.complete, true);
+  assert.equal(result.next?.id, 'receipt');
+});

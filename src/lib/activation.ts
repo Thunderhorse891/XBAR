@@ -1,17 +1,77 @@
 import { billingPath } from './billingRoutes.js';
 
-export type ActivationInput = { horses: number; documents: number; receipts: number; members: number; invitations: number; sharedListings: number; monthlyRate: number; billingState: string };
-export type ActivationStep = { id: string; title: string; description: string; action: string; path: string; complete: boolean; value: string };
+export type ActivationInput = {
+  horses: number;
+  documents: number;
+  receipts: number;
+  members: number;
+  invitations: number;
+  sharedListings: number;
+  monthlyRate: number;
+  billingState: string;
+};
+export type ActivationStep = {
+  id: string;
+  title: string;
+  description: string;
+  action: string;
+  path: string;
+  complete: boolean;
+  value: string;
+};
 
 export function buildActivationSteps(input: ActivationInput): ActivationStep[] {
   const teamCount = input.members + input.invitations;
   const planActive = input.monthlyRate > 0 && !/manual/i.test(input.billingState);
   return [
-    { id: 'horse', title: 'Add the first horse', description: 'Create the horse record the rest of the operation can organize around.', action: 'Add Horse', path: '/horses?new=1', complete: input.horses > 0, value: `${input.horses} horse${input.horses === 1 ? '' : 's'} added` },
-    { id: 'documents', title: 'Attach the first document', description: 'Connect registration, Coggins, health, or ownership documents to the operation.', action: 'Upload Documents', path: '/documents?upload=1', complete: input.documents > 0, value: `${input.documents} source document${input.documents === 1 ? '' : 's'}` },
-    { id: 'receipt', title: 'Capture one real operating cost', description: 'Add a receipt so the record begins connecting decisions to spend.', action: 'Log a cost', path: '/expenses', complete: input.receipts > 0, value: `${input.receipts} cost record${input.receipts === 1 ? '' : 's'}` },
-    { id: 'team', title: 'Put a workflow in motion', description: 'Invite a teammate or prepare a controlled listing for a real next step.', action: 'Open access controls', path: '/settings', complete: teamCount > 0 || input.sharedListings > 0, value: teamCount > 0 ? `${teamCount} team access` : `${input.sharedListings} controlled listing${input.sharedListings === 1 ? '' : 's'}` },
-    { id: 'plan', title: 'Confirm operating capacity', description: 'Review billing before capacity becomes a blocker.', action: 'Review billing', path: billingPath, complete: planActive, value: planActive ? 'Paid billing active' : 'Billing not confirmed' },
+    {
+      id: 'horse',
+      title: 'Add the first horse',
+      description: 'Create the horse record the rest of the operation can organize around.',
+      action: 'Add Horse',
+      path: '/horses?new=1',
+      complete: input.horses > 0,
+      value: `${input.horses} horse${input.horses === 1 ? '' : 's'} added`,
+    },
+    {
+      id: 'documents',
+      title: 'Attach the first document',
+      description: 'Connect registration, Coggins, health, or ownership documents to the operation.',
+      action: 'Upload Documents',
+      path: '/documents?upload=1',
+      complete: input.documents > 0,
+      value: `${input.documents} source document${input.documents === 1 ? '' : 's'}`,
+    },
+    {
+      id: 'receipt',
+      title: 'Capture one real operating cost',
+      description: 'Add a receipt so the record begins connecting decisions to spend.',
+      action: 'Log a cost',
+      path: '/expenses',
+      complete: input.receipts > 0,
+      value: `${input.receipts} cost record${input.receipts === 1 ? '' : 's'}`,
+    },
+    {
+      id: 'team',
+      title: 'Put a workflow in motion',
+      description: 'Invite a teammate or prepare a controlled listing for a real next step.',
+      action: 'Open access controls',
+      path: '/settings',
+      complete: teamCount > 0 || input.sharedListings > 0,
+      value:
+        teamCount > 0
+          ? `${teamCount} team access`
+          : `${input.sharedListings} controlled listing${input.sharedListings === 1 ? '' : 's'}`,
+    },
+    {
+      id: 'plan',
+      title: 'Confirm operating capacity',
+      description: 'Review billing before capacity becomes a blocker.',
+      action: 'Review billing',
+      path: billingPath,
+      complete: planActive,
+      value: planActive ? 'Paid billing active' : 'Billing not confirmed',
+    },
   ];
 }
 

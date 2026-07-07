@@ -13,7 +13,7 @@ export const productEventNames = {
   buyerMomentumOpened: 'sales.buyer_momentum_opened',
 } as const;
 
-export type ProductEventName = typeof productEventNames[keyof typeof productEventNames];
+export type ProductEventName = (typeof productEventNames)[keyof typeof productEventNames];
 
 export function productEvent(eventName: ProductEventName, payload: Record<string, unknown> = {}) {
   return { eventName, payload };

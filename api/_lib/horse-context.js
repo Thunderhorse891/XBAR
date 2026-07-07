@@ -6,7 +6,9 @@ export async function loadHorseContext(supabase, workspaceId, horseId) {
   const [{ data: horse }, { data: profile }, { data: documents }, { data: ownership }] = await Promise.all([
     supabase
       .from('horses')
-      .select('horse_id, name, barn_name, status, registration_number, owner_name, breed, color, birthdate, gender, microchip, registry, payload')
+      .select(
+        'horse_id, name, barn_name, status, registration_number, owner_name, breed, color, birthdate, gender, microchip, registry, payload',
+      )
       .eq('workspace_id', workspaceId)
       .eq('horse_id', horseId)
       .maybeSingle(),
@@ -42,9 +44,7 @@ export async function loadHorseContext(supabase, workspaceId, horseId) {
     storage_path: doc.storage_path || doc.payload?.storagePath || '',
     mime_type: doc.mime_type || doc.payload?.mimeType || '',
     extracted_data:
-      doc.extracted_data && Object.keys(doc.extracted_data).length
-        ? doc.extracted_data
-        : doc.payload?.entities || {},
+      doc.extracted_data && Object.keys(doc.extracted_data).length ? doc.extracted_data : doc.payload?.entities || {},
   }));
   const horsePayload = horse.payload || {};
   const latestCoggins = docs.find((doc) => doc.document_type === 'Coggins');

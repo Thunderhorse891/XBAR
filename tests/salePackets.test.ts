@@ -11,5 +11,9 @@ test('sale packets page builds real packets — no fake share links or toast-onl
 
 test('buyer revoke persists a buyer event, not only telemetry', async () => {
   const source = await readFile('src/routes/BuyerDealRoom.tsx', 'utf8');
-  assert.match(source, /logBuyerRoomEvent\(\{[^}]*kind: 'deal-status'/s, 'revoking access must log a persisted buyer event');
+  assert.match(
+    source,
+    /logBuyerRoomEvent\(\{[^}]*kind: 'deal-status'/s,
+    'revoking access must log a persisted buyer event',
+  );
 });

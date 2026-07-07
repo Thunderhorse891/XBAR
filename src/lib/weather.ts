@@ -163,12 +163,7 @@ export async function loadWeatherForecast(params: {
   );
   url.searchParams.set(
     'hourly',
-    [
-      'temperature_2m',
-      'precipitation_probability',
-      'wind_speed_10m',
-      'weather_code',
-    ].join(','),
+    ['temperature_2m', 'precipitation_probability', 'wind_speed_10m', 'weather_code'].join(','),
   );
   url.searchParams.set(
     'daily',
@@ -219,8 +214,14 @@ export async function loadWeatherForecast(params: {
     weatherLabel: weatherLabelFromCode(payload.hourly.weather_code[index] ?? payload.current.weather_code),
   }));
 
-  const maxRainChance = next12Hours.reduce((max, hour) => Math.max(max, hour.rainChance), payload.daily.precipitation_probability_max[0] ?? 0);
-  const maxWindMph = next12Hours.reduce((max, hour) => Math.max(max, hour.windMph), payload.current.wind_gusts_10m ?? 0);
+  const maxRainChance = next12Hours.reduce(
+    (max, hour) => Math.max(max, hour.rainChance),
+    payload.daily.precipitation_probability_max[0] ?? 0,
+  );
+  const maxWindMph = next12Hours.reduce(
+    (max, hour) => Math.max(max, hour.windMph),
+    payload.current.wind_gusts_10m ?? 0,
+  );
   const notes = describeOperationalNotes({
     currentTempF: payload.current.temperature_2m,
     maxRainChance,

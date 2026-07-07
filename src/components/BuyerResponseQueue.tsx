@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
@@ -54,16 +61,19 @@ export function BuyerResponseQueue() {
   const openRequests = openBuyerRequests(events);
   const activity = sortBuyerRoomEvents(events).slice(0, 30);
 
-  const refresh = useCallback(async (showFailure = true) => {
-    setSyncing(true);
-    const result = await loadPublicBuyerRoomEventsFromCloud();
-    setSyncing(false);
-    if (result.ok) {
-      setSyncMessage(mergeBuyerRoomEvents(result.events).message);
-    } else if (showFailure) {
-      setSyncMessage(result.message);
-    }
-  }, [mergeBuyerRoomEvents]);
+  const refresh = useCallback(
+    async (showFailure = true) => {
+      setSyncing(true);
+      const result = await loadPublicBuyerRoomEventsFromCloud();
+      setSyncing(false);
+      if (result.ok) {
+        setSyncMessage(mergeBuyerRoomEvents(result.events).message);
+      } else if (showFailure) {
+        setSyncMessage(result.message);
+      }
+    },
+    [mergeBuyerRoomEvents],
+  );
 
   useEffect(() => {
     void refresh(false);
@@ -115,7 +125,7 @@ export function BuyerResponseQueue() {
     setResponseNote('');
   };
 
-  const renderEvents = (visibleEvents: BuyerRoomEvent[], emptyTitle: string, emptyDescription: string) => (
+  const renderEvents = (visibleEvents: BuyerRoomEvent[], emptyTitle: string, emptyDescription: string) =>
     visibleEvents.length ? (
       <div className="stack-list">
         {visibleEvents.map((event) => {
@@ -145,13 +155,20 @@ export function BuyerResponseQueue() {
             <div className="stack-item" key={event.id}>
               <div className="stack-item__top">
                 <div>
-                  <div className="stack-item__title">{eventLabel(event.kind)} · {horse?.name ?? 'Horse record'}</div>
-                  <div className="stack-item__copy">{event.actor} · {formatDateLabel(event.at)}</div>
+                  <div className="stack-item__title">
+                    {eventLabel(event.kind)} · {horse?.name ?? 'Horse record'}
+                  </div>
+                  <div className="stack-item__copy">
+                    {event.actor} · {formatDateLabel(event.at)}
+                  </div>
                 </div>
                 <Pill tone={eventTone(event.kind)}>{eventLabel(event.kind)}</Pill>
               </div>
               <div className="stack-item__copy" style={{ marginTop: 8 }}>
-                {event.note || (event.kind === 'offer' && event.amount ? `Offer submitted for ${formatCompactCurrency(event.amount)}.` : 'Buyer activity recorded.')}
+                {event.note ||
+                  (event.kind === 'offer' && event.amount
+                    ? `Offer submitted for ${formatCompactCurrency(event.amount)}.`
+                    : 'Buyer activity recorded.')}
               </div>
               <div className="inline-actions" style={{ marginTop: 10 }}>
                 {event.amount ? <Pill tone="blue">{formatCompactCurrency(event.amount)}</Pill> : null}
@@ -169,12 +186,14 @@ export function BuyerResponseQueue() {
                     Send to offer workflow
                   </Button>
                 ) : null}
-                {(event.kind === 'packet-downloaded' || event.kind === 'call-requested') && followUpLead?.nextFollowUp ? (
+                {(event.kind === 'packet-downloaded' || event.kind === 'call-requested') &&
+                followUpLead?.nextFollowUp ? (
                   <Button asChild variant="outline" size="sm">
                     <Link to={`/follow-ups?lead=${followUpLead.id}`}>Open follow-up</Link>
                   </Button>
                 ) : null}
-                {(event.kind === 'packet-downloaded' || event.kind === 'call-requested') && !followUpLead?.nextFollowUp ? (
+                {(event.kind === 'packet-downloaded' || event.kind === 'call-requested') &&
+                !followUpLead?.nextFollowUp ? (
                   <Button
                     variant="outline"
                     size="sm"
@@ -213,8 +232,7 @@ export function BuyerResponseQueue() {
           <div className="stack-item__copy">{emptyDescription}</div>
         </div>
       </div>
-    )
-  );
+    );
 
   return (
     <>
@@ -222,8 +240,20 @@ export function BuyerResponseQueue() {
         eyebrow="Buyer response queue"
         title="Buyer activity"
         description="Questions, document requests, offers, packet downloads, scheduled follow-ups, and seller responses from shared buyer links."
-        meta={<Pill tone={openRequests.length ? 'amber' : activity.length ? 'blue' : 'slate'}>{openRequests.length ? `${openRequests.length} response needed` : activity.length ? 'Activity current' : 'Quiet'}</Pill>}
-        action={<Button variant="outline" size="sm" disabled={syncing} onClick={() => void refresh()}>{syncing ? 'Refreshing...' : 'Refresh activity'}</Button>}
+        meta={
+          <Pill tone={openRequests.length ? 'amber' : activity.length ? 'blue' : 'slate'}>
+            {openRequests.length
+              ? `${openRequests.length} response needed`
+              : activity.length
+                ? 'Activity current'
+                : 'Quiet'}
+          </Pill>
+        }
+        action={
+          <Button variant="outline" size="sm" disabled={syncing} onClick={() => void refresh()}>
+            {syncing ? 'Refreshing...' : 'Refresh activity'}
+          </Button>
+        }
       >
         <Tabs defaultValue={openRequests.length ? 'responses' : 'activity'}>
           <TabsList>
@@ -231,13 +261,25 @@ export function BuyerResponseQueue() {
             <TabsTrigger value="activity">All activity ({activity.length})</TabsTrigger>
           </TabsList>
           <TabsContent value="responses">
-            {renderEvents(openRequests, 'No buyer requests waiting', 'New buyer questions, call requests, and document requests will appear here.')}
+            {renderEvents(
+              openRequests,
+              'No buyer requests waiting',
+              'New buyer questions, call requests, and document requests will appear here.',
+            )}
           </TabsContent>
           <TabsContent value="activity">
-            {renderEvents(activity, 'No buyer activity yet', 'Share a buyer packet to begin tracking views, requests, and offers.')}
+            {renderEvents(
+              activity,
+              'No buyer activity yet',
+              'Share a buyer packet to begin tracking views, requests, and offers.',
+            )}
           </TabsContent>
         </Tabs>
-        {syncMessage ? <p className="panel__description" role="status" style={{ marginTop: 12 }}>{syncMessage}</p> : null}
+        {syncMessage ? (
+          <p className="panel__description" role="status" style={{ marginTop: 12 }}>
+            {syncMessage}
+          </p>
+        ) : null}
       </Panel>
 
       <Dialog
@@ -254,12 +296,16 @@ export function BuyerResponseQueue() {
           <DialogHeader>
             <DialogTitle>Respond to {responseEvent?.actor ?? 'buyer'}</DialogTitle>
             <DialogDescription>
-              Record the response delivered to the buyer. This resolves the exact request and becomes part of the buyer-room timeline.
+              Record the response delivered to the buyer. This resolves the exact request and becomes part of the
+              buyer-room timeline.
             </DialogDescription>
           </DialogHeader>
           {responseEvent ? (
             <div className="rounded-md border bg-muted/40 p-3 text-sm">
-              <div className="font-medium">{eventLabel(responseEvent.kind)} · {horses.find((horse) => horse.id === responseEvent.horseId)?.name ?? 'Horse record'}</div>
+              <div className="font-medium">
+                {eventLabel(responseEvent.kind)} ·{' '}
+                {horses.find((horse) => horse.id === responseEvent.horseId)?.name ?? 'Horse record'}
+              </div>
               <div className="mt-1 text-muted-foreground">{responseEvent.note || 'No additional buyer note.'}</div>
             </div>
           ) : null}
@@ -275,7 +321,9 @@ export function BuyerResponseQueue() {
               aria-invalid={Boolean(responseError)}
               disabled={Boolean(respondingEventId)}
             />
-            <FieldDescription>{responseNote.length}/1200 characters · Recorded against this buyer request.</FieldDescription>
+            <FieldDescription>
+              {responseNote.length}/1200 characters · Recorded against this buyer request.
+            </FieldDescription>
             <FieldError>{responseError}</FieldError>
           </Field>
           <DialogFooter>

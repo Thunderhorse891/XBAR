@@ -1,18 +1,31 @@
-import { sendJson, getQuery } from '../_lib/http.js';
-import { requireWorkspaceAccess } from '../_lib/supabase-admin.js';
-import { recordAuditEvent } from '../_lib/audit.js';
+import { sendJson, getQuery } from './http.js';
+import { requireWorkspaceAccess } from './supabase-admin.js';
+import { recordAuditEvent } from './audit.js';
+import { enforceRateLimit } from './rate-limit.js';
+import { applyCors } from './cors.js';
 
 // Full data export for one horse: profile, documents (with 1-hour signed
 // URLs for the original files), ownership records, reminders, and sale
 // packets — suitable for hand-off to a buyer's agent or a third-party system.
 
-const DOCUMENT_BUCKET = process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
+const DOCUMENT_BUCKET =
+  process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
 const PACKET_BUCKET = process.env.SUPABASE_SALE_PACKET_BUCKET || 'sale-packets';
 const SIGNED_URL_TTL_SECONDS = 3600;
 
+const RATE_LIMIT = { bucket: 'horses-export', limit: 12, windowSeconds: 60 };
+
 export default async function handler(req, res) {
+  if (!applyCors(req, res, { methods: 'GET, OPTIONS' })) {
+    return;
+  }
+
   if (req.method !== 'GET') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
+  }
+
+  if (!(await enforceRateLimit(req, res, RATE_LIMIT))) {
+    return;
   }
 
   const accessToken = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim() || '';
@@ -40,17 +53,33 @@ export default async function handler(req, res) {
   }
 
   const [{ data: documents }, { data: ownership }, { data: reminders }, { data: packets }] = await Promise.all([
-    supabase.from('documents').select('*').eq('workspace_id', workspaceId).eq('horse_id', horseId).order('created_at', { ascending: false }),
+    supabase
+      .from('documents')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .eq('horse_id', horseId)
+      .order('created_at', { ascending: false }),
     supabase.from('ownership_records').select('*').eq('workspace_id', workspaceId).eq('horse_id', horseId),
-    supabase.from('reminders').select('*').eq('workspace_id', workspaceId).eq('horse_id', horseId).order('due_date', { ascending: true }),
-    supabase.from('sale_packets').select('packet_id, packet_pdf_path, watermark_text, shared_with_email, status, created_at').eq('workspace_id', workspaceId).eq('horse_id', horseId),
+    supabase
+      .from('reminders')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .eq('horse_id', horseId)
+      .order('due_date', { ascending: true }),
+    supabase
+      .from('sale_packets')
+      .select('packet_id, packet_pdf_path, watermark_text, shared_with_email, status, created_at')
+      .eq('workspace_id', workspaceId)
+      .eq('horse_id', horseId),
   ]);
 
   const documentExports = [];
   for (const doc of documents || []) {
     let downloadUrl = '';
     if (doc.storage_path) {
-      const { data: signed } = await supabase.storage.from(DOCUMENT_BUCKET).createSignedUrl(doc.storage_path, SIGNED_URL_TTL_SECONDS);
+      const { data: signed } = await supabase.storage
+        .from(DOCUMENT_BUCKET)
+        .createSignedUrl(doc.storage_path, SIGNED_URL_TTL_SECONDS);
       downloadUrl = signed?.signedUrl || '';
     }
     documentExports.push({
@@ -71,7 +100,9 @@ export default async function handler(req, res) {
 
   const packetExports = [];
   for (const packet of packets || []) {
-    const { data: signed } = await supabase.storage.from(PACKET_BUCKET).createSignedUrl(packet.packet_pdf_path, SIGNED_URL_TTL_SECONDS);
+    const { data: signed } = await supabase.storage
+      .from(PACKET_BUCKET)
+      .createSignedUrl(packet.packet_pdf_path, SIGNED_URL_TTL_SECONDS);
     packetExports.push({
       packetId: packet.packet_id,
       watermarkText: packet.watermark_text,

@@ -11,8 +11,12 @@ export default function Terms() {
       <p className="xbar-legal-route__notice">{terms.notice}</p>
       {terms.sections.map((section, index) => (
         <section key={section.title}>
-          <h2>{String(index + 1).padStart(2, '0')}. {section.title}</h2>
-          {section.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+          <h2>
+            {String(index + 1).padStart(2, '0')}. {section.title}
+          </h2>
+          {section.body.map((paragraph) => (
+            <p key={paragraph}>{paragraph}</p>
+          ))}
         </section>
       ))}
     </main>

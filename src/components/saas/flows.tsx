@@ -9,7 +9,19 @@ import { events, track } from '@/lib/telemetry';
 import type { ExpenseCategory, HorseSegment, HorseSex, HorseStatus } from '@/types/xbar';
 
 /* ----------------------------------------------------------- Form fields */
-export function Text({ label, placeholder, value, onChange, hint }: { label: string; placeholder?: string; value: string; onChange: (v: string) => void; hint?: string }) {
+export function Text({
+  label,
+  placeholder,
+  value,
+  onChange,
+  hint,
+}: {
+  label: string;
+  placeholder?: string;
+  value: string;
+  onChange: (v: string) => void;
+  hint?: string;
+}) {
   return (
     <label>
       <span className="xs-field-label">{label}</span>
@@ -18,20 +30,49 @@ export function Text({ label, placeholder, value, onChange, hint }: { label: str
     </label>
   );
 }
-export function Area({ label, placeholder, value, onChange }: { label: string; placeholder?: string; value: string; onChange: (v: string) => void }) {
+export function Area({
+  label,
+  placeholder,
+  value,
+  onChange,
+}: {
+  label: string;
+  placeholder?: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
   return (
     <label>
       <span className="xs-field-label">{label}</span>
-      <textarea className="xs-textarea" placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} />
+      <textarea
+        className="xs-textarea"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
     </label>
   );
 }
-export function Pick({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: string[] }) {
+export function Pick({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+}) {
   return (
     <label>
       <span className="xs-field-label">{label}</span>
       <select className="xs-select" value={value} onChange={(e) => onChange(e.target.value)}>
-        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
       </select>
     </label>
   );
@@ -43,7 +84,9 @@ export function Stepper({ steps, current }: { steps: string[]; current: number }
     <div className="xs-stepper">
       {steps.map((s, i) => (
         <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <span className={`xs-stepper__step${i === current ? ' xs-stepper__step--active' : ''}${i < current ? ' xs-stepper__step--done' : ''}`}>
+          <span
+            className={`xs-stepper__step${i === current ? ' xs-stepper__step--active' : ''}${i < current ? ' xs-stepper__step--done' : ''}`}
+          >
             <span className="xs-stepper__num">{i < current ? <Check size={13} /> : i + 1}</span>
             {s}
           </span>
@@ -56,12 +99,28 @@ export function Stepper({ steps, current }: { steps: string[]; current: number }
 
 /* ------------------------------------------------- Global Create (drawer) */
 export type CreateKey =
-  | 'Add Horse' | 'Add Task' | 'Upload Document' | 'Add Health Record' | 'Move Horses'
-  | 'Prepare Sale Packet' | 'Add Buyer Follow-up' | 'Add Expense' | 'Add Equipment' | 'Report Pasture Issue';
+  | 'Add Horse'
+  | 'Add Task'
+  | 'Upload Document'
+  | 'Add Health Record'
+  | 'Move Horses'
+  | 'Prepare Sale Packet'
+  | 'Add Buyer Follow-up'
+  | 'Add Expense'
+  | 'Add Equipment'
+  | 'Report Pasture Issue';
 
 export const createActions: CreateKey[] = [
-  'Add Horse', 'Add Task', 'Upload Document', 'Add Health Record', 'Move Horses',
-  'Prepare Sale Packet', 'Add Buyer Follow-up', 'Add Expense', 'Add Equipment', 'Report Pasture Issue',
+  'Add Horse',
+  'Add Task',
+  'Upload Document',
+  'Add Health Record',
+  'Move Horses',
+  'Prepare Sale Packet',
+  'Add Buyer Follow-up',
+  'Add Expense',
+  'Add Equipment',
+  'Report Pasture Issue',
 ];
 
 const locationNames = ['Main Barn', 'North Pasture', 'South Pasture', 'Foaling Pen', 'Quarantine Pen', 'Round Pen'];
@@ -76,7 +135,16 @@ const SEGMENT_STATUS: Record<HorseSegment, HorseStatus> = {
   'Young Stock': 'Pasture',
   Retired: 'Retired',
 };
-const EXPENSE_CATEGORIES: ExpenseCategory[] = ['Feed', 'Vet Care', 'Farrier', 'Wormer', 'Dental Float', 'Supplements', 'Bedding', 'Travel'];
+const EXPENSE_CATEGORIES: ExpenseCategory[] = [
+  'Feed',
+  'Vet Care',
+  'Farrier',
+  'Wormer',
+  'Dental Float',
+  'Supplements',
+  'Bedding',
+  'Travel',
+];
 
 export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | null; onClose: () => void }) {
   const navigate = useNavigate();
@@ -108,7 +176,8 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
       return;
     }
     const segment = (f.segment as HorseSegment) ?? 'Sale Prospect';
-    const owner = (f.owner ?? '').trim() || workspaceProfile.defaultOwnerName || workspaceProfile.businessName || 'Ranch owner';
+    const owner =
+      (f.owner ?? '').trim() || workspaceProfile.defaultOwnerName || workspaceProfile.businessName || 'Ranch owner';
     const ownerEntity = workspaceProfile.defaultOwnerEntity || workspaceProfile.businessName || owner;
     const result = addHorse({
       name,
@@ -168,46 +237,111 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
       body = (
         <div className="xs-form">
           <Text label="Name" placeholder="e.g. THR Copper Canyon" value={f.name ?? ''} onChange={set('name')} />
-          <Pick label="Segment" value={f.segment ?? 'Sale Prospect'} onChange={set('segment')} options={SEGMENT_OPTIONS} />
+          <Pick
+            label="Segment"
+            value={f.segment ?? 'Sale Prospect'}
+            onChange={set('segment')}
+            options={SEGMENT_OPTIONS}
+          />
           <Pick label="Sex" value={f.sex ?? 'Mare'} onChange={set('sex')} options={SEX_OPTIONS} />
-          <Text label="Owner" placeholder={workspaceProfile.defaultOwnerName || 'Legal owner'} value={f.owner ?? ''} onChange={set('owner')} hint="Defaults to the workspace owner if left blank." />
-          <Pick label="Location" value={f.loc ?? workspaceProfile.defaultBarn ?? locationNames[0]} onChange={set('loc')} options={locationNames} />
+          <Text
+            label="Owner"
+            placeholder={workspaceProfile.defaultOwnerName || 'Legal owner'}
+            value={f.owner ?? ''}
+            onChange={set('owner')}
+            hint="Defaults to the workspace owner if left blank."
+          />
+          <Pick
+            label="Location"
+            value={f.loc ?? workspaceProfile.defaultBarn ?? locationNames[0]}
+            onChange={set('loc')}
+            options={locationNames}
+          />
         </div>
       );
-      footer = <ActionButton variant="primary" onClick={submitAnimal}>Add Horse</ActionButton>;
+      footer = (
+        <ActionButton variant="primary" onClick={submitAnimal}>
+          Add Horse
+        </ActionButton>
+      );
       break;
     case 'Add Task':
       body = (
         <div className="xs-form">
-          <Text label="Task" placeholder="e.g. Move mares to South Trap" value={f.title ?? ''} onChange={set('title')} />
-          <Pick label="Priority" value={f.priority ?? 'High'} onChange={set('priority')} options={['Revenue Blocker', 'High', 'Medium', 'Normal']} />
-          <Pick label="Assign to" value={f.assignee ?? 'Erin W.'} onChange={set('assignee')} options={['Erin W.', 'Cody R.', 'Dr. Hale']} />
+          <Text
+            label="Task"
+            placeholder="e.g. Move mares to South Trap"
+            value={f.title ?? ''}
+            onChange={set('title')}
+          />
+          <Pick
+            label="Priority"
+            value={f.priority ?? 'High'}
+            onChange={set('priority')}
+            options={['Revenue Blocker', 'High', 'Medium', 'Normal']}
+          />
+          <Pick
+            label="Assign to"
+            value={f.assignee ?? 'Erin W.'}
+            onChange={set('assignee')}
+            options={['Erin W.', 'Cody R.', 'Dr. Hale']}
+          />
           <Text label="Due" placeholder="Today 6:00 PM" value={f.due ?? ''} onChange={set('due')} />
         </div>
       );
-      footer = <ActionButton variant="primary" onClick={() => submit(`Task created: ${f.title || 'New task'}`, '/today')}>Create Task</ActionButton>;
+      footer = (
+        <ActionButton variant="primary" onClick={() => submit(`Task created: ${f.title || 'New task'}`, '/today')}>
+          Create Task
+        </ActionButton>
+      );
       break;
     case 'Upload Document':
       body = (
         <div className="xs-form">
-          <div className="xs-drop"><FileUp size={20} style={{ display: 'block', margin: '0 auto 8px' }} />Drop a file or click to browse (PDF, JPG)</div>
-          <Pick label="Document type" value={f.type ?? 'Health Certificate'} onChange={set('type')} options={['Health Certificate', 'Coggins', 'Registration', 'Bill of Sale', 'Photos', 'Contract']} />
+          <div className="xs-drop">
+            <FileUp size={20} style={{ display: 'block', margin: '0 auto 8px' }} />
+            Drop a file or click to browse (PDF, JPG)
+          </div>
+          <Pick
+            label="Document type"
+            value={f.type ?? 'Health Certificate'}
+            onChange={set('type')}
+            options={['Health Certificate', 'Coggins', 'Registration', 'Bill of Sale', 'Photos', 'Contract']}
+          />
           <Pick label="Link to horse" value={f.animal ?? horseNames[0]} onChange={set('animal')} options={horseNames} />
           <Text label="Expiration date" placeholder="YYYY-MM-DD" value={f.exp ?? ''} onChange={set('exp')} />
         </div>
       );
-      footer = <ActionButton variant="primary" onClick={() => submit(`${f.type || 'Document'} uploaded`, '/documents')}>Upload</ActionButton>;
+      footer = (
+        <ActionButton variant="primary" onClick={() => submit(`${f.type || 'Document'} uploaded`, '/documents')}>
+          Upload
+        </ActionButton>
+      );
       break;
     case 'Add Health Record':
       body = (
         <div className="xs-form">
           <Pick label="Horse" value={f.animal ?? horseNames[0]} onChange={set('animal')} options={horseNames} />
-          <Pick label="Record type" value={f.type ?? 'Vaccine'} onChange={set('type')} options={['Vaccine', 'Deworming', 'Coggins', 'Dental', 'Farrier', 'Vet visit', 'Medication']} />
+          <Pick
+            label="Record type"
+            value={f.type ?? 'Vaccine'}
+            onChange={set('type')}
+            options={['Vaccine', 'Deworming', 'Coggins', 'Dental', 'Farrier', 'Vet visit', 'Medication']}
+          />
           <Text label="Date" placeholder="YYYY-MM-DD" value={f.date ?? ''} onChange={set('date')} />
-          <Area label="Notes" placeholder="Withdrawal date, dosage, vet…" value={f.notes ?? ''} onChange={set('notes')} />
+          <Area
+            label="Notes"
+            placeholder="Withdrawal date, dosage, vet…"
+            value={f.notes ?? ''}
+            onChange={set('notes')}
+          />
         </div>
       );
-      footer = <ActionButton variant="primary" onClick={() => submit('Health record added')}>Add Record</ActionButton>;
+      footer = (
+        <ActionButton variant="primary" onClick={() => submit('Health record added')}>
+          Add Record
+        </ActionButton>
+      );
       break;
     case 'Move Horses':
       body = (
@@ -217,32 +351,123 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
           <Text label="How many" placeholder="e.g. 14" value={f.count ?? ''} onChange={set('count')} />
         </div>
       );
-      footer = <ActionButton variant="primary" onClick={() => submit(`Moved ${f.count || 'horses'} → ${f.to || 'new location'}`, '/pastures')}>Move Horses</ActionButton>;
+      footer = (
+        <ActionButton
+          variant="primary"
+          onClick={() => submit(`Moved ${f.count || 'horses'} → ${f.to || 'new location'}`, '/pastures')}
+        >
+          Move Horses
+        </ActionButton>
+      );
       break;
     case 'Prepare Sale Packet':
-      body = <div className="xs-form"><Pick label="Horse" value={f.animal ?? horseNames[0]} onChange={set('animal')} options={horseNames} /><Pick label="Packet type" value={f.type ?? 'Buyer review packet'} onChange={set('type')} options={['Sale packet', 'Buyer review packet', 'Release packet', 'Vet and travel packet']} /></div>;
-      footer = <ActionButton variant="primary" onClick={() => submit('Opening sale packets', '/sale-packets')}>Open Sale Packets</ActionButton>;
+      body = (
+        <div className="xs-form">
+          <Pick label="Horse" value={f.animal ?? horseNames[0]} onChange={set('animal')} options={horseNames} />
+          <Pick
+            label="Packet type"
+            value={f.type ?? 'Buyer review packet'}
+            onChange={set('type')}
+            options={['Sale packet', 'Buyer review packet', 'Release packet', 'Vet and travel packet']}
+          />
+        </div>
+      );
+      footer = (
+        <ActionButton variant="primary" onClick={() => submit('Opening sale packets', '/sale-packets')}>
+          Open Sale Packets
+        </ActionButton>
+      );
       break;
     case 'Add Buyer Follow-up':
-      body = <div className="xs-form"><Text label="Buyer name" placeholder="e.g. Marlow Ranch Partners" value={f.name ?? ''} onChange={set('name')} /><Text label="Email" placeholder="buyer@email.com" value={f.email ?? ''} onChange={set('email')} /><Pick label="Horse" value={f.animal ?? horseNames[0]} onChange={set('animal')} options={horseNames} /></div>;
-      footer = <ActionButton variant="primary" onClick={() => submit(`Open sales to save follow-up for ${f.name || 'buyer'}`, '/sales')}>Open sales</ActionButton>;
+      body = (
+        <div className="xs-form">
+          <Text
+            label="Buyer name"
+            placeholder="e.g. Marlow Ranch Partners"
+            value={f.name ?? ''}
+            onChange={set('name')}
+          />
+          <Text label="Email" placeholder="buyer@email.com" value={f.email ?? ''} onChange={set('email')} />
+          <Pick label="Horse" value={f.animal ?? horseNames[0]} onChange={set('animal')} options={horseNames} />
+        </div>
+      );
+      footer = (
+        <ActionButton
+          variant="primary"
+          onClick={() => submit(`Open sales to save follow-up for ${f.name || 'buyer'}`, '/sales')}
+        >
+          Open sales
+        </ActionButton>
+      );
       break;
     case 'Add Expense':
-      body = <div className="xs-form"><Text label="Description" placeholder="Feed, vet, farrier…" value={f.desc ?? ''} onChange={set('desc')} /><Text label="Vendor" placeholder="e.g. Tractor Supply" value={f.vendor ?? ''} onChange={set('vendor')} /><Text label="Amount" placeholder="$" value={f.amt ?? ''} onChange={set('amt')} /><Pick label="Category" value={f.cat ?? 'Feed'} onChange={set('cat')} options={EXPENSE_CATEGORIES} /></div>;
-      footer = <ActionButton variant="primary" disabled={busy} onClick={submitExpense}>{busy ? 'Adding…' : 'Add Expense'}</ActionButton>;
+      body = (
+        <div className="xs-form">
+          <Text label="Description" placeholder="Feed, vet, farrier…" value={f.desc ?? ''} onChange={set('desc')} />
+          <Text label="Vendor" placeholder="e.g. Tractor Supply" value={f.vendor ?? ''} onChange={set('vendor')} />
+          <Text label="Amount" placeholder="$" value={f.amt ?? ''} onChange={set('amt')} />
+          <Pick label="Category" value={f.cat ?? 'Feed'} onChange={set('cat')} options={EXPENSE_CATEGORIES} />
+        </div>
+      );
+      footer = (
+        <ActionButton variant="primary" disabled={busy} onClick={submitExpense}>
+          {busy ? 'Adding…' : 'Add Expense'}
+        </ActionButton>
+      );
       break;
     case 'Add Equipment':
-      body = <div className="xs-form"><Text label="Equipment" placeholder="e.g. Stock trailer (24ft)" value={f.name ?? ''} onChange={set('name')} /><Pick label="Type" value={f.type ?? 'Trailer'} onChange={set('type')} options={['Truck', 'Trailer', 'Tractor', 'UTV', 'Tack', 'Feeder', 'Water trough', 'Tool']} /><Pick label="Location" value={f.loc ?? locationNames[0]} onChange={set('loc')} options={locationNames} /></div>;
-      footer = <ActionButton variant="primary" onClick={() => submit(`${f.name || 'Equipment'} added`, '/assets')}>Add Equipment</ActionButton>;
+      body = (
+        <div className="xs-form">
+          <Text label="Equipment" placeholder="e.g. Stock trailer (24ft)" value={f.name ?? ''} onChange={set('name')} />
+          <Pick
+            label="Type"
+            value={f.type ?? 'Trailer'}
+            onChange={set('type')}
+            options={['Truck', 'Trailer', 'Tractor', 'UTV', 'Tack', 'Feeder', 'Water trough', 'Tool']}
+          />
+          <Pick label="Location" value={f.loc ?? locationNames[0]} onChange={set('loc')} options={locationNames} />
+        </div>
+      );
+      footer = (
+        <ActionButton variant="primary" onClick={() => submit(`${f.name || 'Equipment'} added`, '/assets')}>
+          Add Equipment
+        </ActionButton>
+      );
       break;
     case 'Report Pasture Issue':
-      body = <div className="xs-form"><Pick label="Location" value={f.loc ?? locationNames[1]} onChange={set('loc')} options={locationNames} /><Pick label="Issue" value={f.issue ?? 'Water trough'} onChange={set('issue')} options={['Water trough', 'Fence / gate', 'Grazing pressure', 'Flooding', 'Other']} /><Area label="Details" placeholder="What did you see?" value={f.notes ?? ''} onChange={set('notes')} /></div>;
-      footer = <ActionButton variant="primary" onClick={() => submit(`Issue reported at ${f.loc || 'location'}`, '/pastures')}>Report Issue</ActionButton>;
+      body = (
+        <div className="xs-form">
+          <Pick label="Location" value={f.loc ?? locationNames[1]} onChange={set('loc')} options={locationNames} />
+          <Pick
+            label="Issue"
+            value={f.issue ?? 'Water trough'}
+            onChange={set('issue')}
+            options={['Water trough', 'Fence / gate', 'Grazing pressure', 'Flooding', 'Other']}
+          />
+          <Area label="Details" placeholder="What did you see?" value={f.notes ?? ''} onChange={set('notes')} />
+        </div>
+      );
+      footer = (
+        <ActionButton variant="primary" onClick={() => submit(`Issue reported at ${f.loc || 'location'}`, '/pastures')}>
+          Report Issue
+        </ActionButton>
+      );
       break;
   }
 
   return (
-    <SlideOverDrawer open title={action} subtitle="Quick create" onClose={onClose} footer={<><ActionButton onClick={onClose}>Cancel</ActionButton>{footer}</>}>
+    <SlideOverDrawer
+      open
+      title={action}
+      subtitle="Quick create"
+      onClose={onClose}
+      footer={
+        <>
+          <ActionButton onClick={onClose}>Cancel</ActionButton>
+          {footer}
+        </>
+      }
+    >
       {body}
     </SlideOverDrawer>
   );

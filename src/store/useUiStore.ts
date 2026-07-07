@@ -81,21 +81,23 @@ export const useUiStore = create<UiStore>((set) => ({
     sonnerToast.dismiss();
     set({ toasts: [] });
   },
-  sendSurfaceEvent: (id, event) => set((state) => {
-    const nextMode = transitionSurfaceMode(state.surfaceModes[id] ?? 'expanded', event);
-    const surfaceModes = { ...state.surfaceModes, [id]: nextMode };
-    rememberSurfaceModes(surfaceModes);
-    return {
-      surfaceModes,
-      focusedSurfaceId: nextMode === 'focus' ? id : state.focusedSurfaceId === id ? null : state.focusedSurfaceId,
-    };
-  }),
-  exitFocusMode: () => set((state) => {
-    if (!state.focusedSurfaceId) return state;
-    const surfaceModes = { ...state.surfaceModes, [state.focusedSurfaceId]: 'expanded' as const };
-    rememberSurfaceModes(surfaceModes);
-    return { surfaceModes, focusedSurfaceId: null };
-  }),
+  sendSurfaceEvent: (id, event) =>
+    set((state) => {
+      const nextMode = transitionSurfaceMode(state.surfaceModes[id] ?? 'expanded', event);
+      const surfaceModes = { ...state.surfaceModes, [id]: nextMode };
+      rememberSurfaceModes(surfaceModes);
+      return {
+        surfaceModes,
+        focusedSurfaceId: nextMode === 'focus' ? id : state.focusedSurfaceId === id ? null : state.focusedSurfaceId,
+      };
+    }),
+  exitFocusMode: () =>
+    set((state) => {
+      if (!state.focusedSurfaceId) return state;
+      const surfaceModes = { ...state.surfaceModes, [state.focusedSurfaceId]: 'expanded' as const };
+      rememberSurfaceModes(surfaceModes);
+      return { surfaceModes, focusedSurfaceId: null };
+    }),
   openRightDrawer: (rightDrawer) => set({ rightDrawer }),
   closeRightDrawer: () => set({ rightDrawer: null }),
   setCommandPaletteOpen: (commandPaletteOpen) => set({ commandPaletteOpen }),

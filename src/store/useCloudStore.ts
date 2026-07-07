@@ -107,7 +107,8 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'Enter an email address first.' };
     }
 
-    const emailRedirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    const emailRedirectTo =
+      typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
     const { error } = await client.auth.signInWithOtp({
       email: trimmedEmail,
       options: {
@@ -160,7 +161,8 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'Use at least 8 characters for the password.' };
     }
 
-    const emailRedirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    const emailRedirectTo =
+      typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
     const { error } = await client.auth.signUp({
       email: trimmedEmail,
       password,
@@ -186,7 +188,8 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'Enter the email address for this workspace.' };
     }
 
-    const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    const redirectTo =
+      typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
     const { error } = await client.auth.resetPasswordForEmail(trimmedEmail, {
       redirectTo,
     });
@@ -203,7 +206,8 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'Supabase is not configured for this build.' };
     }
 
-    const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    const redirectTo =
+      typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
     const { error } = await client.auth.signInWithOAuth({
       provider: 'facebook',
       options: {
@@ -223,7 +227,8 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'Supabase is not configured for this build.' };
     }
 
-    const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    const redirectTo =
+      typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
     const { error } = await client.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo },
@@ -241,7 +246,8 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'Supabase is not configured for this build.' };
     }
 
-    const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    const redirectTo =
+      typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
     const { error } = await client.auth.signInWithOAuth({
       provider: 'apple',
       options: { redirectTo },
@@ -264,7 +270,15 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: error.message };
     }
 
-    set({ session: null, status: 'signed-out', workspaceId: '', workspaceRole: 'Owner', syncState: 'idle', syncMessage: '', autosaveReady: false });
+    set({
+      session: null,
+      status: 'signed-out',
+      workspaceId: '',
+      workspaceRole: 'Owner',
+      syncState: 'idle',
+      syncMessage: '',
+      autosaveReady: false,
+    });
     return { ok: true, message: 'Signed out of cloud sync.' };
   },
 }));

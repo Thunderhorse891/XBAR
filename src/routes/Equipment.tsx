@@ -18,11 +18,14 @@ export default function Equipment() {
   const addRanchAsset = useXbarStore((s) => s.addRanchAsset);
   const toast = (m: string) => pushToast({ title: 'Equipment', message: m, tone: 'success' });
 
-  const counts = useMemo(() => ({
-    serviceSoon: assets.filter((e) => e.condition === 'Service Soon').length,
-    attention: assets.filter((e) => e.condition === 'Attention Required').length,
-    good: assets.filter((e) => e.condition === 'Excellent').length,
-  }), [assets]);
+  const counts = useMemo(
+    () => ({
+      serviceSoon: assets.filter((e) => e.condition === 'Service Soon').length,
+      attention: assets.filter((e) => e.condition === 'Attention Required').length,
+      good: assets.filter((e) => e.condition === 'Excellent').length,
+    }),
+    [assets],
+  );
 
   const addEquipment = () => {
     const result = addRanchAsset({ name: 'New equipment', category: 'Equipment', location: 'Main Barn' });
@@ -37,8 +40,12 @@ export default function Equipment() {
         subtitle="Trucks, trailers, tractors, gates, troughs, and tools — status, service, and open work orders."
         actions={
           <>
-            <ActionButton icon={<Wrench size={15} />} onClick={() => toast('Work order created')}>Create Work Order</ActionButton>
-            <ActionButton variant="primary" icon={<Plus size={15} />} onClick={addEquipment}>Add Equipment</ActionButton>
+            <ActionButton icon={<Wrench size={15} />} onClick={() => toast('Work order created')}>
+              Create Work Order
+            </ActionButton>
+            <ActionButton variant="primary" icon={<Plus size={15} />} onClick={addEquipment}>
+              Add Equipment
+            </ActionButton>
           </>
         }
       />
@@ -46,18 +53,49 @@ export default function Equipment() {
       {assets.length === 0 ? (
         <Card>
           <div className="xs-empty">
-            <span className="xs-empty__icon"><Wrench size={26} /></span>
+            <span className="xs-empty__icon">
+              <Wrench size={26} />
+            </span>
             <div className="xs-empty__title">No equipment tracked yet</div>
-            <div className="xs-empty__sub">Add trailers, trucks, tractors, tack, and tools to track condition, service schedules, and work orders.</div>
-            <ActionButton variant="primary" icon={<Plus size={15} />} onClick={addEquipment}>Add equipment</ActionButton>
+            <div className="xs-empty__sub">
+              Add trailers, trucks, tractors, tack, and tools to track condition, service schedules, and work orders.
+            </div>
+            <ActionButton variant="primary" icon={<Plus size={15} />} onClick={addEquipment}>
+              Add equipment
+            </ActionButton>
           </div>
         </Card>
       ) : (
         <>
           <div className="xs-grid-3">
-            <Card><div className="xs-card__sub">Service soon</div><div style={{ fontSize: 28, fontWeight: 700, color: counts.serviceSoon ? 'var(--xbar-warning)' : 'var(--xbar-text)' }}>{counts.serviceSoon}</div></Card>
-            <Card><div className="xs-card__sub">Attention required</div><div style={{ fontSize: 28, fontWeight: 700, color: counts.attention ? 'var(--xbar-danger)' : 'var(--xbar-text)' }}>{counts.attention}</div></Card>
-            <Card><div className="xs-card__sub">Good condition</div><div style={{ fontSize: 28, fontWeight: 700, color: 'var(--xbar-success)' }}>{counts.good}</div></Card>
+            <Card>
+              <div className="xs-card__sub">Service soon</div>
+              <div
+                style={{
+                  fontSize: 28,
+                  fontWeight: 700,
+                  color: counts.serviceSoon ? 'var(--xbar-warning)' : 'var(--xbar-text)',
+                }}
+              >
+                {counts.serviceSoon}
+              </div>
+            </Card>
+            <Card>
+              <div className="xs-card__sub">Attention required</div>
+              <div
+                style={{
+                  fontSize: 28,
+                  fontWeight: 700,
+                  color: counts.attention ? 'var(--xbar-danger)' : 'var(--xbar-text)',
+                }}
+              >
+                {counts.attention}
+              </div>
+            </Card>
+            <Card>
+              <div className="xs-card__sub">Good condition</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--xbar-success)' }}>{counts.good}</div>
+            </Card>
           </div>
 
           <div className="xs-grid-2">
@@ -66,14 +104,22 @@ export default function Equipment() {
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 700 }}>{e.name}</div>
-                    <div className="xs-card__sub">{e.category} · {e.location}</div>
-                    <div className="xs-mrow__detail" style={{ marginTop: 6 }}>{e.notes || `${e.status}${e.nextService ? ` · next service ${e.nextService}` : ''}`}</div>
+                    <div className="xs-card__sub">
+                      {e.category} · {e.location}
+                    </div>
+                    <div className="xs-mrow__detail" style={{ marginTop: 6 }}>
+                      {e.notes || `${e.status}${e.nextService ? ` · next service ${e.nextService}` : ''}`}
+                    </div>
                   </div>
                   <StatusChip tone={CONDITION_TONE[e.condition]}>{e.condition}</StatusChip>
                 </div>
                 <div className="xs-toolbar" style={{ marginTop: 12 }}>
-                  <ActionButton size="sm" onClick={() => toast(`Work order — ${e.name}`)}>Work Order</ActionButton>
-                  <ActionButton size="sm" onClick={() => toast(`Repair logged — ${e.name}`)}>Log Repair</ActionButton>
+                  <ActionButton size="sm" onClick={() => toast(`Work order — ${e.name}`)}>
+                    Work Order
+                  </ActionButton>
+                  <ActionButton size="sm" onClick={() => toast(`Repair logged — ${e.name}`)}>
+                    Log Repair
+                  </ActionButton>
                 </div>
               </Card>
             ))}

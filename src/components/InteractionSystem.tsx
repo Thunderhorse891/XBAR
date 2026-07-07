@@ -21,14 +21,7 @@ import {
   CommandList,
   CommandShortcut,
 } from '@/components/ui/command';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { interactionHint, type SurfaceMode } from '@/lib/interactionState';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -37,7 +30,11 @@ function isEditableTarget(target: EventTarget | null) {
   return target instanceof HTMLElement && Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
 }
 
-function activateOnKey(event: KeyboardEvent<HTMLElement>, onActivate?: () => void, onActions?: (x: number, y: number) => void) {
+function activateOnKey(
+  event: KeyboardEvent<HTMLElement>,
+  onActivate?: () => void,
+  onActions?: (x: number, y: number) => void,
+) {
   if ((event.key === 'Enter' || event.key === ' ') && onActivate) {
     event.preventDefault();
     onActivate();
@@ -73,10 +70,14 @@ export function InteractiveCard({
       title={interactive ? interactionHint(Boolean(onActions)) : undefined}
       onClick={onActivate}
       onKeyDown={interactive ? (event) => activateOnKey(event, onActivate, onActions) : undefined}
-      onContextMenu={onActions ? (event) => {
-        event.preventDefault();
-        onActions(event.clientX, event.clientY);
-      } : undefined}
+      onContextMenu={
+        onActions
+          ? (event) => {
+              event.preventDefault();
+              onActions(event.clientX, event.clientY);
+            }
+          : undefined
+      }
     >
       {children}
     </article>
@@ -105,10 +106,14 @@ export function InteractiveRow({
       title={interactionHint(Boolean(onActions))}
       onClick={onActivate}
       onKeyDown={(event) => activateOnKey(event, onActivate, onActions)}
-      onContextMenu={onActions ? (event) => {
-        event.preventDefault();
-        onActions(event.clientX, event.clientY);
-      } : undefined}
+      onContextMenu={
+        onActions
+          ? (event) => {
+              event.preventDefault();
+              onActions(event.clientX, event.clientY);
+            }
+          : undefined
+      }
     >
       {children}
     </div>
@@ -194,7 +199,10 @@ export function RememberedAccordion({
     >
       <AccordionItem value={id}>
         <AccordionTrigger className="remembered-accordion__trigger">
-          <span><strong>{title}</strong>{summary ? <small>{summary}</small> : null}</span>
+          <span>
+            <strong>{title}</strong>
+            {summary ? <small>{summary}</small> : null}
+          </span>
         </AccordionTrigger>
         <AccordionContent className="remembered-accordion__content">{children}</AccordionContent>
       </AccordionItem>
@@ -223,12 +231,38 @@ export function StatefulSurface({
   return (
     <section className={`stateful-surface stateful-surface--${mode} ${className}`.trim()} data-surface-id={id}>
       <header className="stateful-surface__header">
-        <span>{eyebrow ? <small>{eyebrow}</small> : null}<strong>{title}</strong></span>
+        <span>
+          {eyebrow ? <small>{eyebrow}</small> : null}
+          <strong>{title}</strong>
+        </span>
         <div className="stateful-surface__controls" aria-label={`${title} display controls`}>
-          <button type="button" onClick={() => send(id, 'collapse')} aria-pressed={mode === 'collapsed'} title="Collapse">-</button>
-          <button type="button" onClick={() => send(id, 'expand')} aria-pressed={mode === 'expanded'} title="Expand">+</button>
-          <button type="button" onClick={() => send(id, 'detail')} aria-pressed={mode === 'detailed'} title="Detailed view">Details</button>
-          <button type="button" onClick={() => send(id, mode === 'focus' ? 'expand' : 'focus')} aria-pressed={mode === 'focus'} title="Focus mode">Focus</button>
+          <button
+            type="button"
+            onClick={() => send(id, 'collapse')}
+            aria-pressed={mode === 'collapsed'}
+            title="Collapse"
+          >
+            -
+          </button>
+          <button type="button" onClick={() => send(id, 'expand')} aria-pressed={mode === 'expanded'} title="Expand">
+            +
+          </button>
+          <button
+            type="button"
+            onClick={() => send(id, 'detail')}
+            aria-pressed={mode === 'detailed'}
+            title="Detailed view"
+          >
+            Details
+          </button>
+          <button
+            type="button"
+            onClick={() => send(id, mode === 'focus' ? 'expand' : 'focus')}
+            aria-pressed={mode === 'focus'}
+            title="Focus mode"
+          >
+            Focus
+          </button>
         </div>
       </header>
       {mode !== 'collapsed' ? <div className="stateful-surface__content">{children}</div> : null}
@@ -270,17 +304,40 @@ export function InteractionShell() {
   const focusedSurfaceId = useUiStore((state) => state.focusedSurfaceId);
   const [query, setQuery] = useState('');
 
-  const commands = useMemo<CommandItem[]>(() => [
-    ...routeCommands,
-    ...horses.map((horse) => ({ id: `horse-${horse.id}`, label: horse.name, detail: `${horse.segment} | ${horse.location.barn}`, path: `/horses/${horse.id}`, group: 'Horses' })),
-    ...documents.slice(0, 40).map((document) => ({ id: `document-${document.id}`, label: document.title, detail: `${document.type} | ${document.state}`, path: '/documents', group: 'Documents' })),
-    ...salesLeads.map((lead) => ({ id: `lead-${lead.id}`, label: lead.name, detail: `${lead.stage} buyer`, path: `/follow-ups?lead=${lead.id}`, group: 'Buyers' })),
-  ], [documents, horses, salesLeads]);
+  const commands = useMemo<CommandItem[]>(
+    () => [
+      ...routeCommands,
+      ...horses.map((horse) => ({
+        id: `horse-${horse.id}`,
+        label: horse.name,
+        detail: `${horse.segment} | ${horse.location.barn}`,
+        path: `/horses/${horse.id}`,
+        group: 'Horses',
+      })),
+      ...documents.slice(0, 40).map((document) => ({
+        id: `document-${document.id}`,
+        label: document.title,
+        detail: `${document.type} | ${document.state}`,
+        path: '/documents',
+        group: 'Documents',
+      })),
+      ...salesLeads.map((lead) => ({
+        id: `lead-${lead.id}`,
+        label: lead.name,
+        detail: `${lead.stage} buyer`,
+        path: `/follow-ups?lead=${lead.id}`,
+        group: 'Buyers',
+      })),
+    ],
+    [documents, horses, salesLeads],
+  );
 
   const results = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return commands.slice(0, 12);
-    return commands.filter((item) => `${item.label} ${item.detail} ${item.group}`.toLowerCase().includes(normalized)).slice(0, 20);
+    return commands
+      .filter((item) => `${item.label} ${item.detail} ${item.group}`.toLowerCase().includes(normalized))
+      .slice(0, 20);
   }, [commands, query]);
 
   useEffect(() => {
@@ -340,7 +397,10 @@ export function InteractionShell() {
                 onSelect={() => run(item)}
                 className="command-palette__result"
               >
-                <span><strong>{item.label}</strong><small>{item.detail}</small></span>
+                <span>
+                  <strong>{item.label}</strong>
+                  <small>{item.detail}</small>
+                </span>
                 <CommandShortcut>{item.group}</CommandShortcut>
               </CommandMenuItem>
             ))}
@@ -348,16 +408,40 @@ export function InteractionShell() {
         </CommandList>
       </CommandDialog>
 
-      <Sheet open={Boolean(drawer)} onOpenChange={(nextOpen) => { if (!nextOpen) closeDrawer(); }}>
+      <Sheet
+        open={Boolean(drawer)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) closeDrawer();
+        }}
+      >
         {drawer ? (
           <SheetContent className="right-drawer" side="right">
             <SheetHeader className="right-drawer__header">
               {drawer.eyebrow ? <small>{drawer.eyebrow}</small> : null}
               <SheetTitle id="right-drawer-title">{drawer.title}</SheetTitle>
-              {drawer.description ? <SheetDescription className="right-drawer__description">{drawer.description}</SheetDescription> : null}
+              {drawer.description ? (
+                <SheetDescription className="right-drawer__description">{drawer.description}</SheetDescription>
+              ) : null}
             </SheetHeader>
-            {drawer.facts?.length ? <dl className="right-drawer__facts">{drawer.facts.map((fact) => <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}</dd></div>)}</dl> : null}
-            {drawer.actions?.length ? <SheetFooter className="right-drawer__actions">{drawer.actions.map((action) => <Link key={action.path} className="button button--primary" to={action.path}>{action.label}</Link>)}</SheetFooter> : null}
+            {drawer.facts?.length ? (
+              <dl className="right-drawer__facts">
+                {drawer.facts.map((fact) => (
+                  <div key={fact.label}>
+                    <dt>{fact.label}</dt>
+                    <dd>{fact.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : null}
+            {drawer.actions?.length ? (
+              <SheetFooter className="right-drawer__actions">
+                {drawer.actions.map((action) => (
+                  <Link key={action.path} className="button button--primary" to={action.path}>
+                    {action.label}
+                  </Link>
+                ))}
+              </SheetFooter>
+            ) : null}
           </SheetContent>
         ) : null}
       </Sheet>
@@ -387,13 +471,36 @@ export function Timeline({
   items,
 }: {
   label: string;
-  items: Array<{ id: string; date: string; title: string; description?: string; tone?: 'default' | 'warning' | 'critical' | 'success'; onActivate?: () => void; action?: ReactNode }>;
+  items: Array<{
+    id: string;
+    date: string;
+    title: string;
+    description?: string;
+    tone?: 'default' | 'warning' | 'critical' | 'success';
+    onActivate?: () => void;
+    action?: ReactNode;
+  }>;
 }) {
   return (
     <ol className="xbar-timeline" aria-label={label}>
       {items.map((item) => {
         const interactive = Boolean(item.onActivate && !item.action);
-        return <li key={item.id} className={`xbar-timeline__item xbar-timeline__item--${item.tone ?? 'default'}${interactive ? ' xbar-timeline__item--interactive' : ''}`} tabIndex={interactive ? 0 : undefined} role={interactive ? 'button' : undefined} onClick={interactive ? item.onActivate : undefined} onKeyDown={interactive ? (event) => activateOnKey(event, item.onActivate) : undefined}><span className="xbar-timeline__marker" aria-hidden="true" /><time>{item.date}</time><strong>{item.title}</strong>{item.description ? <p>{item.description}</p> : null}{item.action ? <span className="xbar-timeline__action">{item.action}</span> : null}</li>;
+        return (
+          <li
+            key={item.id}
+            className={`xbar-timeline__item xbar-timeline__item--${item.tone ?? 'default'}${interactive ? ' xbar-timeline__item--interactive' : ''}`}
+            tabIndex={interactive ? 0 : undefined}
+            role={interactive ? 'button' : undefined}
+            onClick={interactive ? item.onActivate : undefined}
+            onKeyDown={interactive ? (event) => activateOnKey(event, item.onActivate) : undefined}
+          >
+            <span className="xbar-timeline__marker" aria-hidden="true" />
+            <time>{item.date}</time>
+            <strong>{item.title}</strong>
+            {item.description ? <p>{item.description}</p> : null}
+            {item.action ? <span className="xbar-timeline__action">{item.action}</span> : null}
+          </li>
+        );
       })}
     </ol>
   );
@@ -416,9 +523,18 @@ export function TaskItem({
 }) {
   const interactive = Boolean(onActivate && !action);
   return (
-    <article className={`xbar-task xbar-task--${priority}${interactive ? ' xbar-task--interactive' : ''}`} role={interactive ? 'button' : undefined} tabIndex={interactive ? 0 : undefined} onClick={interactive ? onActivate : undefined} onKeyDown={interactive ? (event) => activateOnKey(event, onActivate) : undefined}>
+    <article
+      className={`xbar-task xbar-task--${priority}${interactive ? ' xbar-task--interactive' : ''}`}
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onClick={interactive ? onActivate : undefined}
+      onKeyDown={interactive ? (event) => activateOnKey(event, onActivate) : undefined}
+    >
       <span className="xbar-task__priority" aria-label={`${priority} priority`} />
-      <span className="xbar-task__copy"><strong>{title}</strong>{detail ? <small>{detail}</small> : null}</span>
+      <span className="xbar-task__copy">
+        <strong>{title}</strong>
+        {detail ? <small>{detail}</small> : null}
+      </span>
       <span className="xbar-task__status">{status}</span>
       {action ? <span className="xbar-task__action">{action}</span> : null}
     </article>
@@ -441,11 +557,29 @@ export function DocumentBlock({
   action?: ReactNode;
 }) {
   return (
-    <article className={`document-block${onActivate ? ' document-block--interactive' : ''}`} role={onActivate ? 'button' : undefined} tabIndex={onActivate ? 0 : undefined} onClick={onActivate} onKeyDown={onActivate ? (event) => activateOnKey(event, onActivate) : undefined}>
-      <span className="document-block__icon" aria-hidden="true">DOC</span>
-      <span className="document-block__copy"><strong>{title}</strong><small>{type}{detail ? ` | ${detail}` : ''}</small></span>
+    <article
+      className={`document-block${onActivate ? ' document-block--interactive' : ''}`}
+      role={onActivate ? 'button' : undefined}
+      tabIndex={onActivate ? 0 : undefined}
+      onClick={onActivate}
+      onKeyDown={onActivate ? (event) => activateOnKey(event, onActivate) : undefined}
+    >
+      <span className="document-block__icon" aria-hidden="true">
+        DOC
+      </span>
+      <span className="document-block__copy">
+        <strong>{title}</strong>
+        <small>
+          {type}
+          {detail ? ` | ${detail}` : ''}
+        </small>
+      </span>
       <span className="document-block__state">{state}</span>
-      {action ? <span className="document-block__action" onClick={(event) => event.stopPropagation()}>{action}</span> : null}
+      {action ? (
+        <span className="document-block__action" onClick={(event) => event.stopPropagation()}>
+          {action}
+        </span>
+      ) : null}
     </article>
   );
 }
@@ -461,5 +595,17 @@ export function AsyncState({
   message?: string;
   action?: ReactNode;
 }) {
-  return <div className={`async-state async-state--${state}`} role={state === 'error' ? 'alert' : 'status'} aria-live="polite"><span><strong>{title}</strong>{message ? <p>{message}</p> : null}{action}</span></div>;
+  return (
+    <div
+      className={`async-state async-state--${state}`}
+      role={state === 'error' ? 'alert' : 'status'}
+      aria-live="polite"
+    >
+      <span>
+        <strong>{title}</strong>
+        {message ? <p>{message}</p> : null}
+        {action}
+      </span>
+    </div>
+  );
 }

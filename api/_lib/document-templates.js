@@ -23,9 +23,24 @@ export const templateCatalog = [
     tier: 'Basic',
     minimumPlan: 'Starter',
     sections: [
-      { heading: 'Parties', lines: ['Seller: {{owner.name}} ({{workspace.businessName}})', 'Buyer: {{buyer.name}}', 'Agreement date: {{today_date}}'] },
+      {
+        heading: 'Parties',
+        lines: [
+          'Seller: {{owner.name}} ({{workspace.businessName}})',
+          'Buyer: {{buyer.name}}',
+          'Agreement date: {{today_date}}',
+        ],
+      },
       { heading: 'Horse', lines: HORSE_IDENTITY_LINES },
-      { heading: 'Terms of Sale', lines: ['Purchase price: {{sale.price}}', 'Deposit received: {{sale.deposit}}', 'Balance due on or before: {{sale.balanceDueDate}}', 'The horse is sold as-is. Risk of loss passes to the buyer upon delivery.'] },
+      {
+        heading: 'Terms of Sale',
+        lines: [
+          'Purchase price: {{sale.price}}',
+          'Deposit received: {{sale.deposit}}',
+          'Balance due on or before: {{sale.balanceDueDate}}',
+          'The horse is sold as-is. Risk of loss passes to the buyer upon delivery.',
+        ],
+      },
       { heading: 'Signatures', lines: SIGNATURE_LINES },
     ],
   },
@@ -35,9 +50,24 @@ export const templateCatalog = [
     tier: 'Basic',
     minimumPlan: 'Starter',
     sections: [
-      { heading: 'Parties', lines: ['Facility: {{workspace.businessName}} ({{workspace.ranchName}})', 'Horse owner: {{owner.name}}', 'Start date: {{boarding.startDate}}'] },
+      {
+        heading: 'Parties',
+        lines: [
+          'Facility: {{workspace.businessName}} ({{workspace.ranchName}})',
+          'Horse owner: {{owner.name}}',
+          'Start date: {{boarding.startDate}}',
+        ],
+      },
       { heading: 'Horse', lines: HORSE_IDENTITY_LINES },
-      { heading: 'Boarding Terms', lines: ['Monthly board rate: {{boarding.monthlyRate}}', 'Services included: stall, turnout, feed, water, routine observation.', 'Emergency contact: {{owner.emergencyContact}}', 'Owner authorizes emergency veterinary care up to: {{boarding.vetCareLimit}}'] },
+      {
+        heading: 'Boarding Terms',
+        lines: [
+          'Monthly board rate: {{boarding.monthlyRate}}',
+          'Services included: stall, turnout, feed, water, routine observation.',
+          'Emergency contact: {{owner.emergencyContact}}',
+          'Owner authorizes emergency veterinary care up to: {{boarding.vetCareLimit}}',
+        ],
+      },
       { heading: 'Signatures', lines: SIGNATURE_LINES },
     ],
   },
@@ -47,9 +77,24 @@ export const templateCatalog = [
     tier: 'Basic',
     minimumPlan: 'Starter',
     sections: [
-      { heading: 'Parties', lines: ['Lessor (owner): {{owner.name}}', 'Lessee: {{lease.lesseeName}}', 'Lease term: {{lease.startDate}} through {{lease.endDate}}'] },
+      {
+        heading: 'Parties',
+        lines: [
+          'Lessor (owner): {{owner.name}}',
+          'Lessee: {{lease.lesseeName}}',
+          'Lease term: {{lease.startDate}} through {{lease.endDate}}',
+        ],
+      },
       { heading: 'Horse', lines: HORSE_IDENTITY_LINES },
-      { heading: 'Lease Terms', lines: ['Monthly lease fee: {{lease.monthlyFee}}', 'Permitted use: {{lease.permittedUse}}', 'Lessee is responsible for routine care during the lease term.', 'The horse must be returned in equal or better condition.'] },
+      {
+        heading: 'Lease Terms',
+        lines: [
+          'Monthly lease fee: {{lease.monthlyFee}}',
+          'Permitted use: {{lease.permittedUse}}',
+          'Lessee is responsible for routine care during the lease term.',
+          'The horse must be returned in equal or better condition.',
+        ],
+      },
       { heading: 'Signatures', lines: SIGNATURE_LINES },
     ],
   },
@@ -61,7 +106,15 @@ export const templateCatalog = [
     sections: [
       { heading: 'Horse', lines: HORSE_IDENTITY_LINES },
       { heading: 'Owner', lines: ['Owner: {{owner.name}}', 'Primary veterinarian: {{vet.name}}'] },
-      { heading: 'Care Entries', lines: ['Date: __________  Visit type: __________  Vet: __________', 'Diagnosis / treatment: ____________________________________________', 'Medications: ____________________________________________________', 'Follow-up due: __________'] },
+      {
+        heading: 'Care Entries',
+        lines: [
+          'Date: __________  Visit type: __________  Vet: __________',
+          'Diagnosis / treatment: ____________________________________________',
+          'Medications: ____________________________________________________',
+          'Follow-up due: __________',
+        ],
+      },
     ],
   },
   {
@@ -72,8 +125,22 @@ export const templateCatalog = [
     sections: [
       { heading: 'Horse', lines: HORSE_IDENTITY_LINES },
       { heading: 'Owner', lines: ['Owner: {{owner.name}}', 'Facility: {{workspace.businessName}}'] },
-      { heading: 'Coggins History', lines: ['Last Coggins test date: {{health.lastCogginsDate}}', 'Next Coggins due: {{health.nextCogginsDue}}', 'Last health certificate exam: {{health.lastExamDate}}'] },
-      { heading: 'For the Veterinarian', lines: ['Sample drawn date: __________  Lab: __________', 'Result: __________  Accession #: __________', 'Veterinarian signature: ________________________________'] },
+      {
+        heading: 'Coggins History',
+        lines: [
+          'Last Coggins test date: {{health.lastCogginsDate}}',
+          'Next Coggins due: {{health.nextCogginsDue}}',
+          'Last health certificate exam: {{health.lastExamDate}}',
+        ],
+      },
+      {
+        heading: 'For the Veterinarian',
+        lines: [
+          'Sample drawn date: __________  Lab: __________',
+          'Result: __________  Accession #: __________',
+          'Veterinarian signature: ________________________________',
+        ],
+      },
     ],
   },
   {
@@ -82,9 +149,25 @@ export const templateCatalog = [
     tier: 'Pro',
     minimumPlan: 'Professional',
     sections: [
-      { heading: 'Parties', lines: ['Mare owner: {{owner.name}}', 'Stallion owner: {{breeding.stallionOwner}}', 'Contract date: {{today_date}}'] },
+      {
+        heading: 'Parties',
+        lines: [
+          'Mare owner: {{owner.name}}',
+          'Stallion owner: {{breeding.stallionOwner}}',
+          'Contract date: {{today_date}}',
+        ],
+      },
       { heading: 'Mare', lines: HORSE_IDENTITY_LINES },
-      { heading: 'Breeding Terms', lines: ['Stallion: {{breeding.stallionName}} (Reg # {{breeding.stallionRegistration}})', 'Stud fee: {{breeding.studFee}}    Booking fee: {{breeding.bookingFee}}', 'Method: {{breeding.method}}', 'Live foal guarantee: {{breeding.liveFoalGuarantee}}', 'Rebreed terms: {{breeding.rebreedTerms}}'] },
+      {
+        heading: 'Breeding Terms',
+        lines: [
+          'Stallion: {{breeding.stallionName}} (Reg # {{breeding.stallionRegistration}})',
+          'Stud fee: {{breeding.studFee}}    Booking fee: {{breeding.bookingFee}}',
+          'Method: {{breeding.method}}',
+          'Live foal guarantee: {{breeding.liveFoalGuarantee}}',
+          'Rebreed terms: {{breeding.rebreedTerms}}',
+        ],
+      },
       { heading: 'Signatures', lines: SIGNATURE_LINES },
     ],
   },
@@ -94,9 +177,24 @@ export const templateCatalog = [
     tier: 'Pro',
     minimumPlan: 'Professional',
     sections: [
-      { heading: 'Parties', lines: ['Trainer: {{workspace.businessName}}', 'Client / owner: {{owner.name}}', 'Start date: {{training.startDate}}'] },
+      {
+        heading: 'Parties',
+        lines: [
+          'Trainer: {{workspace.businessName}}',
+          'Client / owner: {{owner.name}}',
+          'Start date: {{training.startDate}}',
+        ],
+      },
       { heading: 'Horse', lines: HORSE_IDENTITY_LINES },
-      { heading: 'Training Terms', lines: ['Monthly training fee: {{training.monthlyFee}}', 'Training goals: {{training.goals}}', 'Owner grants permission for routine care decisions during training.', 'Liability: owner acknowledges the inherent risk of equine activities.'] },
+      {
+        heading: 'Training Terms',
+        lines: [
+          'Monthly training fee: {{training.monthlyFee}}',
+          'Training goals: {{training.goals}}',
+          'Owner grants permission for routine care decisions during training.',
+          'Liability: owner acknowledges the inherent risk of equine activities.',
+        ],
+      },
       { heading: 'Signatures', lines: SIGNATURE_LINES },
     ],
   },
@@ -107,8 +205,23 @@ export const templateCatalog = [
     minimumPlan: 'Professional',
     sections: [
       { heading: 'Mare', lines: HORSE_IDENTITY_LINES },
-      { heading: 'Breeding Record', lines: ['Bred to: {{breeding.stallionName}}', 'Last breeding date: {{breeding.lastBreedingDate}}', 'Pregnancy check results: __________', 'Expected foaling date: {{breeding.expectedFoalingDate}}'] },
-      { heading: 'Foaling Observations', lines: ['Foaling date/time: __________', 'Foal sex: ______  Color/markings: __________________', 'Notes: ____________________________________________________'] },
+      {
+        heading: 'Breeding Record',
+        lines: [
+          'Bred to: {{breeding.stallionName}}',
+          'Last breeding date: {{breeding.lastBreedingDate}}',
+          'Pregnancy check results: __________',
+          'Expected foaling date: {{breeding.expectedFoalingDate}}',
+        ],
+      },
+      {
+        heading: 'Foaling Observations',
+        lines: [
+          'Foaling date/time: __________',
+          'Foal sex: ______  Color/markings: __________________',
+          'Notes: ____________________________________________________',
+        ],
+      },
     ],
   },
   {
@@ -117,9 +230,23 @@ export const templateCatalog = [
     tier: 'Pro',
     minimumPlan: 'Professional',
     sections: [
-      { heading: 'Presented By', lines: ['{{workspace.businessName}} ({{workspace.ranchName}})', 'Prepared for: {{buyer.name}}', 'Prepared on: {{today_date}}'] },
+      {
+        heading: 'Presented By',
+        lines: [
+          '{{workspace.businessName}} ({{workspace.ranchName}})',
+          'Prepared for: {{buyer.name}}',
+          'Prepared on: {{today_date}}',
+        ],
+      },
       { heading: 'Horse Profile', lines: HORSE_IDENTITY_LINES },
-      { heading: 'Ownership & Compliance', lines: ['Legal owner: {{owner.name}}', 'Last Coggins test: {{health.lastCogginsDate}}', 'Registration status: {{horse.registrationNumber}}'] },
+      {
+        heading: 'Ownership & Compliance',
+        lines: [
+          'Legal owner: {{owner.name}}',
+          'Last Coggins test: {{health.lastCogginsDate}}',
+          'Registration status: {{horse.registrationNumber}}',
+        ],
+      },
       { heading: 'Included Documents', lines: ['{{packet.documentList}}'] },
     ],
   },
@@ -129,10 +256,27 @@ export const templateCatalog = [
     tier: 'Pro',
     minimumPlan: 'Professional',
     sections: [
-      { heading: 'Facility', lines: ['{{workspace.businessName}} ({{workspace.ranchName}})', 'Onboarding date: {{today_date}}'] },
-      { heading: 'Client', lines: ['Client name: {{client.name}}', 'Phone: {{client.phone}}    Email: {{client.email}}', 'Emergency contact: {{client.emergencyContact}}'] },
+      {
+        heading: 'Facility',
+        lines: ['{{workspace.businessName}} ({{workspace.ranchName}})', 'Onboarding date: {{today_date}}'],
+      },
+      {
+        heading: 'Client',
+        lines: [
+          'Client name: {{client.name}}',
+          'Phone: {{client.phone}}    Email: {{client.email}}',
+          'Emergency contact: {{client.emergencyContact}}',
+        ],
+      },
       { heading: 'Horse', lines: HORSE_IDENTITY_LINES },
-      { heading: 'Care Instructions', lines: ['Feed program: ____________________________________________', 'Medical notes: ___________________________________________', 'Service expectations: ____________________________________'] },
+      {
+        heading: 'Care Instructions',
+        lines: [
+          'Feed program: ____________________________________________',
+          'Medical notes: ___________________________________________',
+          'Service expectations: ____________________________________',
+        ],
+      },
     ],
   },
   {
@@ -141,8 +285,24 @@ export const templateCatalog = [
     tier: 'Business',
     minimumPlan: 'Ranch Ops',
     sections: [
-      { heading: 'Parties', lines: ['Barn operation: {{workspace.businessName}}', 'Service provider: {{provider.name}}', 'Service: {{provider.service}}', 'Effective date: {{today_date}}'] },
-      { heading: 'Terms', lines: ['Scope of services: {{provider.scope}}', 'Rate: {{provider.rate}}', 'Insurance: provider carries professional liability coverage.', 'Either party may terminate with 30 days written notice.'] },
+      {
+        heading: 'Parties',
+        lines: [
+          'Barn operation: {{workspace.businessName}}',
+          'Service provider: {{provider.name}}',
+          'Service: {{provider.service}}',
+          'Effective date: {{today_date}}',
+        ],
+      },
+      {
+        heading: 'Terms',
+        lines: [
+          'Scope of services: {{provider.scope}}',
+          'Rate: {{provider.rate}}',
+          'Insurance: provider carries professional liability coverage.',
+          'Either party may terminate with 30 days written notice.',
+        ],
+      },
       { heading: 'Signatures', lines: SIGNATURE_LINES },
     ],
   },
@@ -154,8 +314,17 @@ export const templateCatalog = [
     sections: [
       { heading: 'Facility', lines: ['{{workspace.businessName}} ({{workspace.ranchName}})', 'Date: {{today_date}}'] },
       { heading: 'Participant', lines: ['Name: {{participant.name}}', 'Activity: {{participant.activity}}'] },
-      { heading: 'Acknowledgement', lines: ['Under state equine activity liability law, an equine professional is not liable for injury or death resulting from the inherent risks of equine activities.', 'The participant accepts these risks and releases the facility from liability for ordinary negligence.'] },
-      { heading: 'Signature', lines: ['Participant signature: ________________________________   Date: ______________'] },
+      {
+        heading: 'Acknowledgement',
+        lines: [
+          'Under state equine activity liability law, an equine professional is not liable for injury or death resulting from the inherent risks of equine activities.',
+          'The participant accepts these risks and releases the facility from liability for ordinary negligence.',
+        ],
+      },
+      {
+        heading: 'Signature',
+        lines: ['Participant signature: ________________________________   Date: ______________'],
+      },
     ],
   },
   {
@@ -165,8 +334,19 @@ export const templateCatalog = [
     minimumPlan: 'Ranch Ops',
     sections: [
       { heading: 'Horse', lines: HORSE_IDENTITY_LINES },
-      { heading: 'Current Ownership', lines: ['Managing owner: {{owner.name}}', 'Co-owners and percentages: {{transfer.currentOwnership}}'] },
-      { heading: 'Transfer', lines: ['New owner: {{transfer.newOwnerName}}', 'Percentage transferred: {{transfer.percentage}}', 'Effective date: {{transfer.effectiveDate}}', 'Consideration: {{transfer.consideration}}'] },
+      {
+        heading: 'Current Ownership',
+        lines: ['Managing owner: {{owner.name}}', 'Co-owners and percentages: {{transfer.currentOwnership}}'],
+      },
+      {
+        heading: 'Transfer',
+        lines: [
+          'New owner: {{transfer.newOwnerName}}',
+          'Percentage transferred: {{transfer.percentage}}',
+          'Effective date: {{transfer.effectiveDate}}',
+          'Consideration: {{transfer.consideration}}',
+        ],
+      },
       { heading: 'Signatures', lines: ['Each owner of record must sign below.', ...SIGNATURE_LINES] },
     ],
   },
@@ -177,8 +357,23 @@ export const templateCatalog = [
     minimumPlan: 'Ranch Ops',
     sections: [
       { heading: 'Barn', lines: ['{{workspace.businessName}} ({{workspace.ranchName}})', 'Generated: {{today_date}}'] },
-      { heading: 'Included Assets', lines: ['Boarding agreement cover page', 'Emergency protocol sheet', 'Insurance reference card', 'Barn policy packet'] },
-      { heading: 'Emergency Protocol', lines: ['Primary contact: {{workspace.ranchManagerName}}', 'Operations email: {{workspace.operationsEmail}}', 'Primary veterinarian: {{vet.name}}'] },
+      {
+        heading: 'Included Assets',
+        lines: [
+          'Boarding agreement cover page',
+          'Emergency protocol sheet',
+          'Insurance reference card',
+          'Barn policy packet',
+        ],
+      },
+      {
+        heading: 'Emergency Protocol',
+        lines: [
+          'Primary contact: {{workspace.ranchManagerName}}',
+          'Operations email: {{workspace.operationsEmail}}',
+          'Primary veterinarian: {{vet.name}}',
+        ],
+      },
     ],
   },
   {
@@ -187,9 +382,27 @@ export const templateCatalog = [
     tier: 'Business',
     minimumPlan: 'Ranch Ops',
     sections: [
-      { heading: 'Invoice', lines: ['Veterinarian: {{vet.name}}', 'Patient: {{horse.name}} (Reg # {{horse.registrationNumber}})', 'Responsible party: {{owner.name}}', 'Invoice date: {{today_date}}'] },
-      { heading: 'Charges', lines: ['Procedure: ____________________  Amount: __________', 'Procedure: ____________________  Amount: __________', 'Total due: {{invoice.total}}'] },
-      { heading: 'Payment Plan', lines: ['Installments: {{invoice.installments}}', 'First payment due: {{invoice.firstPaymentDate}}'] },
+      {
+        heading: 'Invoice',
+        lines: [
+          'Veterinarian: {{vet.name}}',
+          'Patient: {{horse.name}} (Reg # {{horse.registrationNumber}})',
+          'Responsible party: {{owner.name}}',
+          'Invoice date: {{today_date}}',
+        ],
+      },
+      {
+        heading: 'Charges',
+        lines: [
+          'Procedure: ____________________  Amount: __________',
+          'Procedure: ____________________  Amount: __________',
+          'Total due: {{invoice.total}}',
+        ],
+      },
+      {
+        heading: 'Payment Plan',
+        lines: ['Installments: {{invoice.installments}}', 'First payment due: {{invoice.firstPaymentDate}}'],
+      },
     ],
   },
 ];
@@ -224,10 +437,7 @@ export function renderPlaceholders(text, context, missingFields) {
 }
 
 function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 // Renders a catalog template (or a DB template_content override) against a
@@ -238,7 +448,10 @@ export function renderTemplate({ template, overrideContent = '', context }) {
 
   if (overrideContent.trim()) {
     const html = renderPlaceholders(overrideContent, context, missing);
-    const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const text = html
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
     return {
       title: template.name,
       sections: [{ heading: template.name, lines: text ? [text] : [] }],
@@ -254,7 +467,10 @@ export function renderTemplate({ template, overrideContent = '', context }) {
   }));
 
   const htmlSections = sections
-    .map((section) => `<section><h2>${escapeHtml(section.heading)}</h2>${section.lines.map((line) => `<p>${escapeHtml(line)}</p>`).join('')}</section>`)
+    .map(
+      (section) =>
+        `<section><h2>${escapeHtml(section.heading)}</h2>${section.lines.map((line) => `<p>${escapeHtml(line)}</p>`).join('')}</section>`,
+    )
     .join('');
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(template.name)}</title></head><body><h1>${escapeHtml(template.name)}</h1>${htmlSections}</body></html>`;
   const text = sections.map((section) => `${section.heading}\n${section.lines.join('\n')}`).join('\n\n');

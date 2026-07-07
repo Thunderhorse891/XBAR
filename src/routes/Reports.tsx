@@ -21,7 +21,9 @@ export default function Reports() {
       { label: 'Getting there', value: gettingThere, tone: 'var(--xbar-warning)' },
       { label: 'Not ready', value: notReady, tone: 'var(--xbar-danger)' },
     ];
-    const needsReview = documents.filter((d) => d.state === 'Needs Review' || d.state === 'Queued' || d.state === 'Matched').length;
+    const needsReview = documents.filter(
+      (d) => d.state === 'Needs Review' || d.state === 'Queued' || d.state === 'Matched',
+    ).length;
     const activeSales = salesLeads.filter((l) => l.stage !== 'Closed').length;
     const buyers = new Set(salesLeads.map((l) => l.name)).size;
     return { avg, segments, needsReview, activeSales, buyers };
@@ -30,8 +32,14 @@ export default function Reports() {
   if (horses.length === 0) {
     return (
       <>
-        <PageHead eyebrow="Account" title="Reports" subtitle="See how ready your horses are to sell, and what documents need attention." />
-        <Card><div className="xs-empty">Add horses and documents to see your reports here.</div></Card>
+        <PageHead
+          eyebrow="Account"
+          title="Reports"
+          subtitle="See how ready your horses are to sell, and what documents need attention."
+        />
+        <Card>
+          <div className="xs-empty">Add horses and documents to see your reports here.</div>
+        </Card>
       </>
     );
   }
@@ -48,7 +56,11 @@ export default function Reports() {
         <Card title="Ready to Sell" subtitle="How close your horses are to being sale-ready">
           <div className="xs-readiness">
             <div>
-              <ReadinessChart score={model.avg} segments={model.segments} mark={<HorsesIcon width={26} height={26} />} />
+              <ReadinessChart
+                score={model.avg}
+                segments={model.segments}
+                mark={<HorsesIcon width={26} height={26} />}
+              />
               <div className="xs-legend">
                 {model.segments.map((seg) => (
                   <span key={seg.label} className="xs-legend__item">
@@ -61,12 +73,22 @@ export default function Reports() {
               {horses.map((h) => {
                 const score = h.readiness?.score ?? 0;
                 return (
-                  <div key={h.id} className="xs-row" role="button" tabIndex={0} onClick={() => navigate(`/horses/${h.id}`)} onKeyDown={(e) => e.key === 'Enter' && navigate(`/horses/${h.id}`)} style={{ cursor: 'pointer' }}>
+                  <div
+                    key={h.id}
+                    className="xs-row"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => navigate(`/horses/${h.id}`)}
+                    onKeyDown={(e) => e.key === 'Enter' && navigate(`/horses/${h.id}`)}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <span className="xs-row__main">
                       <span className="xs-row__title">{h.name}</span>
                       <span className="xs-row__meta">{score}% ready</span>
                     </span>
-                    <StatusChip tone={score >= 95 ? 'success' : score >= 75 ? 'warning' : 'danger'}>{score >= 95 ? 'Ready' : score >= 75 ? 'Getting there' : 'Not ready'}</StatusChip>
+                    <StatusChip tone={score >= 95 ? 'success' : score >= 75 ? 'warning' : 'danger'}>
+                      {score >= 95 ? 'Ready' : score >= 75 ? 'Getting there' : 'Not ready'}
+                    </StatusChip>
                   </div>
                 );
               })}
@@ -88,7 +110,9 @@ export default function Reports() {
       <div className="xs-grid-3">
         <Card>
           <div className="xs-card__sub">Horses for sale</div>
-          <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 30, fontWeight: 700 }}>{model.activeSales}</div>
+          <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 30, fontWeight: 700 }}>
+            {model.activeSales}
+          </div>
         </Card>
         <Card>
           <div className="xs-card__sub">Buyers in progress</div>

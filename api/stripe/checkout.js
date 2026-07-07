@@ -2,6 +2,11 @@ import Stripe from 'stripe';
 import { readJsonBody, sendJson } from '../_lib/http.js';
 import { buildSubscriptionProfile, getStripePriceIdByTier } from '../_lib/subscription-plans.js';
 import { requireWorkspaceAccess } from '../_lib/supabase-admin.js';
+import { applyCors } from '../_lib/cors.js';
+import { checkoutSchema, parseBody } from '../_lib/validation.js';
+import { enforceRateLimit } from '../_lib/rate-limit.js';
+
+const RATE_LIMIT = { bucket: 'checkout', limit: 10, windowSeconds: 60 };
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY || '';
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026-02-25.clover' }) : null;
@@ -34,8 +39,16 @@ function getTrustedReturnUrl(requestedReturnUrl) {
 }
 
 export default async function handler(req, res) {
+  if (!applyCors(req, res)) {
+    return;
+  }
+
   if (req.method !== 'POST') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
+  }
+
+  if (!(await enforceRateLimit(req, res, RATE_LIMIT))) {
+    return;
   }
 
   if (!managedBillingEnabled) {
@@ -48,10 +61,13 @@ export default async function handler(req, res) {
 
   const accessToken = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim() || '';
   const body = await readJsonBody(req);
-  const tier = typeof body.tier === 'string' ? body.tier : '';
-  const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId : '';
-  const returnUrl = getTrustedReturnUrl(typeof body.returnUrl === 'string' ? body.returnUrl : '');
-  const requestedSeatCount = Number(body.seatCount || 1);
+  const parsed = parseBody(checkoutSchema, body);
+  if (!parsed.ok) {
+    return sendJson(res, 400, { ok: false, message: parsed.message });
+  }
+  const { tier, workspaceId } = parsed.data;
+  const returnUrl = getTrustedReturnUrl(parsed.data.returnUrl);
+  const requestedSeatCount = Number(parsed.data.seatCount || 1);
   const seatCount = Number.isInteger(requestedSeatCount) ? Math.min(100, Math.max(1, requestedSeatCount)) : 1;
   const priceId = getStripePriceIdByTier(tier);
 

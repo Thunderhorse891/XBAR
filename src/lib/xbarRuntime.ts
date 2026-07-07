@@ -22,7 +22,10 @@ const BASE36_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 export const subscriptionTierConfig: Record<
   SubscriptionTier,
   Pick<SubscriptionProfile, 'monthlyRate' | 'sharedAccessEnabled' | 'featureFlags'> & {
-    limits: Pick<SubscriptionProfile['usage'], 'horseLimit' | 'seatLimit' | 'documentLimit' | 'salePacketLimit' | 'storageLimitGb' | 'sharedAccessSeatLimit'>;
+    limits: Pick<
+      SubscriptionProfile['usage'],
+      'horseLimit' | 'seatLimit' | 'documentLimit' | 'salePacketLimit' | 'storageLimitGb' | 'sharedAccessSeatLimit'
+    >;
   }
 > = {
   Starter: {
@@ -137,7 +140,9 @@ function createRandomBase36(length: number) {
     return Array.from(values, (value) => BASE36_ALPHABET[value % BASE36_ALPHABET.length]).join('');
   }
 
-  return Array.from({ length }, (_, index) => BASE36_ALPHABET[(Date.now() + index * 17) % BASE36_ALPHABET.length]).join('');
+  return Array.from({ length }, (_, index) => BASE36_ALPHABET[(Date.now() + index * 17) % BASE36_ALPHABET.length]).join(
+    '',
+  );
 }
 
 export function createId(prefix: string) {
@@ -233,8 +238,12 @@ export function deriveSharedAccessSnapshot(
   const activeListings = sharedListings.filter((listing) => listing.state !== 'Archived');
   const listedHorseIds = new Set(activeListings.map((listing) => listing.horseId));
   const openInquiries = salesLeads.filter((lead) => lead.stage !== 'Closed' && listedHorseIds.has(lead.horseId)).length;
-  const invitedOwners = workspaceInvitations.filter((invite) => invite.status === 'Pending' && invite.role === 'Owner').length;
-  const activeOwners = workspaceMembers.filter((member) => member.status === 'Active' && member.role === 'Owner').length;
+  const invitedOwners = workspaceInvitations.filter(
+    (invite) => invite.status === 'Pending' && invite.role === 'Owner',
+  ).length;
+  const activeOwners = workspaceMembers.filter(
+    (member) => member.status === 'Active' && member.role === 'Owner',
+  ).length;
   return {
     ...sharedAccess,
     invitedOwners,
@@ -273,11 +282,11 @@ function extractFirstMatch(haystack: string, candidates: string[]) {
 }
 
 function extractRegistrationNumber(haystack: string) {
-  const labelMatch = haystack.match(/\b(?:registration|reg\.?)\s*(?:no|number|#)?\.?\s*[:#-]?\s*([A-Z]{0,5}\s*-?\s*\d{4,10}[A-Z]?)/i);
+  const labelMatch = haystack.match(
+    /\b(?:registration|reg\.?)\s*(?:no|number|#)?\.?\s*[:#-]?\s*([A-Z]{0,5}\s*-?\s*\d{4,10}[A-Z]?)/i,
+  );
   const registryMatch = haystack.match(/\b(?:AHA|AQHA|APHA|USEF|JC)\s*-?\s*\d{4,10}[A-Z]?\b/i);
-  return (labelMatch?.[1] ?? registryMatch?.[0] ?? '')
-    .replace(/\s+/g, '')
-    .toUpperCase() || undefined;
+  return (labelMatch?.[1] ?? registryMatch?.[0] ?? '').replace(/\s+/g, '').toUpperCase() || undefined;
 }
 
 function extractLabeledText(haystack: string, labels: string[]) {
@@ -302,9 +311,15 @@ function extractLabeledText(haystack: string, labels: string[]) {
   ].join('|');
 
   for (const label of labels) {
-    const pattern = new RegExp(`\\b${label}\\s*[:#-]?\\s*([A-Z][A-Z0-9 .,'&-]{1,72}?)(?=\\s+(?:${stopLabels})\\b|$)`, 'i');
+    const pattern = new RegExp(
+      `\\b${label}\\s*[:#-]?\\s*([A-Z][A-Z0-9 .,'&-]{1,72}?)(?=\\s+(?:${stopLabels})\\b|$)`,
+      'i',
+    );
     const match = haystack.match(pattern);
-    const value = match?.[1]?.replace(/\s+/g, ' ').replace(/[|;,:-]+$/g, '').trim();
+    const value = match?.[1]
+      ?.replace(/\s+/g, ' ')
+      .replace(/[|;,:-]+$/g, '')
+      .trim();
     if (value && value.length >= 2) {
       return value;
     }
@@ -336,7 +351,8 @@ function extractTransferStatus(haystack: string, type: DocumentType) {
   }
 
   if (normalized.includes('aqha review')) return 'AQHA Review';
-  if (normalized.includes('attention required') || normalized.includes('missing signature')) return 'Attention Required';
+  if (normalized.includes('attention required') || normalized.includes('missing signature'))
+    return 'Attention Required';
   if (normalized.includes('pending signatures') || normalized.includes('signature')) return 'Pending Signatures';
   return 'Pending Signatures';
 }
@@ -355,11 +371,16 @@ function extractDocumentEntities(params: {
   const haystack = `${fileName} ${previewText}`;
 
   return {
-    horseName: extractFirstMatch(haystack, horses.flatMap((horse) => [horse.name, horse.barnName])) ?? extractRegisteredHorseName(haystack),
+    horseName:
+      extractFirstMatch(
+        haystack,
+        horses.flatMap((horse) => [horse.name, horse.barnName]),
+      ) ?? extractRegisteredHorseName(haystack),
     registrationNumber: extractRegistrationNumber(haystack),
     ownerName: extractFirstMatch(haystack, buildKnownOwners(horses)) ?? extractOwnerName(haystack),
     examDate: inferredType === 'Vet Record' || inferredType === 'Coggins' ? extractExamDate(haystack) : undefined,
-    veterinarian: inferredType === 'Vet Record' || inferredType === 'Coggins' ? extractVeterinarian(haystack) : undefined,
+    veterinarian:
+      inferredType === 'Vet Record' || inferredType === 'Coggins' ? extractVeterinarian(haystack) : undefined,
     transferStatus: extractTransferStatus(haystack, inferredType),
   } satisfies DocumentEntities;
 }
@@ -375,9 +396,26 @@ function scoreHorseMatch(horse: HorseRecord, search: string, entities?: Document
   let reason = '';
 
   const exactChecks: Array<[string | undefined, number, string]> = [
-    [entities?.horseName && normalizeToken(entities.horseName) === normalizeToken(horse.name) ? horse.name : undefined, 0.99, 'Extracted horse name matches profile'],
-    [entities?.registrationNumber && normalizeToken(entities.registrationNumber) === normalizeToken(horse.registrationNumber) ? horse.registrationNumber : undefined, 0.98, 'Extracted registration number matches profile'],
-    [entities?.ownerName && normalizeToken(entities.ownerName) === normalizeToken(horse.owner) ? horse.owner : undefined, 0.91, 'Extracted owner name matches profile'],
+    [
+      entities?.horseName && normalizeToken(entities.horseName) === normalizeToken(horse.name) ? horse.name : undefined,
+      0.99,
+      'Extracted horse name matches profile',
+    ],
+    [
+      entities?.registrationNumber &&
+      normalizeToken(entities.registrationNumber) === normalizeToken(horse.registrationNumber)
+        ? horse.registrationNumber
+        : undefined,
+      0.98,
+      'Extracted registration number matches profile',
+    ],
+    [
+      entities?.ownerName && normalizeToken(entities.ownerName) === normalizeToken(horse.owner)
+        ? horse.owner
+        : undefined,
+      0.91,
+      'Extracted owner name matches profile',
+    ],
   ];
 
   exactChecks.forEach(([value, nextConfidence, nextReason]) => {
@@ -446,13 +484,16 @@ export async function buildDocumentRecord(params: {
     : rankHorseMatches(horses, `${file.name} ${previewText}`, extractedEntities);
 
   const matchedHorse = candidateMatches[0]?.horse;
-  const exactTitleDuplicate = existingDocuments.some((document) => normalizeToken(document.title) === normalizeToken(file.name.replace(/\.[^.]+$/, '')));
+  const exactTitleDuplicate = existingDocuments.some(
+    (document) => normalizeToken(document.title) === normalizeToken(file.name.replace(/\.[^.]+$/, '')),
+  );
   const sameHorseDuplicate = existingDocuments.some(
     (document) =>
       document.horseId &&
       document.horseId === matchedHorse?.id &&
       document.type === inferredType &&
-      (document.entities.registrationNumber === extractedEntities.registrationNumber || normalizeToken(document.title) === normalizeToken(file.name)),
+      (document.entities.registrationNumber === extractedEntities.registrationNumber ||
+        normalizeToken(document.title) === normalizeToken(file.name)),
   );
   const duplicateRisk = exactTitleDuplicate ? 'Possible Duplicate' : sameHorseDuplicate ? 'Review' : 'Low';
 

@@ -37,7 +37,10 @@ export default function Expenses() {
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [savingReceipt, setSavingReceipt] = useState(false);
   const [intakeOpen, setIntakeOpen] = useState(false);
-  const profitPortfolio = useMemo(() => buildProfitPortfolio(horses, expenseReceipts, salesLeads), [expenseReceipts, horses, salesLeads]);
+  const profitPortfolio = useMemo(
+    () => buildProfitPortfolio(horses, expenseReceipts, salesLeads),
+    [expenseReceipts, horses, salesLeads],
+  );
   const [profitHorseId, setProfitHorseId] = useState(horses[0]?.id ?? '');
   const profitHorse = horses.find((horse) => horse.id === profitHorseId) ?? horses[0];
   const profitProfile = profitPortfolio.find((profile) => profile.horseId === profitHorse?.id);
@@ -134,7 +137,7 @@ export default function Expenses() {
     const topHorses = Array.from(horseTotals.entries())
       .map(([id, amount]) => ({
         id,
-        name: id === RANCH_WIDE ? RANCH_WIDE : horses.find((horse) => horse.id === id)?.name ?? 'Unknown horse',
+        name: id === RANCH_WIDE ? RANCH_WIDE : (horses.find((horse) => horse.id === id)?.name ?? 'Unknown horse'),
         amount,
       }))
       .sort((left, right) => right.amount - left.amount)
@@ -182,7 +185,10 @@ export default function Expenses() {
         const horse = horses.find((item) => item.id === receipt.horseId);
         return (
           (categoryFilter === 'All' || receipt.category === categoryFilter) &&
-          matchesSearch([receipt.title, receipt.vendor, receipt.category, receipt.notes, horse?.name, horse?.barnName], query)
+          matchesSearch(
+            [receipt.title, receipt.vendor, receipt.category, receipt.notes, horse?.name, horse?.barnName],
+            query,
+          )
         );
       })
       .sort((left, right) => Date.parse(right.receiptDate) - Date.parse(left.receiptDate));
@@ -239,43 +245,137 @@ export default function Expenses() {
       <div className="ops-workspace ops-workspace--split">
         <section className="ops-panel ops-panel--wide">
           <div className="ops-section-heading">
-            <div><span className="section-eyebrow">Margin Planning</span><h2>Know the break-even before setting the sale price</h2></div>
+            <div>
+              <span className="section-eyebrow">Margin Planning</span>
+              <h2>Know the break-even before setting the sale price</h2>
+            </div>
             <Pill tone={profitGate ? 'amber' : 'emerald'}>{profitGate ? 'Ranch Ops' : 'Live margin'}</Pill>
           </div>
           {profitProfile ? (
             <>
               <div className="metric-grid">
-                <MetricCard label="Cost basis" value={formatCompactCurrency(profitProfile.costBasis)} detail="Acquisition or retained basis" />
-                <MetricCard label="Linked spend" value={formatCompactCurrency(profitProfile.spend)} detail="Feed, vet, farrier, training, and receipts" tone="blue" />
-                <MetricCard label="Break-even" value={formatCompactCurrency(profitProfile.breakEven)} detail="Cost basis plus linked spend" tone="amber" />
-                <MetricCard label="Safe sale price" value={formatCompactCurrency(profitProfile.safeSalePrice)} detail="Break-even plus a 15% operating buffer" tone={profitProfile.profitLoss >= 0 ? 'emerald' : 'rose'} />
+                <MetricCard
+                  label="Cost basis"
+                  value={formatCompactCurrency(profitProfile.costBasis)}
+                  detail="Acquisition or retained basis"
+                />
+                <MetricCard
+                  label="Linked spend"
+                  value={formatCompactCurrency(profitProfile.spend)}
+                  detail="Feed, vet, farrier, training, and receipts"
+                  tone="blue"
+                />
+                <MetricCard
+                  label="Break-even"
+                  value={formatCompactCurrency(profitProfile.breakEven)}
+                  detail="Cost basis plus linked spend"
+                  tone="amber"
+                />
+                <MetricCard
+                  label="Safe sale price"
+                  value={formatCompactCurrency(profitProfile.safeSalePrice)}
+                  detail="Break-even plus a 15% operating buffer"
+                  tone={profitProfile.profitLoss >= 0 ? 'emerald' : 'rose'}
+                />
               </div>
               <div className="stack-list">
                 {profitPortfolio.slice(0, 8).map((profile) => (
-                  <button className={`stack-item stack-item--interactive${profile.horseId === profitProfile.horseId ? ' stack-item--selected' : ''}`} type="button" key={profile.horseId} onClick={() => {
-                    const horse = horses.find((item) => item.id === profile.horseId);
-                    setProfitHorseId(profile.horseId);
-                    setCostBasis(String(horse?.costBasis ?? 0));
-                    setAskingPrice(String(horse?.sale.askPrice ?? 0));
-                  }}>
-                    <div className="stack-item__top"><div><div className="stack-item__title">{profile.horseName}</div><div className="stack-item__copy">Break-even {formatCurrency(profile.breakEven)} · sale value {formatCurrency(profile.salePrice)}</div></div><Pill tone={profile.profitLoss >= 0 ? 'emerald' : 'rose'}>{formatCurrency(profile.profitLoss)}</Pill></div>
+                  <button
+                    className={`stack-item stack-item--interactive${profile.horseId === profitProfile.horseId ? ' stack-item--selected' : ''}`}
+                    type="button"
+                    key={profile.horseId}
+                    onClick={() => {
+                      const horse = horses.find((item) => item.id === profile.horseId);
+                      setProfitHorseId(profile.horseId);
+                      setCostBasis(String(horse?.costBasis ?? 0));
+                      setAskingPrice(String(horse?.sale.askPrice ?? 0));
+                    }}
+                  >
+                    <div className="stack-item__top">
+                      <div>
+                        <div className="stack-item__title">{profile.horseName}</div>
+                        <div className="stack-item__copy">
+                          Break-even {formatCurrency(profile.breakEven)} · sale value{' '}
+                          {formatCurrency(profile.salePrice)}
+                        </div>
+                      </div>
+                      <Pill tone={profile.profitLoss >= 0 ? 'emerald' : 'rose'}>
+                        {formatCurrency(profile.profitLoss)}
+                      </Pill>
+                    </div>
                   </button>
                 ))}
               </div>
             </>
-          ) : <EmptyState compact title="No horses to price yet" description="Create a horse record, then link receipts to calculate break-even and safe sale price." />}
+          ) : (
+            <EmptyState
+              compact
+              title="No horses to price yet"
+              description="Create a horse record, then link receipts to calculate break-even and safe sale price."
+            />
+          )}
         </section>
         <aside className="ops-panel ops-panel--form">
-          <div className="ops-section-heading ops-section-heading--compact"><div><span className="section-eyebrow">Pricing action</span><h2>{profitHorse?.name ?? 'Select horse'}</h2></div><Pill tone={profitGate ? 'amber' : 'blue'}>{profitGate ? 'Upgrade to unlock' : 'Editable'}</Pill></div>
-          {profitGate ? <div className="stack-item"><div className="stack-item__title">Turn receipts into pricing decisions</div><div className="stack-item__copy">{profitGate}</div><button className="button button--primary button--compact" type="button" onClick={() => navigate(billingPath)}>Upgrade to unlock</button></div> : (
+          <div className="ops-section-heading ops-section-heading--compact">
+            <div>
+              <span className="section-eyebrow">Pricing action</span>
+              <h2>{profitHorse?.name ?? 'Select horse'}</h2>
+            </div>
+            <Pill tone={profitGate ? 'amber' : 'blue'}>{profitGate ? 'Upgrade to unlock' : 'Editable'}</Pill>
+          </div>
+          {profitGate ? (
+            <div className="stack-item">
+              <div className="stack-item__title">Turn receipts into pricing decisions</div>
+              <div className="stack-item__copy">{profitGate}</div>
+              <button
+                className="button button--primary button--compact"
+                type="button"
+                onClick={() => navigate(billingPath)}
+              >
+                Upgrade to unlock
+              </button>
+            </div>
+          ) : (
             <div className="ops-form">
-              <label className="field-stack"><span className="field-label">Cost basis</span><input className="field-input" type="number" min="0" value={costBasis} onChange={(event) => setCostBasis(event.target.value)} /></label>
-              <label className="field-stack"><span className="field-label">Asking price</span><input className="field-input" type="number" min="0" value={askingPrice} onChange={(event) => setAskingPrice(event.target.value)} /></label>
-              <button className="button button--primary ops-full-button" type="button" disabled={!profitHorse || !canManageBudget} onClick={() => {
-                if (!profitHorse) return;
-                const result = updateHorse(profitHorse.id, { costBasis: Number(costBasis), askPrice: Number(askingPrice) });
-                pushToast({ title: result.ok ? 'Sale economics updated' : 'Pricing update blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
-              }}>Save pricing decision</button>
+              <label className="field-stack">
+                <span className="field-label">Cost basis</span>
+                <input
+                  className="field-input"
+                  type="number"
+                  min="0"
+                  value={costBasis}
+                  onChange={(event) => setCostBasis(event.target.value)}
+                />
+              </label>
+              <label className="field-stack">
+                <span className="field-label">Asking price</span>
+                <input
+                  className="field-input"
+                  type="number"
+                  min="0"
+                  value={askingPrice}
+                  onChange={(event) => setAskingPrice(event.target.value)}
+                />
+              </label>
+              <button
+                className="button button--primary ops-full-button"
+                type="button"
+                disabled={!profitHorse || !canManageBudget}
+                onClick={() => {
+                  if (!profitHorse) return;
+                  const result = updateHorse(profitHorse.id, {
+                    costBasis: Number(costBasis),
+                    askPrice: Number(askingPrice),
+                  });
+                  pushToast({
+                    title: result.ok ? 'Sale economics updated' : 'Pricing update blocked',
+                    message: result.message,
+                    tone: result.ok ? 'success' : 'error',
+                  });
+                }}
+              >
+                Save pricing decision
+              </button>
             </div>
           )}
         </aside>
@@ -290,7 +390,11 @@ export default function Expenses() {
             </div>
             <div className="inline-actions inline-actions--card">
               <Pill tone={canManageBudget ? 'blue' : 'slate'}>{canManageBudget ? 'Enabled' : 'Read only'}</Pill>
-              <button className="button button--ghost button--compact" type="button" onClick={() => setIntakeOpen(false)}>
+              <button
+                className="button button--ghost button--compact"
+                type="button"
+                onClick={() => setIntakeOpen(false)}
+              >
                 Close
               </button>
             </div>
@@ -299,46 +403,116 @@ export default function Expenses() {
           <form className="ops-form" onSubmit={handleReceiptSubmit}>
             <label className="field-stack">
               <span className="field-label">Category</span>
-              <select ref={firstFieldRef} className="field-input" value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value as ExpenseCategory }))} disabled={!canManageBudget || savingReceipt}>
-                {EXPENSE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+              <select
+                ref={firstFieldRef}
+                className="field-input"
+                value={draft.category}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, category: event.target.value as ExpenseCategory }))
+                }
+                disabled={!canManageBudget || savingReceipt}
+              >
+                {EXPENSE_CATEGORIES.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="field-stack">
               <span className="field-label">Horse</span>
-              <select className="field-input" value={draft.horseId} onChange={(event) => setDraft((current) => ({ ...current, horseId: event.target.value }))} disabled={!canManageBudget || savingReceipt}>
+              <select
+                className="field-input"
+                value={draft.horseId}
+                onChange={(event) => setDraft((current) => ({ ...current, horseId: event.target.value }))}
+                disabled={!canManageBudget || savingReceipt}
+              >
                 <option value="">Ranch-wide</option>
-                {horses.map((horse) => <option key={horse.id} value={horse.id}>{horse.name}</option>)}
+                {horses.map((horse) => (
+                  <option key={horse.id} value={horse.id}>
+                    {horse.name}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="field-stack">
               <span className="field-label">Receipt label</span>
-              <input className="field-input" value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Feed delivery" disabled={!canManageBudget || savingReceipt} />
+              <input
+                className="field-input"
+                value={draft.title}
+                onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+                placeholder="Feed delivery"
+                disabled={!canManageBudget || savingReceipt}
+              />
             </label>
             <label className="field-stack">
               <span className="field-label">Vendor</span>
-              <input className="field-input" value={draft.vendor} onChange={(event) => setDraft((current) => ({ ...current, vendor: event.target.value }))} placeholder="Co-op, vet, farrier" disabled={!canManageBudget || savingReceipt} />
+              <input
+                className="field-input"
+                value={draft.vendor}
+                onChange={(event) => setDraft((current) => ({ ...current, vendor: event.target.value }))}
+                placeholder="Co-op, vet, farrier"
+                disabled={!canManageBudget || savingReceipt}
+              />
             </label>
             <label className="field-stack">
               <span className="field-label">Amount</span>
-              <input className="field-input" type="number" min="0" step="0.01" value={draft.amount} onChange={(event) => setDraft((current) => ({ ...current, amount: event.target.value }))} placeholder="240.00" disabled={!canManageBudget || savingReceipt} />
+              <input
+                className="field-input"
+                type="number"
+                min="0"
+                step="0.01"
+                value={draft.amount}
+                onChange={(event) => setDraft((current) => ({ ...current, amount: event.target.value }))}
+                placeholder="240.00"
+                disabled={!canManageBudget || savingReceipt}
+              />
             </label>
             <label className="field-stack">
               <span className="field-label">Receipt date</span>
-              <input className="field-input" type="date" value={draft.receiptDate} onChange={(event) => setDraft((current) => ({ ...current, receiptDate: event.target.value }))} disabled={!canManageBudget || savingReceipt} />
+              <input
+                className="field-input"
+                type="date"
+                value={draft.receiptDate}
+                onChange={(event) => setDraft((current) => ({ ...current, receiptDate: event.target.value }))}
+                disabled={!canManageBudget || savingReceipt}
+              />
             </label>
             <label className="field-stack">
               <span className="field-label">Uploaded by</span>
-              <input className="field-input" value={draft.uploadedBy} onChange={(event) => setDraft((current) => ({ ...current, uploadedBy: event.target.value }))} disabled={!canManageBudget || savingReceipt} />
+              <input
+                className="field-input"
+                value={draft.uploadedBy}
+                onChange={(event) => setDraft((current) => ({ ...current, uploadedBy: event.target.value }))}
+                disabled={!canManageBudget || savingReceipt}
+              />
             </label>
             <label className="field-stack">
               <span className="field-label">Receipt file</span>
-              <input className="field-input" type="file" accept=".pdf,image/*" onChange={(event) => setReceiptFile(event.target.files?.[0] ?? null)} disabled={!canManageBudget || savingReceipt} />
+              <input
+                className="field-input"
+                type="file"
+                accept=".pdf,image/*"
+                onChange={(event) => setReceiptFile(event.target.files?.[0] ?? null)}
+                disabled={!canManageBudget || savingReceipt}
+              />
             </label>
             <label className="field-stack field-stack--wide">
               <span className="field-label">Notes</span>
-              <textarea className="field-textarea" rows={3} value={draft.notes} onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="Optional note." disabled={!canManageBudget || savingReceipt} />
+              <textarea
+                className="field-textarea"
+                rows={3}
+                value={draft.notes}
+                onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))}
+                placeholder="Optional note."
+                disabled={!canManageBudget || savingReceipt}
+              />
             </label>
-            <button className="button button--primary ops-full-button" type="submit" disabled={!canManageBudget || savingReceipt}>
+            <button
+              className="button button--primary ops-full-button"
+              type="submit"
+              disabled={!canManageBudget || savingReceipt}
+            >
               {savingReceipt ? 'Logging...' : 'Log receipt'}
             </button>
             {receiptFile ? <Pill tone="slate">{receiptFile.name}</Pill> : null}
@@ -347,7 +521,11 @@ export default function Expenses() {
       ) : null}
 
       <div className="ops-workspace ops-workspace--columns">
-        <Panel title="Category breakdown" description="Month-to-date spend by category." meta={<Pill tone="blue">This month</Pill>}>
+        <Panel
+          title="Category breakdown"
+          description="Month-to-date spend by category."
+          meta={<Pill tone="blue">This month</Pill>}
+        >
           {spend.categories.length ? (
             <div className="stack-list">
               {spend.categories.map(({ category, amount }) => {
@@ -361,26 +539,49 @@ export default function Expenses() {
                         {formatCurrency(amount)} · {Math.round(share)}%
                       </span>
                     </div>
-                    <ProgressBar value={share} tone={isRiskCategory ? (spend.categoryRisk && spend.categoryRisk.overagePercent >= 50 ? 'rose' : 'amber') : 'blue'} />
+                    <ProgressBar
+                      value={share}
+                      tone={
+                        isRiskCategory
+                          ? spend.categoryRisk && spend.categoryRisk.overagePercent >= 50
+                            ? 'rose'
+                            : 'amber'
+                          : 'blue'
+                      }
+                    />
                   </div>
                 );
               })}
             </div>
           ) : (
-            <EmptyState compact title="No spend this month" description="Log a receipt and the category split appears here." />
+            <EmptyState
+              compact
+              title="No spend this month"
+              description="Log a receipt and the category split appears here."
+            />
           )}
         </Panel>
 
-        <Panel title="6-month trend" description="Monthly totals, oldest to newest." meta={<Pill tone="slate">Trailing view</Pill>}>
+        <Panel
+          title="6-month trend"
+          description="Monthly totals, oldest to newest."
+          meta={<Pill tone="slate">Trailing view</Pill>}
+        >
           {expenseReceipts.length ? (
             <div className="stack-list">
               {spend.trend.map((month, index) => (
                 <div key={month.key} className="stack-item">
                   <div className="stack-item__top">
-                    <div className="stack-item__title">{month.label}{index === spend.trend.length - 1 ? ' (current)' : ''}</div>
+                    <div className="stack-item__title">
+                      {month.label}
+                      {index === spend.trend.length - 1 ? ' (current)' : ''}
+                    </div>
                     <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(month.total)}</span>
                   </div>
-                  <ProgressBar value={(month.total / spend.trendMax) * 100} tone={index === spend.trend.length - 1 ? 'blue' : 'slate'} />
+                  <ProgressBar
+                    value={(month.total / spend.trendMax) * 100}
+                    tone={index === spend.trend.length - 1 ? 'blue' : 'slate'}
+                  />
                 </div>
               ))}
             </div>
@@ -391,7 +592,11 @@ export default function Expenses() {
       </div>
 
       <div className="ops-workspace ops-workspace--columns">
-        <Panel title="Cost per horse" description="Top five by total spend; receipts without a horse group as Ranch-wide." meta={<Pill tone="slate">All time</Pill>}>
+        <Panel
+          title="Cost per horse"
+          description="Top five by total spend; receipts without a horse group as Ranch-wide."
+          meta={<Pill tone="slate">All time</Pill>}
+        >
           {spend.topHorses.length ? (
             <div className="stack-list">
               {spend.topHorses.map((row) => (
@@ -405,11 +610,19 @@ export default function Expenses() {
               ))}
             </div>
           ) : (
-            <EmptyState compact title="No horse costs yet" description="Receipts tied to horses surface their cost here." />
+            <EmptyState
+              compact
+              title="No horse costs yet"
+              description="Receipts tied to horses surface their cost here."
+            />
           )}
         </Panel>
 
-        <Panel title="Top vendors" description="Top five vendors by total spend." meta={<Pill tone="slate">All time</Pill>}>
+        <Panel
+          title="Top vendors"
+          description="Top five vendors by total spend."
+          meta={<Pill tone="slate">All time</Pill>}
+        >
           {spend.topVendors.length ? (
             <div className="stack-list">
               {spend.topVendors.map((row) => (
@@ -423,7 +636,11 @@ export default function Expenses() {
               ))}
             </div>
           ) : (
-            <EmptyState compact title="No vendors yet" description="Vendor totals appear once receipts carry a vendor name." />
+            <EmptyState
+              compact
+              title="No vendors yet"
+              description="Vendor totals appear once receipts carry a vendor name."
+            />
           )}
         </Panel>
       </div>
@@ -440,11 +657,23 @@ export default function Expenses() {
         <div className="ops-toolbar">
           <label className="ops-search">
             <span className="sr-only">Search expenses</span>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search vendor, horse, category, receipt..." />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search vendor, horse, category, receipt..."
+            />
           </label>
-          <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value as ExpenseFilter)} aria-label="Filter expense category">
+          <select
+            value={categoryFilter}
+            onChange={(event) => setCategoryFilter(event.target.value as ExpenseFilter)}
+            aria-label="Filter expense category"
+          >
             <option value="All">All categories</option>
-            {EXPENSE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+            {EXPENSE_CATEGORIES.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -452,27 +681,38 @@ export default function Expenses() {
           <div className="ops-record-grid">
             {filteredReceipts.map((receipt) => {
               const horse = horses.find((item) => item.id === receipt.horseId);
-              const content = <>
-                <div className="ops-record-card__top">
-                  <div>
-                    <span>{receipt.category}</span>
-                    <strong>{receipt.title}</strong>
+              const content = (
+                <>
+                  <div className="ops-record-card__top">
+                    <div>
+                      <span>{receipt.category}</span>
+                      <strong>{receipt.title}</strong>
+                    </div>
+                    <Pill tone="blue">{formatCurrency(receipt.amount)}</Pill>
                   </div>
-                  <Pill tone="blue">{formatCurrency(receipt.amount)}</Pill>
-                </div>
-                <p>{receipt.notes || 'No notes added.'}</p>
-                <div className="ops-record-meta">
-                  <span>{horse?.name ?? RANCH_WIDE}</span>
-                  <span>{receipt.vendor || 'Vendor pending'}</span>
-                  <span>{formatDateLabel(receipt.receiptDate)}</span>
-                </div>
-              </>;
+                  <p>{receipt.notes || 'No notes added.'}</p>
+                  <div className="ops-record-meta">
+                    <span>{horse?.name ?? RANCH_WIDE}</span>
+                    <span>{receipt.vendor || 'Vendor pending'}</span>
+                    <span>{formatDateLabel(receipt.receiptDate)}</span>
+                  </div>
+                </>
+              );
               return receipt.horseId ? (
-                <button key={receipt.id} className="ops-record-card" type="button" onClick={() => receipt.horseId ? navigate(`/horses/${receipt.horseId}`) : undefined}>
+                <button
+                  key={receipt.id}
+                  className="ops-record-card"
+                  type="button"
+                  onClick={() => (receipt.horseId ? navigate(`/horses/${receipt.horseId}`) : undefined)}
+                >
                   {content}
                 </button>
               ) : (
-                <article key={receipt.id} className="ops-record-card ops-record-card--static" title="Ranch-wide receipt with no linked horse record.">
+                <article
+                  key={receipt.id}
+                  className="ops-record-card ops-record-card--static"
+                  title="Ranch-wide receipt with no linked horse record."
+                >
                   {content}
                 </article>
               );
@@ -496,9 +736,15 @@ export default function Expenses() {
       <div className="ops-workspace ops-workspace--columns">
         <Panel title="Where this connects" meta={<Pill tone="slate">Operating system</Pill>}>
           <div className="ops-link-list">
-            <button type="button" onClick={() => navigate('/documents?upload=1')}>Go to document upload</button>
-            <button type="button" onClick={() => navigate('/medical')}>Review care costs beside health records</button>
-            <button type="button" onClick={() => navigate('/horses')}>Open the horse profiles tied to spending</button>
+            <button type="button" onClick={() => navigate('/documents?upload=1')}>
+              Go to document upload
+            </button>
+            <button type="button" onClick={() => navigate('/medical')}>
+              Review care costs beside health records
+            </button>
+            <button type="button" onClick={() => navigate('/horses')}>
+              Open the horse profiles tied to spending
+            </button>
           </div>
         </Panel>
       </div>

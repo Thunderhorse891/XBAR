@@ -22,7 +22,9 @@ export default function GettingStarted() {
   const salesLeads = useXbarStore((state) => state.salesLeads);
   const subscription = useXbarStore((state) => state.subscription);
 
-  const documentsToCheck = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched').length;
+  const documentsToCheck = documents.filter(
+    (document) => document.state === 'Needs Review' || document.state === 'Matched',
+  ).length;
   const steps: Step[] = [
     {
       id: 'workspace',
@@ -35,7 +37,9 @@ export default function GettingStarted() {
     {
       id: 'horse',
       title: 'Add your first horse',
-      detail: horses.length ? `${horses.length} horse${horses.length === 1 ? '' : 's'} in this workspace.` : 'Start with the horse you work with most.',
+      detail: horses.length
+        ? `${horses.length} horse${horses.length === 1 ? '' : 's'} in this workspace.`
+        : 'Start with the horse you work with most.',
       done: horses.length > 0,
       action: horses.length ? 'View horses' : 'Add horse',
       to: horses.length ? '/horses' : '/horses?new=1',
@@ -43,7 +47,9 @@ export default function GettingStarted() {
     {
       id: 'documents',
       title: 'Upload documents',
-      detail: documents.length ? `${documents.length} document${documents.length === 1 ? '' : 's'} uploaded.` : 'Upload Coggins, registration, health records, or bills of sale.',
+      detail: documents.length
+        ? `${documents.length} document${documents.length === 1 ? '' : 's'} uploaded.`
+        : 'Upload Coggins, registration, health records, or bills of sale.',
       done: documents.length > 0,
       action: 'Upload',
       to: '/documents?upload=1',
@@ -51,7 +57,9 @@ export default function GettingStarted() {
     {
       id: 'review',
       title: 'Review uploaded documents',
-      detail: documents.length ? `${documentsToCheck} item${documentsToCheck === 1 ? '' : 's'} still need checking.` : 'Review starts after the first upload.',
+      detail: documents.length
+        ? `${documentsToCheck} item${documentsToCheck === 1 ? '' : 's'} still need checking.`
+        : 'Review starts after the first upload.',
       done: documents.length > 0 && documentsToCheck === 0,
       action: 'Review',
       to: '/documents',
@@ -59,7 +67,9 @@ export default function GettingStarted() {
     {
       id: 'sale-packets',
       title: 'Prepare sale packet',
-      detail: salePacketBuilds.length ? `${salePacketBuilds.length} set${salePacketBuilds.length === 1 ? '' : 's'} prepared.` : 'Choose the records a buyer can see before a sale.',
+      detail: salePacketBuilds.length
+        ? `${salePacketBuilds.length} set${salePacketBuilds.length === 1 ? '' : 's'} prepared.`
+        : 'Choose the records a buyer can see before a sale.',
       done: salePacketBuilds.length > 0,
       action: 'Prepare',
       to: '/sale-packets',
@@ -67,7 +77,9 @@ export default function GettingStarted() {
     {
       id: 'buyer',
       title: 'Track buyer follow-up',
-      detail: salesLeads.length ? `${salesLeads.length} buyer${salesLeads.length === 1 ? '' : 's'} in sales.` : 'Add buyer notes, offers, and next follow-up dates.',
+      detail: salesLeads.length
+        ? `${salesLeads.length} buyer${salesLeads.length === 1 ? '' : 's'} in sales.`
+        : 'Add buyer notes, offers, and next follow-up dates.',
       done: salesLeads.length > 0,
       action: 'Open sales',
       to: '/sales',
@@ -97,7 +109,9 @@ export default function GettingStarted() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
           <ProgressRing value={progress} size={56} />
           <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 24, fontWeight: 600 }}>{progress}% set up</div>
+            <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 24, fontWeight: 600 }}>
+              {progress}% set up
+            </div>
             <div className="xs-card__sub">
               {doneCount} of {steps.length} steps are complete.
             </div>
@@ -111,10 +125,7 @@ export default function GettingStarted() {
       <div className="xs-checklist">
         {steps.map((s) => (
           <div key={s.id} className={`xs-checkitem${s.done ? ' xs-checkitem--done' : ''}`}>
-            <span
-              className={`xs-check${s.done ? ' xs-check--done' : ''}`}
-              aria-label={s.done ? 'Done' : 'Not done'}
-            >
+            <span className={`xs-check${s.done ? ' xs-check--done' : ''}`} aria-label={s.done ? 'Done' : 'Not done'}>
               {s.done ? <Check size={15} /> : null}
             </span>
             <div className="xs-checkitem__body">

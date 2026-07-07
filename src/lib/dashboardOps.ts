@@ -128,7 +128,11 @@ function createTimedSignal(params: {
   };
 }
 
-export function buildTransferGapRows(horses: HorseRecord[], ownershipRecords: OwnershipRecord[], documents: DocumentRecord[]) {
+export function buildTransferGapRows(
+  horses: HorseRecord[],
+  ownershipRecords: OwnershipRecord[],
+  documents: DocumentRecord[],
+) {
   return horses
     .map((horse) => {
       const record = ownershipRecords.find((item) => item.horseId === horse.id);
@@ -169,7 +173,12 @@ export function buildTransferGapRows(horses: HorseRecord[], ownershipRecords: Ow
     .sort((left, right) => Date.parse(left.dueDate || '9999-12-31') - Date.parse(right.dueDate || '9999-12-31'));
 }
 
-export function buildCareBoardRows(horses: HorseRecord[], documents: DocumentRecord[], receipts: ExpenseReceipt[], now = new Date()) {
+export function buildCareBoardRows(
+  horses: HorseRecord[],
+  documents: DocumentRecord[],
+  receipts: ExpenseReceipt[],
+  now = new Date(),
+) {
   return horses
     .map((horse) => {
       const wormer = latestReceiptForCategory(receipts, horse.id, 'Wormer');
@@ -209,7 +218,10 @@ export function buildCareBoardRows(horses: HorseRecord[], documents: DocumentRec
         }),
       ];
 
-      const priority = signals.reduce((score, signal) => score + (signal.status === 'due' ? 2 : signal.status === 'watch' ? 1 : 0), 0);
+      const priority = signals.reduce(
+        (score, signal) => score + (signal.status === 'due' ? 2 : signal.status === 'watch' ? 1 : 0),
+        0,
+      );
       if (!priority) {
         return null;
       }
@@ -228,7 +240,10 @@ export function buildCareBoardRows(horses: HorseRecord[], documents: DocumentRec
 export function buildBudgetSummary(receipts: ExpenseReceipt[], now = new Date()): BudgetSummary {
   const monthKey = buildMonthKey(now);
   const monthReceipts = receipts
-    .filter((receipt) => { const d = parseDate(receipt.receiptDate); return d !== null && buildMonthKey(d) === monthKey; })
+    .filter((receipt) => {
+      const d = parseDate(receipt.receiptDate);
+      return d !== null && buildMonthKey(d) === monthKey;
+    })
     .sort((left, right) => Date.parse(right.receiptDate) - Date.parse(left.receiptDate));
 
   const categories = monthReceipts.reduce<Map<ExpenseCategory, number>>((totals, receipt) => {
@@ -241,10 +256,18 @@ export function buildBudgetSummary(receipts: ExpenseReceipt[], now = new Date())
     .sort((left, right) => right.amount - left.amount);
 
   const feed = monthReceipts
-    .filter((receipt) => receipt.category === 'Feed' || receipt.category === 'Bedding' || receipt.category === 'Supplements')
+    .filter(
+      (receipt) => receipt.category === 'Feed' || receipt.category === 'Bedding' || receipt.category === 'Supplements',
+    )
     .reduce((sum, receipt) => sum + receipt.amount, 0);
   const health = monthReceipts
-    .filter((receipt) => receipt.category === 'Wormer' || receipt.category === 'Dental Float' || receipt.category === 'Vet Care' || receipt.category === 'Farrier')
+    .filter(
+      (receipt) =>
+        receipt.category === 'Wormer' ||
+        receipt.category === 'Dental Float' ||
+        receipt.category === 'Vet Care' ||
+        receipt.category === 'Farrier',
+    )
     .reduce((sum, receipt) => sum + receipt.amount, 0);
 
   return {

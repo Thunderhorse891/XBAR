@@ -23,7 +23,11 @@ export default function SharedAccess() {
   const updateSharedListingAccessMode = useXbarStore((state) => state.updateSharedListingAccessMode);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const [menuState, setMenuState] = useState<{ horseId: string; x: number; y: number } | null>(null);
-  const [publicLinkPending, setPublicLinkPending] = useState<{ horseId: string; horseName: string; packetStatus: string } | null>(null);
+  const [publicLinkPending, setPublicLinkPending] = useState<{
+    horseId: string;
+    horseName: string;
+    packetStatus: string;
+  } | null>(null);
   const activeSharedListings = sharedListings.filter((listing) => listing.state !== 'Archived');
   const liveSharedListings = activeSharedListings.filter((listing) => listing.state === 'Live');
   const facebookSharedListings = activeSharedListings.filter((listing) => listing.channels.includes('Facebook'));
@@ -49,7 +53,8 @@ export default function SharedAccess() {
   const menuPacket = menuHorse ? packetByHorseId[menuHorse.id] : undefined;
   const menuListing = menuHorse ? activeSharedListings.find((listing) => listing.horseId === menuHorse.id) : undefined;
 
-  const getShareToken = (listing: SharedListingRecord | undefined) => (listing?.accessMode === 'Private Token' ? listing.shareToken : undefined);
+  const getShareToken = (listing: SharedListingRecord | undefined) =>
+    listing?.accessMode === 'Private Token' ? listing.shareToken : undefined;
   const copyShareLink = async (horseId: string, path: string, listing?: SharedListingRecord) => {
     const release = await recordSharedChannel(horseId, 'Direct Link');
     if (!release.ok) {
@@ -86,108 +91,120 @@ export default function SharedAccess() {
   // Public exposure is a legal-grade action: it goes through a proof-checked
   // dialog (state below) instead of window.confirm.
 
-  const menuItems = menuHorse && menuPacket
-    ? [
-        {
-          id: 'open-horse',
-          label: 'Open horse profile',
-          onSelect: () => navigate(`/horses/${menuHorse.id}`),
-        },
-        {
-          id: 'open-share',
-          label: 'Open listing',
-          onSelect: async () => {
-            const result = await recordSharedChannel(menuHorse.id, 'Direct Link');
-            if (!result.ok) {
-              pushToast({ title: 'Listing blocked', message: result.message, tone: 'error' });
-              return;
-            }
-            if (typeof window !== 'undefined') {
-              window.open(buildPublicShareUrl(menuPacket.sharePath, getShareToken(menuListing)), '_blank', 'noopener,noreferrer');
-            }
+  const menuItems =
+    menuHorse && menuPacket
+      ? [
+          {
+            id: 'open-horse',
+            label: 'Open horse profile',
+            onSelect: () => navigate(`/horses/${menuHorse.id}`),
           },
-        },
-        {
-          id: 'copy-link',
-          label: 'Copy listing link',
-          onSelect: () => {
-            void copyShareLink(menuHorse.id, menuPacket.sharePath, menuListing);
+          {
+            id: 'open-share',
+            label: 'Open listing',
+            onSelect: async () => {
+              const result = await recordSharedChannel(menuHorse.id, 'Direct Link');
+              if (!result.ok) {
+                pushToast({ title: 'Listing blocked', message: result.message, tone: 'error' });
+                return;
+              }
+              if (typeof window !== 'undefined') {
+                window.open(
+                  buildPublicShareUrl(menuPacket.sharePath, getShareToken(menuListing)),
+                  '_blank',
+                  'noopener,noreferrer',
+                );
+              }
+            },
           },
-        },
-        ...(menuListing
-          ? [
-              {
-                id: 'toggle-access',
-                label: menuListing.accessMode === 'Private Token' ? 'Make public' : 'Require token',
-                onSelect: async () => {
-                  const nextAccessMode = menuListing.accessMode === 'Private Token' ? 'Public Link' : 'Private Token';
-                  if (nextAccessMode === 'Public Link') {
-                    setPublicLinkPending({
-                      horseId: menuHorse.id,
-                      horseName: menuHorse.name,
-                      packetStatus: menuPacket.buyerProfileStatus,
-                    });
-                    return;
-                  }
+          {
+            id: 'copy-link',
+            label: 'Copy listing link',
+            onSelect: () => {
+              void copyShareLink(menuHorse.id, menuPacket.sharePath, menuListing);
+            },
+          },
+          ...(menuListing
+            ? [
+                {
+                  id: 'toggle-access',
+                  label: menuListing.accessMode === 'Private Token' ? 'Make public' : 'Require token',
+                  onSelect: async () => {
+                    const nextAccessMode = menuListing.accessMode === 'Private Token' ? 'Public Link' : 'Private Token';
+                    if (nextAccessMode === 'Public Link') {
+                      setPublicLinkPending({
+                        horseId: menuHorse.id,
+                        horseName: menuHorse.name,
+                        packetStatus: menuPacket.buyerProfileStatus,
+                      });
+                      return;
+                    }
 
-                  const result = await updateSharedListingAccessMode(menuHorse.id, nextAccessMode);
-                  pushToast({
-                    title: result.ok ? 'Access updated' : 'Access blocked',
-                    message: result.message,
-                    tone: result.ok ? 'success' : 'error',
-                  });
+                    const result = await updateSharedListingAccessMode(menuHorse.id, nextAccessMode);
+                    pushToast({
+                      title: result.ok ? 'Access updated' : 'Access blocked',
+                      message: result.message,
+                      tone: result.ok ? 'success' : 'error',
+                    });
+                  },
                 },
-              },
-              ...(menuListing.accessMode === 'Private Token'
-                ? [
-                    {
-                      id: 'rotate-token',
-                      label: 'Rotate token',
-                      onSelect: async () => {
-                        const result = await rotateSharedListingToken(menuHorse.id);
-                        pushToast({
-                          title: result.ok ? 'Token rotated' : 'Token blocked',
-                          message: result.message,
-                          tone: result.ok ? 'success' : 'error',
-                        });
+                ...(menuListing.accessMode === 'Private Token'
+                  ? [
+                      {
+                        id: 'rotate-token',
+                        label: 'Rotate token',
+                        onSelect: async () => {
+                          const result = await rotateSharedListingToken(menuHorse.id);
+                          pushToast({
+                            title: result.ok ? 'Token rotated' : 'Token blocked',
+                            message: result.message,
+                            tone: result.ok ? 'success' : 'error',
+                          });
+                        },
                       },
-                    },
-                  ]
-                : []),
-            ]
-          : []),
-        {
-          id: 'post-facebook',
-          label: 'Post to Facebook',
-          onSelect: async () => {
-            const release = await recordSharedChannel(menuHorse.id, 'Facebook');
-            if (!release.ok) {
-              pushToast({ title: 'Facebook share blocked', message: release.message, tone: 'error' });
-              return;
-            }
-            const result = openFacebookShareDialog(menuPacket.sharePath, getShareToken(menuListing));
-            pushToast({
-              title: result.ok ? 'Facebook ready' : 'Facebook unavailable',
-              message: result.message,
-              tone: result.ok ? 'success' : 'error',
-            });
+                    ]
+                  : []),
+              ]
+            : []),
+          {
+            id: 'post-facebook',
+            label: 'Post to Facebook',
+            onSelect: async () => {
+              const release = await recordSharedChannel(menuHorse.id, 'Facebook');
+              if (!release.ok) {
+                pushToast({ title: 'Facebook share blocked', message: release.message, tone: 'error' });
+                return;
+              }
+              const result = openFacebookShareDialog(menuPacket.sharePath, getShareToken(menuListing));
+              pushToast({
+                title: result.ok ? 'Facebook ready' : 'Facebook unavailable',
+                message: result.message,
+                tone: result.ok ? 'success' : 'error',
+              });
+            },
           },
-        },
-      ]
-    : [];
+        ]
+      : [];
 
   return (
     <>
-      <PageHeader
-        eyebrow="Sale Packets"
-        title="Sale listings"
-      />
+      <PageHeader eyebrow="Sale Packets" title="Sale listings" />
 
       <div className="metric-grid">
         <MetricCard label="Sale packets" value={`${activeSharedListings.length}`} detail="Active links" tone="blue" />
         <MetricCard label="Live links" value={`${liveSharedListings.length}`} detail="Open to buyers" tone="emerald" />
-        <MetricCard label="Facebook posts" value={`${facebookSharedListings.length}`} detail="Sent through Facebook" tone="slate" />
-        <MetricCard label="Open inquiries" value={`${openSharedLeads.length}`} detail="Leads tied to shared horses" tone="amber" />
+        <MetricCard
+          label="Facebook posts"
+          value={`${facebookSharedListings.length}`}
+          detail="Sent through Facebook"
+          tone="slate"
+        />
+        <MetricCard
+          label="Open inquiries"
+          value={`${openSharedLeads.length}`}
+          detail="Leads tied to shared horses"
+          tone="amber"
+        />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
@@ -233,7 +250,12 @@ export default function SharedAccess() {
                     role="button"
                     tabIndex={0}
                     onClick={() => navigate(packet.sharePath)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(packet.sharePath); } }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        navigate(packet.sharePath);
+                      }
+                    }}
                     onContextMenu={(event) => {
                       event.preventDefault();
                       setMenuState({ horseId: horse.id, x: event.clientX, y: event.clientY });
@@ -243,7 +265,9 @@ export default function SharedAccess() {
                       <div className="stack-item__title">{horse.name}</div>
                       <div className="status-inline">
                         <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
-                        <Pill tone={sharedListing?.state === 'Live' ? 'emerald' : 'blue'}>{sharedListing?.state ?? horse.sale.listingState}</Pill>
+                        <Pill tone={sharedListing?.state === 'Live' ? 'emerald' : 'blue'}>
+                          {sharedListing?.state ?? horse.sale.listingState}
+                        </Pill>
                         <Pill tone={sharedListing?.accessMode === 'Public Link' ? 'emerald' : 'slate'}>
                           {sharedListing?.accessMode ?? 'Private Token'}
                         </Pill>
@@ -277,7 +301,8 @@ export default function SharedAccess() {
                             pushToast({ title: 'Listing blocked', message: result.message, tone: 'error' });
                             return;
                           }
-                          if (typeof window !== 'undefined') window.open(publicShareUrl, '_blank', 'noopener,noreferrer');
+                          if (typeof window !== 'undefined')
+                            window.open(publicShareUrl, '_blank', 'noopener,noreferrer');
                         }}
                       >
                         Open listing
@@ -318,7 +343,8 @@ export default function SharedAccess() {
                           type="button"
                           onClick={async (event) => {
                             event.stopPropagation();
-                            const nextAccessMode = sharedListing.accessMode === 'Private Token' ? 'Public Link' : 'Private Token';
+                            const nextAccessMode =
+                              sharedListing.accessMode === 'Private Token' ? 'Public Link' : 'Private Token';
                             if (nextAccessMode === 'Public Link') {
                               setPublicLinkPending({
                                 horseId: horse.id,
@@ -345,7 +371,11 @@ export default function SharedAccess() {
               })}
             </div>
           ) : (
-            <EmptyState compact title="No sale packets" description="Add a horse to sale packets from the horse ledger or profile." />
+            <EmptyState
+              compact
+              title="No sale packets"
+              description="Add a horse to sale packets from the horse ledger or profile."
+            />
           )}
         </Panel>
       </div>
@@ -359,7 +389,11 @@ export default function SharedAccess() {
           'Shared fields include horse identity, approved sale photos, sale readiness, and approved packet documents only.',
           'The access change is recorded in the audit log.',
         ]}
-        proofSummary={<span>Current packet status: <strong>{publicLinkPending?.packetStatus ?? 'Unknown'}</strong></span>}
+        proofSummary={
+          <span>
+            Current packet status: <strong>{publicLinkPending?.packetStatus ?? 'Unknown'}</strong>
+          </span>
+        }
         acknowledgements={['I understand anyone with the link can view this packet without signing in.']}
         confirmLabel="Make public"
         onCancel={() => setPublicLinkPending(null)}
@@ -377,7 +411,13 @@ export default function SharedAccess() {
         }}
       />
 
-      <ContextMenu open={Boolean(menuItems.length)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
+      <ContextMenu
+        open={Boolean(menuItems.length)}
+        x={menuState?.x ?? 0}
+        y={menuState?.y ?? 0}
+        items={menuItems}
+        onClose={() => setMenuState(null)}
+      />
     </>
   );
 }

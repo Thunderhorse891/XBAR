@@ -13,7 +13,18 @@ const stripeSecretKey = process.env.STRIPE_SECRET_KEY || '';
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026-02-25.clover' }) : null;
 
-async function syncWorkspaceSubscription({ workspaceId, customerId, subscriptionId, priceId, status, currentPeriodEnd, quantity, eventId, eventType, payload }) {
+async function syncWorkspaceSubscription({
+  workspaceId,
+  customerId,
+  subscriptionId,
+  priceId,
+  status,
+  currentPeriodEnd,
+  quantity,
+  eventId,
+  eventType,
+  payload,
+}) {
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     throw new Error('Supabase admin credentials are not configured.');
@@ -85,6 +96,21 @@ export default async function handler(req, res) {
     const signature = req.headers['stripe-signature'];
     const event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
     const payload = event.data.object;
+
+    // Idempotency guard: Stripe retries deliveries, so a replayed event id is
+    // acknowledged without re-running the sync (no duplicate Stripe API calls,
+    // no racing upserts).
+    const supabaseForReplay = getSupabaseAdmin();
+    if (supabaseForReplay) {
+      const { data: processedEvents } = await supabaseForReplay
+        .from('workspace_subscription_events')
+        .select('id')
+        .eq('stripe_event_id', event.id)
+        .limit(1);
+      if (processedEvents?.length) {
+        return sendJson(res, 200, { ok: true, duplicate: true });
+      }
+    }
 
     if (event.type === 'checkout.session.completed' && payload.mode === 'subscription') {
       const workspaceId = payload.metadata?.workspace_id;

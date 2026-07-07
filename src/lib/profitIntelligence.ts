@@ -21,14 +21,21 @@ export function buildHorseProfitProfile(horse: HorseRecord, receipts: ExpenseRec
   const costBasis = Math.max(0, horse.costBasis ?? 0);
   const breakEven = costBasis + spend;
   const acceptedOffer = leads
-    .filter((lead) => lead.horseId === horse.id && ['Accepted', 'Deposit Due', 'Deposit Paid'].includes(lead.offerStatus ?? ''))
+    .filter(
+      (lead) =>
+        lead.horseId === horse.id && ['Accepted', 'Deposit Due', 'Deposit Paid'].includes(lead.offerStatus ?? ''),
+    )
     .sort((left, right) => (right.offerUpdatedAt ?? '').localeCompare(left.offerUpdatedAt ?? ''))[0];
   const salePrice = acceptedOffer?.counterOfferAmount ?? acceptedOffer?.offerAmount ?? horse.sale.askPrice;
   const profitLoss = salePrice - breakEven;
-  const categorySpend = Array.from(horseReceipts.reduce<Map<ExpenseCategory, number>>((totals, receipt) => {
-    totals.set(receipt.category, (totals.get(receipt.category) ?? 0) + receipt.amount);
-    return totals;
-  }, new Map())).map(([category, amount]) => ({ category, amount })).sort((left, right) => right.amount - left.amount);
+  const categorySpend = Array.from(
+    horseReceipts.reduce<Map<ExpenseCategory, number>>((totals, receipt) => {
+      totals.set(receipt.category, (totals.get(receipt.category) ?? 0) + receipt.amount);
+      return totals;
+    }, new Map()),
+  )
+    .map(([category, amount]) => ({ category, amount }))
+    .sort((left, right) => right.amount - left.amount);
 
   return {
     horseId: horse.id,
@@ -81,7 +88,8 @@ export function buildOfferDecision(
       acceptanceBlocked: false,
       overrideRequired: true,
       label: 'Cost proof missing',
-      recommendation: 'Add cost basis or linked expenses before relying on this margin, or explicitly approve the incomplete-cost override.',
+      recommendation:
+        'Add cost basis or linked expenses before relying on this margin, or explicitly approve the incomplete-cost override.',
     };
   }
 
@@ -130,5 +138,7 @@ export function buildOfferDecision(
 }
 
 export function buildProfitPortfolio(horses: HorseRecord[], receipts: ExpenseReceipt[], leads: SalesLead[]) {
-  return horses.map((horse) => buildHorseProfitProfile(horse, receipts, leads)).sort((left, right) => right.profitLoss - left.profitLoss);
+  return horses
+    .map((horse) => buildHorseProfitProfile(horse, receipts, leads))
+    .sort((left, right) => right.profitLoss - left.profitLoss);
 }

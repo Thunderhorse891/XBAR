@@ -6,7 +6,6 @@ const NETWORK_FIRST_ASSET_PATHS = [
   /^\/ocr\//,
   /^\/favicon\.svg$/,
   /^\/site\.webmanifest$/,
-  /^\/manifest\.webmanifest$/,
 ];
 
 self.addEventListener('install', (event) => {
@@ -15,12 +14,15 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(
-        keys
-          .filter((key) => key.startsWith(XBAR_RUNTIME_CACHE_PREFIX) && key !== XBAR_CACHE)
-          .map((key) => caches.delete(key)),
-      ))
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((key) => key.startsWith(XBAR_RUNTIME_CACHE_PREFIX) && key !== XBAR_CACHE)
+            .map((key) => caches.delete(key)),
+        ),
+      )
       .then(() => self.clients.claim()),
   );
 });
@@ -46,14 +48,16 @@ self.addEventListener('fetch', (event) => {
   if (!shouldUseNetworkFirst) return;
 
   event.respondWith(
-    fetch(request, { cache: 'no-store' }).then((response) => {
-      if (!response || response.status !== 200) return response;
-      const clone = response.clone();
-      caches.open(XBAR_CACHE).then((cache) => cache.put(request, clone));
-      return response;
-    }).catch(async () => {
-      const cached = await caches.match(request);
-      return cached || Response.error();
-    }),
+    fetch(request, { cache: 'no-store' })
+      .then((response) => {
+        if (!response || response.status !== 200) return response;
+        const clone = response.clone();
+        caches.open(XBAR_CACHE).then((cache) => cache.put(request, clone));
+        return response;
+      })
+      .catch(async () => {
+        const cached = await caches.match(request);
+        return cached || Response.error();
+      }),
   );
 });

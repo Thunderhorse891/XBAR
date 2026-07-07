@@ -15,12 +15,18 @@ function ensureTrailingSlash(value: string) {
 }
 
 function readBaseUrl() {
-  return (typeof import.meta !== 'undefined' && (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.BASE_URL) || '/';
+  return (
+    (typeof import.meta !== 'undefined' &&
+      (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.BASE_URL) ||
+    '/'
+  );
 }
 
 export function buildPublicShareUrl(path: string, shareToken?: string) {
   const normalizedPath = normalizeAppPath(path);
-  const tokenSuffix = shareToken ? `${normalizedPath.includes('?') ? '&' : '?'}t=${encodeURIComponent(shareToken)}` : '';
+  const tokenSuffix = shareToken
+    ? `${normalizedPath.includes('?') ? '&' : '?'}t=${encodeURIComponent(shareToken)}`
+    : '';
   const configuredBase = facebookConfig.publicAppUrl;
 
   if (configuredBase) {
@@ -66,11 +72,7 @@ export function openFacebookShareDialog(path: string, shareToken?: string): Face
     };
   }
 
-  const popup = window.open(
-    dialogUrl,
-    'xbar-facebook-share',
-    'popup=yes,width=720,height=760,noopener,noreferrer',
-  );
+  const popup = window.open(dialogUrl, 'xbar-facebook-share', 'popup=yes,width=720,height=760,noopener,noreferrer');
 
   if (!popup) {
     return {

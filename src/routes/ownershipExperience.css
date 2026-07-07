@@ -83,7 +83,10 @@
   color: #14202d;
   padding: 0 12px;
   outline: none;
-  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
 }
 
 .ownership-ops .field-textarea {
@@ -132,7 +135,10 @@
 .ownership-table__head,
 .ownership-row {
   display: grid;
-  grid-template-columns: minmax(150px, 1.05fr) minmax(150px, 1fr) minmax(86px, 0.5fr) minmax(140px, 0.74fr) minmax(150px, 0.9fr);
+  grid-template-columns: minmax(150px, 1.05fr) minmax(150px, 1fr) minmax(86px, 0.5fr) minmax(140px, 0.74fr) minmax(
+      150px,
+      0.9fr
+    );
   gap: 12px;
   align-items: center;
 }
@@ -344,7 +350,10 @@
   font-size: 0.82rem;
   font-weight: 700;
   cursor: pointer;
-  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
 }
 
 .ownership-status-button:hover:not(:disabled) {
@@ -446,7 +455,7 @@
 }
 
 .ownership-audit-divider::after {
-  content: "";
+  content: '';
   flex: 1;
   height: 1px;
   background: rgba(32, 49, 67, 0.14);
@@ -509,7 +518,10 @@
   flex-direction: column;
   gap: 14px;
   padding: 16px;
-  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .ownership-owner-card:hover {

@@ -10,7 +10,9 @@ export const emptyBreedingEconomics: BreedingEconomics = {
 
 export function buildBreedingRevenueProfile(horse: HorseRecord, receipts: ExpenseReceipt[]) {
   const economics = { ...emptyBreedingEconomics, ...horse.breedingEconomics };
-  const linkedCosts = receipts.filter((receipt) => receipt.horseId === horse.id).reduce((sum, receipt) => sum + receipt.amount, 0);
+  const linkedCosts = receipts
+    .filter((receipt) => receipt.horseId === horse.id)
+    .reduce((sum, receipt) => sum + receipt.amount, 0);
   const totalCosts = economics.breedingCosts + linkedCosts;
   const stallionRevenue = horse.segment === 'Stud' ? economics.studFee * economics.bookedMares : 0;
   const projectedValue = stallionRevenue + economics.mareProductionValue + economics.foalProjectedValue;

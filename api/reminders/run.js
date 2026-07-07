@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { sendJson } from '../_lib/http.js';
 import { getSupabaseAdmin } from '../_lib/supabase-admin.js';
 import { sendEmail, isEmailConfigured } from '../_lib/email.js';
@@ -17,7 +18,14 @@ export default async function handler(req, res) {
 
   const cronSecret = process.env.CRON_SECRET || '';
   const provided = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim() || '';
-  if (!cronSecret || provided !== cronSecret) {
+  // Constant-time comparison so the secret cannot be probed byte by byte.
+  const providedBuffer = Buffer.from(provided);
+  const secretBuffer = Buffer.from(cronSecret);
+  const secretsMatch =
+    providedBuffer.length === secretBuffer.length &&
+    cronSecret.length > 0 &&
+    timingSafeEqual(providedBuffer, secretBuffer);
+  if (!secretsMatch) {
     return sendJson(res, 401, { ok: false, message: 'Invalid or missing cron secret.' });
   }
 

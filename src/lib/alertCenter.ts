@@ -57,9 +57,17 @@ export function buildAlertDigest(items: OperationsPriorityItem[], now = new Date
   const overdueCount = alerts.filter((alert) => alert.timing === 'Overdue').length;
   const dueSoonCount = alerts.filter((alert) => alert.timing === 'Today' || alert.timing === 'This week').length;
   const dateStamp = now.toISOString().slice(0, 10);
-  const emailSubject = alerts.length ? `XBAR alerts: ${overdueCount} overdue, ${dueSoonCount} due soon` : 'XBAR alerts: no open expiration alerts';
+  const emailSubject = alerts.length
+    ? `XBAR alerts: ${overdueCount} overdue, ${dueSoonCount} due soon`
+    : 'XBAR alerts: no open expiration alerts';
   const emailBody = alerts.length
-    ? [`XBAR automated alert digest — ${dateStamp}`, '', ...alerts.map(formatLine), '', 'Open XBAR to clear these items from the Reminders queue.'].join('\n')
+    ? [
+        `XBAR automated alert digest — ${dateStamp}`,
+        '',
+        ...alerts.map(formatLine),
+        '',
+        'Open XBAR to clear these items from the Reminders queue.',
+      ].join('\n')
     : `XBAR automated alert digest — ${dateStamp}\n\nNo overdue or due-soon care, ownership, document, or sales alerts are currently open.`;
 
   return {
@@ -69,7 +77,9 @@ export function buildAlertDigest(items: OperationsPriorityItem[], now = new Date
     emailSubject,
     emailBody,
     browserTitle: alerts.length ? 'XBAR alerts need attention' : 'XBAR alerts clear',
-    browserBody: alerts.length ? `${overdueCount} overdue · ${dueSoonCount} due today/this week` : 'No urgent horse-care alerts are open.',
+    browserBody: alerts.length
+      ? `${overdueCount} overdue · ${dueSoonCount} due today/this week`
+      : 'No urgent horse-care alerts are open.',
   };
 }
 

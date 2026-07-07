@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { countReservedSharedAccessSeats, countReservedWorkspaceSeats, hasBuyerShareAccess, validateWorkspaceInvitation } from '../src/lib/workspaceAccess.js';
+import {
+  countReservedSharedAccessSeats,
+  countReservedWorkspaceSeats,
+  hasBuyerShareAccess,
+  validateWorkspaceInvitation,
+} from '../src/lib/workspaceAccess.js';
 import type { SharedListingRecord, WorkspaceInvitationRecord, WorkspaceMemberRecord } from '../src/types/xbar.js';
 
 const members: WorkspaceMemberRecord[] = [

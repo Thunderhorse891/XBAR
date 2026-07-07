@@ -6,13 +6,22 @@ import { loadHorseContext } from './_lib/horse-context.js';
 import { createSectionedPdf, assemblePacketPdf } from './_lib/pdf.js';
 import { sendEmail } from './_lib/email.js';
 import { recordAuditEvent } from './_lib/audit.js';
+import { enforceRateLimit } from './_lib/rate-limit.js';
+import { applyCors } from './_lib/cors.js';
 
-const DOCUMENT_BUCKET = process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
+const DOCUMENT_BUCKET =
+  process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
 const PACKET_BUCKET = process.env.SUPABASE_SALE_PACKET_BUCKET || 'sale-packets';
 const SIGNED_URL_TTL_SECONDS = 3600;
 const MAX_PACKET_ATTACHMENTS = 20;
 
+const RATE_LIMIT = { bucket: 'sale-packets', limit: 20, windowSeconds: 60 };
+
 export default async function handler(req, res) {
+  if (!applyCors(req, res, { methods: 'GET, POST, OPTIONS' })) {
+    return;
+  }
+
   const accessToken = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim() || '';
 
   if (req.method === 'GET') {
@@ -27,6 +36,10 @@ export default async function handler(req, res) {
 
   if (req.method !== 'POST') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
+  }
+
+  if (!(await enforceRateLimit(req, res, RATE_LIMIT))) {
+    return;
   }
 
   let body;
@@ -78,11 +91,12 @@ export default async function handler(req, res) {
 
     const buyerName = typeof body.buyerName === 'string' ? body.buyerName.trim() : '';
     const buyerEmail = typeof body.buyerEmail === 'string' ? body.buyerEmail.trim().toLowerCase() : '';
-    const watermarkText = typeof body.watermarkText === 'string' && body.watermarkText.trim()
-      ? body.watermarkText.trim()
-      : buyerName
-        ? `Copy for ${buyerName} - ${new Date().toISOString().slice(0, 10)}`
-        : '';
+    const watermarkText =
+      typeof body.watermarkText === 'string' && body.watermarkText.trim()
+        ? body.watermarkText.trim()
+        : buyerName
+          ? `Copy for ${buyerName} - ${new Date().toISOString().slice(0, 10)}`
+          : '';
 
     // Select the documents to bundle: caller-specified list, or every stored
     // document attached to the horse (originals + generated templates).
@@ -187,7 +201,12 @@ export default async function handler(req, res) {
       action: 'sale_packet.created',
       entityType: 'sale_packet',
       entityId: packetId,
-      metadata: { horseId, documents: packetDocs.length, buyerEmail: buyerEmail ? 'set' : '', emailed: Boolean(emailResult.ok) },
+      metadata: {
+        horseId,
+        documents: packetDocs.length,
+        buyerEmail: buyerEmail ? 'set' : '',
+        emailed: Boolean(emailResult.ok),
+      },
     });
 
     return sendJson(res, 200, {

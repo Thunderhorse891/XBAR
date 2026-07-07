@@ -35,7 +35,10 @@ export default function Sales() {
   const openRightDrawer = useUiStore((state) => state.openRightDrawer);
   const canManageSales = useCurrentRoleCapability('manageSales');
   const saleHorses = horses.filter(
-    (horse) => horse.sale.askPrice > 0 || horse.sale.listingState === 'Buyer Review' || horse.sale.listingState === 'Market Ready',
+    (horse) =>
+      horse.sale.askPrice > 0 ||
+      horse.sale.listingState === 'Buyer Review' ||
+      horse.sale.listingState === 'Market Ready',
   );
   const packetByHorseId = Object.fromEntries(
     saleHorses.map((horse) => [
@@ -49,7 +52,9 @@ export default function Sales() {
   );
   const liveShareCount = saleHorses.filter((horse) => packetByHorseId[horse.id]?.buyerSafe).length;
   const today = new Date().toISOString().slice(0, 10);
-  const overdueLeads = salesLeads.filter((lead) => lead.stage !== 'Closed' && lead.nextFollowUp && lead.nextFollowUp <= today);
+  const overdueLeads = salesLeads.filter(
+    (lead) => lead.stage !== 'Closed' && lead.nextFollowUp && lead.nextFollowUp <= today,
+  );
   const followUpsDue = salesLeads.filter((lead) => lead.nextFollowUp && lead.nextFollowUp <= today).length;
   const openProspects = salesLeads.filter((lead) => lead.stage !== 'Closed');
   const transferBlockedHorses = saleHorses.filter((horse) => horse.readiness.packetStatus === 'Needs Transfer Docs');
@@ -58,10 +63,16 @@ export default function Sales() {
   const [leadStage, setLeadStage] = useState(selectedLead?.stage ?? 'New');
   const [leadLastTouch, setLeadLastTouch] = useState(selectedLead?.lastTouch ?? new Date().toISOString().slice(0, 10));
   const [leadNextFollowUp, setLeadNextFollowUp] = useState(selectedLead?.nextFollowUp ?? '');
-  const [leadOfferAmount, setLeadOfferAmount] = useState(selectedLead?.offerAmount ? String(selectedLead.offerAmount) : '');
-  const [leadCounterOfferAmount, setLeadCounterOfferAmount] = useState(selectedLead?.counterOfferAmount ? String(selectedLead.counterOfferAmount) : '');
+  const [leadOfferAmount, setLeadOfferAmount] = useState(
+    selectedLead?.offerAmount ? String(selectedLead.offerAmount) : '',
+  );
+  const [leadCounterOfferAmount, setLeadCounterOfferAmount] = useState(
+    selectedLead?.counterOfferAmount ? String(selectedLead.counterOfferAmount) : '',
+  );
   const [leadOfferStatus, setLeadOfferStatus] = useState(selectedLead?.offerStatus ?? 'Draft');
-  const [leadDepositAmount, setLeadDepositAmount] = useState(selectedLead?.depositAmount ? String(selectedLead.depositAmount) : '');
+  const [leadDepositAmount, setLeadDepositAmount] = useState(
+    selectedLead?.depositAmount ? String(selectedLead.depositAmount) : '',
+  );
   const [leadDepositStatus, setLeadDepositStatus] = useState(selectedLead?.depositStatus ?? 'Not Requested');
   const [leadNotes, setLeadNotes] = useState(selectedLead?.notes ?? '');
   const [leadOutcome, setLeadOutcome] = useState(selectedLead?.outcome ?? 'Won');
@@ -87,17 +98,28 @@ export default function Sales() {
     setLeadError('');
   }, [selectedLead]);
 
-  const authorizedSeller = workspaceProfile.defaultOwnerName || workspaceProfile.ranchManagerName || workspaceProfile.businessName;
+  const authorizedSeller =
+    workspaceProfile.defaultOwnerName || workspaceProfile.ranchManagerName || workspaceProfile.businessName;
   const selectedHorse = selectedLead ? horses.find((horse) => horse.id === selectedLead.horseId) : undefined;
   const offerDecision = selectedHorse
-    ? buildOfferDecision(selectedHorse, expenseReceipts, Number(leadOfferAmount) || 0, Number(leadCounterOfferAmount) || 0)
+    ? buildOfferDecision(
+        selectedHorse,
+        expenseReceipts,
+        Number(leadOfferAmount) || 0,
+        Number(leadCounterOfferAmount) || 0,
+      )
     : null;
   const menuLead = menuState?.type === 'lead' ? salesLeads.find((lead) => lead.id === menuState.id) : undefined;
   const menuHorse = menuState?.type === 'horse' ? saleHorses.find((horse) => horse.id === menuState.id) : undefined;
-  const menuListing = menuHorse ? sharedListings.find((listing) => listing.horseId === menuHorse.id && listing.state !== 'Archived') : undefined;
+  const menuListing = menuHorse
+    ? sharedListings.find((listing) => listing.horseId === menuHorse.id && listing.state !== 'Archived')
+    : undefined;
   const menuPacket = menuHorse ? packetByHorseId[menuHorse.id] : undefined;
   const menuShareUrl = menuPacket
-    ? buildPublicShareUrl(menuPacket.sharePath, menuListing?.accessMode === 'Private Token' ? menuListing.shareToken : undefined)
+    ? buildPublicShareUrl(
+        menuPacket.sharePath,
+        menuListing?.accessMode === 'Private Token' ? menuListing.shareToken : undefined,
+      )
     : '';
   const openHorseDetails = (horse: (typeof saleHorses)[number]) => {
     const packet = packetByHorseId[horse.id];
@@ -151,16 +173,30 @@ export default function Sales() {
                 id: 'qualified',
                 label: 'Mark qualified',
                 onSelect: () => {
-                  const result = updateSalesLead(menuLead.id, { stage: 'Qualified', lastTouch: new Date().toISOString().slice(0, 10) });
-                  pushToast({ title: result.ok ? 'Lead updated' : 'Lead update blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                  const result = updateSalesLead(menuLead.id, {
+                    stage: 'Qualified',
+                    lastTouch: new Date().toISOString().slice(0, 10),
+                  });
+                  pushToast({
+                    title: result.ok ? 'Lead updated' : 'Lead update blocked',
+                    message: result.message,
+                    tone: result.ok ? 'success' : 'error',
+                  });
                 },
               },
               {
                 id: 'offer',
                 label: 'Move to offer',
                 onSelect: () => {
-                  const result = updateSalesLead(menuLead.id, { stage: 'Offer', lastTouch: new Date().toISOString().slice(0, 10) });
-                  pushToast({ title: result.ok ? 'Lead updated' : 'Lead update blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+                  const result = updateSalesLead(menuLead.id, {
+                    stage: 'Offer',
+                    lastTouch: new Date().toISOString().slice(0, 10),
+                  });
+                  pushToast({
+                    title: result.ok ? 'Lead updated' : 'Lead update blocked',
+                    message: result.message,
+                    tone: result.ok ? 'success' : 'error',
+                  });
                 },
               },
             ]
@@ -188,7 +224,11 @@ export default function Sales() {
             label: 'Open sale listing',
             onSelect: async () => {
               const result = await recordSharedChannel(menuHorse.id, 'Direct Link');
-              pushToast({ title: result.ok ? 'Buyer packet opened' : 'Release blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
+              pushToast({
+                title: result.ok ? 'Buyer packet opened' : 'Release blocked',
+                message: result.message,
+                tone: result.ok ? 'success' : 'error',
+              });
               if (result.ok && typeof window !== 'undefined') {
                 window.open(menuShareUrl, '_blank', 'noopener,noreferrer');
               }
@@ -236,9 +276,24 @@ export default function Sales() {
 
       <div className="metric-grid">
         <MetricCard label="Sale horses" value={`${saleHorses.length}`} detail="Active pricing or pending review" />
-        <MetricCard label="Prospects" value={`${openProspects.length}`} detail="Open inquiries across all channels" tone="blue" />
-        <MetricCard label="Shared records" value={`${sharedAccess.savedHorses}`} detail="Listings open in shared access" tone="blue" />
-        <MetricCard label="Transfer blockers" value={`${transferBlockedHorses.length}`} detail="Listings with ownership or document friction" tone="amber" />
+        <MetricCard
+          label="Prospects"
+          value={`${openProspects.length}`}
+          detail="Open inquiries across all channels"
+          tone="blue"
+        />
+        <MetricCard
+          label="Shared records"
+          value={`${sharedAccess.savedHorses}`}
+          detail="Listings open in shared access"
+          tone="blue"
+        />
+        <MetricCard
+          label="Transfer blockers"
+          value={`${transferBlockedHorses.length}`}
+          detail="Listings with ownership or document friction"
+          tone="amber"
+        />
       </div>
 
       <div className="dashboard-grid dashboard-grid--primary">
@@ -256,116 +311,152 @@ export default function Sales() {
           )}
           {saleHorses.length ? (
             <div className="horse-grid">
-              {saleHorses.filter((h) => !listingQuery.trim() || h.name.toLowerCase().includes(listingQuery.toLowerCase()) || h.segment.toLowerCase().includes(listingQuery.toLowerCase())).map((horse) => (
-                <div
-                  key={horse.id}
-                  className="horse-card horse-card--interactive"
-                  role="group"
-                  tabIndex={0}
-                  aria-label={`Sale listing for ${horse.name}`}
-                  title="Press Enter to open the horse record. Press Shift+F10 for actions."
-                  onClick={() => navigate(`/horses/${horse.id}`)}
-                  onKeyDown={(event) => {
-                    if (event.target !== event.currentTarget) return;
-                    if (event.key === 'Enter' || event.key === ' ') {
+              {saleHorses
+                .filter(
+                  (h) =>
+                    !listingQuery.trim() ||
+                    h.name.toLowerCase().includes(listingQuery.toLowerCase()) ||
+                    h.segment.toLowerCase().includes(listingQuery.toLowerCase()),
+                )
+                .map((horse) => (
+                  <div
+                    key={horse.id}
+                    className="horse-card horse-card--interactive"
+                    role="group"
+                    tabIndex={0}
+                    aria-label={`Sale listing for ${horse.name}`}
+                    title="Press Enter to open the horse record. Press Shift+F10 for actions."
+                    onClick={() => navigate(`/horses/${horse.id}`)}
+                    onKeyDown={(event) => {
+                      if (event.target !== event.currentTarget) return;
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        navigate(`/horses/${horse.id}`);
+                      }
+                    }}
+                    onContextMenu={(event) => {
                       event.preventDefault();
-                      navigate(`/horses/${horse.id}`);
-                    }
-                  }}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    openMenu('horse', horse.id, event.clientX, event.clientY);
-                  }}
-                >
-                  {(() => {
-                    const packet = packetByHorseId[horse.id];
-                    const sharedListing = sharedListings.find((listing) => listing.horseId === horse.id && listing.state !== 'Archived');
-                    const saleHold = buildSaleHold(horse, documents, ownershipRecords.find((record) => record.horseId === horse.id));
-                    const publicShareUrl = buildPublicShareUrl(
-                      packet.sharePath,
-                      sharedListing?.accessMode === 'Private Token' ? sharedListing.shareToken : undefined,
-                    );
+                      openMenu('horse', horse.id, event.clientX, event.clientY);
+                    }}
+                  >
+                    {(() => {
+                      const packet = packetByHorseId[horse.id];
+                      const sharedListing = sharedListings.find(
+                        (listing) => listing.horseId === horse.id && listing.state !== 'Archived',
+                      );
+                      const saleHold = buildSaleHold(
+                        horse,
+                        documents,
+                        ownershipRecords.find((record) => record.horseId === horse.id),
+                      );
+                      const publicShareUrl = buildPublicShareUrl(
+                        packet.sharePath,
+                        sharedListing?.accessMode === 'Private Token' ? sharedListing.shareToken : undefined,
+                      );
 
-                    return (
-                      <>
-                        <div className="horse-card__media">
-                          <HorseMediaPreview
-                            src={horse.profileImage || horse.gallery[0]?.url}
-                            name={horse.name}
-                            imageClassName="horse-card__image"
-                            fallbackClassName="horse-card__image-fallback"
-                          />
-                          <div className="horse-card__media-copy">
-                            <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
-                            <ActionMenuButton
-                              className="icon-button icon-button--compact"
-                              label={`Open actions for ${horse.name}`}
-                              onOpen={(x, y) => openMenu('horse', horse.id, x, y)}
-                            >
-                              <DotsIcon className="icon-button__icon" />
-                            </ActionMenuButton>
+                      return (
+                        <>
+                          <div className="horse-card__media">
+                            <HorseMediaPreview
+                              src={horse.profileImage || horse.gallery[0]?.url}
+                              name={horse.name}
+                              imageClassName="horse-card__image"
+                              fallbackClassName="horse-card__image-fallback"
+                            />
+                            <div className="horse-card__media-copy">
+                              <Pill tone={packet.buyerProfileTone}>{packet.buyerProfileStatus}</Pill>
+                              <ActionMenuButton
+                                className="icon-button icon-button--compact"
+                                label={`Open actions for ${horse.name}`}
+                                onOpen={(x, y) => openMenu('horse', horse.id, x, y)}
+                              >
+                                <DotsIcon className="icon-button__icon" />
+                              </ActionMenuButton>
+                            </div>
                           </div>
-                        </div>
-                        <div className="horse-card__body">
-                          <div className="horse-card__title">{horse.name}</div>
-                          <div className="horse-card__subtitle">{horse.sale.listingState}</div>
-                          <Pill tone={saleHold.held ? 'rose' : sharedListing?.releaseConfirmedAt ? 'emerald' : 'amber'}>
-                            {saleHold.held ? `Hold: ${saleHold.reasons[0]}` : sharedListing?.releaseConfirmedAt ? 'Seller release confirmed' : 'Seller release required'}
-                          </Pill>
-                          <p className="horse-card__summary">{horse.summary}</p>
-                          <div className="inline-metrics">
-                            <span>{packet.score}% record complete</span>
-                            <span>{packet.shareSlug}</span>
-                          </div>
-                          <div className="horse-card__footer">
-                            <span>{horse.sale.watchlistCount} watchers</span>
-                            <span>{formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)}</span>
-                          </div>
-                          <div className="inline-actions inline-actions--card">
-                            <button
-                              className="button button--ghost button--compact"
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                openHorseDetails(horse);
-                              }}
+                          <div className="horse-card__body">
+                            <div className="horse-card__title">{horse.name}</div>
+                            <div className="horse-card__subtitle">{horse.sale.listingState}</div>
+                            <Pill
+                              tone={saleHold.held ? 'rose' : sharedListing?.releaseConfirmedAt ? 'emerald' : 'amber'}
                             >
-                              Quick view
-                            </button>
-                            <button
-                              className="button button--ghost button--compact"
-                              type="button"
-                              onClick={async (event) => {
-                                event.stopPropagation();
-                                const result = await recordSharedChannel(horse.id, 'Direct Link');
-                                pushToast({ title: result.ok ? 'Buyer packet opened' : 'Release blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
-                                if (result.ok) window.open(publicShareUrl, '_blank', 'noopener,noreferrer');
-                              }}
-                            >
-                              Open sale listing
-                            </button>
-                            <button
-                              className="button button--primary button--compact"
-                              type="button"
-                              disabled={!canManageSales || saleHold.held || !sharedListing || Boolean(sharedListing.releaseConfirmedAt)}
-                              onClick={async (event) => {
-                                event.stopPropagation();
-                                const result = await confirmSharedListingRelease(horse.id, authorizedSeller);
-                                pushToast({ title: result.ok ? 'Release confirmed' : 'Confirmation blocked', message: result.message, tone: result.ok ? 'success' : 'error' });
-                              }}
-                            >
-                              {sharedListing?.releaseConfirmedAt ? 'Release confirmed' : 'Confirm legal release'}
-                            </button>
+                              {saleHold.held
+                                ? `Hold: ${saleHold.reasons[0]}`
+                                : sharedListing?.releaseConfirmedAt
+                                  ? 'Seller release confirmed'
+                                  : 'Seller release required'}
+                            </Pill>
+                            <p className="horse-card__summary">{horse.summary}</p>
+                            <div className="inline-metrics">
+                              <span>{packet.score}% record complete</span>
+                              <span>{packet.shareSlug}</span>
+                            </div>
+                            <div className="horse-card__footer">
+                              <span>{horse.sale.watchlistCount} watchers</span>
+                              <span>{formatCompactCurrency(horse.sale.askPrice || horse.insuredValue)}</span>
+                            </div>
+                            <div className="inline-actions inline-actions--card">
+                              <button
+                                className="button button--ghost button--compact"
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  openHorseDetails(horse);
+                                }}
+                              >
+                                Quick view
+                              </button>
+                              <button
+                                className="button button--ghost button--compact"
+                                type="button"
+                                onClick={async (event) => {
+                                  event.stopPropagation();
+                                  const result = await recordSharedChannel(horse.id, 'Direct Link');
+                                  pushToast({
+                                    title: result.ok ? 'Buyer packet opened' : 'Release blocked',
+                                    message: result.message,
+                                    tone: result.ok ? 'success' : 'error',
+                                  });
+                                  if (result.ok) window.open(publicShareUrl, '_blank', 'noopener,noreferrer');
+                                }}
+                              >
+                                Open sale listing
+                              </button>
+                              <button
+                                className="button button--primary button--compact"
+                                type="button"
+                                disabled={
+                                  !canManageSales ||
+                                  saleHold.held ||
+                                  !sharedListing ||
+                                  Boolean(sharedListing.releaseConfirmedAt)
+                                }
+                                onClick={async (event) => {
+                                  event.stopPropagation();
+                                  const result = await confirmSharedListingRelease(horse.id, authorizedSeller);
+                                  pushToast({
+                                    title: result.ok ? 'Release confirmed' : 'Confirmation blocked',
+                                    message: result.message,
+                                    tone: result.ok ? 'success' : 'error',
+                                  });
+                                }}
+                              >
+                                {sharedListing?.releaseConfirmedAt ? 'Release confirmed' : 'Confirm legal release'}
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-              ))}
+                        </>
+                      );
+                    })()}
+                  </div>
+                ))}
             </div>
           ) : (
-            <EmptyState compact title="No sale horses yet" description="Move a horse into review or market ready to populate the sales board." />
+            <EmptyState
+              compact
+              title="No sale horses yet"
+              description="Move a horse into review or market ready to populate the sales board."
+            />
           )}
         </Panel>
 
@@ -428,7 +519,11 @@ export default function Sales() {
               })}
             </div>
           ) : (
-            <EmptyState compact title="No leads yet" description="Create a lead from a horse record to start the pipeline." />
+            <EmptyState
+              compact
+              title="No leads yet"
+              description="Create a lead from a horse record to start the pipeline."
+            />
           )}
         </Panel>
       </div>
@@ -463,7 +558,12 @@ export default function Sales() {
               <div className="form-grid form-grid--tight">
                 <label className="field-stack">
                   <span className="field-label">Stage</span>
-                  <select className="field-input" value={leadStage} onChange={(event) => setLeadStage(event.target.value as typeof leadStage)} disabled={!canManageSales}>
+                  <select
+                    className="field-input"
+                    value={leadStage}
+                    onChange={(event) => setLeadStage(event.target.value as typeof leadStage)}
+                    disabled={!canManageSales}
+                  >
                     {(['New', 'Qualified', 'Offer', 'Closed'] as const).map((stage) => (
                       <option key={stage} value={stage}>
                         {stage}
@@ -473,46 +573,124 @@ export default function Sales() {
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Last touch</span>
-                  <input className="field-input" type="date" value={leadLastTouch} onChange={(event) => setLeadLastTouch(event.target.value)} disabled={!canManageSales} />
+                  <input
+                    className="field-input"
+                    type="date"
+                    value={leadLastTouch}
+                    onChange={(event) => setLeadLastTouch(event.target.value)}
+                    disabled={!canManageSales}
+                  />
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Next follow-up</span>
-                  <input className="field-input" type="date" value={leadNextFollowUp} onChange={(event) => setLeadNextFollowUp(event.target.value)} disabled={!canManageSales} />
+                  <input
+                    className="field-input"
+                    type="date"
+                    value={leadNextFollowUp}
+                    onChange={(event) => setLeadNextFollowUp(event.target.value)}
+                    disabled={!canManageSales}
+                  />
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Offer amount</span>
-                  <input className="field-input" type="number" min="0" value={leadOfferAmount} onChange={(event) => { setLeadOfferAmount(event.target.value); setAcceptMarginOverride(false); }} disabled={!canManageSales} />
+                  <input
+                    className="field-input"
+                    type="number"
+                    min="0"
+                    value={leadOfferAmount}
+                    onChange={(event) => {
+                      setLeadOfferAmount(event.target.value);
+                      setAcceptMarginOverride(false);
+                    }}
+                    disabled={!canManageSales}
+                  />
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Counteroffer</span>
-                  <input className="field-input" type="number" min="0" value={leadCounterOfferAmount} onChange={(event) => { setLeadCounterOfferAmount(event.target.value); setAcceptMarginOverride(false); }} disabled={!canManageSales} />
+                  <input
+                    className="field-input"
+                    type="number"
+                    min="0"
+                    value={leadCounterOfferAmount}
+                    onChange={(event) => {
+                      setLeadCounterOfferAmount(event.target.value);
+                      setAcceptMarginOverride(false);
+                    }}
+                    disabled={!canManageSales}
+                  />
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Offer status</span>
-                  <select className="field-input" value={leadOfferStatus} onChange={(event) => setLeadOfferStatus(event.target.value as typeof leadOfferStatus)} disabled={!canManageSales}>
-                    {(['Draft', 'Submitted', 'Countered', 'Accepted', 'Rejected', 'Deposit Due', 'Deposit Paid'] as const).map((status) => <option key={status} value={status}>{status}</option>)}
+                  <select
+                    className="field-input"
+                    value={leadOfferStatus}
+                    onChange={(event) => setLeadOfferStatus(event.target.value as typeof leadOfferStatus)}
+                    disabled={!canManageSales}
+                  >
+                    {(
+                      [
+                        'Draft',
+                        'Submitted',
+                        'Countered',
+                        'Accepted',
+                        'Rejected',
+                        'Deposit Due',
+                        'Deposit Paid',
+                      ] as const
+                    ).map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Deposit amount</span>
-                  <input className="field-input" type="number" min="0" value={leadDepositAmount} onChange={(event) => setLeadDepositAmount(event.target.value)} disabled={!canManageSales} />
+                  <input
+                    className="field-input"
+                    type="number"
+                    min="0"
+                    value={leadDepositAmount}
+                    onChange={(event) => setLeadDepositAmount(event.target.value)}
+                    disabled={!canManageSales}
+                  />
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Deposit status</span>
-                  <select className="field-input" value={leadDepositStatus} onChange={(event) => setLeadDepositStatus(event.target.value as typeof leadDepositStatus)} disabled={!canManageSales}>
-                    {(['Not Requested', 'Due', 'Paid'] as const).map((status) => <option key={status} value={status}>{status}</option>)}
+                  <select
+                    className="field-input"
+                    value={leadDepositStatus}
+                    onChange={(event) => setLeadDepositStatus(event.target.value as typeof leadDepositStatus)}
+                    disabled={!canManageSales}
+                  >
+                    {(['Not Requested', 'Due', 'Paid'] as const).map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 <label className="field-stack">
                   <span className="field-label">Closed outcome</span>
-                  <select className="field-input" value={leadOutcome} onChange={(event) => setLeadOutcome(event.target.value as 'Won' | 'Lost')} disabled={!canManageSales}>
+                  <select
+                    className="field-input"
+                    value={leadOutcome}
+                    onChange={(event) => setLeadOutcome(event.target.value as 'Won' | 'Lost')}
+                    disabled={!canManageSales}
+                  >
                     <option value="Won">Won</option>
                     <option value="Lost">Lost</option>
                   </select>
                 </label>
                 <label className="field-stack field-stack--wide">
                   <span className="field-label">Notes</span>
-                  <textarea className="field-textarea" rows={4} value={leadNotes} onChange={(event) => setLeadNotes(event.target.value)} disabled={!canManageSales} />
+                  <textarea
+                    className="field-textarea"
+                    rows={4}
+                    value={leadNotes}
+                    onChange={(event) => setLeadNotes(event.target.value)}
+                    disabled={!canManageSales}
+                  />
                 </label>
               </div>
               {leadError ? <div className="field-error">{leadError}</div> : null}
@@ -573,7 +751,11 @@ export default function Sales() {
               </div>
             </>
           ) : (
-            <EmptyState compact title="No lead selected" description="Pick a lead from the pipeline to edit its lifecycle and notes." />
+            <EmptyState
+              compact
+              title="No lead selected"
+              description="Pick a lead from the pipeline to edit its lifecycle and notes."
+            />
           )}
         </Panel>
 
@@ -601,7 +783,13 @@ export default function Sales() {
         </Panel>
       </div>
 
-      <ContextMenu open={Boolean(menuState)} x={menuState?.x ?? 0} y={menuState?.y ?? 0} items={menuItems} onClose={() => setMenuState(null)} />
+      <ContextMenu
+        open={Boolean(menuState)}
+        x={menuState?.x ?? 0}
+        y={menuState?.y ?? 0}
+        items={menuItems}
+        onClose={() => setMenuState(null)}
+      />
     </>
   );
 }

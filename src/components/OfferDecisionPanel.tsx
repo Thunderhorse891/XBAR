@@ -36,12 +36,30 @@ export function OfferDecisionPanel({
       title={`${horseName} deal decision`}
       description="Connect the buyer offer to real horse costs before accepting, countering, or requesting a deposit."
       meta={<Pill tone={tone}>{decision.label}</Pill>}
-      action={<Link className="button button--ghost button--compact" to="/expenses">Review costs</Link>}
+      action={
+        <Link className="button button--ghost button--compact" to="/expenses">
+          Review costs
+        </Link>
+      }
     >
       <div className="metric-grid">
-        <MetricCard label="Effective offer" value={formatCompactCurrency(decision.effectiveOffer)} detail="Counteroffer takes priority" tone={tone} />
-        <MetricCard label="Break-even" value={formatCompactCurrency(decision.breakEven)} detail="Cost basis plus linked expenses" />
-        <MetricCard label="Protected floor" value={formatCompactCurrency(decision.safeSalePrice)} detail="Break-even plus protected margin" tone="blue" />
+        <MetricCard
+          label="Effective offer"
+          value={formatCompactCurrency(decision.effectiveOffer)}
+          detail="Counteroffer takes priority"
+          tone={tone}
+        />
+        <MetricCard
+          label="Break-even"
+          value={formatCompactCurrency(decision.breakEven)}
+          detail="Cost basis plus linked expenses"
+        />
+        <MetricCard
+          label="Protected floor"
+          value={formatCompactCurrency(decision.safeSalePrice)}
+          detail="Break-even plus protected margin"
+          tone="blue"
+        />
         <MetricCard
           label="Profit at offer"
           value={formatCompactCurrency(decision.expectedProfit)}
@@ -57,7 +75,13 @@ export function OfferDecisionPanel({
               <div className="stack-item__title">Recommended seller action</div>
               <div className="stack-item__copy">{decision.recommendation}</div>
             </div>
-            <Pill tone={tone}>{decision.acceptanceBlocked ? 'Acceptance blocked' : decision.overrideRequired ? 'Approval required' : 'Ready'}</Pill>
+            <Pill tone={tone}>
+              {decision.acceptanceBlocked
+                ? 'Acceptance blocked'
+                : decision.overrideRequired
+                  ? 'Approval required'
+                  : 'Ready'}
+            </Pill>
           </div>
         </div>
       </div>
@@ -81,7 +105,12 @@ export function OfferDecisionPanel({
       ) : null}
 
       <div className="inline-actions" style={{ marginTop: 14 }}>
-        <button className="button button--ghost button--compact" type="button" onClick={onCounterAtFloor} disabled={!canManageSales || decision.safeSalePrice <= 0}>
+        <button
+          className="button button--ghost button--compact"
+          type="button"
+          onClick={onCounterAtFloor}
+          disabled={!canManageSales || decision.safeSalePrice <= 0}
+        >
           Counter at protected floor
         </button>
         <button

@@ -17,7 +17,10 @@ function userFacingSource(filePath: string) {
 
 test('every legacy route redirects to a canonical product route', () => {
   for (const [from, to] of Object.entries(legacyRouteRedirects)) {
-    assert.ok(canonicalSet.has(to as (typeof canonicalRoutes)[keyof typeof canonicalRoutes]), `${from} must redirect to a canonical route, got ${to}`);
+    assert.ok(
+      canonicalSet.has(to as (typeof canonicalRoutes)[keyof typeof canonicalRoutes]),
+      `${from} must redirect to a canonical route, got ${to}`,
+    );
     assert.ok(!canonicalSet.has(from as never), `${from} is legacy and must not also be canonical`);
   }
 });
@@ -84,9 +87,14 @@ test('active user-facing surfaces use plain product language', () => {
     'src/routes/TodayWork.tsx',
     'src/routes/layouts/MainLayout.tsx',
   ];
-  const forbiddenLanguage = /\b(?:Animals|Paperwork|paperwork|Vault|buyer room|Buyer room|buyer folder|Buyer folder|Deal Room|sale documents|Sale documents|Command Center|operator|Global Asset|Initialize|initialize)\b/;
+  const forbiddenLanguage =
+    /\b(?:Animals|Paperwork|paperwork|Vault|buyer room|Buyer room|buyer folder|Buyer folder|Deal Room|sale documents|Sale documents|Command Center|operator|Global Asset|Initialize|initialize)\b/;
 
   for (const filePath of activeFiles) {
-    assert.doesNotMatch(userFacingSource(filePath), forbiddenLanguage, `${filePath} should use Horses, Documents, Buyer follow-up, and Sale Packets language`);
+    assert.doesNotMatch(
+      userFacingSource(filePath),
+      forbiddenLanguage,
+      `${filePath} should use Horses, Documents, Buyer follow-up, and Sale Packets language`,
+    );
   }
 });

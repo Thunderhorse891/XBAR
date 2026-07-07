@@ -10,13 +10,7 @@ const statusLabels: Record<SalePacketSlot['status'], string> = {
   missing: 'Missing',
 };
 
-export function SalePacketSlots({
-  slots,
-  compact = false,
-}: {
-  slots: SalePacketSlot[];
-  compact?: boolean;
-}) {
+export function SalePacketSlots({ slots, compact = false }: { slots: SalePacketSlot[]; compact?: boolean }) {
   return (
     <div className={classNames('sale-packet-grid', compact && 'sale-packet-grid--compact')}>
       {slots.map((slot) => (

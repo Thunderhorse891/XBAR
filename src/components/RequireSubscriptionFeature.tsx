@@ -11,5 +11,15 @@ export function RequireSharedListings({ children }: { children: ReactNode }) {
 
   if (!blocked) return <>{children}</>;
 
-  return <EmptyState title="Unlock sale listings" description={blocked} action={<Link className="button button--primary" to={billingPathForTier('Professional')}>Compare billing</Link>} />;
+  return (
+    <EmptyState
+      title="Unlock sale listings"
+      description={blocked}
+      action={
+        <Link className="button button--primary" to={billingPathForTier('Professional')}>
+          Compare billing
+        </Link>
+      }
+    />
+  );
 }

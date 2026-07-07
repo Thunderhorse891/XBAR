@@ -34,7 +34,11 @@ const pillars = [
   {
     title: 'Ownership integrity',
     copy: 'Track legal owner, co-owner structure, transfer status, and compliance deadlines before missing documents block a sale.',
-    details: ['Ownership documents per horse', 'Transfer status and deadlines surfaced', 'Every change lands in the audit log'],
+    details: [
+      'Ownership documents per horse',
+      'Transfer status and deadlines surfaced',
+      'Every change lands in the audit log',
+    ],
   },
   {
     title: 'Faster sale readiness',
@@ -89,19 +93,23 @@ const trustPoints = [
 const questions = [
   {
     question: 'Can I start before cloud sync is configured?',
-    answer: 'Yes. XBAR has a local-first workspace, so you can evaluate the system and begin organizing records before enabling cloud services.',
+    answer:
+      'Yes. XBAR has a local-first workspace, so you can evaluate the system and begin organizing records before enabling cloud services.',
   },
   {
     question: 'What happens to my records if I change plans?',
-    answer: 'Your records stay intact. Plans change capacity and collaboration access; they do not erase the operating history you built.',
+    answer:
+      'Your records stay intact. Plans change capacity and collaboration access; they do not erase the operating history you built.',
   },
   {
     question: 'Is XBAR only for large operations?',
-    answer: 'No. Starter is designed for a smaller records-driven operation. Professional and Ranch Ops add the collaboration, sale-readiness, and capacity larger programs need.',
+    answer:
+      'No. Starter is designed for a smaller records-driven operation. Professional and Ranch Ops add the collaboration, sale-readiness, and capacity larger programs need.',
   },
   {
     question: 'How does checkout work?',
-    answer: 'A workspace owner reviews the plan inside XBAR and completes the plan change through secure Stripe checkout when billing is configured.',
+    answer:
+      'A workspace owner reviews the plan inside XBAR and completes the plan change through secure Stripe checkout when billing is configured.',
   },
 ];
 
@@ -163,7 +171,9 @@ const signupPath = (plan?: SubscriptionTier) => `/login?mode=signup${plan ? `&pl
 function Wordmark() {
   return (
     <span className="xbar-wordmark">
-      <span className="xbar-wordmark__mark" aria-hidden="true"><XbarMark tone="mono" /></span>
+      <span className="xbar-wordmark__mark" aria-hidden="true">
+        <XbarMark tone="mono" />
+      </span>
       <span className="xbar-wordmark__copy">
         <strong>XBAR</strong>
         <span>Horse records &amp; sales software</span>
@@ -174,7 +184,10 @@ function Wordmark() {
 
 function CommandPreview() {
   return (
-    <figure className="command-brief revenue-console" aria-label="Example XBAR horse record showing verified ownership, a compliance deadline, document review status, and sale packet readiness">
+    <figure
+      className="command-brief revenue-console"
+      aria-label="Example XBAR horse record showing verified ownership, a compliance deadline, document review status, and sale packet readiness"
+    >
       <div className="revenue-console__top">
         <span className="revenue-console__mark" aria-hidden="true">
           <XbarMark tone="mono" />
@@ -277,8 +290,8 @@ function RevenueIntelligenceShowcase() {
         <p className="revenue-kicker">Operational preview</p>
         <h2 id="revenue-intelligence-title">Health records, documents, and ownership — all in one place.</h2>
         <p>
-          XBAR is organized around the moments that decide whether a horse can be trusted,
-          transferred, shown, or sold. Every module answers a real operating question.
+          XBAR is organized around the moments that decide whether a horse can be trusted, transferred, shown, or sold.
+          Every module answers a real operating question.
         </p>
         <div className="revenue-intelligence-showcase__actions">
           <Link className="public-action public-action--primary" to={signupPath('Professional')}>
@@ -305,11 +318,26 @@ function RevenueIntelligenceShowcase() {
           ))}
         </div>
         <ol className="revenue-record-preview__chain" aria-label="Record timeline">
-          <li><span>01</span><strong>Identity</strong></li>
-          <li><span>02</span><strong>Ownership</strong></li>
-          <li><span>03</span><strong>Care</strong></li>
-          <li><span>04</span><strong>Documents</strong></li>
-          <li><span>05</span><strong>Sale packet</strong></li>
+          <li>
+            <span>01</span>
+            <strong>Identity</strong>
+          </li>
+          <li>
+            <span>02</span>
+            <strong>Ownership</strong>
+          </li>
+          <li>
+            <span>03</span>
+            <strong>Care</strong>
+          </li>
+          <li>
+            <span>04</span>
+            <strong>Documents</strong>
+          </li>
+          <li>
+            <span>05</span>
+            <strong>Sale packet</strong>
+          </li>
         </ol>
       </div>
 
@@ -322,9 +350,18 @@ function RevenueIntelligenceShowcase() {
                 <strong>{card.name}</strong>
               </div>
               <dl>
-                <div><dt>Documents</dt><dd>{card.proof}</dd></div>
-                <div><dt>Signal</dt><dd>{card.signal}</dd></div>
-                <div><dt>Value</dt><dd>{card.value}</dd></div>
+                <div>
+                  <dt>Documents</dt>
+                  <dd>{card.proof}</dd>
+                </div>
+                <div>
+                  <dt>Signal</dt>
+                  <dd>{card.signal}</dd>
+                </div>
+                <div>
+                  <dt>Value</dt>
+                  <dd>{card.value}</dd>
+                </div>
               </dl>
             </article>
           ))}
@@ -356,10 +393,18 @@ export default function Landing() {
           <Wordmark />
         </Link>
         <nav className="revenue-nav__actions" aria-label="Account">
-          <Link className="public-action public-action--quiet" to="/login" onClick={() => trackCta('navigation', '/login')}>
+          <Link
+            className="public-action public-action--quiet"
+            to="/login"
+            onClick={() => trackCta('navigation', '/login')}
+          >
             Sign in
           </Link>
-          <Link className="public-action public-action--primary" to={signupPath('Professional')} onClick={() => trackPlan('Professional')}>
+          <Link
+            className="public-action public-action--primary"
+            to={signupPath('Professional')}
+            onClick={() => trackPlan('Professional')}
+          >
             Create your workspace
           </Link>
         </nav>
@@ -372,10 +417,15 @@ export default function Landing() {
             <span>Simple record-keeping for horse ranches and breeders.</span>
           </h1>
           <p className="revenue-hero__lead">
-            One trusted record for every horse, document, buyer, and transfer. XBAR turns scattered documents into sale-ready proof your team can actually operate from.
+            One trusted record for every horse, document, buyer, and transfer. XBAR turns scattered documents into
+            sale-ready proof your team can actually operate from.
           </p>
           <div className="revenue-hero__actions">
-            <Link className="public-action public-action--primary" to={signupPath('Professional')} onClick={() => trackPlan('Professional')}>
+            <Link
+              className="public-action public-action--primary"
+              to={signupPath('Professional')}
+              onClick={() => trackPlan('Professional')}
+            >
               Create your workspace
             </Link>
             <Link className="public-action" to="/login" onClick={() => trackCta('hero', '/login')}>
@@ -396,8 +446,8 @@ export default function Landing() {
           <p className="revenue-kicker">The record itself</p>
           <h2 id="reveal-heading">Every horse, resolved to a single source of truth.</h2>
           <p>
-            Ownership, transfer status, compliance, documents, and sale readiness &mdash; verified by a
-            person, audit-logged, and ready to share the moment a buyer asks.
+            Ownership, transfer status, compliance, documents, and sale readiness &mdash; verified by a person,
+            audit-logged, and ready to share the moment a buyer asks.
           </p>
         </div>
         <CommandPreview />
@@ -411,7 +461,10 @@ export default function Landing() {
             <p className="revenue-kicker">One path for every document</p>
             <h2 id="pipeline-heading">From documents to ready records, in five steps.</h2>
           </div>
-          <p>Every file moves through one pipeline: upload, local OCR, human review, ownership review, then watermarked sharing. No shortcuts, no untracked copies.</p>
+          <p>
+            Every file moves through one pipeline: upload, local OCR, human review, ownership review, then watermarked
+            sharing. No shortcuts, no untracked copies.
+          </p>
         </div>
         <ol className="revenue-pipeline">
           {pipeline.map((item, index) => (
@@ -431,7 +484,10 @@ export default function Landing() {
               <p className="revenue-kicker">What ranchers get</p>
               <h2 id="pillars-heading">Built around the workflows that cost horse businesses time and money.</h2>
             </div>
-            <p>XBAR is not trying to be every kind of horse software. It is designed to solve the record, document, and buyer-confidence problems that directly affect operations and sales.</p>
+            <p>
+              XBAR is not trying to be every kind of horse software. It is designed to solve the record, document, and
+              buyer-confidence problems that directly affect operations and sales.
+            </p>
           </div>
           <div className="revenue-pillars">
             {pillars.map((pillar) => (
@@ -453,8 +509,14 @@ export default function Landing() {
         <div className="revenue-pain">
           <div className="revenue-pain__copy">
             <p className="revenue-kicker">Why now</p>
-            <h2 id="pain-heading">Most horse businesses still run critical records through email, folders, binders, and memory.</h2>
-            <p>That works until a buyer asks for documentation, ownership details need to be verified, or transfer documents slow down a sale. XBAR reduces that chaos and gives your team one trusted operational record for every horse.</p>
+            <h2 id="pain-heading">
+              Most horse businesses still run critical records through email, folders, binders, and memory.
+            </h2>
+            <p>
+              That works until a buyer asks for documentation, ownership details need to be verified, or transfer
+              documents slow down a sale. XBAR reduces that chaos and gives your team one trusted operational record for
+              every horse.
+            </p>
           </div>
           <ul className="revenue-pain__list">
             {painPoints.map((point) => (
@@ -471,7 +533,10 @@ export default function Landing() {
               <p className="revenue-kicker">Trust is a product feature</p>
               <h2 id="trust-heading">Designed for records people rely on.</h2>
             </div>
-            <p>Horse operations need software that is clear about what is known, what is missing, and what can safely be shared.</p>
+            <p>
+              Horse operations need software that is clear about what is known, what is missing, and what can safely be
+              shared.
+            </p>
           </div>
           <div className="revenue-trust-grid">
             {trustPoints.map((point) => (
@@ -491,7 +556,10 @@ export default function Landing() {
               <p className="revenue-kicker">Who it's for</p>
               <h2 id="segments-heading">Built for the operations where documents decide the deal.</h2>
             </div>
-            <p>From a single broodmare program to a multi-rider barn, XBAR gives every horse one record your team and your buyers can trust.</p>
+            <p>
+              From a single broodmare program to a multi-rider barn, XBAR gives every horse one record your team and
+              your buyers can trust.
+            </p>
           </div>
           <div className="revenue-trust-grid">
             {segments.map((segment) => (
@@ -510,7 +578,10 @@ export default function Landing() {
             <p className="revenue-kicker">Pricing</p>
             <h2 id="pricing-heading">Built for operations where documents have real financial consequences.</h2>
           </div>
-          <p>Every plan protects the core horse record. Higher levels add collaboration, shared access, and substantially more document and storage capacity.</p>
+          <p>
+            Every plan protects the core horse record. Higher levels add collaboration, shared access, and substantially
+            more document and storage capacity.
+          </p>
         </div>
         <div className="revenue-plan-grid">
           {tiers.map((tier) => {
@@ -565,9 +636,16 @@ export default function Landing() {
       <section className="revenue-cta" aria-labelledby="cta-heading">
         <p className="revenue-kicker">See whether XBAR fits your operation</p>
         <h2 id="cta-heading">Give every horse a record buyers can trust.</h2>
-        <p>Start with the records you already have. XBAR shows what is complete, what needs verification, and what is ready to share.</p>
+        <p>
+          Start with the records you already have. XBAR shows what is complete, what needs verification, and what is
+          ready to share.
+        </p>
         <div className="revenue-cta__actions">
-          <Link className="public-action public-action--primary" to={signupPath('Professional')} onClick={() => trackPlan('Professional')}>
+          <Link
+            className="public-action public-action--primary"
+            to={signupPath('Professional')}
+            onClick={() => trackPlan('Professional')}
+          >
             Create your workspace
           </Link>
           <Link className="public-action" to="/login" onClick={() => trackCta('closing', '/login')}>

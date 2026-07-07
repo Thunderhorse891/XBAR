@@ -2,9 +2,11 @@ export type ChipTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral' | '
 
 export type TaskPriority = 'Revenue Blocker' | 'High' | 'Medium' | 'Normal' | 'Planned';
 
-export type WorkCategory = 'Setup' | 'Animal Care' | 'Ownership' | 'Pasture' | 'Feed' | 'Documents' | 'Sales' | 'Equipment';
+export type WorkCategory =
+  'Setup' | 'Animal Care' | 'Ownership' | 'Pasture' | 'Feed' | 'Documents' | 'Sales' | 'Equipment';
 
-export type WorkLinkedType = 'Workspace' | 'Animal' | 'Pasture' | 'Document' | 'Sale Packet' | 'Herd Group' | 'Equipment' | 'Ownership';
+export type WorkLinkedType =
+  'Workspace' | 'Animal' | 'Pasture' | 'Document' | 'Sale Packet' | 'Herd Group' | 'Equipment' | 'Ownership';
 
 export type WorkTask = {
   id: string;

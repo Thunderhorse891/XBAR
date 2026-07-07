@@ -15,7 +15,9 @@ function safeParseLog(value: string | null): LocalSalePacketLogEntry[] {
   if (!value) return [];
   try {
     const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((entry) => entry && typeof entry === 'object') as LocalSalePacketLogEntry[] : [];
+    return Array.isArray(parsed)
+      ? (parsed.filter((entry) => entry && typeof entry === 'object') as LocalSalePacketLogEntry[])
+      : [];
   } catch {
     return [];
   }

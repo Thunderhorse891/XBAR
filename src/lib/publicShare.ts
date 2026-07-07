@@ -47,7 +47,10 @@ export type PublicDocumentDTO = Pick<
 
 export type PublicOwnershipDTO = Pick<OwnershipRecord, 'id' | 'horseId' | 'transferStatus' | 'confidence'>;
 
-export type PublicSharedListingDTO = Pick<SharedListingRecord, 'id' | 'horseId' | 'sharePath' | 'accessMode' | 'state' | 'channels' | 'updatedAt'> & {
+export type PublicSharedListingDTO = Pick<
+  SharedListingRecord,
+  'id' | 'horseId' | 'sharePath' | 'accessMode' | 'state' | 'channels' | 'updatedAt'
+> & {
   shareToken?: string;
 };
 
@@ -76,7 +79,11 @@ function parsePublicBuyerProfilePayload(value: unknown): PublicBuyerProfilePaylo
   // and strip any sensitive fields before use.
   return {
     horse: sanitizePublicHorse(horse as unknown as HorseRecord),
-    documents: Array.isArray(value.documents) ? value.documents.map(sanitizePublicDocument).filter((document): document is PublicDocumentDTO => Boolean(document)) : [],
+    documents: Array.isArray(value.documents)
+      ? value.documents
+          .map(sanitizePublicDocument)
+          .filter((document): document is PublicDocumentDTO => Boolean(document))
+      : [],
     ownershipRecord: sanitizePublicOwnership(value.ownershipRecord),
     sharedListing: sanitizePublicSharedListing(value.sharedListing),
   };
@@ -178,35 +185,39 @@ export function sanitizeHorseForBuyerView(horse: HorseRecord): PublicHorseDTO {
 }
 
 export function sanitizeDocumentForBuyerView(doc: DocumentRecord): PublicDocumentDTO {
-  return sanitizePublicDocument(doc) ?? {
-    id: doc.id,
-    title: doc.title,
-    type: doc.type,
-    horseId: doc.horseId,
-    uploadedAt: doc.uploadedAt,
-    source: doc.source,
-    state: doc.state,
-    confidence: doc.confidence,
-    duplicateRisk: doc.duplicateRisk,
-    extractedTextPreview: '',
-    summary: doc.summary,
-    entities: doc.entities ?? {},
-    fileName: doc.fileName,
-    mimeType: doc.mimeType,
-    fileSizeBytes: doc.fileSizeBytes,
-  };
+  return (
+    sanitizePublicDocument(doc) ?? {
+      id: doc.id,
+      title: doc.title,
+      type: doc.type,
+      horseId: doc.horseId,
+      uploadedAt: doc.uploadedAt,
+      source: doc.source,
+      state: doc.state,
+      confidence: doc.confidence,
+      duplicateRisk: doc.duplicateRisk,
+      extractedTextPreview: '',
+      summary: doc.summary,
+      entities: doc.entities ?? {},
+      fileName: doc.fileName,
+      mimeType: doc.mimeType,
+      fileSizeBytes: doc.fileSizeBytes,
+    }
+  );
 }
 
 export function sanitizeSharedListingForBuyerView(listing: SharedListingRecord): PublicSharedListingDTO {
-  return sanitizePublicSharedListing(listing) ?? {
-    id: listing.id,
-    horseId: listing.horseId,
-    sharePath: listing.sharePath,
-    accessMode: listing.accessMode,
-    state: listing.state,
-    channels: listing.channels,
-    updatedAt: listing.updatedAt,
-  };
+  return (
+    sanitizePublicSharedListing(listing) ?? {
+      id: listing.id,
+      horseId: listing.horseId,
+      sharePath: listing.sharePath,
+      accessMode: listing.accessMode,
+      state: listing.state,
+      channels: listing.channels,
+      updatedAt: listing.updatedAt,
+    }
+  );
 }
 
 type PublicBuyerProfileResult =
@@ -266,10 +277,7 @@ export async function loadPublicBuyerProfile(params: {
   };
 }
 
-export async function trackPublicBuyerProfileView(params: {
-  sharePath: string;
-  shareToken?: string;
-}) {
+export async function trackPublicBuyerProfileView(params: { sharePath: string; shareToken?: string }) {
   if (!isSupabaseConfigured()) {
     return;
   }

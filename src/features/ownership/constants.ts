@@ -7,12 +7,7 @@ export const ownershipRoles: OwnershipStake['role'][] = [
   'Prospective Buyer',
 ];
 
-export const transferStatuses: TransferStatus[] = [
-  'Clear',
-  'Pending Signatures',
-  'AQHA Review',
-  'Attention Required',
-];
+export const transferStatuses: TransferStatus[] = ['Clear', 'Pending Signatures', 'AQHA Review', 'Attention Required'];
 
 export const ownershipDocumentTypes: DocumentType[] = [
   'Bill of Sale',

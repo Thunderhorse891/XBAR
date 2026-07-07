@@ -19,7 +19,10 @@ const copies = [
   // variants are ever requested. The worker picks one based on SIMD support.
   ['node_modules/tesseract.js-core/tesseract-core-lstm.wasm.js', join(outDir, 'tesseract-core-lstm.wasm.js')],
   ['node_modules/tesseract.js-core/tesseract-core-simd-lstm.wasm.js', join(outDir, 'tesseract-core-simd-lstm.wasm.js')],
-  ['node_modules/tesseract.js-core/tesseract-core-relaxedsimd-lstm.wasm.js', join(outDir, 'tesseract-core-relaxedsimd-lstm.wasm.js')],
+  [
+    'node_modules/tesseract.js-core/tesseract-core-relaxedsimd-lstm.wasm.js',
+    join(outDir, 'tesseract-core-relaxedsimd-lstm.wasm.js'),
+  ],
   ['node_modules/@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz', join(langDir, 'eng.traineddata.gz')],
 ];
 

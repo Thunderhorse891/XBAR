@@ -4,13 +4,15 @@ import App from './App';
 import { CloudBootstrap } from './components/CloudBootstrap';
 import ErrorBoundary from './components/ErrorBoundary';
 import { InteractionBootstrap } from './components/InteractionBootstrap';
+import { registerGlobalErrorHandlers } from './lib/globalErrorHandlers';
 import { registerOfflineRuntime } from './lib/offlineRuntime';
 import './index.css';
 import './mobilePolish.css';
 
 const rootElement = document.getElementById('root');
-if (!rootElement) throw new Error("Root element not found.");
+if (!rootElement) throw new Error('Root element not found.');
 
+registerGlobalErrorHandlers();
 void registerOfflineRuntime();
 
 ReactDOM.createRoot(rootElement).render(
@@ -20,5 +22,5 @@ ReactDOM.createRoot(rootElement).render(
       <InteractionBootstrap />
       <App />
     </ErrorBoundary>
-  </React.StrictMode>
+  </React.StrictMode>,
 );

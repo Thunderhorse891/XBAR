@@ -199,7 +199,11 @@ export function validateLeadInput(input: LeadInput) {
 }
 
 export function validateHorseNoteInput(note: Pick<HorseNote, 'title' | 'body' | 'author' | 'tone'>) {
-  return requireValue(note.title, 'Note title', 2) ?? requireValue(note.body, 'Note body', 4) ?? requireValue(note.author, 'Author', 2);
+  return (
+    requireValue(note.title, 'Note title', 2) ??
+    requireValue(note.body, 'Note body', 4) ??
+    requireValue(note.author, 'Author', 2)
+  );
 }
 
 export function validateLocationPatch(patch: LocationPatch) {
@@ -218,7 +222,10 @@ export function validateAssetPatch(patch: AssetPatch) {
     return 'Assigned to is required when an asset is assigned or in service.';
   }
 
-  if ((patch.status === 'In Service' || patch.condition === 'Service Soon' || patch.condition === 'Attention Required') && !patch.nextService?.trim()) {
+  if (
+    (patch.status === 'In Service' || patch.condition === 'Service Soon' || patch.condition === 'Attention Required') &&
+    !patch.nextService?.trim()
+  ) {
     return 'Next service date is required for maintenance-sensitive assets.';
   }
 
@@ -244,7 +251,9 @@ export function summarizeBatch(batch: IntakeBatch, documents: DocumentRecord[]):
   const fileCount = batchDocuments.length;
   const processedCount = batchDocuments.filter((document) => document.state !== 'Queued').length;
   const needsReviewCount = batchDocuments.filter((document) => document.state === 'Needs Review').length;
-  const matchedCount = batchDocuments.filter((document) => document.state === 'Matched' || document.state === 'Ready').length;
+  const matchedCount = batchDocuments.filter(
+    (document) => document.state === 'Matched' || document.state === 'Ready',
+  ).length;
 
   let state: IntakeBatch['state'] = 'Queued';
   if (needsReviewCount > 0) {

@@ -1,18 +1,31 @@
 import { randomUUID } from 'node:crypto';
-import { readJsonBody, sendJson } from '../_lib/http.js';
-import { requireWorkspaceAccess } from '../_lib/supabase-admin.js';
-import { getTemplateById, renderTemplate } from '../_lib/document-templates.js';
-import { getWorkspaceEntitlements, tierIncludesPlan } from '../_lib/entitlements.js';
-import { loadHorseContext } from '../_lib/horse-context.js';
-import { createSectionedPdf } from '../_lib/pdf.js';
-import { recordAuditEvent } from '../_lib/audit.js';
+import { readJsonBody, sendJson } from './http.js';
+import { requireWorkspaceAccess } from './supabase-admin.js';
+import { getTemplateById, renderTemplate } from './document-templates.js';
+import { getWorkspaceEntitlements, tierIncludesPlan } from './entitlements.js';
+import { loadHorseContext } from './horse-context.js';
+import { createSectionedPdf } from './pdf.js';
+import { recordAuditEvent } from './audit.js';
+import { enforceRateLimit } from './rate-limit.js';
+import { applyCors } from './cors.js';
 
-const DOCUMENT_BUCKET = process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
+const DOCUMENT_BUCKET =
+  process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
 const SIGNED_URL_TTL_SECONDS = 3600;
 
+const RATE_LIMIT = { bucket: 'documents-template', limit: 20, windowSeconds: 60 };
+
 export default async function handler(req, res) {
+  if (!applyCors(req, res)) {
+    return;
+  }
+
   if (req.method !== 'POST') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
+  }
+
+  if (!(await enforceRateLimit(req, res, RATE_LIMIT))) {
+    return;
   }
 
   const accessToken = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim() || '';
@@ -72,7 +85,8 @@ export default async function handler(req, res) {
     const context = { ...loaded.context };
     if (templateId === 'sales-packet') {
       context.packet = {
-        documentList: loaded.documents.map((doc) => `${doc.document_type}: ${doc.title}`).join('; ') || 'No documents attached yet',
+        documentList:
+          loaded.documents.map((doc) => `${doc.document_type}: ${doc.title}`).join('; ') || 'No documents attached yet',
       };
     }
     // Caller-supplied placeholder values ({"buyer.name": "...", "sale.price": "..."}).

@@ -68,12 +68,14 @@ type RelationalMembershipRow = {
 const userRoles: UserRole[] = ['Admin', 'Ranch Manager', 'Owner', 'Medical Lead', 'Sales Lead'];
 
 function sanitizeStorageSegment(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 80) || 'record';
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 80) || 'record'
+  );
 }
 
 function normalizeWorkspaceRole(value: unknown): UserRole | null {
@@ -107,9 +109,11 @@ function extractPayloadItem<T>(row: RelationalWorkspaceRow | null | undefined): 
 }
 
 function pickNewestTimestamp(values: Array<string | null | undefined>) {
-  return values
-    .filter((value): value is string => Boolean(value))
-    .sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? '';
+  return (
+    values
+      .filter((value): value is string => Boolean(value))
+      .sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? ''
+  );
 }
 
 function normalizeBackup(backup: unknown): CloudWorkspaceBackup | null {
@@ -395,7 +399,7 @@ export async function recordBuyerRoomSellerResponseInCloud(input: {
       };
     }
 
-    const event = payload.event ? publicShareEventToBuyerRoomEvent(payload.event) ?? undefined : undefined;
+    const event = payload.event ? (publicShareEventToBuyerRoomEvent(payload.event) ?? undefined) : undefined;
     return {
       ok: true,
       cloudAttempted: true,
@@ -406,7 +410,10 @@ export async function recordBuyerRoomSellerResponseInCloud(input: {
     return {
       ok: false,
       cloudAttempted: true,
-      message: error instanceof Error ? error.message : 'The seller response could not be recorded in the cloud buyer timeline.',
+      message:
+        error instanceof Error
+          ? error.message
+          : 'The seller response could not be recorded in the cloud buyer timeline.',
     };
   }
 }
@@ -647,7 +654,10 @@ async function saveWorkspaceSnapshotToCloud(backup: unknown, session: Session, u
   } as const;
 }
 
-async function saveWorkspaceBackupToRelationalCloud(backup: unknown, session: Session): Promise<RelationalMirrorResult> {
+async function saveWorkspaceBackupToRelationalCloud(
+  backup: unknown,
+  session: Session,
+): Promise<RelationalMirrorResult> {
   const normalized = normalizeBackup(backup);
   if (!normalized) {
     return {
@@ -864,7 +874,10 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
     subscriptionResult,
     profileResult,
   ] = await Promise.all([
-    client.from('workspace_memberships').select('email, role, status, payload, updated_at').eq('workspace_id', workspaceId),
+    client
+      .from('workspace_memberships')
+      .select('email, role, status, payload, updated_at')
+      .eq('workspace_id', workspaceId),
     client.from('workspace_invitations').select('payload, updated_at').eq('workspace_id', workspaceId),
     client.from('horses').select('payload, updated_at').eq('workspace_id', workspaceId),
     client.from('documents').select('payload, updated_at').eq('workspace_id', workspaceId),
@@ -874,7 +887,11 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
     client.from('ranch_assets').select('payload, updated_at').eq('workspace_id', workspaceId),
     client.from('sales_leads').select('payload, updated_at').eq('workspace_id', workspaceId),
     client.from('shared_listings').select('payload, updated_at').eq('workspace_id', workspaceId),
-    client.from('workspace_subscription_profiles').select('payload, updated_at').eq('workspace_id', workspaceId).maybeSingle(),
+    client
+      .from('workspace_subscription_profiles')
+      .select('payload, updated_at')
+      .eq('workspace_id', workspaceId)
+      .maybeSingle(),
     client.from('workspace_profiles').select('payload, updated_at').eq('workspace_id', workspaceId).maybeSingle(),
   ]);
 
@@ -955,17 +972,17 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
 
   const hasWorkspaceData = Boolean(
     backup.workspace?.horses?.length ||
-      backup.workspace?.workspaceMembers?.length ||
-      backup.workspace?.workspaceInvitations?.length ||
-      backup.workspace?.documents?.length ||
-      backup.workspace?.intakeBatches?.length ||
-      backup.workspace?.ownershipRecords?.length ||
-      backup.workspace?.expenseReceipts?.length ||
-      backup.workspace?.ranchAssets?.length ||
-      backup.workspace?.salesLeads?.length ||
-      backup.workspace?.sharedListings?.length ||
-      backup.workspace?.subscription ||
-      backup.workspace?.workspaceProfile,
+    backup.workspace?.workspaceMembers?.length ||
+    backup.workspace?.workspaceInvitations?.length ||
+    backup.workspace?.documents?.length ||
+    backup.workspace?.intakeBatches?.length ||
+    backup.workspace?.ownershipRecords?.length ||
+    backup.workspace?.expenseReceipts?.length ||
+    backup.workspace?.ranchAssets?.length ||
+    backup.workspace?.salesLeads?.length ||
+    backup.workspace?.sharedListings?.length ||
+    backup.workspace?.subscription ||
+    backup.workspace?.workspaceProfile,
   );
 
   if (!hasWorkspaceData) {
@@ -998,7 +1015,9 @@ export async function saveWorkspaceBackupToCloud(backup: unknown) {
         const snapshot = await saveWorkspaceSnapshotToCloud(backup, session, updatedAt);
         return {
           ok: true,
-          message: snapshot.ok ? 'Cloud sync complete. Relational workspace updated.' : `Relational workspace updated, but snapshot backup failed: ${snapshot.message}`,
+          message: snapshot.ok
+            ? 'Cloud sync complete. Relational workspace updated.'
+            : `Relational workspace updated, but snapshot backup failed: ${snapshot.message}`,
           updatedAt,
         };
       }
@@ -1177,7 +1196,9 @@ export async function getDocumentAccessUrl(document: Pick<DocumentRecord, 'fileU
     } as const;
   }
 
-  const { data, error } = await client.storage.from(supabaseConfig.documentBucket).createSignedUrl(document.storagePath, 60 * 5);
+  const { data, error } = await client.storage
+    .from(supabaseConfig.documentBucket)
+    .createSignedUrl(document.storagePath, 60 * 5);
   if (error || !data?.signedUrl) {
     return {
       ok: false,
@@ -1280,7 +1301,10 @@ export async function revokeWorkspaceInvitationInCloud(invitationId: string, acc
     return { ok: false, message: error.message } as const;
   }
 
-  return { ok: true, message: acceptedAt ? 'Workspace invite accepted in cloud.' : 'Workspace invite revoked in cloud.' } as const;
+  return {
+    ok: true,
+    message: acceptedAt ? 'Workspace invite accepted in cloud.' : 'Workspace invite revoked in cloud.',
+  } as const;
 }
 
 export async function removeWorkspaceMemberFromCloud(member: WorkspaceMemberRecord) {

@@ -1,7 +1,13 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, PageHeader, Panel, Pill } from '@/components/app-ui';
-import { loadWeatherForecast, resolveWeatherByQuery, searchWeatherLocations, type WeatherForecast, type WeatherLocationResult } from '@/lib/weather';
+import {
+  loadWeatherForecast,
+  resolveWeatherByQuery,
+  searchWeatherLocations,
+  type WeatherForecast,
+  type WeatherLocationResult,
+} from '@/lib/weather';
 import { useXbarStore } from '@/store/useXbarStore';
 
 type WeatherState =
@@ -115,7 +121,12 @@ export default function Weather() {
       <PageHeader
         title="Weather"
         actions={
-          <button className="button button--ghost button--compact" type="button" onClick={handleUseMyLocation} disabled={searching}>
+          <button
+            className="button button--ghost button--compact"
+            type="button"
+            onClick={handleUseMyLocation}
+            disabled={searching}
+          >
             Use my location
           </button>
         }
@@ -145,9 +156,23 @@ export default function Weather() {
         <>
           <div className="metric-grid">
             <MetricCard label="Current temp" value={`${forecast.current.temperatureF}°F`} tone="blue" />
-            <MetricCard label="Rain risk" value={`${forecast.today.rainChance}%`} tone={forecast.today.rainChance >= 50 ? 'rose' : 'slate'} />
-            <MetricCard label="Wind" value={`${forecast.current.windMph} mph`} detail={`Gusts ${forecast.current.gustMph} mph`} tone={forecast.current.windMph >= 20 ? 'amber' : 'emerald'} />
-            <MetricCard label="UV" value={`${forecast.today.uvIndex}`} detail={forecast.current.weatherLabel} tone={forecast.today.uvIndex >= 8 ? 'amber' : 'slate'} />
+            <MetricCard
+              label="Rain risk"
+              value={`${forecast.today.rainChance}%`}
+              tone={forecast.today.rainChance >= 50 ? 'rose' : 'slate'}
+            />
+            <MetricCard
+              label="Wind"
+              value={`${forecast.current.windMph} mph`}
+              detail={`Gusts ${forecast.current.gustMph} mph`}
+              tone={forecast.current.windMph >= 20 ? 'amber' : 'emerald'}
+            />
+            <MetricCard
+              label="UV"
+              value={`${forecast.today.uvIndex}`}
+              detail={forecast.current.weatherLabel}
+              tone={forecast.today.uvIndex >= 8 ? 'amber' : 'slate'}
+            />
           </div>
 
           <div className="detail-grid">
@@ -168,7 +193,9 @@ export default function Weather() {
                   <div className="inline-metrics">
                     <span>Humidity {forecast.current.humidity}%</span>
                     <span>Precip {forecast.current.precipitationIn} in</span>
-                    <span>Sunrise {forecast.today.sunrise || 'N/A'} · Sunset {forecast.today.sunset || 'N/A'}</span>
+                    <span>
+                      Sunrise {forecast.today.sunrise || 'N/A'} · Sunset {forecast.today.sunset || 'N/A'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -234,13 +261,18 @@ export default function Weather() {
                     });
                     setState({ status: 'ready', forecast: nextForecast });
                   } catch (error) {
-                    setState({ status: 'error', error: error instanceof Error ? error.message : 'Weather could not load.' });
+                    setState({
+                      status: 'error',
+                      error: error instanceof Error ? error.message : 'Weather could not load.',
+                    });
                   } finally {
                     setSearching(false);
                   }
                 }}
               >
-                <div className="stack-item__title">{[match.name, match.admin1, match.country].filter(Boolean).join(', ')}</div>
+                <div className="stack-item__title">
+                  {[match.name, match.admin1, match.country].filter(Boolean).join(', ')}
+                </div>
                 <div className="stack-item__copy">
                   {match.latitude.toFixed(3)}, {match.longitude.toFixed(3)}
                 </div>

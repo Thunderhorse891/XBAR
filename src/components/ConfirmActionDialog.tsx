@@ -66,14 +66,21 @@ export function ConfirmActionDialog({
       : '';
 
   return (
-    <AlertDialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onCancel(); }}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onCancel();
+      }}
+    >
       <AlertDialogContent className={`confirm-dialog confirm-dialog--${tone}`}>
         <AlertDialogHeader>
           <AlertDialogTitle className="confirm-dialog__title">{title}</AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div>
               <ul className="confirm-dialog__consequences">
-                {consequences.map((line) => <li key={line}>{line}</li>)}
+                {consequences.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
               </ul>
             </div>
           </AlertDialogDescription>
@@ -113,10 +120,16 @@ export function ConfirmActionDialog({
           </div>
         )}
 
-        {blockerHint && <p className="confirm-dialog__hint" role="status">{blockerHint}</p>}
+        {blockerHint && (
+          <p className="confirm-dialog__hint" role="status">
+            {blockerHint}
+          </p>
+        )}
 
         <AlertDialogFooter className="confirm-dialog__actions">
-          <Button type="button" variant="outline" className="confirm-dialog__cancel" onClick={onCancel}>Cancel</Button>
+          <Button type="button" variant="outline" className="confirm-dialog__cancel" onClick={onCancel}>
+            Cancel
+          </Button>
           <Button
             type="button"
             variant={tone === 'danger' ? 'destructive' : 'default'}
