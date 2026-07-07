@@ -1,12 +1,19 @@
 import { recordAuditEvent } from './_lib/audit.js';
 import { readJsonBody, sendJson } from './_lib/http.js';
 import { requireWorkspaceAccess } from './_lib/supabase-admin.js';
+import { enforceRateLimit } from './_lib/rate-limit.js';
 
 const RESPONSE_ROLES = new Set(['Admin', 'Ranch Manager', 'Sales Lead']);
+
+const RATE_LIMIT = { bucket: 'buyer-responses', limit: 30, windowSeconds: 60 };
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
+  }
+
+  if (!(await enforceRateLimit(req, res, RATE_LIMIT))) {
+    return;
   }
 
   let body;

@@ -1,6 +1,7 @@
 import { sendJson, getQuery } from '../_lib/http.js';
 import { requireWorkspaceAccess } from '../_lib/supabase-admin.js';
 import { recordAuditEvent } from '../_lib/audit.js';
+import { enforceRateLimit } from '../_lib/rate-limit.js';
 
 // Full data export for one horse: profile, documents (with 1-hour signed
 // URLs for the original files), ownership records, reminders, and sale
@@ -11,9 +12,15 @@ const DOCUMENT_BUCKET =
 const PACKET_BUCKET = process.env.SUPABASE_SALE_PACKET_BUCKET || 'sale-packets';
 const SIGNED_URL_TTL_SECONDS = 3600;
 
+const RATE_LIMIT = { bucket: 'horses-export', limit: 12, windowSeconds: 60 };
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
+  }
+
+  if (!(await enforceRateLimit(req, res, RATE_LIMIT))) {
+    return;
   }
 
   const accessToken = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim() || '';

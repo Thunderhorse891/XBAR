@@ -92,6 +92,35 @@ test('anonymous public endpoints are rate limited', () => {
   assert.match(rateLimitSource, /memoryBuckets/);
 });
 
+test('every request-driven endpoint enforces a per-IP rate limit', async () => {
+  // The Stripe webhook (signature-verified, retried by Stripe) and the cron
+  // runner (CRON_SECRET-gated, fired by Vercel) are intentionally exempt.
+  const rateLimitedEndpoints = [
+    'api/telemetry.js',
+    'api/buyer-inquiries.js',
+    'api/invite.js',
+    'api/stripe/checkout.js',
+    'api/sale-packets.js',
+    'api/horses/import.js',
+    'api/horses/export.js',
+    'api/buyer-responses.js',
+    'api/documents/bulk-upload-with-ocr.js',
+    'api/documents/generate-from-template.js',
+  ];
+  for (const endpoint of rateLimitedEndpoints) {
+    const source = await readFile(fromRoot(endpoint), 'utf8');
+    assert.match(source, /enforceRateLimit\(req, res, RATE_LIMIT\)/, `${endpoint} is missing rate limiting`);
+  }
+});
+
+test('cron secret comparison is constant-time and invite links use server config', async () => {
+  const remindersSource = await readFile(fromRoot('api/reminders/run.js'), 'utf8');
+  assert.match(remindersSource, /timingSafeEqual/);
+  assert.doesNotMatch(remindersSource, /provided !== cronSecret/);
+  // Invite redirect prefers the documented server-side PUBLIC_APP_URL.
+  assert.match(inviteSource, /process\.env\.PUBLIC_APP_URL \|\|\s*\n?\s*process\.env\.VITE_PUBLIC_APP_URL/);
+});
+
 test('production responses carry hardened security headers', () => {
   assert.match(vercelConfigSource, /Content-Security-Policy/);
   assert.match(vercelConfigSource, /frame-ancestors 'none'/);

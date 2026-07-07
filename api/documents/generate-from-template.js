@@ -6,14 +6,21 @@ import { getWorkspaceEntitlements, tierIncludesPlan } from '../_lib/entitlements
 import { loadHorseContext } from '../_lib/horse-context.js';
 import { createSectionedPdf } from '../_lib/pdf.js';
 import { recordAuditEvent } from '../_lib/audit.js';
+import { enforceRateLimit } from '../_lib/rate-limit.js';
 
 const DOCUMENT_BUCKET =
   process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
 const SIGNED_URL_TTL_SECONDS = 3600;
 
+const RATE_LIMIT = { bucket: 'documents-template', limit: 20, windowSeconds: 60 };
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
+  }
+
+  if (!(await enforceRateLimit(req, res, RATE_LIMIT))) {
+    return;
   }
 
   const accessToken = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim() || '';

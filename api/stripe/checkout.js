@@ -4,6 +4,9 @@ import { buildSubscriptionProfile, getStripePriceIdByTier } from '../_lib/subscr
 import { requireWorkspaceAccess } from '../_lib/supabase-admin.js';
 import { applyCors } from '../_lib/cors.js';
 import { checkoutSchema, parseBody } from '../_lib/validation.js';
+import { enforceRateLimit } from '../_lib/rate-limit.js';
+
+const RATE_LIMIT = { bucket: 'checkout', limit: 10, windowSeconds: 60 };
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY || '';
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026-02-25.clover' }) : null;
@@ -42,6 +45,10 @@ export default async function handler(req, res) {
 
   if (req.method !== 'POST') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
+  }
+
+  if (!(await enforceRateLimit(req, res, RATE_LIMIT))) {
+    return;
   }
 
   if (!managedBillingEnabled) {

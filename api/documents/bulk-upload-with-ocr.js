@@ -10,15 +10,22 @@ import {
 import { extractZipEntries, isZipBuffer, guessMimeType } from '../_lib/zip.js';
 import { getWorkspaceEntitlements, checkDocumentCapacity } from '../_lib/entitlements.js';
 import { recordAuditEvent } from '../_lib/audit.js';
+import { enforceRateLimit } from '../_lib/rate-limit.js';
 
 const DOCUMENT_BUCKET =
   process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
 const MAX_FILES_PER_BATCH = 25;
 const MAX_OCR_TEXT_CHARS = 20000;
 
+const RATE_LIMIT = { bucket: 'documents-upload', limit: 10, windowSeconds: 60 };
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
+  }
+
+  if (!(await enforceRateLimit(req, res, RATE_LIMIT))) {
+    return;
   }
 
   const accessToken = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim() || '';

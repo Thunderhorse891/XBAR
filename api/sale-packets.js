@@ -6,12 +6,15 @@ import { loadHorseContext } from './_lib/horse-context.js';
 import { createSectionedPdf, assemblePacketPdf } from './_lib/pdf.js';
 import { sendEmail } from './_lib/email.js';
 import { recordAuditEvent } from './_lib/audit.js';
+import { enforceRateLimit } from './_lib/rate-limit.js';
 
 const DOCUMENT_BUCKET =
   process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
 const PACKET_BUCKET = process.env.SUPABASE_SALE_PACKET_BUCKET || 'sale-packets';
 const SIGNED_URL_TTL_SECONDS = 3600;
 const MAX_PACKET_ATTACHMENTS = 20;
+
+const RATE_LIMIT = { bucket: 'sale-packets', limit: 20, windowSeconds: 60 };
 
 export default async function handler(req, res) {
   const accessToken = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim() || '';
@@ -28,6 +31,10 @@ export default async function handler(req, res) {
 
   if (req.method !== 'POST') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
+  }
+
+  if (!(await enforceRateLimit(req, res, RATE_LIMIT))) {
+    return;
   }
 
   let body;

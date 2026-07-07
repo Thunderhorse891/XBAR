@@ -3,6 +3,7 @@ import { readJsonBody, sendJson } from '../_lib/http.js';
 import { requireWorkspaceAccess } from '../_lib/supabase-admin.js';
 import { recordAuditEvent } from '../_lib/audit.js';
 import { normalizeDate } from '../_lib/document-extraction.js';
+import { enforceRateLimit } from '../_lib/rate-limit.js';
 
 // Bulk CSV import of horses. Accepts { workspaceId, csv } where csv is the
 // raw file contents. Header names are matched case-insensitively against the
@@ -22,9 +23,15 @@ const COLUMN_ALIASES = {
   barn_name: ['barn', 'barn name'],
 };
 
+const RATE_LIMIT = { bucket: 'horses-import', limit: 6, windowSeconds: 60 };
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
+  }
+
+  if (!(await enforceRateLimit(req, res, RATE_LIMIT))) {
+    return;
   }
 
   const accessToken = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim() || '';

@@ -1,14 +1,21 @@
 import { readJsonBody, sendJson } from './_lib/http.js';
 import { getSupabaseAdmin, requireWorkspaceAccess } from './_lib/supabase-admin.js';
 import { inviteSchema, parseBody } from './_lib/validation.js';
+import { enforceRateLimit } from './_lib/rate-limit.js';
 
 // The invited role is validated by inviteSchema; anything unrecognized is
 // coerced to the least privileged option so a caller cannot inject arbitrary
 // role metadata.
 
+const RATE_LIMIT = { bucket: 'invite', limit: 10, windowSeconds: 60 };
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
+  }
+
+  if (!(await enforceRateLimit(req, res, RATE_LIMIT))) {
+    return;
   }
 
   const accessToken = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim() || '';
@@ -31,7 +38,14 @@ export default async function handler(req, res) {
   }
 
   const supabase = getSupabaseAdmin();
-  const redirectTo = `${process.env.VITE_PUBLIC_APP_URL || ''}/login?invite=${encodeURIComponent(invitationId)}&workspace=${encodeURIComponent(workspaceId)}`;
+  // Server-side config first: PUBLIC_APP_URL is the documented server var,
+  // with the VITE_ mirror and the deployment origin as fallbacks so invite
+  // links never come out relative.
+  const appOrigin =
+    process.env.PUBLIC_APP_URL ||
+    process.env.VITE_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
+  const redirectTo = `${appOrigin}/login?invite=${encodeURIComponent(invitationId)}&workspace=${encodeURIComponent(workspaceId)}`;
 
   const { data, error } = await supabase.auth.admin.inviteUserByEmail(email, {
     redirectTo,
