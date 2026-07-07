@@ -97,6 +97,21 @@ export default async function handler(req, res) {
     const event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
     const payload = event.data.object;
 
+    // Idempotency guard: Stripe retries deliveries, so a replayed event id is
+    // acknowledged without re-running the sync (no duplicate Stripe API calls,
+    // no racing upserts).
+    const supabaseForReplay = getSupabaseAdmin();
+    if (supabaseForReplay) {
+      const { data: processedEvents } = await supabaseForReplay
+        .from('workspace_subscription_events')
+        .select('id')
+        .eq('stripe_event_id', event.id)
+        .limit(1);
+      if (processedEvents?.length) {
+        return sendJson(res, 200, { ok: true, duplicate: true });
+      }
+    }
+
     if (event.type === 'checkout.session.completed' && payload.mode === 'subscription') {
       const workspaceId = payload.metadata?.workspace_id;
       const subscriptionId = typeof payload.subscription === 'string' ? payload.subscription : payload.subscription?.id;
