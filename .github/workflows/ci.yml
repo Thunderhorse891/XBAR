@@ -44,7 +44,11 @@ jobs:
         run: npm run build
 
       - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
+        # Prefer the full install (browser + system deps). GitHub's
+        # ubuntu-latest image already ships Chromium's runtime libraries, so
+        # fall back to a deps-free browser install when the runner's apt
+        # sources are temporarily broken (e.g. an unsigned upstream repo).
+        run: npx playwright install --with-deps chromium || npx playwright install chromium
 
       - name: Production smoke test (built dist)
         run: npm run test:prod-smoke
