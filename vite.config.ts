@@ -23,7 +23,9 @@ export default defineConfig(() => {
     envPrefix: ['VITE_'],
     build: {
       target: ['es2021', 'chrome100', 'safari13'],
-      minify: debugBuild ? false : 'esbuild',
+      // Vite 8 (Rolldown) minifies with Oxc by default; the old 'esbuild'
+      // minifier requires a separate esbuild install and is deprecated.
+      minify: !debugBuild,
       sourcemap: debugBuild,
       chunkSizeWarningLimit: 900,
       rollupOptions: {
