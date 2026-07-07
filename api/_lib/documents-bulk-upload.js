@@ -1,17 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { readJsonBody, sendJson } from '../_lib/http.js';
-import { requireWorkspaceAccess } from '../_lib/supabase-admin.js';
-import { runOcr } from '../_lib/ocr.js';
-import {
-  extractDocument,
-  groupExtractionsIntoCandidates,
-  NEEDS_REVIEW_THRESHOLD,
-} from '../_lib/document-extraction.js';
-import { extractZipEntries, isZipBuffer, guessMimeType } from '../_lib/zip.js';
-import { getWorkspaceEntitlements, checkDocumentCapacity } from '../_lib/entitlements.js';
-import { recordAuditEvent } from '../_lib/audit.js';
-import { enforceRateLimit } from '../_lib/rate-limit.js';
-import { applyCors } from '../_lib/cors.js';
+import { readJsonBody, sendJson } from './http.js';
+import { requireWorkspaceAccess } from './supabase-admin.js';
+import { runOcr } from './ocr.js';
+import { extractDocument, groupExtractionsIntoCandidates, NEEDS_REVIEW_THRESHOLD } from './document-extraction.js';
+import { extractZipEntries, isZipBuffer, guessMimeType } from './zip.js';
+import { getWorkspaceEntitlements, checkDocumentCapacity } from './entitlements.js';
+import { recordAuditEvent } from './audit.js';
+import { enforceRateLimit } from './rate-limit.js';
+import { applyCors } from './cors.js';
 
 const DOCUMENT_BUCKET =
   process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';

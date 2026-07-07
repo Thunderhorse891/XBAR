@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { readJsonBody, sendJson } from '../_lib/http.js';
-import { requireWorkspaceAccess } from '../_lib/supabase-admin.js';
-import { getTemplateById, renderTemplate } from '../_lib/document-templates.js';
-import { getWorkspaceEntitlements, tierIncludesPlan } from '../_lib/entitlements.js';
-import { loadHorseContext } from '../_lib/horse-context.js';
-import { createSectionedPdf } from '../_lib/pdf.js';
-import { recordAuditEvent } from '../_lib/audit.js';
-import { enforceRateLimit } from '../_lib/rate-limit.js';
-import { applyCors } from '../_lib/cors.js';
+import { readJsonBody, sendJson } from './http.js';
+import { requireWorkspaceAccess } from './supabase-admin.js';
+import { getTemplateById, renderTemplate } from './document-templates.js';
+import { getWorkspaceEntitlements, tierIncludesPlan } from './entitlements.js';
+import { loadHorseContext } from './horse-context.js';
+import { createSectionedPdf } from './pdf.js';
+import { recordAuditEvent } from './audit.js';
+import { enforceRateLimit } from './rate-limit.js';
+import { applyCors } from './cors.js';
 
 const DOCUMENT_BUCKET =
   process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';

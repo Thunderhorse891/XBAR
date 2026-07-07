@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { readJsonBody, sendJson } from '../_lib/http.js';
-import { requireWorkspaceAccess } from '../_lib/supabase-admin.js';
-import { recordAuditEvent } from '../_lib/audit.js';
-import { normalizeDate } from '../_lib/document-extraction.js';
-import { enforceRateLimit } from '../_lib/rate-limit.js';
-import { horsesImportSchema, parseBody } from '../_lib/validation.js';
-import { applyCors } from '../_lib/cors.js';
+import { readJsonBody, sendJson } from './http.js';
+import { requireWorkspaceAccess } from './supabase-admin.js';
+import { recordAuditEvent } from './audit.js';
+import { normalizeDate } from './document-extraction.js';
+import { enforceRateLimit } from './rate-limit.js';
+import { horsesImportSchema, parseBody } from './validation.js';
+import { applyCors } from './cors.js';
 
 // Bulk CSV import of horses. Accepts { workspaceId, csv } where csv is the
 // raw file contents. Header names are matched case-insensitively against the

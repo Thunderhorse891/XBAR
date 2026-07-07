@@ -1,8 +1,8 @@
-import { sendJson, getQuery } from '../_lib/http.js';
-import { requireWorkspaceAccess } from '../_lib/supabase-admin.js';
-import { recordAuditEvent } from '../_lib/audit.js';
-import { enforceRateLimit } from '../_lib/rate-limit.js';
-import { applyCors } from '../_lib/cors.js';
+import { sendJson, getQuery } from './http.js';
+import { requireWorkspaceAccess } from './supabase-admin.js';
+import { recordAuditEvent } from './audit.js';
+import { enforceRateLimit } from './rate-limit.js';
+import { applyCors } from './cors.js';
 
 // Full data export for one horse: profile, documents (with 1-hour signed
 // URLs for the original files), ownership records, reminders, and sale

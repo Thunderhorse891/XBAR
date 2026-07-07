@@ -81,7 +81,7 @@ test('API request bodies are validated with shared zod schemas', async () => {
   assert.match(buyerInquiriesSource, /parseBody\(buyerInquirySchema, body\)/);
   const buyerResponsesSource = await readFile(fromRoot('api/buyer-responses.js'), 'utf8');
   assert.match(buyerResponsesSource, /parseBody\(buyerResponseSchema, body\)/);
-  const importSource = await readFile(fromRoot('api/horses/import.js'), 'utf8');
+  const importSource = await readFile(fromRoot('api/_lib/horses-import.js'), 'utf8');
   assert.match(importSource, /parseBody\(horsesImportSchema, body\)/);
   // CSV imports are size-capped so a single request cannot buffer unbounded input.
   assert.match(validationSource, /MAX_IMPORT_CSV_CHARS/);
@@ -96,11 +96,11 @@ test('browser-called endpoints declare an explicit, allow-listed CORS policy', a
     'api/invite.js',
     'api/stripe/checkout.js',
     'api/sale-packets.js',
-    'api/horses/import.js',
-    'api/horses/export.js',
+    'api/_lib/horses-import.js',
+    'api/_lib/horses-export.js',
     'api/buyer-responses.js',
-    'api/documents/bulk-upload-with-ocr.js',
-    'api/documents/generate-from-template.js',
+    'api/_lib/documents-bulk-upload.js',
+    'api/_lib/documents-generate-template.js',
   ];
   for (const endpoint of corsEndpoints) {
     const source = await readFile(fromRoot(endpoint), 'utf8');
@@ -125,11 +125,11 @@ test('every request-driven endpoint enforces a per-IP rate limit', async () => {
     'api/invite.js',
     'api/stripe/checkout.js',
     'api/sale-packets.js',
-    'api/horses/import.js',
-    'api/horses/export.js',
+    'api/_lib/horses-import.js',
+    'api/_lib/horses-export.js',
     'api/buyer-responses.js',
-    'api/documents/bulk-upload-with-ocr.js',
-    'api/documents/generate-from-template.js',
+    'api/_lib/documents-bulk-upload.js',
+    'api/_lib/documents-generate-template.js',
   ];
   for (const endpoint of rateLimitedEndpoints) {
     const source = await readFile(fromRoot(endpoint), 'utf8');
