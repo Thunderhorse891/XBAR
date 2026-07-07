@@ -2,6 +2,7 @@ import { readJsonBody, sendJson } from './_lib/http.js';
 import { getSupabaseAdmin, requireWorkspaceAccess } from './_lib/supabase-admin.js';
 import { inviteSchema, parseBody } from './_lib/validation.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
+import { applyCors } from './_lib/cors.js';
 
 // The invited role is validated by inviteSchema; anything unrecognized is
 // coerced to the least privileged option so a caller cannot inject arbitrary
@@ -10,6 +11,10 @@ import { enforceRateLimit } from './_lib/rate-limit.js';
 const RATE_LIMIT = { bucket: 'invite', limit: 10, windowSeconds: 60 };
 
 export default async function handler(req, res) {
+  if (!applyCors(req, res)) {
+    return;
+  }
+
   if (req.method !== 'POST') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
   }

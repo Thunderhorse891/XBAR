@@ -32,6 +32,57 @@ export const telemetrySchema = z.object({
   payload: z.record(z.string(), z.unknown()).optional().default({}),
 });
 
+export const BUYER_INQUIRY_KINDS = ['question', 'call-requested', 'proof-requested', 'offer', 'packet-downloaded'];
+const MAX_BUYER_MESSAGE_CHARS = 1200;
+
+// Shapes and caps only — the kind-specific requirements (an offer needs an
+// amount, a question needs a message) stay in the handler where the
+// buyer-facing error copy lives.
+export const buyerInquirySchema = z.object({
+  sharePath: z.string().trim().optional().default(''),
+  shareToken: z.string().trim().optional().default(''),
+  kind: z.string().optional().default(''),
+  buyerName: z
+    .string()
+    .trim()
+    .transform((value) => value.slice(0, 120))
+    .optional()
+    .default(''),
+  buyerEmail: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .transform((value) => value.slice(0, 200))
+    .optional()
+    .default(''),
+  message: z
+    .string()
+    .trim()
+    .transform((value) => value.slice(0, MAX_BUYER_MESSAGE_CHARS))
+    .optional()
+    .default(''),
+  amount: z.unknown().optional(),
+});
+
+export const buyerResponseSchema = z.object({
+  workspaceId: z.string().trim().min(1),
+  replyToEventId: z.string().trim().min(1),
+  note: z
+    .string()
+    .trim()
+    .min(1)
+    .transform((value) => value.slice(0, MAX_BUYER_MESSAGE_CHARS)),
+});
+
+// CSV imports are bounded so a single request cannot buffer unbounded input
+// through the service-role client.
+export const MAX_IMPORT_CSV_CHARS = 2_000_000;
+
+export const horsesImportSchema = z.object({
+  workspaceId: z.string().trim().min(1),
+  csv: z.string().min(1).max(MAX_IMPORT_CSV_CHARS, 'CSV imports are limited to 2 MB per request.'),
+});
+
 /**
  * Parse a request body against a schema.
  * Returns { ok: true, data } or { ok: false, message } with the first issue.

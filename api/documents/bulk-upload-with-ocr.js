@@ -11,6 +11,7 @@ import { extractZipEntries, isZipBuffer, guessMimeType } from '../_lib/zip.js';
 import { getWorkspaceEntitlements, checkDocumentCapacity } from '../_lib/entitlements.js';
 import { recordAuditEvent } from '../_lib/audit.js';
 import { enforceRateLimit } from '../_lib/rate-limit.js';
+import { applyCors } from '../_lib/cors.js';
 
 const DOCUMENT_BUCKET =
   process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
@@ -20,6 +21,10 @@ const MAX_OCR_TEXT_CHARS = 20000;
 const RATE_LIMIT = { bucket: 'documents-upload', limit: 10, windowSeconds: 60 };
 
 export default async function handler(req, res) {
+  if (!applyCors(req, res)) {
+    return;
+  }
+
   if (req.method !== 'POST') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
   }

@@ -2,12 +2,18 @@ import { recordAuditEvent } from './_lib/audit.js';
 import { readJsonBody, sendJson } from './_lib/http.js';
 import { requireWorkspaceAccess } from './_lib/supabase-admin.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
+import { buyerResponseSchema, parseBody } from './_lib/validation.js';
+import { applyCors } from './_lib/cors.js';
 
 const RESPONSE_ROLES = new Set(['Admin', 'Ranch Manager', 'Sales Lead']);
 
 const RATE_LIMIT = { bucket: 'buyer-responses', limit: 30, windowSeconds: 60 };
 
 export default async function handler(req, res) {
+  if (!applyCors(req, res)) {
+    return;
+  }
+
   if (req.method !== 'POST') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
   }
@@ -23,12 +29,11 @@ export default async function handler(req, res) {
     return sendJson(res, 400, { ok: false, message: 'Request body must be valid JSON.' });
   }
 
-  const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId.trim() : '';
-  const replyToEventId = typeof body.replyToEventId === 'string' ? body.replyToEventId.trim() : '';
-  const note = typeof body.note === 'string' ? body.note.trim().slice(0, 1200) : '';
-  if (!workspaceId || !replyToEventId || !note) {
+  const parsed = parseBody(buyerResponseSchema, body);
+  if (!parsed.ok) {
     return sendJson(res, 400, { ok: false, message: 'Workspace, buyer request, and response note are required.' });
   }
+  const { workspaceId, replyToEventId, note } = parsed.data;
 
   const accessToken = String(req.headers?.authorization || '')
     .replace(/^Bearer\s+/i, '')

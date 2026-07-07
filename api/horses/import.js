@@ -4,6 +4,8 @@ import { requireWorkspaceAccess } from '../_lib/supabase-admin.js';
 import { recordAuditEvent } from '../_lib/audit.js';
 import { normalizeDate } from '../_lib/document-extraction.js';
 import { enforceRateLimit } from '../_lib/rate-limit.js';
+import { horsesImportSchema, parseBody } from '../_lib/validation.js';
+import { applyCors } from '../_lib/cors.js';
 
 // Bulk CSV import of horses. Accepts { workspaceId, csv } where csv is the
 // raw file contents. Header names are matched case-insensitively against the
@@ -26,6 +28,10 @@ const COLUMN_ALIASES = {
 const RATE_LIMIT = { bucket: 'horses-import', limit: 6, windowSeconds: 60 };
 
 export default async function handler(req, res) {
+  if (!applyCors(req, res)) {
+    return;
+  }
+
   if (req.method !== 'POST') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
   }
@@ -42,11 +48,15 @@ export default async function handler(req, res) {
     return sendJson(res, 400, { ok: false, message: 'Request body must be valid JSON.' });
   }
 
-  const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId : '';
-  const csv = typeof body.csv === 'string' ? body.csv : '';
-  if (!workspaceId || !csv.trim()) {
-    return sendJson(res, 400, { ok: false, message: 'workspaceId and csv are required.' });
+  const parsed = parseBody(horsesImportSchema, body);
+  if (!parsed.ok || !parsed.data.csv.trim()) {
+    const oversize = parsed.ok ? '' : parsed.message;
+    return sendJson(res, 400, {
+      ok: false,
+      message: oversize.includes('2 MB') ? oversize : 'workspaceId and csv are required.',
+    });
   }
+  const { workspaceId, csv } = parsed.data;
 
   const access = await requireWorkspaceAccess(accessToken, workspaceId);
   if (!access.ok) {

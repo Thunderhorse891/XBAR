@@ -68,20 +68,44 @@ test('member invitations are admin-only with a bounded role set', () => {
   assert.match(inviteSource, /Only workspace admins can invite members\./);
 });
 
-test('API request bodies are validated with shared zod schemas', () => {
+test('API request bodies are validated with shared zod schemas', async () => {
   assert.match(validationSource, /export const inviteSchema/);
   assert.match(validationSource, /export const checkoutSchema/);
   assert.match(validationSource, /export const telemetrySchema/);
+  assert.match(validationSource, /export const buyerInquirySchema/);
+  assert.match(validationSource, /export const buyerResponseSchema/);
+  assert.match(validationSource, /export const horsesImportSchema/);
   assert.match(inviteSource, /parseBody\(inviteSchema, body\)/);
   assert.match(checkoutSource, /parseBody\(checkoutSchema, body\)/);
   assert.match(telemetrySource, /parseBody\(telemetrySchema, body\)/);
+  assert.match(buyerInquiriesSource, /parseBody\(buyerInquirySchema, body\)/);
+  const buyerResponsesSource = await readFile(fromRoot('api/buyer-responses.js'), 'utf8');
+  assert.match(buyerResponsesSource, /parseBody\(buyerResponseSchema, body\)/);
+  const importSource = await readFile(fromRoot('api/horses/import.js'), 'utf8');
+  assert.match(importSource, /parseBody\(horsesImportSchema, body\)/);
+  // CSV imports are size-capped so a single request cannot buffer unbounded input.
+  assert.match(validationSource, /MAX_IMPORT_CSV_CHARS/);
 });
 
-test('public endpoints declare an explicit, allow-listed CORS policy', () => {
+test('browser-called endpoints declare an explicit, allow-listed CORS policy', async () => {
   assert.match(corsSource, /Access-Control-Allow-Origin/);
   assert.match(corsSource, /allowedOrigins\.includes\(origin\)/);
-  assert.match(buyerInquiriesSource, /applyCors\(req, res\)/);
-  assert.match(telemetrySource, /applyCors\(req, res\)/);
+  const corsEndpoints = [
+    'api/telemetry.js',
+    'api/buyer-inquiries.js',
+    'api/invite.js',
+    'api/stripe/checkout.js',
+    'api/sale-packets.js',
+    'api/horses/import.js',
+    'api/horses/export.js',
+    'api/buyer-responses.js',
+    'api/documents/bulk-upload-with-ocr.js',
+    'api/documents/generate-from-template.js',
+  ];
+  for (const endpoint of corsEndpoints) {
+    const source = await readFile(fromRoot(endpoint), 'utf8');
+    assert.match(source, /applyCors\(req, res/, `${endpoint} is missing the CORS policy`);
+  }
 });
 
 test('anonymous public endpoints are rate limited', () => {

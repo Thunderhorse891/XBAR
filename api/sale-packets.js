@@ -7,6 +7,7 @@ import { createSectionedPdf, assemblePacketPdf } from './_lib/pdf.js';
 import { sendEmail } from './_lib/email.js';
 import { recordAuditEvent } from './_lib/audit.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
+import { applyCors } from './_lib/cors.js';
 
 const DOCUMENT_BUCKET =
   process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
@@ -17,6 +18,10 @@ const MAX_PACKET_ATTACHMENTS = 20;
 const RATE_LIMIT = { bucket: 'sale-packets', limit: 20, windowSeconds: 60 };
 
 export default async function handler(req, res) {
+  if (!applyCors(req, res, { methods: 'GET, POST, OPTIONS' })) {
+    return;
+  }
+
   const accessToken = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim() || '';
 
   if (req.method === 'GET') {

@@ -2,6 +2,7 @@ import { readJsonBody, sendJson } from './_lib/http.js';
 import { getSupabaseAdmin } from './_lib/supabase-admin.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
 import { applyCors } from './_lib/cors.js';
+import { BUYER_INQUIRY_KINDS, buyerInquirySchema, parseBody } from './_lib/validation.js';
 
 /*
  * Public buyer folder intake. Anonymous buyers on a shared packet page can
@@ -14,8 +15,7 @@ import { applyCors } from './_lib/cors.js';
  * single client from flooding a seller's buyer folder with spam events.
  */
 
-const ALLOWED_KINDS = new Set(['question', 'call-requested', 'proof-requested', 'offer', 'packet-downloaded']);
-const MAX_MESSAGE_CHARS = 1200;
+const ALLOWED_KINDS = new Set(BUYER_INQUIRY_KINDS);
 const RATE_LIMIT = { bucket: 'buyer-inquiries', limit: 12, windowSeconds: 60 };
 
 export default async function handler(req, res) {
@@ -38,13 +38,13 @@ export default async function handler(req, res) {
     return sendJson(res, 400, { ok: false, message: 'Request body must be valid JSON.' });
   }
 
-  const sharePath = typeof body.sharePath === 'string' ? body.sharePath.trim() : '';
-  const shareToken = typeof body.shareToken === 'string' ? body.shareToken.trim() : '';
-  const kind = typeof body.kind === 'string' ? body.kind : '';
-  const buyerName = typeof body.buyerName === 'string' ? body.buyerName.trim().slice(0, 120) : '';
-  const buyerEmail = typeof body.buyerEmail === 'string' ? body.buyerEmail.trim().toLowerCase().slice(0, 200) : '';
-  const message = typeof body.message === 'string' ? body.message.trim().slice(0, MAX_MESSAGE_CHARS) : '';
-  const amount = Number.isFinite(Number(body.amount)) && Number(body.amount) > 0 ? Number(body.amount) : null;
+  const parsed = parseBody(buyerInquirySchema, body);
+  if (!parsed.ok) {
+    return sendJson(res, 400, { ok: false, message: parsed.message });
+  }
+  const { sharePath, shareToken, kind, buyerName, buyerEmail, message } = parsed.data;
+  const amount =
+    Number.isFinite(Number(parsed.data.amount)) && Number(parsed.data.amount) > 0 ? Number(parsed.data.amount) : null;
 
   if (!sharePath || !ALLOWED_KINDS.has(kind)) {
     return sendJson(res, 400, { ok: false, message: 'sharePath and a valid kind are required.' });

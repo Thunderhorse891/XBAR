@@ -2,6 +2,7 @@ import { sendJson, getQuery } from '../_lib/http.js';
 import { requireWorkspaceAccess } from '../_lib/supabase-admin.js';
 import { recordAuditEvent } from '../_lib/audit.js';
 import { enforceRateLimit } from '../_lib/rate-limit.js';
+import { applyCors } from '../_lib/cors.js';
 
 // Full data export for one horse: profile, documents (with 1-hour signed
 // URLs for the original files), ownership records, reminders, and sale
@@ -15,6 +16,10 @@ const SIGNED_URL_TTL_SECONDS = 3600;
 const RATE_LIMIT = { bucket: 'horses-export', limit: 12, windowSeconds: 60 };
 
 export default async function handler(req, res) {
+  if (!applyCors(req, res, { methods: 'GET, OPTIONS' })) {
+    return;
+  }
+
   if (req.method !== 'GET') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
   }
