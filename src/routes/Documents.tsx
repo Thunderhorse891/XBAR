@@ -17,35 +17,17 @@ import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import { normalizeOwnershipRecord } from '@/store/xbarStoreLogic';
 import type { DocumentRecord, DocumentSource } from '@/types/xbar';
 import { documentSources } from '@/features/documents/constants';
+import {
+  PIPELINE_STAGES,
+  buildProofLinks,
+  computeHeroRisks,
+  computeHeroStatus,
+  computeStageBuckets,
+  computeStageCounts,
+  type PipelineStage,
+} from '@/features/documents/pipeline';
 
 const SHARED_ACCESS_PATH = '/shared-access';
-const STALE_REVIEW_MS = 3 * 24 * 60 * 60 * 1000;
-
-type PipelineStage = 'Upload' | 'Processing' | 'Review' | 'Proof' | 'Share';
-
-const PIPELINE_STAGES: { id: PipelineStage; label: string; hint: string }[] = [
-  {
-    id: 'Upload',
-    label: 'Upload',
-    hint: 'Bring files in: choose documents, tag a source, and optionally attach a horse.',
-  },
-  {
-    id: 'Processing',
-    label: 'OCR / Processing',
-    hint: 'OCR runs locally; extracted fields appear here while files are queued.',
-  },
-  {
-    id: 'Review',
-    label: 'Review',
-    hint: 'Confirm the extracted match, assign the right horse, then approve or discard.',
-  },
-  { id: 'Proof', label: 'Ownership', hint: 'Use approved documents to support the horse ownership record.' },
-  {
-    id: 'Share',
-    label: 'Share',
-    hint: 'Bundle approved documents into watermarked sale packets and hand off to Shared Access.',
-  },
-];
 
 type SurfaceId = 'review' | 'buyer' | 'intake' | 'batches' | 'duplicates' | 'processing' | 'proof';
 
@@ -109,69 +91,29 @@ export default function Documents() {
   }, [uploadOpen]);
 
   // Stage buckets — each document lives in exactly one workflow stage.
-  const queuedDocuments = documents.filter((document) => document.state === 'Queued');
-  const reviewQueue = documents.filter((document) => document.state === 'Needs Review' || document.state === 'Matched');
-  const readyDocuments = documents.filter((document) => document.state === 'Ready');
-  const proofDocuments = readyDocuments.filter((document) => Boolean(document.horseId));
-  const duplicates = documents.filter((document) => document.duplicateRisk === 'Possible Duplicate');
-  const buyerSafeDocuments = documents.filter(
-    (document) => buildDocumentTrustProfile(document, horses).readyForProfile,
+  const stageBuckets = useMemo(
+    () => computeStageBuckets(documents, horses, intakeBatches),
+    [documents, horses, intakeBatches],
   );
-  const processingBatches = intakeBatches.filter((batch) => batch.state !== 'Completed');
-  const unmatchedDocuments = documents.filter((document) => !document.horseId && document.state !== 'Archived');
-  const staleReviewCount = reviewQueue.filter((document) => {
-    const uploaded = Date.parse(document.uploadedAt);
-    return Number.isFinite(uploaded) && Date.now() - uploaded > STALE_REVIEW_MS;
-  }).length;
+  const {
+    queuedDocuments,
+    reviewQueue,
+    readyDocuments,
+    proofDocuments,
+    duplicates,
+    buyerSafeDocuments,
+    processingBatches,
+  } = stageBuckets;
 
   // Proof chain context: which documents already back an ownership requirement.
-  const proofLinksByDocumentId = useMemo(() => {
-    const links = new Map<string, string[]>();
-    ownershipRecords.forEach((record) => {
-      const normalized = normalizeOwnershipRecord(record);
-      (normalized.proofRequirements ?? []).forEach((requirement) => {
-        if (requirement.documentId) {
-          links.set(requirement.documentId, [...(links.get(requirement.documentId) ?? []), requirement.label]);
-        }
-      });
-    });
-    return links;
-  }, [ownershipRecords]);
+  const proofLinksByDocumentId = useMemo(() => buildProofLinks(ownershipRecords), [ownershipRecords]);
   const proofLinkedCount = documents.filter((document) => proofLinksByDocumentId.has(document.id)).length;
 
-  const stageCounts: Record<PipelineStage, number> = {
-    Upload: documents.length,
-    Processing: queuedDocuments.length,
-    Review: reviewQueue.length,
-    Proof: proofDocuments.length,
-    Share: readyDocuments.length,
-  };
+  const stageCounts: Record<PipelineStage, number> = computeStageCounts(documents, stageBuckets);
 
-  const heroStatus =
-    staleReviewCount > 0 || unmatchedDocuments.length > 0
-      ? { label: 'Needs attention', tone: 'rose' as const }
-      : reviewQueue.length > 0
-        ? { label: 'Review pending', tone: 'amber' as const }
-        : { label: 'All caught up', tone: 'blue' as const };
+  const heroStatus = computeHeroStatus(stageBuckets);
 
-  const heroRisks = [
-    ...(reviewQueue.length
-      ? [
-          {
-            label: `${reviewQueue.length} ${reviewQueue.length === 1 ? 'document needs' : 'documents need'} review`,
-            severity: staleReviewCount > 0 ? ('rose' as const) : ('amber' as const),
-          },
-        ]
-      : []),
-    ...(unmatchedDocuments.length
-      ? [
-          {
-            label: `${unmatchedDocuments.length} ${unmatchedDocuments.length === 1 ? 'document' : 'documents'} not matched to a horse`,
-            severity: 'rose' as const,
-          },
-        ]
-      : []),
-  ];
+  const heroRisks = computeHeroRisks(stageBuckets);
 
   const applyExtractedFacts = (document: DocumentRecord) => {
     const targetId = reviewAssignments[document.id] ?? document.horseId ?? '';
