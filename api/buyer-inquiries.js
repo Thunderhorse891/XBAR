@@ -11,6 +11,24 @@ import { getSupabaseAdmin } from './_lib/supabase-admin.js';
 
 const ALLOWED_KINDS = new Set(['question', 'call-requested', 'proof-requested', 'offer', 'packet-downloaded']);
 const MAX_MESSAGE_CHARS = 1200;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 8;
+
+// Anonymous intake throttle: cap how many buyer events a single shared listing
+// can receive per minute so a public link can't be flooded.
+async function isRateLimited(supabase, sharePath) {
+  const since = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString();
+  const { count, error } = await supabase
+    .from('public_share_events')
+    .select('id', { count: 'exact', head: true })
+    .eq('share_path', sharePath)
+    .like('event_type', 'buyer-%')
+    .gte('created_at', since);
+  if (error) {
+    return false;
+  }
+  return Number(count || 0) >= RATE_LIMIT_MAX;
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -51,6 +69,13 @@ export default async function handler(req, res) {
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return sendJson(res, 503, { ok: false, message: 'The workspace service is not configured.' });
+  }
+
+  if (await isRateLimited(supabase, sharePath)) {
+    return sendJson(res, 429, {
+      ok: false,
+      message: 'Too many messages for this listing right now. Please wait a minute and try again.',
+    });
   }
 
   // Validate the share path/token exactly like the public page does: if the

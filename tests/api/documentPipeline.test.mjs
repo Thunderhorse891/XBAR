@@ -4,6 +4,8 @@ import { Readable } from 'node:stream';
 import { deflateRawSync } from 'node:zlib';
 import buyerInquiryHandler from '../../api/buyer-inquiries.js';
 import buyerResponseHandler from '../../api/buyer-responses.js';
+import inviteHandler, { ALLOWED_INVITE_ROLES } from '../../api/invite.js';
+import telemetryHandler from '../../api/telemetry.js';
 import {
   classifyDocumentType,
   extractRegistrationFields,
@@ -81,6 +83,44 @@ test('buyer proof requests require actionable details', async () => {
   });
   assert.equal(response.statusCode, 400);
   assert.match(response.body.message, /Describe the proof/);
+});
+
+test('workspace invites reject roles outside the allowlist', async () => {
+  const response = await invokeJsonHandler(inviteHandler, {
+    email: 'buyer@example.com',
+    workspaceId: 'workspace-1',
+    role: 'Superuser',
+  });
+  assert.equal(response.statusCode, 400);
+  assert.match(response.body.message, /Unsupported workspace role/);
+});
+
+test('workspace invites require an email and workspace id', async () => {
+  const response = await invokeJsonHandler(inviteHandler, { role: 'Owner' });
+  assert.equal(response.statusCode, 400);
+  assert.match(response.body.message, /Email and workspace id are required/);
+});
+
+test('the invite role allowlist matches the supported workspace roles', () => {
+  assert.deepEqual(
+    [...ALLOWED_INVITE_ROLES].sort(),
+    ['Admin', 'Medical Lead', 'Owner', 'Ranch Manager', 'Sales Lead'],
+  );
+});
+
+test('telemetry requires a workspace id', async () => {
+  const response = await invokeJsonHandler(telemetryHandler, { eventName: 'navigation.page_view' });
+  assert.equal(response.statusCode, 400);
+  assert.match(response.body.message, /workspaceId is required/);
+});
+
+test('telemetry is skipped (not stored) when admin credentials are absent', async () => {
+  const response = await invokeJsonHandler(telemetryHandler, {
+    workspaceId: 'workspace-1',
+    eventName: 'navigation.page_view',
+  });
+  assert.equal(response.statusCode, 202);
+  assert.equal(response.body.ok, true);
 });
 
 test('seller buyer responses require a target and response note', async () => {

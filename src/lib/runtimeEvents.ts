@@ -23,8 +23,13 @@ function buildApiUrl(path: string) {
   return normalizedPath;
 }
 
-async function postRuntimeEventToApi(event: RuntimeEventInput) {
+async function postRuntimeEventToApi(event: RuntimeEventInput, accessToken?: string) {
   if (typeof fetch === 'undefined') {
+    return;
+  }
+
+  // The telemetry API is workspace-scoped and requires an authenticated caller.
+  if (!accessToken || !event.workspaceId) {
     return;
   }
 
@@ -33,6 +38,7 @@ async function postRuntimeEventToApi(event: RuntimeEventInput) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify(event),
       keepalive: true,
@@ -47,6 +53,7 @@ export async function trackRuntimeEvent(event: RuntimeEventInput) {
     return;
   }
 
+  let accessToken: string | undefined;
   try {
     if (isSupabaseConfigured()) {
       const client = getSupabaseClient();
@@ -54,6 +61,7 @@ export async function trackRuntimeEvent(event: RuntimeEventInput) {
         const {
           data: { session },
         } = await client.auth.getSession();
+        accessToken = session?.access_token;
 
         if (session?.user && event.workspaceId) {
           const { error } = await client.from('runtime_events').insert({
@@ -79,5 +87,5 @@ export async function trackRuntimeEvent(event: RuntimeEventInput) {
     return;
   }
 
-  await postRuntimeEventToApi(event);
+  await postRuntimeEventToApi(event, accessToken);
 }
