@@ -3,7 +3,6 @@ node_modules
 .codex-test-dist
 package-lock.json
 public/ocr
-web
 android
 ios
 coverage
