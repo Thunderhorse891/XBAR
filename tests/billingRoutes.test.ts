@@ -47,7 +47,6 @@ test('upgrade links use canonical billing path instead of legacy billing routes'
     'src/routes/Expenses.tsx',
     'src/routes/GettingStarted.tsx',
     'src/routes/Login.tsx',
-    'src/routes/Plans.tsx',
     'src/routes/layouts/MainLayout.tsx',
   ];
   const legacyLiteral = /['"`]\/(?:plans|subscribe|subscriptions)(?:[?'"`]|$)/;

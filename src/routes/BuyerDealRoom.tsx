@@ -63,6 +63,9 @@ export default function BuyerDealRoom() {
   useEffect(() => {
     setRecordingOffer(false);
     setOfferDraft(createBuyerOfferDraft(selected));
+    // Key on the lead id only: re-seeding on every `selected` mutation would
+    // clobber an in-progress offer draft when background sync touches the lead.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id]);
 
   function updateOfferDraft<K extends keyof BuyerOfferDraft>(key: K, value: BuyerOfferDraft[K]) {
