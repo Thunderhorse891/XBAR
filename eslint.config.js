@@ -12,7 +12,6 @@ export default tseslint.config(
       'node_modules',
       '.codex-test-dist',
       'public/ocr',
-      'web',
       'android',
       'ios',
       'coverage',
