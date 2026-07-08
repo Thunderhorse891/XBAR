@@ -13,3 +13,4 @@ test-results/
 supabase/production-schema.generated.sql
 public/ocr/
 .scratch-e2e/
+*.csv

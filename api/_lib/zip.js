@@ -28,7 +28,13 @@ export function isZipBuffer(buffer) {
   return buffer?.length > 4 && buffer.readUInt32LE(0) === LOCAL_SIGNATURE;
 }
 
-export function extractZipEntries(buffer, { maxEntries = 50 } = {}) {
+const DEFAULT_MAX_ENTRY_BYTES = 50 * 1024 * 1024; // 50 MB per entry
+const DEFAULT_MAX_TOTAL_BYTES = 200 * 1024 * 1024; // 200 MB cumulative
+
+export function extractZipEntries(
+  buffer,
+  { maxEntries = 50, maxEntryBytes = DEFAULT_MAX_ENTRY_BYTES, maxTotalBytes = DEFAULT_MAX_TOTAL_BYTES } = {},
+) {
   // Locate the end-of-central-directory record (search backwards, allowing a
   // trailing comment of up to 64KB).
   let eocdOffset = -1;
@@ -48,6 +54,7 @@ export function extractZipEntries(buffer, { maxEntries = 50 } = {}) {
 
   const entries = [];
   const skipped = [];
+  let totalBytes = 0;
 
   for (let index = 0; index < entryCount && entries.length < maxEntries; index += 1) {
     if (buffer.readUInt32LE(cursor) !== CENTRAL_SIGNATURE) break;
@@ -80,7 +87,21 @@ export function extractZipEntries(buffer, { maxEntries = 50 } = {}) {
     const compressed = buffer.subarray(dataStart, dataStart + compressedSize);
 
     try {
-      const content = compressionMethod === 0 ? Buffer.from(compressed) : inflateRawSync(compressed);
+      const content =
+        compressionMethod === 0
+          ? Buffer.from(compressed)
+          : inflateRawSync(compressed, { maxOutputLength: maxEntryBytes });
+
+      if (content.length > maxEntryBytes) {
+        skipped.push({ fileName, reason: `decompressed size ${content.length} exceeds per-entry limit` });
+        continue;
+      }
+      if (totalBytes + content.length > maxTotalBytes) {
+        skipped.push({ fileName, reason: 'cumulative decompressed size exceeds archive limit' });
+        break;
+      }
+      totalBytes += content.length;
+
       entries.push({
         fileName: fileName.split('/').pop() || fileName,
         mimeType: guessMimeType(fileName),

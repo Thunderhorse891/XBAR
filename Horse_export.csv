@@ -1,6 +1,0 @@
-Name,Color,Birth Date,Gender,Status,OCR_Source
-Blue,#00ff,1998-05-22,Male,Active,page 1
-Red,#f000,,Female,Dead,ocr_report.jpg
-Grey,#dddd,1995-08-15,Male,Retired,ocr_bar.jpg
-Yellow,#ffff0,2002-01-06,Female,Sale,ocr_ticket.png
-Black,#000000,1994-12-01,Male,Dead,ocr_form.jpg

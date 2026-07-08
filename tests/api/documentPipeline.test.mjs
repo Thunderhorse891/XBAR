@@ -291,6 +291,33 @@ test('zip extraction handles stored and deflated entries', () => {
   assert.equal(entries[1].content.toString('utf8'), 'hello');
 });
 
+test('zip extraction skips entries exceeding per-entry size limit', () => {
+  const big = Buffer.alloc(1024, 0x41);
+  const zip = buildZip([
+    { name: 'big.txt', content: big, deflate: true },
+    { name: 'small.txt', content: Buffer.from('ok'), deflate: false },
+  ]);
+  const { entries, skipped } = extractZipEntries(zip, { maxEntryBytes: 512 });
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].fileName, 'small.txt');
+  assert.equal(skipped.length, 1);
+  assert.match(skipped[0].reason, /inflate failed/);
+});
+
+test('zip extraction stops when cumulative size limit is reached', () => {
+  const a = Buffer.alloc(600, 0x42);
+  const b = Buffer.alloc(600, 0x43);
+  const zip = buildZip([
+    { name: 'a.bin', content: a, deflate: false },
+    { name: 'b.bin', content: b, deflate: false },
+  ]);
+  const { entries, skipped } = extractZipEntries(zip, { maxTotalBytes: 1000 });
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].fileName, 'a.bin');
+  assert.equal(skipped.length, 1);
+  assert.match(skipped[0].reason, /cumulative/);
+});
+
 test('PDF generation and packet assembly produce valid PDFs with watermarks', async () => {
   const cover = await createSectionedPdf({
     title: 'Sale Packet: Spirit',
