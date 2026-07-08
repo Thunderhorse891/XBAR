@@ -1,12 +1,20 @@
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, FileUp } from 'lucide-react';
 import { ActionButton, SlideOverDrawer } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import { events, track } from '@/lib/telemetry';
-import type { ExpenseCategory, HorseSegment, HorseSex, HorseStatus } from '@/types/xbar';
+import type {
+  AssetCategory,
+  ExpenseCategory,
+  HorseSegment,
+  HorseSex,
+  HorseStatus,
+  MedicalEventType,
+  SalesLead,
+} from '@/types/xbar';
 
 /* ----------------------------------------------------------- Form fields */
 export function Text({
@@ -98,30 +106,6 @@ export function Stepper({ steps, current }: { steps: string[]; current: number }
 }
 
 /* ------------------------------------------------- Global Create (drawer) */
-export type CreateKey =
-  | 'Add Horse'
-  | 'Add Task'
-  | 'Upload Document'
-  | 'Add Health Record'
-  | 'Move Horses'
-  | 'Prepare Sale Packet'
-  | 'Add Buyer Follow-up'
-  | 'Add Expense'
-  | 'Add Equipment'
-  | 'Report Pasture Issue';
-
-export const createActions: CreateKey[] = [
-  'Add Horse',
-  'Add Task',
-  'Upload Document',
-  'Add Health Record',
-  'Move Horses',
-  'Prepare Sale Packet',
-  'Add Buyer Follow-up',
-  'Add Expense',
-  'Add Equipment',
-  'Report Pasture Issue',
-];
 
 const locationNames = ['Main Barn', 'North Pasture', 'South Pasture', 'Foaling Pen', 'Quarantine Pen', 'Round Pen'];
 
@@ -145,34 +129,86 @@ const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   'Bedding',
   'Travel',
 ];
+const MEDICAL_EVENT_TYPES: MedicalEventType[] = [
+  'Vaccine',
+  'Deworming',
+  'Coggins',
+  'Dental',
+  'Vet visit',
+  'Treatment',
+  'Injury',
+];
+const ASSET_CATEGORIES: AssetCategory[] = ['Equipment', 'Transport', 'Tack', 'Medical Kit', 'Feed & Supply'];
+const LEAD_CHANNELS: SalesLead['channel'][] = ['Referral', 'Site Inquiry', 'Facebook', 'Instagram'];
 
-export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | null; onClose: () => void }) {
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export function GlobalCreateDrawer() {
   const navigate = useNavigate();
+  const action = useUiStore((s) => s.createAction);
+  const prefill = useUiStore((s) => s.createPrefill);
+  const closeCreate = useUiStore((s) => s.closeCreate);
   const pushToast = useUiStore((s) => s.pushToast);
   const horses = useXbarStore((s) => s.horses);
   const workspaceProfile = useXbarStore((s) => s.workspaceProfile);
   const addHorse = useXbarStore((s) => s.addHorse);
   const addExpenseReceipt = useXbarStore((s) => s.addExpenseReceipt);
+  const addMedicalEvent = useXbarStore((s) => s.addMedicalEvent);
+  const addBreedingEvent = useXbarStore((s) => s.addBreedingEvent);
+  const updateHorseLocation = useXbarStore((s) => s.updateHorseLocation);
+  const addRanchAsset = useXbarStore((s) => s.addRanchAsset);
+  const createSalesLead = useXbarStore((s) => s.createSalesLead);
+  const createDocumentIntake = useXbarStore((s) => s.createDocumentIntake);
   const [f, setF] = useState<Record<string, string>>({});
+  const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const set = (k: string) => (v: string) => setF((cur) => ({ ...cur, [k]: v }));
 
+  // Re-seed the form whenever a flow opens so route-level prefills
+  // (horse name, expense category, record title) land in the fields.
+  useEffect(() => {
+    setF(prefill);
+    setFiles([]);
+    setBusy(false);
+  }, [action, prefill]);
+
   const horseNames = horses.length ? horses.map((h) => h.name) : ['(add a horse first)'];
+  const author =
+    workspaceProfile.ranchManagerName ||
+    workspaceProfile.defaultOwnerName ||
+    workspaceProfile.businessName ||
+    'Ranch manager';
 
   if (!action) return null;
 
-  const submit = (msg: string, go?: string) => {
+  const onClose = closeCreate;
+  const pickedHorse = () => horses.find((h) => h.name === (f.animal ?? horseNames[0])) ?? null;
+
+  const warn = (message: string) => pushToast({ title: action, message, tone: 'warning' });
+
+  const finish = (message: string, go?: string) => {
     track(events.createSubmitted, { action });
-    pushToast({ title: action, message: msg, tone: 'success' });
+    pushToast({ title: action, message, tone: 'success' });
     setF({});
+    setFiles([]);
     onClose();
     if (go) navigate(go);
+  };
+
+  const readDate = () => {
+    const value = (f.date ?? '').trim();
+    if (!value) return today();
+    return ISO_DATE.test(value) ? value : null;
   };
 
   const submitAnimal = () => {
     const name = (f.name ?? '').trim();
     if (name.length < 2) {
-      pushToast({ title: 'Add Horse', message: 'Enter a name to add the horse.', tone: 'warning' });
+      warn('Enter a name to add the horse.');
       return;
     }
     const segment = (f.segment as HorseSegment) ?? 'Sale Prospect';
@@ -190,14 +226,10 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
       barn: f.loc ?? workspaceProfile.defaultBarn ?? locationNames[0],
       pasture: workspaceProfile.defaultPasture ?? '',
     });
-    track(events.createSubmitted, { action });
     if (result.ok) {
-      pushToast({ title: 'Add Horse', message: `${name} added to the herd`, tone: 'success' });
-      setF({});
-      onClose();
-      navigate(result.id ? `/horses/${result.id}` : '/horses');
+      finish(`${name} added to the herd`, result.id ? `/horses/${result.id}` : '/horses');
     } else {
-      pushToast({ title: 'Add Horse', message: result.message, tone: 'warning' });
+      warn(result.message);
     }
   };
 
@@ -205,7 +237,7 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
     const desc = (f.desc ?? '').trim();
     const amount = Number.parseFloat((f.amt ?? '').replace(/[^0-9.]/g, ''));
     if (desc.length < 2 || !Number.isFinite(amount) || amount <= 0) {
-      pushToast({ title: 'Add Expense', message: 'Enter a description and a valid amount.', tone: 'warning' });
+      warn('Enter a description and a valid amount.');
       return;
     }
     setBusy(true);
@@ -214,18 +246,154 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
       category: (f.cat as ExpenseCategory) ?? 'Feed',
       vendor: (f.vendor ?? '').trim() || 'General',
       amount,
-      receiptDate: new Date().toISOString().slice(0, 10),
-      uploadedBy: workspaceProfile.ranchManagerName || 'Ranch manager',
+      receiptDate: today(),
+      uploadedBy: author,
     });
     setBusy(false);
-    track(events.createSubmitted, { action });
     if (result.ok) {
-      pushToast({ title: 'Add Expense', message: 'Expense logged', tone: 'success' });
-      setF({});
-      onClose();
-      navigate('/expenses');
+      finish('Expense logged', '/expenses');
     } else {
-      pushToast({ title: 'Add Expense', message: result.message, tone: 'warning' });
+      warn(result.message);
+    }
+  };
+
+  const submitHealthRecord = () => {
+    const horse = pickedHorse();
+    if (!horse) {
+      warn('Add a horse first, then log health records against it.');
+      return;
+    }
+    const date = readDate();
+    if (!date) {
+      warn('Enter the date as YYYY-MM-DD, or leave it blank for today.');
+      return;
+    }
+    const type = (f.type as MedicalEventType) ?? 'Vaccine';
+    const result = addMedicalEvent(horse.id, {
+      title: (f.title ?? '').trim() || type,
+      body: (f.notes ?? '').trim() || type,
+      author,
+      date,
+      type,
+    });
+    if (result.ok) {
+      finish(`${type} recorded for ${horse.name}`, `/horses/${horse.id}`);
+    } else {
+      warn(result.message);
+    }
+  };
+
+  const submitBreedingRecord = () => {
+    const horse = pickedHorse();
+    if (!horse) {
+      warn('Add a horse first, then log breeding records against it.');
+      return;
+    }
+    const date = readDate();
+    if (!date) {
+      warn('Enter the date as YYYY-MM-DD, or leave it blank for today.');
+      return;
+    }
+    const title = (f.title ?? '').trim();
+    if (title.length < 2) {
+      warn('Describe the milestone — e.g. Preg check, Cover date, Foaling watch.');
+      return;
+    }
+    const result = addBreedingEvent(horse.id, {
+      title,
+      body: (f.notes ?? '').trim() || title,
+      author,
+      date,
+    });
+    if (result.ok) {
+      finish(`${title} recorded for ${horse.name}`, '/breeding-foaling');
+    } else {
+      warn(result.message);
+    }
+  };
+
+  const submitMoveHorse = () => {
+    const horse = pickedHorse();
+    if (!horse) {
+      warn('Add a horse first, then move it between locations.');
+      return;
+    }
+    const barn = (f.barn ?? '').trim();
+    const pasture = (f.pasture ?? '').trim();
+    if (!barn && !pasture) {
+      warn('Enter the new barn, the new pasture, or both.');
+      return;
+    }
+    const result = updateHorseLocation(horse.id, {
+      ...(barn ? { barn } : {}),
+      ...(pasture ? { pasture } : {}),
+    });
+    if (result.ok) {
+      finish(`${horse.name} moved to ${[barn, pasture].filter(Boolean).join(' / ')}`, '/pastures');
+    } else {
+      warn(result.message);
+    }
+  };
+
+  const submitEquipment = () => {
+    const name = (f.name ?? '').trim();
+    if (name.length < 2) {
+      warn('Name the equipment to add it.');
+      return;
+    }
+    const result = addRanchAsset({
+      name,
+      category: (f.cat as AssetCategory) ?? 'Equipment',
+      location: f.loc ?? locationNames[0],
+    });
+    if (result.ok) {
+      finish(`${name} added`, '/assets');
+    } else {
+      warn(result.message);
+    }
+  };
+
+  const submitBuyerFollowUp = () => {
+    const horse = pickedHorse();
+    const name = (f.name ?? '').trim();
+    if (name.length < 2) {
+      warn('Enter the buyer name to save the follow-up.');
+      return;
+    }
+    if (!horse) {
+      warn('Add a horse first, then link buyer follow-ups to it.');
+      return;
+    }
+    const result = createSalesLead({
+      name,
+      channel: (f.channel as SalesLead['channel']) ?? 'Referral',
+      horseId: horse.id,
+    });
+    if (result.ok) {
+      finish(`Follow-up saved for ${name}`, '/sales');
+    } else {
+      warn(result.message);
+    }
+  };
+
+  const submitDocuments = async () => {
+    if (!files.length) {
+      warn('Choose at least one PDF or image to upload.');
+      return;
+    }
+    const horse = pickedHorse();
+    setBusy(true);
+    const result = await createDocumentIntake({
+      files,
+      horseId: horse?.id,
+      source: 'Manual Upload',
+      uploadedBy: author,
+    });
+    setBusy(false);
+    if (result.ok) {
+      finish(`${files.length} file${files.length === 1 ? '' : 's'} queued for review`, '/documents');
+    } else {
+      warn(result.message);
     }
   };
 
@@ -265,56 +433,29 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
         </ActionButton>
       );
       break;
-    case 'Add Task':
-      body = (
-        <div className="xs-form">
-          <Text
-            label="Task"
-            placeholder="e.g. Move mares to South Trap"
-            value={f.title ?? ''}
-            onChange={set('title')}
-          />
-          <Pick
-            label="Priority"
-            value={f.priority ?? 'High'}
-            onChange={set('priority')}
-            options={['Revenue Blocker', 'High', 'Medium', 'Normal']}
-          />
-          <Pick
-            label="Assign to"
-            value={f.assignee ?? 'Erin W.'}
-            onChange={set('assignee')}
-            options={['Erin W.', 'Cody R.', 'Dr. Hale']}
-          />
-          <Text label="Due" placeholder="Today 6:00 PM" value={f.due ?? ''} onChange={set('due')} />
-        </div>
-      );
-      footer = (
-        <ActionButton variant="primary" onClick={() => submit(`Task created: ${f.title || 'New task'}`, '/today')}>
-          Create Task
-        </ActionButton>
-      );
-      break;
     case 'Upload Document':
       body = (
         <div className="xs-form">
-          <div className="xs-drop">
-            <FileUp size={20} style={{ display: 'block', margin: '0 auto 8px' }} />
-            Drop a file or click to browse (PDF, JPG)
-          </div>
-          <Pick
-            label="Document type"
-            value={f.type ?? 'Health Certificate'}
-            onChange={set('type')}
-            options={['Health Certificate', 'Coggins', 'Registration', 'Bill of Sale', 'Photos', 'Contract']}
-          />
+          <label>
+            <span className="xs-field-label">Files</span>
+            <input
+              className="xs-input"
+              type="file"
+              multiple
+              accept="application/pdf,image/*"
+              onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+            />
+            <span className="xs-field-hint">
+              <FileUp size={12} style={{ display: 'inline', verticalAlign: '-2px' }} /> PDF or JPG — XBAR reads each
+              file and queues it for review.
+            </span>
+          </label>
           <Pick label="Link to horse" value={f.animal ?? horseNames[0]} onChange={set('animal')} options={horseNames} />
-          <Text label="Expiration date" placeholder="YYYY-MM-DD" value={f.exp ?? ''} onChange={set('exp')} />
         </div>
       );
       footer = (
-        <ActionButton variant="primary" onClick={() => submit(`${f.type || 'Document'} uploaded`, '/documents')}>
-          Upload
+        <ActionButton variant="primary" disabled={busy} onClick={submitDocuments}>
+          {busy ? 'Uploading…' : 'Upload'}
         </ActionButton>
       );
       break;
@@ -322,13 +463,14 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
       body = (
         <div className="xs-form">
           <Pick label="Horse" value={f.animal ?? horseNames[0]} onChange={set('animal')} options={horseNames} />
-          <Pick
-            label="Record type"
-            value={f.type ?? 'Vaccine'}
-            onChange={set('type')}
-            options={['Vaccine', 'Deworming', 'Coggins', 'Dental', 'Farrier', 'Vet visit', 'Medication']}
+          <Pick label="Record type" value={f.type ?? 'Vaccine'} onChange={set('type')} options={MEDICAL_EVENT_TYPES} />
+          <Text
+            label="Date"
+            placeholder={today()}
+            value={f.date ?? ''}
+            onChange={set('date')}
+            hint="Leave blank for today."
           />
-          <Text label="Date" placeholder="YYYY-MM-DD" value={f.date ?? ''} onChange={set('date')} />
           <Area
             label="Notes"
             placeholder="Withdrawal date, dosage, vet…"
@@ -338,43 +480,75 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
         </div>
       );
       footer = (
-        <ActionButton variant="primary" onClick={() => submit('Health record added')}>
+        <ActionButton variant="primary" onClick={submitHealthRecord}>
           Add Record
         </ActionButton>
       );
       break;
-    case 'Move Horses':
+    case 'Add Breeding Record':
       body = (
         <div className="xs-form">
-          <Pick label="From" value={f.from ?? locationNames[1]} onChange={set('from')} options={locationNames} />
-          <Pick label="To" value={f.to ?? locationNames[2]} onChange={set('to')} options={locationNames} />
-          <Text label="How many" placeholder="e.g. 14" value={f.count ?? ''} onChange={set('count')} />
+          <Pick label="Horse" value={f.animal ?? horseNames[0]} onChange={set('animal')} options={horseNames} />
+          <Text
+            label="Milestone"
+            placeholder="e.g. Preg check, Cover date, Foaling watch"
+            value={f.title ?? ''}
+            onChange={set('title')}
+          />
+          <Text
+            label="Date"
+            placeholder={today()}
+            value={f.date ?? ''}
+            onChange={set('date')}
+            hint="Leave blank for today."
+          />
+          <Area label="Notes" placeholder="Stallion, vet, result…" value={f.notes ?? ''} onChange={set('notes')} />
         </div>
       );
       footer = (
-        <ActionButton
-          variant="primary"
-          onClick={() => submit(`Moved ${f.count || 'horses'} → ${f.to || 'new location'}`, '/pastures')}
-        >
-          Move Horses
+        <ActionButton variant="primary" onClick={submitBreedingRecord}>
+          Add Record
+        </ActionButton>
+      );
+      break;
+    case 'Move Horse':
+      body = (
+        <div className="xs-form">
+          <Pick label="Horse" value={f.animal ?? horseNames[0]} onChange={set('animal')} options={horseNames} />
+          <Text label="New barn" placeholder="e.g. Main Barn" value={f.barn ?? ''} onChange={set('barn')} />
+          <Text
+            label="New pasture"
+            placeholder="e.g. South Pasture"
+            value={f.pasture ?? ''}
+            onChange={set('pasture')}
+            hint="Fill in either field — only the ones you set are changed."
+          />
+        </div>
+      );
+      footer = (
+        <ActionButton variant="primary" onClick={submitMoveHorse}>
+          Move Horse
         </ActionButton>
       );
       break;
     case 'Prepare Sale Packet':
       body = (
         <div className="xs-form">
-          <Pick label="Horse" value={f.animal ?? horseNames[0]} onChange={set('animal')} options={horseNames} />
-          <Pick
-            label="Packet type"
-            value={f.type ?? 'Buyer review packet'}
-            onChange={set('type')}
-            options={['Sale packet', 'Buyer review packet', 'Release packet', 'Vet and travel packet']}
-          />
+          <p className="xs-field-hint" style={{ margin: 0 }}>
+            Sale packets are built in the Sale Packet Studio, where you pick the horse, the packet type, and the
+            watermark before generating.
+          </p>
         </div>
       );
       footer = (
-        <ActionButton variant="primary" onClick={() => submit('Opening sale packets', '/sale-packets')}>
-          Open Sale Packets
+        <ActionButton
+          variant="primary"
+          onClick={() => {
+            onClose();
+            navigate('/sale-packets');
+          }}
+        >
+          Open Sale Packet Studio
         </ActionButton>
       );
       break;
@@ -387,16 +561,13 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
             value={f.name ?? ''}
             onChange={set('name')}
           />
-          <Text label="Email" placeholder="buyer@email.com" value={f.email ?? ''} onChange={set('email')} />
+          <Pick label="Channel" value={f.channel ?? 'Referral'} onChange={set('channel')} options={LEAD_CHANNELS} />
           <Pick label="Horse" value={f.animal ?? horseNames[0]} onChange={set('animal')} options={horseNames} />
         </div>
       );
       footer = (
-        <ActionButton
-          variant="primary"
-          onClick={() => submit(`Open sales to save follow-up for ${f.name || 'buyer'}`, '/sales')}
-        >
-          Open sales
+        <ActionButton variant="primary" onClick={submitBuyerFollowUp}>
+          Save Follow-up
         </ActionButton>
       );
       break;
@@ -419,37 +590,13 @@ export function GlobalCreateDrawer({ action, onClose }: { action: CreateKey | nu
       body = (
         <div className="xs-form">
           <Text label="Equipment" placeholder="e.g. Stock trailer (24ft)" value={f.name ?? ''} onChange={set('name')} />
-          <Pick
-            label="Type"
-            value={f.type ?? 'Trailer'}
-            onChange={set('type')}
-            options={['Truck', 'Trailer', 'Tractor', 'UTV', 'Tack', 'Feeder', 'Water trough', 'Tool']}
-          />
+          <Pick label="Category" value={f.cat ?? 'Equipment'} onChange={set('cat')} options={ASSET_CATEGORIES} />
           <Pick label="Location" value={f.loc ?? locationNames[0]} onChange={set('loc')} options={locationNames} />
         </div>
       );
       footer = (
-        <ActionButton variant="primary" onClick={() => submit(`${f.name || 'Equipment'} added`, '/assets')}>
+        <ActionButton variant="primary" onClick={submitEquipment}>
           Add Equipment
-        </ActionButton>
-      );
-      break;
-    case 'Report Pasture Issue':
-      body = (
-        <div className="xs-form">
-          <Pick label="Location" value={f.loc ?? locationNames[1]} onChange={set('loc')} options={locationNames} />
-          <Pick
-            label="Issue"
-            value={f.issue ?? 'Water trough'}
-            onChange={set('issue')}
-            options={['Water trough', 'Fence / gate', 'Grazing pressure', 'Flooding', 'Other']}
-          />
-          <Area label="Details" placeholder="What did you see?" value={f.notes ?? ''} onChange={set('notes')} />
-        </div>
-      );
-      footer = (
-        <ActionButton variant="primary" onClick={() => submit(`Issue reported at ${f.loc || 'location'}`, '/pastures')}>
-          Report Issue
         </ActionButton>
       );
       break;

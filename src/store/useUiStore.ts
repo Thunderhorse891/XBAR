@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { toast as sonnerToast } from 'sonner';
 import { createId } from '@/lib/xbarRuntime';
+import type { CreateKey, CreatePrefill } from '@/components/saas/createActions';
 import {
   sanitizeSurfaceModes,
   transitionSurfaceMode,
@@ -25,6 +26,10 @@ type UiStore = {
   focusedSurfaceId: string | null;
   rightDrawer: DrawerPayload | null;
   commandPaletteOpen: boolean;
+  createAction: CreateKey | null;
+  createPrefill: CreatePrefill;
+  openCreate: (action: CreateKey, prefill?: CreatePrefill) => void;
+  closeCreate: () => void;
   pushToast: (toast: { id?: string; title?: string; message: string; tone?: ToastTone; duration?: number }) => string;
   removeToast: (id: string) => void;
   clearToasts: () => void;
@@ -61,6 +66,10 @@ export const useUiStore = create<UiStore>((set) => ({
   focusedSurfaceId: null,
   rightDrawer: null,
   commandPaletteOpen: false,
+  createAction: null,
+  createPrefill: {},
+  openCreate: (createAction, createPrefill = {}) => set({ createAction, createPrefill }),
+  closeCreate: () => set({ createAction: null, createPrefill: {} }),
   pushToast: ({ id, duration = 4000, tone = 'info', ...toast }) => {
     const toastId = id ?? createToastId();
     const options = { id: toastId, description: toast.title ? toast.message : undefined, duration };

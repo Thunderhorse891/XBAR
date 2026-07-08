@@ -26,7 +26,8 @@ import {
   Wheat,
 } from 'lucide-react';
 import { ProgressRing, QuickCreateMenu } from '@/components/saas';
-import { GlobalCreateDrawer, createActions, type CreateKey } from '@/components/saas/flows';
+import { GlobalCreateDrawer } from '@/components/saas/flows';
+import { createActions } from '@/components/saas/createActions';
 import { billingPath } from '@/lib/billingRoutes';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { buildCareBoardRows } from '@/lib/dashboardOps';
@@ -97,7 +98,7 @@ export default function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mode, setMode] = useState<'ops' | 'buyer'>('ops');
-  const [createAction, setCreateAction] = useState<CreateKey | null>(null);
+  const openCreate = useUiStore((state) => state.openCreate);
 
   const documents = useXbarStore((state) => state.documents);
   const horses = useXbarStore((state) => state.horses);
@@ -165,7 +166,7 @@ export default function MainLayout() {
     }
   }
 
-  const createItems = createActions.map((label) => ({ label, onSelect: () => setCreateAction(label) }));
+  const createItems = createActions.map((label) => ({ label, onSelect: () => openCreate(label) }));
 
   return (
     <div className="xs-shell">
@@ -335,7 +336,7 @@ export default function MainLayout() {
           <Outlet />
         </main>
 
-        <GlobalCreateDrawer action={createAction} onClose={() => setCreateAction(null)} />
+        <GlobalCreateDrawer />
 
         <nav className="xs-mobilebar" aria-label="Mobile navigation">
           {mobileItems.map(({ label, path, icon: Icon }) => {

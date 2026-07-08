@@ -23,6 +23,38 @@ type Task = {
 const TABS: Array<'All' | TaskCategory> = ['All', 'Documents', 'Care', 'Sales'];
 const priorityTone = { Blocker: 'danger', High: 'warning', Normal: 'neutral' } as const;
 
+// Done and snoozed task ids persist per calendar day so the list stays quiet
+// after a refresh but resurfaces everything the next morning.
+const TASK_STATE_KEY = 'xbar-care-tasks-state-v1';
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function readTaskState(): { day: string; done: string[]; snoozed: string[] } {
+  const empty = { day: todayKey(), done: [], snoozed: [] };
+  if (typeof window === 'undefined') return empty;
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(TASK_STATE_KEY) ?? '');
+    if (parsed?.day !== todayKey()) return empty;
+    return {
+      day: parsed.day,
+      done: Array.isArray(parsed.done) ? parsed.done.filter((v: unknown) => typeof v === 'string') : [],
+      snoozed: Array.isArray(parsed.snoozed) ? parsed.snoozed.filter((v: unknown) => typeof v === 'string') : [],
+    };
+  } catch {
+    return empty;
+  }
+}
+
+function writeTaskState(done: Set<string>, snoozed: Set<string>) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(
+    TASK_STATE_KEY,
+    JSON.stringify({ day: todayKey(), done: [...done], snoozed: [...snoozed] }),
+  );
+}
+
 export default function TodayWork() {
   const navigate = useNavigate();
   const pushToast = useUiStore((s) => s.pushToast);
@@ -32,7 +64,8 @@ export default function TodayWork() {
   const expenseReceipts = useXbarStore((s) => s.expenseReceipts);
   const salesLeads = useXbarStore((s) => s.salesLeads);
   const [tab, setTab] = useState<'All' | TaskCategory>('All');
-  const [done, setDone] = useState<Set<string>>(new Set());
+  const [done, setDone] = useState<Set<string>>(() => new Set(readTaskState().done));
+  const [snoozed, setSnoozed] = useState<Set<string>>(() => new Set(readTaskState().snoozed));
   const [open, setOpen] = useState<Task | null>(null);
   const toast = (m: string) => pushToast({ title: 'Care Tasks', message: m, tone: 'success' });
 
@@ -93,14 +126,28 @@ export default function TodayWork() {
           due: l.nextFollowUp ?? 'Soon',
         }),
       );
-    return out.filter((t) => !done.has(t.id));
-  }, [horses, documents, ownershipRecords, expenseReceipts, salesLeads, done]);
+    return out.filter((t) => !done.has(t.id) && !snoozed.has(t.id));
+  }, [horses, documents, ownershipRecords, expenseReceipts, salesLeads, done, snoozed]);
 
   const filtered = tab === 'All' ? tasks : tasks.filter((t) => t.category === tab);
   const markDone = (id: string) => {
-    setDone((cur) => new Set(cur).add(id));
+    setDone((cur) => {
+      const next = new Set(cur).add(id);
+      writeTaskState(next, snoozed);
+      return next;
+    });
     setOpen(null);
     toast('Task marked done');
+  };
+
+  const snooze = (task: Task) => {
+    setSnoozed((cur) => {
+      const next = new Set(cur).add(task.id);
+      writeTaskState(done, next);
+      return next;
+    });
+    setOpen(null);
+    toast(`Snoozed "${task.title}" until tomorrow`);
   };
 
   return (
@@ -185,8 +232,8 @@ export default function TodayWork() {
                       <button
                         type="button"
                         className="xs-quickbtn"
-                        title="Snooze"
-                        onClick={() => toast(`Snoozed "${t.title}"`)}
+                        title="Snooze until tomorrow"
+                        onClick={() => snooze(t)}
                       >
                         <Timer size={15} />
                       </button>
@@ -210,14 +257,7 @@ export default function TodayWork() {
         footer={
           open ? (
             <>
-              <ActionButton
-                onClick={() => {
-                  toast('Snoozed');
-                  setOpen(null);
-                }}
-              >
-                Snooze
-              </ActionButton>
+              <ActionButton onClick={() => snooze(open)}>Snooze</ActionButton>
               <ActionButton
                 variant="primary"
                 icon={<Check size={15} />}

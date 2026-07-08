@@ -3,7 +3,7 @@ import { Plus, Wrench } from 'lucide-react';
 import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
-import type { AssetCondition } from '@/types/xbar';
+import type { AssetCondition, RanchAsset } from '@/types/xbar';
 
 type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 const CONDITION_TONE: Record<AssetCondition, Tone> = {
@@ -16,7 +16,26 @@ export default function Equipment() {
   const pushToast = useUiStore((s) => s.pushToast);
   const assets = useXbarStore((s) => s.ranchAssets);
   const addRanchAsset = useXbarStore((s) => s.addRanchAsset);
+  const updateAsset = useXbarStore((s) => s.updateAsset);
   const toast = (m: string) => pushToast({ title: 'Equipment', message: m, tone: 'success' });
+
+  const openWorkOrder = (asset: RanchAsset) => {
+    const result = updateAsset(asset.id, {
+      status: 'In Service',
+      condition: 'Service Soon',
+      notes: `Work order opened ${new Date().toISOString().slice(0, 10)}`,
+    });
+    toast(result.ok ? `${asset.name} pulled into service — work order open` : result.message);
+  };
+
+  const logRepair = (asset: RanchAsset) => {
+    const result = updateAsset(asset.id, {
+      status: 'Available',
+      condition: 'Excellent',
+      notes: `Repair completed ${new Date().toISOString().slice(0, 10)}`,
+    });
+    toast(result.ok ? `${asset.name} repaired and back in rotation` : result.message);
+  };
 
   const counts = useMemo(
     () => ({
@@ -39,14 +58,9 @@ export default function Equipment() {
         title="Equipment & Maintenance"
         subtitle="Trucks, trailers, tractors, gates, troughs, and tools — status, service, and open work orders."
         actions={
-          <>
-            <ActionButton icon={<Wrench size={15} />} onClick={() => toast('Work order created')}>
-              Create Work Order
-            </ActionButton>
-            <ActionButton variant="primary" icon={<Plus size={15} />} onClick={addEquipment}>
-              Add Equipment
-            </ActionButton>
-          </>
+          <ActionButton variant="primary" icon={<Plus size={15} />} onClick={addEquipment}>
+            Add Equipment
+          </ActionButton>
         }
       />
 
@@ -114,10 +128,10 @@ export default function Equipment() {
                   <StatusChip tone={CONDITION_TONE[e.condition]}>{e.condition}</StatusChip>
                 </div>
                 <div className="xs-toolbar" style={{ marginTop: 12 }}>
-                  <ActionButton size="sm" onClick={() => toast(`Work order — ${e.name}`)}>
-                    Work Order
+                  <ActionButton size="sm" icon={<Wrench size={14} />} onClick={() => openWorkOrder(e)}>
+                    Open Work Order
                   </ActionButton>
-                  <ActionButton size="sm" onClick={() => toast(`Repair logged — ${e.name}`)}>
+                  <ActionButton size="sm" onClick={() => logRepair(e)}>
                     Log Repair
                   </ActionButton>
                 </div>

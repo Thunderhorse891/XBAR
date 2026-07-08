@@ -15,12 +15,11 @@ const STATUS_LABEL: Record<CareSignalStatus, string> = { due: 'Due', watch: 'Wat
 
 export default function HealthCare() {
   const navigate = useNavigate();
-  const pushToast = useUiStore((s) => s.pushToast);
+  const openCreate = useUiStore((s) => s.openCreate);
   const horses = useXbarStore((s) => s.horses);
   const documents = useXbarStore((s) => s.documents);
   const expenseReceipts = useXbarStore((s) => s.expenseReceipts);
   const [f, setF] = useState<string>('All');
-  const toast = (m: string) => pushToast({ title: 'Health & Care', message: m, tone: 'success' });
 
   const careRows = useMemo(
     () => buildCareBoardRows(horses, documents, expenseReceipts),
@@ -111,10 +110,13 @@ export default function HealthCare() {
         subtitle="Vaccines, Coggins, farrier, dental, and medications — everything that keeps a horse healthy and sale-ready."
         actions={
           <>
-            <ActionButton icon={<CalendarPlus size={15} />} onClick={() => toast('Care scheduled')}>
+            <ActionButton
+              icon={<CalendarPlus size={15} />}
+              onClick={() => openCreate('Add Health Record', { type: 'Vet visit' })}
+            >
               Schedule Care
             </ActionButton>
-            <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => toast('Health record added')}>
+            <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => openCreate('Add Health Record')}>
               Add Record
             </ActionButton>
           </>

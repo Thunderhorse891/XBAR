@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, MapPin, Move } from 'lucide-react';
+import { MapPin, Move } from 'lucide-react';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import { ActionButton, Card, PageHead, SlideOverDrawer, StatusChip } from '@/components/saas';
@@ -9,12 +9,11 @@ import type { HorseRecord } from '@/types/xbar';
 type Location = { id: string; name: string; kind: 'Barn' | 'Pasture'; horses: HorseRecord[] };
 
 export default function Pastures() {
-  const pushToast = useUiStore((state) => state.pushToast);
+  const openCreate = useUiStore((state) => state.openCreate);
   const navigate = useNavigate();
   const horses = useXbarStore((s) => s.horses);
   const workspaceProfile = useXbarStore((s) => s.workspaceProfile);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const toast = (m: string) => pushToast({ title: 'Pastures', message: m, tone: 'success' });
 
   const locations = useMemo<Location[]>(() => {
     const barns = new Set<string>();
@@ -41,23 +40,11 @@ export default function Pastures() {
       <PageHead
         eyebrow="Ranch"
         title="Pastures"
-        subtitle="Where every horse is, what needs attention, and which locations have open issues."
+        subtitle="Where every horse is right now, barn by barn and pasture by pasture."
         actions={
-          <>
-            <ActionButton
-              icon={<Move size={15} />}
-              onClick={() => toast('Use a horse profile to move it between locations')}
-            >
-              Move Horses
-            </ActionButton>
-            <ActionButton
-              variant="primary"
-              icon={<AlertTriangle size={15} />}
-              onClick={() => toast('Pasture issue reported')}
-            >
-              Report Issue
-            </ActionButton>
-          </>
+          <ActionButton variant="primary" icon={<Move size={15} />} onClick={() => openCreate('Move Horse')}>
+            Move Horse
+          </ActionButton>
         }
       />
 
@@ -101,21 +88,17 @@ export default function Pastures() {
         onClose={() => setSelectedId(null)}
         footer={
           selected ? (
-            <>
-              <ActionButton icon={<Move size={15} />} onClick={() => toast(`Move from ${selected.name}`)}>
-                Move Horses
-              </ActionButton>
-              <ActionButton
-                variant="primary"
-                icon={<AlertTriangle size={15} />}
-                onClick={() => {
-                  toast(`Issue reported at ${selected.name}`);
-                  setSelectedId(null);
-                }}
-              >
-                Report Issue
-              </ActionButton>
-            </>
+            <ActionButton
+              variant="primary"
+              icon={<Move size={15} />}
+              onClick={() => {
+                const first = selected.horses[0];
+                setSelectedId(null);
+                openCreate('Move Horse', first ? { animal: first.name } : {});
+              }}
+            >
+              Move Horse
+            </ActionButton>
           ) : null
         }
       >
