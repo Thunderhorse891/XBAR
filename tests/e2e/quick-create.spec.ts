@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { bootstrapWorkspace, seedHorse } from './helpers';
+import { bootstrapWorkspace, seedHorse } from './helpers.js';
 
 // The quick-create surfaces must persist real records — a success toast with
 // no stored data is a defect. These specs drive the prefilled flows opened

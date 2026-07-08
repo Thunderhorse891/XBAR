@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { bootstrapWorkspace, seedHorse } from './helpers';
+import { bootstrapWorkspace, seedHorse } from './helpers.js';
 
 test('creates a workspace and lands on the getting-started dashboard', async ({ page }) => {
   await bootstrapWorkspace(page);
