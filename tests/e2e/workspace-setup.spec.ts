@@ -26,7 +26,7 @@ test('creates a fresh workspace and lands on the operations dashboard', async ({
 
   await page.goto('/setup');
 
-  const setupHeading = page.getByRole('heading', { name: 'Build the ranch workspace around real records.' });
+  const setupHeading = page.getByRole('heading', { name: 'Build your operating workspace' });
   const openBrowserWorkspace = page.getByRole('button', { name: 'Open browser workspace' });
   const setupVisible = await setupHeading.isVisible({ timeout: 5_000 }).catch(() => false);
   if (!setupVisible) {
@@ -51,9 +51,8 @@ test('creates a fresh workspace and lands on the operations dashboard', async ({
 
   await page.getByRole('button', { name: 'Create workspace' }).click();
 
-  await expect(page).toHaveURL(/\/$/);
-  // The h1 reads "Ranch desk is clear." (no urgency) or "N items need attention."
-  // Use partial match so the assertion is resilient to the urgency count.
-  await expect(page.getByRole('heading', { name: /Ranch desk/, exact: false })).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText('No records yet')).toBeVisible();
+  await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: 'Add your first horse.', exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('[aria-label="Empty workspace counters"]')).toContainText('Horses', { timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: 'Create the first horse record' })).toBeVisible({ timeout: 15_000 });
 });

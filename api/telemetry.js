@@ -40,8 +40,8 @@ export default async function handler(req, res) {
     return sendJson(res, 202, { ok: true, message: 'Telemetry skipped — admin credentials not configured.' });
   }
 
-  // Require a verified session token — unauthenticated callers cannot pollute
-  // the analytics table or spoof workspace IDs.
+  // Require a verified session token so unauthenticated callers cannot
+  // pollute the analytics table or spoof workspace IDs.
   const accessToken = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim() || '';
   if (!accessToken) {
     return sendJson(res, 401, { ok: false, message: 'Authentication required.' });
