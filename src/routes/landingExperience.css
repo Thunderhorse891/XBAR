@@ -1,0 +1,763 @@
+/* ═══════════════════════════════════════════════
+   XBAR LANDING — Light Aerospace Edition
+   Premium silver marketing surface aligned with xbarCommandSystem.css.
+   Light canvas everywhere; exactly one dark graphite command module
+   (.revenue-console, rendered through the app's .command-brief styles).
+   Action color is electric blue. No green: verified = blue,
+   warning = amber, blocked = rose.
+═══════════════════════════════════════════════ */
+
+.revenue-landing {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 12% -8%, rgba(45, 140, 255, 0.10), transparent 34rem),
+    radial-gradient(circle at 88% 4%, rgba(174, 185, 197, 0.18), transparent 30rem),
+    linear-gradient(165deg, #f4f9fe 0%, #eef5fb 46%, #e6eef6 100%);
+  color: #0f141b;
+}
+
+.revenue-landing a:focus-visible,
+.revenue-landing button:focus-visible {
+  outline: 2px solid #18a8ff;
+  outline-offset: 2px;
+  border-radius: 9px;
+}
+
+/* ── Header / navigation ─────────────────────── */
+.revenue-nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 12px clamp(16px, 4vw, 54px);
+  border-bottom: 1px solid rgba(96, 124, 154, 0.22);
+  background: rgba(238, 245, 251, 0.88);
+  backdrop-filter: blur(18px) saturate(1.05);
+  -webkit-backdrop-filter: blur(18px) saturate(1.05);
+  box-shadow: 0 14px 30px -24px rgba(17, 21, 27, 0.25);
+}
+
+.revenue-nav__home {
+  display: inline-flex;
+  text-decoration: none;
+}
+
+.revenue-nav__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Wordmark copy reads dark on the light shell; the metallic X mark itself
+   is painted by metalBrandSystem.css (.xbar-wordmark__mark pseudo). */
+.revenue-landing .xbar-wordmark__copy strong {
+  color: #0d1420;
+}
+
+.revenue-landing .xbar-wordmark__copy span {
+  color: #5a6b7f;
+}
+
+/* ── Shared type ─────────────────────────────── */
+.revenue-kicker {
+  margin: 0 0 16px;
+  color: #1466d8;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+/* ── Hero ────────────────────────────────────── */
+.revenue-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(360px, 0.95fr);
+  align-items: center;
+  gap: clamp(32px, 6vw, 80px);
+  max-width: 1320px;
+  margin: auto;
+  padding: clamp(60px, 8vw, 116px) clamp(20px, 5vw, 72px);
+}
+
+.revenue-hero h1 {
+  max-width: 17ch;
+  margin: 0;
+  color: #0d1420;
+  font-size: clamp(2.6rem, 5.4vw, 4.9rem);
+  line-height: 1.0;
+  letter-spacing: -0.055em;
+}
+
+.revenue-hero__lead {
+  max-width: 620px;
+  margin: 22px 0 0;
+  color: #46586d;
+  font-size: clamp(16px, 1.9vw, 19px);
+  line-height: 1.65;
+}
+
+.revenue-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.revenue-proof-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  margin: 26px 0 0;
+  padding: 0;
+  list-style: none;
+  color: #5a6b7f;
+  font-size: 12.5px;
+}
+
+.revenue-proof-line li::before {
+  content: '✓';
+  margin-right: 7px;
+  color: #1466d8;
+  font-weight: 800;
+}
+
+/* ── Hero command preview (the one dark module) ─
+   Surface chrome (graphite gradient, border, shadow, radius) comes from
+   .command-brief in xbarCommandSystem.css; layout + chips live here. */
+.revenue-console {
+  margin: 0;
+  width: 100%;
+  max-width: 520px;
+  justify-self: end;
+  padding: clamp(18px, 2.4vw, 26px);
+}
+
+.revenue-console__top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(206, 221, 234, 0.14);
+}
+
+.revenue-console__mark {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+}
+
+.revenue-console__head {
+  flex: 1;
+  min-width: 0;
+}
+
+.revenue-console .revenue-kicker {
+  margin: 0 0 5px;
+  color: #58a8ff !important;
+  font-size: 9.5px;
+}
+
+.revenue-console__head strong {
+  display: block;
+  color: #f2f7ff;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.revenue-console__rows {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+.revenue-console__row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(206, 221, 234, 0.10);
+}
+
+.revenue-console__row dt {
+  color: #8aa0b8;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.revenue-console__row dd {
+  margin: 0;
+  color: #c6d8ec;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.revenue-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border: 1px solid rgba(120, 165, 220, 0.30);
+  border-radius: 999px;
+  background: rgba(10, 18, 30, 0.62);
+  color: rgba(214, 228, 244, 0.88);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.revenue-chip--blue {
+  border-color: rgba(24, 168, 255, 0.46);
+  background: rgba(24, 168, 255, 0.13);
+  color: #58c0ff;
+}
+
+.revenue-chip--amber {
+  border-color: rgba(226, 178, 96, 0.42);
+  background: rgba(154, 103, 0, 0.2);
+  color: #e6b35c;
+}
+
+.revenue-chip--rose {
+  border-color: rgba(255, 141, 150, 0.42);
+  background: rgba(192, 68, 78, 0.2);
+  color: #ff9aa2;
+}
+
+.revenue-chip--neutral {
+  color: rgba(214, 228, 244, 0.85);
+}
+
+.revenue-console__audit {
+  display: block;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(206, 221, 234, 0.14);
+  color: #8aa0b8;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.revenue-console__audit-label {
+  display: inline-block;
+  margin-right: 8px;
+  color: #58a8ff;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+/* ── Sections ────────────────────────────────── */
+.revenue-section {
+  max-width: 1320px;
+  margin: auto;
+  padding: clamp(56px, 8vw, 104px) clamp(20px, 5vw, 72px);
+}
+
+.revenue-section--bordered {
+  max-width: none;
+  border-top: 1px solid rgba(96, 124, 154, 0.18);
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.revenue-section__inner {
+  max-width: 1320px;
+  margin: auto;
+}
+
+.revenue-section__header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 28px;
+  margin-bottom: 34px;
+}
+
+.revenue-section h2 {
+  max-width: 22ch;
+  margin: 0;
+  color: #0d1420;
+  font-size: clamp(1.9rem, 3.8vw, 3.2rem);
+  line-height: 1.04;
+  letter-spacing: -0.045em;
+}
+
+.revenue-section__header > p {
+  max-width: 480px;
+  margin: 0;
+  color: #5a6b7f;
+  line-height: 1.65;
+}
+
+/* Light machined card base. */
+.revenue-pipeline__step,
+.revenue-pillar,
+.revenue-trust-card,
+.revenue-plan,
+.revenue-faq,
+.revenue-pain__list {
+  position: relative;
+  border: 1px solid rgba(96, 124, 154, 0.24);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff, #f5fafe);
+  box-shadow: 0 14px 34px -24px rgba(17, 21, 27, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+.revenue-pipeline__step::before,
+.revenue-pillar::before,
+.revenue-trust-card::before,
+.revenue-plan::before,
+.revenue-faq::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 16px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(45, 140, 255, 0.45), transparent);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* ── Pipeline ────────────────────────────────── */
+.revenue-pipeline {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: pipeline;
+}
+
+.revenue-pipeline__step {
+  padding: 20px;
+}
+
+.revenue-pipeline__index {
+  display: block;
+  color: #1466d8;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.2em;
+}
+
+.revenue-pipeline__step strong {
+  display: block;
+  margin: 16px 0 8px;
+  color: #0d1420;
+  font-size: 15.5px;
+  letter-spacing: -0.02em;
+}
+
+.revenue-pipeline__step p {
+  margin: 0;
+  color: #5a6b7f;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+/* ── Value pillars ───────────────────────────── */
+.revenue-pillars {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.revenue-pillar {
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+}
+
+.revenue-pillar h3 {
+  margin: 0 0 10px;
+  color: #0d1420;
+  font-size: 18px;
+  letter-spacing: -0.025em;
+}
+
+.revenue-pillar > p {
+  margin: 0;
+  color: #5a6b7f;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.revenue-pillar ul {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0 0;
+  padding: 16px 0 0;
+  border-top: 1px solid rgba(96, 124, 154, 0.16);
+  list-style: none;
+  color: #303842;
+  font-size: 12px;
+}
+
+.revenue-pillar li::before {
+  content: '→';
+  margin-right: 8px;
+  color: #1466d8;
+}
+
+/* ── Pain section ────────────────────────────── */
+.revenue-pain {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
+  align-items: center;
+  gap: clamp(28px, 5vw, 64px);
+}
+
+.revenue-pain__copy h2 {
+  max-width: 24ch;
+}
+
+.revenue-pain__copy > p:last-child {
+  max-width: 560px;
+  margin: 18px 0 0;
+  color: #5a6b7f;
+  line-height: 1.65;
+}
+
+.revenue-pain__list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 10px 24px;
+  list-style: none;
+}
+
+.revenue-pain__list li {
+  padding: 13px 0;
+  border-bottom: 1px solid rgba(96, 124, 154, 0.16);
+  color: #303842;
+  font-size: 13.5px;
+}
+
+.revenue-pain__list li:last-child {
+  border-bottom: 0;
+}
+
+.revenue-pain__list li::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 12px;
+  border-radius: 50%;
+  background: #9a6700;
+  vertical-align: 1px;
+}
+
+/* ── Trust ───────────────────────────────────── */
+.revenue-trust-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.revenue-trust-card {
+  padding: 24px;
+}
+
+.revenue-trust-card h3 {
+  margin: 0 0 9px;
+  color: #0d1420;
+  font-size: 16.5px;
+  letter-spacing: -0.02em;
+}
+
+.revenue-trust-card p {
+  margin: 0;
+  color: #5a6b7f;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* ── Pricing ─────────────────────────────────── */
+.revenue-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.revenue-plan {
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+}
+
+.revenue-plan--featured {
+  border-color: rgba(45, 140, 255, 0.62);
+  background: linear-gradient(180deg, #ffffff, #eef6ff);
+  box-shadow: 0 22px 48px -24px rgba(22, 111, 228, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.revenue-plan--featured::before {
+  background: linear-gradient(90deg, transparent, rgba(24, 168, 255, 0.8), transparent);
+  opacity: 1;
+}
+
+.revenue-plan__badge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #26b4ff, #0878d6);
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.revenue-plan h3 {
+  margin: 0;
+  color: #0d1420;
+  font-size: 18px;
+}
+
+.revenue-plan__fit {
+  min-height: 42px;
+  margin: 8px 0 0;
+  color: #5a6b7f;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.revenue-plan__price {
+  margin: 16px 0;
+  color: #0d1420;
+  font-size: 36px;
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+}
+
+.revenue-plan__cadence {
+  margin-left: 2px;
+  color: #5a6b7f;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.revenue-plan ul {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 22px;
+  padding: 16px 0 0;
+  border-top: 1px solid rgba(96, 124, 154, 0.16);
+  list-style: none;
+  color: #303842;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.revenue-plan li::before {
+  content: '✓';
+  margin-right: 8px;
+  color: #1466d8;
+  font-weight: 800;
+}
+
+.revenue-plan .public-action {
+  width: 100%;
+  margin-top: auto;
+}
+
+/* ── FAQ ─────────────────────────────────────── */
+.revenue-faq-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.revenue-faq {
+  padding: 22px 24px;
+}
+
+.revenue-faq h3 {
+  margin: 0 0 8px;
+  color: #0d1420;
+  font-size: 15.5px;
+  letter-spacing: -0.015em;
+}
+
+.revenue-faq p {
+  margin: 0;
+  color: #5a6b7f;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* ── Closing CTA ─────────────────────────────── */
+.revenue-cta {
+  position: relative;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: clamp(34px, 6vw, 64px);
+  border: 1px solid rgba(45, 140, 255, 0.42);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 85% 40%, rgba(24, 168, 255, 0.12), transparent 22rem),
+    linear-gradient(180deg, #ffffff, #f0f7fd);
+  text-align: center;
+  box-shadow: 0 24px 56px -28px rgba(22, 111, 228, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.revenue-cta::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 18px;
+  right: 18px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(24, 168, 255, 0.7), transparent);
+  pointer-events: none;
+}
+
+.revenue-cta .revenue-kicker {
+  margin-bottom: 14px;
+}
+
+.revenue-cta h2 {
+  max-width: 22ch;
+  margin: 0 auto 14px;
+  color: #0d1420;
+  font-size: clamp(2rem, 4.2vw, 3.4rem);
+  line-height: 1.02;
+  letter-spacing: -0.05em;
+}
+
+.revenue-cta > p:not(.revenue-kicker) {
+  max-width: 580px;
+  margin: 0 auto 24px;
+  color: #5a6b7f;
+  line-height: 1.6;
+}
+
+.revenue-cta__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+/* ── Footer ──────────────────────────────────── */
+.revenue-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  max-width: 1320px;
+  margin: 56px auto 0;
+  padding: 26px clamp(20px, 5vw, 72px) 34px;
+  border-top: 1px solid rgba(96, 124, 154, 0.18);
+}
+
+.revenue-footer p {
+  margin: 0;
+  color: #5a6b7f;
+  font-size: 12px;
+}
+
+.revenue-footer nav {
+  display: flex;
+  gap: 18px;
+}
+
+.revenue-footer a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 4px;
+  color: #303842;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.revenue-footer a:hover {
+  color: #1466d8;
+  text-decoration: underline;
+}
+
+/* ── Responsive ──────────────────────────────── */
+@media (max-width: 1140px) {
+  .revenue-pipeline {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .revenue-pillars,
+  .revenue-plan-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 1020px) {
+  .revenue-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .revenue-console {
+    justify-self: stretch;
+    max-width: 640px;
+  }
+
+  .revenue-pain {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+}
+
+@media (max-width: 760px) {
+  .revenue-nav .xbar-wordmark__copy span {
+    display: none;
+  }
+
+  .revenue-section__header {
+    display: block;
+  }
+
+  .revenue-section__header > p {
+    margin-top: 16px;
+  }
+
+  .revenue-pipeline,
+  .revenue-pillars,
+  .revenue-trust-grid,
+  .revenue-plan-grid,
+  .revenue-faq-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .revenue-console__row {
+    grid-template-columns: 84px minmax(0, 1fr);
+  }
+
+  .revenue-console__row .revenue-chip {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .revenue-footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
