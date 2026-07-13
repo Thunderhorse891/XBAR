@@ -1,3 +1,4 @@
+import { buyerFollowUpPath } from './buyerRoutes.js';
 import type { CareBoardRow, TransferGapRow } from './dashboardOps.js';
 import type { DocumentRecord, SalesLead } from '../types/xbar.js';
 import type { ReminderItem, ReminderUrgency } from '../features/reminders/types.js';
@@ -132,7 +133,7 @@ export function buildOperationsPriorities(input: PriorityInput, now = new Date()
             horseName,
             dueDate: lead.nextFollowUp ?? lead.lastTouch,
             detail: `${horseName ?? 'Horse pending'} | ${lead.channel} | ${lead.stage}`,
-            route: `/follow-ups?lead=${lead.id}`,
+            route: buyerFollowUpPath(lead.id),
           },
           now,
           lead.stage === 'Offer' ? 12 : 0,

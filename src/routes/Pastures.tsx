@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, MapPin, Move } from 'lucide-react';
+import { MapPin, Move } from 'lucide-react';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import { ActionButton, Card, PageHead, SlideOverDrawer, StatusChip } from '@/components/saas';
@@ -9,12 +9,11 @@ import type { HorseRecord } from '@/types/xbar';
 type Location = { id: string; name: string; kind: 'Barn' | 'Pasture'; horses: HorseRecord[] };
 
 export default function Pastures() {
-  const pushToast = useUiStore((state) => state.pushToast);
+  const openQuickCreate = useUiStore((state) => state.openQuickCreate);
   const navigate = useNavigate();
   const horses = useXbarStore((s) => s.horses);
   const workspaceProfile = useXbarStore((s) => s.workspaceProfile);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const toast = (m: string) => pushToast({ title: 'Pastures', message: m, tone: 'success' });
 
   const locations = useMemo<Location[]>(() => {
     const barns = new Set<string>();
@@ -45,17 +44,11 @@ export default function Pastures() {
         actions={
           <>
             <ActionButton
-              icon={<Move size={15} />}
-              onClick={() => toast('Use a horse profile to move it between locations')}
-            >
-              Move Horses
-            </ActionButton>
-            <ActionButton
               variant="primary"
-              icon={<AlertTriangle size={15} />}
-              onClick={() => toast('Pasture issue reported')}
+              icon={<Move size={15} />}
+              onClick={() => openQuickCreate({ action: 'Move Horse' })}
             >
-              Report Issue
+              Move Horse
             </ActionButton>
           </>
         }
@@ -102,18 +95,15 @@ export default function Pastures() {
         footer={
           selected ? (
             <>
-              <ActionButton icon={<Move size={15} />} onClick={() => toast(`Move from ${selected.name}`)}>
-                Move Horses
-              </ActionButton>
               <ActionButton
                 variant="primary"
-                icon={<AlertTriangle size={15} />}
+                icon={<Move size={15} />}
                 onClick={() => {
-                  toast(`Issue reported at ${selected.name}`);
                   setSelectedId(null);
+                  openQuickCreate({ action: 'Move Horse', horseId: selected.horses[0]?.id });
                 }}
               >
-                Report Issue
+                Move Horse
               </ActionButton>
             </>
           ) : null

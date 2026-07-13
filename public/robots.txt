@@ -1,21 +1,13 @@
-# XBAR — Equine Operations Command
+# XBAR — public marketing site is crawlable; the application is not.
 User-agent: *
-Allow: /$
-Allow: /landing
-Allow: /login
-Allow: /privacy
-Allow: /terms
+Allow: /
 
-# Keep authenticated application surfaces out of the index
+# Authenticated application, share links, and API surfaces stay out of the index
+Disallow: /app
+Disallow: /app/
 Disallow: /api/
-Disallow: /settings
-Disallow: /horses
-Disallow: /documents
-Disallow: /ownership
-Disallow: /sales
-Disallow: /expenses
-Disallow: /reminders
-Disallow: /shared
+Disallow: /profiles/
+Disallow: /login
 Disallow: /setup
 
 Sitemap: https://xbar.app/sitemap.xml

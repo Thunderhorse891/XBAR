@@ -24,12 +24,13 @@ async function bootstrapWorkspace(page: Page) {
     }
   });
 
-  await page.goto('/setup');
+  // The application router lives under /app (marketing owns the site root).
+  await page.goto('/app/setup');
 
   const setupHeading = page.getByRole('heading', { name: 'Configure Workspace' });
   const setupVisible = await setupHeading.isVisible({ timeout: 5_000 }).catch(() => false);
   if (!setupVisible) {
-    await page.goto('/#/setup');
+    await page.goto('/app/setup');
   }
   await expect(setupHeading).toBeVisible({ timeout: 10_000 });
 
@@ -44,7 +45,7 @@ async function bootstrapWorkspace(page: Page) {
   await page.getByPlaceholder('Pasture 1').fill('North Pasture');
   await page.getByRole('button', { name: 'Create workspace' }).click();
 
-  await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
+  await expect(page).toHaveURL(/\/app$/, { timeout: 15_000 });
   // Fresh workspace lands on the plain-language getting-started dashboard (no seeded records).
   await expect(page.getByRole('heading', { name: 'Get your horse records in order.' })).toBeVisible({
     timeout: 15_000,
@@ -145,7 +146,7 @@ test('a seeded horse opens a full profile object page with tabs', async ({ page 
   await page.getByRole('link', { name: 'Horse record' }).click();
   await expect(page).toHaveURL(/\/horses\//);
   await expect(page.locator('.xs-objhead__name')).toHaveText(/roster prospect/i);
-  await page.getByRole('button', { name: 'Documents' }).click();
+  await page.getByRole('button', { name: 'Documents', exact: true }).click();
   await expect(page.getByText('No documents linked to this horse yet.')).toBeVisible();
 });
 

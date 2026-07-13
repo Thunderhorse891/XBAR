@@ -1,4 +1,5 @@
 {
+  "trailingSlash": false,
   "headers": [
     {
       "source": "/(.*)",
@@ -34,6 +35,28 @@
       ]
     },
     {
+      "source": "/app(/.*)?",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
+        { "key": "Cache-Control", "value": "no-store, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/app.html",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
+        { "key": "Cache-Control", "value": "no-store, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+    },
+    {
       "source": "/xbar-service-worker.js",
       "headers": [
         {
@@ -43,20 +66,31 @@
       ]
     },
     {
-      "source": "/((?!api/|assets/|brand/|ocr/|favicon\\.svg|favicon\\.ico|site\\.webmanifest|xbar-service-worker\\.js|robots\\.txt|sitemap\\.xml).*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store, max-age=0, must-revalidate"
-        }
-      ]
+      "source": "/((?!api/|assets/|brand/|ocr/|samples/|app|app\\.html|favicon\\.svg|favicon\\.ico|site\\.webmanifest|xbar-service-worker\\.js|robots\\.txt|sitemap\\.xml).*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "www.xbar.app" }],
+      "destination": "https://xbar.app/$1",
+      "permanent": true
+    },
+    { "source": "/landing", "destination": "/", "permanent": true },
+    { "source": "/login", "destination": "/app/login", "permanent": true },
+    { "source": "/setup", "destination": "/app/setup", "permanent": true },
+    { "source": "/profiles/:id", "destination": "/app/profiles/:id", "permanent": true },
+    { "source": "/assets", "destination": "/app/assets", "permanent": true },
+    {
+      "source": "/(horses|documents|sales|buyers|sale-packets|billing|settings|today|herd-groups|pastures|feed|health-care|ownership-chain|equipment|breeding-foaling|reports|expenses|reminders|medical|breeding|ownership|follow-ups|shared-access|getting-started|weather|animals|documents-vault|document-library|sales-pipeline|buyer-deal-room|buyer-follow-up|sale-packet-studio|plans|subscribe|subscriptions|assets-equipment)(/.*)?",
+      "destination": "/app/$1$2",
+      "permanent": true
     }
   ],
   "rewrites": [
-    {
-      "source": "/((?!api/|assets/|brand/|ocr/|favicon\\.svg|favicon\\.ico|site\\.webmanifest|xbar-service-worker\\.js|robots\\.txt|sitemap\\.xml).*)",
-      "destination": "/index.html"
-    }
+    { "source": "/app", "destination": "/app.html" },
+    { "source": "/app/(.*)", "destination": "/app.html" }
   ],
   "crons": [
     {

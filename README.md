@@ -23,8 +23,8 @@ npm run dev
 | Script                     | Description                                                    |
 | -------------------------- | -------------------------------------------------------------- |
 | `npm run dev`              | Start the web app locally                                      |
-| `npm run build`            | Typecheck and build the production web bundle                  |
-| `npm run preview`          | Preview the production web bundle                              |
+| `npm run build`            | Typecheck, build the app bundle, then generate the public site |
+| `npm run preview`          | Serve `dist` with production-parity routing (`serve-dist`)     |
 | `npm run test`             | Prepare the Supabase schema, typecheck, and run unit tests     |
 | `npm run test:e2e`         | Run Playwright end-to-end tests                                |
 | `npm run test:prod-smoke`  | Build `dist` and smoke-test the production bundle in a browser |
@@ -35,11 +35,26 @@ npm run dev
 
 ## Deployment
 
-### Web
+### Web — public site and application are separate surfaces
 
-- Vercel SPA rewrites are configured in `vercel.json`.
-- Browser routing is used on hosted environments.
-- Hash routing remains available for GitHub Pages previews.
+- **`/` is the public marketing site**: complete static HTML generated at
+  build time by `scripts/build-marketing.mjs` (home, features, pricing,
+  solutions, resources, demo, privacy, terms). Every page ships unique
+  server-generated metadata, a self-referencing canonical, and JSON-LD, and
+  never loads the application bundle.
+- **`/app/*` is the authenticated application**: the SPA shell is emitted as
+  `dist/app.html`, rewritten under `/app/*` by `vercel.json`, and marked
+  `noindex` (meta tag + `X-Robots-Tag`). The React Router basename is `/app`
+  (`src/lib/routeCanon.ts`).
+- `vercel.json` also 308-redirects legacy paths (`/login`, `/landing`,
+  `/horses`, `/profiles/:id`, …) into their new homes and redirects
+  `www.xbar.app` to the canonical `xbar.app` host.
+- `sitemap.xml` is generated with the marketing pages only; `robots.txt`
+  disallows `/app`, `/api/`, `/profiles/`.
+- `scripts/serve-dist.mjs` mirrors this routing locally (`npm run preview`)
+  and backs the prod-smoke Playwright suite.
+- Hash routing remains available for GitHub Pages previews and is forced for
+  mobile builds (`scripts/build-mobile.mjs`), which skip marketing generation.
 
 ### Mobile
 
@@ -54,9 +69,22 @@ Capacitor configuration lives in `capacitor.config.ts`.
 - Premium command infrastructure, not generic SaaS dashboard UI
 - Graphite shell, metallic/silver workspace surfaces, restrained electric-blue control accents
 - Shared brand rule: one system, distinct operational silhouettes per section
+- Typography: exactly one UI family (Outfit) and one display family (Fraunces),
+  declared as `--font-ui` / `--font-display` in `src/index.css` and loaded once
+  from `index.html` — no per-file font imports
 - Command-center visual layer in `src/routes/xbarCommandSystem.css` and `src/routes/commandCenterLocal.css`
 - Interaction affordances in `src/routes/interactionSystem.css`
 - Base tokens and foundational styles in `src/index.css`
+- Public marketing site styles live in `scripts/marketing/site.css` (single
+  stylesheet, no application CSS)
+
+### Workflow integrity rule
+
+No button may report success without persistent evidence. Every create/update
+action in the UI calls a real store mutation and reports the store's actual
+result; navigation actions are labeled as navigation ("Open …"), not as
+creation. `tests/marketingSite.test.ts` additionally blocks unverifiable
+social-proof claims from the public site.
 
 ## Product Standard
 

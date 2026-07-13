@@ -1,5 +1,5 @@
 const XBAR_RUNTIME_CACHE_PREFIX = 'xbar-runtime-';
-const XBAR_CACHE = 'xbar-runtime-v20260703-ocr-light';
+const XBAR_CACHE = 'xbar-runtime-v20260713-public-split';
 const NETWORK_FIRST_ASSET_PATHS = [
   /^\/assets\//,
   /^\/brand\//,

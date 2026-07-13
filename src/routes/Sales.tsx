@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { BuyerDealRoomPanel } from '@/components/BuyerDealRoomPanel';
 import { BuyerResponseQueue } from '@/components/BuyerResponseQueue';
 import { CommandBrief } from '@/components/CommandBrief';
@@ -155,7 +156,7 @@ export default function Sales() {
       ],
       actions: [
         { label: 'Open horse record', path: `/horses/${lead.horseId}` },
-        { label: 'Open follow-ups', path: '/follow-ups' },
+        { label: 'Open follow-ups', path: buyerFollowUpPath() },
       ],
     });
   };
@@ -253,14 +254,14 @@ export default function Sales() {
         summary={`${saleHorses.length} active listings with ${openProspects.length} open prospects and ${liveShareCount} live sale links.`}
         evidence={[
           { label: 'Listings', value: String(saleHorses.length) },
-          { label: 'Open prospects', value: String(openProspects.length), to: '/follow-ups' },
-          { label: 'Follow-ups due', value: String(followUpsDue), to: '/follow-ups' },
+          { label: 'Open prospects', value: String(openProspects.length), to: buyerFollowUpPath() },
+          { label: 'Follow-ups due', value: String(followUpsDue), to: buyerFollowUpPath() },
         ]}
         risks={[
           ...overdueLeads.map((lead) => ({
             label: `${lead.name} — follow-up overdue since ${formatDateLabel(lead.nextFollowUp ?? today)}`,
             severity: 'rose' as const,
-            to: '/follow-ups',
+            to: buyerFollowUpPath(),
           })),
           ...transferBlockedHorses.map((horse) => ({
             label: `${horse.name} — needs transfer docs`,
@@ -268,7 +269,7 @@ export default function Sales() {
             to: '/ownership',
           })),
         ].slice(0, 5)}
-        nextAction={{ label: 'Open follow-up queue', to: '/follow-ups' }}
+        nextAction={{ label: 'Open follow-up queue', to: buyerFollowUpPath() }}
       />
 
       <BuyerDealRoomPanel />

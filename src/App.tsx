@@ -8,6 +8,8 @@ import { SubscriptionEnforcement } from './components/SubscriptionEnforcement';
 import { InteractionShell } from './components/InteractionSystem';
 import { Toaster } from './components/ui/sonner';
 import { billingPath } from './lib/billingRoutes';
+import { buyerFollowUpPath } from './lib/buyerRoutes';
+import { appBasePath } from './lib/routeCanon';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
 import { useCloudStore } from './store/useCloudStore';
 import './routes/operationsHierarchy.css';
@@ -38,15 +40,12 @@ const Breeding = lazy(() => import('./routes/Breeding'));
 const BuyerProfile = lazy(() => import('./routes/BuyerProfile'));
 const Documents = lazy(() => import('./routes/Documents'));
 const Expenses = lazy(() => import('./routes/Expenses'));
-const FollowUps = lazy(() => import('./routes/FollowUps'));
 const Horses = lazy(() => import('./routes/Horses'));
-const Landing = lazy(() => import('./routes/Landing'));
 const Login = lazy(() => import('./routes/Login'));
 const MainLayout = lazy(() => import('./routes/layouts/MainLayout'));
 const Medical = lazy(() => import('./routes/Medical'));
 const NotFound = lazy(() => import('./routes/NotFound'));
 const Ownership = lazy(() => import('./routes/Ownership'));
-const Privacy = lazy(() => import('./routes/Privacy'));
 const RanchAssets = lazy(() => import('./routes/RanchAssets'));
 const Reminders = lazy(() => import('./routes/Reminders'));
 const Sales = lazy(() => import('./routes/Sales'));
@@ -54,9 +53,11 @@ const Settings = lazy(() => import('./routes/Settings'));
 const SetupWorkspace = lazy(() => import('./routes/SetupWorkspace'));
 const SharedAccess = lazy(() => import('./routes/SharedAccess'));
 const Subscriptions = lazy(() => import('./routes/Subscriptions'));
-const Terms = lazy(() => import('./routes/Terms'));
 const Weather = lazy(() => import('./routes/Weather'));
 
+// One unique label per route: no two routes may share a user-facing name, so
+// navigation, page titles, and the command palette always agree on where a
+// feature lives (routeCanon.ts documents the canonical route per area).
 const ROUTE_LABELS: Record<string, string> = {
   '/': 'Dashboard',
   '/getting-started': 'Getting started',
@@ -64,7 +65,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/herd-groups': 'Herd Groups',
   '/pastures': 'Pastures',
   '/feed': 'Feed & Supplies',
-  '/health-care': 'Health',
+  '/health-care': 'Care Board',
   '/ownership-chain': 'Ownership',
   '/equipment': 'Equipment',
   '/breeding-foaling': 'Breeding',
@@ -72,16 +73,14 @@ const ROUTE_LABELS: Record<string, string> = {
   '/buyers': 'Buyer Follow-up',
   '/sale-packets': 'Sale Packets',
   '/reports': 'Reports',
-  '/assets': 'Equipment',
-  '/breeding': 'Breeding',
+  '/assets': 'Ranch Assets',
+  '/breeding': 'Breeding Records',
   '/documents': 'Documents',
   '/expenses': 'Expenses',
-  '/follow-ups': 'Buyer Follow-up',
   '/horses': 'Horses',
-  '/landing': 'Ranch records',
   '/login': 'Login',
-  '/medical': 'Health',
-  '/ownership': 'Ownership',
+  '/medical': 'Health Records',
+  '/ownership': 'Ownership Records',
   '/reminders': 'Reminders',
   '/sales': 'Sales',
   '/settings': 'Settings',
@@ -107,48 +106,12 @@ function routeTitle(path: string) {
   return `XBAR | ${ROUTE_LABELS[path] ?? 'Ranch'}`;
 }
 
-const DEFAULT_META_DESCRIPTION =
-  'XBAR turns scattered horse documents into trusted, buyer-ready digital records — OCR-assisted intake, ownership integrity, compliance deadlines, and watermarked sale packets in one place.';
-
-// Distinct titles and descriptions for the publicly indexable routes. These
-// compound the static SEO in index.html so each crawlable page presents its
-// own snippet in search and social results instead of the shared default.
-const PUBLIC_ROUTE_META: Record<string, { title: string; description: string }> = {
-  '/landing': {
-    title: 'XBAR — Clean records, ownership integrity, faster sale readiness',
-    description: DEFAULT_META_DESCRIPTION,
-  },
-  '/login': {
-    title: 'Sign in or create your workspace | XBAR',
-    description:
-      'Sign in to XBAR or create a local-first workspace for horse records, ownership, documents, and sale-ready buyer packets.',
-  },
-  '/privacy': {
-    title: 'Privacy Policy | XBAR',
-    description: 'How XBAR handles workspace data, document storage, and account information.',
-  },
-  '/terms': {
-    title: 'Terms of Service | XBAR',
-    description: 'The terms that govern use of the XBAR equine operations platform.',
-  },
-};
-
-function setMetaDescription(content: string) {
-  if (typeof document === 'undefined') return;
-  let tag = document.querySelector('meta[name="description"]');
-  if (!tag) {
-    tag = document.createElement('meta');
-    tag.setAttribute('name', 'description');
-    document.head.appendChild(tag);
-  }
-  tag.setAttribute('content', content);
-}
-
+// The SPA only serves the authenticated application (plus the noindex login
+// and buyer-share views); all indexable pages are prerendered static HTML on
+// the marketing site, so the app shell just keeps the tab title accurate.
 function applyRouteMeta(path: string) {
   if (typeof document === 'undefined') return;
-  const meta = PUBLIC_ROUTE_META[path];
-  document.title = meta ? meta.title : routeTitle(path);
-  setMetaDescription(meta ? meta.description : DEFAULT_META_DESCRIPTION);
+  document.title = path === '/login' ? 'Sign in | XBAR' : routeTitle(path);
 }
 
 function RouteTelemetry() {
@@ -171,22 +134,33 @@ function RouteTelemetry() {
   return null;
 }
 
+function FollowUpsRedirect() {
+  const location = useLocation();
+  const leadId = new URLSearchParams(location.search).get('lead');
+  return <Navigate to={buyerFollowUpPath(leadId ?? undefined)} replace />;
+}
+
 export default function App() {
-  const Router = useHashRouting() ? HashRouter : BrowserRouter;
+  const hashRouting = useHashRouting();
+  const Router = hashRouting ? HashRouter : BrowserRouter;
 
   return (
-    <Router>
+    <Router {...(hashRouting ? {} : { basename: appBasePath })}>
       <ErrorBoundary>
         <Toaster position="top-right" richColors closeButton />
         <InteractionShell />
         <SubscriptionEnforcement />
         <RouteTelemetry />
-        <Suspense fallback={<div className="app-loading-shell">Loading XBAR...</div>}>
+        <Suspense
+          fallback={
+            <div className="app-loading-shell" role="status" aria-live="polite">
+              <span className="app-loading-shell__spinner" aria-hidden="true" />
+              Loading XBAR…
+            </div>
+          }
+        >
           <Routes>
             <Route path="/profiles/:id" element={<BuyerProfile />} />
-            <Route path="/landing" element={<Landing />} />
-            <Route path="/terms" element={<Terms />} />
-            <Route path="/privacy" element={<Privacy />} />
             <Route path="/login" element={<Login />} />
             <Route path="/subscribe" element={<Navigate to={billingPath} replace />} />
             <Route
@@ -231,7 +205,6 @@ export default function App() {
               <Route path="plans" element={<Navigate to={billingPath} replace />} />
               <Route path="horses" element={<Horses />} />
               <Route path="horses/:id" element={<AnimalProfile />} />
-              <Route path="assets-equipment" element={<RanchAssets />} />
               <Route path="documents" element={<Documents />} />
               <Route path="document-library" element={<Navigate to="/documents" replace />} />
               <Route path="weather" element={<Weather />} />
@@ -239,10 +212,11 @@ export default function App() {
               <Route path="medical" element={<Medical />} />
               <Route path="breeding" element={<Breeding />} />
               <Route path="sales" element={<Sales />} />
-              <Route path="follow-ups" element={<FollowUps />} />
+              <Route path="follow-ups" element={<FollowUpsRedirect />} />
               <Route path="expenses" element={<Expenses />} />
               <Route path="reminders" element={<Reminders />} />
               <Route path="assets" element={<RanchAssets />} />
+              <Route path="assets-equipment" element={<Navigate to="/assets" replace />} />
               <Route path="billing" element={<Subscriptions />} />
               <Route path="subscriptions" element={<Navigate to={billingPath} replace />} />
               <Route

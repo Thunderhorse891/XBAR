@@ -418,14 +418,14 @@ export default function BuyerDealRoom() {
               <ActionButton
                 size="sm"
                 icon={<MessageSquare size={14} />}
-                onClick={() => navigate(`/follow-ups?lead=${selected.id}`)}
+                onClick={() => navigate(buyerFollowUpPath(selected.id))}
               >
                 Open follow-up
               </ActionButton>
               <ActionButton
                 size="sm"
                 icon={<Phone size={14} />}
-                onClick={() => navigate(`/follow-ups?lead=${selected.id}`)}
+                onClick={() => navigate(buyerFollowUpPath(selected.id))}
               >
                 Plan call
               </ActionButton>

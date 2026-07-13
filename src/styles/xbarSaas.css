@@ -2434,6 +2434,31 @@
   color: var(--xbar-text);
   font-family: inherit;
 }
+/* the search affordance is a button that opens the command palette */
+button.xs-search {
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+button.xs-search:hover {
+  border-color: var(--xbar-cyan);
+}
+.xs-search__placeholder {
+  color: var(--xbar-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.xs-search__kbd {
+  flex: none;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--xbar-text-muted);
+  border: 1px solid var(--xbar-border);
+  border-radius: 6px;
+  padding: 1px 6px;
+  background: var(--xbar-surface-2, transparent);
+}
 
 /* clickable task rows */
 .xs-task--click {

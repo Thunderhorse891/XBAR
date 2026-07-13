@@ -26,7 +26,7 @@ import {
   Wheat,
 } from 'lucide-react';
 import { ProgressRing, QuickCreateMenu } from '@/components/saas';
-import { GlobalCreateDrawer, createActions, type CreateKey } from '@/components/saas/flows';
+import { GlobalCreateDrawer, createActions } from '@/components/saas/flows';
 import { billingPath } from '@/lib/billingRoutes';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { buildCareBoardRows } from '@/lib/dashboardOps';
@@ -97,7 +97,6 @@ export default function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mode, setMode] = useState<'ops' | 'buyer'>('ops');
-  const [createAction, setCreateAction] = useState<CreateKey | null>(null);
 
   const documents = useXbarStore((state) => state.documents);
   const horses = useXbarStore((state) => state.horses);
@@ -110,6 +109,7 @@ export default function MainLayout() {
   const signOutCloud = useCloudStore((state) => state.signOut);
   const pushToast = useUiStore((state) => state.pushToast);
   const setCommandPaletteOpen = useUiStore((state) => state.setCommandPaletteOpen);
+  const openQuickCreate = useUiStore((state) => state.openQuickCreate);
 
   const pendingReview = documents.filter((d) => d.state === 'Needs Review' || d.state === 'Matched').length;
   const pendingTransfers = ownershipRecords.filter((r) => r.transferStatus !== 'Clear').length;
@@ -158,14 +158,7 @@ export default function MainLayout() {
     if (next === 'buyer') navigate(buyerFollowUpPath());
   }
 
-  function handleSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') {
-      const q = (e.target as HTMLInputElement).value.trim();
-      if (q) navigate(`/horses?search=${encodeURIComponent(q)}`);
-    }
-  }
-
-  const createItems = createActions.map((label) => ({ label, onSelect: () => setCreateAction(label) }));
+  const createItems = createActions.map((label) => ({ label, onSelect: () => openQuickCreate({ action: label }) }));
 
   return (
     <div className="xs-shell">
@@ -251,15 +244,18 @@ export default function MainLayout() {
             )}
           </div>
 
-          <label className="xs-search">
+          {/* Opens the command palette — real global search across horses,
+              documents, buyers, and modules (see InteractionSystem). */}
+          <button
+            type="button"
+            className="xs-search"
+            onClick={() => setCommandPaletteOpen(true)}
+            aria-label="Search horses, documents, buyers, and modules"
+          >
             <Search size={15} className="xs-search__icon" />
-            <input
-              className="xs-search__input"
-              placeholder="Search horses, documents, buyers…"
-              onKeyDown={handleSearchKey}
-              aria-label="Search"
-            />
-          </label>
+            <span className="xs-search__input xs-search__placeholder">Search horses, documents, buyers…</span>
+            <kbd className="xs-search__kbd">⌘K</kbd>
+          </button>
 
           <div className="xs-topbar__spacer" />
 
@@ -335,7 +331,7 @@ export default function MainLayout() {
           <Outlet />
         </main>
 
-        <GlobalCreateDrawer action={createAction} onClose={() => setCreateAction(null)} />
+        <GlobalCreateDrawer />
 
         <nav className="xs-mobilebar" aria-label="Mobile navigation">
           {mobileItems.map(({ label, path, icon: Icon }) => {

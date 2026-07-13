@@ -22,6 +22,7 @@ import {
   CommandShortcut,
 } from '@/components/ui/command';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { interactionHint, type SurfaceMode } from '@/lib/interactionState';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -325,7 +326,7 @@ export function InteractionShell() {
         id: `lead-${lead.id}`,
         label: lead.name,
         detail: `${lead.stage} buyer`,
-        path: `/follow-ups?lead=${lead.id}`,
+        path: buyerFollowUpPath(lead.id),
         group: 'Buyers',
       })),
     ],

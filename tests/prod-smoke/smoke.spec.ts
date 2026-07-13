@@ -47,17 +47,56 @@ function assertClean(c: Collected) {
   expect(c.chunkFailures, `production JS/CSS chunk failures:\n${c.chunkFailures.join('\n')}`).toEqual([]);
 }
 
-test('production build boots and React mounts (no blank screen)', async ({ page }) => {
+test('marketing homepage at / is complete static HTML (no app bundle)', async ({ page, request }) => {
   const c = collect(page);
   await page.goto('/', { waitUntil: 'load' });
-  // React must have mounted actual content into #root. A fresh local-first
-  // visit lands on the sign-in screen; waiting on the heading auto-retries
-  // through the '/' -> '/login' redirect without an execution-context race.
+  await expect(page.getByRole('heading', { name: 'Give every horse a record buyers can trust.' })).toBeVisible();
+
+  // View-source completeness: the raw HTML carries the content, its own
+  // canonical, and no reference to the application bundle.
+  const source = await (await request.get('/')).text();
+  expect(source).toContain('Give every horse a record buyers can trust.');
+  expect(source).toContain('<link rel="canonical" href="https://xbar.app/" />');
+  expect(source).not.toContain('/assets/');
+  assertClean(c);
+});
+
+test('app shell boots under /app and React mounts (no blank screen)', async ({ page }) => {
+  const c = collect(page);
+  await page.goto('/app', { waitUntil: 'load' });
+  // A fresh local-first visit redirects to the sign-in screen inside /app.
   await expect(page.locator('#root')).toBeAttached();
   await expect(page.getByRole('heading', { name: 'Sign In' })).toBeVisible({ timeout: 15_000 });
   const rootChildren = await page.evaluate(() => document.getElementById('root')?.childElementCount ?? 0);
   expect(rootChildren, 'React did not render into #root (blank screen)').toBeGreaterThan(0);
   assertClean(c);
+});
+
+test('indexing architecture: sitemap, robots, and app noindex hold', async ({ request }) => {
+  const sitemap = await (await request.get('/sitemap.xml')).text();
+  expect(sitemap).toContain('https://xbar.app/</loc>');
+  expect(sitemap).toContain('https://xbar.app/pricing</loc>');
+  expect(sitemap).not.toContain('login');
+  expect(sitemap).not.toContain('/app');
+
+  const robots = await (await request.get('/robots.txt')).text();
+  expect(robots).toContain('Disallow: /app');
+  expect(robots).toContain('Sitemap: https://xbar.app/sitemap.xml');
+
+  const appShell = await (await request.get('/app')).text();
+  expect(appShell).toContain('noindex');
+
+  // Server-level permanent redirects for legacy public paths.
+  for (const [from, to] of [
+    ['/login', '/app/login'],
+    ['/landing', '/'],
+    ['/horses', '/app/horses'],
+    ['/profiles/abc', '/app/profiles/abc'],
+  ] as const) {
+    const res = await request.get(from, { maxRedirects: 0 });
+    expect(res.status(), `${from} should 308`).toBe(308);
+    expect(res.headers()['location'], `${from} location`).toBe(to);
+  }
 });
 
 test('local workspace setup is reachable without cloud sign-in', async ({ page }) => {
@@ -123,15 +162,16 @@ test('legacy routes redirect to canonical product routes', async ({ page }) => {
   await page.waitForURL((url) => !url.pathname.includes('/setup'), { timeout: 20_000 });
 
   const redirects: Array<[string, string]> = [
-    ['/animals', '/horses'],
-    ['/documents-vault', '/documents'],
-    ['/document-library', '/documents'],
-    ['/sales-pipeline', '/sales'],
-    ['/buyer-deal-room', '/buyers'],
-    ['/buyer-follow-up', '/buyers'],
-    ['/sale-packet-studio', '/sale-packets'],
-    ['/plans', '/billing'],
-    ['/subscriptions', '/billing'],
+    ['/app/animals', '/app/horses'],
+    ['/app/documents-vault', '/app/documents'],
+    ['/app/document-library', '/app/documents'],
+    ['/app/sales-pipeline', '/app/sales'],
+    ['/app/buyer-deal-room', '/app/buyers'],
+    ['/app/buyer-follow-up', '/app/buyers'],
+    ['/app/follow-ups', '/app/buyers'],
+    ['/app/sale-packet-studio', '/app/sale-packets'],
+    ['/app/plans', '/app/billing'],
+    ['/app/subscriptions', '/app/billing'],
   ];
   for (const [legacy, canonical] of redirects) {
     // Navigate client-side (pushState + popstate drives React Router) so the

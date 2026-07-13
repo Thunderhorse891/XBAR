@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarPlus, HeartPulse, Plus } from 'lucide-react';
+import { HeartPulse, Plus } from 'lucide-react';
 import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -15,12 +15,11 @@ const STATUS_LABEL: Record<CareSignalStatus, string> = { due: 'Due', watch: 'Wat
 
 export default function HealthCare() {
   const navigate = useNavigate();
-  const pushToast = useUiStore((s) => s.pushToast);
+  const openQuickCreate = useUiStore((s) => s.openQuickCreate);
   const horses = useXbarStore((s) => s.horses);
   const documents = useXbarStore((s) => s.documents);
   const expenseReceipts = useXbarStore((s) => s.expenseReceipts);
   const [f, setF] = useState<string>('All');
-  const toast = (m: string) => pushToast({ title: 'Health & Care', message: m, tone: 'success' });
 
   const careRows = useMemo(
     () => buildCareBoardRows(horses, documents, expenseReceipts),
@@ -111,11 +110,12 @@ export default function HealthCare() {
         subtitle="Vaccines, Coggins, farrier, dental, and medications — everything that keeps a horse healthy and sale-ready."
         actions={
           <>
-            <ActionButton icon={<CalendarPlus size={15} />} onClick={() => toast('Care scheduled')}>
-              Schedule Care
-            </ActionButton>
-            <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => toast('Health record added')}>
-              Add Record
+            <ActionButton
+              variant="primary"
+              icon={<Plus size={15} />}
+              onClick={() => openQuickCreate({ action: 'Add Health Record' })}
+            >
+              Add Health Record
             </ActionButton>
           </>
         }

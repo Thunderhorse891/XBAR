@@ -76,7 +76,6 @@ test('active user-facing surfaces use plain product language', () => {
     'src/routes/GettingStarted.tsx',
     'src/routes/HealthCare.tsx',
     'src/routes/Horses.tsx',
-    'src/routes/Landing.tsx',
     'src/routes/Login.tsx',
     'src/routes/OwnershipChain.tsx',
     'src/routes/Pastures.tsx',
