@@ -19,7 +19,6 @@ import './routes/metalBrandSystem.css';
 import './routes/commandCenterLocal.css';
 import './routes/premiumOperatingSystem.css';
 import './routes/premiumSaasExperience.css';
-import './routes/productionFinal.css';
 import './styles/xbarSaas.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));

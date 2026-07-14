@@ -52,9 +52,12 @@ test('every public page has unique metadata and complete static content', async 
     marketingPages: MarketingPage[];
     notFoundPage: MarketingPage;
   };
-  const { renderPage } = (await load('scripts/marketing/render.mjs')) as {
+  const { renderPage, SITE_ORIGIN } = (await load('scripts/marketing/render.mjs')) as {
     renderPage: (page: MarketingPage) => string;
+    SITE_ORIGIN: string;
   };
+  assert.match(SITE_ORIGIN, /^https:\/\//, 'SITE_ORIGIN must be an https origin');
+  assert.ok(!SITE_ORIGIN.endsWith('/'), 'SITE_ORIGIN must not end with a slash');
 
   const titles = new Set<string>();
   const descriptions = new Set<string>();
@@ -74,7 +77,7 @@ test('every public page has unique metadata and complete static content', async 
     paths.add(page.path);
 
     const html = renderPage(page);
-    const canonical = `https://xbar.app${page.path === '/' ? '/' : page.path}`;
+    const canonical = `${SITE_ORIGIN}${page.path === '/' ? '/' : page.path}`;
     assert.ok(html.includes(`<link rel="canonical" href="${canonical}" />`), `${page.path}: missing self-canonical`);
     assert.ok(html.includes('"index, follow'), `${page.path}: public page must be indexable`);
     assert.ok(!html.includes('/assets/'), `${page.path}: marketing page must not load the application bundle`);

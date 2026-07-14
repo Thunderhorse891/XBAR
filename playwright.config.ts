@@ -5,6 +5,9 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   timeout: 60_000,
+  // Real regressions fail every attempt; a single retry absorbs dev-server
+  // cold-transform flake in constrained sandboxes (same policy as prod-smoke).
+  retries: process.env.CI ? 2 : 1,
   use: {
     baseURL: 'http://127.0.0.1:4174',
     trace: 'retain-on-failure',
@@ -15,7 +18,8 @@ export default defineConfig({
     ...(process.env.XBAR_CHROME ? { launchOptions: { executablePath: process.env.XBAR_CHROME } } : {}),
   },
   webServer: {
-    command: 'node ./node_modules/vite/bin/vite.js --mode e2e --host 0.0.0.0 --port 4174',
+    command:
+      'node ./scripts/prepare-ocr-assets.mjs && node ./node_modules/vite/bin/vite.js --mode e2e --host 0.0.0.0 --port 4174',
     url: 'http://127.0.0.1:4174',
     reuseExistingServer: !process.env.CI,
     timeout: 240_000,

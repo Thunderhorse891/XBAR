@@ -77,7 +77,26 @@ const samplesDir = path.join(dist, 'samples');
 mkdirSync(samplesDir, { recursive: true });
 writeFileSync(path.join(samplesDir, 'sample-sale-packet.html'), renderSamplePacket());
 
-/* 5 — sitemap: canonical, indexable public pages only. */
+/* 5 — robots.txt: derived from the same origin as every canonical. */
+writeFileSync(
+  path.join(dist, 'robots.txt'),
+  `# XBAR — public marketing site is crawlable; the application is not.
+User-agent: *
+Allow: /
+
+# Authenticated application, share links, and API surfaces stay out of the index
+Disallow: /app
+Disallow: /app/
+Disallow: /api/
+Disallow: /profiles/
+Disallow: /login
+Disallow: /setup
+
+Sitemap: ${SITE_ORIGIN}/sitemap.xml
+`,
+);
+
+/* 6 — sitemap: canonical, indexable public pages only. */
 const sitemapEntries = pages
   .filter((page) => !page.noindex)
   .map(

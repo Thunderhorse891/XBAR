@@ -163,3 +163,48 @@ test('billing page shows tier cards', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Review Billing' })).toBeVisible();
   await expect(page.locator('.checkout-plan')).toHaveCount(4);
 });
+
+test('OCR pipeline: an uploaded image is read on-device and matched to a horse by its pixels', async ({ page }) => {
+  test.setTimeout(180_000);
+  await bootstrapWorkspace(page);
+  await seedHorse(page, 'Ocr Test Horse');
+
+  // Generate a scan-like PNG in the browser. The filename is deliberately
+  // generic, and no horse is selected at upload — the ONLY way this document
+  // can match "Ocr Test Horse" is if tesseract actually reads the pixels.
+  const dataUrl = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1400;
+    canvas.height = 600;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('no canvas context');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 64px Arial';
+    ctx.fillText('COGGINS TEST CERTIFICATE', 60, 140);
+    ctx.fillText('Horse: OCR TEST HORSE', 60, 280);
+    ctx.fillText('Result: NEGATIVE', 60, 420);
+    return canvas.toDataURL('image/png');
+  });
+  const buffer = Buffer.from(dataUrl.split(',')[1], 'base64');
+
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Upload Document' });
+  await expect(drawer).toBeVisible();
+  await drawer.locator('input[type="file"]').setInputFiles({ name: 'scan-001.png', mimeType: 'image/png', buffer });
+  await expect(drawer.getByText('1 file selected — click to change')).toBeVisible();
+  // Leave horse assignment to the pipeline: pixels must drive the match.
+  await drawer.locator('select').first().selectOption('');
+  // OCR (worker init + recognition) runs during submit — allow real time.
+  await drawer.getByRole('button', { name: 'Upload for review' }).click();
+  await expect(page).toHaveURL(/\/documents/, { timeout: 120_000 });
+
+  // The document appears in the review queue, and its row shows the horse the
+  // pipeline matched from the OCR text — proof the pixels were actually read
+  // (the filename carries no horse signal and no horse was selected).
+  const row = page.locator('tr', { hasText: 'scan-001' }).first();
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await expect(row.getByText('Ocr Test Horse').first()).toBeVisible();
+});

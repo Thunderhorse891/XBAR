@@ -315,8 +315,7 @@
   gap: 9px;
 }
 
-.clean-auth-card__header p,
-.clean-heading-kicker {
+.clean-auth-card__header p {
   margin: 0;
   color: var(--entry-blue);
   font-family: var(--font-ui);
@@ -346,8 +345,7 @@
   line-height: 1.55;
 }
 
-.clean-form,
-.clean-local-start {
+.clean-form {
   display: grid;
   gap: 16px;
 }
@@ -505,7 +503,6 @@
   gap: 9px;
 }
 
-.clean-local-start ul,
 .clean-step-list {
   display: grid;
   gap: 10px;
@@ -514,25 +511,6 @@
   list-style: none;
 }
 
-.clean-local-start li {
-  display: grid;
-  grid-template-columns: 9px minmax(0, 1fr);
-  gap: 9px;
-  color: var(--entry-muted);
-  font-size: 14px;
-  line-height: 1.45;
-}
-
-.clean-local-start li::before {
-  width: 7px;
-  height: 7px;
-  margin-top: 7px;
-  border-radius: 50%;
-  background: var(--entry-blue);
-  content: '';
-}
-
-.clean-local-start p,
 .clean-auth-footer,
 .clean-form-error {
   margin: 0;

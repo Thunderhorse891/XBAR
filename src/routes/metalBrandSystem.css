@@ -49,11 +49,8 @@ body::before {
 }
 
 /* The exact public metallic-X image is the visible mark everywhere. */
-.xbar-command-shell > aside > div:first-child > div:first-child::before,
-.brand-lockup__mark::before,
-.premium-brand-mark::before,
-.xbar-wordmark__mark::before,
-.brand-canvas__x::before {
+
+.xbar-wordmark__mark::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -61,11 +58,7 @@ body::before {
   filter: drop-shadow(0 0 14px rgba(24, 168, 255, 0.24));
 }
 
-.xbar-command-shell > aside > div:first-child > div:first-child,
-.brand-lockup__mark,
-.premium-brand-mark,
-.xbar-wordmark__mark,
-.brand-canvas__x {
+.xbar-wordmark__mark {
   position: relative;
   overflow: hidden;
   color: transparent !important;
@@ -78,12 +71,6 @@ body::before {
     inset 0 -1px 0 rgba(0, 0, 0, 0.9) !important;
 }
 
-.xbar-command-shell > aside > div:first-child > div:first-child > svg,
-.brand-lockup__mark > svg,
-.premium-brand-mark > svg {
-  opacity: 0 !important;
-}
-
 .xbar-wordmark__mark {
   width: 46px;
   height: 46px;
@@ -92,69 +79,21 @@ body::before {
   border-radius: 13px;
 }
 
-.brand-canvas {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  background:
-    radial-gradient(circle at 50% 42%, rgba(24, 168, 255, 0.14), transparent 28rem),
-    linear-gradient(145deg, #000, #080a0e 62%, #010204);
-}
-
-.brand-canvas::after {
-  content: '';
-  position: absolute;
-  width: min(72%, 620px);
-  aspect-ratio: 1;
-  border-radius: 25%;
-  background: var(--xbar-logo-image) center / contain no-repeat;
-  filter: drop-shadow(0 34px 70px rgba(0, 0, 0, 0.8)) drop-shadow(0 0 34px rgba(24, 168, 255, 0.18));
-  opacity: 0.96;
-}
-
-.brand-canvas__lockup {
-  opacity: 0;
-}
-
 /* Machined graphite shell for the sidebar. */
-.sidebar,
-.xbar-command-shell > aside {
-  border-right: 1px solid rgba(224, 237, 248, 0.18) !important;
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025), transparent 18%), linear-gradient(180deg, #080a0e, #010204 80%) !important;
-  box-shadow:
-    14px 0 44px rgba(8, 14, 22, 0.3),
-    inset -1px 0 0 rgba(255, 255, 255, 0.035) !important;
-}
 
 /* Topbar: brushed light steel. */
-.topbar,
-header.sticky {
-  border-bottom-color: rgba(96, 124, 154, 0.26) !important;
-  background: linear-gradient(180deg, rgba(252, 254, 255, 0.94), rgba(236, 243, 250, 0.92)) !important;
-  box-shadow:
-    0 14px 30px -24px rgba(17, 21, 27, 0.28),
-    inset 0 -1px 0 rgba(24, 168, 255, 0.1) !important;
-}
 
 /* Machined silver panels on the light workspace. */
+
 .panel,
 .metric-card,
-.command-stage,
-.portfolio-stage,
 .stack-item,
 .empty-state,
-.detail-hero,
 .horse-card,
 .table-shell,
 .context-menu,
 .ownership-panel,
-.ownership-command-panel,
-.ownership-workspace,
-.buyer-momentum,
-.activation-guide,
-.premium-setup-form {
+.ownership-workspace {
   border-color: var(--xbar-metal-border) !important;
   background: var(--xbar-metal-panel) !important;
   box-shadow:
@@ -165,9 +104,6 @@ header.sticky {
 
 .panel::after,
 .metric-card::after,
-.command-stage::after,
-.portfolio-stage::after,
-.detail-hero::after,
 .horse-card::after,
 .table-shell::after {
   content: '';
@@ -186,9 +122,6 @@ header.sticky {
 
 .panel::before,
 .metric-card::before,
-.command-stage::before,
-.portfolio-stage::before,
-.detail-hero::before,
 .horse-card::before,
 .table-shell::before {
   background: linear-gradient(
@@ -202,51 +135,13 @@ header.sticky {
 }
 
 /* Auth cards stay dark graphite — premium command surfaces on the light shell. */
-.lp-card,
-.premium-setup-card {
-  border-color: rgba(206, 221, 234, 0.24) !important;
-  background: var(--xbar-command-panel) !important;
-  box-shadow:
-    0 24px 64px rgba(8, 14, 22, 0.38),
-    inset 0 1px 0 rgba(255, 255, 255, 0.13),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.82) !important;
-}
-
-.lp-card::before,
-.premium-setup-card::before {
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(235, 244, 252, 0.66),
-    rgba(24, 168, 255, 0.78),
-    transparent
-  ) !important;
-  box-shadow: 0 0 14px rgba(24, 168, 255, 0.28);
-}
 
 /* Mission-brief header keeps the dark command treatment with the brand mark. */
-.ops-briefing-header {
-  isolation: isolate;
-  background:
-    linear-gradient(90deg, rgba(1, 2, 4, 0.9), rgba(4, 7, 11, 0.72)),
-    var(--xbar-logo-image) 92% 50% / min(38vw, 420px) no-repeat,
-    linear-gradient(145deg, #10151c, #010204) !important;
-}
-
-.ops-briefing-header::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  background: radial-gradient(circle at 82% 50%, rgba(24, 168, 255, 0.16), transparent 28rem);
-}
 
 /* Steel controls with electric-blue active energy. */
+
 .button,
 .icon-button,
-.public-action,
-.ops-briefing-action,
 button[class*='border'],
 a[class*='border'] {
   border-color: rgba(96, 124, 154, 0.36) !important;
@@ -257,8 +152,6 @@ a[class*='border'] {
 }
 
 .button--primary,
-.public-action--primary,
-.ops-briefing-action--primary,
 button[class*='bg-[#1155dd]'],
 a[class*='bg-[#1155dd]'] {
   border-color: rgba(92, 196, 255, 0.78) !important;
@@ -270,22 +163,12 @@ a[class*='bg-[#1155dd]'] {
   color: #ffffff !important;
 }
 
-.nav-link--active,
-.xbar-command-shell aside a[aria-current='page'] {
-  border-color: rgba(24, 168, 255, 0.56) !important;
-  background: linear-gradient(90deg, rgba(24, 168, 255, 0.21), rgba(20, 25, 32, 0.75)) !important;
-  box-shadow:
-    inset 3px 0 0 var(--xbar-electric),
-    0 0 24px rgba(24, 168, 255, 0.12) !important;
-}
-
 /* Inset machined inputs — light. */
+
 input,
 select,
 textarea,
-.field-input,
-.search-shell__input,
-.role-select {
+.field-input {
   border-color: rgba(96, 124, 154, 0.38) !important;
   background: #ffffff !important;
   box-shadow:
@@ -294,27 +177,15 @@ textarea,
 }
 
 thead,
-.table-head,
 th {
   background: linear-gradient(180deg, #f4f9fe, #eaf1f8) !important;
   border-color: rgba(96, 124, 154, 0.26) !important;
 }
 
-tbody tr,
-.table-row {
+tbody tr {
   background: #ffffff !important;
 }
 
-tbody tr:hover,
-.table-row:hover {
+tbody tr:hover {
   background: rgba(24, 168, 255, 0.08) !important;
-}
-
-@media (max-width: 768px) {
-  .ops-briefing-header {
-    background:
-      linear-gradient(90deg, rgba(1, 2, 4, 0.92), rgba(4, 7, 11, 0.82)),
-      var(--xbar-logo-image) 110% 50% / 62% no-repeat,
-      linear-gradient(145deg, #10151c, #010204) !important;
-  }
 }

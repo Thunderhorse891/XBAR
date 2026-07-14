@@ -3,7 +3,15 @@
 // full content, each page carries unique metadata and a self-referencing
 // canonical, and none of them load the application bundle.
 
-export const SITE_ORIGIN = 'https://xbar.app';
+// Canonical public origin. Defaults to the live Vercel domain; override with
+// PUBLIC_SITE_ORIGIN (or PUBLIC_APP_URL) when a custom domain is attached —
+// every canonical, OG URL, JSON-LD id, sitemap entry, and robots.txt line
+// derives from this single value.
+export const SITE_ORIGIN = (
+  process.env.PUBLIC_SITE_ORIGIN ||
+  process.env.PUBLIC_APP_URL ||
+  'https://xbar-horse-management-app.vercel.app'
+).replace(/\/+$/, '');
 export const APP_LOGIN = '/app/login';
 export const APP_SIGNUP = '/app/login?mode=signup';
 

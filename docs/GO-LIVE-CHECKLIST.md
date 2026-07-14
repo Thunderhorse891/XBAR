@@ -3,29 +3,26 @@
 The repository is ready for these steps; none of them can be completed from
 code. Work top to bottom.
 
-## 1. Canonical domain (Vercel dashboard) — **currently the top blocker**
+## 1. Canonical domain
 
-Verified during the July 2026 audit via the Vercel API: the project
-`xbar-horse-management-app` has **no custom domain attached** — only
-`xbar-horse-management-app.vercel.app` aliases. Meanwhile every canonical URL,
-sitemap entry, and JSON-LD block on the site points at `https://xbar.app`, and
-`xbar.app` is registered (not available for purchase). Two possibilities:
+**Interim decision (July 2026):** the site canonicalizes to
+`https://xbar-horse-management-app.vercel.app` — the domain actually attached
+to the project — so canonicals, sitemap, JSON-LD, and robots.txt are all
+truthful today. The origin comes from one place
+(`SITE_ORIGIN` in `scripts/marketing/render.mjs`, overridable via the
+`PUBLIC_SITE_ORIGIN` or `PUBLIC_APP_URL` env var), so moving to a custom
+domain later is a config change plus redeploy.
 
-- **You own `xbar.app`** → attach it now (steps below).
-- **You do not own it** → either acquire it, or change `SITE_ORIGIN` in
-  `scripts/marketing/render.mjs` (and `public/robots.txt`) to the domain you
-  do own before promoting the site — canonicals pointing at a domain you
-  don't control are worse than none.
+When you attach a custom domain (e.g. `xbar.app`, currently registered —
+confirm you own it):
 
-1. Project → Settings → Domains: add `xbar.app` and `www.xbar.app`.
-2. Point DNS (A/ALIAS + CNAME) per Vercel's instructions and wait for both to
-   show **Valid Configuration**.
-3. Set `xbar.app` as the primary domain. `vercel.json` already 308-redirects
-   `www.xbar.app` → `xbar.app`; verify with
-   `curl -sI https://www.xbar.app/pricing | grep -i location`.
-4. If any other alias domains exist, add a matching host redirect block in
-   `vercel.json` (copy the `www` entry).
-5. Confirm `PUBLIC_APP_URL=https://xbar.app` in Vercel Production env vars.
+1. Project → Settings → Domains: add the domain (+ `www.`) and set it primary.
+2. Set `PUBLIC_SITE_ORIGIN=https://<domain>` in Vercel Production env vars and
+   redeploy — every canonical, OG URL, sitemap entry, and robots.txt line
+   updates automatically.
+3. `vercel.json` already 308-redirects `www.xbar.app` → `xbar.app`; add
+   equivalent host redirect blocks for any other alias.
+4. Resubmit the sitemap in Search Console under the new property.
 
 ## 2. Search Console
 

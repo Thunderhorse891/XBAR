@@ -56,7 +56,7 @@ test('marketing homepage at / is complete static HTML (no app bundle)', async ({
   // canonical, and no reference to the application bundle.
   const source = await (await request.get('/')).text();
   expect(source).toContain('Give every horse a record buyers can trust.');
-  expect(source).toContain('<link rel="canonical" href="https://xbar.app/" />');
+  expect(source).toMatch(/<link rel="canonical" href="https:\/\/[^"]+\/" \/>/);
   expect(source).not.toContain('/assets/');
   assertClean(c);
 });
@@ -74,14 +74,18 @@ test('app shell boots under /app and React mounts (no blank screen)', async ({ p
 
 test('indexing architecture: sitemap, robots, and app noindex hold', async ({ request }) => {
   const sitemap = await (await request.get('/sitemap.xml')).text();
-  expect(sitemap).toContain('https://xbar.app/</loc>');
-  expect(sitemap).toContain('https://xbar.app/pricing</loc>');
+  // Origin-agnostic: the sitemap must list canonical public pages on a single
+  // https origin and never leak login/app/share routes.
+  const origins = [...sitemap.matchAll(/<loc>(https:\/\/[^/]+)\//g)].map((m) => m[1]);
+  expect(origins.length).toBeGreaterThan(0);
+  expect(new Set(origins).size, 'sitemap must use exactly one origin').toBe(1);
+  expect(sitemap).toContain(`${origins[0]}/pricing</loc>`);
   expect(sitemap).not.toContain('login');
   expect(sitemap).not.toContain('/app');
 
   const robots = await (await request.get('/robots.txt')).text();
   expect(robots).toContain('Disallow: /app');
-  expect(robots).toContain('Sitemap: https://xbar.app/sitemap.xml');
+  expect(robots).toContain(`Sitemap: ${origins[0]}/sitemap.xml`);
 
   const appShell = await (await request.get('/app')).text();
   expect(appShell).toContain('noindex');

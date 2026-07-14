@@ -77,6 +77,9 @@ Capacitor configuration lives in `capacitor.config.ts`.
 - Base tokens and foundational styles in `src/index.css`
 - Public marketing site styles live in `scripts/marketing/site.css` (single
   stylesheet, no application CSS)
+- Dead CSS is not tolerated: rules whose classes are unreachable from the
+  source tree get removed (see the measured prune in
+  `docs/PRODUCTION-AUDIT-2026-07.md`)
 
 ### Workflow integrity rule
 
