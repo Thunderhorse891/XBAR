@@ -95,7 +95,7 @@ function LegacyHorseRedirect() {
 
 function useHashRouting() {
   if (typeof window === 'undefined' || import.meta.env.MODE === 'e2e') return false;
-  return import.meta.env.VITE_ROUTER_MODE === 'hash' || window.location.hostname.endsWith('github.io');
+  return import.meta.env.VITE_ROUTER_MODE === 'hash' || window.location.hostname.endsWith('.github.io');
 }
 
 function routeTitle(path: string) {

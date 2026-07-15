@@ -77,7 +77,7 @@ export function isStaticPreviewHost() {
     return false;
   }
 
-  return window.location.hostname.endsWith('github.io');
+  return window.location.hostname.endsWith('.github.io');
 }
 
 export function isSupabaseConfigured() {

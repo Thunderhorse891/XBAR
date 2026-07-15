@@ -17,7 +17,7 @@ import './mobilePolish.css';
 // of a blank screen. Hash routing (GitHub Pages previews) is exempt.
 const usesHashRouting =
   import.meta.env.MODE !== 'e2e' &&
-  (import.meta.env.VITE_ROUTER_MODE === 'hash' || window.location.hostname.endsWith('github.io'));
+  (import.meta.env.VITE_ROUTER_MODE === 'hash' || window.location.hostname.endsWith('.github.io'));
 if (!usesHashRouting && !window.location.pathname.startsWith(appBasePath)) {
   const { pathname, search, hash } = window.location;
   window.location.replace(`${appBasePath}${pathname === '/' ? '' : pathname}${search}${hash}`);
