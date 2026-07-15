@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useId, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { XbarMark } from '@/components/BrandMark';
 import { billingPath } from '@/lib/billingRoutes';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
@@ -86,10 +86,12 @@ export default function Login() {
     setBusy('password');
     rememberEmailPreference();
     if (!supabaseReady) {
+      // No cloud auth is configured in this build, so no credentials were
+      // checked — never report a sign-in that did not happen.
       pushToast({
-        title: 'Signed in',
-        message: 'Choose a plan to continue.',
-        tone: 'success',
+        title: 'Local workspace opened',
+        message: 'Cloud sign-in is not configured in this build, so XBAR opened your browser-local workspace instead.',
+        tone: 'info',
       });
       openBrowserWorkspace();
       setBusy('');
@@ -179,7 +181,7 @@ export default function Login() {
         </aside>
 
         <section className="clean-auth-card clean-auth-card--login">
-          <Link className="clean-brand clean-brand--login" to="/landing" aria-label="XBAR home">
+          <a className="clean-brand clean-brand--login" href="/" aria-label="XBAR home">
             <span className="clean-brand__mark" aria-hidden="true">
               <XbarMark tone="mono" />
             </span>
@@ -187,7 +189,7 @@ export default function Login() {
               <strong>XBAR</strong>
               <small>Horse records</small>
             </span>
-          </Link>
+          </a>
 
           <div className="clean-auth-card__header">
             <p>{label}</p>
@@ -278,7 +280,7 @@ export default function Login() {
                 </button>
               </div>
             )}
-            <Link to="/landing">View plans</Link>
+            <a href="/pricing">View plans</a>
             <span>© 2026 XBAR</span>
           </div>
         </section>

@@ -79,7 +79,12 @@ export default function Reports() {
                     role="button"
                     tabIndex={0}
                     onClick={() => navigate(`/horses/${h.id}`)}
-                    onKeyDown={(e) => e.key === 'Enter' && navigate(`/horses/${h.id}`)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        navigate(`/horses/${h.id}`);
+                      }
+                    }}
                     style={{ cursor: 'pointer' }}
                   >
                     <span className="xs-row__main">

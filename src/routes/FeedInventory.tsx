@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Wheat } from 'lucide-react';
+import { Wheat } from 'lucide-react';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import { ActionButton, Card, PageHead } from '@/components/saas';
@@ -9,10 +9,9 @@ const usd = (n: number) => `$${n.toLocaleString('en-US', { maximumFractionDigits
 
 export default function FeedInventory() {
   const navigate = useNavigate();
-  const pushToast = useUiStore((state) => state.pushToast);
+  const openQuickCreate = useUiStore((state) => state.openQuickCreate);
   const horses = useXbarStore((s) => s.horses);
   const expenseReceipts = useXbarStore((s) => s.expenseReceipts);
-  const toast = (m: string) => pushToast({ title: 'Feed & Supplies', message: m, tone: 'success' });
 
   const model = useMemo(() => {
     const feed = expenseReceipts.filter(
@@ -37,11 +36,12 @@ export default function FeedInventory() {
         subtitle="Track what you spend on hay, grain, supplements, and bedding — and keep the receipts."
         actions={
           <>
-            <ActionButton icon={<Wheat size={15} />} onClick={() => toast('Feed logged')}>
-              Log Feed
-            </ActionButton>
-            <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/expenses')}>
-              Add Expense
+            <ActionButton
+              variant="primary"
+              icon={<Wheat size={15} />}
+              onClick={() => openQuickCreate({ action: 'Add Expense' })}
+            >
+              Log Feed Purchase
             </ActionButton>
           </>
         }

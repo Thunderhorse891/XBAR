@@ -26,14 +26,12 @@ export default defineConfig({
     ...(process.env.XBAR_CHROME ? { launchOptions: { executablePath: process.env.XBAR_CHROME } } : {}),
   },
   webServer: {
-    command: 'node ./node_modules/vite/bin/vite.js preview --host 0.0.0.0 --port 4175',
+    // serve-dist mirrors production routing: static marketing pages at the
+    // root, the SPA shell rewritten under /app/*, and vercel.json's
+    // permanent redirects — so the smoke suite exercises real prod behavior.
+    command: 'node ./scripts/serve-dist.mjs --port 4175',
     url: 'http://127.0.0.1:4175',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
-    // vite preview re-reads vite.config.ts, which switches base to /XBAR/ when
-    // GITHUB_ACTIONS is set (GitHub Pages deploys). The dist under test is built
-    // with VITE_STATIC_TARGET=web (base /), so the preview server must match —
-    // otherwise every route and asset 404s in CI.
-    env: { VITE_STATIC_TARGET: 'web' },
   },
 });

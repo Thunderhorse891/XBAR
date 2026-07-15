@@ -35,7 +35,7 @@ const STATUS_TONE: Record<HorseStatus, Tone> = {
 export default function AnimalProfile() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const pushToast = useUiStore((s) => s.pushToast);
+  const openQuickCreate = useUiStore((s) => s.openQuickCreate);
   const [tab, setTab] = useState<string>('Overview');
   const animal = useHorseRecord(id);
 
@@ -63,7 +63,6 @@ export default function AnimalProfile() {
     );
   }
 
-  const toast = (m: string) => pushToast({ title: animal.name, message: m, tone: 'success' });
   const readiness = animal.readiness?.score ?? 0;
   const packetReady = animal.readiness?.packetStatus === 'Ready';
   const location =
@@ -99,10 +98,18 @@ export default function AnimalProfile() {
           </div>
         </div>
         <div className="xs-objhead__actions">
-          <ActionButton size="sm" icon={<Move size={14} />} onClick={() => toast('Move drawer opened')}>
+          <ActionButton
+            size="sm"
+            icon={<Move size={14} />}
+            onClick={() => openQuickCreate({ action: 'Move Horse', horseId: animal.id })}
+          >
             Move
           </ActionButton>
-          <ActionButton size="sm" icon={<HeartPulse size={14} />} onClick={() => toast('Health record added')}>
+          <ActionButton
+            size="sm"
+            icon={<HeartPulse size={14} />}
+            onClick={() => openQuickCreate({ action: 'Add Health Record', horseId: animal.id })}
+          >
             Add Health
           </ActionButton>
           <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents')}>
@@ -170,10 +177,10 @@ export default function AnimalProfile() {
             </div>
             <div className="xs-toolbar" style={{ marginTop: 12 }}>
               <ActionButton size="sm" onClick={() => navigate('/today')}>
-                Add Task
+                Open Care Tasks
               </ActionButton>
               <ActionButton size="sm" variant="primary" onClick={() => navigate('/sale-packets')}>
-                Build sale packet
+                Open Sale Packets
               </ActionButton>
             </div>
           </Card>
@@ -203,7 +210,11 @@ export default function AnimalProfile() {
               No health records yet.{animal.lastVetVisit ? ` Last vet visit ${animal.lastVetVisit}.` : ''}
             </p>
           )}
-          <ActionButton size="sm" icon={<Plus size={14} />} onClick={() => toast('Health record added')}>
+          <ActionButton
+            size="sm"
+            icon={<Plus size={14} />}
+            onClick={() => openQuickCreate({ action: 'Add Health Record', horseId: animal.id })}
+          >
             Add Health Record
           </ActionButton>
         </Card>
@@ -280,7 +291,11 @@ export default function AnimalProfile() {
               No active breeding records for this horse.
             </p>
           )}
-          <ActionButton size="sm" icon={<Plus size={14} />} onClick={() => toast('Breeding record added')}>
+          <ActionButton
+            size="sm"
+            icon={<Plus size={14} />}
+            onClick={() => openQuickCreate({ action: 'Add Breeding Record', horseId: animal.id })}
+          >
             Add Breeding Record
           </ActionButton>
         </Card>
@@ -298,7 +313,11 @@ export default function AnimalProfile() {
             <dt>Stall</dt>
             <dd>{animal.location.stall || '—'}</dd>
           </dl>
-          <ActionButton size="sm" icon={<Move size={14} />} onClick={() => toast('Move drawer opened')}>
+          <ActionButton
+            size="sm"
+            icon={<Move size={14} />}
+            onClick={() => openQuickCreate({ action: 'Move Horse', horseId: animal.id })}
+          >
             Move Horse
           </ActionButton>
         </Card>

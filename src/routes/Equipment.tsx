@@ -16,7 +16,13 @@ export default function Equipment() {
   const pushToast = useUiStore((s) => s.pushToast);
   const assets = useXbarStore((s) => s.ranchAssets);
   const addRanchAsset = useXbarStore((s) => s.addRanchAsset);
+  const updateAsset = useXbarStore((s) => s.updateAsset);
   const toast = (m: string) => pushToast({ title: 'Equipment', message: m, tone: 'success' });
+
+  const markRepaired = (assetId: string, name: string, location: string) => {
+    const result = updateAsset(assetId, { condition: 'Excellent', status: 'Available', location });
+    toast(result.ok ? `${name} marked repaired — condition set to Excellent` : result.message);
+  };
 
   const counts = useMemo(
     () => ({
@@ -40,9 +46,6 @@ export default function Equipment() {
         subtitle="Trucks, trailers, tractors, gates, troughs, and tools — status, service, and open work orders."
         actions={
           <>
-            <ActionButton icon={<Wrench size={15} />} onClick={() => toast('Work order created')}>
-              Create Work Order
-            </ActionButton>
             <ActionButton variant="primary" icon={<Plus size={15} />} onClick={addEquipment}>
               Add Equipment
             </ActionButton>
@@ -114,12 +117,11 @@ export default function Equipment() {
                   <StatusChip tone={CONDITION_TONE[e.condition]}>{e.condition}</StatusChip>
                 </div>
                 <div className="xs-toolbar" style={{ marginTop: 12 }}>
-                  <ActionButton size="sm" onClick={() => toast(`Work order — ${e.name}`)}>
-                    Work Order
-                  </ActionButton>
-                  <ActionButton size="sm" onClick={() => toast(`Repair logged — ${e.name}`)}>
-                    Log Repair
-                  </ActionButton>
+                  {e.condition !== 'Excellent' ? (
+                    <ActionButton size="sm" onClick={() => markRepaired(e.id, e.name, e.location)}>
+                      Mark Repaired
+                    </ActionButton>
+                  ) : null}
                 </div>
               </Card>
             ))}

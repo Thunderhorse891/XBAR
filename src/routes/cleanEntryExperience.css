@@ -179,7 +179,7 @@
 
 .clean-login-visual__copy span {
   color: var(--entry-steel);
-  font-family: 'Geist', 'Outfit', sans-serif;
+  font-family: var(--font-ui);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.18em;
@@ -189,7 +189,7 @@
 .clean-login-visual__copy h2 {
   margin: 0;
   color: #121518 !important;
-  font-family: 'Hanken Grotesk', 'Geist', 'Outfit', sans-serif;
+  font-family: var(--font-ui);
   font-size: clamp(1.8rem, 4vw, 2.65rem);
   font-weight: 800;
   letter-spacing: 0 !important;
@@ -224,7 +224,7 @@
 
 .clean-login-proof dt {
   color: #121518;
-  font-family: 'Geist', 'Hanken Grotesk', sans-serif;
+  font-family: var(--font-ui);
   font-size: 11px;
   font-weight: 800;
   text-transform: uppercase;
@@ -315,11 +315,10 @@
   gap: 9px;
 }
 
-.clean-auth-card__header p,
-.clean-heading-kicker {
+.clean-auth-card__header p {
   margin: 0;
   color: var(--entry-blue);
-  font-family: 'Geist', 'Hanken Grotesk', sans-serif;
+  font-family: var(--font-ui);
   font-size: 11px;
   font-weight: 820;
   letter-spacing: 0.1em;
@@ -330,7 +329,7 @@
 .clean-auth-card__header h2 {
   margin: 0;
   color: var(--entry-ink);
-  font-family: 'Hanken Grotesk', 'Geist', 'Outfit', sans-serif;
+  font-family: var(--font-ui);
   font-size: clamp(2.8rem, 7vw, 4rem);
   font-weight: 800;
   line-height: 1;
@@ -346,8 +345,7 @@
   line-height: 1.55;
 }
 
-.clean-form,
-.clean-local-start {
+.clean-form {
   display: grid;
   gap: 16px;
 }
@@ -360,7 +358,7 @@
 .clean-field span,
 .clean-field > label {
   color: #46515e;
-  font-family: 'Geist', 'Hanken Grotesk', sans-serif;
+  font-family: var(--font-ui);
   font-size: 12px;
   font-weight: 760;
   letter-spacing: 0.08em;
@@ -442,7 +440,7 @@
   border-radius: 7px;
   cursor: pointer;
   font: inherit;
-  font-family: 'Geist', 'Hanken Grotesk', sans-serif;
+  font-family: var(--font-ui);
   font-size: 13px;
   font-weight: 820;
   text-transform: uppercase;
@@ -505,7 +503,6 @@
   gap: 9px;
 }
 
-.clean-local-start ul,
 .clean-step-list {
   display: grid;
   gap: 10px;
@@ -514,25 +511,6 @@
   list-style: none;
 }
 
-.clean-local-start li {
-  display: grid;
-  grid-template-columns: 9px minmax(0, 1fr);
-  gap: 9px;
-  color: var(--entry-muted);
-  font-size: 14px;
-  line-height: 1.45;
-}
-
-.clean-local-start li::before {
-  width: 7px;
-  height: 7px;
-  margin-top: 7px;
-  border-radius: 50%;
-  background: var(--entry-blue);
-  content: '';
-}
-
-.clean-local-start p,
 .clean-auth-footer,
 .clean-form-error {
   margin: 0;
@@ -564,7 +542,7 @@
 
 .clean-auth-footer > span {
   color: rgba(89, 97, 104, 0.72);
-  font-family: 'Geist', 'Hanken Grotesk', sans-serif;
+  font-family: var(--font-ui);
   font-size: 10px;
   text-transform: uppercase;
 }

@@ -24,12 +24,13 @@ async function bootstrapWorkspace(page: Page) {
     }
   });
 
-  await page.goto('/setup');
+  // The application router lives under /app (marketing owns the site root).
+  await page.goto('/app/setup');
 
   const setupHeading = page.getByRole('heading', { name: 'Configure Workspace' });
   const setupVisible = await setupHeading.isVisible({ timeout: 5_000 }).catch(() => false);
   if (!setupVisible) {
-    await page.goto('/#/setup');
+    await page.goto('/app/setup');
   }
   await expect(setupHeading).toBeVisible({ timeout: 10_000 });
 
@@ -44,7 +45,7 @@ async function bootstrapWorkspace(page: Page) {
   await page.getByPlaceholder('Pasture 1').fill('North Pasture');
   await page.getByRole('button', { name: 'Create workspace' }).click();
 
-  await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
+  await expect(page).toHaveURL(/\/app$/, { timeout: 15_000 });
   // Fresh workspace lands on the plain-language getting-started dashboard (no seeded records).
   await expect(page.getByRole('heading', { name: 'Get your horse records in order.' })).toBeVisible({
     timeout: 15_000,
@@ -145,7 +146,7 @@ test('a seeded horse opens a full profile object page with tabs', async ({ page 
   await page.getByRole('link', { name: 'Horse record' }).click();
   await expect(page).toHaveURL(/\/horses\//);
   await expect(page.locator('.xs-objhead__name')).toHaveText(/roster prospect/i);
-  await page.getByRole('button', { name: 'Documents' }).click();
+  await page.getByRole('button', { name: 'Documents', exact: true }).click();
   await expect(page.getByText('No documents linked to this horse yet.')).toBeVisible();
 });
 
@@ -161,4 +162,49 @@ test('billing page shows tier cards', async ({ page }) => {
   await page.getByRole('button', { name: 'Billing' }).click();
   await expect(page.getByRole('heading', { name: 'Review Billing' })).toBeVisible();
   await expect(page.locator('.checkout-plan')).toHaveCount(4);
+});
+
+test('OCR pipeline: an uploaded image is read on-device and matched to a horse by its pixels', async ({ page }) => {
+  test.setTimeout(180_000);
+  await bootstrapWorkspace(page);
+  await seedHorse(page, 'Ocr Test Horse');
+
+  // Generate a scan-like PNG in the browser. The filename is deliberately
+  // generic, and no horse is selected at upload — the ONLY way this document
+  // can match "Ocr Test Horse" is if tesseract actually reads the pixels.
+  const dataUrl = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1400;
+    canvas.height = 600;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('no canvas context');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 64px Arial';
+    ctx.fillText('COGGINS TEST CERTIFICATE', 60, 140);
+    ctx.fillText('Horse: OCR TEST HORSE', 60, 280);
+    ctx.fillText('Result: NEGATIVE', 60, 420);
+    return canvas.toDataURL('image/png');
+  });
+  const buffer = Buffer.from(dataUrl.split(',')[1], 'base64');
+
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Upload Document' });
+  await expect(drawer).toBeVisible();
+  await drawer.locator('input[type="file"]').setInputFiles({ name: 'scan-001.png', mimeType: 'image/png', buffer });
+  await expect(drawer.getByText('1 file selected — click to change')).toBeVisible();
+  // Leave horse assignment to the pipeline: pixels must drive the match.
+  await drawer.locator('select').first().selectOption('');
+  // OCR (worker init + recognition) runs during submit — allow real time.
+  await drawer.getByRole('button', { name: 'Upload for review' }).click();
+  await expect(page).toHaveURL(/\/documents/, { timeout: 120_000 });
+
+  // The document appears in the review queue, and its row shows the horse the
+  // pipeline matched from the OCR text — proof the pixels were actually read
+  // (the filename carries no horse signal and no horse was selected).
+  const row = page.locator('tr', { hasText: 'scan-001' }).first();
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await expect(row.getByText('Ocr Test Horse').first()).toBeVisible();
 });

@@ -77,16 +77,13 @@ body::selection {
 }
 
 /* ── App shell / canvas ──────────────────────── */
-.app-shell,
-.shell-main,
+
 [class*='bg-[#eef3f8]'],
 [class*='bg-[#fbfdff]'] {
   background: transparent !important;
   color: var(--text) !important;
 }
 
-.shell-content,
-.xbar-command-shell > aside + div > main,
 main.flex.flex-col {
   background: transparent !important;
   color: var(--text) !important;
@@ -94,6 +91,7 @@ main.flex.flex-col {
 
 /* The legacy ops wrapper painted its own dark cinematic gradient. The
    workspace canvas is light now; command modules carry the dark surfaces. */
+
 .ops-experience {
   background: transparent !important;
   color: var(--text) !important;
@@ -101,81 +99,11 @@ main.flex.flex-col {
 }
 
 /* ── Sidebar stays graphite (shell identity) ─── */
-.sidebar,
-.xbar-command-shell > aside {
-  background:
-    radial-gradient(ellipse at 50% -6%, rgba(45, 140, 255, 0.14), transparent 18rem),
-    linear-gradient(180deg, #050a12 0%, #03070d 100%) !important;
-  color: #dbe8f8 !important;
-  border-color: rgba(120, 165, 220, 0.12) !important;
-  box-shadow: 14px 0 44px rgba(8, 14, 22, 0.22);
-}
-
-.brand-lockup__title,
-.xbar-command-shell aside [class*='tracking-[0.14em]'],
-.xbar-command-shell aside [class*='tracking-[0.24em]'] {
-  color: #f3f8ff !important;
-}
-
-.brand-lockup__subtitle,
-.sidebar-card__eyebrow,
-.nav-section__title,
-.sidebar-footer__title,
-.xbar-command-shell aside [class*='text-[#52708d]'],
-.xbar-command-shell aside [class*='text-[#3d5870]'] {
-  color: rgba(168, 194, 224, 0.58) !important;
-}
-
-.sidebar-card,
-.sidebar-footer,
-.xbar-command-shell aside [class*='bg-[#080f1c]'],
-.xbar-command-shell aside [class*='bg-[#08111d]'],
-.xbar-command-shell aside [class*='bg-[#0a1628]'] {
-  border-color: rgba(120, 165, 220, 0.13) !important;
-  background: linear-gradient(145deg, rgba(12, 21, 34, 0.86), rgba(5, 10, 18, 0.92)) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045) !important;
-}
-
-.nav-link,
-.xbar-command-shell aside a,
-.xbar-command-shell aside button {
-  border-radius: 9px !important;
-  color: rgba(205, 222, 242, 0.72) !important;
-}
-
-.nav-link:hover,
-.xbar-command-shell aside a:hover,
-.xbar-command-shell aside button:hover {
-  background: rgba(45, 140, 255, 0.09) !important;
-  color: #f5f9ff !important;
-  border-color: rgba(45, 140, 255, 0.3) !important;
-}
-
-.nav-link--active,
-.xbar-command-shell aside a[aria-current='page'] {
-  background: linear-gradient(90deg, rgba(45, 140, 255, 0.18), rgba(45, 140, 255, 0.045)) !important;
-  color: #ffffff !important;
-  border-color: rgba(45, 140, 255, 0.46) !important;
-  box-shadow: inset 3px 0 0 var(--brand-electric) !important;
-}
 
 /* ── Topbar: light translucent steel ─────────── */
-.topbar,
-header.sticky {
-  background: rgba(238, 245, 251, 0.88) !important;
-  border-color: rgba(96, 124, 154, 0.22) !important;
-  color: var(--text) !important;
-  backdrop-filter: blur(16px) saturate(1.05) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(1.05) !important;
-  box-shadow: 0 14px 30px -24px rgba(17, 21, 27, 0.25);
-}
 
-.topbar__title,
 .page-title,
 .panel__title,
-.command-stage__title,
-.portfolio-stage__title,
-.detail-hero__title,
 h1,
 h2,
 h3 {
@@ -183,15 +111,12 @@ h3 {
   letter-spacing: -0.03em;
 }
 
-.topbar__title,
 .page-title {
   font-size: clamp(1rem, 1.8vw, 1.55rem) !important;
   line-height: 1.06 !important;
 }
 
-.page-header,
-.shell-content > header,
-main > header:not(.topbar) {
+.page-header {
   border: 1px solid var(--border);
   border-radius: 18px;
   padding: clamp(18px, 2.2vw, 26px);
@@ -201,11 +126,6 @@ main > header:not(.topbar) {
 
 .eyebrow,
 .panel__eyebrow,
-.detail-hero__eyebrow,
-.command-stage__eyebrow,
-.portfolio-stage__eyebrow,
-.dashboard-kpi__label,
-.ledger-stat__label,
 .horse-card__kicker,
 [class*='uppercase'][class*='tracking'] {
   color: #1466d8 !important;
@@ -223,24 +143,16 @@ p {
 }
 
 /* ── Panels: light surfaces, metal borders ───── */
+
 .panel,
 .metric-card,
-.command-stage,
-.portfolio-stage,
-.command-stage__support-card,
-.command-stage__ledger-item,
-.portfolio-stage__stat,
 .stack-item,
 .empty-state,
-.detail-hero,
 .horse-card,
 .table-shell,
 .context-menu,
 .ownership-panel,
-.ownership-command-panel,
-.ownership-workspace,
-.buyer-momentum,
-.activation-guide {
+.ownership-workspace {
   border-color: var(--border) !important;
   background: linear-gradient(180deg, #ffffff, #f5fafe) !important;
   color: var(--text) !important;
@@ -267,9 +179,6 @@ p {
 
 .panel::before,
 .metric-card::before,
-.command-stage::before,
-.portfolio-stage::before,
-.detail-hero::before,
 .horse-card::before,
 .table-shell::before {
   content: '';
@@ -307,20 +216,17 @@ p {
 }
 
 .metric-card--amber,
-.pill--amber,
-.ops-briefing-stat__value--warning {
+.pill--amber {
   --tone: var(--amber);
 }
 
 .metric-card--rose,
-.pill--rose,
-.ops-briefing-stat__value--danger {
+.pill--rose {
   --tone: var(--rose);
 }
 
 .metric-card--emerald,
-.pill--emerald,
-.ops-briefing-stat__value--clear {
+.pill--emerald {
   --tone: var(--emerald);
 }
 
@@ -335,7 +241,7 @@ p {
 }
 
 /* ── Pills / status chips on light surfaces ──── */
-.ops-briefing-chip,
+
 .pill,
 [class*='rounded-full'],
 [class*='rounded-md'][class*='uppercase'] {
@@ -345,12 +251,12 @@ p {
 }
 
 .pill--blue,
-.nav-badge--blue,
 [class*='text-[#1155dd]'] {
   color: #1466d8 !important;
 }
 
 /* "Clear / verified" semantics are blue — no green in the system. */
+
 .pill--emerald {
   color: #1466d8 !important;
   border-color: rgba(20, 102, 216, 0.32) !important;
@@ -369,18 +275,9 @@ p {
   background: rgba(192, 68, 78, 0.1) !important;
 }
 
-.ops-briefing-stat,
-.dashboard-kpi,
-.ledger-stat {
-  border-color: var(--border) !important;
-  background: #ffffff !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
-}
-
 /* ── Forms / controls: readable, light ───────── */
-.search-shell__input,
+
 .field-input,
-.role-select,
 input,
 select,
 textarea {
@@ -395,9 +292,7 @@ textarea::placeholder {
   color: rgba(90, 107, 127, 0.62) !important;
 }
 
-.search-shell__input:focus,
 .field-input:focus,
-.role-select:focus,
 input:focus,
 select:focus,
 textarea:focus {
@@ -413,10 +308,9 @@ label,
 }
 
 /* ── Buttons ────────────────────────────────── */
+
 .button,
 .icon-button,
-.public-action,
-.ops-briefing-action,
 button[class*='border'],
 a[class*='border'] {
   border-color: var(--border-strong) !important;
@@ -428,8 +322,6 @@ a[class*='border'] {
 }
 
 .button--primary,
-.public-action--primary,
-.ops-briefing-action--primary,
 button[class*='bg-[#1155dd]'],
 a[class*='bg-[#1155dd]'] {
   border-color: rgba(45, 140, 255, 0.72) !important;
@@ -442,8 +334,6 @@ a[class*='bg-[#1155dd]'] {
 
 .button:hover,
 .icon-button:hover,
-.public-action:hover,
-.ops-briefing-action:hover,
 button[class*='border']:hover,
 a[class*='border']:hover {
   transform: translateY(-1px);
@@ -453,8 +343,6 @@ a[class*='border']:hover {
 }
 
 .button--primary:hover,
-.public-action--primary:hover,
-.ops-briefing-action--primary:hover,
 button[class*='bg-[#1155dd]']:hover,
 a[class*='bg-[#1155dd]']:hover {
   background: linear-gradient(180deg, #4aa0ff 0%, #207cff 100%) !important;
@@ -463,8 +351,6 @@ a[class*='bg-[#1155dd]']:hover {
 
 .button:active,
 .icon-button:active,
-.public-action:active,
-.ops-briefing-action:active,
 button:active,
 a[role='button']:active {
   transform: scale(0.985);
@@ -480,6 +366,7 @@ button:disabled,
 }
 
 /* ── Tables / registries: light rows, dark text ─ */
+
 .table-shell,
 table,
 .data-table {
@@ -490,7 +377,6 @@ table,
 }
 
 thead,
-.table-head,
 th {
   background: #f1f6fb !important;
   color: var(--muted) !important;
@@ -507,13 +393,11 @@ td {
   color: var(--text) !important;
 }
 
-tbody tr,
-.table-row {
+tbody tr {
   background: #ffffff !important;
 }
 
-tbody tr:hover,
-.table-row:hover {
+tbody tr:hover {
   background: rgba(24, 168, 255, 0.07) !important;
 }
 
@@ -524,23 +408,19 @@ tbody tr[data-state='selected'],
 }
 
 /* ── Detail / dossier cards ─────────────────── */
-.detail-hero,
+
 .horse-card,
-.ownership-hero,
-.ownership-command-panel,
 .ownership-workspace--timeline {
   isolation: isolate;
 }
 
 .horse-card__name,
-.detail-hero__title,
 .key-value__value,
 .stack-item__title {
   color: #0d1420 !important;
 }
 
-.horse-card__meta,
-.detail-hero__description {
+.horse-card__meta {
   color: var(--muted) !important;
 }
 
@@ -553,6 +433,7 @@ tbody tr[data-state='selected'],
 }
 
 /* No green: "emerald" progress renders as verified blue. */
+
 .progress-bar--emerald {
   background: linear-gradient(90deg, #1466d8, #58a8ff) !important;
 }
@@ -566,18 +447,9 @@ tbody tr[data-state='selected'],
 }
 
 /* ── Auth / setup continuity (kept dark-band) ── */
-.lp-shell,
-.xbar-login-shell,
-.premium-setup-shell {
-  background: linear-gradient(180deg, #eef5fb 0%, #dde8f2 100%) !important;
-}
-
-.lp-hero-logo {
-  object-fit: cover !important;
-  object-position: center top !important;
-}
 
 /* ── Mobile dock stays graphite (shell) ─────── */
+
 nav[aria-label='Mobile quick navigation'] {
   border-color: rgba(120, 165, 220, 0.18) !important;
   background: rgba(5, 9, 15, 0.94) !important;
@@ -597,24 +469,14 @@ nav[aria-label='Mobile quick navigation'] a[aria-current='page'] {
 }
 
 @media (max-width: 768px) {
-  .shell-content,
-  .xbar-command-shell > aside + div > main,
   main.flex.flex-col {
     padding-inline: 14px !important;
   }
 
   .panel,
   .metric-card,
-  .command-stage,
-  .portfolio-stage,
   .page-header {
     border-radius: 14px !important;
-  }
-
-  .command-stage__title,
-  .portfolio-stage__title,
-  .ops-briefing-header__title {
-    font-size: clamp(1.6rem, 9vw, 2.6rem) !important;
   }
 }
 

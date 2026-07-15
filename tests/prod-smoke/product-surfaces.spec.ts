@@ -45,7 +45,7 @@ async function goToRoute(page: Page, path: string) {
 test('documents pipeline renders all five workflow stages', async ({ page }) => {
   const errors = collectPageErrors(page);
   await completeLocalOnboarding(page);
-  await goToRoute(page, '/documents');
+  await goToRoute(page, '/app/documents');
 
   await expect(page.getByText('Your Documents')).toBeVisible({ timeout: 15_000 });
   const tabs = page.getByRole('tablist', { name: 'Document pipeline stages' }).getByRole('tab');
@@ -63,7 +63,7 @@ test('documents pipeline renders all five workflow stages', async ({ page }) => 
 test('billing page renders every advertised subscription tier', async ({ page }) => {
   const errors = collectPageErrors(page);
   await completeLocalOnboarding(page);
-  await goToRoute(page, '/billing');
+  await goToRoute(page, '/app/billing');
 
   for (const tier of ['Starter', 'Professional', 'Ranch Ops', 'Enterprise']) {
     await expect(page.getByText(tier).first()).toBeVisible({ timeout: 15_000 });

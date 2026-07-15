@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import {
@@ -189,7 +190,7 @@ export function BuyerResponseQueue() {
                 {(event.kind === 'packet-downloaded' || event.kind === 'call-requested') &&
                 followUpLead?.nextFollowUp ? (
                   <Button asChild variant="outline" size="sm">
-                    <Link to={`/follow-ups?lead=${followUpLead.id}`}>Open follow-up</Link>
+                    <Link to={buyerFollowUpPath(followUpLead.id)}>Open follow-up</Link>
                   </Button>
                 ) : null}
                 {(event.kind === 'packet-downloaded' || event.kind === 'call-requested') &&

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Check, CheckCircle2, Plus, Timer } from 'lucide-react';
+import { ArrowRight, Check, CheckCircle2, Plus } from 'lucide-react';
 import { ActionButton, Card, PageHead, SlideOverDrawer, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -32,7 +32,16 @@ export default function TodayWork() {
   const expenseReceipts = useXbarStore((s) => s.expenseReceipts);
   const salesLeads = useXbarStore((s) => s.salesLeads);
   const [tab, setTab] = useState<'All' | TaskCategory>('All');
-  const [done, setDone] = useState<Set<string>>(new Set());
+  // Dismissals persist per-day in localStorage: a dismissed task really stays
+  // dismissed across reloads, and returns tomorrow if the record is still due.
+  const dismissKey = `xbar-care-dismissed-${new Date().toISOString().slice(0, 10)}`;
+  const [done, setDone] = useState<Set<string>>(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(dismissKey) ?? '[]') as string[]);
+    } catch {
+      return new Set();
+    }
+  });
   const [open, setOpen] = useState<Task | null>(null);
   const toast = (m: string) => pushToast({ title: 'Care Tasks', message: m, tone: 'success' });
 
@@ -98,9 +107,13 @@ export default function TodayWork() {
 
   const filtered = tab === 'All' ? tasks : tasks.filter((t) => t.category === tab);
   const markDone = (id: string) => {
-    setDone((cur) => new Set(cur).add(id));
+    setDone((cur) => {
+      const next = new Set(cur).add(id);
+      localStorage.setItem(dismissKey, JSON.stringify([...next]));
+      return next;
+    });
     setOpen(null);
-    toast('Task marked done');
+    toast('Dismissed for today — it comes back tomorrow if the record is still due');
   };
 
   return (
@@ -165,7 +178,12 @@ export default function TodayWork() {
                   role="button"
                   tabIndex={0}
                   onClick={() => setOpen(t)}
-                  onKeyDown={(e) => e.key === 'Enter' && setOpen(t)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setOpen(t);
+                    }
+                  }}
                 >
                   <StatusChip tone={priorityTone[t.priority]}>
                     {t.priority === 'Blocker' ? 'Cannot sell yet' : t.priority}
@@ -181,14 +199,6 @@ export default function TodayWork() {
                     <div className="xs-task__quick">
                       <button type="button" className="xs-quickbtn" title="Mark done" onClick={() => markDone(t.id)}>
                         <CheckCircle2 size={15} />
-                      </button>
-                      <button
-                        type="button"
-                        className="xs-quickbtn"
-                        title="Snooze"
-                        onClick={() => toast(`Snoozed "${t.title}"`)}
-                      >
-                        <Timer size={15} />
                       </button>
                       <button type="button" className="xs-quickbtn" title="Open" onClick={() => setOpen(t)}>
                         <ArrowRight size={15} />

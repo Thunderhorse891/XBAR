@@ -7,9 +7,8 @@ import { useXbarStore } from '@/store/useXbarStore';
 
 export default function BreedingFoaling() {
   const navigate = useNavigate();
-  const pushToast = useUiStore((s) => s.pushToast);
+  const openQuickCreate = useUiStore((s) => s.openQuickCreate);
   const horses = useXbarStore((s) => s.horses);
-  const toast = (m: string) => pushToast({ title: 'Breeding & Foaling', message: m, tone: 'success' });
 
   const mares = useMemo(
     () => horses.filter((h) => h.segment === 'Broodmare' || (h.sex === 'Mare' && h.breedingTimeline.length > 0)),
@@ -80,8 +79,11 @@ export default function BreedingFoaling() {
         subtitle="Cover dates, preg checks, foaling windows, and registration — tracked from pairing to foal."
         actions={
           <>
-            <ActionButton icon={<CalendarPlus size={15} />} onClick={() => toast('Preg check scheduled')}>
-              Schedule Preg Check
+            <ActionButton
+              icon={<CalendarPlus size={15} />}
+              onClick={() => openQuickCreate({ action: 'Add Breeding Record' })}
+            >
+              Add Breeding Record
             </ActionButton>
             <ActionButton variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/horses?new=1')}>
               Add Broodmare

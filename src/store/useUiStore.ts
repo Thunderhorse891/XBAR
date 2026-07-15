@@ -11,6 +11,13 @@ import {
 
 export type ToastTone = 'success' | 'error' | 'warning' | 'info';
 
+/**
+ * A request to open the global quick-create drawer. `action` must be one of
+ * the CreateKey labels owned by components/saas/flows.tsx; `horseId`
+ * preselects a horse for horse-scoped actions.
+ */
+export type QuickCreateRequest = { action: string; horseId?: string };
+
 export type ToastItem = {
   id: string;
   title?: string;
@@ -25,6 +32,9 @@ type UiStore = {
   focusedSurfaceId: string | null;
   rightDrawer: DrawerPayload | null;
   commandPaletteOpen: boolean;
+  quickCreate: QuickCreateRequest | null;
+  openQuickCreate: (request: QuickCreateRequest) => void;
+  closeQuickCreate: () => void;
   pushToast: (toast: { id?: string; title?: string; message: string; tone?: ToastTone; duration?: number }) => string;
   removeToast: (id: string) => void;
   clearToasts: () => void;
@@ -61,6 +71,9 @@ export const useUiStore = create<UiStore>((set) => ({
   focusedSurfaceId: null,
   rightDrawer: null,
   commandPaletteOpen: false,
+  quickCreate: null,
+  openQuickCreate: (quickCreate) => set({ quickCreate }),
+  closeQuickCreate: () => set({ quickCreate: null }),
   pushToast: ({ id, duration = 4000, tone = 'info', ...toast }) => {
     const toastId = id ?? createToastId();
     const options = { id: toastId, description: toast.title ? toast.message : undefined, duration };

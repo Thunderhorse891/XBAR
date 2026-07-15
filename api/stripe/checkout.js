@@ -25,7 +25,7 @@ function getTrustedReturnUrl(requestedReturnUrl) {
     })
     .filter(Boolean);
 
-  const fallbackOrigin = configuredOrigins[0] || 'https://xbar.app';
+  const fallbackOrigin = configuredOrigins[0] || 'https://xbar-horse-management-app.vercel.app';
   try {
     const requestedUrl = new URL(requestedReturnUrl || fallbackOrigin);
     if (configuredOrigins.includes(requestedUrl.origin)) {

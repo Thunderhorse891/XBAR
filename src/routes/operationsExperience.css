@@ -344,40 +344,11 @@
   grid-column: 1 / -1;
 }
 
-.ops-timeline-list {
-  display: grid;
-  gap: 12px;
-}
-
 .ops-timeline-item {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
   gap: 12px;
   padding: 16px;
-}
-
-.ops-timeline-dot {
-  width: 11px;
-  height: 11px;
-  margin-top: 7px;
-  border-radius: 999px;
-  background: #7d95aa;
-  box-shadow: 0 0 0 4px rgba(125, 149, 170, 0.15);
-}
-
-.ops-timeline-dot--due {
-  background: #b84c55;
-  box-shadow: 0 0 0 4px rgba(184, 76, 85, 0.15);
-}
-
-.ops-timeline-dot--watch {
-  background: #b38535;
-  box-shadow: 0 0 0 4px rgba(179, 133, 53, 0.15);
-}
-
-.ops-timeline-dot--clear {
-  background: #3e8664;
-  box-shadow: 0 0 0 4px rgba(62, 134, 100, 0.15);
 }
 
 .ops-link-list {
