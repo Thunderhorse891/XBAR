@@ -208,3 +208,28 @@ test('OCR pipeline: an uploaded image is read on-device and matched to a horse b
   await expect(row).toBeVisible({ timeout: 30_000 });
   await expect(row.getByText('Ocr Test Horse').first()).toBeVisible();
 });
+
+test('panel sheen overlays stay inside their cards (no sidebar wash)', async ({ page }) => {
+  await bootstrapWorkspace(page);
+  // Full reloads of pages built on .panel components used to let the
+  // decorative ::after gradient anchor to the viewport, washing out the
+  // sidebar. The host must establish its own positioning context.
+  // Client-side navigation (pushState drives React Router) — full reloads
+  // race IndexedDB hydration in the dev server and land on /setup.
+  await page.evaluate(() => {
+    window.history.pushState({}, '', '/app/medical');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+  const panel = page.locator('.panel').first();
+  await expect(panel).toBeVisible({ timeout: 15_000 });
+  const check = await page.evaluate(() => {
+    const results: string[] = [];
+    for (const sel of ['.panel', '.metric-card', '.horse-card', '.table-shell']) {
+      for (const el of Array.from(document.querySelectorAll(sel))) {
+        if (getComputedStyle(el).position === 'static') results.push(sel);
+      }
+    }
+    return results;
+  });
+  expect(check, 'sheen hosts must not be position:static').toEqual([]);
+});

@@ -124,3 +124,22 @@ Authority is earned off-repository. What this pass did and did not do:
   sale packet" relabeled as the navigations they are.
 - **Mobile verified:** marketing home/pricing and the app setup flow render
   correctly at 390px (screenshot-checked).
+
+## Round 3 addendum — the "white space on the left side panel"
+
+User-reported: some tabs showed a translucent white film over the sidebar.
+Diagnosed by pixel-measured CSS bisection (decode screenshots, count dark
+logo pixels, bisect stylesheets → rules): the decorative sheen overlay
+`.panel::after / .metric-card::after / .horse-card::after /
+.table-shell::after { position: absolute; inset: 0 }` in
+`metalBrandSystem.css` had hosts without a positioning context — `.panel`
+was never `position: relative` (the only rule that set it was scoped under
+`.xbar-route-surface`, a class rendered by no component). On every tab built
+from `.panel` components (Health Records, Reminders, …) the gradient
+anchored to the viewport and washed the sidebar. Pre-existing bug, not a
+prune regression (verified against the pre-audit commit).
+
+Fix: the sheen hosts now establish their own positioning context at the
+sheen's definition site. Regression-guarded by the e2e test "panel sheen
+overlays stay inside their cards" which asserts no sheen host is
+`position: static`.
