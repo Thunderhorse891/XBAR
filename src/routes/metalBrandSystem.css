@@ -102,6 +102,16 @@ body::before {
     inset 0 -1px 0 rgba(96, 124, 154, 0.14) !important;
 }
 
+/* The sheen overlays below are absolutely positioned with inset: 0 — their
+   hosts MUST establish a positioning context, or the gradients anchor to the
+   viewport and wash out the sidebar (the "white film on the left panel" bug). */
+.panel,
+.metric-card,
+.horse-card,
+.table-shell {
+  position: relative;
+}
+
 .panel::after,
 .metric-card::after,
 .horse-card::after,
