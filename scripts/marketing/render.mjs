@@ -168,6 +168,7 @@ export function renderPage(page) {
     <link rel="icon" type="image/png" href="/brand/xbar-favicon.png" />
     <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
     <script type="application/ld+json">${JSON.stringify(baseJsonLd)}</script>
+    <script defer src="/site.js"></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
