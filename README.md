@@ -129,6 +129,8 @@ Optional browser configuration is documented in `.env.example`.
 - **Health probe**: `GET /api/health` returns liveness plus subsystem-configured booleans (no secrets, no database touch). Point uptime monitors here.
 - **Rate limiting**: every request-driven API endpoint is per-IP rate limited. Set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` so limits are shared across all serverless instances; without them the limiter degrades to per-instance in-memory counting.
 - **Crash telemetry**: uncaught browser errors and unhandled promise rejections are reported to `runtime_events` through `/api/telemetry` (rate limited, workspace-verified, capped at 20 reports per session).
+- **Marketing analytics**: every public page loads the first-party beacon `/site.js`, which reports pageviews and CTA clicks to `/api/metrics` — anonymous (no cookies, no identifiers, honors Do Not Track), CSP-safe, logged in the Vercel function stream, and stored in `runtime_events` as `marketing.*` when Supabase is configured.
+- **Go-live preflight**: `npm run preflight` reports which subsystems are configured and what each missing env var keeps switched off; add `-- --url <deployment>` to probe the live `/api/health` and compare.
 - **Webhook replays**: Stripe webhook deliveries are idempotent on `stripe_event_id` — retried events are acknowledged without re-running the subscription sync.
 - **CI**: every push runs lint, format check, production-dependency audit, typecheck, unit tests, build, and a browser smoke test of the built bundle; CodeQL scans weekly and on PRs; Dependabot files grouped weekly updates.
 

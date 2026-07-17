@@ -71,6 +71,7 @@ for (const page of [...pages, notFoundPage]) {
   writeFileSync(file, renderPage(page));
 }
 copyFileSync(path.join(here, 'marketing', 'site.css'), path.join(dist, 'site.css'));
+copyFileSync(path.join(here, 'marketing', 'site.js'), path.join(dist, 'site.js'));
 
 /* 4 — sample sale packet (fictional data, clearly labeled). */
 const samplesDir = path.join(dist, 'samples');

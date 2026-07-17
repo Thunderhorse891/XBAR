@@ -81,6 +81,10 @@ test('every public page has unique metadata and complete static content', async 
     assert.ok(html.includes(`<link rel="canonical" href="${canonical}" />`), `${page.path}: missing self-canonical`);
     assert.ok(html.includes('"index, follow'), `${page.path}: public page must be indexable`);
     assert.ok(!html.includes('/assets/'), `${page.path}: marketing page must not load the application bundle`);
+    assert.ok(
+      html.includes('<script defer src="/site.js"></script>'),
+      `${page.path}: missing the first-party analytics beacon`,
+    );
     assert.ok(html.length > 4000, `${page.path}: page should carry substantial crawlable content`);
     // View-source completeness: the body copy is in the HTML itself.
     assert.ok(html.includes('<main id="main">'), `${page.path}: missing main landmark`);

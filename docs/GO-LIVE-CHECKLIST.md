@@ -3,6 +3,25 @@
 The repository is ready for these steps; none of them can be completed from
 code. Work top to bottom.
 
+## 0. Preflight — see what's configured before and after each step
+
+```sh
+npm run preflight                                                    # local env report
+npm run preflight -- --url https://xbar-horse-management-app.vercel.app  # + live /api/health probe
+```
+
+The report lists every production subsystem (Supabase accounts/sync, Stripe
+billing, email, cron, optional hardening), which env vars each one needs, and
+what turning it on unlocks. The `--url` probe compares intent against the
+deployed reality. Nothing here blocks a deploy — unconfigured subsystems
+degrade honestly (manual-billing panel, local-only mode, in-app reminders).
+
+**Billing launch note:** `VITE_MANAGED_BILLING_ENABLED` is the client-side
+master switch. Leave it `false` (the app shows the honest manual-billing
+panel) until _all_ Stripe values — secret key, webhook secret, and the four
+price IDs — plus Supabase are configured in Vercel; then set it `true` and
+redeploy.
+
 ## 1. Canonical domain
 
 **Interim decision (July 2026):** the site canonicalizes to
@@ -39,15 +58,19 @@ confirm you own it):
 
 ## 3. Analytics and conversion events
 
-- The CSP is strict (`script-src 'self'`) by design. Options, in order of
-  preference:
-  1. A proxied/self-hosted analytics endpoint served from your own domain
-     (e.g. Plausible/Umami behind a first-party path), or
-  2. Deliberately extending the CSP in `vercel.json` for one vetted vendor.
-- Conversion events worth wiring first: marketing CTA click-through to
-  `/app/login?mode=signup` (measurable server-side from the redirect), workspace
-  creation, first document upload, first sale packet build (the app already
-  tracks these via `src/lib/telemetry.ts` product events).
+- **Already wired, first-party, CSP-safe:** every marketing page loads
+  `/site.js`, which beacons pageviews, sign-up CTA clicks, and sample-packet
+  clicks to `/api/metrics` (anonymous — no cookies, respects Do Not Track).
+  Events always appear in the Vercel function logs; once Supabase is
+  configured they are also stored in `runtime_events` as `marketing.*` rows,
+  queryable alongside the app's product events.
+- If you later want a full analytics product, keep the CSP strict
+  (`script-src 'self'`) and prefer a proxied/self-hosted endpoint
+  (Plausible/Umami behind a first-party path) over extending the CSP for a
+  third-party vendor.
+- In-app conversion events (workspace creation, first document upload, first
+  sale packet build) are already tracked via `src/lib/telemetry.ts` product
+  events.
 - Set up rank tracking for: "horse records software", "equine records app",
   "horse sale packet", "horse ownership transfer checklist", plus brand terms.
 
