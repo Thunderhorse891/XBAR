@@ -5,6 +5,7 @@ import type {
   AuditAction,
   AuditEntityType,
   AuditEvent,
+  DocumentEntities,
   DocumentRecord,
   DocumentSource,
   ExpenseCategory,
@@ -278,4 +279,83 @@ export function summarizeBatch(batch: IntakeBatch, documents: DocumentRecord[]):
     matchedCount,
     state,
   };
+}
+
+// Compose a parent's name with its registration number for the bloodline
+// field, e.g. "SHINING SPARK (AQHA 3038883)". Mirrors createHorseRecord.
+export function composeParentField(name?: string, registration?: string): string {
+  const trimmedName = name?.trim() ?? '';
+  if (!trimmedName) return '';
+  const trimmedReg = registration?.trim();
+  return trimmedReg ? `${trimmedName} (${trimmedReg})` : trimmedName;
+}
+
+// The subset of HorsePatch that document extraction can supply.
+export type HorseEnrichmentPatch = {
+  registrationNumber?: string;
+  registry?: string;
+  owner?: string;
+  color?: string;
+  breed?: string;
+  foaledOn?: string;
+  sire?: string;
+  dam?: string;
+};
+
+/**
+ * Build a fill-the-blanks patch that copies the facts a document extracted
+ * onto an existing horse, and a human-readable list of what was applied.
+ * Existing values are never overwritten — only empty fields are filled — so a
+ * registration paper enriches a record without clobbering verified data.
+ */
+export function buildHorseEnrichmentFromEntities(
+  entities: DocumentEntities,
+  horse: HorseRecord,
+): { patch: HorseEnrichmentPatch; applied: string[] } {
+  const patch: HorseEnrichmentPatch = {};
+  const applied: string[] = [];
+  const isEmpty = (value: string | undefined) => !value || !value.trim();
+
+  const registration = entities.registrationNumber?.trim();
+  if (registration && isEmpty(horse.registrationNumber)) {
+    patch.registrationNumber = registration;
+    applied.push(`registration # ${registration}`);
+  }
+  const registry = entities.registry?.trim();
+  if (registry && isEmpty(horse.registry)) {
+    patch.registry = registry;
+    applied.push(`registry ${registry}`);
+  }
+  const owner = entities.ownerName?.trim();
+  if (owner && isEmpty(horse.owner)) {
+    patch.owner = owner;
+    applied.push(`owner ${owner}`);
+  }
+  const color = entities.color?.trim();
+  if (color && isEmpty(horse.color)) {
+    patch.color = color;
+    applied.push(`color ${color}`);
+  }
+  const breed = entities.breed?.trim();
+  if (breed && isEmpty(horse.breed)) {
+    patch.breed = breed;
+    applied.push(`breed ${breed}`);
+  }
+  const foaledOn = entities.foaledOn?.trim();
+  if (foaledOn && isEmpty(horse.foaledOn)) {
+    patch.foaledOn = foaledOn;
+    applied.push(`foaled ${foaledOn}`);
+  }
+  const sire = composeParentField(entities.sire, entities.sireRegistration);
+  if (sire && isEmpty(horse.bloodline.sire)) {
+    patch.sire = sire;
+    applied.push(`sire ${sire}`);
+  }
+  const dam = composeParentField(entities.dam, entities.damRegistration);
+  if (dam && isEmpty(horse.bloodline.dam)) {
+    patch.dam = dam;
+    applied.push(`dam ${dam}`);
+  }
+
+  return { patch, applied };
 }

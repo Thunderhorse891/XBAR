@@ -48,9 +48,11 @@ export type HorsePatch = Partial<
   Pick<
     HorseRecord,
     | 'name'
+    | 'barnName'
     | 'breed'
     | 'color'
     | 'sex'
+    | 'foaledOn'
     | 'registrationNumber'
     | 'registry'
     | 'aqhaNumber'
@@ -60,7 +62,7 @@ export type HorsePatch = Partial<
     | 'status'
     | 'costBasis'
   >
-> & { askPrice?: number };
+> & { askPrice?: number; sire?: string; dam?: string };
 
 export type XbarStore = {
   currentRole: UserRole;

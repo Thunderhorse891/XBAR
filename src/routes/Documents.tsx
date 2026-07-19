@@ -14,7 +14,7 @@ import { buildDocumentTrustProfile } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
-import { normalizeOwnershipRecord } from '@/store/xbarStoreLogic';
+import { buildHorseEnrichmentFromEntities, normalizeOwnershipRecord } from '@/store/xbarStoreLogic';
 import type { DocumentRecord, DocumentSource } from '@/types/xbar';
 import { documentSources } from '@/features/documents/constants';
 import {
@@ -126,16 +126,10 @@ export default function Documents() {
       });
       return;
     }
-    const applied: string[] = [];
-    const patch: { registrationNumber?: string; owner?: string } = {};
-    if (document.entities.registrationNumber && !horse.registrationNumber.trim()) {
-      patch.registrationNumber = document.entities.registrationNumber;
-      applied.push(`registration # ${document.entities.registrationNumber}`);
-    }
-    if (document.entities.ownerName && !horse.owner.trim()) {
-      patch.owner = document.entities.ownerName;
-      applied.push(`owner ${document.entities.ownerName}`);
-    }
+    // Copy every fact the paper extracted (name, reg #, registry, owner, color,
+    // breed, foaled date, sire, dam) onto the horse — filling only empty fields
+    // so verified data is never overwritten.
+    const { patch, applied } = buildHorseEnrichmentFromEntities(document.entities, horse);
     if (!applied.length) {
       pushToast({
         title: 'Nothing new to apply',

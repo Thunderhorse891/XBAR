@@ -127,8 +127,10 @@ export type CreateKey =
   | 'Move Horse'
   | 'Add Buyer Follow-up'
   | 'Add Expense'
-  | 'Add Equipment';
+  | 'Add Equipment'
+  | 'Edit Horse';
 
+// Actions offered in the global Create menu (create-only).
 export const createActions: CreateKey[] = [
   'Add Horse',
   'Upload Document',
@@ -140,8 +142,12 @@ export const createActions: CreateKey[] = [
   'Add Equipment',
 ];
 
+// Every action the drawer can render. "Edit Horse" is opened contextually from
+// a horse profile, not from the Create menu.
+const drawerActions: CreateKey[] = [...createActions, 'Edit Horse'];
+
 function isCreateKey(value: string): value is CreateKey {
-  return (createActions as string[]).includes(value);
+  return (drawerActions as string[]).includes(value);
 }
 
 const SEGMENT_OPTIONS: HorseSegment[] = ['Sale Prospect', 'Broodmare', 'Stud', 'Show String', 'Young Stock', 'Retired'];
@@ -197,6 +203,7 @@ export function GlobalCreateDrawer() {
   const addRanchAsset = useXbarStore((s) => s.addRanchAsset);
   const createSalesLead = useXbarStore((s) => s.createSalesLead);
   const updateHorseLocation = useXbarStore((s) => s.updateHorseLocation);
+  const updateHorse = useXbarStore((s) => s.updateHorse);
   const createDocumentIntake = useXbarStore((s) => s.createDocumentIntake);
   const [f, setF] = useState<Record<string, string>>({});
   const [files, setFiles] = useState<File[]>([]);
@@ -217,10 +224,16 @@ export function GlobalCreateDrawer() {
   // Document upload never defaults to a horse: the batch either matches an
   // existing record or creates a new one, so leave it explicitly unlinked.
   const documentHorseId = f.horseId ?? request.horseId ?? '';
-  // Upload Document is excluded: it is the flow that *creates* the first horse
-  // from registration papers, so it must work on an empty workspace.
+  // The horse being edited (Edit Horse is opened from a profile with its id).
+  const editHorse = action === 'Edit Horse' ? horses.find((h) => h.id === (request.horseId ?? '')) : undefined;
+  // Upload Document and Edit Horse are excluded from the "add a horse first"
+  // gate: Upload creates the first horse, and Edit already targets one.
   const needsHorse =
-    action !== 'Add Horse' && action !== 'Add Expense' && action !== 'Add Equipment' && action !== 'Upload Document';
+    action !== 'Add Horse' &&
+    action !== 'Add Expense' &&
+    action !== 'Add Equipment' &&
+    action !== 'Upload Document' &&
+    action !== 'Edit Horse';
 
   const close = () => {
     setF({});
@@ -262,6 +275,32 @@ export function GlobalCreateDrawer() {
       result.ok ? { ok: true, message: `${name} added to the herd` } : result,
       result.ok && result.id ? `/horses/${result.id}` : '/horses',
     );
+  };
+
+  const submitEditHorse = () => {
+    if (!editHorse) return;
+    const name = (f.name ?? editHorse.name).trim();
+    if (name.length < 2) {
+      pushToast({ title: 'Edit Horse', message: 'A registered name is required.', tone: 'warning' });
+      return;
+    }
+    // Send only the identity fields the edit form controls. Empty strings are
+    // allowed so a user can clear an incorrect value.
+    const result = updateHorse(editHorse.id, {
+      name,
+      barnName: f.barnName ?? editHorse.barnName,
+      breed: f.breed ?? editHorse.breed,
+      color: f.color ?? editHorse.color,
+      sex: (f.sex as HorseSex) ?? editHorse.sex,
+      foaledOn: f.foaledOn ?? editHorse.foaledOn,
+      registry: f.registry ?? editHorse.registry,
+      registrationNumber: f.registrationNumber ?? editHorse.registrationNumber,
+      owner: f.owner ?? editHorse.owner,
+      ownerEntity: f.ownerEntity ?? editHorse.ownerEntity,
+      sire: f.sire ?? editHorse.bloodline.sire,
+      dam: f.dam ?? editHorse.bloodline.dam,
+    });
+    finish(result, result.ok ? `/horses/${editHorse.id}` : undefined);
   };
 
   const submitExpense = async () => {
@@ -616,13 +655,64 @@ export function GlobalCreateDrawer() {
         </ActionButton>
       );
       break;
+    case 'Edit Horse':
+      if (!editHorse) {
+        body = <p className="xs-field-hint">That horse record could not be found. It may have been removed.</p>;
+        break;
+      }
+      body = (
+        <div className="xs-form">
+          <Text label="Registered name" value={f.name ?? editHorse.name} onChange={set('name')} />
+          <Text label="Barn name" value={f.barnName ?? editHorse.barnName} onChange={set('barnName')} />
+          <Pick label="Sex" value={f.sex ?? editHorse.sex} onChange={set('sex')} options={SEX_OPTIONS} />
+          <Text label="Color" placeholder="e.g. Sorrel" value={f.color ?? editHorse.color} onChange={set('color')} />
+          <Text
+            label="Breed"
+            placeholder="e.g. Quarter Horse"
+            value={f.breed ?? editHorse.breed}
+            onChange={set('breed')}
+          />
+          <Text label="Foaled on" type="date" value={f.foaledOn ?? editHorse.foaledOn} onChange={set('foaledOn')} />
+          <Text
+            label="Registry"
+            placeholder="e.g. AQHA"
+            value={f.registry ?? editHorse.registry}
+            onChange={set('registry')}
+          />
+          <Text
+            label="Registration number"
+            value={f.registrationNumber ?? editHorse.registrationNumber}
+            onChange={set('registrationNumber')}
+          />
+          <Text
+            label="Sire"
+            placeholder="Name (registration #)"
+            value={f.sire ?? editHorse.bloodline.sire}
+            onChange={set('sire')}
+          />
+          <Text
+            label="Dam"
+            placeholder="Name (registration #)"
+            value={f.dam ?? editHorse.bloodline.dam}
+            onChange={set('dam')}
+          />
+          <Text label="Owner" value={f.owner ?? editHorse.owner} onChange={set('owner')} />
+          <Text label="Owner entity" value={f.ownerEntity ?? editHorse.ownerEntity} onChange={set('ownerEntity')} />
+        </div>
+      );
+      footer = (
+        <ActionButton variant="primary" onClick={submitEditHorse}>
+          Save changes
+        </ActionButton>
+      );
+      break;
   }
 
   return (
     <SlideOverDrawer
       open
       title={action}
-      subtitle="Quick create"
+      subtitle={action === 'Edit Horse' ? 'Update details' : 'Quick create'}
       onClose={close}
       footer={
         <>

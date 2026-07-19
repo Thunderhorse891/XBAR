@@ -252,6 +252,17 @@ test('registration intake extracts sex, color, sire and dam into a new horse pro
   await expect(identity).toContainText('SMART CHIC OLENA (3120011)');
   await expect(identity).toContainText('DOCS SUGAR BARS (3220022)');
   await expect(identity).toContainText('5544332');
+
+  // Correcting a wrong extraction must persist: open Edit details, fix the color.
+  await page.getByRole('button', { name: 'Edit details' }).click();
+  const edit = page.getByRole('dialog', { name: 'Edit Horse' });
+  await expect(edit).toBeVisible();
+  const colorField = edit.getByLabel('Color');
+  await colorField.fill('Buckskin');
+  await edit.getByRole('button', { name: 'Save changes' }).click();
+  await expect(edit).toBeHidden();
+  await expect(page.locator('.xs-kv')).toContainText('Buckskin');
+  await expect(page.locator('.xs-kv')).not.toContainText('Palomino');
 });
 
 test('panel sheen overlays stay inside their cards (no sidebar wash)', async ({ page }) => {
