@@ -292,6 +292,15 @@ export interface HorseRecord {
 export interface DocumentEntities {
   horseName?: string;
   registrationNumber?: string;
+  registry?: string;
+  sex?: string;
+  color?: string;
+  breed?: string;
+  foaledOn?: string;
+  sire?: string;
+  sireRegistration?: string;
+  dam?: string;
+  damRegistration?: string;
   ownerName?: string;
   examDate?: string;
   veterinarian?: string;

@@ -149,14 +149,32 @@ export default function AnimalProfile() {
               <dd>{animal.breed || '—'}</dd>
               <dt>Sex</dt>
               <dd>{animal.sex}</dd>
+              {animal.color ? (
+                <>
+                  <dt>Color</dt>
+                  <dd>{animal.color}</dd>
+                </>
+              ) : null}
               <dt>Age</dt>
-              <dd>{animal.age} yrs</dd>
+              <dd>{animal.age ? `${animal.age} yrs` : animal.foaledOn ? `Foaled ${animal.foaledOn}` : '—'}</dd>
               <dt>Registry</dt>
               <dd>
                 {animal.registered
                   ? `${animal.registry} · ${animal.registrationNumber || animal.aqhaNumber || '—'}`
                   : 'Unregistered'}
               </dd>
+              {animal.bloodline?.sire ? (
+                <>
+                  <dt>Sire</dt>
+                  <dd>{animal.bloodline.sire}</dd>
+                </>
+              ) : null}
+              {animal.bloodline?.dam ? (
+                <>
+                  <dt>Dam</dt>
+                  <dd>{animal.bloodline.dam}</dd>
+                </>
+              ) : null}
               <dt>Owner</dt>
               <dd>
                 {animal.owner}

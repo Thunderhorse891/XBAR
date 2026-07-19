@@ -201,6 +201,9 @@ export function GlobalCreateDrawer() {
   const [f, setF] = useState<Record<string, string>>({});
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
+  // Registration papers can create the horse records they describe. On by
+  // default so a brand-new workspace bootstraps its herd from its documents.
+  const [createProfiles, setCreateProfiles] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const set = (k: string) => (v: string) => setF((cur) => ({ ...cur, [k]: v }));
 
@@ -211,7 +214,13 @@ export function GlobalCreateDrawer() {
   const defaultBarn = workspaceProfile.defaultBarn || 'Main Barn';
   const horseOptions = horses.map((horse) => ({ value: horse.id, label: horse.name }));
   const selectedHorseId = f.horseId ?? request.horseId ?? horses[0]?.id ?? '';
-  const needsHorse = action !== 'Add Horse' && action !== 'Add Expense' && action !== 'Add Equipment';
+  // Document upload never defaults to a horse: the batch either matches an
+  // existing record or creates a new one, so leave it explicitly unlinked.
+  const documentHorseId = f.horseId ?? request.horseId ?? '';
+  // Upload Document is excluded: it is the flow that *creates* the first horse
+  // from registration papers, so it must work on an empty workspace.
+  const needsHorse =
+    action !== 'Add Horse' && action !== 'Add Expense' && action !== 'Add Equipment' && action !== 'Upload Document';
 
   const close = () => {
     setF({});
@@ -283,18 +292,18 @@ export function GlobalCreateDrawer() {
     setBusy(true);
     const result = await createDocumentIntake({
       files,
-      horseId: selectedHorseId || undefined,
+      horseId: documentHorseId || undefined,
       source: 'Manual Upload',
       uploadedBy: actor,
       label: (f.label ?? '').trim() || undefined,
+      createHorseFromBatch: !documentHorseId && createProfiles,
     });
     setBusy(false);
-    finish(
-      result.ok
-        ? { ok: true, message: `${files.length} file${files.length === 1 ? '' : 's'} queued for OCR and review` }
-        : result,
-      '/documents',
-    );
+    // When exactly one horse was created, land on its new profile so the
+    // extracted registration facts are immediately visible.
+    const createdHorseIds = (result as { createdHorseIds?: string[] }).createdHorseIds ?? [];
+    const destination = createdHorseIds.length === 1 ? `/horses/${createdHorseIds[0]}` : '/documents';
+    finish(result, destination);
   };
 
   const submitHealthRecord = () => {
@@ -462,10 +471,22 @@ export function GlobalCreateDrawer() {
           {horses.length > 0 ? (
             <Pick
               label="Link to horse (optional)"
-              value={selectedHorseId}
+              value={documentHorseId}
               onChange={set('horseId')}
               options={[{ value: '', label: 'Decide during review' }, ...horseOptions]}
             />
+          ) : null}
+          {!documentHorseId ? (
+            <label className="xs-optin">
+              <input type="checkbox" checked={createProfiles} onChange={(e) => setCreateProfiles(e.target.checked)} />
+              <span>
+                Create horse profiles from registration papers
+                <small className="xs-field-hint">
+                  We read the name, registration number, sex, color, and sire &amp; dam, then build a record for each
+                  horse. Turn off to only queue the files for review.
+                </small>
+              </span>
+            </label>
           ) : null}
           <Text
             label="Batch label (optional)"

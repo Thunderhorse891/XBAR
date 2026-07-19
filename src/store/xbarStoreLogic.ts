@@ -29,6 +29,14 @@ export type NewHorseInput = {
   ownerEntity: string;
   aqhaNumber?: string;
   registrationNumber?: string;
+  registry?: string;
+  color?: string;
+  breed?: string;
+  foaledOn?: string;
+  sire?: string;
+  sireRegistration?: string;
+  dam?: string;
+  damRegistration?: string;
   barn: string;
   pasture: string;
 };

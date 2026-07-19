@@ -987,6 +987,34 @@
   margin-top: 2px;
 }
 
+/* Opt-in checkbox row used in create/upload drawers. */
+.xs-optin {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border: 1px solid var(--xbar-border);
+  border-radius: 10px;
+  background: var(--xbar-surface-muted, rgba(0, 0, 0, 0.02));
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--xbar-text);
+}
+.xs-optin input[type='checkbox'] {
+  margin-top: 2px;
+  height: 16px;
+  width: 16px;
+  flex: none;
+  accent-color: var(--xbar-accent, #3d6b4f);
+  cursor: pointer;
+}
+.xs-optin .xs-field-hint {
+  display: block;
+  margin-top: 4px;
+  font-weight: 400;
+}
+
 .xs-tabs {
   display: inline-flex;
   gap: 2px;
