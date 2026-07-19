@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildDocumentRecord } from '../src/lib/xbarRuntime.js';
 import {
+  buildHorseEnrichmentFromEntities,
+  composeParentField,
   summarizeBatch,
   validateAssetPatch,
   validateHorseNoteInput,
@@ -9,7 +11,7 @@ import {
   validateLocationPatch,
   validateNewHorseInput,
 } from '../src/store/xbarStoreLogic.js';
-import type { DocumentRecord, IntakeBatch } from '../src/types/xbar.js';
+import type { DocumentEntities, DocumentRecord, HorseRecord, IntakeBatch } from '../src/types/xbar.js';
 
 test('registration paper intake extracts a new horse identity without an existing profile', async () => {
   const file = new File(
@@ -41,6 +43,77 @@ test('registration paper intake extracts a new horse identity without an existin
   assert.equal(document.entities.registry, 'AQHA');
   assert.equal(document.entities.sex, 'Mare');
   assert.equal(document.entities.ownerName, 'Blue River Ranch LLC');
+});
+
+function makeHorse(patch: Partial<HorseRecord> = {}): HorseRecord {
+  return {
+    registrationNumber: '',
+    registry: '',
+    owner: '',
+    color: '',
+    breed: '',
+    foaledOn: '',
+    bloodline: { sire: '', dam: '', family: '' },
+    ...patch,
+  } as HorseRecord;
+}
+
+test('composeParentField joins a parent name with its registration number', () => {
+  assert.equal(composeParentField('SHINING SPARK', '3038883'), 'SHINING SPARK (3038883)');
+  assert.equal(composeParentField('DOC BAR', undefined), 'DOC BAR');
+  assert.equal(composeParentField('', '123'), '');
+});
+
+test('enrichment fills only empty horse fields from extracted document facts', () => {
+  const entities: DocumentEntities = {
+    registrationNumber: '5544332',
+    registry: 'AQHA',
+    ownerName: 'Blue River Ranch',
+    color: 'Palomino',
+    breed: 'Quarter Horse',
+    foaledOn: '2021-04-12',
+    sire: 'SMART CHIC OLENA',
+    sireRegistration: '3120011',
+    dam: 'DOCS SUGAR BARS',
+    damRegistration: '3220022',
+  };
+  const { patch, applied } = buildHorseEnrichmentFromEntities(entities, makeHorse());
+  assert.equal(patch.registrationNumber, '5544332');
+  assert.equal(patch.registry, 'AQHA');
+  assert.equal(patch.owner, 'Blue River Ranch');
+  assert.equal(patch.color, 'Palomino');
+  assert.equal(patch.breed, 'Quarter Horse');
+  assert.equal(patch.foaledOn, '2021-04-12');
+  assert.equal(patch.sire, 'SMART CHIC OLENA (3120011)');
+  assert.equal(patch.dam, 'DOCS SUGAR BARS (3220022)');
+  assert.equal(applied.length, 8);
+});
+
+test('enrichment never overwrites values the horse already has', () => {
+  const horse = makeHorse({
+    registrationNumber: '9999999',
+    color: 'Bay',
+    bloodline: { sire: 'EXISTING SIRE', dam: '', family: '' },
+  });
+  const entities: DocumentEntities = {
+    registrationNumber: '5544332',
+    color: 'Palomino',
+    sire: 'SMART CHIC OLENA',
+    dam: 'DOCS SUGAR BARS',
+  };
+  const { patch, applied } = buildHorseEnrichmentFromEntities(entities, horse);
+  // Existing registration, color, and sire are preserved; only the empty dam fills.
+  assert.equal(patch.registrationNumber, undefined);
+  assert.equal(patch.color, undefined);
+  assert.equal(patch.sire, undefined);
+  assert.equal(patch.dam, 'DOCS SUGAR BARS');
+  assert.deepEqual(applied, ['dam DOCS SUGAR BARS']);
+});
+
+test('enrichment applies nothing when the document carries no new facts', () => {
+  const { patch, applied } = buildHorseEnrichmentFromEntities({}, makeHorse({ color: 'Bay' }));
+  assert.deepEqual(patch, {});
+  assert.deepEqual(applied, []);
 });
 
 test('validateNewHorseInput rejects incomplete horse records', () => {

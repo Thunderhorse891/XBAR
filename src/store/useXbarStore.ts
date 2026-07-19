@@ -1542,26 +1542,39 @@ export const useXbarStore = create<XbarStore>()(
         if (deniedMessage) return { ok: false, message: deniedMessage };
         if (!get().horses.some((h) => h.id === horseId)) return { ok: false, message: 'Horse not found.' };
         set((state) => ({
-          horses: state.horses.map((h) =>
-            h.id === horseId
-              ? {
-                  ...h,
-                  name: patch.name?.trim() ?? h.name,
-                  breed: patch.breed?.trim() ?? h.breed,
-                  color: patch.color?.trim() ?? h.color,
-                  sex: patch.sex ?? h.sex,
-                  registrationNumber: patch.registrationNumber?.trim() ?? h.registrationNumber,
-                  registry: patch.registry?.trim() ?? h.registry,
-                  aqhaNumber: patch.aqhaNumber?.trim() ?? h.aqhaNumber,
-                  owner: patch.owner?.trim() ?? h.owner,
-                  ownerEntity: patch.ownerEntity?.trim() ?? h.ownerEntity,
-                  segment: patch.segment ?? h.segment,
-                  status: patch.status ?? h.status,
-                  costBasis: patch.costBasis !== undefined ? Math.max(0, Number(patch.costBasis) || 0) : h.costBasis,
-                  sale: patch.askPrice !== undefined ? { ...h.sale, askPrice: patch.askPrice } : h.sale,
-                }
-              : h,
-          ),
+          horses: state.horses.map((h) => {
+            if (h.id !== horseId) return h;
+            const registrationNumber = patch.registrationNumber?.trim() ?? h.registrationNumber;
+            const aqhaNumber = patch.aqhaNumber?.trim() ?? h.aqhaNumber;
+            return {
+              ...h,
+              name: patch.name?.trim() ?? h.name,
+              barnName: patch.barnName?.trim() ?? h.barnName,
+              breed: patch.breed?.trim() ?? h.breed,
+              color: patch.color?.trim() ?? h.color,
+              sex: patch.sex ?? h.sex,
+              foaledOn: patch.foaledOn?.trim() ?? h.foaledOn,
+              registrationNumber,
+              registry: patch.registry?.trim() ?? h.registry,
+              aqhaNumber,
+              // Adding a registration number promotes the record to "registered".
+              registered: Boolean(registrationNumber || aqhaNumber),
+              owner: patch.owner?.trim() ?? h.owner,
+              ownerEntity: patch.ownerEntity?.trim() ?? h.ownerEntity,
+              segment: patch.segment ?? h.segment,
+              status: patch.status ?? h.status,
+              costBasis: patch.costBasis !== undefined ? Math.max(0, Number(patch.costBasis) || 0) : h.costBasis,
+              sale: patch.askPrice !== undefined ? { ...h.sale, askPrice: patch.askPrice } : h.sale,
+              bloodline:
+                patch.sire !== undefined || patch.dam !== undefined
+                  ? {
+                      ...h.bloodline,
+                      sire: patch.sire?.trim() ?? h.bloodline.sire,
+                      dam: patch.dam?.trim() ?? h.bloodline.dam,
+                    }
+                  : h.bloodline,
+            };
+          }),
         }));
         return { ok: true, message: 'Horse record updated.', id: horseId };
       },

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, FileText, HeartPulse, Move, Plus, Upload } from 'lucide-react';
+import { ArrowLeft, FileText, HeartPulse, Move, Pencil, Plus, Upload } from 'lucide-react';
 import { HorsesIcon } from '@/components/icons';
 import { ActionButton, Card, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
@@ -98,6 +98,13 @@ export default function AnimalProfile() {
           </div>
         </div>
         <div className="xs-objhead__actions">
+          <ActionButton
+            size="sm"
+            icon={<Pencil size={14} />}
+            onClick={() => openQuickCreate({ action: 'Edit Horse', horseId: animal.id })}
+          >
+            Edit details
+          </ActionButton>
           <ActionButton
             size="sm"
             icon={<Move size={14} />}
