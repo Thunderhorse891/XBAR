@@ -474,6 +474,14 @@ export function createHorseRecord(input: NewHorseInput, workspaceProfile: Worksp
   const ranchName = workspaceProfile.ranchName.trim() || 'Primary Ranch';
   const ranchManagerName = workspaceProfile.ranchManagerName.trim() || 'Unassigned';
   const operationsEmail = workspaceProfile.operationsEmail.trim();
+  // Combine a parent's name with its registration number for the bloodline
+  // text field, e.g. "SHINING SPARK (AQHA 3038883)".
+  const withRegistration = (parentName?: string, registration?: string) => {
+    const trimmedName = parentName?.trim() ?? '';
+    if (!trimmedName) return '';
+    const trimmedReg = registration?.trim();
+    return trimmedReg ? `${trimmedName} (${trimmedReg})` : trimmedName;
+  };
   return {
     id,
     name,
@@ -481,15 +489,15 @@ export function createHorseRecord(input: NewHorseInput, workspaceProfile: Worksp
     summary: '',
     segment: input.segment,
     status: input.status,
-    breed: '',
-    registry: input.aqhaNumber?.trim() ? 'AQHA' : '',
+    breed: input.breed?.trim() || '',
+    registry: input.registry?.trim() || (input.aqhaNumber?.trim() ? 'AQHA' : ''),
     aqhaNumber: input.aqhaNumber?.trim() || '',
     registrationNumber: input.registrationNumber?.trim() || '',
     registered: Boolean(input.aqhaNumber || input.registrationNumber),
     age: 0,
-    foaledOn: '',
+    foaledOn: input.foaledOn?.trim() || '',
     sex: input.sex,
-    color: '',
+    color: input.color?.trim() || '',
     markings: '',
     microchipId: '',
     owner: input.owner.trim(),
@@ -498,8 +506,8 @@ export function createHorseRecord(input: NewHorseInput, workspaceProfile: Worksp
     profileImage: '',
     tags: ['intake-pending'],
     bloodline: {
-      sire: '',
-      dam: '',
+      sire: withRegistration(input.sire, input.sireRegistration),
+      dam: withRegistration(input.dam, input.damRegistration),
       family: '',
     },
     location: {
@@ -573,10 +581,19 @@ export function createHorseRecord(input: NewHorseInput, workspaceProfile: Worksp
 }
 
 export function guessHorseSexFromDocuments(documents: DocumentRecord[]): NewHorseInput['sex'] {
+  // Prefer a sex that the registration extractor already resolved per document.
+  const extracted = documents
+    .map((document) => document.entities.sex?.trim())
+    .find((value): value is NewHorseInput['sex'] =>
+      Boolean(value && ['Mare', 'Stud', 'Gelding', 'Filly', 'Colt'].includes(value)),
+    );
+  if (extracted) return extracted;
+
   const haystack =
     `${documents.map((document) => `${document.title} ${document.extractedTextPreview}`).join(' ')}`.toLowerCase();
   if (haystack.includes('gelding')) return 'Gelding';
-  if (haystack.includes('stud') || haystack.includes('stallion') || haystack.includes('colt')) return 'Stud';
+  if (haystack.includes('stud') || haystack.includes('stallion')) return 'Stud';
+  if (haystack.includes('colt')) return 'Colt';
   if (haystack.includes('filly')) return 'Filly';
   return 'Mare';
 }
@@ -619,8 +636,14 @@ export function buildHorseInputFromDocuments(
     return null;
   }
 
+  // First non-empty value for a given entity field across all grouped documents.
+  const firstEntity = (key: keyof DocumentRecord['entities']) =>
+    documents.map((document) => document.entities[key]?.trim()).find(Boolean) ?? '';
+
+  const registry = firstEntity('registry');
   const normalizedHorseName = (horseName || registrationNumber).trim().toUpperCase();
   const normalizedBarnName = normalizedHorseName.split(/\s+/).slice(0, 2).join(' ') || normalizedHorseName;
+  const isAqha = registry.toUpperCase() === 'AQHA' || registrationNumber.toUpperCase().startsWith('AQHA');
 
   return {
     name: normalizedHorseName,
@@ -630,8 +653,16 @@ export function buildHorseInputFromDocuments(
     sex: guessHorseSexFromDocuments(documents),
     owner: ownerName || 'Pending Owner',
     ownerEntity: ownerEntity || 'Pending Entity',
-    aqhaNumber: registrationNumber.startsWith('AQHA') ? registrationNumber : '',
+    aqhaNumber: isAqha ? registrationNumber : '',
     registrationNumber,
+    registry,
+    color: firstEntity('color'),
+    breed: firstEntity('breed'),
+    foaledOn: firstEntity('foaledOn'),
+    sire: firstEntity('sire'),
+    sireRegistration: firstEntity('sireRegistration'),
+    dam: firstEntity('dam'),
+    damRegistration: firstEntity('damRegistration'),
     barn: workspaceProfile.defaultBarn.trim() || 'Main Barn',
     pasture: workspaceProfile.defaultPasture.trim() || 'Pending Pasture',
   };

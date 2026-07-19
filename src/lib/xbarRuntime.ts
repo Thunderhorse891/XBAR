@@ -15,6 +15,7 @@ import type {
   SubscriptionTier,
 } from '../types/xbar.js';
 import { readDocumentText } from './documentIntelligence.js';
+import { extractRegistrationFields } from './registrationExtraction.js';
 
 const GIGABYTE = 1024 * 1024 * 1024;
 const BASE36_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -281,14 +282,6 @@ function extractFirstMatch(haystack: string, candidates: string[]) {
     .find((candidate) => includesNormalized(haystack, candidate));
 }
 
-function extractRegistrationNumber(haystack: string) {
-  const labelMatch = haystack.match(
-    /\b(?:registration|reg\.?)\s*(?:no|number|#)?\.?\s*[:#-]?\s*([A-Z]{0,5}\s*-?\s*\d{4,10}[A-Z]?)/i,
-  );
-  const registryMatch = haystack.match(/\b(?:AHA|AQHA|APHA|USEF|JC)\s*-?\s*\d{4,10}[A-Z]?\b/i);
-  return (labelMatch?.[1] ?? registryMatch?.[0] ?? '').replace(/\s+/g, '').toUpperCase() || undefined;
-}
-
 function extractLabeledText(haystack: string, labels: string[]) {
   const stopLabels = [
     'registration',
@@ -328,10 +321,6 @@ function extractLabeledText(haystack: string, labels: string[]) {
   return undefined;
 }
 
-function extractRegisteredHorseName(haystack: string) {
-  return extractLabeledText(haystack, ['registered\\s+name', '(?:horse\\s+)?name(?:\\s+of\\s+horse)?']);
-}
-
 function extractOwnerName(haystack: string) {
   return extractLabeledText(haystack, ['current\\s+owner', 'recorded\\s+owner', 'owner(?:\\s+name)?']);
 }
@@ -369,15 +358,27 @@ function extractDocumentEntities(params: {
 }) {
   const { fileName, previewText, inferredType, horses } = params;
   const haystack = `${fileName} ${previewText}`;
+  // Structured registration-paper fields (name, reg #, sex, color, sire, dam…).
+  const registration = extractRegistrationFields(haystack);
 
   return {
     horseName:
       extractFirstMatch(
         haystack,
         horses.flatMap((horse) => [horse.name, horse.barnName]),
-      ) ?? extractRegisteredHorseName(haystack),
-    registrationNumber: extractRegistrationNumber(haystack),
-    ownerName: extractFirstMatch(haystack, buildKnownOwners(horses)) ?? extractOwnerName(haystack),
+      ) ?? registration.horseName,
+    registrationNumber: registration.registrationNumber,
+    registry: registration.registry,
+    sex: registration.sex,
+    color: registration.color,
+    breed: registration.breed,
+    foaledOn: registration.foaledOn,
+    sire: registration.sire,
+    sireRegistration: registration.sireRegistration,
+    dam: registration.dam,
+    damRegistration: registration.damRegistration,
+    ownerName:
+      extractFirstMatch(haystack, buildKnownOwners(horses)) ?? registration.ownerName ?? extractOwnerName(haystack),
     examDate: inferredType === 'Vet Record' || inferredType === 'Coggins' ? extractExamDate(haystack) : undefined,
     veterinarian:
       inferredType === 'Vet Record' || inferredType === 'Coggins' ? extractVeterinarian(haystack) : undefined,
@@ -500,6 +501,15 @@ export async function buildDocumentRecord(params: {
   const entities: DocumentEntities = {
     horseName: extractedEntities.horseName ?? matchedHorse?.name,
     registrationNumber: extractedEntities.registrationNumber ?? matchedHorse?.registrationNumber,
+    registry: extractedEntities.registry ?? (matchedHorse?.registry || undefined),
+    sex: extractedEntities.sex ?? matchedHorse?.sex,
+    color: extractedEntities.color ?? (matchedHorse?.color || undefined),
+    breed: extractedEntities.breed ?? (matchedHorse?.breed || undefined),
+    foaledOn: extractedEntities.foaledOn ?? (matchedHorse?.foaledOn || undefined),
+    sire: extractedEntities.sire ?? (matchedHorse?.bloodline?.sire || undefined),
+    sireRegistration: extractedEntities.sireRegistration,
+    dam: extractedEntities.dam ?? (matchedHorse?.bloodline?.dam || undefined),
+    damRegistration: extractedEntities.damRegistration,
     ownerName: extractedEntities.ownerName ?? matchedHorse?.owner,
     examDate: extractedEntities.examDate,
     veterinarian: extractedEntities.veterinarian,

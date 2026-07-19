@@ -209,6 +209,51 @@ test('OCR pipeline: an uploaded image is read on-device and matched to a horse b
   await expect(row.getByText('Ocr Test Horse').first()).toBeVisible();
 });
 
+test('registration intake extracts sex, color, sire and dam into a new horse profile', async ({ page }) => {
+  test.setTimeout(120_000);
+  await bootstrapWorkspace(page);
+
+  // A registration certificate as flat text (a .txt is read directly, so this
+  // asserts the field extraction + profile threading without OCR variance —
+  // the pixel-reading path is covered by the OCR pipeline test above).
+  const registration = [
+    'AMERICAN QUARTER HORSE ASSOCIATION CERTIFICATE OF REGISTRATION',
+    'Registered Name: DOCS SMART LENA',
+    'Registration Number: 5544332',
+    'Sex: Mare Color: Palomino Foaled: 04/12/2021',
+    'Sire: SMART CHIC OLENA AQHA 3120011',
+    'Dam: DOCS SUGAR BARS AQHA 3220022',
+    'Owner: BLUE RIVER RANCH LLC',
+  ].join('\n');
+  const buffer = Buffer.from(registration, 'utf8');
+
+  // The global Create > Upload Document flow must work on an empty workspace —
+  // it is the path that bootstraps the first horses from their papers.
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Upload Document' });
+  await expect(drawer).toBeVisible();
+  await drawer
+    .locator('input[type="file"]')
+    .setInputFiles({ name: 'registration-docs-smart-lena.txt', mimeType: 'text/plain', buffer });
+  await expect(drawer.getByText('1 file selected — click to change')).toBeVisible();
+  // Creating profiles from papers is the default opt-in.
+  await expect(drawer.getByRole('checkbox')).toBeChecked();
+  await drawer.getByRole('button', { name: 'Upload for review' }).click();
+
+  // Exactly one horse is created, so the app lands on its new profile page.
+  await expect(page).toHaveURL(/\/horses\//, { timeout: 60_000 });
+  await expect(page.locator('.xs-objhead__name')).toHaveText(/docs smart lena/i);
+
+  // The Overview identity card carries the extracted registration facts.
+  const identity = page.locator('.xs-kv');
+  await expect(identity).toContainText('Palomino');
+  await expect(identity).toContainText('Mare');
+  await expect(identity).toContainText('SMART CHIC OLENA (3120011)');
+  await expect(identity).toContainText('DOCS SUGAR BARS (3220022)');
+  await expect(identity).toContainText('5544332');
+});
+
 test('panel sheen overlays stay inside their cards (no sidebar wash)', async ({ page }) => {
   await bootstrapWorkspace(page);
   // Full reloads of pages built on .panel components used to let the

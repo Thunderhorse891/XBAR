@@ -1,6 +1,10 @@
 const TEXT_PREVIEW_LIMIT = 12000;
 const PDF_TEXT_PAGE_LIMIT = 8;
 const PDF_OCR_PAGE_LIMIT = 3;
+// Scanned registration papers often carry a token text layer (a title or form
+// labels) while the real horse data lives in the page image. Below this many
+// characters we treat the text layer as unusable and fall through to OCR.
+const MIN_TEXT_LAYER_CHARS = 60;
 
 // OCR runtime files are staged same-origin by scripts/prepare-ocr-assets.mjs
 // (see that file). Never fall back to the jsdelivr CDN defaults: they break
@@ -135,11 +139,12 @@ async function extractPdfText(file: File) {
     }
 
     const combined = chunks.join(' ').trim();
-    if (combined) {
+    if (combined.length >= MIN_TEXT_LAYER_CHARS) {
       return combined;
     }
 
-    // No text layer — scanned document. OCR the first few pages.
+    // No usable text layer — scanned document. OCR the first few pages, and
+    // fall back to whatever thin text layer we did find if OCR comes up empty.
     const ocrPageCount = Math.min(pdf.numPages, PDF_OCR_PAGE_LIMIT);
     const ocrChunks: string[] = [];
     for (let pageNumber = 1; pageNumber <= ocrPageCount; pageNumber += 1) {
@@ -156,7 +161,7 @@ async function extractPdfText(file: File) {
       }
     }
 
-    return ocrChunks.join(' ').trim();
+    return ocrChunks.join(' ').trim() || combined;
   } catch (error) {
     console.error('PDF extraction failed', error);
     return '';

@@ -36,7 +36,10 @@ test('registration paper intake extracts a new horse identity without an existin
 
   assert.equal(document.type, 'Registration');
   assert.equal(document.entities.horseName, 'Smart Lena Bar');
-  assert.equal(document.entities.registrationNumber, 'AQHA1234567');
+  // The registration number is stored registry-free; the registry is its own field.
+  assert.equal(document.entities.registrationNumber, '1234567');
+  assert.equal(document.entities.registry, 'AQHA');
+  assert.equal(document.entities.sex, 'Mare');
   assert.equal(document.entities.ownerName, 'Blue River Ranch LLC');
 });
 
