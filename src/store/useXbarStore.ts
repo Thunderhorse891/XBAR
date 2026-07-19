@@ -900,6 +900,57 @@ export const useXbarStore = create<XbarStore>()(
 
         return { ok: true, message: `${matchedHorse.name} now has this document attached.`, id: matchedHorse.id };
       },
+      createHorseFromDocument: (documentId) => {
+        const deniedMessage = requireRoleCapability(get().currentRole, 'createHorse');
+        if (deniedMessage) {
+          return { ok: false, message: deniedMessage };
+        }
+
+        const state = get();
+        const document = state.documents.find((item) => item.id === documentId);
+        if (!document) {
+          return { ok: false, message: 'Document not found.' };
+        }
+        if (document.horseId) {
+          return { ok: false, message: 'This document is already linked to a horse.' };
+        }
+
+        const availableHorseSlots = Math.max(0, state.subscription.usage.horseLimit - state.horses.length);
+        if (availableHorseSlots < 1) {
+          return { ok: false, message: 'Your plan’s horse limit is reached. Upgrade to add more horses.' };
+        }
+
+        const bundle = createHorseFromDocuments([document], state.workspaceProfile);
+        if (!bundle) {
+          return {
+            ok: false,
+            message:
+              'Not enough was read from this document to create a horse. Add the horse manually, then attach it.',
+          };
+        }
+
+        const readyDocument = bundle.documents.find((item) => item.id === documentId) ?? document;
+        set((current) => {
+          const nextDocuments = current.documents.map((item) => (item.id === documentId ? readyDocument : item));
+          const nextBatches = current.intakeBatches.map((batch) => summarizeBatch(batch, nextDocuments));
+          return {
+            horses: [bundle.horse, ...current.horses],
+            documents: nextDocuments,
+            ownershipRecords: [bundle.ownershipRecord, ...current.ownershipRecords],
+            intakeBatches: nextBatches,
+            subscription: {
+              ...current.subscription,
+              usage: {
+                ...current.subscription.usage,
+                horsesUsed: current.horses.length + 1,
+                documentsProcessed: nextDocuments.filter((item) => item.state !== 'Archived').length,
+              },
+            },
+          };
+        });
+
+        return { ok: true, message: `${bundle.horse.name} was created from ${document.title}.`, id: bundle.horse.id };
+      },
       discardDocument: (documentId) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'reviewDocuments');
         if (deniedMessage) {

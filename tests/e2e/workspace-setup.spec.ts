@@ -265,6 +265,45 @@ test('registration intake extracts sex, color, sire and dam into a new horse pro
   await expect(page.locator('.xs-kv')).not.toContainText('Palomino');
 });
 
+test('a Needs-Review document can spawn a new horse from the review stage', async ({ page }) => {
+  test.setTimeout(120_000);
+  await bootstrapWorkspace(page);
+
+  const registration = [
+    'AMERICAN QUARTER HORSE ASSOCIATION CERTIFICATE OF REGISTRATION',
+    'Registered Name: RUSTIC ROYAL LADY',
+    'Registration Number: 6612345',
+    'Sex: Filly Color: Buckskin',
+    'Sire: ROYAL BLUE BOON AQHA 3310099',
+    'Dam: RUSTIC PEPPY AQHA 3410088',
+  ].join('\n');
+  const buffer = Buffer.from(registration, 'utf8');
+
+  // Upload with profile-creation turned OFF, so the document lands in the
+  // review queue unattached — the exact state the review-stage action targets.
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Upload Document' });
+  await expect(drawer).toBeVisible();
+  await drawer
+    .locator('input[type="file"]')
+    .setInputFiles({ name: 'registration-rustic-royal-lady.txt', mimeType: 'text/plain', buffer });
+  await expect(drawer.getByText('1 file selected — click to change')).toBeVisible();
+  await drawer.getByRole('checkbox').uncheck();
+  await drawer.getByRole('button', { name: 'Upload for review' }).click();
+  await expect(page).toHaveURL(/\/documents/, { timeout: 60_000 });
+
+  // The review stage is the default view; the unattached document offers a
+  // "New horse" action that creates the record its paper describes.
+  await page.getByRole('button', { name: 'New horse' }).click();
+  await expect(page).toHaveURL(/\/horses\//, { timeout: 30_000 });
+  await expect(page.locator('.xs-objhead__name')).toHaveText(/rustic royal lady/i);
+  const identity = page.locator('.xs-kv');
+  await expect(identity).toContainText('Buckskin');
+  await expect(identity).toContainText('ROYAL BLUE BOON (3310099)');
+  await expect(identity).toContainText('RUSTIC PEPPY (3410088)');
+});
+
 test('panel sheen overlays stay inside their cards (no sidebar wash)', async ({ page }) => {
   await bootstrapWorkspace(page);
   // Full reloads of pages built on .panel components used to let the
