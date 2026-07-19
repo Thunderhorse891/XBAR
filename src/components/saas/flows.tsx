@@ -205,6 +205,7 @@ export function GlobalCreateDrawer() {
   const updateHorseLocation = useXbarStore((s) => s.updateHorseLocation);
   const updateHorse = useXbarStore((s) => s.updateHorse);
   const createDocumentIntake = useXbarStore((s) => s.createDocumentIntake);
+  const intakeProgress = useXbarStore((s) => s.documentIntakeProgress);
   const [f, setF] = useState<Record<string, string>>({});
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
@@ -537,7 +538,11 @@ export function GlobalCreateDrawer() {
       );
       footer = (
         <ActionButton variant="primary" disabled={busy} onClick={() => void submitDocuments()}>
-          {busy ? 'Uploading…' : 'Upload for review'}
+          {busy
+            ? intakeProgress && intakeProgress.total > 1
+              ? `Reading ${intakeProgress.processed} of ${intakeProgress.total}…`
+              : 'Reading document…'
+            : 'Upload for review'}
         </ActionButton>
       );
       break;

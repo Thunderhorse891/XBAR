@@ -87,6 +87,8 @@ export function createEmptyWorkspaceState(): PersistedXbarState {
 export const initialState = {
   currentRole: (isSupabaseConfigured() ? 'Owner' : 'Admin') as UserRole,
   ...createEmptyWorkspaceState(),
+  // Transient (never persisted): live progress of an in-flight OCR batch.
+  documentIntakeProgress: null,
 };
 
 export function syncDerivedValues(
