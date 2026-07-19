@@ -23,6 +23,7 @@ export function SubscriptionEnforcement() {
     const toggleSharedListing = state.toggleSharedListing;
     const createDocumentIntake = state.createDocumentIntake;
     const addHorse = state.addHorse;
+    const createHorseFromDocument = state.createHorseFromDocument;
     const createSalePacketBuild = state.createSalePacketBuild;
     const inviteWorkspaceMember = state.inviteWorkspaceMember;
 
@@ -54,6 +55,11 @@ export function SubscriptionEnforcement() {
         const current = useXbarStore.getState();
         const blocked = horseCreationGate(current.subscription, current.horses.length);
         return blocked ? { ok: false, message: blocked } : addHorse(input);
+      },
+      createHorseFromDocument: (documentId) => {
+        const current = useXbarStore.getState();
+        const blocked = horseCreationGate(current.subscription, current.horses.length);
+        return blocked ? { ok: false, message: blocked } : createHorseFromDocument(documentId);
       },
       createSalePacketBuild: (input) => {
         const current = useXbarStore.getState();

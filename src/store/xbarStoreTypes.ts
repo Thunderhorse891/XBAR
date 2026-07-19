@@ -105,6 +105,7 @@ export type XbarStore = {
   addHorse: (input: NewHorseInput) => ActionResult;
   createDocumentIntake: (input: DocumentIntakeInput) => Promise<ActionResult>;
   reviewDocument: (documentId: string, horseId?: string) => ActionResult;
+  createHorseFromDocument: (documentId: string) => ActionResult;
   discardDocument: (documentId: string) => ActionResult;
   uploadHorseMedia: (input: MediaUploadInput) => Promise<ActionResult>;
   addExpenseReceipt: (input: ExpenseReceiptInput) => Promise<ActionResult>;

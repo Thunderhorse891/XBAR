@@ -42,6 +42,7 @@ export default function Documents() {
   const salePacketBuilds = useXbarStore((state) => state.salePacketBuilds);
   const createDocumentIntake = useXbarStore((state) => state.createDocumentIntake);
   const reviewDocument = useXbarStore((state) => state.reviewDocument);
+  const createHorseFromDocument = useXbarStore((state) => state.createHorseFromDocument);
   const discardDocument = useXbarStore((state) => state.discardDocument);
   const ensureOwnershipRecord = useXbarStore((state) => state.ensureOwnershipRecord);
   const linkOwnershipProof = useXbarStore((state) => state.linkOwnershipProof);
@@ -53,6 +54,7 @@ export default function Documents() {
   // Applying OCR facts writes to the horse record (updateHorse → editHorse),
   // so the action needs edit rights, not just document review rights.
   const canEditHorses = useCurrentRoleCapability('editHorse');
+  const canCreateHorses = useCurrentRoleCapability('createHorse');
   const session = useCloudStore((state) => state.session);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const currentUserName =
@@ -154,6 +156,28 @@ export default function Documents() {
       message: result.ok ? `${horse.name} updated: ${applied.join(', ')}. Logged to the audit trail.` : result.message,
       tone: result.ok ? 'success' : 'error',
     });
+  };
+
+  const createHorseFromReview = (document: DocumentRecord) => {
+    const result = createHorseFromDocument(document.id);
+    pushToast({
+      title: result.ok ? 'Horse created' : 'Could not create horse',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
+    if (result.ok) {
+      recordAuditEvent({
+        actor: currentUserName,
+        action: 'created',
+        entityType: 'horse',
+        entityId: result.id ?? '',
+        summary: `Horse created from document "${document.title}" during review`,
+        context: { documentId: document.id },
+      });
+      if (result.id) {
+        navigate(`/horses/${result.id}`);
+      }
+    }
   };
 
   const menuDocument =
@@ -869,6 +893,21 @@ export default function Documents() {
                                   disabled={openingDocumentId === document.id}
                                 >
                                   {openingDocumentId === document.id ? 'Opening...' : 'Open file'}
+                                </button>
+                              ) : null}
+                              {!document.horseId ? (
+                                <button
+                                  className="button button--ghost button--compact"
+                                  type="button"
+                                  onClick={() => createHorseFromReview(document)}
+                                  disabled={!canCreateHorses}
+                                  title={
+                                    canCreateHorses
+                                      ? 'Create a new horse record from this paper and attach it.'
+                                      : 'Your role cannot create horse records.'
+                                  }
+                                >
+                                  New horse
                                 </button>
                               ) : null}
                               <button
