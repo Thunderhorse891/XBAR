@@ -64,11 +64,20 @@ export type HorsePatch = Partial<
   >
 > & { askPrice?: number; sire?: string; dam?: string };
 
+export type DocumentIntakeProgress = {
+  processed: number;
+  total: number;
+  phase: string;
+};
+
 export type XbarStore = {
   currentRole: UserRole;
   horses: HorseRecord[];
   documents: DocumentRecord[];
   intakeBatches: IntakeBatch[];
+  // Live progress for an in-flight document intake (on-device OCR of a batch).
+  // null when no intake is running.
+  documentIntakeProgress: DocumentIntakeProgress | null;
   ownershipRecords: OwnershipRecord[];
   auditEvents: AuditEvent[];
   salePacketBuilds: SalePacketBuild[];

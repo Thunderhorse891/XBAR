@@ -708,6 +708,12 @@ export const useXbarStore = create<XbarStore>()(
           };
         }
 
+        // Surface live progress: on-device OCR of a large batch can take a
+        // while, so the UI shows "Reading N of M" instead of a silent spinner.
+        const totalFiles = fileList.length;
+        let processedFiles = 0;
+        set(() => ({ documentIntakeProgress: { processed: 0, total: totalFiles, phase: 'Reading documents' } }));
+
         try {
           const selectedHorse = state.horses.find((horse) => horse.id === horseId);
           const batchId = createId('batch');
@@ -731,6 +737,10 @@ export const useXbarStore = create<XbarStore>()(
                 existingDocuments: get().documents,
               });
               const localFileUrl = undefined;
+              processedFiles += 1;
+              set(() => ({
+                documentIntakeProgress: { processed: processedFiles, total: totalFiles, phase: 'Reading documents' },
+              }));
               return {
                 ...document,
                 batchId,
@@ -845,6 +855,9 @@ export const useXbarStore = create<XbarStore>()(
         } catch (error) {
           console.error('Document upload failed', error);
           return { ok: false, message: 'Document upload failed. Check the selected files and try again.' };
+        } finally {
+          // Always clear progress so the UI never sticks on a stale count.
+          set(() => ({ documentIntakeProgress: null }));
         }
       },
       reviewDocument: (documentId, horseId) => {

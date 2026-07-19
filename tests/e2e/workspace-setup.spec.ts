@@ -265,6 +265,38 @@ test('registration intake extracts sex, color, sire and dam into a new horse pro
   await expect(page.locator('.xs-kv')).not.toContainText('Palomino');
 });
 
+test('a multi-file batch upload creates one horse per registration paper', async ({ page }) => {
+  test.setTimeout(120_000);
+  await bootstrapWorkspace(page);
+
+  const paper = (name: string, reg: string, color: string) =>
+    [
+      'AMERICAN QUARTER HORSE ASSOCIATION CERTIFICATE OF REGISTRATION',
+      `Registered Name: ${name}`,
+      `Registration Number: ${reg}`,
+      `Sex: Mare Color: ${color}`,
+    ].join('\n');
+
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Upload Document' });
+  await expect(drawer).toBeVisible();
+  await drawer.locator('input[type="file"]').setInputFiles([
+    { name: 'reg-daisy.txt', mimeType: 'text/plain', buffer: Buffer.from(paper('DESERT DAISY', '7001111', 'Bay')) },
+    { name: 'reg-belle.txt', mimeType: 'text/plain', buffer: Buffer.from(paper('CANYON BELLE', '7002222', 'Gray')) },
+  ]);
+  await expect(drawer.getByText('2 files selected — click to change')).toBeVisible();
+  await expect(drawer.getByRole('checkbox')).toBeChecked();
+  await drawer.getByRole('button', { name: 'Upload for review' }).click();
+  // Batch creates multiple horses, so it returns to the documents workspace.
+  await expect(page).toHaveURL(/\/documents/, { timeout: 60_000 });
+
+  // Both papers produced their own horse record in the roster.
+  await page.getByRole('link', { name: 'Horses', exact: true }).click();
+  await expect(page.getByText('DESERT DAISY', { exact: false })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('CANYON BELLE', { exact: false })).toBeVisible();
+});
+
 test('a Needs-Review document can spawn a new horse from the review stage', async ({ page }) => {
   test.setTimeout(120_000);
   await bootstrapWorkspace(page);
