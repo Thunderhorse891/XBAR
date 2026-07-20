@@ -1,14 +1,98 @@
-// XBAR first-party analytics beacon (marketing pages only).
+// XBAR first-party site script (marketing pages only).
 //
-// The public site sets script-src 'self', so there is no third-party
-// analytics script — this tiny beacon reports pageviews and the two CTA
-// clicks that matter (sign-up and sample packet) to our own /api/metrics.
-// Anonymous by design: no cookies, no identifiers, no cross-site anything,
-// and it respects Do Not Track / Global Privacy Control.
-/* global document, location */
+// Two jobs, both CSP-safe (script-src 'self') and zero-dependency:
+//   1. Progressive motion: scroll-reveal, header state, and card spotlight.
+//      Everything is additive — without JS (or with reduced motion) the page
+//      is fully visible and static. CSS gates on the html.js class set here.
+//   2. Anonymous analytics beacon: pageviews and the two CTA clicks that
+//      matter, reported to our own /api/metrics. No cookies, no identifiers,
+//      honors Do Not Track / Global Privacy Control.
+/* global document, location, window */
 (function () {
   'use strict';
 
+  var doc = typeof document === 'undefined' ? null : document;
+  if (!doc) return;
+  doc.documentElement.classList.add('js');
+
+  var reduceMotion =
+    typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ------------------------------------------------------------ motion */
+  function setUpMotion() {
+    var header = doc.querySelector('.site-header');
+    if (header) {
+      var onScroll = function () {
+        header.classList.toggle('scrolled', window.scrollY > 8);
+      };
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    }
+
+    // Cursor spotlight on glass cards (hover-only; irrelevant on touch).
+    doc.addEventListener('pointermove', function (evt) {
+      var card = evt.target && evt.target.closest ? evt.target.closest('.card, .plan') : null;
+      if (!card) return;
+      var rect = card.getBoundingClientRect();
+      card.style.setProperty('--mx', ((evt.clientX - rect.left) / rect.width) * 100 + '%');
+      card.style.setProperty('--my', ((evt.clientY - rect.top) / rect.height) * 100 + '%');
+    });
+
+    if (reduceMotion) return;
+
+    // Scroll reveal: only elements below the initial viewport, so first paint
+    // never flashes. A deterministic position sweep (rAF-throttled on scroll,
+    // plus a short interval until done) is used instead of
+    // IntersectionObserver: the sweep cannot miss elements when rendering
+    // frames are throttled (battery saver, prerender, headless).
+    var pending = [];
+    var staggerByParent = new Map();
+    doc
+      .querySelectorAll(
+        '.section .card, .steps li, .plan, .faq details, .section h2, .section .intro, .section .shot, .cta .wrap',
+      )
+      .forEach(function (el) {
+        if (el.getBoundingClientRect().top < window.innerHeight * 0.92) return; // already visible
+        var n = (staggerByParent.get(el.parentElement) || 0) + 1;
+        staggerByParent.set(el.parentElement, n);
+        el.style.setProperty('--rd', Math.min((n - 1) * 70, 350) + 'ms');
+        el.classList.add('reveal');
+        pending.push(el);
+      });
+    if (!pending.length) return;
+
+    var ticking = false;
+    var sweep = function () {
+      ticking = false;
+      var line = window.innerHeight * 0.94;
+      pending = pending.filter(function (el) {
+        if (el.getBoundingClientRect().top > line) return true;
+        el.classList.add('in');
+        return false;
+      });
+      if (!pending.length) {
+        window.removeEventListener('scroll', onScrollReveal);
+        window.clearInterval(sweepTimer);
+      }
+    };
+    var onScrollReveal = function () {
+      if (ticking) return;
+      ticking = true;
+      (window.requestAnimationFrame || window.setTimeout)(sweep);
+    };
+    window.addEventListener('scroll', onScrollReveal, { passive: true });
+    // Interval safety net: catches resizes, anchor jumps, and frame-starved
+    // environments where scroll events outpace rendering.
+    var sweepTimer = window.setInterval(sweep, 300);
+  }
+
+  try {
+    setUpMotion();
+  } catch {
+    /* motion must never break the page */
+  }
+
+  /* --------------------------------------------------------- analytics */
   var nav = typeof navigator === 'undefined' ? null : navigator;
   if (!nav) return;
   if (nav.doNotTrack === '1' || nav.globalPrivacyControl === true) return;

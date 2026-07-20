@@ -55,7 +55,9 @@ test('marketing homepage at / is complete static HTML (no app bundle)', async ({
   // View-source completeness: the raw HTML carries the content, its own
   // canonical, and no reference to the application bundle.
   const source = await (await request.get('/')).text();
-  expect(source).toContain('Give every horse a record buyers can trust.');
+  // The headline carries a gradient <span> mid-sentence, so assert both halves.
+  expect(source).toContain('Give every horse a');
+  expect(source).toContain('record buyers can trust.');
   expect(source).toMatch(/<link rel="canonical" href="https:\/\/[^"]+\/" \/>/);
   expect(source).not.toContain('/assets/');
   assertClean(c);

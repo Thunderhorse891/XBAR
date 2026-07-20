@@ -171,6 +171,7 @@ export function renderPage(page) {
     <script defer src="/site.js"></script>
   </head>
   <body>
+    <div class="bg-fx" aria-hidden="true"><i class="bg-fx__grid"></i><i class="bg-fx__aurora"></i><i class="bg-fx__aurora bg-fx__aurora--warm"></i></div>
     <a class="skip-link" href="#main">Skip to content</a>
     ${header(page.path)}
     <main id="main">
