@@ -30,7 +30,10 @@ function ctaBlock(heading, copy) {
 // local-first workflow with example data). Never replace these with mockups.
 function productShot(file, alt, caption, { eager = false } = {}) {
   return `<figure class="shot">
-  <img src="/brand/screenshots/${file}" alt="${esc(alt)}" width="1440" height="900" ${eager ? 'fetchpriority="high"' : 'loading="lazy"'} />
+  <div class="shot-frame">
+    <div class="shot-chrome" aria-hidden="true"><span></span><span></span><span></span><em class="shot-url">xbar — live workspace</em></div>
+    <img src="/brand/screenshots/${file}" alt="${esc(alt)}" width="1440" height="900" ${eager ? 'fetchpriority="high"' : 'loading="lazy"'} />
+  </div>
   <figcaption>${caption}</figcaption>
 </figure>`;
 }
@@ -124,7 +127,7 @@ const home = {
 <section class="hero wrap section--flush">
   <div>
     <p class="kicker">Horse records, ownership &amp; sale readiness</p>
-    <h1>Give every horse a record buyers can trust.</h1>
+    <h1>Give every horse a <span class="grad">record buyers can trust.</span></h1>
     <p class="lead">One trusted operational record for every horse, document, buyer, and transfer. XBAR turns scattered paperwork into verified, sale-ready proof your team can actually operate from.</p>
     <div class="hero-actions">
       <a class="btn btn--primary" href="${signup('Professional')}" rel="nofollow">Create your workspace</a>
