@@ -336,6 +336,50 @@ test('a Needs-Review document can spawn a new horse from the review stage', asyn
   await expect(identity).toContainText('RUSTIC PEPPY (3410088)');
 });
 
+test('review-stage "New horse" attaches to an existing match instead of duplicating', async ({ page }) => {
+  test.setTimeout(120_000);
+  await bootstrapWorkspace(page);
+
+  const registration = [
+    'AMERICAN QUARTER HORSE ASSOCIATION CERTIFICATE OF REGISTRATION',
+    'Registered Name: SILVER CANYON KING',
+    'Registration Number: 8809900',
+    'Sex: Stud Color: Gray',
+  ].join('\n');
+
+  // Upload the paper BEFORE any horse exists, so it sits in review unmatched
+  // (auto-match links to a horse only at upload time).
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Upload Document' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Upload Document' });
+  await expect(drawer).toBeVisible();
+  await drawer
+    .locator('input[type="file"]')
+    .setInputFiles({ name: 'reg-silver-canyon-king.txt', mimeType: 'text/plain', buffer: Buffer.from(registration) });
+  await expect(drawer.getByText('1 file selected — click to change')).toBeVisible();
+  await drawer.getByRole('checkbox').uncheck();
+  await drawer.getByRole('button', { name: 'Upload for review' }).click();
+  await expect(page).toHaveURL(/\/documents/, { timeout: 60_000 });
+
+  // Now create that horse by another route, leaving the earlier document stale
+  // and still unlinked.
+  await seedHorse(page, 'Silver Canyon King');
+
+  // Back in review, "New horse" must recognise the now-existing match and
+  // attach to it rather than mint a second record. (Client-side nav via
+  // pushState — reliable against the profile page's layout.)
+  await page.evaluate(() => {
+    window.history.pushState({}, '', '/app/documents');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+  await page.getByRole('button', { name: 'New horse' }).click();
+  await expect(page).toHaveURL(/\/horses\//, { timeout: 30_000 });
+
+  // The roster still holds exactly one Silver Canyon King.
+  await page.getByRole('link', { name: 'Horses', exact: true }).click();
+  await expect(page.getByText('SILVER CANYON KING', { exact: false })).toHaveCount(1, { timeout: 15_000 });
+});
+
 test('panel sheen overlays stay inside their cards (no sidebar wash)', async ({ page }) => {
   await bootstrapWorkspace(page);
   // Full reloads of pages built on .panel components used to let the

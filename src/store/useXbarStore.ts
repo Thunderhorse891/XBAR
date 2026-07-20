@@ -928,6 +928,28 @@ export const useXbarStore = create<XbarStore>()(
           return { ok: false, message: 'This document is already linked to a horse.' };
         }
 
+        // Don't create a duplicate: if a horse matching this paper's registration
+        // number or name already exists, attach the document to it instead.
+        const norm = (value: string | undefined) => (value ?? '').trim().toUpperCase().replace(/\s+/g, ' ');
+        const proposed = buildHorseInputFromDocuments([document], state.workspaceProfile);
+        const extractedReg = norm(document.entities.registrationNumber);
+        const proposedName = norm(proposed?.name);
+        const existingHorse = state.horses.find((horse) => {
+          const regMatch = Boolean(extractedReg) && norm(horse.registrationNumber) === extractedReg;
+          const nameMatch = Boolean(proposedName) && norm(horse.name) === proposedName;
+          return regMatch || nameMatch;
+        });
+        if (existingHorse) {
+          const attached = get().reviewDocument(documentId, existingHorse.id);
+          return attached.ok
+            ? {
+                ok: true,
+                message: `${existingHorse.name} is already on file — attached this document to it instead of creating a duplicate.`,
+                id: existingHorse.id,
+              }
+            : attached;
+        }
+
         const availableHorseSlots = Math.max(0, state.subscription.usage.horseLimit - state.horses.length);
         if (availableHorseSlots < 1) {
           return { ok: false, message: 'Your plan’s horse limit is reached. Upgrade to add more horses.' };
