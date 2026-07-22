@@ -1,4 +1,5 @@
 import { readJsonBody, sendJson } from './_lib/http.js';
+import { getWorkspaceEntitlements, checkSeatCapacity } from './_lib/entitlements.js';
 import { getSupabaseAdmin, requireWorkspaceAccess } from './_lib/supabase-admin.js';
 import { inviteSchema, parseBody } from './_lib/validation.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
@@ -43,6 +44,15 @@ export default async function handler(req, res) {
   }
 
   const supabase = getSupabaseAdmin();
+
+  // Server-side seat-limit enforcement: active members plus pending invites
+  // count against the tier's seats. The client check is UX; this is the gate.
+  const entitlements = await getWorkspaceEntitlements(supabase, workspaceId);
+  const capacity = await checkSeatCapacity(supabase, workspaceId, 1, entitlements.limits);
+  if (!capacity.ok) {
+    return sendJson(res, 403, { ok: false, message: capacity.message });
+  }
+
   // Server-side config first: PUBLIC_APP_URL is the documented server var,
   // with the VITE_ mirror and the deployment origin as fallbacks so invite
   // links never come out relative.
