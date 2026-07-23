@@ -298,6 +298,8 @@ export function GlobalCreateDrawer() {
       registrationNumber: f.registrationNumber ?? editHorse.registrationNumber,
       owner: f.owner ?? editHorse.owner,
       ownerEntity: f.ownerEntity ?? editHorse.ownerEntity,
+      microchipId: f.microchipId ?? editHorse.microchipId,
+      markings: f.markings ?? editHorse.markings,
       sire: f.sire ?? editHorse.bloodline.sire,
       dam: f.dam ?? editHorse.bloodline.dam,
     });
@@ -703,6 +705,18 @@ export function GlobalCreateDrawer() {
           />
           <Text label="Owner" value={f.owner ?? editHorse.owner} onChange={set('owner')} />
           <Text label="Owner entity" value={f.ownerEntity ?? editHorse.ownerEntity} onChange={set('ownerEntity')} />
+          <Text
+            label="Microchip / brand ID"
+            placeholder="e.g. 985141000123456"
+            value={f.microchipId ?? editHorse.microchipId}
+            onChange={set('microchipId')}
+          />
+          <Text
+            label="Markings"
+            placeholder="e.g. Star, left hind sock"
+            value={f.markings ?? editHorse.markings}
+            onChange={set('markings')}
+          />
         </div>
       );
       footer = (

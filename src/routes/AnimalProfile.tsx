@@ -84,6 +84,10 @@ export default function AnimalProfile() {
   const packetReady = animal.readiness?.packetStatus === 'Ready';
   const identity = identityCompleteness(animal);
   const identityTone: Tone = identity.percent >= 90 ? 'success' : identity.percent >= 60 ? 'info' : 'warning';
+  // Every identity gap except a Photo can be filled from the Edit Horse drawer.
+  // A photo needs media capture (not yet built), so the "Complete passport" CTA
+  // only appears when the drawer can actually resolve a gap — no dead ends.
+  const drawerFixableMissing = identity.missing.filter((label) => label !== 'Photo');
   const location =
     [animal.location.barn, animal.location.pasture].filter(Boolean).join(' · ') || animal.location.ranch || '—';
   const forSale = animal.sale?.listingState !== 'Hold' && (animal.segment === 'Sale Prospect' || readiness > 0);
@@ -248,7 +252,7 @@ export default function AnimalProfile() {
               </p>
             )}
             <div className="xs-toolbar" style={{ marginTop: 12 }}>
-              {identity.missing.length ? (
+              {drawerFixableMissing.length ? (
                 <ActionButton
                   size="sm"
                   icon={<Pencil size={14} />}

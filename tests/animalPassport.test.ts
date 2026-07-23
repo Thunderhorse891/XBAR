@@ -71,11 +71,31 @@ test('registration needs both the flag and a number to count', () => {
   assert.ok(!complete.missing.includes('Registration'));
 });
 
-test('age alone satisfies the foaled field, photo can come from the gallery', () => {
+test('age alone satisfies the foaled field', () => {
   const byAge = identityCompleteness(horse({ age: 6 }));
   assert.ok(!byAge.missing.includes('Foaled date'));
-  const byGallery = identityCompleteness(horse({ gallery: [{ id: 'g1' }] as HorseRecord['gallery'] }));
-  assert.ok(!byGallery.missing.includes('Photo'));
+});
+
+test('only an actual horse photo satisfies the Photo field', () => {
+  const photo = { id: 'g1', label: 'Hero', kind: 'Hero', url: 'https://x.test/h.jpg', status: 'Approved' };
+  const withPhoto = identityCompleteness(horse({ gallery: [photo] as HorseRecord['gallery'] }));
+  assert.ok(!withPhoto.missing.includes('Photo'));
+
+  // A pedigree scan or document cover is imagery, not a photo of the horse.
+  const docOnly = {
+    id: 'g2',
+    label: 'Papers',
+    kind: 'Document Cover',
+    url: 'https://x.test/d.jpg',
+    status: 'Approved',
+  };
+  const withoutPhoto = identityCompleteness(horse({ gallery: [docOnly] as HorseRecord['gallery'] }));
+  assert.ok(withoutPhoto.missing.includes('Photo'));
+
+  // A photo kind with no usable URL does not count either.
+  const noUrl = { id: 'g3', label: 'Hero', kind: 'Hero', url: '', status: 'Draft' };
+  const blankUrl = identityCompleteness(horse({ gallery: [noUrl] as HorseRecord['gallery'] }));
+  assert.ok(blankUrl.missing.includes('Photo'));
 });
 
 test('percent is rounded, not truncated', () => {
