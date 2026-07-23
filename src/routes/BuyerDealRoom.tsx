@@ -63,6 +63,10 @@ export default function BuyerDealRoom() {
   useEffect(() => {
     setRecordingOffer(false);
     setOfferDraft(createBuyerOfferDraft(selected));
+    // Reset only when the selected lead's identity changes — deliberately not
+    // when its content updates (e.g. after saving an offer), which would wipe
+    // an in-progress draft. `selected` is read fresh but excluded on purpose.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id]);
 
   function updateOfferDraft<K extends keyof BuyerOfferDraft>(key: K, value: BuyerOfferDraft[K]) {

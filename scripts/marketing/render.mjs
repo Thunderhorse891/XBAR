@@ -175,7 +175,7 @@ export function renderPage(page) {
       '@id': `${SITE_ORIGIN}/#organization`,
       name: 'XBAR',
       url: `${SITE_ORIGIN}/`,
-      logo: `${SITE_ORIGIN}/brand/xbar-horse-logo-lockup-main.png`,
+      logo: `${SITE_ORIGIN}/brand/icon-512.png`,
       description: 'Records, ownership, and sale-readiness software for performance horse and ranch operations.',
     },
     {
@@ -205,13 +205,17 @@ export function renderPage(page) {
     <meta property="og:url" content="${canonical}" />
     <meta property="og:title" content="${esc(page.title)}" />
     <meta property="og:description" content="${esc(page.description)}" />
-    <meta property="og:image" content="${SITE_ORIGIN}/brand/xbar-horse-logo-lockup-main.png" />
-    <meta property="og:image:alt" content="XBAR horse records" />
+    <meta property="og:image" content="${SITE_ORIGIN}/brand/og-card.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="XBAR — one verified, sale-ready record per horse" />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${esc(page.title)}" />
     <meta name="twitter:description" content="${esc(page.description)}" />
-    <meta name="twitter:image" content="${SITE_ORIGIN}/brand/xbar-horse-logo-lockup-main.png" />
+    <meta name="twitter:image" content="${SITE_ORIGIN}/brand/og-card.jpg" />
+    <meta name="twitter:image:alt" content="XBAR — one verified, sale-ready record per horse" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
