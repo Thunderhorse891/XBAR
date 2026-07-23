@@ -57,10 +57,18 @@ export default function AnimalProfile() {
     if (!animal || !files.length) return;
     setUploadingPhoto(true);
     try {
-      // Both entry points (tap-avatar and Add Photo) are primary-photo controls,
-      // so the uploaded image becomes the passport's hero — adding it when none
-      // exists and replacing it otherwise. Extra files join the gallery.
-      const result = await uploadHorseMedia({ horseId: animal.id, files, makePrimary: true });
+      // This is a horse-photo capture control (camera / image picker), so tag the
+      // asset with a real horse-photo kind rather than guessing from the filename
+      // — otherwise a file named e.g. "pedigree.jpg" would be classed as a
+      // document, yet still get promoted to the primary image. Both entry points
+      // set the primary: add the hero when none exists, replace it otherwise;
+      // extra files join the gallery.
+      const result = await uploadHorseMedia({
+        horseId: animal.id,
+        files,
+        kind: 'Conformation',
+        makePrimary: true,
+      });
       pushToast({
         title: result.ok ? 'Photo added' : 'Upload failed',
         message: result.message,

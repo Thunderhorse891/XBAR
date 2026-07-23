@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { animalPassportId, hasHorsePhoto, identityCompleteness } from '../src/lib/animalPassport.js';
+import { animalPassportId, hasHorsePhoto, identityCompleteness, isHorsePhotoAsset } from '../src/lib/animalPassport.js';
 import type { HorseRecord } from '../src/types/xbar.js';
 
 test('passport id is deterministic for the same horse id', () => {
@@ -117,6 +117,15 @@ test('hasHorsePhoto: profile image or real photo kind counts, docs do not', () =
     false,
   );
   assert.equal(hasHorsePhoto(horse({})), false);
+});
+
+test('isHorsePhotoAsset: only real photo kinds with a URL qualify', () => {
+  assert.equal(isHorsePhotoAsset({ kind: 'Hero', url: 'u' }), true);
+  assert.equal(isHorsePhotoAsset({ kind: 'Conformation', url: 'u' }), true);
+  assert.equal(isHorsePhotoAsset({ kind: 'Sale Still', url: 'u' }), true);
+  assert.equal(isHorsePhotoAsset({ kind: 'Pedigree', url: 'u' }), false);
+  assert.equal(isHorsePhotoAsset({ kind: 'Document Cover', url: 'u' }), false);
+  assert.equal(isHorsePhotoAsset({ kind: 'Hero', url: '' }), false);
 });
 
 test('percent is rounded, not truncated', () => {

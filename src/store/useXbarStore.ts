@@ -15,7 +15,7 @@ import { normalizeWorkspaceEmail, validateWorkspaceInvitation } from '@/lib/work
 import { apiConfig, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { hasRoleCapability } from '@/lib/permissions';
-import { hasHorsePhoto } from '@/lib/animalPassport';
+import { hasHorsePhoto, isHorsePhotoAsset } from '@/lib/animalPassport';
 import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { featureGate } from '@/lib/commercialEngine';
 import { buildOfferDecision } from '@/lib/profitIntelligence';
@@ -1093,10 +1093,15 @@ export const useXbarStore = create<XbarStore>()(
           // Charge storage for the bytes actually retained, never for skipped files.
           const chargedIncrease = estimateStorageGb(uploadedResults.map((result) => result.file));
 
+          // Only a real horse photo may become the primary/profile image, so a
+          // document scan (e.g. a Pedigree/Document Cover kind) can never become
+          // the avatar or satisfy the Photo requirement even when makePrimary.
+          const primaryPhotoAsset = makePrimary ? uploadedAssets.find((asset) => isHorsePhotoAsset(asset)) : undefined;
+
           // The photo readiness credit is a one-time transition (no qualifying
           // photo -> a real one). Replacing an existing photo updates the image
           // but must not keep inflating the completeness score or re-toggle state.
-          const projectedProfile = makePrimary ? uploadedAssets[0].url : targetHorse.profileImage;
+          const projectedProfile = primaryPhotoAsset ? primaryPhotoAsset.url : targetHorse.profileImage;
           const gainedFirstPhoto =
             !priorHasPhoto &&
             hasHorsePhoto({ profileImage: projectedProfile, gallery: [...uploadedAssets, ...targetHorse.gallery] });
@@ -1106,7 +1111,7 @@ export const useXbarStore = create<XbarStore>()(
               horse.id === horseId
                 ? {
                     ...horse,
-                    profileImage: makePrimary ? uploadedAssets[0].url : horse.profileImage,
+                    profileImage: primaryPhotoAsset ? primaryPhotoAsset.url : horse.profileImage,
                     gallery: [...uploadedAssets, ...horse.gallery],
                     readiness: gainedFirstPhoto
                       ? {

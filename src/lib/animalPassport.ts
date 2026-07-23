@@ -63,9 +63,14 @@ const HORSE_PHOTO_KINDS: ReadonlySet<GalleryAsset['kind']> = new Set(['Hero', 'C
  * and document covers do not count. Exported so the passport can both score
  * completeness and decide whether a newly uploaded photo becomes the primary.
  */
+/** A gallery asset that is a real horse photograph (not a pedigree/doc scan) with a usable URL. */
+export function isHorsePhotoAsset(asset: Pick<GalleryAsset, 'kind' | 'url'>): boolean {
+  return HORSE_PHOTO_KINDS.has(asset.kind) && filled(asset.url);
+}
+
 export function hasHorsePhoto(horse: Pick<HorseRecord, 'profileImage' | 'gallery'>): boolean {
   if (filled(horse.profileImage)) return true;
-  return (horse.gallery ?? []).some((asset) => HORSE_PHOTO_KINDS.has(asset.kind) && filled(asset.url));
+  return (horse.gallery ?? []).some(isHorsePhotoAsset);
 }
 
 export interface IdentityField {
