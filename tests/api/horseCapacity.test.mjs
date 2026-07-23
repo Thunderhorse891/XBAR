@@ -69,27 +69,30 @@ test('every published tier enforces its own horse limit', async () => {
 
 /* Seat capacity: active members plus pending invites count against the tier. */
 
-function fakeSupabaseWithSeats({ members, invites }) {
+function fakeSupabaseWithSeats({ members, invites, excludedInvites = 0 }, observed = {}) {
   return {
     from(table) {
-      const count = table === 'workspace_memberships' ? members : invites;
       const expectedStatus = table === 'workspace_memberships' ? 'active' : 'pending';
-      let statusFiltered = false;
+      let excluded = false;
       const builder = {
         select() {
+          return builder;
+        },
+        neq(field, value) {
+          assert.equal(table, 'workspace_invitations', 'only the invitation count may exclude a row');
+          assert.equal(field, 'invitation_id');
+          observed.excludedInvitationId = value;
+          excluded = true;
           return builder;
         },
         eq(field, value) {
           if (field === 'status') {
             assert.equal(value, expectedStatus, `${table} must filter on ${expectedStatus}`);
-            statusFiltered = true;
+            const count = table === 'workspace_memberships' ? members : excluded ? invites - excludedInvites : invites;
             return Promise.resolve({ count });
           }
           assert.equal(field, 'workspace_id');
           return builder;
-        },
-        get filtered() {
-          return statusFiltered;
         },
       };
       return builder;
@@ -118,4 +121,16 @@ test('a solo Starter workspace cannot invite a second seat', async () => {
   const supabase = fakeSupabaseWithSeats({ members: 1, invites: 0 });
   const result = await checkSeatCapacity(supabase, 'ws-1', 1, limits);
   assert.equal(result.ok, false);
+});
+
+test('the invite being sent is not double-counted against its own reservation', async () => {
+  // The app inserts the pending invitation row BEFORE calling /api/invite.
+  // With 4 of 5 seats used and this invite's own row already reserved,
+  // excluding it must let the send go through (4 others + this 1 = 5 = limit).
+  const limits = subscriptionPlans.Professional.limits; // 5 seats
+  const observed = {};
+  const supabase = fakeSupabaseWithSeats({ members: 4, invites: 1, excludedInvites: 1 }, observed);
+  const result = await checkSeatCapacity(supabase, 'ws-1', 1, limits, { excludeInvitationId: 'invite-self' });
+  assert.equal(observed.excludedInvitationId, 'invite-self');
+  assert.deepEqual(result, { ok: true, used: 4 });
 });

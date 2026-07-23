@@ -63,18 +63,24 @@ export async function checkHorseCapacity(supabase, workspaceId, incomingCount, l
   return { ok: true, used };
 }
 
-export async function checkSeatCapacity(supabase, workspaceId, incomingCount, limits) {
+export async function checkSeatCapacity(supabase, workspaceId, incomingCount, limits, options = {}) {
+  // The app reserves the pending invitation row BEFORE calling /api/invite,
+  // so the invite being sent must be excluded from the pending count or it
+  // would be double-counted (once as the row, once as incomingCount).
+  let invitationQuery = supabase
+    .from('workspace_invitations')
+    .select('invitation_id', { count: 'exact', head: true })
+    .eq('workspace_id', workspaceId);
+  if (options.excludeInvitationId) {
+    invitationQuery = invitationQuery.neq('invitation_id', options.excludeInvitationId);
+  }
   const [memberships, invitations] = await Promise.all([
     supabase
       .from('workspace_memberships')
       .select('id', { count: 'exact', head: true })
       .eq('workspace_id', workspaceId)
       .eq('status', 'active'),
-    supabase
-      .from('workspace_invitations')
-      .select('invitation_id', { count: 'exact', head: true })
-      .eq('workspace_id', workspaceId)
-      .eq('status', 'pending'),
+    invitationQuery.eq('status', 'pending'),
   ]);
 
   const used = Number(memberships.count || 0) + Number(invitations.count || 0);
