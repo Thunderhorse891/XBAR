@@ -119,6 +119,7 @@ test('local workspace setup is reachable without cloud sign-in', async ({ page }
 test('critical brand assets return 200 with non-empty body', async ({ request }) => {
   const assets = [
     '/brand/icon-512.png',
+    '/brand/icon-512-maskable.png',
     '/brand/icon-192.png',
     '/brand/apple-touch-icon.png',
     '/brand/xbar-favicon.png',
