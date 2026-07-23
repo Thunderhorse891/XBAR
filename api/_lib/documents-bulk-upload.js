@@ -262,8 +262,14 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
         proposal.needsReview = !confident;
       } else if (confident && (candidate.fields.name || candidate.fields.registrationNumber)) {
         if (horseSlotsLeft < 1) {
-          // Leave the document in review rather than exceeding the paid tier.
-          proposal.note = `Plan's ${entitlements.limits.horseLimit} horse limit reached — horse not auto-created. Upgrade to continue.`;
+          // Over the paid tier: a confident candidate's documents were inserted
+          // as 'Queued' (needs_review false). Flip them to the review state so
+          // they land in the manual-resolution queue instead of being stranded.
+          const limitNote = `Plan's ${entitlements.limits.horseLimit} horse limit reached — horse not auto-created. Upgrade to continue.`;
+          await markDocumentsForReview({ supabase, workspaceId, documentIds: candidate.documentRefs, note: limitNote });
+          proposal.action = 'review';
+          proposal.needsReview = true;
+          proposal.note = limitNote;
         } else {
           horseSlotsLeft -= 1;
           const horseId = await createHorseFromCandidate({ supabase, workspaceId, user, candidate });
@@ -484,6 +490,19 @@ async function findExistingHorse(supabase, workspaceId, fields) {
   }
 
   return null;
+}
+
+// Move a set of documents into the manual review queue. Used when auto-create
+// is blocked (e.g. horse limit reached) so confident-but-uncreated documents
+// don't linger in 'Queued' where the review surfaces never show them.
+async function markDocumentsForReview({ supabase, workspaceId, documentIds, note }) {
+  const ids = (documentIds || []).filter((id) => typeof id === 'string' && id);
+  if (!ids.length) return;
+  await supabase
+    .from('documents')
+    .update({ state: 'Needs Review', needs_review: true, review_notes: note, updated_at: new Date().toISOString() })
+    .eq('workspace_id', workspaceId)
+    .in('document_id', ids);
 }
 
 async function createHorseFromCandidate({ supabase, workspaceId, user, candidate }) {
