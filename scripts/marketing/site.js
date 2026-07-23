@@ -86,8 +86,56 @@
     var sweepTimer = window.setInterval(sweep, 300);
   }
 
+  // Progressive enhancement for the native <details> nav dropdowns: on
+  // hover-capable pointers open on hover; always keep one open at a time and
+  // close on outside-click or Escape. Keyboard toggle (Enter/Space) is
+  // preserved — only real mouse clicks are intercepted to avoid closing a
+  // hover-opened menu.
+  function setUpNavDropdowns() {
+    var dropdowns = Array.prototype.slice.call(doc.querySelectorAll('.nav-dd'));
+    if (!dropdowns.length) return;
+    var hoverable = window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+    function closeAll(except) {
+      dropdowns.forEach(function (d) {
+        if (d !== except) d.removeAttribute('open');
+      });
+    }
+
+    dropdowns.forEach(function (dd) {
+      dd.addEventListener('toggle', function () {
+        if (dd.open) closeAll(dd);
+      });
+      if (hoverable) {
+        // pointerenter/leave ignore moves within the subtree, so the
+        // absolutely-positioned menu (a DOM child) stays "inside" the dd.
+        dd.addEventListener('pointerenter', function () {
+          closeAll(dd);
+          dd.setAttribute('open', '');
+        });
+        dd.addEventListener('pointerleave', function () {
+          dd.removeAttribute('open');
+        });
+        var summary = dd.querySelector('summary');
+        if (summary) {
+          summary.addEventListener('click', function (evt) {
+            if (evt.detail !== 0) evt.preventDefault(); // mouse click only; keep keyboard toggle
+          });
+        }
+      }
+    });
+
+    doc.addEventListener('click', function (evt) {
+      if (!evt.target || !evt.target.closest || !evt.target.closest('.nav-dd')) closeAll(null);
+    });
+    doc.addEventListener('keydown', function (evt) {
+      if (evt.key === 'Escape') closeAll(null);
+    });
+  }
+
   try {
     setUpMotion();
+    setUpNavDropdowns();
   } catch {
     /* motion must never break the page */
   }
