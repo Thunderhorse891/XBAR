@@ -114,9 +114,10 @@ export default function AnimalProfile() {
   const packetReady = animal.readiness?.packetStatus === 'Ready';
   const identity = identityCompleteness(animal);
   const identityTone: Tone = identity.percent >= 90 ? 'success' : identity.percent >= 60 ? 'info' : 'warning';
-  // Every identity gap except a Photo can be filled from the Edit Horse drawer.
-  // A photo needs media capture (not yet built), so the "Complete passport" CTA
-  // only appears when the drawer can actually resolve a gap — no dead ends.
+  // Every identity gap except a Photo is filled from the Edit Horse drawer; a
+  // Photo is added through the camera-capture control on the avatar. So the
+  // "Complete passport" (drawer) CTA only lists gaps the drawer can resolve —
+  // the Photo gap is handled by its own Add Photo control instead of dead-ending.
   const drawerFixableMissing = identity.missing.filter((label) => label !== 'Photo');
   const photoUrl =
     animal.profileImage ||
