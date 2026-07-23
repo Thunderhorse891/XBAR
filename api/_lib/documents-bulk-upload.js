@@ -4,7 +4,7 @@ import { requireWorkspaceAccess } from './supabase-admin.js';
 import { runOcr } from './ocr.js';
 import { extractDocument, groupExtractionsIntoCandidates, NEEDS_REVIEW_THRESHOLD } from './document-extraction.js';
 import { extractZipEntries, isZipBuffer, guessMimeType } from './zip.js';
-import { getWorkspaceEntitlements, checkDocumentCapacity } from './entitlements.js';
+import { getWorkspaceEntitlements, checkDocumentCapacity, checkHorseCapacity } from './entitlements.js';
 import { recordAuditEvent } from './audit.js';
 import { enforceRateLimit } from './rate-limit.js';
 import { applyCors } from './cors.js';
@@ -127,6 +127,11 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
   if (!capacity.ok) {
     return { ok: false, status: 403, message: capacity.message };
   }
+
+  // Horse-limit gate for auto-created horses: track remaining slots so the
+  // OCR pipeline cannot exceed the tier by creating horses from documents.
+  const horseCapacity = await checkHorseCapacity(supabase, workspaceId, 0, entitlements.limits);
+  let horseSlotsLeft = Math.max(0, entitlements.limits.horseLimit - (horseCapacity.used ?? 0));
 
   const batchId = `batch-${randomUUID()}`;
   const batchLabel =
@@ -256,10 +261,22 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
         proposal.horseId = match.horse_id;
         proposal.needsReview = !confident;
       } else if (confident && (candidate.fields.name || candidate.fields.registrationNumber)) {
-        const horseId = await createHorseFromCandidate({ supabase, workspaceId, user, candidate });
-        proposal.action = 'created';
-        proposal.horseId = horseId;
-        proposal.needsReview = false;
+        if (horseSlotsLeft < 1) {
+          // Over the paid tier: a confident candidate's documents were inserted
+          // as 'Queued' (needs_review false). Flip them to the review state so
+          // they land in the manual-resolution queue instead of being stranded.
+          const limitNote = `Plan's ${entitlements.limits.horseLimit} horse limit reached — horse not auto-created. Upgrade to continue.`;
+          await markDocumentsForReview({ supabase, workspaceId, documentIds: candidate.documentRefs, note: limitNote });
+          proposal.action = 'review';
+          proposal.needsReview = true;
+          proposal.note = limitNote;
+        } else {
+          horseSlotsLeft -= 1;
+          const horseId = await createHorseFromCandidate({ supabase, workspaceId, user, candidate });
+          proposal.action = 'created';
+          proposal.horseId = horseId;
+          proposal.needsReview = false;
+        }
       }
     }
 
@@ -306,6 +323,11 @@ async function commitAssignments({ supabase, workspaceId, user, assignments }) {
   if (!list.length) {
     return { ok: false, status: 400, message: 'assignments[] is required for commit mode.' };
   }
+
+  // Horse-limit gate for review-committed creations, mirroring the auto flow.
+  const entitlements = await getWorkspaceEntitlements(supabase, workspaceId);
+  const horseCapacity = await checkHorseCapacity(supabase, workspaceId, 0, entitlements.limits);
+  let horseSlotsLeft = Math.max(0, entitlements.limits.horseLimit - (horseCapacity.used ?? 0));
 
   const results = [];
   for (const assignment of list) {
@@ -375,6 +397,15 @@ async function commitAssignments({ supabase, workspaceId, user, assignments }) {
       await attachDocumentsToHorse({ supabase, workspaceId, user, horse, candidate, markReviewed: true });
       results.push({ ok: true, documentIds, action, horseId });
     } else {
+      if (horseSlotsLeft < 1) {
+        results.push({
+          ok: false,
+          documentIds,
+          message: `This would exceed the plan's ${entitlements.limits.horseLimit} horse limit. Upgrade to continue.`,
+        });
+        continue;
+      }
+      horseSlotsLeft -= 1;
       const horseId = await createHorseFromCandidate({ supabase, workspaceId, user, candidate });
       results.push({ ok: true, documentIds, action, horseId });
     }
@@ -459,6 +490,19 @@ async function findExistingHorse(supabase, workspaceId, fields) {
   }
 
   return null;
+}
+
+// Move a set of documents into the manual review queue. Used when auto-create
+// is blocked (e.g. horse limit reached) so confident-but-uncreated documents
+// don't linger in 'Queued' where the review surfaces never show them.
+async function markDocumentsForReview({ supabase, workspaceId, documentIds, note }) {
+  const ids = (documentIds || []).filter((id) => typeof id === 'string' && id);
+  if (!ids.length) return;
+  await supabase
+    .from('documents')
+    .update({ state: 'Needs Review', needs_review: true, review_notes: note, updated_at: new Date().toISOString() })
+    .eq('workspace_id', workspaceId)
+    .in('document_id', ids);
 }
 
 async function createHorseFromCandidate({ supabase, workspaceId, user, candidate }) {

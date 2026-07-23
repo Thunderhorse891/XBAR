@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { readJsonBody, sendJson } from './http.js';
+import { getWorkspaceEntitlements, checkHorseCapacity } from './entitlements.js';
 import { requireWorkspaceAccess } from './supabase-admin.js';
 import { recordAuditEvent } from './audit.js';
 import { normalizeDate } from './document-extraction.js';
@@ -77,6 +78,34 @@ export default async function handler(req, res) {
   }
   if (!('name' in columnMap)) {
     return sendJson(res, 400, { ok: false, message: 'CSV must include a Name column.' });
+  }
+
+  // Server-side horse-limit enforcement: the client check is UX, this is the
+  // gate. Compute exactly how many NEW horses this CSV creates (rows whose
+  // registration number matches an existing horse update in place and don't
+  // count), then verify plan capacity before any row is written.
+  const cellAt = (row, field) => (field in columnMap ? String(row[columnMap[field]] || '').trim() : '');
+  const dataRows = rows.slice(1).filter((row) => row.length && row.some((cell) => cell.trim()) && cellAt(row, 'name'));
+  const csvRegistrations = [...new Set(dataRows.map((row) => cellAt(row, 'registration_number')).filter(Boolean))];
+  let existingRegistrations = new Set();
+  if (csvRegistrations.length) {
+    const { data: existingRows } = await supabase
+      .from('horses')
+      .select('registration_number')
+      .eq('workspace_id', workspaceId)
+      .in('registration_number', csvRegistrations);
+    existingRegistrations = new Set((existingRows || []).map((row) => row.registration_number));
+  }
+  const newRegistrationCount = csvRegistrations.filter((reg) => !existingRegistrations.has(reg)).length;
+  const noRegistrationRowCount = dataRows.filter((row) => !cellAt(row, 'registration_number')).length;
+  const plannedInserts = newRegistrationCount + noRegistrationRowCount;
+
+  if (plannedInserts > 0) {
+    const entitlements = await getWorkspaceEntitlements(supabase, workspaceId);
+    const capacity = await checkHorseCapacity(supabase, workspaceId, plannedInserts, entitlements.limits);
+    if (!capacity.ok) {
+      return sendJson(res, 403, { ok: false, message: capacity.message });
+    }
   }
 
   let imported = 0;
