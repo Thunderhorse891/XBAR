@@ -63,7 +63,7 @@ const HORSE_PHOTO_KINDS: ReadonlySet<GalleryAsset['kind']> = new Set(['Hero', 'C
  * and document covers do not count. Exported so the passport can both score
  * completeness and decide whether a newly uploaded photo becomes the primary.
  */
-export function hasHorsePhoto(horse: IdentityInput): boolean {
+export function hasHorsePhoto(horse: Pick<HorseRecord, 'profileImage' | 'gallery'>): boolean {
   if (filled(horse.profileImage)) return true;
   return (horse.gallery ?? []).some((asset) => HORSE_PHOTO_KINDS.has(asset.kind) && filled(asset.url));
 }
