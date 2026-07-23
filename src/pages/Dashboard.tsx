@@ -20,7 +20,7 @@ import { formatCompactCurrency } from '@/lib/format';
 import { events, track } from '@/lib/telemetry';
 import { useXbarStore } from '@/store/useXbarStore';
 
-const XBAR_ICON = '/brand/xbar-app-icon.png';
+const XBAR_ICON = '/brand/apple-touch-icon.png';
 
 type Tone = 'danger' | 'warning' | 'info' | 'neutral';
 type Signal = {
