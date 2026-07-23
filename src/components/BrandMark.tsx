@@ -5,7 +5,10 @@ type BrandMarkProps = SVGProps<SVGSVGElement> & {
   tone?: 'color' | 'mono';
 };
 
-export const XBAR_MAIN_LOGO_SRC = '/brand/xbar-app-icon.png';
+// 40KB apple-touch-icon — identical squircle-X artwork as the 1.53MB
+// xbar-app-icon, but every in-app render is small (≤64px), so the large
+// source is pure download weight.
+export const XBAR_MAIN_LOGO_SRC = '/brand/apple-touch-icon.png';
 
 export function XbarMark({ title, tone: _tone = 'color', ...props }: BrandMarkProps) {
   return (
