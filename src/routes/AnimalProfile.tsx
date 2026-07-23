@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, FileText, HeartPulse, Move, Pencil, Plus, Upload } from 'lucide-react';
+import { ArrowLeft, Copy, FileText, HeartPulse, Move, Pencil, Plus, Upload } from 'lucide-react';
 import { HorsesIcon } from '@/components/icons';
 import { ActionButton, Card, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
 import { useHorseRecord } from '@/store/useXbarStore';
 import { formatCurrency } from '@/lib/format';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
+import { animalPassportId, identityCompleteness } from '@/lib/animalPassport';
 import type { HorseStatus } from '@/types/xbar';
 
 const TABS = [
@@ -36,8 +37,24 @@ export default function AnimalProfile() {
   const navigate = useNavigate();
   const { id } = useParams();
   const openQuickCreate = useUiStore((s) => s.openQuickCreate);
+  const pushToast = useUiStore((s) => s.pushToast);
   const [tab, setTab] = useState<string>('Overview');
   const animal = useHorseRecord(id);
+
+  const passportId = animalPassportId(animal?.id);
+  async function copyPassportId() {
+    try {
+      if (!navigator.clipboard) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(passportId);
+      pushToast({ title: 'Copied', message: `XBAR ID ${passportId} copied to clipboard.`, tone: 'success' });
+    } catch {
+      pushToast({
+        title: 'Copy failed',
+        message: `Your browser blocked copying. XBAR ID: ${passportId}`,
+        tone: 'error',
+      });
+    }
+  }
 
   if (!animal) {
     return (
@@ -65,6 +82,8 @@ export default function AnimalProfile() {
 
   const readiness = animal.readiness?.score ?? 0;
   const packetReady = animal.readiness?.packetStatus === 'Ready';
+  const identity = identityCompleteness(animal);
+  const identityTone: Tone = identity.percent >= 90 ? 'success' : identity.percent >= 60 ? 'info' : 'warning';
   const location =
     [animal.location.barn, animal.location.pasture].filter(Boolean).join(' · ') || animal.location.ranch || '—';
   const forSale = animal.sale?.listingState !== 'Hold' && (animal.segment === 'Sale Prospect' || readiness > 0);
@@ -85,6 +104,16 @@ export default function AnimalProfile() {
             <div className="xs-objhead__meta">
               {animal.breed || 'Horse'} · {animal.sex} · {animal.age} yrs · {location}
             </div>
+            <button
+              type="button"
+              className="xs-passport-id"
+              onClick={copyPassportId}
+              title="Copy this animal's permanent XBAR ID"
+            >
+              <span className="xs-passport-id__label">XBAR ID</span>
+              <code className="xs-passport-id__code">{passportId}</code>
+              <Copy size={12} aria-hidden="true" />
+            </button>
             <div className="xs-objhead__chips">
               <StatusChip tone={STATUS_TONE[animal.status] ?? 'neutral'}>{animal.status}</StatusChip>
               {forSale ? (
@@ -94,6 +123,7 @@ export default function AnimalProfile() {
               ) : (
                 <span className="xs-chip xs-chip--neutral">Not for sale</span>
               )}
+              <StatusChip tone={identityTone}>Passport {identity.percent}%</StatusChip>
             </div>
           </div>
         </div>
@@ -200,10 +230,37 @@ export default function AnimalProfile() {
                 {animal.readiness?.blockers?.[0] ?? `Keep ${animal.name}'s records current`}
               </div>
             </div>
+            {identity.missing.length ? (
+              <div className="xs-passport-gap">
+                <div className="xs-passport-gap__head">
+                  <span>
+                    Passport {identity.present}/{identity.total} complete
+                  </span>
+                  <StatusChip tone={identityTone}>{identity.percent}%</StatusChip>
+                </div>
+                <p className="xs-muted" style={{ fontSize: 12.5, margin: '4px 0 0' }}>
+                  Add to complete the buyer-ready passport: {identity.missing.join(', ')}.
+                </p>
+              </div>
+            ) : (
+              <p className="xs-muted" style={{ fontSize: 12.5, marginTop: 10 }}>
+                Passport identity is complete — every core field is on file.
+              </p>
+            )}
             <div className="xs-toolbar" style={{ marginTop: 12 }}>
-              <ActionButton size="sm" onClick={() => navigate('/today')}>
-                Open Care Tasks
-              </ActionButton>
+              {identity.missing.length ? (
+                <ActionButton
+                  size="sm"
+                  icon={<Pencil size={14} />}
+                  onClick={() => openQuickCreate({ action: 'Edit Horse', horseId: animal.id })}
+                >
+                  Complete passport
+                </ActionButton>
+              ) : (
+                <ActionButton size="sm" onClick={() => navigate('/today')}>
+                  Open Care Tasks
+                </ActionButton>
+              )}
               <ActionButton size="sm" variant="primary" onClick={() => navigate('/sale-packets')}>
                 Open Sale Packets
               </ActionButton>
