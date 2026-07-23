@@ -23,12 +23,45 @@ export function esc(value) {
     .replaceAll('"', '&quot;');
 }
 
-const NAV = [
+// Top-level links plus two rich dropdown menus. Dropdowns are native
+// <details> elements, so they work without JavaScript; /site.js enhances
+// them (hover-open on fine pointers, outside-click and Escape to close,
+// one open at a time).
+const NAV_LINKS = [
   { href: '/features', label: 'Features' },
   { href: '/pricing', label: 'Pricing' },
-  { href: '/solutions', label: 'Solutions' },
-  { href: '/resources', label: 'Resources' },
-  { href: '/demo', label: 'Product tour' },
+];
+const NAV_MENUS = [
+  {
+    root: '/solutions',
+    label: 'Solutions',
+    items: [
+      { href: '/solutions', label: 'Solutions overview', desc: 'Which operations XBAR fits' },
+      { href: '/solutions/breeding-programs', label: 'Breeding programs', desc: 'Papers, foaling, ownership' },
+      { href: '/solutions/sale-barns', label: 'Sale barns & consignors', desc: 'Buyer-ready packets' },
+      { href: '/solutions/trainers', label: 'Trainers & show barns', desc: 'Care, documents, owners' },
+      { href: '/solutions/ranch-operations', label: 'Ranch operations', desc: 'Herd, pastures, expenses' },
+    ],
+  },
+  {
+    root: '/resources',
+    label: 'Resources',
+    items: [
+      { href: '/resources', label: 'Resource hub', desc: 'Guides for record-driven barns' },
+      { href: '/resources/horse-records-checklist', label: 'Records checklist', desc: 'What every horse file needs' },
+      {
+        href: '/resources/sale-ready-horse-documentation',
+        label: 'Sale-ready docs',
+        desc: 'Paperwork that closes sales',
+      },
+      {
+        href: '/resources/equine-ownership-transfer-checklist',
+        label: 'Transfer checklist',
+        desc: 'Clean ownership handoffs',
+      },
+      { href: '/demo', label: 'Product tour', desc: 'Screenshots of the real app' },
+    ],
+  },
 ];
 
 function navLink(item, currentPath) {
@@ -39,15 +72,37 @@ function navLink(item, currentPath) {
   return `<a href="${item.href}"${current}>${esc(item.label)}</a>`;
 }
 
+function navMenu(menu, currentPath) {
+  const active = currentPath === menu.root || currentPath.startsWith(`${menu.root}/`);
+  const items = menu.items
+    .map(
+      (item) =>
+        `<a href="${item.href}"${currentPath === item.href ? ' aria-current="page"' : ''}><strong>${esc(item.label)}</strong><small>${esc(item.desc)}</small></a>`,
+    )
+    .join('\n        ');
+  return `<details class="nav-dd${active ? ' nav-dd--active' : ''}">
+      <summary>${esc(menu.label)}<i class="nav-caret" aria-hidden="true"></i></summary>
+      <div class="nav-menu">
+        ${items}
+      </div>
+    </details>`;
+}
+
 function header(currentPath) {
   return `<header class="site-header">
   <div class="wrap">
     <a class="brand" href="/" aria-label="XBAR home">
-      <img src="/brand/xbar-app-icon.png" alt="" width="30" height="30" />
+      <img src="/brand/apple-touch-icon.png" alt="" width="30" height="30" />
       <span>XBAR<small>Horse records &amp; sales</small></span>
     </a>
     <nav class="site-nav" aria-label="Primary">
-      ${NAV.map((item) => navLink(item, currentPath)).join('\n      ')}
+      ${NAV_LINKS.map((item) => navLink(item, currentPath)).join('\n      ')}
+      ${NAV_MENUS.map((menu) => navMenu(menu, currentPath)).join('\n      ')}
+      ${NAV_MENUS.map(
+        (menu) =>
+          `<a class="nav-mobile-link" href="${menu.root}"${currentPath === menu.root || currentPath.startsWith(`${menu.root}/`) ? ' aria-current="page"' : ''}>${esc(menu.label)}</a>`,
+      ).join('\n      ')}
+      <a href="/demo"${currentPath === '/demo' ? ' aria-current="page"' : ''}>Product tour</a>
       <a href="${APP_LOGIN}" rel="nofollow">Sign in</a>
     </nav>
     <a class="btn btn--primary" href="${APP_SIGNUP}" rel="nofollow">Create your workspace</a>
@@ -59,7 +114,7 @@ function footer() {
   return `<footer class="site-footer">
   <div class="wrap">
     <div>
-      <a class="brand" href="/"><img src="/brand/xbar-app-icon.png" alt="" width="30" height="30" /><span>XBAR</span></a>
+      <a class="brand" href="/"><img src="/brand/apple-touch-icon.png" alt="" width="30" height="30" /><span>XBAR</span></a>
       <p>One trusted operational record for every horse — documents, ownership, care, and sale-ready buyer packets.</p>
     </div>
     <div>

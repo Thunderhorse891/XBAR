@@ -49,11 +49,11 @@ function recordShot(eager = false) {
 
 function pipelineSteps() {
   return `<ol class="steps">
-  <li><strong>Upload</strong>Bring in registration papers, transfer forms, vet records, and media.</li>
-  <li><strong>Local OCR</strong>Documents are read on-device so intake keeps pace with real record volume.</li>
-  <li><strong>Human review</strong>Nothing becomes part of the record until a person verifies it.</li>
-  <li><strong>Ownership link</strong>Approved documents attach to each horse’s ownership record.</li>
-  <li><strong>Watermarked sharing</strong>Approved records bundle into watermarked sale packets for buyers.</li>
+  <li><strong>Upload</strong>Registration papers, transfer forms, vet records, media.</li>
+  <li><strong>Local OCR</strong>Read on-device — intake keeps pace with real volume.</li>
+  <li><strong>Human review</strong>Nothing joins the record until a person verifies it.</li>
+  <li><strong>Ownership link</strong>Approved documents attach to the ownership record.</li>
+  <li><strong>Watermarked sharing</strong>Approved records bundle into buyer packets.</li>
 </ol>`;
 }
 
@@ -128,7 +128,7 @@ const home = {
   <div>
     <p class="kicker">Horse records, ownership &amp; sale readiness</p>
     <h1>Give every horse a <span class="grad">record buyers can trust.</span></h1>
-    <p class="lead">One trusted operational record for every horse, document, buyer, and transfer. XBAR turns scattered paperwork into verified, sale-ready proof your team can actually operate from.</p>
+    <p class="lead">Turn scattered paperwork into one verified, sale-ready record per horse — documents, ownership, and buyer packets your team can operate from.</p>
     <div class="hero-actions">
       <a class="btn btn--primary" href="${signup('Professional')}" rel="nofollow">Create your workspace</a>
       <a class="btn" href="/demo">See how it works</a>
@@ -146,7 +146,7 @@ const home = {
   <div class="wrap">
     <p class="kicker">One path for every document</p>
     <h2>From loose paperwork to ready records, in five steps.</h2>
-    <p class="intro">Every file moves through one pipeline: upload, on-device OCR, human review, ownership linking, then watermarked sharing. No shortcuts, no untracked copies.</p>
+    <p class="intro">One pipeline, no untracked copies: upload, on-device OCR, human review, ownership link, watermarked sharing.</p>
     ${pipelineSteps()}
   </div>
 </section>
@@ -156,10 +156,10 @@ const home = {
     <p class="kicker">What operations get</p>
     <h2>Built around the workflows that cost horse businesses time and money.</h2>
     <div class="grid grid--2" style="margin-top:26px">
-      <div class="card"><h3>Records you can trust</h3><p>Replace scattered files, folders, and spreadsheets with one clean digital record per horse — identity, care, documents, and history stay attached to the animal.</p><ul><li>Source documents stay attached</li><li>Gaps are visible, not hidden</li><li>History remains usable years later</li></ul></div>
-      <div class="card"><h3>Ownership integrity</h3><p>Track legal owner, co-owner structure, transfer status, and compliance deadlines before missing documents block a sale.</p><ul><li>Ownership documents per horse</li><li>Transfer status and deadlines surfaced</li><li>Every change lands in the audit log</li></ul></div>
-      <div class="card"><h3>Faster sale readiness</h3><p>Bundle each horse’s approved documents into a watermarked sale packet and share buyer-ready profiles built only from verified records.</p><ul><li>Watermarked buyer packets</li><li>Buyer profiles from approved records only</li><li>Internal notes stay internal</li></ul></div>
-      <div class="card"><h3>OCR-assisted intake</h3><p>High-volume document intake runs through on-device OCR and a review queue, so large archives move into XBAR without sacrificing accuracy.</p><ul><li>On-device OCR extraction</li><li>Review before anything is final</li><li>Match documents to the right horse</li></ul></div>
+      <div class="card"><h3>Records you can trust</h3><p>One clean record per horse — identity, care, documents, history — instead of scattered files and spreadsheets.</p><ul><li>Source documents stay attached</li><li>Gaps are visible, not hidden</li><li>Usable years later</li></ul></div>
+      <div class="card"><h3>Ownership integrity</h3><p>Legal owner, co-owners, transfer status, and deadlines — surfaced before a missing document blocks a sale.</p><ul><li>Ownership documents per horse</li><li>Transfer status and deadlines</li><li>Every change audit-logged</li></ul></div>
+      <div class="card"><h3>Faster sale readiness</h3><p>Bundle approved documents into a watermarked sale packet; share buyer profiles built only from verified records.</p><ul><li>Watermarked buyer packets</li><li>Approved records only</li><li>Internal notes stay internal</li></ul></div>
+      <div class="card"><h3>OCR-assisted intake</h3><p>Move large archives in through on-device OCR and a review queue — volume without sacrificing accuracy.</p><ul><li>On-device OCR extraction</li><li>Review before anything is final</li><li>Matched to the right horse</li></ul></div>
     </div>
   </div>
 </section>
@@ -169,9 +169,9 @@ const home = {
     <p class="kicker">Trust is a product feature</p>
     <h2>Designed for records people rely on.</h2>
     <div class="grid grid--3" style="margin-top:26px">
-      <div class="card"><h3>Source-record discipline</h3><p>Unknown data stays unknown until a person verifies it. XBAR is built to support decisions, not invent certainty.</p></div>
-      <div class="card"><h3>Audit-logged operations</h3><p>Document links, verifications, and status changes are recorded, so your team always knows who changed what and when.</p></div>
-      <div class="card"><h3>Controlled buyer access</h3><p>Shared profiles and sale packets are built from approved records, so the public view never becomes the internal workspace.</p></div>
+      <div class="card"><h3>Source-record discipline</h3><p>Unknown data stays unknown until a person verifies it. We support decisions, not invent certainty.</p></div>
+      <div class="card"><h3>Audit-logged operations</h3><p>Links, verifications, and status changes are recorded — always who changed what, and when.</p></div>
+      <div class="card"><h3>Controlled buyer access</h3><p>Shared profiles come from approved records, so the public view is never your internal workspace.</p></div>
     </div>
   </div>
 </section>
@@ -193,7 +193,7 @@ const home = {
   <div class="wrap">
     <p class="kicker">Pricing</p>
     <h2>Plans that match the operation, from first horse to full remuda.</h2>
-    <p class="intro">Every plan protects the core horse record. Higher tiers add collaboration, buyer sharing, and substantially more document and storage capacity. <a href="/pricing">See full pricing and plan limits →</a></p>
+    <p class="intro">Every plan protects the core record; higher tiers add collaboration, buyer sharing, and capacity. <a href="/pricing">See full pricing →</a></p>
     <div class="grid grid--4">
       ${marketingPlans
         .map(
@@ -204,7 +204,7 @@ const home = {
     </div>
   </div>
 </section>
-${ctaBlock('Start with the records you already have.', 'XBAR shows what is complete, what needs verification, and what is ready to share — beginning with your first upload.')}`,
+${ctaBlock('Start with the records you already have.', 'See what’s complete, what needs verification, and what’s ready to share — from your first upload.')}`,
 };
 
 /* ------------------------------------------------------------- features */
