@@ -1063,15 +1063,28 @@ export const useXbarStore = create<XbarStore>()(
               };
             }),
           );
-          const localAssetCount = assets.filter((asset) => !asset.storagePath).length;
+          // Only assets that actually stored to the cloud (real storagePath AND
+          // url) are usable photos. A metadata-only "upload" — cloud unavailable,
+          // missing session, or a bucket error — has no renderable image, so it
+          // must not become a passport photo, advance sale readiness, or flip
+          // socialReady. Otherwise a packet could read "ready" with no photo.
+          const uploadedAssets = assets.filter((asset) => asset.storagePath && asset.url);
+          const failedCount = fileList.length - uploadedAssets.length;
+
+          if (uploadedAssets.length === 0) {
+            return {
+              ok: false,
+              message: 'Photo upload failed — no image was stored. Check your connection and try again.',
+            };
+          }
 
           set((current) => ({
             horses: current.horses.map((horse) =>
               horse.id === horseId
                 ? {
                     ...horse,
-                    profileImage: makePrimary ? (assets[0]?.url ?? horse.profileImage) : horse.profileImage,
-                    gallery: [...assets, ...horse.gallery],
+                    profileImage: makePrimary ? uploadedAssets[0].url : horse.profileImage,
+                    gallery: [...uploadedAssets, ...horse.gallery],
                     readiness: {
                       ...horse.readiness,
                       score: Math.min(100, horse.readiness.score + 5),
@@ -1088,7 +1101,7 @@ export const useXbarStore = create<XbarStore>()(
                         id: createId('activity'),
                         date: todayStamp(),
                         title: 'Media uploaded',
-                        summary: `${assets.length} media asset${assets.length === 1 ? '' : 's'} added to the horse profile.`,
+                        summary: `${uploadedAssets.length} media asset${uploadedAssets.length === 1 ? '' : 's'} added to the horse profile.`,
                         owner: 'Media Desk',
                         category: 'Sales' as const,
                       },
@@ -1108,7 +1121,7 @@ export const useXbarStore = create<XbarStore>()(
 
           return {
             ok: true,
-            message: `${assets.length} media asset${assets.length === 1 ? '' : 's'} uploaded.${localAssetCount ? ` ${localAssetCount} kept as metadata only because cloud media storage is not available.` : ''}`,
+            message: `${uploadedAssets.length} photo${uploadedAssets.length === 1 ? '' : 's'} added.${failedCount ? ` ${failedCount} could not be uploaded and ${failedCount === 1 ? 'was' : 'were'} skipped.` : ''}`,
             id: horseId,
           };
         } catch (error) {
