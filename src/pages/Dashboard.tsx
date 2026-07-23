@@ -20,7 +20,10 @@ import { formatCompactCurrency } from '@/lib/format';
 import { events, track } from '@/lib/telemetry';
 import { useXbarStore } from '@/store/useXbarStore';
 
-const XBAR_ICON = '/brand/apple-touch-icon.png';
+// Used only for the large faded hero watermark (300x300), so it needs a
+// source bigger than the 180px touch icon — icon-512 stays crisp while still
+// being ~4x lighter than the 1.53MB app icon.
+const XBAR_ICON = '/brand/icon-512.png';
 
 type Tone = 'danger' | 'warning' | 'info' | 'neutral';
 type Signal = {

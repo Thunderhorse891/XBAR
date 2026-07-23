@@ -34,7 +34,11 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 
+// 40KB touch icon for the 38px brand tile; the faded sidebar watermark
+// renders at 250px, so it uses the 512px source to avoid upscaling. Both
+// beat the 1.53MB app icon this replaced.
 const XBAR_ICON = '/brand/apple-touch-icon.png';
+const XBAR_WATERMARK = '/brand/icon-512.png';
 
 type NavItem = { label: string; path: string; icon: LucideIcon; badgeKey?: 'docs' | 'transfers' | 'care' };
 type NavGroup = { heading: string; items: NavItem[] };
@@ -216,7 +220,7 @@ export default function MainLayout() {
         </nav>
 
         <div className="xs-sidebar__footer">
-          <img className="xs-sidebar__wm" src={XBAR_ICON} alt="" aria-hidden="true" />
+          <img className="xs-sidebar__wm" src={XBAR_WATERMARK} alt="" aria-hidden="true" />
           <div className="xs-ranchcard">
             <span className="xs-ranchcard__avatar">{ranchInitials}</span>
             <span>
