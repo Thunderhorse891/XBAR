@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { animalPassportId, identityCompleteness } from '../src/lib/animalPassport.js';
+import { animalPassportId, hasHorsePhoto, identityCompleteness, isHorsePhotoAsset } from '../src/lib/animalPassport.js';
 import type { HorseRecord } from '../src/types/xbar.js';
 
 test('passport id is deterministic for the same horse id', () => {
@@ -96,6 +96,36 @@ test('only an actual horse photo satisfies the Photo field', () => {
   const noUrl = { id: 'g3', label: 'Hero', kind: 'Hero', url: '', status: 'Draft' };
   const blankUrl = identityCompleteness(horse({ gallery: [noUrl] as HorseRecord['gallery'] }));
   assert.ok(blankUrl.missing.includes('Photo'));
+});
+
+test('hasHorsePhoto: profile image or real photo kind counts, docs do not', () => {
+  assert.equal(hasHorsePhoto(horse({ profileImage: 'https://x.test/h.jpg' })), true);
+  assert.equal(
+    hasHorsePhoto(
+      horse({
+        gallery: [{ id: 'g', label: '', kind: 'Conformation', url: 'u', status: 'Approved' }] as HorseRecord['gallery'],
+      }),
+    ),
+    true,
+  );
+  assert.equal(
+    hasHorsePhoto(
+      horse({
+        gallery: [{ id: 'g', label: '', kind: 'Pedigree', url: 'u', status: 'Approved' }] as HorseRecord['gallery'],
+      }),
+    ),
+    false,
+  );
+  assert.equal(hasHorsePhoto(horse({})), false);
+});
+
+test('isHorsePhotoAsset: only real photo kinds with a URL qualify', () => {
+  assert.equal(isHorsePhotoAsset({ kind: 'Hero', url: 'u' }), true);
+  assert.equal(isHorsePhotoAsset({ kind: 'Conformation', url: 'u' }), true);
+  assert.equal(isHorsePhotoAsset({ kind: 'Sale Still', url: 'u' }), true);
+  assert.equal(isHorsePhotoAsset({ kind: 'Pedigree', url: 'u' }), false);
+  assert.equal(isHorsePhotoAsset({ kind: 'Document Cover', url: 'u' }), false);
+  assert.equal(isHorsePhotoAsset({ kind: 'Hero', url: '' }), false);
 });
 
 test('percent is rounded, not truncated', () => {

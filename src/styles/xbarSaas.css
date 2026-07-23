@@ -2263,6 +2263,7 @@ aside.xs-drawer .xs-drawer__sub {
 }
 
 .xs-objhead__avatar {
+  position: relative;
   height: 52px;
   width: 52px;
   flex: none;
@@ -2272,6 +2273,38 @@ aside.xs-drawer .xs-drawer__sub {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+}
+.xs-objhead__avatar--action {
+  cursor: pointer;
+  border: 1px solid var(--xbar-border);
+  padding: 0;
+}
+.xs-objhead__avatar--action:hover {
+  border-color: var(--xbar-graphite-2);
+}
+.xs-objhead__avatar--action:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+.xs-objhead__avatar-img {
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+}
+.xs-objhead__avatar-cam {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  height: 18px;
+  width: 18px;
+  border-radius: 999px;
+  background: var(--xbar-graphite-2, #1f2937);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 .xs-objhead__name {

@@ -15,6 +15,7 @@ import { normalizeWorkspaceEmail, validateWorkspaceInvitation } from '@/lib/work
 import { apiConfig, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { hasRoleCapability } from '@/lib/permissions';
+import { hasHorsePhoto, isHorsePhotoAsset } from '@/lib/animalPassport';
 import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { featureGate } from '@/lib/commercialEngine';
 import { buildOfferDecision } from '@/lib/profitIntelligence';
@@ -1035,60 +1036,101 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const state = get();
-        if (!state.horses.some((horse) => horse.id === horseId)) {
+        const targetHorse = state.horses.find((horse) => horse.id === horseId);
+        if (!targetHorse) {
           return { ok: false, message: 'Horse record not found for this media upload.' };
         }
+        // Whether a qualifying photo already exists decides if this upload earns
+        // the one-time photo readiness credit or is just a replacement.
+        const priorHasPhoto = hasHorsePhoto(targetHorse);
 
-        const storageIncrease = estimateStorageGb(fileList);
-        if (state.subscription.usage.storageUsedGb + storageIncrease > state.subscription.usage.storageLimitGb) {
+        // Pre-flight against the whole selection so we never start uploads that
+        // clearly cannot fit; the actual charge below is only for retained files.
+        const preflightIncrease = estimateStorageGb(fileList);
+        if (state.subscription.usage.storageUsedGb + preflightIncrease > state.subscription.usage.storageLimitGb) {
           return { ok: false, message: 'Storage limit reached for this plan. Upgrade before uploading more media.' };
         }
 
         try {
-          const assets = await Promise.all(
+          const results = await Promise.all(
             fileList.map(async (file) => {
               let uploadedAsset: Awaited<ReturnType<typeof uploadMediaAssetToCloud>> = null;
               try {
                 uploadedAsset = await uploadMediaAssetToCloud({ file, horseId });
               } catch (error) {
-                console.error('Cloud media upload failed; storing media locally instead.', error);
+                console.error('Cloud media upload failed.', error);
               }
               return {
-                id: createId('media'),
-                label: file.name.replace(/\.[^.]+$/, ''),
-                kind: kind ?? guessGalleryKind(file.name),
-                url: uploadedAsset?.publicUrl ?? '',
-                storagePath: uploadedAsset?.storagePath,
-                status: 'Approved' as const,
+                file,
+                stored: Boolean(uploadedAsset?.storagePath && uploadedAsset?.publicUrl),
+                asset: {
+                  id: createId('media'),
+                  label: file.name.replace(/\.[^.]+$/, ''),
+                  kind: kind ?? guessGalleryKind(file.name),
+                  url: uploadedAsset?.publicUrl ?? '',
+                  storagePath: uploadedAsset?.storagePath,
+                  status: 'Approved' as const,
+                },
               };
             }),
           );
-          const localAssetCount = assets.filter((asset) => !asset.storagePath).length;
+
+          // Only assets that actually stored (real storagePath AND url) are usable
+          // photos. A metadata-only "upload" — cloud unavailable, missing session,
+          // or a bucket error — has no renderable image, so it must not become a
+          // passport photo, advance readiness, or flip socialReady.
+          const uploadedResults = results.filter((result) => result.stored);
+          const uploadedAssets = uploadedResults.map((result) => result.asset);
+          const failedCount = fileList.length - uploadedAssets.length;
+
+          if (uploadedAssets.length === 0) {
+            return {
+              ok: false,
+              message: 'Photo upload failed — no image was stored. Check your connection and try again.',
+            };
+          }
+
+          // Charge storage for the bytes actually retained, never for skipped files.
+          const chargedIncrease = estimateStorageGb(uploadedResults.map((result) => result.file));
+
+          // Only a real horse photo may become the primary/profile image, so a
+          // document scan (e.g. a Pedigree/Document Cover kind) can never become
+          // the avatar or satisfy the Photo requirement even when makePrimary.
+          const primaryPhotoAsset = makePrimary ? uploadedAssets.find((asset) => isHorsePhotoAsset(asset)) : undefined;
+
+          // The photo readiness credit is a one-time transition (no qualifying
+          // photo -> a real one). Replacing an existing photo updates the image
+          // but must not keep inflating the completeness score or re-toggle state.
+          const projectedProfile = primaryPhotoAsset ? primaryPhotoAsset.url : targetHorse.profileImage;
+          const gainedFirstPhoto =
+            !priorHasPhoto &&
+            hasHorsePhoto({ profileImage: projectedProfile, gallery: [...uploadedAssets, ...targetHorse.gallery] });
 
           set((current) => ({
             horses: current.horses.map((horse) =>
               horse.id === horseId
                 ? {
                     ...horse,
-                    profileImage: makePrimary ? (assets[0]?.url ?? horse.profileImage) : horse.profileImage,
-                    gallery: [...assets, ...horse.gallery],
-                    readiness: {
-                      ...horse.readiness,
-                      score: Math.min(100, horse.readiness.score + 5),
-                      packetStatus:
-                        horse.readiness.packetStatus === 'Needs Photos' ? 'Ready' : horse.readiness.packetStatus,
-                      blockers: horse.readiness.blockers.filter((blocker) => blocker !== 'Hero image missing'),
-                    },
-                    sale: {
-                      ...horse.sale,
-                      socialReady: true,
-                    },
+                    profileImage: primaryPhotoAsset ? primaryPhotoAsset.url : horse.profileImage,
+                    gallery: [...uploadedAssets, ...horse.gallery],
+                    readiness: gainedFirstPhoto
+                      ? {
+                          ...horse.readiness,
+                          score: Math.min(100, horse.readiness.score + 5),
+                          packetStatus:
+                            horse.readiness.packetStatus === 'Needs Photos' ? 'Ready' : horse.readiness.packetStatus,
+                          blockers: horse.readiness.blockers.filter(
+                            (blocker) => blocker !== 'Hero image missing' && blocker !== 'Sale photos missing',
+                          ),
+                        }
+                      : horse.readiness,
+                    sale: gainedFirstPhoto ? { ...horse.sale, socialReady: true } : horse.sale,
                     activity: [
                       {
                         id: createId('activity'),
                         date: todayStamp(),
                         title: 'Media uploaded',
-                        summary: `${assets.length} media asset${assets.length === 1 ? '' : 's'} added to the horse profile.`,
+                        summary: `${uploadedAssets.length} media asset${uploadedAssets.length === 1 ? '' : 's'} added to the horse profile.`,
                         owner: 'Media Desk',
                         category: 'Sales' as const,
                       },
@@ -1101,14 +1143,14 @@ export const useXbarStore = create<XbarStore>()(
               ...current.subscription,
               usage: {
                 ...current.subscription.usage,
-                storageUsedGb: normalizeUsage(current.subscription.usage.storageUsedGb + storageIncrease),
+                storageUsedGb: normalizeUsage(current.subscription.usage.storageUsedGb + chargedIncrease),
               },
             },
           }));
 
           return {
             ok: true,
-            message: `${assets.length} media asset${assets.length === 1 ? '' : 's'} uploaded.${localAssetCount ? ` ${localAssetCount} kept as metadata only because cloud media storage is not available.` : ''}`,
+            message: `${uploadedAssets.length} photo${uploadedAssets.length === 1 ? '' : 's'} added.${failedCount ? ` ${failedCount} could not be uploaded and ${failedCount === 1 ? 'was' : 'were'} skipped.` : ''}`,
             id: horseId,
           };
         } catch (error) {
