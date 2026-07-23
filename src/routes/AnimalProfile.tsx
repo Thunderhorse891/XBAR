@@ -9,7 +9,7 @@ import { useHorseRecord, useXbarStore } from '@/store/useXbarStore';
 import { formatCurrency } from '@/lib/format';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { hasRoleCapability } from '@/lib/permissions';
-import { animalPassportId, hasHorsePhoto, identityCompleteness } from '@/lib/animalPassport';
+import { animalPassportId, identityCompleteness } from '@/lib/animalPassport';
 import type { HorseStatus } from '@/types/xbar';
 
 const TABS = [
@@ -57,8 +57,10 @@ export default function AnimalProfile() {
     if (!animal || !files.length) return;
     setUploadingPhoto(true);
     try {
-      // A first photo becomes the passport's primary image; later ones join the gallery.
-      const result = await uploadHorseMedia({ horseId: animal.id, files, makePrimary: !hasHorsePhoto(animal) });
+      // Both entry points (tap-avatar and Add Photo) are primary-photo controls,
+      // so the uploaded image becomes the passport's hero — adding it when none
+      // exists and replacing it otherwise. Extra files join the gallery.
+      const result = await uploadHorseMedia({ horseId: animal.id, files, makePrimary: true });
       pushToast({
         title: result.ok ? 'Photo added' : 'Upload failed',
         message: result.message,
