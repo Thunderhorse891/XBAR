@@ -1647,6 +1647,8 @@ export const useXbarStore = create<XbarStore>()(
               registered: Boolean(registrationNumber || aqhaNumber),
               owner: patch.owner?.trim() ?? h.owner,
               ownerEntity: patch.ownerEntity?.trim() ?? h.ownerEntity,
+              microchipId: patch.microchipId?.trim() ?? h.microchipId,
+              markings: patch.markings?.trim() ?? h.markings,
               segment: patch.segment ?? h.segment,
               status: patch.status ?? h.status,
               costBasis: patch.costBasis !== undefined ? Math.max(0, Number(patch.costBasis) || 0) : h.costBasis,

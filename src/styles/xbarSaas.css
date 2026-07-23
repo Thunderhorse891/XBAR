@@ -2288,6 +2288,51 @@ aside.xs-drawer .xs-drawer__sub {
   margin-top: 3px;
 }
 
+.xs-passport-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  padding: 3px 9px;
+  border: 1px solid var(--xbar-border);
+  border-radius: 999px;
+  background: var(--xbar-surface-warm);
+  color: var(--xbar-text-muted);
+  cursor: pointer;
+  max-width: 100%;
+}
+.xs-passport-id:hover {
+  border-color: var(--xbar-accent, var(--xbar-graphite-2));
+  color: var(--xbar-text);
+}
+.xs-passport-id__label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.xs-passport-id__code {
+  font-family: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, monospace;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--xbar-text);
+}
+
+.xs-passport-gap {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--xbar-border);
+}
+.xs-passport-gap__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
 .xs-objhead__chips {
   display: flex;
   gap: 8px;

@@ -61,6 +61,8 @@ export type HorsePatch = Partial<
     | 'segment'
     | 'status'
     | 'costBasis'
+    | 'microchipId'
+    | 'markings'
   >
 > & { askPrice?: number; sire?: string; dam?: string };
 
