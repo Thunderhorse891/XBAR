@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import type { ChangeEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Copy, FileText, HeartPulse, Move, Pencil, Plus, Upload } from 'lucide-react';
+import { ArrowLeft, Camera, Copy, FileText, HeartPulse, Move, Pencil, Plus, Upload } from 'lucide-react';
 import { HorsesIcon } from '@/components/icons';
 import { ActionButton, Card, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
-import { useHorseRecord } from '@/store/useXbarStore';
+import { useHorseRecord, useXbarStore } from '@/store/useXbarStore';
 import { formatCurrency } from '@/lib/format';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
-import { animalPassportId, identityCompleteness } from '@/lib/animalPassport';
+import { hasRoleCapability } from '@/lib/permissions';
+import { animalPassportId, hasHorsePhoto, identityCompleteness } from '@/lib/animalPassport';
 import type { HorseStatus } from '@/types/xbar';
 
 const TABS = [
@@ -38,10 +40,36 @@ export default function AnimalProfile() {
   const { id } = useParams();
   const openQuickCreate = useUiStore((s) => s.openQuickCreate);
   const pushToast = useUiStore((s) => s.pushToast);
+  const uploadHorseMedia = useXbarStore((s) => s.uploadHorseMedia);
+  const currentRole = useXbarStore((s) => s.currentRole);
   const [tab, setTab] = useState<string>('Overview');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const animal = useHorseRecord(id);
 
   const passportId = animalPassportId(animal?.id);
+  const canUploadMedia = hasRoleCapability(currentRole, 'uploadMedia');
+
+  async function onPhotoSelected(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.target;
+    const files = input.files ? Array.from(input.files) : [];
+    input.value = ''; // allow re-selecting the same file after an error
+    if (!animal || !files.length) return;
+    setUploadingPhoto(true);
+    try {
+      // A first photo becomes the passport's primary image; later ones join the gallery.
+      const result = await uploadHorseMedia({ horseId: animal.id, files, makePrimary: !hasHorsePhoto(animal) });
+      pushToast({
+        title: result.ok ? 'Photo added' : 'Upload failed',
+        message: result.message,
+        tone: result.ok ? 'success' : 'error',
+      });
+    } catch {
+      pushToast({ title: 'Upload failed', message: 'The photo could not be uploaded. Try again.', tone: 'error' });
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
   async function copyPassportId() {
     try {
       if (!navigator.clipboard) throw new Error('clipboard unavailable');
@@ -88,6 +116,12 @@ export default function AnimalProfile() {
   // A photo needs media capture (not yet built), so the "Complete passport" CTA
   // only appears when the drawer can actually resolve a gap — no dead ends.
   const drawerFixableMissing = identity.missing.filter((label) => label !== 'Photo');
+  const photoUrl =
+    animal.profileImage ||
+    animal.gallery?.find(
+      (asset) => asset.url && (asset.kind === 'Hero' || asset.kind === 'Conformation' || asset.kind === 'Sale Still'),
+    )?.url ||
+    '';
   const location =
     [animal.location.barn, animal.location.pasture].filter(Boolean).join(' · ') || animal.location.ranch || '—';
   const forSale = animal.sale?.listingState !== 'Hold' && (animal.segment === 'Sale Prospect' || readiness > 0);
@@ -100,9 +134,42 @@ export default function AnimalProfile() {
 
       <div className="xs-objhead">
         <div className="xs-objhead__id">
-          <span className="xs-objhead__avatar">
-            <HorsesIcon width={28} height={28} />
-          </span>
+          {canUploadMedia ? (
+            <button
+              type="button"
+              className="xs-objhead__avatar xs-objhead__avatar--action"
+              onClick={() => photoInputRef.current?.click()}
+              disabled={uploadingPhoto}
+              title={photoUrl ? 'Replace photo' : 'Add a photo'}
+              aria-label={photoUrl ? 'Replace horse photo' : 'Add horse photo'}
+            >
+              {photoUrl ? (
+                <img className="xs-objhead__avatar-img" src={photoUrl} alt={animal.name} />
+              ) : (
+                <HorsesIcon width={28} height={28} />
+              )}
+              <span className="xs-objhead__avatar-cam" aria-hidden="true">
+                <Camera size={13} />
+              </span>
+            </button>
+          ) : (
+            <span className="xs-objhead__avatar">
+              {photoUrl ? (
+                <img className="xs-objhead__avatar-img" src={photoUrl} alt={animal.name} />
+              ) : (
+                <HorsesIcon width={28} height={28} />
+              )}
+            </span>
+          )}
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            multiple
+            hidden
+            onChange={onPhotoSelected}
+          />
           <div>
             <div className="xs-objhead__name">{animal.name}</div>
             <div className="xs-objhead__meta">
@@ -156,6 +223,16 @@ export default function AnimalProfile() {
           <ActionButton size="sm" icon={<Upload size={14} />} onClick={() => navigate('/documents')}>
             Upload Doc
           </ActionButton>
+          {canUploadMedia && !photoUrl ? (
+            <ActionButton
+              size="sm"
+              icon={<Camera size={14} />}
+              onClick={() => photoInputRef.current?.click()}
+              disabled={uploadingPhoto}
+            >
+              {uploadingPhoto ? 'Uploading…' : 'Add Photo'}
+            </ActionButton>
+          ) : null}
           <ActionButton
             size="sm"
             variant="primary"

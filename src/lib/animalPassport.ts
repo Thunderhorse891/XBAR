@@ -57,7 +57,13 @@ export function animalPassportId(horseId: string | undefined | null): string {
 // the passport "Photo" requirement.
 const HORSE_PHOTO_KINDS: ReadonlySet<GalleryAsset['kind']> = new Set(['Hero', 'Conformation', 'Sale Still']);
 
-function hasHorsePhoto(horse: IdentityInput): boolean {
+/**
+ * True when the record has a real photograph of the animal — a profile image
+ * or a gallery asset of a horse-photo kind with a usable URL. Pedigree scans
+ * and document covers do not count. Exported so the passport can both score
+ * completeness and decide whether a newly uploaded photo becomes the primary.
+ */
+export function hasHorsePhoto(horse: IdentityInput): boolean {
   if (filled(horse.profileImage)) return true;
   return (horse.gallery ?? []).some((asset) => HORSE_PHOTO_KINDS.has(asset.kind) && filled(asset.url));
 }
