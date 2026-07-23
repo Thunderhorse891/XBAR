@@ -98,6 +98,10 @@ function header(currentPath) {
     <nav class="site-nav" aria-label="Primary">
       ${NAV_LINKS.map((item) => navLink(item, currentPath)).join('\n      ')}
       ${NAV_MENUS.map((menu) => navMenu(menu, currentPath)).join('\n      ')}
+      ${NAV_MENUS.map(
+        (menu) =>
+          `<a class="nav-mobile-link" href="${menu.root}"${currentPath === menu.root || currentPath.startsWith(`${menu.root}/`) ? ' aria-current="page"' : ''}>${esc(menu.label)}</a>`,
+      ).join('\n      ')}
       <a href="/demo"${currentPath === '/demo' ? ' aria-current="page"' : ''}>Product tour</a>
       <a href="${APP_LOGIN}" rel="nofollow">Sign in</a>
     </nav>

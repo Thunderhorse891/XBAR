@@ -276,6 +276,11 @@ a:focus-visible {
 .nav-dd {
   position: relative;
 }
+/* Mobile-only fallback links to each dropdown's overview page; the desktop
+   nav uses the hover panels instead. See the ≤720px block. */
+.nav-mobile-link {
+  display: none;
+}
 .nav-dd > summary {
   list-style: none;
   cursor: pointer;
@@ -1243,15 +1248,19 @@ html.js .reveal.in {
     padding: 7px 11px;
     font-size: 14px;
   }
-  /* On the scrollable mobile rail, dropdowns collapse to their summary link;
-     the full destinations live in the footer, so no overlay panel is needed. */
-  .nav-dd > summary {
+  /* The hover panels don't work on touch, so on the scrollable mobile rail the
+     dropdowns are replaced by plain links to each overview page (Solutions,
+     Resources). Every sub-destination also lives in the footer, so nothing is
+     stranded. This needs no JavaScript. */
+  .nav-dd {
+    display: none;
+  }
+  .nav-mobile-link {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
     padding: 7px 11px;
     font-size: 14px;
-    white-space: nowrap;
-  }
-  .nav-menu {
-    display: none;
   }
 }
 @media (max-width: 620px) {
