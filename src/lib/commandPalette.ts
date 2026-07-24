@@ -102,9 +102,6 @@ export interface CommandSources {
   buyerPath: (leadId: string) => string;
 }
 
-const MAX_DOCUMENTS = 60;
-const MAX_EXPENSES = 40;
-
 function formatUsd(amount: number): string {
   const rounded = Math.max(0, Math.round(Number(amount) || 0));
   return `$${rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
@@ -138,7 +135,10 @@ function buildPeopleEntries(horses: HorseLike[], ownershipRecords: OwnershipLike
   return [...horsesByPerson.values()].map(({ name, horseIds }) => {
     const count = horseIds.size;
     return {
-      id: `person-${personKey(name).replace(/[^a-z0-9]+/g, '-')}`,
+      // Encode the full normalized name so distinct people never collide on the
+      // React key: "Anne-Marie" vs "Anne Marie", or any non-ASCII name, each map
+      // to a unique id (personKey already de-duplicates true duplicates).
+      id: `person-${encodeURIComponent(personKey(name))}`,
       label: name,
       detail: count === 1 ? 'Owner · 1 horse' : `Owner · ${count} horses`,
       path: '/ownership',
@@ -161,7 +161,7 @@ export function buildCommandEntries(sources: CommandSources): CommandEntry[] {
     keywords: [horse.breed, horse.registrationNumber].filter(Boolean).join(' '),
   }));
 
-  const documentEntries: CommandEntry[] = documents.slice(0, MAX_DOCUMENTS).map((document) => ({
+  const documentEntries: CommandEntry[] = documents.map((document) => ({
     id: `document-${document.id}`,
     label: document.title,
     detail: `${document.type} · ${document.state}`,
@@ -179,7 +179,7 @@ export function buildCommandEntries(sources: CommandSources): CommandEntry[] {
     keywords: `${lead.stage} buyer prospect`,
   }));
 
-  const expenseEntries: CommandEntry[] = expenseReceipts.slice(0, MAX_EXPENSES).map((expense) => ({
+  const expenseEntries: CommandEntry[] = expenseReceipts.map((expense) => ({
     id: `expense-${expense.id}`,
     label: expense.title,
     detail: `${expense.category} · ${expense.vendor || 'No vendor'} · ${formatUsd(expense.amount)}`,
@@ -212,7 +212,9 @@ export function scoreCommandEntry(entry: CommandEntry, normalizedQuery: string):
   if (label.startsWith(normalizedQuery)) return 1;
   if (new RegExp(`\\b${escapeRegExp(normalizedQuery)}`).test(label)) return 2;
   if (label.includes(normalizedQuery)) return 3;
-  if (`${entry.detail} ${entry.keywords}`.toLowerCase().includes(normalizedQuery)) return 4;
+  // Group name is part of the metadata haystack so a category query ("buyers",
+  // "people", "expenses") surfaces that category's records.
+  if (`${entry.detail} ${entry.keywords} ${entry.group}`.toLowerCase().includes(normalizedQuery)) return 4;
   return Number.POSITIVE_INFINITY;
 }
 

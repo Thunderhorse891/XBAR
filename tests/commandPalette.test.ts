@@ -123,6 +123,53 @@ test('scoring ranks exact < prefix < word-start < includes < metadata', () => {
   assert.equal(Number.isFinite(scoreCommandEntry(entry, 'zebra')), false); // no match
 });
 
+test('a category-name query surfaces that category (group name is searchable)', () => {
+  const entries = buildCommandEntries(makeSources());
+  const buyers = searchCommandEntries(entries, 'buyers');
+  assert.ok(
+    buyers.some((group) => group.group === 'Buyers'),
+    'typing "buyers" should surface buyer records',
+  );
+  const people = searchCommandEntries(entries, 'people');
+  assert.ok(
+    people.some((group) => group.group === 'People'),
+    'typing "people" should surface people',
+  );
+});
+
+test('distinct people never collide on id even with punctuation or non-ASCII names', () => {
+  const entries = buildCommandEntries(
+    makeSources({
+      horses: [],
+      ownershipRecords: [
+        { id: 'a', legalOwner: 'Anne-Marie', horseId: 'h1' },
+        { id: 'b', legalOwner: 'Anne Marie', horseId: 'h2' },
+        { id: 'c', legalOwner: '张三', horseId: 'h3' },
+        { id: 'd', legalOwner: '李四', horseId: 'h4' },
+      ],
+    }),
+  );
+  const people = entries.filter((entry) => entry.group === 'People');
+  const ids = people.map((entry) => entry.id);
+  assert.equal(ids.length, 4, 'four distinct owners');
+  assert.equal(new Set(ids).size, 4, 'all four ids must be unique (usable as React keys)');
+});
+
+test('a receipt beyond the render cap is still indexed and findable', () => {
+  const manyReceipts = Array.from({ length: 60 }, (_, index) => ({
+    id: `e${index}`,
+    title: index === 55 ? 'Unique Farrier Visit' : `Feed ${index}`,
+    vendor: 'Vendor',
+    category: 'Feed',
+    amount: 100,
+  }));
+  const entries = buildCommandEntries(makeSources({ expenseReceipts: manyReceipts }));
+  const hit = searchCommandEntries(entries, 'farrier visit')
+    .flatMap((group) => group.items)
+    .find((entry) => entry.id === 'expense-e55');
+  assert.ok(hit, 'the 56th receipt must remain searchable by an exact title');
+});
+
 test('per-group result caps are honored', () => {
   const manyHorses = Array.from({ length: 20 }, (_, index) => ({
     id: `h${index}`,
