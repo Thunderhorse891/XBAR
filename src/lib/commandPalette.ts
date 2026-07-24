@@ -198,6 +198,29 @@ export function buildCommandEntries(sources: CommandSources): CommandEntry[] {
   ];
 }
 
+// Security gate for the private index. InteractionShell is mounted outside the
+// route auth guard (it lives on /login too) and the workspace persists across
+// sign-out, so the palette must only surface private records — owner names,
+// receipt amounts, horse and document titles — to a viewer entitled to the app.
+// This mirrors RequireCloudAuth's grant rule and is pure so it can be tested.
+export interface PrivateIndexAccess {
+  supabaseConfigured: boolean;
+  hasLocalEntry: boolean;
+  hasSession: boolean;
+  status: string;
+}
+
+export function isPrivateIndexAllowed({
+  supabaseConfigured,
+  hasLocalEntry,
+  hasSession,
+  status,
+}: PrivateIndexAccess): boolean {
+  if (hasLocalEntry) return true; // local single-user entry
+  if (!supabaseConfigured) return true; // no cloud: local build, full access
+  return hasSession && status !== 'signed-out';
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

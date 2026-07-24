@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   buildCommandEntries,
+  isPrivateIndexAllowed,
   scoreCommandEntry,
   searchCommandEntries,
   ROUTE_COMMANDS,
@@ -168,6 +169,39 @@ test('a receipt beyond the render cap is still indexed and findable', () => {
     .flatMap((group) => group.items)
     .find((entry) => entry.id === 'expense-e55');
   assert.ok(hit, 'the 56th receipt must remain searchable by an exact title');
+});
+
+test('the private index is gated on entitlement (never leaks after sign-out)', () => {
+  // Cloud build, signed out: no private data may be indexed.
+  assert.equal(
+    isPrivateIndexAllowed({ supabaseConfigured: true, hasLocalEntry: false, hasSession: false, status: 'signed-out' }),
+    false,
+  );
+  // Cloud build, no session yet (loading): still suppressed.
+  assert.equal(
+    isPrivateIndexAllowed({ supabaseConfigured: true, hasLocalEntry: false, hasSession: false, status: 'loading' }),
+    false,
+  );
+  // Cloud build, authenticated session: allowed.
+  assert.equal(
+    isPrivateIndexAllowed({ supabaseConfigured: true, hasLocalEntry: false, hasSession: true, status: 'ready' }),
+    true,
+  );
+  // Local build (no Supabase): full access.
+  assert.equal(
+    isPrivateIndexAllowed({
+      supabaseConfigured: false,
+      hasLocalEntry: false,
+      hasSession: false,
+      status: 'unavailable',
+    }),
+    true,
+  );
+  // Local single-user entry grants access even when cloud is configured.
+  assert.equal(
+    isPrivateIndexAllowed({ supabaseConfigured: true, hasLocalEntry: true, hasSession: false, status: 'signed-out' }),
+    true,
+  );
 });
 
 test('per-group result caps are honored', () => {

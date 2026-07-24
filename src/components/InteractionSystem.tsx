@@ -23,10 +23,24 @@ import {
 } from '@/components/ui/command';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
-import { buildCommandEntries, searchCommandEntries, type CommandEntry } from '@/lib/commandPalette';
+import {
+  buildCommandEntries,
+  isPrivateIndexAllowed,
+  searchCommandEntries,
+  type CommandEntry,
+} from '@/lib/commandPalette';
 import { interactionHint, type SurfaceMode } from '@/lib/interactionState';
+import { isSupabaseConfigured } from '@/lib/platformConfig';
+import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
+
+// Mirrors RequireCloudAuth: a local single-user entry grants app access even
+// when Supabase is configured, so the palette's private index is allowed too.
+function hasCommandCenterEntry() {
+  if (typeof window === 'undefined') return false;
+  return window.localStorage.getItem('xbar-command-center-entry') === 'true';
+}
 
 function isEditableTarget(target: EventTarget | null) {
   return target instanceof HTMLElement && Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
@@ -280,6 +294,8 @@ export function InteractionShell() {
   const salesLeads = useXbarStore((state) => state.salesLeads);
   const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
+  const cloudStatus = useCloudStore((state) => state.status);
+  const cloudSession = useCloudStore((state) => state.session);
   const paletteOpen = useUiStore((state) => state.commandPaletteOpen);
   const setPaletteOpen = useUiStore((state) => state.setCommandPaletteOpen);
   const drawer = useUiStore((state) => state.rightDrawer);
@@ -288,17 +304,30 @@ export function InteractionShell() {
   const focusedSurfaceId = useUiStore((state) => state.focusedSurfaceId);
   const [query, setQuery] = useState('');
 
+  // InteractionShell is mounted globally — including on /login, outside
+  // RequireCloudAuth — and the persisted workspace survives sign-out, so the
+  // private index (owner names, receipt amounts, horse and document titles)
+  // must never populate unless the viewer is actually entitled to the app.
+  // Mirror RequireCloudAuth's grant rule; when suppressed the palette still
+  // offers navigation, whose targets redirect an unauthenticated user to login.
+  const privateIndexAllowed = isPrivateIndexAllowed({
+    supabaseConfigured: isSupabaseConfigured(),
+    hasLocalEntry: hasCommandCenterEntry(),
+    hasSession: Boolean(cloudSession),
+    status: cloudStatus,
+  });
+
   const commands = useMemo<CommandEntry[]>(
     () =>
       buildCommandEntries({
-        horses,
-        documents,
-        salesLeads,
-        expenseReceipts,
-        ownershipRecords,
+        horses: privateIndexAllowed ? horses : [],
+        documents: privateIndexAllowed ? documents : [],
+        salesLeads: privateIndexAllowed ? salesLeads : [],
+        expenseReceipts: privateIndexAllowed ? expenseReceipts : [],
+        ownershipRecords: privateIndexAllowed ? ownershipRecords : [],
         buyerPath: buyerFollowUpPath,
       }),
-    [documents, expenseReceipts, horses, ownershipRecords, salesLeads],
+    [documents, expenseReceipts, horses, ownershipRecords, privateIndexAllowed, salesLeads],
   );
 
   const resultGroups = useMemo(() => searchCommandEntries(commands, query), [commands, query]);
