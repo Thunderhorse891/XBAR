@@ -174,6 +174,9 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
   for (const file of expanded) {
     const documentId = `doc-${randomUUID()}`;
     let storagePath = file.storagePath;
+    // Only objects this loop uploads are ours to delete on failure; a
+    // client-provided storagePath belongs to a prior upload and must be left be.
+    let createdObjectPath = '';
 
     if (!storagePath && file.content) {
       const safeName = file.fileName.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(-80) || 'upload.bin';
@@ -185,6 +188,7 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
         skipped.push({ fileName: file.fileName, reason: `upload failed: ${uploadError.message}` });
         continue;
       }
+      createdObjectPath = storagePath;
     }
 
     const ocr = await runOcr({
@@ -228,6 +232,13 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
 
     const { error: insertError } = await supabase.from('documents').upsert(documentRow);
     if (insertError) {
+      // The row was rejected after the object was written (e.g. the storage
+      // trigger firing on a concurrent batch that passed the preflight). Remove
+      // the object this loop just created so its bytes don't linger untracked
+      // and let repeated races grow physical storage past the enforced cap.
+      if (createdObjectPath) {
+        await supabase.storage.from(DOCUMENT_BUCKET).remove([createdObjectPath]);
+      }
       skipped.push({ fileName: file.fileName, reason: `database insert failed: ${insertError.message}` });
       continue;
     }

@@ -12,9 +12,22 @@
 -- client's estimateStorageGb (src/lib/xbarRuntime.ts), so the enforced cap and
 -- the displayed usage never disagree.
 
--- 1. Track the byte size of every stored artifact.
+-- 1. Track the byte size of every stored artifact. The non-negative CHECK stops
+--    a client from under-reporting usage with a negative size to slip past the
+--    cap; the API paths write the real byteLength, and the DB trigger below is
+--    the authoritative backstop.
 alter table public.documents add column if not exists size_bytes bigint not null default 0;
 alter table public.sale_packets add column if not exists size_bytes bigint not null default 0;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'documents_size_bytes_nonneg') then
+    alter table public.documents add constraint documents_size_bytes_nonneg check (size_bytes >= 0);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'sale_packets_size_bytes_nonneg') then
+    alter table public.sale_packets add constraint sale_packets_size_bytes_nonneg check (size_bytes >= 0);
+  end if;
+end $$;
 
 -- 1a. Backfill existing document rows from the size captured at upload time and
 --     carried in the JSON payload (DocumentRecord.fileSizeBytes). Without this,
