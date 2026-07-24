@@ -726,6 +726,11 @@ async function saveWorkspaceBackupToRelationalCloud(
         state: document.state,
         confidence: document.confidence,
         duplicate_risk: document.duplicateRisk,
+        // Persist the upload size so the server-side storage-limit trigger and
+        // xbar_workspace_storage_bytes count this direct-to-Storage upload path,
+        // not just the API-generated documents. Zero when the file was never
+        // sized (e.g. metadata-only rows).
+        size_bytes: document.fileSizeBytes ?? 0,
         payload: document,
         updated_at: updatedAt,
       })),
