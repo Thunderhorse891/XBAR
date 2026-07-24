@@ -110,3 +110,16 @@ test('photo is a real horse photo, never a document scan', () => {
   );
   assert.equal(docOnly.photoUrl, '');
 });
+
+test('unapproved (Draft/Pending) photos are never exposed', () => {
+  const draft = toPublicPassport(
+    loadedHorse({
+      profileImage: 'https://cdn.test/draft-hero.jpg',
+      gallery: [
+        { id: 'g1', label: 'Hero', kind: 'Hero', url: 'https://cdn.test/draft-hero.jpg', status: 'Draft' },
+        { id: 'g2', label: 'Pending', kind: 'Conformation', url: 'https://cdn.test/pending.jpg', status: 'Pending' },
+      ] as HorseRecord['gallery'],
+    }),
+  );
+  assert.equal(draft.photoUrl, '');
+});

@@ -36,20 +36,21 @@ function str(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-/** Resolve the primary buyer-visible photo: the profile image if it is a real
- * photo, else the first qualifying horse-photo gallery asset. Document scans and
- * pedigree images never qualify. */
+/** Resolve the primary buyer-visible photo. A photo is exposed only if it is an
+ * APPROVED gallery asset of a real horse-photo kind — matching the approval rule
+ * the canonical buyer sanitizer (src/lib/publicShare.ts) enforces. Draft/Pending
+ * assets, document scans, and pedigree images never qualify. The profile image is
+ * exposed only when it corresponds to such an approved photo. */
 function publicPhotoUrl(horse: Pick<HorseRecord, 'profileImage' | 'gallery'>): string {
-  const gallery = horse.gallery ?? [];
+  const approvedPhotos = (horse.gallery ?? []).filter(
+    (asset) => asset.status === 'Approved' && isHorsePhotoAsset(asset),
+  );
   const profile = str(horse.profileImage);
-  if (profile && gallery.some((asset) => isHorsePhotoAsset(asset) && str(asset.url) === profile)) {
+  if (profile && approvedPhotos.some((asset) => str(asset.url) === profile)) {
     return profile;
   }
-  const firstPhoto = gallery.find((asset) => isHorsePhotoAsset(asset));
-  if (firstPhoto) return str(firstPhoto.url);
-  // A profileImage with no matching gallery asset is trusted only if a real
-  // photo exists; otherwise return nothing rather than risk exposing a doc URL.
-  return '';
+  const firstPhoto = approvedPhotos[0];
+  return firstPhoto ? str(firstPhoto.url) : '';
 }
 
 /**
