@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Merge these keys into ios/App/App/Info.plist in the generated Capacitor
+  project. Each maps to a capability the shipped web code actually uses; iOS
+  crashes the WebView the first time a permission is requested without its
+  usage-description string, and App Review rejects builds that request a
+  capability with no purpose string.
+
+    NSCameraUsageDescription        -> AnimalProfile.tsx <input capture="environment">
+    NSPhotoLibraryUsageDescription  -> the same picker's "choose from library" path
+    NSPhotoLibraryAddUsageDescription -> saving a generated packet/photo back to the library (future-safe)
+    NSLocationWhenInUseUsageDescription -> Weather.tsx navigator.geolocation.getCurrentPosition
+
+  Edit the copy to match your final App Store description; keep it specific
+  ("to …") — generic strings ("to use the camera") are a common rejection.
+-->
+<plist version="1.0">
+<dict>
+  <key>NSCameraUsageDescription</key>
+  <string>XBAR uses the camera so you can photograph a horse for its record and buyer packet.</string>
+
+  <key>NSPhotoLibraryUsageDescription</key>
+  <string>XBAR needs access to your photos so you can attach existing horse pictures and documents to a record.</string>
+
+  <key>NSPhotoLibraryAddUsageDescription</key>
+  <string>XBAR saves generated sale packets and horse photos to your photo library when you choose to export them.</string>
+
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>XBAR uses your location once to show local weather for planning ranch work. Your location is not stored.</string>
+</dict>
+</plist>

@@ -7,6 +7,9 @@ const config: CapacitorConfig = {
   bundledWebRuntime: false,
   ios: {
     contentInset: 'automatic',
+    // Match the app's dark theme so a cold launch never flashes white before
+    // the web layer paints. Keep in sync with theme_color in site.webmanifest.
+    backgroundColor: '#05070A',
   },
   android: {
     backgroundColor: '#f4f1ec',

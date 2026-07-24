@@ -23,9 +23,24 @@ import {
 } from '@/components/ui/command';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
+import {
+  buildCommandEntries,
+  isPrivateIndexAllowed,
+  searchCommandEntries,
+  type CommandEntry,
+} from '@/lib/commandPalette';
 import { interactionHint, type SurfaceMode } from '@/lib/interactionState';
+import { isSupabaseConfigured } from '@/lib/platformConfig';
+import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
+
+// Mirrors RequireCloudAuth: a local single-user entry grants app access even
+// when Supabase is configured, so the palette's private index is allowed too.
+function hasCommandCenterEntry() {
+  if (typeof window === 'undefined') return false;
+  return window.localStorage.getItem('xbar-command-center-entry') === 'true';
+}
 
 function isEditableTarget(target: EventTarget | null) {
   return target instanceof HTMLElement && Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
@@ -271,32 +286,16 @@ export function StatefulSurface({
   );
 }
 
-type CommandItem = {
-  id: string;
-  label: string;
-  detail: string;
-  path: string;
-  group: string;
-};
-
-const routeCommands: CommandItem[] = [
-  ['dashboard', 'Home', 'Daily ranch operations', '/', 'Navigate'],
-  ['horses', 'Horse registry', 'All horse records', '/horses', 'Navigate'],
-  ['documents', 'Documents', 'Source records and review', '/documents', 'Navigate'],
-  ['ownership', 'Ownership', 'Transfers and documents', '/ownership', 'Navigate'],
-  ['medical', 'Health', 'Care records and due work', '/medical', 'Navigate'],
-  ['breeding', 'Breeding pipeline', 'Pairings and milestones', '/breeding', 'Navigate'],
-  ['sales', 'Sales', 'Buyer pipeline and listings', '/sales', 'Navigate'],
-  ['reminders', 'Tasks and reminders', 'Daily work queue', '/reminders', 'Navigate'],
-  ['assets', 'Property and equipment', 'Ranch assets and supplies', '/assets', 'Navigate'],
-].map(([id, label, detail, path, group]) => ({ id, label, detail, path, group }));
-
 export function InteractionShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const salesLeads = useXbarStore((state) => state.salesLeads);
+  const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
+  const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
+  const cloudStatus = useCloudStore((state) => state.status);
+  const cloudSession = useCloudStore((state) => state.session);
   const paletteOpen = useUiStore((state) => state.commandPaletteOpen);
   const setPaletteOpen = useUiStore((state) => state.setCommandPaletteOpen);
   const drawer = useUiStore((state) => state.rightDrawer);
@@ -305,41 +304,33 @@ export function InteractionShell() {
   const focusedSurfaceId = useUiStore((state) => state.focusedSurfaceId);
   const [query, setQuery] = useState('');
 
-  const commands = useMemo<CommandItem[]>(
-    () => [
-      ...routeCommands,
-      ...horses.map((horse) => ({
-        id: `horse-${horse.id}`,
-        label: horse.name,
-        detail: `${horse.segment} | ${horse.location.barn}`,
-        path: `/horses/${horse.id}`,
-        group: 'Horses',
-      })),
-      ...documents.slice(0, 40).map((document) => ({
-        id: `document-${document.id}`,
-        label: document.title,
-        detail: `${document.type} | ${document.state}`,
-        path: '/documents',
-        group: 'Documents',
-      })),
-      ...salesLeads.map((lead) => ({
-        id: `lead-${lead.id}`,
-        label: lead.name,
-        detail: `${lead.stage} buyer`,
-        path: buyerFollowUpPath(lead.id),
-        group: 'Buyers',
-      })),
-    ],
-    [documents, horses, salesLeads],
+  // InteractionShell is mounted globally — including on /login, outside
+  // RequireCloudAuth — and the persisted workspace survives sign-out, so the
+  // private index (owner names, receipt amounts, horse and document titles)
+  // must never populate unless the viewer is actually entitled to the app.
+  // Mirror RequireCloudAuth's grant rule; when suppressed the palette still
+  // offers navigation, whose targets redirect an unauthenticated user to login.
+  const privateIndexAllowed = isPrivateIndexAllowed({
+    supabaseConfigured: isSupabaseConfigured(),
+    hasLocalEntry: hasCommandCenterEntry(),
+    hasSession: Boolean(cloudSession),
+    status: cloudStatus,
+  });
+
+  const commands = useMemo<CommandEntry[]>(
+    () =>
+      buildCommandEntries({
+        horses: privateIndexAllowed ? horses : [],
+        documents: privateIndexAllowed ? documents : [],
+        salesLeads: privateIndexAllowed ? salesLeads : [],
+        expenseReceipts: privateIndexAllowed ? expenseReceipts : [],
+        ownershipRecords: privateIndexAllowed ? ownershipRecords : [],
+        buyerPath: buyerFollowUpPath,
+      }),
+    [documents, expenseReceipts, horses, ownershipRecords, privateIndexAllowed, salesLeads],
   );
 
-  const results = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    if (!normalized) return commands.slice(0, 12);
-    return commands
-      .filter((item) => `${item.label} ${item.detail} ${item.group}`.toLowerCase().includes(normalized))
-      .slice(0, 20);
-  }, [commands, query]);
+  const resultGroups = useMemo(() => searchCommandEntries(commands, query), [commands, query]);
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -374,14 +365,14 @@ export function InteractionShell() {
     return () => document.body.classList.remove('xbar-focus-mode');
   }, [focusedSurfaceId]);
 
-  const run = (item: CommandItem) => {
+  const run = (item: CommandEntry) => {
     setPaletteOpen(false);
     navigate(item.path);
   };
 
   return (
     <>
-      <CommandDialog open={paletteOpen} onOpenChange={setPaletteOpen}>
+      <CommandDialog open={paletteOpen} onOpenChange={setPaletteOpen} shouldFilter={false}>
         <CommandInput
           value={query}
           onValueChange={setQuery}
@@ -390,22 +381,24 @@ export function InteractionShell() {
         />
         <CommandList className="command-palette__results">
           <CommandEmpty>No matching records or modules.</CommandEmpty>
-          <CommandGroup heading="Open in XBAR">
-            {results.map((item) => (
-              <CommandMenuItem
-                key={item.id}
-                value={`${item.label} ${item.detail} ${item.group}`}
-                onSelect={() => run(item)}
-                className="command-palette__result"
-              >
-                <span>
-                  <strong>{item.label}</strong>
-                  <small>{item.detail}</small>
-                </span>
-                <CommandShortcut>{item.group}</CommandShortcut>
-              </CommandMenuItem>
-            ))}
-          </CommandGroup>
+          {resultGroups.map((section) => (
+            <CommandGroup key={section.group} heading={section.group}>
+              {section.items.map((item) => (
+                <CommandMenuItem
+                  key={item.id}
+                  value={`${item.label} ${item.detail} ${item.keywords} ${item.id}`}
+                  onSelect={() => run(item)}
+                  className="command-palette__result"
+                >
+                  <span>
+                    <strong>{item.label}</strong>
+                    <small>{item.detail}</small>
+                  </span>
+                  <CommandShortcut>{item.group}</CommandShortcut>
+                </CommandMenuItem>
+              ))}
+            </CommandGroup>
+          ))}
         </CommandList>
       </CommandDialog>
 
