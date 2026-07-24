@@ -108,3 +108,26 @@ export async function checkSalePacketCapacity(supabase, workspaceId, incomingCou
   }
   return { ok: true, used };
 }
+
+// Bytes per binary gigabyte — matches the client's estimateStorageGb
+// (src/lib/xbarRuntime.ts) and the DB trigger, so the cap and the displayed
+// usage never disagree.
+const BYTES_PER_GB = 1024 * 1024 * 1024;
+
+export async function checkStorageCapacity(supabase, workspaceId, incomingBytes, limits) {
+  // Authoritative usage comes from the DB (live documents + sale packets),
+  // never a carried-forward or client-estimated figure.
+  const { data } = await supabase.rpc('xbar_workspace_storage_bytes', { p_workspace_id: workspaceId });
+  const usedBytes = Number(data || 0);
+  const incoming = Math.max(0, Number(incomingBytes) || 0);
+  const capBytes = Number(limits.storageLimitGb) * BYTES_PER_GB;
+
+  if (usedBytes + incoming > capBytes) {
+    const usedGb = (usedBytes / BYTES_PER_GB).toFixed(1);
+    return {
+      ok: false,
+      message: `This upload would exceed the plan's ${limits.storageLimitGb} GB storage limit (${usedGb} GB in use). Upgrade to continue.`,
+    };
+  }
+  return { ok: true, usedBytes };
+}

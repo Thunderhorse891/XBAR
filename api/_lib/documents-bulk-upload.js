@@ -4,7 +4,12 @@ import { requireWorkspaceAccess } from './supabase-admin.js';
 import { runOcr } from './ocr.js';
 import { extractDocument, groupExtractionsIntoCandidates, NEEDS_REVIEW_THRESHOLD } from './document-extraction.js';
 import { extractZipEntries, isZipBuffer, guessMimeType } from './zip.js';
-import { getWorkspaceEntitlements, checkDocumentCapacity, checkHorseCapacity } from './entitlements.js';
+import {
+  getWorkspaceEntitlements,
+  checkDocumentCapacity,
+  checkHorseCapacity,
+  checkStorageCapacity,
+} from './entitlements.js';
 import { recordAuditEvent } from './audit.js';
 import { enforceRateLimit } from './rate-limit.js';
 import { applyCors } from './cors.js';
@@ -15,6 +20,13 @@ const MAX_FILES_PER_BATCH = 25;
 const MAX_OCR_TEXT_CHARS = 20000;
 
 const RATE_LIMIT = { bucket: 'documents-upload', limit: 10, windowSeconds: 60 };
+
+// Byte size of a file's decoded content (Buffer / Uint8Array); 0 when absent so
+// storage accounting degrades safely rather than throwing.
+function fileByteSize(file) {
+  const content = file?.content;
+  return content && typeof content.byteLength === 'number' ? content.byteLength : 0;
+}
 
 export default async function handler(req, res) {
   if (!applyCors(req, res)) {
@@ -128,6 +140,14 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
     return { ok: false, status: 403, message: capacity.message };
   }
 
+  // Storage gate: reject the whole batch before uploading anything if the
+  // combined byte size would exceed the plan's storage cap.
+  const incomingStorageBytes = expanded.reduce((sum, file) => sum + fileByteSize(file), 0);
+  const storage = await checkStorageCapacity(supabase, workspaceId, incomingStorageBytes, entitlements.limits);
+  if (!storage.ok) {
+    return { ok: false, status: 403, message: storage.message };
+  }
+
   // Horse-limit gate for auto-created horses: track remaining slots so the
   // OCR pipeline cannot exceed the tier by creating horses from documents.
   const horseCapacity = await checkHorseCapacity(supabase, workspaceId, 0, entitlements.limits);
@@ -190,6 +210,7 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
       original_filename: file.fileName,
       storage_path: storagePath || '',
       mime_type: file.mimeType,
+      size_bytes: fileByteSize(file),
       ocr_text: ocr.text.slice(0, MAX_OCR_TEXT_CHARS),
       ocr_confidence_map: extraction.confidenceMap,
       extracted_data: extraction.extractedData,

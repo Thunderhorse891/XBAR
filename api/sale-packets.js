@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { readJsonBody, sendJson, getQuery } from './_lib/http.js';
 import { requireWorkspaceAccess } from './_lib/supabase-admin.js';
-import { checkSalePacketCapacity, getWorkspaceEntitlements, tierIncludesPlan } from './_lib/entitlements.js';
+import {
+  checkSalePacketCapacity,
+  checkStorageCapacity,
+  getWorkspaceEntitlements,
+  tierIncludesPlan,
+} from './_lib/entitlements.js';
 import { loadHorseContext } from './_lib/horse-context.js';
 import { createSectionedPdf, assemblePacketPdf } from './_lib/pdf.js';
 import { sendEmail } from './_lib/email.js';
@@ -157,6 +162,21 @@ export default async function handler(req, res) {
     });
 
     const packetBytes = await assemblePacketPdf({ coverBytes, attachments, watermarkText });
+    const packetSizeBytes = packetBytes.byteLength;
+
+    // Reject before storing anything if this packet would exceed the plan's
+    // storage cap (the DB trigger is the backstop, but a clean 403 beats a
+    // post-upload database exception).
+    const storage = await checkStorageCapacity(supabase, workspaceId, packetSizeBytes, entitlements.limits);
+    if (!storage.ok) {
+      return sendJson(res, 403, {
+        ok: false,
+        code: 'storage_limit_reached',
+        message: storage.message,
+        currentPlan: entitlements.effectiveTier,
+        billingState: entitlements.billingState,
+      });
+    }
 
     const packetId = `packet-${randomUUID()}`;
     const packetPath = `${workspaceId}/${horseId}/${packetId}.pdf`;
@@ -177,6 +197,7 @@ export default async function handler(req, res) {
       shared_with_email: buyerEmail,
       document_ids: packetDocs.map((doc) => doc.document_id),
       status: 'ready',
+      size_bytes: packetSizeBytes,
       payload: { buyerName, unavailable, attachmentCount: attachments.length },
     });
 
