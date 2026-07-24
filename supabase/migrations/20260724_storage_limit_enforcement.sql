@@ -68,6 +68,16 @@ declare
   limit_gb integer;
   used_bytes bigint;
 begin
+  -- Only enforce when stored bytes actually grow. On UPDATE where the size is
+  -- unchanged or smaller — review edits, horse assignment, archive, and the
+  -- client's relational-sync re-upserts (which rewrite every document row) —
+  -- the write must pass even for a workspace already over cap (e.g. after a
+  -- tier downgrade or the backfill above). Enforcing the full total on those
+  -- would strand every existing row and break cloud sync outright.
+  if TG_OP = 'UPDATE' and new.size_bytes <= old.size_bytes then
+    return new;
+  end if;
+
   -- Serialize concurrent writes for the same workspace so two uploads racing
   -- near the cap cannot both read the same pre-insert SUM and commit a combined
   -- total over the limit. The lock is held to transaction end (xact variant),

@@ -143,7 +143,7 @@ export default async function handler(req, res) {
       return sendJson(res, 502, { ok: false, message: `Failed to store generated PDF: ${uploadError.message}` });
     }
 
-    await supabase.from('documents').upsert({
+    const { error: recordError } = await supabase.from('documents').upsert({
       workspace_id: workspaceId,
       document_id: documentId,
       horse_id: horseId,
@@ -161,6 +161,21 @@ export default async function handler(req, res) {
       uploaded_by_user_id: user.id,
       payload: { generated: true, templateId, missingFields: rendered.missingFields },
     });
+    if (recordError) {
+      // The row was rejected after the object was written (e.g. the storage
+      // trigger firing on a concurrent request that slipped past the preflight).
+      // Delete the orphan and surface the failure rather than signing a URL to a
+      // document that was never recorded.
+      await supabase.storage.from(DOCUMENT_BUCKET).remove([storagePath]);
+      const overLimit = /storage limit/i.test(recordError.message);
+      return sendJson(res, overLimit ? 403 : 502, {
+        ok: false,
+        code: overLimit ? 'storage_limit_reached' : undefined,
+        message: overLimit
+          ? `This document would exceed the plan's ${entitlements.limits.storageLimitGb} GB storage limit. Upgrade to continue.`
+          : `Failed to record generated document: ${recordError.message}`,
+      });
+    }
 
     const { data: signed } = await supabase.storage
       .from(DOCUMENT_BUCKET)

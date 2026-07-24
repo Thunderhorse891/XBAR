@@ -187,7 +187,7 @@ export default async function handler(req, res) {
       return sendJson(res, 502, { ok: false, message: `Failed to store sale packet: ${uploadError.message}` });
     }
 
-    await supabase.from('sale_packets').upsert({
+    const { error: recordError } = await supabase.from('sale_packets').upsert({
       workspace_id: workspaceId,
       packet_id: packetId,
       horse_id: horseId,
@@ -200,6 +200,20 @@ export default async function handler(req, res) {
       size_bytes: packetSizeBytes,
       payload: { buyerName, unavailable, attachmentCount: attachments.length },
     });
+    if (recordError) {
+      // Row rejected after the object was written (e.g. the storage trigger on a
+      // concurrent request that passed the preflight). Delete the orphan and
+      // report the failure instead of signing a URL to an unrecorded packet.
+      await supabase.storage.from(PACKET_BUCKET).remove([packetPath]);
+      const overLimit = /storage limit/i.test(recordError.message);
+      return sendJson(res, overLimit ? 403 : 502, {
+        ok: false,
+        code: overLimit ? 'storage_limit_reached' : undefined,
+        message: overLimit
+          ? `This sale packet would exceed the plan's ${entitlements.limits.storageLimitGb} GB storage limit. Upgrade to continue.`
+          : `Failed to record sale packet: ${recordError.message}`,
+      });
+    }
 
     const { data: signed } = await supabase.storage
       .from(PACKET_BUCKET)
