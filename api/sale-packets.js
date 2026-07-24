@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { readJsonBody, sendJson, getQuery } from './_lib/http.js';
 import { requireWorkspaceAccess } from './_lib/supabase-admin.js';
-import { checkSalePacketCapacity, getWorkspaceEntitlements, tierIncludesPlan } from './_lib/entitlements.js';
+import {
+  checkSalePacketCapacity,
+  checkStorageCapacity,
+  getWorkspaceEntitlements,
+  tierIncludesPlan,
+} from './_lib/entitlements.js';
 import { loadHorseContext } from './_lib/horse-context.js';
 import { createSectionedPdf, assemblePacketPdf } from './_lib/pdf.js';
 import { sendEmail } from './_lib/email.js';
@@ -157,6 +162,21 @@ export default async function handler(req, res) {
     });
 
     const packetBytes = await assemblePacketPdf({ coverBytes, attachments, watermarkText });
+    const packetSizeBytes = packetBytes.byteLength;
+
+    // Reject before storing anything if this packet would exceed the plan's
+    // storage cap (the DB trigger is the backstop, but a clean 403 beats a
+    // post-upload database exception).
+    const storage = await checkStorageCapacity(supabase, workspaceId, packetSizeBytes, entitlements.limits);
+    if (!storage.ok) {
+      return sendJson(res, 403, {
+        ok: false,
+        code: 'storage_limit_reached',
+        message: storage.message,
+        currentPlan: entitlements.effectiveTier,
+        billingState: entitlements.billingState,
+      });
+    }
 
     const packetId = `packet-${randomUUID()}`;
     const packetPath = `${workspaceId}/${horseId}/${packetId}.pdf`;
@@ -167,7 +187,7 @@ export default async function handler(req, res) {
       return sendJson(res, 502, { ok: false, message: `Failed to store sale packet: ${uploadError.message}` });
     }
 
-    await supabase.from('sale_packets').upsert({
+    const { error: recordError } = await supabase.from('sale_packets').upsert({
       workspace_id: workspaceId,
       packet_id: packetId,
       horse_id: horseId,
@@ -177,8 +197,23 @@ export default async function handler(req, res) {
       shared_with_email: buyerEmail,
       document_ids: packetDocs.map((doc) => doc.document_id),
       status: 'ready',
+      size_bytes: packetSizeBytes,
       payload: { buyerName, unavailable, attachmentCount: attachments.length },
     });
+    if (recordError) {
+      // Row rejected after the object was written (e.g. the storage trigger on a
+      // concurrent request that passed the preflight). Delete the orphan and
+      // report the failure instead of signing a URL to an unrecorded packet.
+      await supabase.storage.from(PACKET_BUCKET).remove([packetPath]);
+      const overLimit = /storage limit/i.test(recordError.message);
+      return sendJson(res, overLimit ? 403 : 502, {
+        ok: false,
+        code: overLimit ? 'storage_limit_reached' : undefined,
+        message: overLimit
+          ? `This sale packet would exceed the plan's ${entitlements.limits.storageLimitGb} GB storage limit. Upgrade to continue.`
+          : `Failed to record sale packet: ${recordError.message}`,
+      });
+    }
 
     const { data: signed } = await supabase.storage
       .from(PACKET_BUCKET)
