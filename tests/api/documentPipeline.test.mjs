@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Readable } from 'node:stream';
 import { deflateRawSync } from 'node:zlib';
-import buyerInquiryHandler from '../../api/buyer-inquiries.js';
-import buyerResponseHandler from '../../api/buyer-responses.js';
+import buyerInquiryHandler from '../../api/_lib/buyer-inquiries.js';
+import buyerResponseHandler from '../../api/_lib/buyer-responses.js';
 import {
   classifyDocumentType,
   extractRegistrationFields,

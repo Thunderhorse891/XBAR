@@ -1,9 +1,9 @@
-import { recordAuditEvent } from './_lib/audit.js';
-import { readJsonBody, sendJson } from './_lib/http.js';
-import { requireWorkspaceAccess } from './_lib/supabase-admin.js';
-import { enforceRateLimit } from './_lib/rate-limit.js';
-import { buyerResponseSchema, parseBody } from './_lib/validation.js';
-import { applyCors } from './_lib/cors.js';
+import { recordAuditEvent } from './audit.js';
+import { readJsonBody, sendJson } from './http.js';
+import { requireWorkspaceAccess } from './supabase-admin.js';
+import { enforceRateLimit } from './rate-limit.js';
+import { buyerResponseSchema, parseBody } from './validation.js';
+import { applyCors } from './cors.js';
 
 const RESPONSE_ROLES = new Set(['Admin', 'Ranch Manager', 'Sales Lead']);
 

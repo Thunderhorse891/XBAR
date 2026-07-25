@@ -45,6 +45,7 @@ export default function Settings() {
   const removeWorkspaceMember = useXbarStore((state) => state.removeWorkspaceMember);
   const exportWorkspaceBackup = useXbarStore((state) => state.exportWorkspaceBackup);
   const importWorkspaceBackup = useXbarStore((state) => state.importWorkspaceBackup);
+  const resetWorkspace = useXbarStore((state) => state.resetWorkspace);
   const cloudStatus = useCloudStore((state) => state.status);
   const cloudSession = useCloudStore((state) => state.session);
   const workspaceId = useCloudStore((state) => state.workspaceId);
@@ -116,7 +117,10 @@ export default function Settings() {
       return;
     }
     // Purge the on-device workspace copy so no data lingers after the account is
-    // gone server-side, then return to the signed-out screen.
+    // gone server-side. Reset the in-memory state FIRST so a later store write
+    // (e.g. CloudBootstrap adjusting the role on sign-out) can't re-persist the
+    // deleted user's data, then clear the backing storage.
+    resetWorkspace();
     try {
       await useXbarStore.persist.clearStorage();
     } catch {

@@ -1,8 +1,8 @@
-import { readJsonBody, sendJson } from './_lib/http.js';
-import { getSupabaseAdmin } from './_lib/supabase-admin.js';
-import { enforceRateLimit } from './_lib/rate-limit.js';
-import { applyCors } from './_lib/cors.js';
-import { BUYER_INQUIRY_KINDS, buyerInquirySchema, parseBody } from './_lib/validation.js';
+import { readJsonBody, sendJson } from './http.js';
+import { getSupabaseAdmin } from './supabase-admin.js';
+import { enforceRateLimit } from './rate-limit.js';
+import { applyCors } from './cors.js';
+import { BUYER_INQUIRY_KINDS, buyerInquirySchema, parseBody } from './validation.js';
 
 /*
  * Public buyer folder intake. Anonymous buyers on a shared packet page can
