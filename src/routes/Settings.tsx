@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { PageHeader, Panel, Pill } from '@/components/app-ui';
 import { formatDateLabel } from '@/lib/format';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
@@ -44,6 +45,7 @@ export default function Settings() {
   const removeWorkspaceMember = useXbarStore((state) => state.removeWorkspaceMember);
   const exportWorkspaceBackup = useXbarStore((state) => state.exportWorkspaceBackup);
   const importWorkspaceBackup = useXbarStore((state) => state.importWorkspaceBackup);
+  const resetWorkspace = useXbarStore((state) => state.resetWorkspace);
   const cloudStatus = useCloudStore((state) => state.status);
   const cloudSession = useCloudStore((state) => state.session);
   const workspaceId = useCloudStore((state) => state.workspaceId);
@@ -53,6 +55,8 @@ export default function Settings() {
   const sendMagicLink = useCloudStore((state) => state.sendMagicLink);
   const signInWithFacebook = useCloudStore((state) => state.signInWithFacebook);
   const signOutCloud = useCloudStore((state) => state.signOut);
+  const deleteAccount = useCloudStore((state) => state.deleteAccount);
+  const navigate = useNavigate();
   const pushToast = useUiStore((state) => state.pushToast);
   const canManageSettings = useCurrentRoleCapability('manageSettings');
   const canSyncCloud = useCurrentRoleCapability('syncCloud');
@@ -62,6 +66,8 @@ export default function Settings() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<UserRole>('Owner');
   const [cloudBusy, setCloudBusy] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [deleting, setDeleting] = useState(false);
   const facebookConnected = cloudSession?.user?.app_metadata?.provider === 'facebook';
   const activeMembers = workspaceMembers.filter((member) => member.status === 'Active');
   const pendingInvites = workspaceInvitations.filter((invite) => invite.status === 'Pending');
@@ -95,6 +101,34 @@ export default function Settings() {
     } finally {
       if (url) URL.revokeObjectURL(url);
     }
+  };
+
+  const accountEmail = cloudSession?.user?.email ?? '';
+  const canConfirmDelete =
+    accountEmail.length > 0 && deleteConfirm.trim().toLowerCase() === accountEmail.trim().toLowerCase();
+
+  const handleDeleteAccount = async () => {
+    if (!canConfirmDelete || deleting) return;
+    setDeleting(true);
+    const result = await deleteAccount(deleteConfirm);
+    setDeleting(false);
+    if (!result.ok) {
+      pushToast({ title: 'Deletion failed', message: result.message, tone: 'error' });
+      return;
+    }
+    // Purge the on-device workspace copy so no data lingers after the account is
+    // gone server-side. Reset the in-memory state FIRST so a later store write
+    // (e.g. CloudBootstrap adjusting the role on sign-out) can't re-persist the
+    // deleted user's data, then clear the backing storage.
+    resetWorkspace();
+    try {
+      await useXbarStore.persist.clearStorage();
+    } catch {
+      // best effort — the account is already deleted on the server
+    }
+    setDeleteConfirm('');
+    pushToast({ title: 'Account deleted', message: result.message, tone: 'success' });
+    navigate('/login', { replace: true });
   };
 
   const handleImport = async (file?: File) => {
@@ -780,6 +814,42 @@ export default function Settings() {
           </button>
         </div>
       </Panel>
+
+      {isSupabaseConfigured() && cloudSession ? (
+        <Panel
+          eyebrow="Danger zone"
+          title="Delete account"
+          description="Permanently delete your XBAR account and the data you own. This cannot be undone."
+        >
+          <p className="settings-danger-note">
+            Deleting your account removes your login and permanently erases every workspace you solely own — horses,
+            documents, sale packets, and receipts. Workspaces you share with other people simply lose your access.
+          </p>
+          <div className="settings-danger-confirm">
+            <label className="field">
+              <span className="field__label">Type your email to confirm</span>
+              <input
+                className="field-input"
+                type="email"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={accountEmail}
+                value={deleteConfirm}
+                onChange={(event) => setDeleteConfirm(event.target.value)}
+                aria-label="Type your account email to confirm account deletion"
+              />
+            </label>
+            <button
+              className="button button--danger button--compact"
+              type="button"
+              onClick={() => void handleDeleteAccount()}
+              disabled={!canConfirmDelete || deleting}
+            >
+              {deleting ? 'Deleting…' : 'Permanently delete my account'}
+            </button>
+          </div>
+        </Panel>
+      ) : null}
     </>
   );
 }

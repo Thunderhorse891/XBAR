@@ -101,7 +101,7 @@ function BuyerActionPanel({
 
     try {
       const base = apiConfig.baseUrl ? apiConfig.baseUrl.replace(/\/$/, '') : '';
-      const response = await fetch(`${base}/api/buyer-inquiries`, {
+      const response = await fetch(`${base}/api/buyer/inquiries`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

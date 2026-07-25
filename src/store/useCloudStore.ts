@@ -35,6 +35,7 @@ type CloudStore = {
   signInWithGoogle: () => Promise<CloudActionResult>;
   signInWithApple: () => Promise<CloudActionResult>;
   signOut: () => Promise<CloudActionResult>;
+  deleteAccount: (confirmation: string) => Promise<CloudActionResult>;
 };
 
 export const useCloudStore = create<CloudStore>((set, get) => ({
@@ -280,5 +281,45 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       autosaveReady: false,
     });
     return { ok: true, message: 'Signed out of cloud sync.' };
+  },
+  deleteAccount: async (confirmation: string) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+    const token = get().session?.access_token;
+    if (!token) {
+      return { ok: false, message: 'You must be signed in to delete your account.' };
+    }
+
+    let response: Response;
+    try {
+      response = await fetch('/api/account/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ confirmation }),
+      });
+    } catch {
+      return { ok: false, message: 'Could not reach the server. Check your connection and try again.' };
+    }
+
+    const payload = await response.json().catch(() => ({}) as { ok?: boolean; message?: string });
+    if (!response.ok || !payload.ok) {
+      return { ok: false, message: payload.message || 'Account deletion failed. Please try again.' };
+    }
+
+    // The server has already deleted the auth user; clear the local session so
+    // the app returns to the signed-out state. Caller purges the local workspace.
+    await client.auth.signOut().catch(() => {});
+    set({
+      session: null,
+      status: 'signed-out',
+      workspaceId: '',
+      workspaceRole: 'Owner',
+      syncState: 'idle',
+      syncMessage: '',
+      autosaveReady: false,
+    });
+    return { ok: true, message: 'Your account and data have been deleted.' };
   },
 }));

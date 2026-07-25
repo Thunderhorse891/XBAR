@@ -15,7 +15,7 @@ const cloudWorkspaceSource = await readFile(fromRoot('src/lib/cloudWorkspace.ts'
 const prepareSchemaSource = await readFile(fromRoot('scripts/prepare-supabase-schema.mjs'), 'utf8');
 const telemetrySource = await readFile(fromRoot('api/telemetry.js'), 'utf8');
 const inviteSource = await readFile(fromRoot('api/invite.js'), 'utf8');
-const buyerInquiriesSource = await readFile(fromRoot('api/buyer-inquiries.js'), 'utf8');
+const buyerInquiriesSource = await readFile(fromRoot('api/_lib/buyer-inquiries.js'), 'utf8');
 const rateLimitSource = await readFile(fromRoot('api/_lib/rate-limit.js'), 'utf8');
 const vercelConfigSource = await readFile(fromRoot('vercel.json'), 'utf8');
 const validationSource = await readFile(fromRoot('api/_lib/validation.js'), 'utf8');
@@ -79,7 +79,7 @@ test('API request bodies are validated with shared zod schemas', async () => {
   assert.match(checkoutSource, /parseBody\(checkoutSchema, body\)/);
   assert.match(telemetrySource, /parseBody\(telemetrySchema, body\)/);
   assert.match(buyerInquiriesSource, /parseBody\(buyerInquirySchema, body\)/);
-  const buyerResponsesSource = await readFile(fromRoot('api/buyer-responses.js'), 'utf8');
+  const buyerResponsesSource = await readFile(fromRoot('api/_lib/buyer-responses.js'), 'utf8');
   assert.match(buyerResponsesSource, /parseBody\(buyerResponseSchema, body\)/);
   const importSource = await readFile(fromRoot('api/_lib/horses-import.js'), 'utf8');
   assert.match(importSource, /parseBody\(horsesImportSchema, body\)/);
@@ -92,13 +92,14 @@ test('browser-called endpoints declare an explicit, allow-listed CORS policy', a
   assert.match(corsSource, /allowedOrigins\.includes\(origin\)/);
   const corsEndpoints = [
     'api/telemetry.js',
-    'api/buyer-inquiries.js',
+    'api/_lib/buyer-inquiries.js',
     'api/invite.js',
     'api/stripe/checkout.js',
+    'api/account/delete.js',
     'api/sale-packets.js',
     'api/_lib/horses-import.js',
     'api/_lib/horses-export.js',
-    'api/buyer-responses.js',
+    'api/_lib/buyer-responses.js',
     'api/_lib/documents-bulk-upload.js',
     'api/_lib/documents-generate-template.js',
   ];
@@ -121,13 +122,14 @@ test('every request-driven endpoint enforces a per-IP rate limit', async () => {
   // runner (CRON_SECRET-gated, fired by Vercel) are intentionally exempt.
   const rateLimitedEndpoints = [
     'api/telemetry.js',
-    'api/buyer-inquiries.js',
+    'api/_lib/buyer-inquiries.js',
     'api/invite.js',
     'api/stripe/checkout.js',
+    'api/account/delete.js',
     'api/sale-packets.js',
     'api/_lib/horses-import.js',
     'api/_lib/horses-export.js',
-    'api/buyer-responses.js',
+    'api/_lib/buyer-responses.js',
     'api/_lib/documents-bulk-upload.js',
     'api/_lib/documents-generate-template.js',
   ];

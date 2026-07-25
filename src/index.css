@@ -1749,3 +1749,22 @@ a:focus-visible,
     scroll-behavior: auto !important;
   }
 }
+
+/* Settings — account deletion (danger zone) */
+.settings-danger-note {
+  margin: 0 0 1rem;
+  max-width: 62ch;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  opacity: 0.8;
+}
+.settings-danger-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+.settings-danger-confirm .field {
+  flex: 1 1 260px;
+  min-width: 0;
+}

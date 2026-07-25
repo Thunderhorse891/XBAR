@@ -128,6 +128,11 @@ export const useXbarStore = create<XbarStore>()(
             : 'Workspace created.',
         };
       },
+      resetWorkspace: () => {
+        // Replace every data slice with the empty initial state. Actions are not
+        // part of initialState, so they are preserved by the shallow merge.
+        set({ ...initialState });
+      },
       updateWorkspaceProfile: (patch) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageSettings');
         if (deniedMessage) {

@@ -374,7 +374,7 @@ export async function recordBuyerRoomSellerResponseInCloud(input: {
     }
 
     const base = apiConfig.baseUrl ? apiConfig.baseUrl.replace(/\/$/, '') : '';
-    const response = await fetch(`${base}/api/buyer-responses`, {
+    const response = await fetch(`${base}/api/buyer/responses`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${session.access_token}`,
