@@ -222,8 +222,9 @@ export default function Subscriptions() {
               <span>Starter setup</span>
               <h2>Start with XBAR</h2>
               <p>
-                No payment is collected in this local setup flow. Paid plans require checkout or manual billing
-                activation.
+                {purchaseBlockedInApp
+                  ? 'No payment is collected in the app. Your workspace runs on whatever plan your XBAR account already has.'
+                  : 'No payment is collected in this local setup flow. Paid plans require checkout or manual billing activation.'}
               </p>
             </div>
             <button type="button" onClick={startTrial}>
