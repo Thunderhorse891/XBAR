@@ -463,7 +463,7 @@ export default function BuyerProfile() {
     )
     .slice(0, 4);
   const downloadBuyerPacket = () => {
-    downloadPublicBuyerPacketArtifact(
+    void downloadPublicBuyerPacketArtifact(
       buildPublicBuyerPacketArtifact({
         horse,
         documents: visibleDocuments.map(({ document }) => document),

@@ -7,8 +7,12 @@
 
     <!-- Installed-app (PWA / iOS home screen) presentation. An opaque black
          status bar (not black-translucent) keeps the app's sticky top bar
-         below the notch/status area, so navigation is never obscured — the
-         shell has no safe-area-inset system to rely on. -->
+         below the notch/status area, so navigation is never obscured.
+
+         These meta tags are PWA-only — iOS ignores them inside a Capacitor
+         WKWebView, where the page is laid out edge to edge instead. That case
+         is handled in CSS by src/styles/nativeShell.css, which needs the
+         viewport-fit=cover above for env(safe-area-inset-*) to resolve. -->
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />

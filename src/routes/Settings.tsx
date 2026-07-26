@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { PageHeader, Panel, Pill } from '@/components/app-ui';
+import { deliverFile, fileDeliveryActionLabel } from '@/lib/fileDelivery';
 import { formatDateLabel } from '@/lib/format';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
 import {
@@ -77,30 +78,31 @@ export default function Settings() {
     setProfileDraft(workspaceProfile);
   }, [workspaceProfile]);
 
-  const handleExport = () => {
-    let url = '';
+  const handleExport = async () => {
+    let backup: ReturnType<typeof exportWorkspaceBackup>;
     try {
-      const backup = exportWorkspaceBackup();
-      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-      url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `xbar-workspace-${backup.exportedAt.slice(0, 10)}.json`;
-      anchor.click();
-      pushToast({
-        title: 'Backup exported',
-        message: 'Ranch backup downloaded successfully.',
-        tone: 'success',
-      });
+      backup = exportWorkspaceBackup();
     } catch {
       pushToast({
         title: 'Backup failed',
         message: 'The ranch backup could not be exported.',
         tone: 'error',
       });
-    } finally {
-      if (url) URL.revokeObjectURL(url);
+      return;
     }
+
+    const result = await deliverFile({
+      fileName: `xbar-workspace-${backup.exportedAt.slice(0, 10)}.json`,
+      contents: JSON.stringify(backup, null, 2),
+      mimeType: 'application/json',
+      shareTitle: 'XBAR ranch backup',
+    });
+
+    pushToast({
+      title: result.ok ? 'Backup exported' : 'Backup failed',
+      message: result.message,
+      tone: result.ok ? 'success' : 'error',
+    });
   };
 
   const accountEmail = cloudSession?.user?.email ?? '';
@@ -799,10 +801,10 @@ export default function Settings() {
           <button
             className="button button--primary button--compact"
             type="button"
-            onClick={handleExport}
+            onClick={() => void handleExport()}
             disabled={!canManageSettings}
           >
-            Export backup
+            {fileDeliveryActionLabel() === 'Share' ? 'Share backup' : 'Export backup'}
           </button>
           <button
             className="button button--ghost button--compact"
@@ -812,6 +814,24 @@ export default function Settings() {
           >
             Import backup
           </button>
+        </div>
+      </Panel>
+
+      <Panel
+        eyebrow="Legal"
+        title="Legal & privacy"
+        description="The agreements this workspace runs under. Readable in the app, no download required."
+      >
+        <div className="inline-actions">
+          <Link className="button button--ghost button--compact" to="/legal/privacy">
+            Privacy policy
+          </Link>
+          <Link className="button button--ghost button--compact" to="/legal/terms">
+            Terms of service
+          </Link>
+          <Link className="button button--ghost button--compact" to="/legal">
+            All documents
+          </Link>
         </div>
       </Panel>
 

@@ -40,6 +40,7 @@ const BuyerProfile = lazy(() => import('./routes/BuyerProfile'));
 const Documents = lazy(() => import('./routes/Documents'));
 const Expenses = lazy(() => import('./routes/Expenses'));
 const Horses = lazy(() => import('./routes/Horses'));
+const Legal = lazy(() => import('./routes/Legal'));
 const Login = lazy(() => import('./routes/Login'));
 const MainLayout = lazy(() => import('./routes/layouts/MainLayout'));
 const Medical = lazy(() => import('./routes/Medical'));
@@ -77,6 +78,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/documents': 'Documents',
   '/expenses': 'Expenses',
   '/horses': 'Horses',
+  '/legal': 'Legal & privacy',
   '/login': 'Login',
   '/medical': 'Health Records',
   '/ownership': 'Ownership Records',
@@ -102,6 +104,7 @@ function routeTitle(path: string) {
   if (path.startsWith('/profiles/')) return 'XBAR | Listings';
   if (path.startsWith('/horses/')) return 'XBAR | Horse';
   if (path.startsWith('/buyers/')) return 'XBAR | Buyer Follow-up';
+  if (path.startsWith('/legal/')) return 'XBAR | Legal & privacy';
   return `XBAR | ${ROUTE_LABELS[path] ?? 'Ranch'}`;
 }
 
@@ -161,6 +164,11 @@ export default function App() {
           <Routes>
             <Route path="/profiles/:id" element={<BuyerProfile />} />
             <Route path="/login" element={<Login />} />
+            {/* Outside RequireCloudAuth on purpose: the privacy policy and
+                terms must be readable before anyone signs in — App Review
+                checks this on a fresh install. */}
+            <Route path="/legal" element={<Legal />} />
+            <Route path="/legal/:documentId" element={<Legal />} />
             <Route path="/subscribe" element={<Navigate to={billingPath} replace />} />
             <Route
               path="/setup"

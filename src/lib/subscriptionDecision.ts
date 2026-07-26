@@ -30,10 +30,16 @@ export type CheckoutReadiness = {
    * - 'checkout': a secure Stripe checkout (managed session or payment link) completes first.
    * - 'manual': online checkout is not configured, so an admin/manual billing
    *   state must explicitly activate the plan before capacity changes.
+   * - 'unavailable-in-app': the platform forbids selling this subscription
+   *   here (Apple Guideline 3.1.1 in the iOS build). No purchase, and no path
+   *   to one, may be shown.
    */
-  mode: 'checkout' | 'manual';
+  mode: 'checkout' | 'manual' | 'unavailable-in-app';
   reason: string;
 };
+
+export const inAppPurchaseUnavailableReason =
+  'Plans are not sold in the iOS app. Your current plan stays active; change it from your XBAR account in a web browser.';
 
 export function getCheckoutReadiness(params: {
   billingEnabled: boolean;
@@ -41,7 +47,14 @@ export function getCheckoutReadiness(params: {
   hasManagedIdentity: boolean;
   hasPaymentLink: boolean;
   checkoutInProgress: boolean;
+  /**
+   * True in the iOS binary. Checked before every other condition: Apple's rule
+   * applies regardless of workspace role, Stripe configuration, or session.
+   */
+  purchaseBlockedInApp?: boolean;
 }): CheckoutReadiness {
+  if (params.purchaseBlockedInApp)
+    return { ready: false, mode: 'unavailable-in-app', reason: inAppPurchaseUnavailableReason };
   if (!params.canManageBilling)
     return { ready: false, mode: 'checkout', reason: 'Ask a workspace owner to change plans.' };
   if (params.checkoutInProgress)

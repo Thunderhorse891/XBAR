@@ -1,3 +1,4 @@
+import { deliverFile } from './fileDelivery.js';
 import type { DocumentRecord, HorseRecord, SharedListingRecord } from '../types/xbar.js';
 
 export type PublicBuyerPacketArtifact = {
@@ -124,11 +125,10 @@ export function buildPublicBuyerPacketArtifact(params: {
 }
 
 export function downloadPublicBuyerPacketArtifact(artifact: PublicBuyerPacketArtifact) {
-  const blob = new Blob([artifact.html], { type: 'text/html;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = artifact.fileName;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  return deliverFile({
+    fileName: artifact.fileName,
+    contents: artifact.html,
+    mimeType: 'text/html;charset=utf-8',
+    shareTitle: 'XBAR buyer packet',
+  });
 }

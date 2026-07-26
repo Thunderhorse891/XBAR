@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency } from '@/lib/format';
+import { isExternalPurchaseBlocked } from '@/lib/nativeRuntime';
 import { getStripePaymentLink, stripeConfig } from '@/lib/platformConfig';
 import { productEvent, productEventNames } from '@/lib/productEvents';
 import { revenuePlanMatrix } from '@/lib/revenuePlanMatrix';
@@ -42,7 +43,10 @@ export default function Subscriptions() {
   const hasManagedIdentity = Boolean(session?.access_token && workspaceId);
   const billingEnabled = stripeConfig.managedBillingEnabled;
   const selectedPaymentLink = Boolean(getStripePaymentLink(decisionTier));
-  const selectedCheckoutConfigured = billingEnabled || selectedPaymentLink;
+  // Apple Guideline 3.1.1: the iOS build may not sell subscriptions, or route
+  // to a place that sells them. It shows plans read-only instead.
+  const purchaseBlockedInApp = isExternalPurchaseBlocked();
+  const selectedCheckoutConfigured = !purchaseBlockedInApp && (billingEnabled || selectedPaymentLink);
   const starterSetup = subscription.tier === 'Starter' && subscription.monthlyRate === 0;
   const continuePath = workspaceReady ? '/' : '/setup';
   const checkoutReadinessLabel = selectedCheckoutConfigured
@@ -54,6 +58,7 @@ export default function Subscriptions() {
     hasManagedIdentity,
     hasPaymentLink: selectedPaymentLink,
     checkoutInProgress: checkoutTier !== null,
+    purchaseBlockedInApp,
   });
   const selectedPaidCurrent =
     decisionTier === subscription.tier &&
@@ -69,6 +74,12 @@ export default function Subscriptions() {
   };
 
   const beginCheckout = async (tier: SubscriptionTier) => {
+    // Hard stop, not just a hidden button: nothing in the iOS build may reach
+    // Stripe checkout, however the call is triggered.
+    if (purchaseBlockedInApp) {
+      return;
+    }
+
     setCheckoutTier(tier);
     emit(productEventNames.checkoutStarted, {
       tier,
@@ -82,6 +93,7 @@ export default function Subscriptions() {
       hasManagedIdentity,
       hasPaymentLink: Boolean(getStripePaymentLink(tier)),
       checkoutInProgress: false,
+      purchaseBlockedInApp,
     });
     if (!readiness.ready) {
       emit(productEventNames.checkoutFailed, { tier, reason: readiness.reason }, 'warning');
@@ -139,6 +151,7 @@ export default function Subscriptions() {
       hasManagedIdentity,
       hasPaymentLink: Boolean(getStripePaymentLink(tier)),
       checkoutInProgress: checkoutTier !== null,
+      purchaseBlockedInApp,
     });
 
     return (
@@ -165,6 +178,10 @@ export default function Subscriptions() {
           <button type="button" disabled>
             {paidCurrent ? 'Current plan' : 'Current setup'}
           </button>
+        ) : purchaseBlockedInApp ? (
+          // No button at all in the iOS build — not even a disabled one that
+          // implies a purchase is available somewhere in the app.
+          <p className="checkout-plan__unavailable">Not sold in the app</p>
         ) : (
           <button
             type="button"
@@ -192,10 +209,11 @@ export default function Subscriptions() {
         <section className="checkout-panel checkout-panel--plans" aria-labelledby="checkout-title">
           <div className="checkout-heading">
             <p>Billing</p>
-            <h1 id="checkout-title">Review Billing</h1>
+            <h1 id="checkout-title">{purchaseBlockedInApp ? 'Your plan' : 'Review Billing'}</h1>
             <span>
-              Choose the tier that fits your workflow. Paid plans change only after checkout succeeds or manual billing
-              is explicitly activated.
+              {purchaseBlockedInApp
+                ? 'These are the plans your XBAR account can run on. Plans are not sold in the app — sign in to your XBAR account in a web browser to start or change a paid plan.'
+                : 'Choose the tier that fits your workflow. Paid plans change only after checkout succeeds or manual billing is explicitly activated.'}
             </span>
           </div>
 
@@ -236,7 +254,19 @@ export default function Subscriptions() {
             <small>{selectedCheckoutConfigured ? 'then monthly' : 'not charged in app'}</small>
           </div>
 
-          {selectedReadiness.mode === 'manual' ? (
+          {selectedReadiness.mode === 'unavailable-in-app' ? (
+            <div className="checkout-card-box" aria-label="Plan availability">
+              <div className="checkout-card-box__top">
+                <span>Billing</span>
+                <strong>Managed on your account</strong>
+              </div>
+              <p>{selectedReadiness.reason}</p>
+              <p>
+                Everything your current plan already includes keeps working here. No payment details are collected in
+                the app.
+              </p>
+            </div>
+          ) : selectedReadiness.mode === 'manual' ? (
             <div className="checkout-card-box" aria-label="Billing details">
               <div className="checkout-card-box__top">
                 <span>Billing</span>
@@ -272,7 +302,22 @@ export default function Subscriptions() {
           )}
 
           <div className="checkout-status-list" aria-label="Billing details">
-            {selectedCheckoutConfigured ? (
+            {purchaseBlockedInApp ? (
+              <>
+                <div>
+                  <span>Current plan</span>
+                  <strong>{subscription.tier}</strong>
+                </div>
+                <div>
+                  <span>Purchases</span>
+                  <strong>Not in app</strong>
+                </div>
+                <div>
+                  <span>Changes</span>
+                  <strong>From your account</strong>
+                </div>
+              </>
+            ) : selectedCheckoutConfigured ? (
               <>
                 <div>
                   <span>Billing</span>
@@ -305,28 +350,32 @@ export default function Subscriptions() {
             )}
           </div>
 
-          <button
-            className="checkout-primary-action"
-            type="button"
-            disabled={!selectedReadiness.ready || selectedPaidCurrent}
-            title={selectedPaidCurrent ? 'This plan is already active.' : selectedReadiness.reason}
-            onClick={() => void beginCheckout(decisionTier)}
-          >
-            {checkoutTier === decisionTier
-              ? 'Opening checkout...'
-              : selectedPaidCurrent
-                ? 'Current plan'
-                : selectedReadiness.mode === 'manual'
-                  ? 'Manual billing required'
-                  : 'Continue to secure checkout'}
-          </button>
+          {purchaseBlockedInApp ? null : (
+            <button
+              className="checkout-primary-action"
+              type="button"
+              disabled={!selectedReadiness.ready || selectedPaidCurrent}
+              title={selectedPaidCurrent ? 'This plan is already active.' : selectedReadiness.reason}
+              onClick={() => void beginCheckout(decisionTier)}
+            >
+              {checkoutTier === decisionTier
+                ? 'Opening checkout...'
+                : selectedPaidCurrent
+                  ? 'Current plan'
+                  : selectedReadiness.mode === 'manual'
+                    ? 'Manual billing required'
+                    : 'Continue to secure checkout'}
+            </button>
+          )}
           <button className="checkout-secondary-action" type="button" onClick={startTrial}>
-            Continue with Starter setup
+            {purchaseBlockedInApp ? 'Back to the ranch' : 'Continue with Starter setup'}
           </button>
           <p className="checkout-note">
-            {selectedPaidCurrent
-              ? 'This paid plan is already active.'
-              : selectedReadiness.reason || checkoutReadinessLabel}
+            {purchaseBlockedInApp
+              ? selectedReadiness.reason
+              : selectedPaidCurrent
+                ? 'This paid plan is already active.'
+                : selectedReadiness.reason || checkoutReadinessLabel}
           </p>
         </aside>
       </div>

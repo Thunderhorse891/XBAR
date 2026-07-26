@@ -200,6 +200,22 @@
   box-shadow: inset 3px 0 0 var(--checkout-blue);
 }
 
+/* Shown in place of the purchase button inside the iOS build, where plans are
+   presented read-only (Apple Guideline 3.1.1). Deliberately not styled as a
+   button or a link: nothing here is tappable. */
+.checkout-plan__unavailable {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  border: 1px dashed var(--checkout-line);
+  border-radius: 7px;
+  color: var(--checkout-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .checkout-plan--active {
   border-color: rgba(5, 150, 105, 0.34);
 }

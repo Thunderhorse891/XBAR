@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { CommandBrief } from '@/components/CommandBrief';
 import { ContextMenu } from '@/components/ContextMenu';
 import { Panel, Pill } from '@/components/app-ui';
@@ -8,8 +8,10 @@ import { EmptyState } from '@/components/EmptyState';
 import { SalePacketWizard } from '@/components/SalePacketWizard';
 import { billingPath, billingPathForTier } from '@/lib/billingRoutes';
 import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
+import { fileDeliveryActionLabel } from '@/lib/fileDelivery';
 import { formatDateTimeLabel } from '@/lib/format';
-import { downloadLegalHtml, legalDocuments, openPrintableLegalDocument } from '@/lib/legalDocuments';
+import { downloadLegalHtml, openPrintableLegalDocument } from '@/lib/legalDocumentActions';
+import { legalDocuments } from '@/lib/legalDocuments';
 import { buildDocumentTrustProfile } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
 import { useCloudStore } from '@/store/useCloudStore';
@@ -1257,6 +1259,9 @@ export default function Documents() {
                       <div className="stack-item__copy">{legalDoc.purpose}</div>
                     </div>
                     <div className="inline-actions">
+                      <Link className="button button--ghost button--compact" to={`/legal/${legalDoc.id}`}>
+                        Read
+                      </Link>
                       <button
                         className="button button--ghost button--compact"
                         type="button"
@@ -1277,15 +1282,16 @@ export default function Documents() {
                         className="button button--ghost button--compact"
                         type="button"
                         onClick={() => {
-                          downloadLegalHtml(legalDoc);
-                          pushToast({
-                            title: 'Legal document exported',
-                            message: `${legalDoc.shortTitle} downloaded as a print-ready file.`,
-                            tone: 'success',
+                          void downloadLegalHtml(legalDoc).then((result) => {
+                            pushToast({
+                              title: result.ok ? 'Legal document exported' : 'Export failed',
+                              message: result.message,
+                              tone: result.ok ? 'success' : 'error',
+                            });
                           });
                         }}
                       >
-                        Download
+                        {fileDeliveryActionLabel()}
                       </button>
                     </div>
                   </div>

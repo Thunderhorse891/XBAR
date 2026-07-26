@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Panel, Pill, ProgressBar } from '@/components/app-ui';
 import { billingPathForTier } from '@/lib/billingRoutes';
 import { buildUsageMeters, highestUsagePressure, nextPlan, type UsagePressure } from '@/lib/commercialEngine';
+import { isExternalPurchaseBlocked } from '@/lib/nativeRuntime';
 import { useXbarStore } from '@/store/useXbarStore';
 
 function pressureCopy(level: UsagePressure) {
@@ -23,6 +24,9 @@ export function UsageMeterPanel({ compact = false }: { compact?: boolean }) {
   const pressure = highestUsagePressure(subscription);
   const visibleMeters = compact ? meters.slice(0, 4) : meters;
   const upgradeTier = nextPlan(subscription.tier);
+  // The iOS build can show what a bigger plan holds, but must not present the
+  // action as a purchase (Apple Guideline 3.1.1).
+  const purchaseBlockedInApp = isExternalPurchaseBlocked();
 
   return (
     <Panel
@@ -39,7 +43,7 @@ export function UsageMeterPanel({ compact = false }: { compact?: boolean }) {
       action={
         !pressure || pressure.pressure === 'clear' ? null : (
           <Link className="button button--primary button--compact" to={billingPathForTier(upgradeTier)}>
-            Upgrade to {upgradeTier}
+            {purchaseBlockedInApp ? 'View plan limits' : `Upgrade to ${upgradeTier}`}
           </Link>
         )
       }

@@ -290,22 +290,3 @@ function escapeHtml(value: unknown) {
 export function legalDocumentToHtml(legalDoc: LegalDocument) {
   return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(legalDoc.title)}</title><style>body{font-family:Arial,sans-serif;margin:42px;color:#17202a;line-height:1.55}header{border-bottom:2px solid #17202a;margin-bottom:24px;padding-bottom:16px}h1{font-size:26px;margin:0 0 8px}h2{font-size:15px;margin-top:24px;text-transform:uppercase;letter-spacing:.08em}p{font-size:13px}.notice{background:#fff8e5;border:1px solid #ead28a;padding:12px;margin:16px 0}.footer{margin-top:28px;color:#667;font-size:12px;border-top:1px solid #d8dee6;padding-top:12px}</style></head><body><header><h1>${escapeHtml(legalDoc.title)}</h1><div>XBAR LLC(TM) · Last updated ${escapeHtml(legalDoc.lastUpdated)}</div></header><div class="notice"><strong>Review notice:</strong> ${escapeHtml(legalDoc.notice)}</div>${legalDoc.sections.map((section) => `<section><h2>${escapeHtml(section.title)}</h2>${section.body.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join('')}</section>`).join('')}<div class="footer">XBAR LLC(TM). XBAR(TM) and related marks are trademarks or service marks claimed by XBAR LLC. This printable document is generated from the XBAR legal document library.</div></body></html>`;
 }
-
-export function openPrintableLegalDocument(legalDoc: LegalDocument) {
-  const preview = window.open('', '_blank', 'noopener,noreferrer');
-  if (!preview) return false;
-  preview.document.write(legalDocumentToHtml(legalDoc));
-  preview.document.close();
-  preview.focus();
-  return true;
-}
-
-export function downloadLegalHtml(legalDoc: LegalDocument) {
-  const blob = new Blob([legalDocumentToHtml(legalDoc)], { type: 'text/html;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const anchor = window.document.createElement('a');
-  anchor.href = url;
-  anchor.download = legalDoc.suggestedFileName;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}

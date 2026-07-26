@@ -1,0 +1,108 @@
+/* Native (Capacitor) shell adjustments.
+ *
+ * Scoped to `html.is-native-app`, set at boot by applyNativeShellFlags(). The
+ * browser and the installed PWA are untouched: there the OS draws its own
+ * chrome above the page, and index.html asks for an opaque status bar.
+ *
+ * Inside the iOS WKWebView the page is laid out edge to edge under the status
+ * bar / Dynamic Island and over the home indicator, so every piece of pinned
+ * chrome has to pay for the safe area itself. `viewport-fit=cover` in
+ * index.html is what makes env(safe-area-inset-*) resolve to real values.
+ */
+
+:root {
+  /* Resolve to 0px everywhere except a notched device, so the calc()
+     expressions below are safe to use unconditionally. */
+  --xbar-safe-top: env(safe-area-inset-top, 0px);
+  --xbar-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --xbar-safe-left: env(safe-area-inset-left, 0px);
+  --xbar-safe-right: env(safe-area-inset-right, 0px);
+}
+
+html.is-native-app,
+html.is-native-app body {
+  /* The WebView is the whole screen; never let it rubber-band the shell away
+     from the status bar and expose the window background. */
+  overscroll-behavior-y: none;
+}
+
+html.is-native-app body {
+  /* iOS reports the keyboard by resizing the visual viewport, not the layout
+     viewport. Anchoring the body to the small viewport height keeps the shell
+     from growing taller than the screen on first paint. */
+  min-height: 100svh;
+}
+
+/* ---- Top chrome ---------------------------------------------------------- */
+
+/* The sticky top bar is the app's only always-visible header, so it is the
+   element that must clear the status bar. Padding (not margin) so its
+   background continues up behind the clock and the Dynamic Island. */
+html.is-native-app .xs-topbar {
+  padding-top: calc(10px + var(--xbar-safe-top));
+  padding-left: calc(22px + var(--xbar-safe-left));
+  padding-right: calc(22px + var(--xbar-safe-right));
+  min-height: calc(62px + var(--xbar-safe-top));
+}
+
+/* The sidebar only renders at >=1024px (iPad landscape / Split View), where it
+   is the leftmost surface and owns the left inset. */
+html.is-native-app .xs-sidebar {
+  padding-top: calc(18px + var(--xbar-safe-top));
+  padding-left: calc(14px + var(--xbar-safe-left));
+  padding-bottom: calc(16px + var(--xbar-safe-bottom));
+}
+
+/* ---- Bottom chrome ------------------------------------------------------- */
+
+/* The mobile tab bar is fixed 12px off the bottom edge — directly under the
+   home indicator on every modern iPhone. Lift it clear. */
+html.is-native-app .xs-mobilebar {
+  bottom: calc(12px + var(--xbar-safe-bottom));
+  left: calc(12px + var(--xbar-safe-left));
+  right: calc(12px + var(--xbar-safe-right));
+}
+
+/* Page content has to end above the lifted tab bar, otherwise the last row of
+   every list sits permanently behind it. Only below 1024px, which is where
+   .xs-mobilebar is displayed at all. */
+@media (max-width: 1023px) {
+  html.is-native-app .xs-page {
+    padding-bottom: calc(96px + var(--xbar-safe-bottom));
+    padding-left: calc(14px + var(--xbar-safe-left));
+    padding-right: calc(14px + var(--xbar-safe-right));
+  }
+}
+
+/* Toasts render top-right (see <Toaster> in App.tsx). Sonner pins its stack to
+   the viewport with its own --offset, so the notch inset is added on top of
+   whatever that resolves to rather than replacing it. */
+html.is-native-app [data-sonner-toaster][data-y-position='top'] {
+  --offset-top: calc(32px + var(--xbar-safe-top));
+}
+
+/* ---- Native input behaviour ---------------------------------------------- */
+
+html.is-native-app {
+  /* Stop the two-finger / double-tap page zoom that makes a wrapped web app
+     feel unfinished, without disabling zoom on the web build. */
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+}
+
+html.is-native-app input,
+html.is-native-app select,
+html.is-native-app textarea {
+  /* iOS zooms the whole page when a focused field's text is under 16px.
+     16px is the floor that prevents it. */
+  font-size: max(16px, 1rem);
+}
+
+html.is-native-app button,
+html.is-native-app a,
+html.is-native-app [role='button'] {
+  /* No blue flash on tap, and no text selection from a long press on
+     controls — both read as "this is a web page" on iOS. */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}

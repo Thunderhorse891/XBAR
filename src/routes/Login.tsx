@@ -1,7 +1,8 @@
 import { type FormEvent, useEffect, useId, useMemo, useState } from 'react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { XbarMark } from '@/components/BrandMark';
 import { billingPath } from '@/lib/billingRoutes';
+import { isExternalPurchaseBlocked } from '@/lib/nativeRuntime';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { productEvent, productEventNames } from '@/lib/productEvents';
 import { trackRuntimeEvent } from '@/lib/runtimeEvents';
@@ -126,6 +127,7 @@ export default function Login() {
   };
   const label = authMode === 'signin' ? 'System access' : selectedPlan ? `${selectedPlan} tier` : 'New workspace';
   const title = authMode === 'signin' ? 'Sign In' : 'Create Account';
+  const purchaseBlockedInApp = isExternalPurchaseBlocked();
   const description = selectedPlan
     ? `Create credentials, then continue to the ${selectedPlan} plan.`
     : authMode === 'signin'
@@ -280,7 +282,13 @@ export default function Login() {
                 </button>
               </div>
             )}
-            <a href="/pricing">View plans</a>
+            {/* The marketing site owns /pricing and it is not part of the
+                native bundle, so the link would dead-end there — and it points
+                at a purchase path the iOS build may not offer at all
+                (Apple Guideline 3.1.1). */}
+            {purchaseBlockedInApp ? null : <a href="/pricing">View plans</a>}
+            <Link to="/legal/privacy">Privacy</Link>
+            <Link to="/legal/terms">Terms</Link>
             <span>© 2026 XBAR</span>
           </div>
         </section>
