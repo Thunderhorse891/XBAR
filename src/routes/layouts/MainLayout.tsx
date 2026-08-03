@@ -332,7 +332,11 @@ export default function MainLayout() {
         </header>
 
         <main className="xs-page">
-          <Outlet />
+          {/* Keyed on the path so each navigation replays the motion-system
+              page entrance (fade + rise); respects prefers-reduced-motion. */}
+          <div key={location.pathname} className="motion-in">
+            <Outlet />
+          </div>
         </main>
 
         <GlobalCreateDrawer />

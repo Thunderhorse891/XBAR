@@ -1,0 +1,110 @@
+/*
+ * XBAR motion system — the single source of truth for interaction motion.
+ * ---------------------------------------------------------------------------
+ * Every feature, present and future, gets premium motion by reusing these
+ * tokens and utility classes instead of hand-writing transitions. Change a
+ * token here and the whole app updates.
+ *
+ * TOKENS (tune the feel in one place)
+ *   --motion-fast / --motion-base / --motion-slow   durations
+ *   --ease-standard / --ease-emphasized / --ease-exit  easing curves
+ *   --motion-lift / --motion-press                  transform amounts
+ *
+ * UTILITIES (add the class; that's it)
+ *   .motion-lift    interactive surface: hover raises + deepens shadow, press compresses
+ *   .motion-press   press-compress only (buttons, chips, icon actions)
+ *   .motion-in      one-shot fade + rise on mount (pages, panels, modals)
+ *   .motion-stagger children fade+rise in sequence (set --motion-index per child)
+ *   .motion-glow    accessible focus ring on :focus-visible
+ *
+ * ACCESSIBILITY
+ *   All of the above collapse to no motion under prefers-reduced-motion.
+ *   Never hand-roll a transition that ignores that guard — use these.
+ */
+
+:root {
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --motion-slow: 320ms;
+
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  --motion-lift: -2px;
+  --motion-lift-strong: -4px;
+  --motion-press: 0.97;
+}
+
+/* Interactive surfaces — cards, tiles, list rows that respond to the cursor. */
+.motion-lift {
+  transition:
+    transform var(--motion-base) var(--ease-emphasized),
+    box-shadow var(--motion-base) var(--ease-emphasized);
+  will-change: transform;
+}
+.motion-lift:hover {
+  transform: translateY(var(--motion-lift));
+  box-shadow: var(--shadow, 0 18px 45px rgba(32, 36, 40, 0.1));
+}
+.motion-lift:active {
+  transform: translateY(0) scale(var(--motion-press));
+  transition-duration: var(--motion-fast);
+}
+
+/* Press-only — for controls that shouldn't float but should feel physical. */
+.motion-press {
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+.motion-press:active {
+  transform: scale(var(--motion-press));
+}
+
+/* One-shot entrance: fade + rise. */
+@keyframes xbar-motion-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.motion-in {
+  animation: xbar-motion-in var(--motion-slow) var(--ease-emphasized) both;
+}
+
+/* Staggered list entrance: give each child `style="--motion-index: N"`. */
+.motion-stagger > * {
+  animation: xbar-motion-in var(--motion-base) var(--ease-emphasized) both;
+  animation-delay: calc(var(--motion-index, 0) * 40ms);
+}
+
+/* Accessible, premium focus ring. */
+.motion-glow {
+  transition: box-shadow var(--motion-fast) var(--ease-standard);
+}
+.motion-glow:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px hsl(var(--ring, 211 62% 41%) / 0.35);
+}
+
+/* One comprehensive guard: honor the OS "reduce motion" setting everywhere. */
+@media (prefers-reduced-motion: reduce) {
+  .motion-lift,
+  .motion-press,
+  .motion-in,
+  .motion-stagger > *,
+  .motion-glow {
+    animation: none !important;
+    transition: none !important;
+  }
+  .motion-lift:hover,
+  .motion-lift:active,
+  .motion-press:active,
+  .button:hover,
+  .button:active {
+    transform: none !important;
+  }
+}
