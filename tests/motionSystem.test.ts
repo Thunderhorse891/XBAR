@@ -10,6 +10,25 @@ import test from 'node:test';
 // everywhere" or the accessibility promise.
 
 const fromRoot = (filePath: string) => path.resolve(process.cwd(), filePath);
+
+// Return the contents of the CSS block whose selector/at-rule contains `header`,
+// matched by balancing braces so the slice is exactly that rule — not the header
+// comment or anything after it.
+function extractBlock(css: string, header: string): string {
+  const start = css.indexOf(header);
+  if (start === -1) return '';
+  const open = css.indexOf('{', start);
+  if (open === -1) return '';
+  let depth = 0;
+  for (let i = open; i < css.length; i += 1) {
+    if (css[i] === '{') depth += 1;
+    else if (css[i] === '}') {
+      depth -= 1;
+      if (depth === 0) return css.slice(open + 1, i);
+    }
+  }
+  return '';
+}
 const motionSource = await readFile(fromRoot('src/styles/motion.css'), 'utf8');
 const mainSource = await readFile(fromRoot('src/main.tsx'), 'utf8');
 const indexCssSource = await readFile(fromRoot('src/index.css'), 'utf8');
@@ -37,7 +56,10 @@ test('the reusable motion utilities exist so features can adopt them', () => {
 
 test('every utility collapses under prefers-reduced-motion (accessibility)', () => {
   assert.match(motionSource, /@media \(prefers-reduced-motion: reduce\)/);
-  const guard = motionSource.slice(motionSource.indexOf('prefers-reduced-motion'));
+  // Scope the check to the media block itself, so removing a selector from the
+  // guard actually fails the test (its normal definition elsewhere won't mask it).
+  const guard = extractBlock(motionSource, '@media (prefers-reduced-motion: reduce)');
+  assert.ok(guard, 'reduced-motion media block is missing or malformed');
   for (const utility of ['.motion-lift', '.motion-press', '.motion-in', '.motion-stagger', '.motion-glow']) {
     assert.ok(guard.includes(utility), `${utility} is not neutralized under reduced motion`);
   }
