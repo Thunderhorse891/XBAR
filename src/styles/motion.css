@@ -71,13 +71,18 @@
     transform: translateY(0);
   }
 }
+/* `backwards` (not `both`/`forwards`): the initial state is applied before the
+ * run so there's no flash, but the transform is NOT retained afterward. A
+ * lingering transform would make the animated element a containing block for
+ * position:fixed descendants (e.g. slide-over drawers), so it must clear. The
+ * end keyframe equals the element's natural style, so the finish is seamless. */
 .motion-in {
-  animation: xbar-motion-in var(--motion-slow) var(--ease-emphasized) both;
+  animation: xbar-motion-in var(--motion-slow) var(--ease-emphasized) backwards;
 }
 
 /* Staggered list entrance: give each child `style="--motion-index: N"`. */
 .motion-stagger > * {
-  animation: xbar-motion-in var(--motion-base) var(--ease-emphasized) both;
+  animation: xbar-motion-in var(--motion-base) var(--ease-emphasized) backwards;
   animation-delay: calc(var(--motion-index, 0) * 40ms);
 }
 

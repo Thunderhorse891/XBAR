@@ -45,6 +45,18 @@ test('every utility collapses under prefers-reduced-motion (accessibility)', () 
   assert.match(guard, /transition:\s*none\s*!important/);
 });
 
+test('entrance animations do not retain a transform (fixed descendants stay viewport-anchored)', () => {
+  // A persisted transform (forwards/both fill) turns the animated element into a
+  // containing block for position:fixed children — breaking slide-over drawers.
+  // The entrance utilities must use `backwards` fill so the transform clears.
+  const entranceRules = motionSource.match(/animation:\s*xbar-motion-in[^;]*/g) ?? [];
+  assert.ok(entranceRules.length >= 2, 'expected .motion-in and .motion-stagger entrance animations');
+  for (const rule of entranceRules) {
+    assert.doesNotMatch(rule, /\b(forwards|both)\b/, `entrance animation must not retain its transform: "${rule}"`);
+    assert.match(rule, /\bbackwards\b/, `entrance animation should use backwards fill: "${rule}"`);
+  }
+});
+
 test('the motion system is imported globally exactly once', () => {
   const matches = mainSource.match(/import '\.\/styles\/motion\.css'/g) ?? [];
   assert.equal(matches.length, 1, 'motion.css must be imported once in main.tsx');
