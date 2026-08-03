@@ -8,6 +8,7 @@ import { registerGlobalErrorHandlers } from './lib/globalErrorHandlers';
 import { registerOfflineRuntime } from './lib/offlineRuntime';
 import { appBasePath } from './lib/routeCanon';
 import './index.css';
+import './styles/motion.css';
 import './mobilePolish.css';
 
 // The application router lives under /app (see routeCanon.appBasePath). In

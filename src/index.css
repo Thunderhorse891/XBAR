@@ -198,12 +198,12 @@ a:focus-visible,
   letter-spacing: 0.01em;
   cursor: pointer;
   transition:
-    transform 100ms ease,
-    box-shadow 150ms ease,
-    background-color 150ms ease,
-    border-color 150ms ease,
-    color 150ms ease,
-    opacity 100ms ease;
+    transform var(--motion-fast, 120ms) var(--ease-emphasized, ease),
+    box-shadow var(--motion-base, 150ms) var(--ease-standard, ease),
+    background-color var(--motion-base, 150ms) var(--ease-standard, ease),
+    border-color var(--motion-base, 150ms) var(--ease-standard, ease),
+    color var(--motion-base, 150ms) var(--ease-standard, ease),
+    opacity var(--motion-fast, 120ms) var(--ease-standard, ease);
   white-space: nowrap;
 }
 
@@ -229,6 +229,7 @@ a:focus-visible,
 
 .button:hover {
   border-color: var(--border);
+  transform: translateY(-1px);
 }
 
 .button--primary:hover {

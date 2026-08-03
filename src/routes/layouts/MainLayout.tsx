@@ -331,7 +331,11 @@ export default function MainLayout() {
           </div>
         </header>
 
-        <main className="xs-page">
+        {/* Keyed on the path so each navigation replays the motion-system page
+            entrance (fade + rise) on .xs-page itself — no wrapper div, so the
+            page's flex-column/gap still applies to the route's sections.
+            Respects prefers-reduced-motion. */}
+        <main key={location.pathname} className="xs-page motion-in">
           <Outlet />
         </main>
 

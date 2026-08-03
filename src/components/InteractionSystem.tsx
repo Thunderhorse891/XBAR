@@ -388,7 +388,7 @@ export function InteractionShell() {
                   key={item.id}
                   value={`${item.label} ${item.detail} ${item.keywords} ${item.id}`}
                   onSelect={() => run(item)}
-                  className="command-palette__result"
+                  className="command-palette__result motion-press"
                 >
                   <span>
                     <strong>{item.label}</strong>
