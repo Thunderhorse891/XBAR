@@ -3,7 +3,7 @@
 // no invented customers, testimonials, or statistics. Product imagery is real:
 // screenshots captured from the shipped app by capture-product-screenshots.mjs.
 
-import { esc, APP_LOGIN, APP_SIGNUP, SITE_ORIGIN } from './render.mjs';
+import { esc, APP_LOGIN, APP_SIGNUP, SITE_ORIGIN, SUPPORT_EMAIL } from './render.mjs';
 import { marketingPlans } from './pricing-data.mjs';
 
 export const CONTENT_UPDATED = '2026-07-13';
@@ -1052,6 +1052,71 @@ export const notFoundPage = {
 </section>`,
 };
 
+/* -------------------------------------------------------------- support */
+
+// Required by App Store Connect: every listing needs a Support URL that
+// resolves. A 404 there is a documented rejection, so this page is part of the
+// iOS submission surface, not just marketing. Keep the contact route on it
+// working — Apple reviewers do click it.
+const support = {
+  path: '/support',
+  title: 'XBAR Support — Help With Records, Documents, Billing & Your Account',
+  description:
+    'Get help with XBAR: contact support, common questions about document intake, ownership records, buyer packets, team seats, billing, and deleting your account.',
+  changefreq: 'monthly',
+  priority: '0.6',
+  body: `
+<section class="hero hero--solo wrap section--flush">
+  <div>
+    <p class="kicker">Support</p>
+    <h1>Help with XBAR.</h1>
+    <p class="lead">Email us and a person answers. We aim to reply within one business day.</p>
+    <div class="hero-actions">
+      <a class="btn btn--primary" href="mailto:${SUPPORT_EMAIL}">Email ${SUPPORT_EMAIL}</a>
+      <a class="btn" href="/demo">Take the product tour</a>
+    </div>
+  </div>
+</section>
+<section class="section section--flush">
+  <div class="wrap">
+    <div class="grid grid--3">
+      <div class="card">
+        <h3>Getting started</h3>
+        <p>Create a workspace, add your first horse, and upload the papers you already have. XBAR reads the registration details off the page and offers them to the record — you approve every fact before it is applied.</p>
+      </div>
+      <div class="card">
+        <h3>Documents and ownership</h3>
+        <p>Every file moves through one path: upload, OCR, human review, ownership support, then watermarked sharing. If a document is stuck, check the review queue on the Documents page.</p>
+      </div>
+      <div class="card">
+        <h3>Team access</h3>
+        <p>Invite your team from Settings. Roles are scoped — a medical lead sees care records, a sales lead sees buyer follow-up. Seat counts depend on your plan.</p>
+      </div>
+      <div class="card">
+        <h3>Billing and plans</h3>
+        <p>Plans are purchased and managed from your XBAR account in a web browser. Subscriptions are not sold inside the iOS app; your plan carries over to it once you sign in.</p>
+      </div>
+      <div class="card">
+        <h3>Deleting your account</h3>
+        <p>Settings ▸ Delete account permanently removes your login and every workspace you solely own. Workspaces shared with other people are transferred, not destroyed. Export a backup first — this cannot be undone.</p>
+      </div>
+      <div class="card">
+        <h3>Privacy and terms</h3>
+        <p>Read the <a href="/privacy">Privacy Policy</a> and <a href="/terms">Terms of Service</a>. Both are also readable inside the app without signing in.</p>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="section section--flush">
+  <div class="wrap">
+    <div class="card">
+      <h3>Still stuck?</h3>
+      <p>Email <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a> with your workspace name and what you were trying to do. Screenshots help. If it is about a specific horse or document, include its name — we never need your password.</p>
+    </div>
+  </div>
+</section>`,
+};
+
 export const marketingPages = [
   home,
   features,
@@ -1066,4 +1131,5 @@ export const marketingPages = [
   saleReadyGuide,
   transferChecklist,
   demo,
+  support,
 ];

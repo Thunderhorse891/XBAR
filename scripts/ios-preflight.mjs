@@ -120,6 +120,46 @@ section('Submission assets');
   );
 }
 
+// ----------------------------------------------------------- listing URLs --
+section('Required listing URLs resolve');
+{
+  // App Store Connect requires a Support URL and a Privacy Policy URL, and
+  // rejects a listing where either 404s. Both are pages this repo generates,
+  // so their existence is checkable here; only the deployed origin is not.
+  const pages = read('scripts/marketing/pages.mjs');
+  const metadata = read('ios-submission/APP-STORE-METADATA.md');
+
+  check(
+    /path: '\/support'/.test(pages),
+    'Support URL — /support is a generated page',
+    'Support URL — the marketing site has no /support page, so the required Support URL would 404',
+    'add a /support page to scripts/marketing/pages.mjs and list it in marketingPages',
+  );
+  check(
+    /legalPage\(getLegalDocument\('privacy'\), '\/privacy'\)/.test(read('scripts/build-marketing.mjs')),
+    'Privacy policy URL — /privacy is generated from the legal library',
+    'Privacy policy URL — /privacy is no longer generated',
+  );
+
+  // The listing must not point at a host that is not serving the site yet.
+  const origin = read('scripts/marketing/render.mjs').match(/'(https:\/\/[^']+)'/)?.[1] ?? '';
+  const metadataHosts = [
+    ...metadata.matchAll(/\| (?:Support|Marketing|Privacy policy)[^|]*\| `(https:\/\/[^/`]+)/g),
+  ].map((match) => match[1]);
+  const mismatched = [...new Set(metadataHosts.filter((host) => host !== origin))];
+
+  if (!metadataHosts.length) {
+    fail('listing URLs are not filled in APP-STORE-METADATA.md');
+  } else if (mismatched.length) {
+    warn(
+      `listing URLs use ${mismatched.join(', ')} but the site builds for ${origin}`,
+      'set PUBLIC_SITE_ORIGIN to the custom domain and redeploy before entering these, or the URLs will 404',
+    );
+  } else {
+    pass(`listing URLs match the built origin (${origin})`);
+  }
+}
+
 // ------------------------------------------------------------- screenshots --
 section('Screenshots');
 {

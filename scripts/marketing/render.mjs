@@ -12,6 +12,11 @@ export const SITE_ORIGIN = (
   process.env.PUBLIC_APP_URL ||
   'https://xbar-horse-management-app.vercel.app'
 ).replace(/\/+$/, '');
+// Public support address. Single source of truth: the marketing /support page,
+// the App Store listing description, and the App Review contact all use this,
+// so there is exactly one mailbox to keep alive.
+export const SUPPORT_EMAIL = process.env.PUBLIC_SUPPORT_EMAIL || 'support@xbar.app';
+
 export const APP_LOGIN = '/app/login';
 export const APP_SIGNUP = '/app/login?mode=signup';
 
@@ -123,6 +128,7 @@ function footer() {
         <li><a href="/features">Features</a></li>
         <li><a href="/pricing">Pricing</a></li>
         <li><a href="/demo">Product tour</a></li>
+        <li><a href="/support">Support</a></li>
         <li><a href="${APP_LOGIN}" rel="nofollow">Sign in</a></li>
       </ul>
     </div>

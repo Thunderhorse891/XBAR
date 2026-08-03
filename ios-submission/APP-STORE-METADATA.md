@@ -116,16 +116,28 @@ First release.
 
 ## URLs
 
-| Field                         | Value                      |
-| ----------------------------- | -------------------------- |
-| Support URL (required)        | `https://xbar.app/support` |
-| Marketing URL (optional)      | `https://xbar.app`         |
-| Privacy policy URL (required) | `https://xbar.app/privacy` |
+These are the URLs that resolve **today**, verified live. `xbar.app` is not
+attached to the Vercel project, so do not enter it until it is — Apple rejects
+a listing whose Support or Privacy URL 404s.
+
+| Field                         | Value                                                  |
+| ----------------------------- | ------------------------------------------------------ |
+| Support URL (required)        | `https://xbar-horse-management-app.vercel.app/support` |
+| Marketing URL (optional)      | `https://xbar-horse-management-app.vercel.app`         |
+| Privacy policy URL (required) | `https://xbar-horse-management-app.vercel.app/privacy` |
 
 The privacy page is generated from `src/lib/legalDocuments.ts` by
 `scripts/build-marketing.mjs` — the same source the in-app reader at
-`/legal/privacy` renders, so the two cannot drift. Confirm the deployed origin
-matches (`PUBLIC_SITE_ORIGIN`) before entering the URLs.
+`/legal/privacy` renders, so the two cannot drift.
+
+**When you attach a custom domain**, set `PUBLIC_SITE_ORIGIN` in Vercel and
+redeploy; every canonical, sitemap entry, and the URLs above move together.
+Then update these three fields in App Store Connect — metadata edits do not
+need a new build.
+
+The support mailbox is `PUBLIC_SUPPORT_EMAIL` (default `support@xbar.app`),
+used by the `/support` page, the listing description, and the reviewer contact.
+**It must be a mailbox someone reads** before you submit.
 
 ---
 
