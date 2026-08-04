@@ -89,14 +89,15 @@ export default function Dashboard() {
   // figure (e.g. −$500), that's just the overhead floor, not a verdict on profit.
   // Show it as a neutral "partial" when there's a concrete number, "—" otherwise.
   const bankedShowValue = bankedComplete || financials.netProfit !== 0;
-  // Point the rancher at the data that actually resolves the gap: a missing price
-  // is fixed by recording the sale amount, a missing cost by adding the cost basis.
+  // Point the rancher at the data that actually resolves the gap. Derive it from
+  // the affected sold rows, not the aggregate counts: a sale missing BOTH price
+  // and cost only shows in soldMissingPriceCount (the cost count is computed from
+  // priced sales), so counts alone would tell them to add only the price.
+  const soldRows = financials.perAnimal.filter((row) => row.status === 'sold');
+  const needsPrice = soldRows.some((row) => row.saleValueUnknown);
+  const needsCost = soldRows.some((row) => row.costBlindSpot);
   const fixPhrase =
-    missingCost > 0 && missingPrice > 0
-      ? 'add sale prices and costs'
-      : missingPrice > 0
-        ? 'record the sale amount'
-        : 'add costs';
+    needsPrice && needsCost ? 'add sale prices and costs' : needsPrice ? 'record the sale amount' : 'add costs';
   const bankedMeta = bankedComplete
     ? `${financials.soldCount} sold${financials.overheadSpend > 0 ? ' · net of overhead' : ''}`
     : bankedShowValue
