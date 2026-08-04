@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildRanchFinancials } from '../src/lib/profitIntelligence.js';
+import { buildBankedHeadline, buildRanchFinancials } from '../src/lib/profitIntelligence.js';
 import type { ExpenseReceipt, HorseRecord, SalesLead } from '../src/types/xbar.js';
 
 // buildRanchFinancials is the money engine behind the Money view. It must turn
@@ -180,6 +180,51 @@ test('a legacy stage-Offer lead with no status still counts as pipeline', () => 
   const row = solo.perAnimal.find((r) => r.horseId === 'l');
   assert.equal(row?.status, 'pipeline');
   assert.equal(row?.value, 9000); // the live offer, since no status marks it dead
+});
+
+test('buildBankedHeadline classifies complete, partial, and unknown consistently', () => {
+  // Complete: the main herd has no sale gaps → a real verdict.
+  const complete = buildBankedHeadline(fin);
+  assert.equal(complete.state, 'complete');
+  assert.equal(complete.netProfit, 3700);
+  assert.equal(complete.fixPhrase, '');
+
+  // Unknown: a priced sale with no cost and no overhead → net 0, nothing concrete.
+  const unknown = buildBankedHeadline(
+    buildRanchFinancials([horse('k', 0, 0, 'Koda')], [], [wonLead('lk', 'k', 10000)]),
+  );
+  assert.equal(unknown.state, 'unknown');
+  assert.equal(unknown.fixPhrase, 'add costs');
+
+  // Partial: same gap but overhead leaves a concrete floor (net −5,000).
+  const partial = buildBankedHeadline(
+    buildRanchFinancials(
+      [horse('k', 0, 0, 'Koda')],
+      [receipt('rent', undefined, 'Other', 5000)],
+      [wonLead('lk', 'k', 10000)],
+    ),
+  );
+  assert.equal(partial.state, 'partial');
+  assert.equal(partial.netProfit, -5000);
+
+  // Both missing: a Won sale with neither price nor cost → remediation names both.
+  const both = buildBankedHeadline(
+    buildRanchFinancials(
+      [horse('m', 0, 0, 'Moss')],
+      [],
+      [
+        {
+          id: 'lm',
+          horseId: 'm',
+          outcome: 'Won',
+          stage: 'Closed',
+          offerUpdatedAt: '2026-03-01',
+        } as unknown as SalesLead,
+      ],
+    ),
+  );
+  assert.equal(both.state, 'unknown');
+  assert.equal(both.fixPhrase, 'add sale prices and costs');
 });
 
 test('a cost-blind held horse is never sold as a sure upside', () => {

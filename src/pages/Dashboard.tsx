@@ -16,7 +16,7 @@ import { HorsesIcon } from '@/components/icons';
 import { ActionButton } from '@/components/saas';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { buildBudgetSummary, buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
-import { buildRanchFinancials } from '@/lib/profitIntelligence';
+import { buildBankedHeadline, buildRanchFinancials } from '@/lib/profitIntelligence';
 import { formatCompactCurrency } from '@/lib/format';
 import { events, track } from '@/lib/telemetry';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -78,32 +78,19 @@ export default function Dashboard() {
   // and populated views so real spend is never hidden (a workspace can log
   // ranch-wide expenses before its first horse; the Money view treats that as a
   // real, negative picture and so must the Dashboard).
-  // Sold horses whose sale price or cost is missing leave banked profit incomplete.
-  // When the net figure is exactly zero for that reason, it isn't a confirmed
-  // break-even — it's unknown, so the headline says so instead of a green $0.
-  const missingCost = financials.soldMissingCostCount;
-  const missingPrice = financials.soldMissingPriceCount;
-  const bankedGaps = missingCost + missingPrice;
-  const bankedComplete = bankedGaps === 0;
-  // Any sale gap makes the net incomplete — even when overhead leaves a nonzero
-  // figure (e.g. −$500), that's just the overhead floor, not a verdict on profit.
-  // Show it as a neutral "partial" when there's a concrete number, "—" otherwise.
-  const bankedShowValue = bankedComplete || financials.netProfit !== 0;
-  // Point the rancher at the data that actually resolves the gap. Derive it from
-  // the affected sold rows, not the aggregate counts: a sale missing BOTH price
-  // and cost only shows in soldMissingPriceCount (the cost count is computed from
-  // priced sales), so counts alone would tell them to add only the price.
-  const soldRows = financials.perAnimal.filter((row) => row.status === 'sold');
-  const needsPrice = soldRows.some((row) => row.saleValueUnknown);
-  const needsCost = soldRows.some((row) => row.costBlindSpot);
-  const fixPhrase =
-    needsPrice && needsCost ? 'add sale prices and costs' : needsPrice ? 'record the sale amount' : 'add costs';
-  const bankedMeta = bankedComplete
-    ? `${financials.soldCount} sold${financials.overheadSpend > 0 ? ' · net of overhead' : ''}`
-    : bankedShowValue
-      ? `Partial — ${fixPhrase} to complete`
-      : `${financials.soldCount} sold · ${fixPhrase} to see profit`;
+  // The banked-profit headline state (complete / partial / unknown) comes from the
+  // shared engine helper, so the Dashboard and the Money view present it identically.
+  const banked = buildBankedHeadline(financials);
+  const bankedComplete = banked.state === 'complete';
+  const bankedShowValue = banked.state !== 'unknown';
+  const bankedMeta =
+    banked.state === 'complete'
+      ? `${financials.soldCount} sold${financials.overheadSpend > 0 ? ' · net of overhead' : ''}`
+      : banked.state === 'partial'
+        ? `Partial — ${banked.fixPhrase} to complete`
+        : `${financials.soldCount} sold · ${banked.fixPhrase} to see profit`;
   // Cash collected is likewise unknown (not $0) when a closed sale has no amount.
+  const missingPrice = financials.soldMissingPriceCount;
   const collectedUnknown = missingPrice > 0 && financials.realizedProceeds === 0;
   const moneyBand = (
     <div className="xs-money motion-stagger">

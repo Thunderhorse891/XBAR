@@ -5,7 +5,12 @@ import { Card, PageHead, StatusChip } from '@/components/saas';
 import { ProgressBar } from '@/components/app-ui';
 import { billingPath } from '@/lib/billingRoutes';
 import { formatCurrency, formatPercent } from '@/lib/format';
-import { type AnimalFinancialStatus, type FinancialInsightTone, buildRanchFinancials } from '@/lib/profitIntelligence';
+import {
+  type AnimalFinancialStatus,
+  type FinancialInsightTone,
+  buildBankedHeadline,
+  buildRanchFinancials,
+} from '@/lib/profitIntelligence';
 import { profitIntelligenceGate } from '@/lib/subscriptionGates';
 import type { ChipTone } from '@/types/saas';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -52,6 +57,9 @@ export default function Financials() {
   );
   const locked = profitIntelligenceGate(subscription);
   const maxCost = fin.topCostCategories[0]?.amount ?? 0;
+  // Same honesty state as the Dashboard money band, from the shared helper, so the
+  // drill-down never contradicts the front door.
+  const banked = buildBankedHeadline(fin);
 
   // Only truly empty when there's nothing to account for. A workspace with logged
   // expenses but no horses yet still has a real (negative) picture worth showing.
@@ -89,11 +97,27 @@ export default function Financials() {
       <div className="fin-hero motion-stagger">
         <div className="fin-stat fin-stat--hero" style={motionIndex(0)}>
           <span className="fin-stat__label">Profit banked</span>
-          <ProfitValue value={fin.netProfit} />
+          {banked.state === 'unknown' ? (
+            <span className="fin-stat__value">—</span>
+          ) : banked.state === 'complete' ? (
+            <ProfitValue value={fin.netProfit} />
+          ) : (
+            // Partial: a concrete floor with sale gaps — shown neutral, not a verdict.
+            <span className="fin-stat__value">
+              {fin.netProfit >= 0 ? '+' : '−'}
+              {formatCurrency(Math.abs(fin.netProfit))}
+            </span>
+          )}
           <span className="fin-stat__sub">
-            {fin.soldCount} sold · {formatCurrency(fin.realizedProceeds)} collected
-            {fin.realizedProceeds > 0 ? ` · ${formatPercent(Math.round(fin.realizedMarginPercent))} gross margin` : ''}
-            {fin.overheadSpend > 0 ? ` · net of ${formatCurrency(fin.overheadSpend)} overhead` : ''}
+            {banked.state === 'complete'
+              ? `${fin.soldCount} sold · ${formatCurrency(fin.realizedProceeds)} collected${
+                  fin.realizedProceeds > 0
+                    ? ` · ${formatPercent(Math.round(fin.realizedMarginPercent))} gross margin`
+                    : ''
+                }${fin.overheadSpend > 0 ? ` · net of ${formatCurrency(fin.overheadSpend)} overhead` : ''}`
+              : banked.state === 'partial'
+                ? `Partial — ${banked.fixPhrase} to complete`
+                : `${fin.soldCount} sold · ${banked.fixPhrase} to see profit`}
           </span>
         </div>
 
