@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { PublicPassportDTO } from '../src/lib/buyerSafePassport.js';
 import {
+  type CredentialDocument,
   type SaleCredentialInput,
   buildCredentialPayload,
   buildSaleCredential,
@@ -9,35 +9,64 @@ import {
   verifySaleCredential,
 } from '../src/lib/saleCredential.js';
 
-function passport(overrides: Partial<PublicPassportDTO> = {}): PublicPassportDTO {
-  return {
-    passportId: 'XB-7Q2K-9F3M',
-    name: 'Docs Smokin Gun',
-    breed: 'Quarter Horse',
-    sex: 'Mare',
-    color: 'Bay',
-    markings: 'Star',
-    foaledOn: '2019-04-01',
-    age: 6,
-    registered: true,
-    registry: 'AQHA',
-    registrationNumber: 'X0099887',
-    sire: 'Smokin Whiz',
-    dam: 'Docs Starlight',
-    photoUrl: 'https://example.test/hero.jpg',
-    ...overrides,
-  };
+function docs(): CredentialDocument[] {
+  return [
+    {
+      id: 'doc-2',
+      type: 'Coggins',
+      title: 'Coggins 2026',
+      uploadedAt: '2026-01-10',
+      summary: 'Negative',
+      confidence: 96,
+    },
+    {
+      id: 'doc-1',
+      type: 'Registration',
+      title: 'AQHA Certificate',
+      uploadedAt: '2025-12-01',
+      summary: 'On file',
+      confidence: 99,
+    },
+  ];
 }
 
 function input(overrides: Partial<SaleCredentialInput> = {}): SaleCredentialInput {
   return {
-    passport: passport(),
-    documents: [
-      { id: 'doc-2', type: 'Coggins', title: 'Coggins 2026', uploadedAt: '2026-01-10' },
-      { id: 'doc-1', type: 'Registration', title: 'AQHA Certificate', uploadedAt: '2025-12-01' },
-    ],
-    ownership: { legalOwner: 'Rocking R Ranch LLC', transferStatus: 'Clear' },
-    release: { status: 'Ready to release', allowed: true },
+    passportId: 'XB-7Q2K-9F3M',
+    identity: {
+      name: 'Docs Smokin Gun',
+      barnName: 'Smoke',
+      breed: 'Quarter Horse',
+      sex: 'Mare',
+      color: 'Bay',
+      markings: 'Star',
+      foaledOn: '2019-04-01',
+      age: 6,
+      registered: true,
+      registry: 'AQHA',
+      registrationNumber: 'X0099887',
+      microchipId: '985141000123456',
+      sire: 'Smokin Whiz',
+      dam: 'Docs Starlight',
+      owner: 'Erin Wyrick',
+    },
+    sale: { askPrice: 45000, listingState: 'Buyer Review' },
+    ownership: {
+      legalOwner: 'Rocking R Ranch LLC',
+      ownerEntity: 'Rocking R Ranch LLC',
+      transferStatus: 'Clear',
+      pendingDocuments: [],
+      complianceDeadline: '',
+    },
+    care: {
+      status: 'Sale Prep',
+      lastVetVisit: '2026-06-01',
+      veterinarian: 'Dr. Vasquez',
+      farrier: 'J. Reed',
+      medicalNotes: 'Sound; routine care current.',
+    },
+    documents: docs(),
+    release: { status: 'Ready to release', allowed: true, blockers: [], warnings: [] },
     verifiedProofs: ['Registration certificate', 'Bill of sale'],
     sealedAt: '2026-08-04T12:00:00.000Z',
     sealedBy: 'erin@rockingr.test',
@@ -56,14 +85,7 @@ test('sealing the same facts is deterministic', () => {
 
 test('document order does not change the seal', () => {
   const forward = buildSaleCredential(input());
-  const reversed = buildSaleCredential(
-    input({
-      documents: [
-        { id: 'doc-1', type: 'Registration', title: 'AQHA Certificate', uploadedAt: '2025-12-01' },
-        { id: 'doc-2', type: 'Coggins', title: 'Coggins 2026', uploadedAt: '2026-01-10' },
-      ],
-    }),
-  );
+  const reversed = buildSaleCredential(input({ documents: [...docs()].reverse() }));
   assert.equal(forward.digest, reversed.digest);
 });
 
@@ -75,7 +97,49 @@ test('verified-proof order does not change the seal', () => {
 
 test('changing any covered identity fact changes the seal', () => {
   const base = buildSaleCredential(input());
-  const tampered = buildSaleCredential(input({ passport: passport({ name: 'Different Horse' }) }));
+  const tampered = buildSaleCredential(input({ identity: { ...input().identity, name: 'Different Horse' } }));
+  assert.notEqual(base.digest, tampered.digest);
+});
+
+test('changing the microchip changes the seal', () => {
+  const base = buildSaleCredential(input());
+  const tampered = buildSaleCredential(input({ identity: { ...input().identity, microchipId: '000000000000000' } }));
+  assert.notEqual(base.digest, tampered.digest);
+});
+
+test('changing the ask price changes the seal', () => {
+  const base = buildSaleCredential(input());
+  const tampered = buildSaleCredential(input({ sale: { askPrice: 30000, listingState: 'Buyer Review' } }));
+  assert.notEqual(base.digest, tampered.digest);
+});
+
+test('changing a document summary or confidence changes the seal', () => {
+  const base = buildSaleCredential(input());
+  const editedSummary = buildSaleCredential(
+    input({
+      documents: [{ ...docs()[0], summary: 'POSITIVE' }, docs()[1]],
+    }),
+  );
+  const editedConfidence = buildSaleCredential(
+    input({
+      documents: [{ ...docs()[0], confidence: 10 }, docs()[1]],
+    }),
+  );
+  assert.notEqual(base.digest, editedSummary.digest);
+  assert.notEqual(base.digest, editedConfidence.digest);
+});
+
+test('changing the medical-notes disclosure changes the seal', () => {
+  const base = buildSaleCredential(input());
+  const tampered = buildSaleCredential(input({ care: { ...input().care, medicalNotes: 'No disclosures.' } }));
+  assert.notEqual(base.digest, tampered.digest);
+});
+
+test('changing pending documents changes the seal', () => {
+  const base = buildSaleCredential(input());
+  const tampered = buildSaleCredential(
+    input({ ownership: { ...input().ownership, pendingDocuments: ['Signed transfer form'] } }),
+  );
   assert.notEqual(base.digest, tampered.digest);
 });
 
@@ -84,8 +148,15 @@ test('swapping a proof document changes the seal', () => {
   const swapped = buildSaleCredential(
     input({
       documents: [
-        { id: 'doc-2', type: 'Coggins', title: 'Coggins 2026', uploadedAt: '2026-01-10' },
-        { id: 'doc-9', type: 'Bill of Sale', title: 'Forged bill', uploadedAt: '2026-02-01' },
+        docs()[0],
+        {
+          id: 'doc-9',
+          type: 'Bill of Sale',
+          title: 'Forged bill',
+          uploadedAt: '2026-02-01',
+          summary: '',
+          confidence: 0,
+        },
       ],
     }),
   );
@@ -101,9 +172,17 @@ test('downgrading a verified proof changes the seal', () => {
 test('transfer status is bound into the seal', () => {
   const clear = buildSaleCredential(input());
   const pending = buildSaleCredential(
-    input({ ownership: { legalOwner: 'Rocking R Ranch LLC', transferStatus: 'Pending Signatures' } }),
+    input({ ownership: { ...input().ownership, transferStatus: 'Pending Signatures' } }),
   );
   assert.notEqual(clear.digest, pending.digest);
+});
+
+test('a release blocker is bound into the seal', () => {
+  const base = buildSaleCredential(input());
+  const blocked = buildSaleCredential(
+    input({ release: { status: 'On hold', allowed: false, blockers: ['Coggins missing'], warnings: [] } }),
+  );
+  assert.notEqual(base.digest, blocked.digest);
 });
 
 test('verifySaleCredential accepts the untouched payload and rejects an edited one', () => {
@@ -135,7 +214,7 @@ test('manifest reports the real document and proof counts', () => {
 
 test('an unregistered horse states so in the manifest without inventing registry data', () => {
   const credential = buildSaleCredential(
-    input({ passport: passport({ registered: false, registry: '', registrationNumber: '' }) }),
+    input({ identity: { ...input().identity, registered: false, registry: '', registrationNumber: '' } }),
   );
   assert.ok(credential.manifest.some((line) => line === 'Registration: not registered'));
 });

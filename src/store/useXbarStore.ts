@@ -17,6 +17,7 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { hasRoleCapability } from '@/lib/permissions';
 import { hasHorsePhoto, isHorsePhotoAsset } from '@/lib/animalPassport';
 import { buildSaleHold } from '@/lib/saleTrustEngine';
+import { buildPacketCredential } from '@/lib/localSalePacketGenerator';
 import { featureGate } from '@/lib/commercialEngine';
 import { buildOfferDecision } from '@/lib/profitIntelligence';
 import { scheduleBuyerActivityFollowUp } from '@/lib/salesFollowUp';
@@ -2062,6 +2063,18 @@ export const useXbarStore = create<XbarStore>()(
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, '-')
             .replace(/^-|-$/g, '') || 'horse';
+
+        // Seal the packet: fingerprint every buyer-facing fact + included
+        // document at generation time, from the same records the packet renders.
+        const state = get();
+        const credential = buildPacketCredential({
+          horse,
+          documents: state.documents,
+          ownershipRecord: state.ownershipRecords.find((record) => record.horseId === input.horseId),
+          selectedDocumentIds: input.documentIds,
+          generatedBy: input.createdBy,
+        });
+
         const packet: SalePacketBuild = {
           id: createId('packet'),
           horseId: input.horseId,
@@ -2075,6 +2088,7 @@ export const useXbarStore = create<XbarStore>()(
           status: 'generated',
           fileName: `sale-packet-${slug}-${todayStamp()}.pdf`,
           downloadUrl: input.downloadUrl,
+          credential,
         };
         const auditEvent = createAuditEvent({
           actor: input.createdBy,

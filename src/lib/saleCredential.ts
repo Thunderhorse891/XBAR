@@ -1,63 +1,111 @@
 // Verifiable Sale Credential — a tamper-evident fingerprint for a sale packet.
 //
 // The problem it solves: today a buyer looking at an XBAR sale packet has to
-// *take the seller's word* that the identity, ownership, transfer status, and
-// proof documents are what they say — and that nothing was quietly changed after
-// the packet was sent. This credential makes that verifiable.
+// *take the seller's word* that the identity, ownership, transfer status, care
+// disclosures, and proof documents are what they say — and that nothing was
+// quietly changed after the packet was generated. This credential makes any such
+// change detectable.
 //
 // How it works, honestly:
-//   1. We collect exactly the buyer-facing facts a packet asserts — the
-//      buyer-safe passport identity, the fingerprints of the included proof
-//      documents, the ownership/transfer state, the release-gate verdict, and
-//      which ownership proofs were VERIFIED at seal time.
+//   1. We collect EVERY buyer-facing fact the packet renders — identity, sale
+//      terms, ownership/transfer, the care & disclosure summary, the release
+//      verdict, and the full metadata of each included document — plus which
+//      ownership proofs were VERIFIED at seal time.
 //   2. We serialize them canonically (keys sorted, arrays ordered) so the same
 //      facts always produce the same bytes, regardless of insertion order.
-//   3. We SHA-256 those bytes into a single digest, and publish it as the seal.
+//   3. We SHA-256 those bytes into a single digest, published as the seal.
 //
-// What the seal proves: every covered fact is bound together into one
-// fingerprint. If ANY of them changes — a swapped document, an edited transfer
-// status, a downgraded proof — the recomputed digest no longer matches the
-// published seal, and `verifySaleCredential` reports a mismatch. That is
-// genuine tamper-EVIDENCE: alterations cannot hide.
+// What the seal proves: every covered fact is bound into one fingerprint. Change
+// ANY of them — a swapped document, an edited transfer status, a bumped ask
+// price, a downgraded proof — and the recomputed digest no longer matches the
+// published seal. `verifySaleCredential` reports the mismatch. That is genuine
+// tamper-EVIDENCE: alterations cannot hide.
 //
-// What it does NOT (yet) claim: this v1 digest is computed and checked from the
-// published bundle itself, so it detects alteration but is not, on its own,
-// proof against a seller who re-seals forged facts. Anchoring the digest
-// server-side at share time (so the buyer verifies against XBAR, not the
-// bundle) is the follow-on that upgrades tamper-evidence to tamper-PROOF. The
-// UI copy states exactly this and never overclaims.
+// What it does NOT claim on its own: `verifySaleCredential` proves a payload
+// matches a GIVEN digest. It does not authenticate where that digest came from.
+// For the guarantee to hold against a seller who re-seals forged facts, the
+// buyer must obtain the seal from a trusted channel — the seal code the seller
+// communicates directly, or (the immediate follow-on) XBAR's server-anchored
+// record of the seal. Until that anchor ships, the honest claim is: this detects
+// accidental or third-party alteration and lets a holder confirm a packet is
+// unchanged against a seal code they trust. UI copy states exactly this and
+// never implies the bundle self-authenticates.
 
 import { sha256 } from './sha256.js';
-import type { PublicPassportDTO } from './buyerSafePassport.js';
 
-export const SALE_CREDENTIAL_VERSION = 1 as const;
+export const SALE_CREDENTIAL_VERSION = 2 as const;
 
-/** Buyer-facing fingerprint of one included proof document. No file bytes are
- * required — identity, type, title and upload date pin which document was in the
- * packet, so a later swap for a different document changes the digest. */
+/** Every buyer-facing metadata field of one included document. File bytes are
+ * generated server-side; these fields are what the packet renders, so covering
+ * them means a later edit to a title, summary, or confidence breaks the seal. */
 export interface CredentialDocument {
   id: string;
   type: string;
   title: string;
   uploadedAt: string;
+  summary: string;
+  confidence: number;
 }
 
-/** Buyer-facing ownership/transfer facts the seal covers. */
+/** Buyer-facing identity block the packet renders. */
+export interface CredentialIdentity {
+  name: string;
+  barnName: string;
+  breed: string;
+  sex: string;
+  color: string;
+  markings: string;
+  foaledOn: string;
+  age: number;
+  registered: boolean;
+  registry: string;
+  registrationNumber: string;
+  microchipId: string;
+  sire: string;
+  dam: string;
+  owner: string;
+}
+
+/** Buyer-facing sale terms the packet renders. */
+export interface CredentialSale {
+  askPrice: number;
+  listingState: string;
+}
+
+/** Buyer-facing ownership & transfer facts the packet renders. */
 export interface CredentialOwnership {
   legalOwner: string;
+  ownerEntity: string;
   transferStatus: string;
+  pendingDocuments: string[];
+  complianceDeadline: string;
 }
 
-/** Release-gate verdict the seal covers. */
+/** Buyer-facing care & disclosure summary the packet renders. */
+export interface CredentialCare {
+  status: string;
+  lastVetVisit: string;
+  veterinarian: string;
+  farrier: string;
+  medicalNotes: string;
+}
+
+/** Release-gate verdict the packet renders. */
 export interface CredentialRelease {
   status: string;
   allowed: boolean;
+  blockers: string[];
+  warnings: string[];
 }
 
 export interface SaleCredentialInput {
-  passport: PublicPassportDTO;
-  documents: CredentialDocument[];
+  /** Stable public identifier for the animal (never the internal record id). */
+  passportId: string;
+  identity: CredentialIdentity;
+  sale: CredentialSale;
   ownership: CredentialOwnership;
+  care: CredentialCare;
+  documents: CredentialDocument[];
   release: CredentialRelease;
   /** Human labels of the ownership proofs that were VERIFIED at seal time. */
   verifiedProofs: string[];
@@ -76,7 +124,7 @@ export interface SaleCredential {
   sealedBy: string;
   /** Plain-language list of what the seal covers, for display next to it. */
   manifest: string[];
-  /** The exact canonical string that was hashed. Republished so a buyer can
+  /** The exact canonical string that was hashed. Republished so a holder can
    * recompute the digest and confirm it matches. */
   payload: string;
 }
@@ -95,41 +143,66 @@ function canonicalStringify(value: Json): string {
 }
 
 /** Build the canonical, order-stable object the digest is computed over. Arrays
- * that have no inherent order (documents, verified proofs) are sorted here so a
- * reordering of the same facts never changes the seal. */
+ * with no inherent order (documents, proofs, blockers, warnings, pending docs)
+ * are sorted here so reordering the same facts never changes the seal. */
 export function buildCredentialPayload(input: SaleCredentialInput): string {
   const documents = [...input.documents]
-    .map((doc) => ({ id: doc.id, type: doc.type, title: doc.title, uploadedAt: doc.uploadedAt }))
+    .map((doc) => ({
+      id: doc.id,
+      type: doc.type,
+      title: doc.title,
+      uploadedAt: doc.uploadedAt,
+      summary: doc.summary,
+      confidence: doc.confidence,
+    }))
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  const verifiedProofs = [...input.verifiedProofs].sort();
 
   const payload: Json = {
     version: SALE_CREDENTIAL_VERSION,
-    passport: {
-      passportId: input.passport.passportId,
-      name: input.passport.name,
-      breed: input.passport.breed,
-      sex: input.passport.sex,
-      color: input.passport.color,
-      markings: input.passport.markings,
-      foaledOn: input.passport.foaledOn,
-      age: input.passport.age,
-      registered: input.passport.registered,
-      registry: input.passport.registry,
-      registrationNumber: input.passport.registrationNumber,
-      sire: input.passport.sire,
-      dam: input.passport.dam,
+    passportId: input.passportId,
+    identity: {
+      name: input.identity.name,
+      barnName: input.identity.barnName,
+      breed: input.identity.breed,
+      sex: input.identity.sex,
+      color: input.identity.color,
+      markings: input.identity.markings,
+      foaledOn: input.identity.foaledOn,
+      age: input.identity.age,
+      registered: input.identity.registered,
+      registry: input.identity.registry,
+      registrationNumber: input.identity.registrationNumber,
+      microchipId: input.identity.microchipId,
+      sire: input.identity.sire,
+      dam: input.identity.dam,
+      owner: input.identity.owner,
     },
-    documents,
+    sale: {
+      askPrice: input.sale.askPrice,
+      listingState: input.sale.listingState,
+    },
     ownership: {
       legalOwner: input.ownership.legalOwner,
+      ownerEntity: input.ownership.ownerEntity,
       transferStatus: input.ownership.transferStatus,
+      pendingDocuments: [...input.ownership.pendingDocuments].sort(),
+      complianceDeadline: input.ownership.complianceDeadline,
     },
+    care: {
+      status: input.care.status,
+      lastVetVisit: input.care.lastVetVisit,
+      veterinarian: input.care.veterinarian,
+      farrier: input.care.farrier,
+      medicalNotes: input.care.medicalNotes,
+    },
+    documents,
     release: {
       status: input.release.status,
       allowed: input.release.allowed,
+      blockers: [...input.release.blockers].sort(),
+      warnings: [...input.release.warnings].sort(),
     },
-    verifiedProofs,
+    verifiedProofs: [...input.verifiedProofs].sort(),
     sealedAt: input.sealedAt,
     sealedBy: input.sealedBy,
   };
@@ -146,19 +219,21 @@ export function sealCodeFromDigest(digest: string): string {
 }
 
 function buildManifest(input: SaleCredentialInput): string[] {
-  const manifest = [
-    `Identity: ${input.passport.name || 'unnamed'} (${input.passport.passportId})`,
-    input.passport.registered
-      ? `Registration: ${input.passport.registry || 'registry'} ${input.passport.registrationNumber || ''}`.trim()
+  return [
+    `Identity: ${input.identity.name || 'unnamed'} (${input.passportId})`,
+    input.identity.registered
+      ? `Registration: ${input.identity.registry || 'registry'} ${input.identity.registrationNumber || ''}`.trim()
       : 'Registration: not registered',
+    `Sale terms: ${input.sale.askPrice > 0 ? `$${input.sale.askPrice.toLocaleString()}` : 'no ask price'} · ${
+      input.sale.listingState || 'unlisted'
+    }`,
     `Ownership: ${input.ownership.legalOwner || 'unknown'} · transfer ${input.ownership.transferStatus || 'unknown'}`,
-    `Release status: ${input.release.status}`,
+    `Care & disclosure summary sealed`,
     `Proof documents sealed: ${input.documents.length}`,
     input.verifiedProofs.length
       ? `Verified proofs: ${[...input.verifiedProofs].sort().join(', ')}`
       : 'Verified proofs: none verified at seal time',
   ];
-  return manifest;
 }
 
 /** Seal a sale packet: fingerprint every covered fact into one digest. */
@@ -167,7 +242,7 @@ export function buildSaleCredential(input: SaleCredentialInput): SaleCredential 
   const digest = sha256(payload);
   return {
     version: SALE_CREDENTIAL_VERSION,
-    passportId: input.passport.passportId,
+    passportId: input.passportId,
     digest,
     sealCode: sealCodeFromDigest(digest),
     sealedAt: input.sealedAt,
@@ -184,9 +259,19 @@ export interface CredentialVerification {
   sealCode: string;
 }
 
-/** Recompute the digest from a published payload and compare it to the seal that
- * was published with it. `valid` is true only when they match exactly — any
- * alteration to the payload flips it to false. */
+/**
+ * Recompute the digest from a published payload and compare it to a digest the
+ * caller supplies. `valid` is true only when they match exactly — any alteration
+ * to the payload flips it to false.
+ *
+ * IMPORTANT: this proves the payload matches THIS digest; it does not
+ * authenticate where the digest came from. The caller must supply a digest
+ * obtained through a trusted channel (the seal code the seller communicates, or
+ * XBAR's server-anchored record) for the result to mean "unaltered since the
+ * seller sealed it." Fed a digest re-derived from the same edited bundle, it
+ * cannot detect a seller who re-seals forged facts — that is what server
+ * anchoring, the documented follow-on, adds.
+ */
 export function verifySaleCredential(payload: string, expectedDigest: string): CredentialVerification {
   const digest = sha256(payload);
   return {

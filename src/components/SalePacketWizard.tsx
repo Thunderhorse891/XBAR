@@ -60,7 +60,12 @@ export function SalePacketWizard({
   const [selectedDocIds, setSelectedDocIds] = useState<string[] | null>(null);
   const [cogginsDisclosed, setCogginsDisclosed] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generated, setGenerated] = useState<{ packetId: string; downloadUrl?: string } | null>(null);
+  const [generated, setGenerated] = useState<{
+    packetId: string;
+    downloadUrl?: string;
+    sealCode?: string;
+    sealedAt?: string;
+  } | null>(null);
   const buyerForm = useForm<BuyerPacketForm>({
     defaultValues: { buyerName: '', buyerEmail: '', watermark: '' },
   });
@@ -188,7 +193,12 @@ export function SalePacketWizard({
     if (downloadUrl && typeof window !== 'undefined') {
       window.open(downloadUrl, '_blank', 'noopener,noreferrer');
     }
-    setGenerated({ packetId: build.packet.id, downloadUrl });
+    setGenerated({
+      packetId: build.packet.id,
+      downloadUrl,
+      sealCode: build.packet.credential?.sealCode,
+      sealedAt: build.packet.credential?.sealedAt,
+    });
     pushToast({
       title: downloadUrl ? 'Sale packet PDF ready' : 'Sale packet recorded',
       message: downloadUrl
@@ -507,6 +517,25 @@ export function SalePacketWizard({
               <p style={{ fontSize: 14, fontWeight: 700, color: '#1466d8', marginTop: 0 }}>
                 Packet ready. Next money action:
               </p>
+              {generated.sealCode && (
+                <div
+                  style={{
+                    border: '1px solid var(--xbar-border, #d8dee6)',
+                    borderRadius: 8,
+                    padding: '10px 12px',
+                    margin: '0 0 12px',
+                    background: 'var(--xbar-surface-muted, #f7fafc)',
+                  }}
+                >
+                  <div style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 800, letterSpacing: '0.08em' }}>
+                    {generated.sealCode}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--xbar-text-muted, #526273)', marginTop: 2 }}>
+                    Verifiable seal — fingerprints every fact in this packet. Give this code to your buyer; if the
+                    packet is ever altered, the seal no longer matches.
+                  </div>
+                </div>
+              )}
               <div className="confirm-dialog__acks">
                 {generated.downloadUrl && (
                   <a

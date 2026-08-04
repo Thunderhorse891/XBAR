@@ -173,6 +173,24 @@ export interface SalePacketBuild {
   status: 'draft' | 'generated' | 'shared';
   fileName?: string;
   downloadUrl?: string;
+  /** Verifiable Sale Credential sealed at generation time — a tamper-evident
+   * fingerprint of every buyer-facing fact in the packet. Present on packets
+   * generated after the credential shipped; older records may omit it. */
+  credential?: SaleCredentialSeal;
+}
+
+/** Persisted form of a packet's Verifiable Sale Credential. Holds exactly what
+ * is needed to display the seal and re-verify it (payload + digest). Mirrors the
+ * display/verify surface of SaleCredential in src/lib/saleCredential.ts. */
+export interface SaleCredentialSeal {
+  version: number;
+  passportId: string;
+  sealCode: string;
+  digest: string;
+  sealedAt: string;
+  sealedBy: string;
+  manifest: string[];
+  payload: string;
 }
 
 export interface MedicalRecordDetails {
