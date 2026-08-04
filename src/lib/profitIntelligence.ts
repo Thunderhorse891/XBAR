@@ -178,6 +178,8 @@ export type AnimalFinancialRow = {
   safeSalePrice: number;
   /** No cost basis and no linked expenses — true profit is unknown until costs are entered. */
   costBlindSpot: boolean;
+  /** Sold (Won) but no sale amount was recorded — proceeds are unknown, never assumed. */
+  saleValueUnknown: boolean;
 };
 
 export type FinancialInsightTone = 'win' | 'risk' | 'opportunity' | 'info';
@@ -192,10 +194,14 @@ export type FinancialInsight = {
 };
 
 export type RanchFinancials = {
-  // Realized — money already made on closed (Won) deals.
+  // Realized — money already made on closed (Won) deals with a RECORDED sale amount.
+  // A Won deal with no amount is never assumed; it is an integrity gap (see below).
   realizedProceeds: number;
   realizedCost: number;
-  realizedProfit: number;
+  /** Gross profit on sold animals: recorded proceeds − their break-even. */
+  grossProfitOnSales: number;
+  /** Bottom line: gross profit on sales − operating overhead. What's actually banked. */
+  netProfit: number;
   realizedMarginPercent: number;
   soldCount: number;
 
@@ -214,6 +220,8 @@ export type RanchFinancials = {
   underwaterCount: number;
   costBlindSpotCount: number;
   unpricedHeldCount: number;
+  /** Sold horses whose sale price was never recorded — excluded from banked profit. */
+  soldMissingPriceCount: number;
 
   perAnimal: AnimalFinancialRow[];
   topCostCategories: { category: ExpenseCategory; amount: number }[];
@@ -239,10 +247,12 @@ export function buildRanchFinancials(
 
     const wonLead = latestByOfferDate(horseLeads.filter((lead) => lead.outcome === 'Won'));
     if (wonLead) {
-      // `||` (not `??`) so a Won deal with a 0/missing amount falls back to the
-      // asking price rather than reporting a phantom total loss.
-      const value = wonLead.counterOfferAmount || wonLead.offerAmount || horse.sale.askPrice || 0;
-      const profit = value - invested;
+      // The recorded deal amount only — NEVER the asking price. A Won deal with no
+      // amount means the sale price was never captured, so proceeds are unknown and
+      // must not be invented; the horse becomes an integrity gap, not banked revenue.
+      const value = wonLead.counterOfferAmount || wonLead.offerAmount || 0;
+      const saleValueUnknown = value <= 0;
+      const profit = saleValueUnknown ? 0 : value - invested;
       return {
         horseId: horse.id,
         horseName: horse.name,
@@ -254,6 +264,7 @@ export function buildRanchFinancials(
         underwater: false,
         safeSalePrice: profile.safeSalePrice,
         costBlindSpot,
+        saleValueUnknown,
       };
     }
 
@@ -281,17 +292,21 @@ export function buildRanchFinancials(
       underwater: value > 0 && value < invested,
       safeSalePrice: profile.safeSalePrice,
       costBlindSpot,
+      saleValueUnknown: false,
     };
   });
 
   const sold = rows.filter((row) => row.status === 'sold');
+  // Only sales with a recorded amount contribute to banked profit; the rest are
+  // integrity gaps, not revenue.
+  const soldPriced = sold.filter((row) => !row.saleValueUnknown);
   const pipeline = rows.filter((row) => row.status === 'pipeline');
   const held = rows.filter((row) => row.status === 'held');
   const unrealized = [...pipeline, ...held];
 
-  const realizedProceeds = sold.reduce((sum, row) => sum + row.value, 0);
-  const realizedCost = sold.reduce((sum, row) => sum + row.invested, 0);
-  const realizedProfit = realizedProceeds - realizedCost;
+  const realizedProceeds = soldPriced.reduce((sum, row) => sum + row.value, 0);
+  const realizedCost = soldPriced.reduce((sum, row) => sum + row.invested, 0);
+  const grossProfitOnSales = realizedProceeds - realizedCost;
 
   const investedInHerd = unrealized.reduce((sum, row) => sum + row.invested, 0);
   const projectedValue = unrealized.reduce((sum, row) => sum + row.value, 0);
@@ -306,6 +321,10 @@ export function buildRanchFinancials(
     .reduce((sum, receipt) => sum + receipt.amount, 0);
   const totalInvested = rows.reduce((sum, row) => sum + row.invested, 0) + overheadSpend;
 
+  // The bottom line: gross profit on sold animals, less operating overhead. This is
+  // what the operation actually banked — a real P&L nets overhead out.
+  const netProfit = grossProfitOnSales - overheadSpend;
+
   const categoryTotals = receipts.reduce<Map<ExpenseCategory, number>>((totals, receipt) => {
     totals.set(receipt.category, (totals.get(receipt.category) ?? 0) + receipt.amount);
     return totals;
@@ -317,12 +336,14 @@ export function buildRanchFinancials(
   const underwaterCount = rows.filter((row) => row.underwater).length;
   const costBlindSpotCount = rows.filter((row) => row.costBlindSpot).length;
   const unpricedHeldCount = held.filter((row) => row.value <= 0).length;
+  const soldMissingPriceCount = sold.length - soldPriced.length;
 
   return {
     realizedProceeds,
     realizedCost,
-    realizedProfit,
-    realizedMarginPercent: realizedProceeds > 0 ? (realizedProfit / realizedProceeds) * 100 : 0,
+    grossProfitOnSales,
+    netProfit,
+    realizedMarginPercent: realizedProceeds > 0 ? (grossProfitOnSales / realizedProceeds) * 100 : 0,
     soldCount: sold.length,
     investedInHerd,
     projectedValue,
@@ -334,11 +355,14 @@ export function buildRanchFinancials(
     underwaterCount,
     costBlindSpotCount,
     unpricedHeldCount,
+    soldMissingPriceCount,
     perAnimal: sortAnimalRows(rows),
     topCostCategories,
-    insights: buildFinancialInsights(sold, held, topCostCategories, {
+    insights: buildFinancialInsights(soldPriced, held, topCostCategories, {
       costBlindSpotCount,
       unpricedHeldCount,
+      soldMissingPriceCount,
+      overheadSpend,
     }),
   };
 }
@@ -351,15 +375,20 @@ function sortAnimalRows(rows: AnimalFinancialRow[]): AnimalFinancialRow[] {
 }
 
 function buildFinancialInsights(
-  sold: AnimalFinancialRow[],
+  soldPriced: AnimalFinancialRow[],
   held: AnimalFinancialRow[],
   topCostCategories: { category: ExpenseCategory; amount: number }[],
-  integrity: { costBlindSpotCount: number; unpricedHeldCount: number },
+  integrity: {
+    costBlindSpotCount: number;
+    unpricedHeldCount: number;
+    soldMissingPriceCount: number;
+    overheadSpend: number;
+  },
 ): FinancialInsight[] {
   const insights: FinancialInsight[] = [];
   const money = (value: number) => `$${Math.round(value).toLocaleString()}`;
 
-  const bestSale = [...sold].sort((left, right) => right.profit - left.profit)[0];
+  const bestSale = [...soldPriced].sort((left, right) => right.profit - left.profit)[0];
   if (bestSale && bestSale.profit > 0) {
     insights.push({
       id: `win-${bestSale.horseId}`,
@@ -371,7 +400,7 @@ function buildFinancialInsights(
     });
   }
 
-  const worstSale = [...sold].sort((left, right) => left.profit - right.profit)[0];
+  const worstSale = [...soldPriced].sort((left, right) => left.profit - right.profit)[0];
   if (worstSale && worstSale.profit < 0) {
     insights.push({
       id: `loss-${worstSale.horseId}`,
@@ -417,6 +446,29 @@ function buildFinancialInsights(
       title: `${topCost.category} is your biggest cost`,
       detail: `${money(topCost.amount)} across the herd. Trimming it lifts the margin on every animal you sell.`,
       amount: topCost.amount,
+    });
+  }
+
+  // Overhead can turn a positive gross into a negative bottom line — surface it so
+  // "am I actually making money?" is answered honestly, not just per-sale.
+  const grossFromSales = soldPriced.reduce((sum, row) => sum + row.profit, 0);
+  if (integrity.overheadSpend > 0 && grossFromSales > 0 && grossFromSales - integrity.overheadSpend < 0) {
+    insights.push({
+      id: 'overhead-drag',
+      tone: 'risk',
+      title: 'Overhead is outrunning your sales profit',
+      detail: `${money(grossFromSales)} gross on sold horses, but ${money(integrity.overheadSpend)} of operating overhead puts the operation ${money(integrity.overheadSpend - grossFromSales)} in the red. Sell more margin or cut overhead.`,
+      amount: grossFromSales - integrity.overheadSpend,
+    });
+  }
+
+  if (integrity.soldMissingPriceCount > 0) {
+    const n = integrity.soldMissingPriceCount;
+    insights.push({
+      id: 'blindspot-sale-price',
+      tone: 'info',
+      title: `${n} sold ${n === 1 ? 'horse has' : 'horses have'} no recorded sale price`,
+      detail: `Record what ${n === 1 ? 'it' : 'they'} sold for so your banked profit is accurate — until then ${n === 1 ? "it's" : "they're"} left out of the total.`,
     });
   }
 

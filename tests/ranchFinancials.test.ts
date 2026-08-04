@@ -59,12 +59,14 @@ const leads: SalesLead[] = [
 
 const fin = buildRanchFinancials(horses, receipts, leads);
 
-test('realized profit counts only Won deals and never touches overhead', () => {
+test('gross profit is on sold animals; net profit deducts operating overhead', () => {
   assert.equal(fin.soldCount, 2);
   // Ace 12,000 proceeds − 6,000 invested = 6,000; Bess 6,000 − 8,000 = −2,000.
   assert.equal(fin.realizedProceeds, 18000);
   assert.equal(fin.realizedCost, 14000);
-  assert.equal(fin.realizedProfit, 4000); // NOT 3,700 — the $300 travel overhead is excluded
+  assert.equal(fin.grossProfitOnSales, 4000); // gross on sold animals
+  assert.equal(fin.netProfit, 3700); // 4,000 gross − 300 travel overhead = the real bottom line
+  assert.equal(fin.soldMissingPriceCount, 0);
   assert.ok(Math.abs(fin.realizedMarginPercent - (4000 / 18000) * 100) < 0.01);
 });
 
@@ -120,13 +122,35 @@ test('insights surface the winner, the underwater risk with a safe price, and th
   assert.ok(tones.lastIndexOf('win') < tones.indexOf('info'), 'info trails');
 });
 
-test('a Won deal with no recorded amount falls back to the asking price, not a phantom loss', () => {
+test('overhead can flip a positive gross into a net loss, and it is surfaced', () => {
+  // A $10,000 per-animal gain with $20,000 of overhead is a $10,000 operation loss.
+  const solo = buildRanchFinancials(
+    [horse('h', 5000, 20000, 'Halo')],
+    [receipt('rent', undefined, 'Other', 20000)],
+    [wonLead('lh', 'h', 15000)], // 15,000 − 5,000 = 10,000 gross
+  );
+  assert.equal(solo.grossProfitOnSales, 10000);
+  assert.equal(solo.overheadSpend, 20000);
+  assert.equal(solo.netProfit, -10000); // the true bottom line is a loss
+  assert.equal(solo.insights.find((i) => i.id === 'overhead-drag')?.tone, 'risk');
+});
+
+test('a Won deal with no recorded amount is an integrity gap, never invented revenue', () => {
   const solo = buildRanchFinancials(
     [horse('g', 1000, 4000, 'Gus')],
     [],
     [{ id: 'lg', horseId: 'g', outcome: 'Won', stage: 'Closed', offerUpdatedAt: '2026-03-01' } as unknown as SalesLead],
   );
   assert.equal(solo.soldCount, 1);
-  assert.equal(solo.realizedProceeds, 4000); // asking price stood in for the missing amount
-  assert.equal(solo.realizedProfit, 3000);
+  assert.equal(solo.soldMissingPriceCount, 1);
+  // The asking price is NEVER treated as proceeds collected.
+  assert.equal(solo.realizedProceeds, 0);
+  assert.equal(solo.grossProfitOnSales, 0);
+  assert.equal(solo.netProfit, 0);
+  const row = solo.perAnimal.find((r) => r.horseId === 'g');
+  assert.equal(row?.status, 'sold');
+  assert.equal(row?.saleValueUnknown, true);
+  assert.equal(row?.value, 0);
+  // Surfaced as an integrity insight so the rancher records the real price.
+  assert.equal(solo.insights.find((i) => i.id === 'blindspot-sale-price')?.tone, 'info');
 });

@@ -87,10 +87,11 @@ export default function Financials() {
       <div className="fin-hero motion-stagger">
         <div className="fin-stat fin-stat--hero" style={motionIndex(0)}>
           <span className="fin-stat__label">Profit banked</span>
-          <ProfitValue value={fin.realizedProfit} />
+          <ProfitValue value={fin.netProfit} />
           <span className="fin-stat__sub">
             {fin.soldCount} sold · {formatCurrency(fin.realizedProceeds)} collected
-            {fin.realizedProceeds > 0 ? ` · ${formatPercent(Math.round(fin.realizedMarginPercent))} margin` : ''}
+            {fin.realizedProceeds > 0 ? ` · ${formatPercent(Math.round(fin.realizedMarginPercent))} gross margin` : ''}
+            {fin.overheadSpend > 0 ? ` · net of ${formatCurrency(fin.overheadSpend)} overhead` : ''}
           </span>
         </div>
 
@@ -208,6 +209,7 @@ export default function Financials() {
                       <span className="fin-animal__title">{row.horseName}</span>
                       <span>
                         <StatusChip tone={chip.tone}>{chip.label}</StatusChip>
+                        {row.saleValueUnknown ? <StatusChip tone="warning">Sale price?</StatusChip> : null}
                         {row.underwater ? <StatusChip tone="danger">Priced to lose</StatusChip> : null}
                         {row.costBlindSpot ? <StatusChip tone="warning">No cost</StatusChip> : null}
                       </span>
