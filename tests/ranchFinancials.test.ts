@@ -156,6 +156,43 @@ test('insights surface the winner, the underwater risk with a safe price, and th
   assert.ok(tones.lastIndexOf('win') < tones.indexOf('info'), 'info trails');
 });
 
+test('a rejected offer is not counted as live pipeline value', () => {
+  const solo = buildRanchFinancials(
+    [horse('r', 2000, 6000, 'Rebel')], // asking 6,000
+    [],
+    [
+      {
+        id: 'lr',
+        horseId: 'r',
+        stage: 'Offer',
+        offerStatus: 'Rejected',
+        offerAmount: 9000, // a rejected 9,000 must not stand in as a live offer
+        offerUpdatedAt: '2026-02-01',
+      } as unknown as SalesLead,
+    ],
+  );
+  assert.equal(solo.pipelineCount, 0);
+  assert.equal(solo.heldCount, 1);
+  const row = solo.perAnimal.find((r) => r.horseId === 'r');
+  assert.equal(row?.status, 'held');
+  assert.equal(row?.value, 6000); // falls back to the asking price, not the rejected 9,000
+});
+
+test('a cost-blind held horse is never sold as a sure upside', () => {
+  const solo = buildRanchFinancials(
+    [horse('u', 0, 5000, 'Uno')], // asking 5,000 but no cost basis and no expenses
+    [],
+    [],
+  );
+  assert.equal(solo.costBlindSpotCount, 1);
+  assert.equal(solo.projectedProfit, 0); // profit unknown without a cost
+  assert.equal(
+    solo.insights.some((i) => i.id.startsWith('opportunity-')),
+    false,
+    'no upside insight should claim its asking price as profit',
+  );
+});
+
 test('overhead can flip a positive gross into a net loss, and it is surfaced', () => {
   // A $10,000 per-animal gain with $20,000 of overhead is a $10,000 operation loss.
   const solo = buildRanchFinancials(

@@ -276,6 +276,9 @@ export function buildRanchFinancials(
       horseLeads.filter(
         (lead) =>
           lead.outcome !== 'Lost' &&
+          // A rejected offer is dead, not live — never let it stand in as pipeline
+          // value just because the lead still sits in the Offer stage.
+          lead.offerStatus !== 'Rejected' &&
           (ACTIVE_OFFER_STATUSES.has(lead.offerStatus ?? '') ||
             (lead.stage === 'Offer' && (lead.offerAmount ?? 0) > 0)),
       ),
@@ -442,7 +445,9 @@ function buildFinancialInsights(
   }
 
   const bestOpportunity = held
-    .filter((row) => row.value > 0 && row.profit > 0)
+    // Only tout upside we can actually stand behind: a cost-blind row's "profit"
+    // is just its asking price, so it must not be sold as a sure gain.
+    .filter((row) => row.value > 0 && row.profit > 0 && !row.costBlindSpot)
     .sort((left, right) => right.profit - left.profit)[0];
   if (bestOpportunity) {
     insights.push({
