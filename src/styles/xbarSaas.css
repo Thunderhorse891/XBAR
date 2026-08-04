@@ -2589,6 +2589,8 @@ aside.xs-drawer .xs-drawer__sub {
     grid-template-columns: 1fr;
   }
 }
+/* The hover lift comes from the shared .motion-lift utility (added on the element)
+   so it inherits the global prefers-reduced-motion guard — no bespoke transform. */
 .xs-money__card {
   display: flex;
   flex-direction: column;
@@ -2600,13 +2602,6 @@ aside.xs-drawer .xs-drawer__sub {
   background: var(--xbar-surface);
   box-shadow: var(--xbar-shadow-card);
   cursor: pointer;
-  transition:
-    transform var(--motion-fast, 120ms) var(--ease-emphasized, ease),
-    box-shadow var(--motion-fast, 120ms) var(--ease-emphasized, ease);
-}
-.xs-money__card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 18px 45px rgba(32, 36, 40, 0.1);
 }
 .xs-money__label {
   font-size: 11.5px;

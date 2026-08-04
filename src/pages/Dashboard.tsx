@@ -78,24 +78,51 @@ export default function Dashboard() {
   // and populated views so real spend is never hidden (a workspace can log
   // ranch-wide expenses before its first horse; the Money view treats that as a
   // real, negative picture and so must the Dashboard).
+  // Sold horses whose sale price or cost is missing leave banked profit incomplete.
+  // When the net figure is exactly zero for that reason, it isn't a confirmed
+  // break-even — it's unknown, so the headline says so instead of a green $0.
+  const bankedGaps = financials.soldMissingCostCount + financials.soldMissingPriceCount;
+  const bankedUnknown = bankedGaps > 0 && financials.netProfit === 0;
+  const bankedMeta = bankedUnknown
+    ? `${financials.soldCount} sold · add costs to see profit`
+    : `${financials.soldCount} sold${bankedGaps > 0 ? ` · ${bankedGaps} need details` : ''}${
+        financials.overheadSpend > 0 ? ' · net of overhead' : ''
+      }`;
   const moneyBand = (
     <div className="xs-money motion-stagger">
-      <button type="button" className="xs-money__card" style={motionIndex(0)} onClick={() => navigate('/financials')}>
+      <button
+        type="button"
+        className="xs-money__card motion-lift"
+        style={motionIndex(0)}
+        onClick={() => navigate('/financials')}
+      >
         <span className="xs-money__label">Profit banked</span>
-        <span className={`xs-money__value xs-money__value--${financials.netProfit >= 0 ? 'up' : 'down'}`}>
-          {financials.netProfit >= 0 ? '' : '−'}
-          {formatCompactCurrency(Math.abs(financials.netProfit))}
-        </span>
-        <span className="xs-money__meta">
-          {financials.soldCount} sold{financials.overheadSpend > 0 ? ' · net of overhead' : ''}
-        </span>
+        {bankedUnknown ? (
+          <span className="xs-money__value">—</span>
+        ) : (
+          <span className={`xs-money__value xs-money__value--${financials.netProfit >= 0 ? 'up' : 'down'}`}>
+            {financials.netProfit >= 0 ? '' : '−'}
+            {formatCompactCurrency(Math.abs(financials.netProfit))}
+          </span>
+        )}
+        <span className="xs-money__meta">{bankedMeta}</span>
       </button>
-      <button type="button" className="xs-money__card" style={motionIndex(1)} onClick={() => navigate('/financials')}>
+      <button
+        type="button"
+        className="xs-money__card motion-lift"
+        style={motionIndex(1)}
+        onClick={() => navigate('/financials')}
+      >
         <span className="xs-money__label">Collected from sales</span>
         <span className="xs-money__value">{formatCompactCurrency(financials.realizedProceeds)}</span>
         <span className="xs-money__meta">Cash in from closed deals</span>
       </button>
-      <button type="button" className="xs-money__card" style={motionIndex(2)} onClick={() => navigate('/financials')}>
+      <button
+        type="button"
+        className="xs-money__card motion-lift"
+        style={motionIndex(2)}
+        onClick={() => navigate('/financials')}
+      >
         <span className="xs-money__label">Invested to date</span>
         <span className="xs-money__value">{formatCompactCurrency(financials.totalInvested)}</span>
         <span className="xs-money__meta">Cost basis, expenses &amp; overhead</span>
