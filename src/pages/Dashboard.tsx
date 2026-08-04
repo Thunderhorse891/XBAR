@@ -74,6 +74,35 @@ export default function Dashboard() {
     [horses, expenseReceipts, salesLeads],
   );
 
+  // Money band — the front-door P&L headline, reused in both the getting-started
+  // and populated views so real spend is never hidden (a workspace can log
+  // ranch-wide expenses before its first horse; the Money view treats that as a
+  // real, negative picture and so must the Dashboard).
+  const moneyBand = (
+    <div className="xs-money motion-stagger">
+      <button type="button" className="xs-money__card" style={motionIndex(0)} onClick={() => navigate('/financials')}>
+        <span className="xs-money__label">Profit banked</span>
+        <span className={`xs-money__value xs-money__value--${financials.netProfit >= 0 ? 'up' : 'down'}`}>
+          {financials.netProfit >= 0 ? '' : '−'}
+          {formatCompactCurrency(Math.abs(financials.netProfit))}
+        </span>
+        <span className="xs-money__meta">
+          {financials.soldCount} sold{financials.overheadSpend > 0 ? ' · net of overhead' : ''}
+        </span>
+      </button>
+      <button type="button" className="xs-money__card" style={motionIndex(1)} onClick={() => navigate('/financials')}>
+        <span className="xs-money__label">Collected from sales</span>
+        <span className="xs-money__value">{formatCompactCurrency(financials.realizedProceeds)}</span>
+        <span className="xs-money__meta">Cash in from closed deals</span>
+      </button>
+      <button type="button" className="xs-money__card" style={motionIndex(2)} onClick={() => navigate('/financials')}>
+        <span className="xs-money__label">Invested to date</span>
+        <span className="xs-money__value">{formatCompactCurrency(financials.totalInvested)}</span>
+        <span className="xs-money__meta">Cost basis, expenses &amp; overhead</span>
+      </button>
+    </div>
+  );
+
   useEffect(() => {
     track(events.pageView, { surface: 'operations_console', empty: isEmpty, horses: horses.length });
   }, [isEmpty, horses.length]);
@@ -119,6 +148,10 @@ export default function Dashboard() {
             </button>
           ))}
         </div>
+
+        {/* Even before the first horse, surface real spend so the money picture is
+            never hidden (matches the Money view's overhead-only handling). */}
+        {financials.totalInvested > 0 ? moneyBand : null}
 
         <div className="xs-homegrid">
           <div>
@@ -358,28 +391,7 @@ export default function Dashboard() {
 
       {/* Money on the front door — is the operation making money? Reuses the Money
           view's engine so the two never disagree. Tap through for the full P&L. */}
-      <div className="xs-money motion-stagger">
-        <button type="button" className="xs-money__card" style={motionIndex(0)} onClick={() => navigate('/financials')}>
-          <span className="xs-money__label">Profit banked</span>
-          <span className={`xs-money__value xs-money__value--${financials.netProfit >= 0 ? 'up' : 'down'}`}>
-            {financials.netProfit >= 0 ? '' : '−'}
-            {formatCompactCurrency(Math.abs(financials.netProfit))}
-          </span>
-          <span className="xs-money__meta">
-            {financials.soldCount} sold{financials.overheadSpend > 0 ? ' · net of overhead' : ''}
-          </span>
-        </button>
-        <button type="button" className="xs-money__card" style={motionIndex(1)} onClick={() => navigate('/financials')}>
-          <span className="xs-money__label">Collected from sales</span>
-          <span className="xs-money__value">{formatCompactCurrency(financials.realizedProceeds)}</span>
-          <span className="xs-money__meta">Cash in from closed deals</span>
-        </button>
-        <button type="button" className="xs-money__card" style={motionIndex(2)} onClick={() => navigate('/financials')}>
-          <span className="xs-money__label">Invested to date</span>
-          <span className="xs-money__value">{formatCompactCurrency(financials.totalInvested)}</span>
-          <span className="xs-money__meta">Cost basis, expenses &amp; overhead</span>
-        </button>
-      </div>
+      {moneyBand}
 
       <div className="xs-homegrid">
         <div>
