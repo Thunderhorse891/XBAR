@@ -430,9 +430,11 @@ export default function AnimalProfile() {
                   <span className="xs-money__value">{money.value > 0 ? formatCurrency(money.value) : '—'}</span>
                   <span className="xs-money__meta">
                     {money.status !== 'sold'
-                      ? money.safeSalePrice > 0
-                        ? `Protect at ${formatCurrency(money.safeSalePrice)}`
-                        : 'Set an asking price'
+                      ? money.value <= 0
+                        ? 'Set an asking price'
+                        : money.costBlindSpot
+                          ? 'Add a cost basis'
+                          : `Protect at ${formatCurrency(money.safeSalePrice)}`
                       : money.value > 0
                         ? 'Recorded sale'
                         : 'Record the sale amount'}
