@@ -84,7 +84,11 @@ export default function Dashboard() {
   const missingCost = financials.soldMissingCostCount;
   const missingPrice = financials.soldMissingPriceCount;
   const bankedGaps = missingCost + missingPrice;
-  const bankedUnknown = bankedGaps > 0 && financials.netProfit === 0;
+  const bankedComplete = bankedGaps === 0;
+  // Any sale gap makes the net incomplete — even when overhead leaves a nonzero
+  // figure (e.g. −$500), that's just the overhead floor, not a verdict on profit.
+  // Show it as a neutral "partial" when there's a concrete number, "—" otherwise.
+  const bankedShowValue = bankedComplete || financials.netProfit !== 0;
   // Point the rancher at the data that actually resolves the gap: a missing price
   // is fixed by recording the sale amount, a missing cost by adding the cost basis.
   const fixPhrase =
@@ -93,11 +97,11 @@ export default function Dashboard() {
       : missingPrice > 0
         ? 'record the sale amount'
         : 'add costs';
-  const bankedMeta = bankedUnknown
-    ? `${financials.soldCount} sold · ${fixPhrase} to see profit`
-    : `${financials.soldCount} sold${bankedGaps > 0 ? ` · ${bankedGaps} need details` : ''}${
-        financials.overheadSpend > 0 ? ' · net of overhead' : ''
-      }`;
+  const bankedMeta = bankedComplete
+    ? `${financials.soldCount} sold${financials.overheadSpend > 0 ? ' · net of overhead' : ''}`
+    : bankedShowValue
+      ? `Partial — ${fixPhrase} to complete`
+      : `${financials.soldCount} sold · ${fixPhrase} to see profit`;
   // Cash collected is likewise unknown (not $0) when a closed sale has no amount.
   const collectedUnknown = missingPrice > 0 && financials.realizedProceeds === 0;
   const moneyBand = (
@@ -109,10 +113,14 @@ export default function Dashboard() {
         onClick={() => navigate('/financials')}
       >
         <span className="xs-money__label">Profit banked</span>
-        {bankedUnknown ? (
+        {!bankedShowValue ? (
           <span className="xs-money__value">—</span>
         ) : (
-          <span className={`xs-money__value xs-money__value--${financials.netProfit >= 0 ? 'up' : 'down'}`}>
+          // Colour it a win/loss only when the result is complete; a partial figure
+          // (sale gaps) stays neutral so it isn't read as a definite outcome.
+          <span
+            className={`xs-money__value${bankedComplete ? ` xs-money__value--${financials.netProfit >= 0 ? 'up' : 'down'}` : ''}`}
+          >
             {financials.netProfit >= 0 ? '' : '−'}
             {formatCompactCurrency(Math.abs(financials.netProfit))}
           </span>
