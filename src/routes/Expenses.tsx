@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CommandBrief } from '@/components/CommandBrief';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill, ProgressBar } from '@/components/app-ui';
@@ -41,7 +41,15 @@ export default function Expenses() {
     () => buildProfitPortfolio(horses, expenseReceipts, salesLeads),
     [expenseReceipts, horses, salesLeads],
   );
-  const [profitHorseId, setProfitHorseId] = useState(horses[0]?.id ?? '');
+  // Deep link: /expenses?horse=<id> preselects that horse's pricing form (e.g. the
+  // "Invested" card on a horse profile), so callers never land on horses[0] by
+  // accident. Falls back to the first horse when the param is missing/unknown.
+  const [searchParams] = useSearchParams();
+  const requestedHorseId = searchParams.get('horse');
+  const [profitHorseId, setProfitHorseId] = useState(
+    (requestedHorseId && horses.some((horse) => horse.id === requestedHorseId) ? requestedHorseId : horses[0]?.id) ??
+      '',
+  );
   const profitHorse = horses.find((horse) => horse.id === profitHorseId) ?? horses[0];
   const profitProfile = profitPortfolio.find((profile) => profile.horseId === profitHorse?.id);
   const [costBasis, setCostBasis] = useState(String(profitHorse?.costBasis ?? 0));

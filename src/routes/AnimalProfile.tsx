@@ -412,7 +412,7 @@ export default function AnimalProfile() {
                   type="button"
                   className="xs-money__card motion-lift"
                   style={motionIndex(0)}
-                  onClick={() => navigate('/expenses')}
+                  onClick={() => navigate(`/expenses?horse=${animal.id}`)}
                 >
                   <span className="xs-money__label">Invested</span>
                   <span className="xs-money__value">{formatCurrency(money.invested)}</span>
