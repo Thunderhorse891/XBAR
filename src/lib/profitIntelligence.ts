@@ -142,3 +142,306 @@ export function buildProfitPortfolio(horses: HorseRecord[], receipts: ExpenseRec
     .map((horse) => buildHorseProfitProfile(horse, receipts, leads))
     .sort((left, right) => right.profitLoss - left.profitLoss);
 }
+
+// ---------------------------------------------------------------------------
+// Ranch-wide financial intelligence.
+//
+// Everything below is derived deterministically from records the rancher
+// already keeps — cost basis, logged expense receipts, and real buyer offers.
+// Nothing is invented or projected by a model. The point is to turn "clean
+// records" into a money answer: what have I actually made, what is at stake in
+// the herd right now, and what one move protects the most margin.
+//
+// The one distinction the per-horse profile does not make, and this does, is
+// REALIZED vs. UNREALIZED. A horse is realized only when a buyer lead for it is
+// marked Won — that is money in. Everything else is capital still tied up, valued
+// at the live offer (pipeline) or the asking price (held), never counted as
+// profit until the deal actually closes.
+// ---------------------------------------------------------------------------
+
+export type AnimalFinancialStatus = 'sold' | 'pipeline' | 'held';
+
+export type AnimalFinancialRow = {
+  horseId: string;
+  horseName: string;
+  status: AnimalFinancialStatus;
+  /** Capital in the animal: cost basis + linked expenses (its break-even). */
+  invested: number;
+  /** Realized proceeds (sold), live offer (pipeline), or asking price (held). 0 means unpriced. */
+  value: number;
+  /** value − invested. Realized for sold animals; projected otherwise. */
+  profit: number;
+  marginPercent: number;
+  /** Held/listed below break-even — selling now would lock in a loss. */
+  underwater: boolean;
+  /** Price that protects the standard margin over break-even (from the profile). */
+  safeSalePrice: number;
+  /** No cost basis and no linked expenses — true profit is unknown until costs are entered. */
+  costBlindSpot: boolean;
+};
+
+export type FinancialInsightTone = 'win' | 'risk' | 'opportunity' | 'info';
+
+export type FinancialInsight = {
+  id: string;
+  tone: FinancialInsightTone;
+  title: string;
+  detail: string;
+  horseId?: string;
+  amount?: number;
+};
+
+export type RanchFinancials = {
+  // Realized — money already made on closed (Won) deals.
+  realizedProceeds: number;
+  realizedCost: number;
+  realizedProfit: number;
+  realizedMarginPercent: number;
+  soldCount: number;
+
+  // Unrealized — capital still working in the herd, valued but not yet banked.
+  investedInHerd: number;
+  projectedValue: number;
+  projectedProfit: number;
+  pipelineCount: number;
+  heldCount: number;
+
+  // Whole-operation totals.
+  totalInvested: number;
+  overheadSpend: number;
+
+  // Integrity signals — where the numbers can't yet be trusted.
+  underwaterCount: number;
+  costBlindSpotCount: number;
+  unpricedHeldCount: number;
+
+  perAnimal: AnimalFinancialRow[];
+  topCostCategories: { category: ExpenseCategory; amount: number }[];
+  insights: FinancialInsight[];
+};
+
+function latestByOfferDate(leads: SalesLead[]): SalesLead | undefined {
+  return [...leads].sort((left, right) => (right.offerUpdatedAt ?? '').localeCompare(left.offerUpdatedAt ?? ''))[0];
+}
+
+const ACTIVE_OFFER_STATUSES = new Set(['Accepted', 'Deposit Due', 'Deposit Paid']);
+
+export function buildRanchFinancials(
+  horses: HorseRecord[],
+  receipts: ExpenseReceipt[],
+  leads: SalesLead[],
+): RanchFinancials {
+  const rows: AnimalFinancialRow[] = horses.map((horse) => {
+    const profile = buildHorseProfitProfile(horse, receipts, []);
+    const invested = profile.breakEven;
+    const costBlindSpot = profile.costBasis <= 0 && profile.spend <= 0;
+    const horseLeads = leads.filter((lead) => lead.horseId === horse.id);
+
+    const wonLead = latestByOfferDate(horseLeads.filter((lead) => lead.outcome === 'Won'));
+    if (wonLead) {
+      // `||` (not `??`) so a Won deal with a 0/missing amount falls back to the
+      // asking price rather than reporting a phantom total loss.
+      const value = wonLead.counterOfferAmount || wonLead.offerAmount || horse.sale.askPrice || 0;
+      const profit = value - invested;
+      return {
+        horseId: horse.id,
+        horseName: horse.name,
+        status: 'sold',
+        invested,
+        value,
+        profit,
+        marginPercent: value > 0 ? (profit / value) * 100 : 0,
+        underwater: false,
+        safeSalePrice: profile.safeSalePrice,
+        costBlindSpot,
+      };
+    }
+
+    const activeLead = latestByOfferDate(
+      horseLeads.filter(
+        (lead) =>
+          lead.outcome !== 'Lost' &&
+          (ACTIVE_OFFER_STATUSES.has(lead.offerStatus ?? '') ||
+            (lead.stage === 'Offer' && (lead.offerAmount ?? 0) > 0)),
+      ),
+    );
+    const liveOffer = activeLead ? activeLead.counterOfferAmount || activeLead.offerAmount || 0 : 0;
+    const isPipeline = liveOffer > 0;
+    const value = isPipeline ? liveOffer : Math.max(0, horse.sale.askPrice || 0);
+    const profit = value - invested;
+
+    return {
+      horseId: horse.id,
+      horseName: horse.name,
+      status: isPipeline ? 'pipeline' : 'held',
+      invested,
+      value,
+      profit,
+      marginPercent: value > 0 ? (profit / value) * 100 : 0,
+      underwater: value > 0 && value < invested,
+      safeSalePrice: profile.safeSalePrice,
+      costBlindSpot,
+    };
+  });
+
+  const sold = rows.filter((row) => row.status === 'sold');
+  const pipeline = rows.filter((row) => row.status === 'pipeline');
+  const held = rows.filter((row) => row.status === 'held');
+  const unrealized = [...pipeline, ...held];
+
+  const realizedProceeds = sold.reduce((sum, row) => sum + row.value, 0);
+  const realizedCost = sold.reduce((sum, row) => sum + row.invested, 0);
+  const realizedProfit = realizedProceeds - realizedCost;
+
+  const investedInHerd = unrealized.reduce((sum, row) => sum + row.invested, 0);
+  const projectedValue = unrealized.reduce((sum, row) => sum + row.value, 0);
+  // Only count animals that actually carry a price toward projected profit.
+  const projectedProfit = unrealized.filter((row) => row.value > 0).reduce((sum, row) => sum + row.profit, 0);
+
+  // Receipts not linked to any current horse are operating overhead, not part of
+  // any single animal's break-even.
+  const horseIds = new Set(horses.map((horse) => horse.id));
+  const overheadSpend = receipts
+    .filter((receipt) => !receipt.horseId || !horseIds.has(receipt.horseId))
+    .reduce((sum, receipt) => sum + receipt.amount, 0);
+  const totalInvested = rows.reduce((sum, row) => sum + row.invested, 0) + overheadSpend;
+
+  const categoryTotals = receipts.reduce<Map<ExpenseCategory, number>>((totals, receipt) => {
+    totals.set(receipt.category, (totals.get(receipt.category) ?? 0) + receipt.amount);
+    return totals;
+  }, new Map());
+  const topCostCategories = [...categoryTotals.entries()]
+    .map(([category, amount]) => ({ category, amount }))
+    .sort((left, right) => right.amount - left.amount);
+
+  const underwaterCount = rows.filter((row) => row.underwater).length;
+  const costBlindSpotCount = rows.filter((row) => row.costBlindSpot).length;
+  const unpricedHeldCount = held.filter((row) => row.value <= 0).length;
+
+  return {
+    realizedProceeds,
+    realizedCost,
+    realizedProfit,
+    realizedMarginPercent: realizedProceeds > 0 ? (realizedProfit / realizedProceeds) * 100 : 0,
+    soldCount: sold.length,
+    investedInHerd,
+    projectedValue,
+    projectedProfit,
+    pipelineCount: pipeline.length,
+    heldCount: held.length,
+    totalInvested,
+    overheadSpend,
+    underwaterCount,
+    costBlindSpotCount,
+    unpricedHeldCount,
+    perAnimal: sortAnimalRows(rows),
+    topCostCategories,
+    insights: buildFinancialInsights(sold, held, topCostCategories, {
+      costBlindSpotCount,
+      unpricedHeldCount,
+    }),
+  };
+}
+
+// Sold first (by realized profit), then active pipeline, then held — the order a
+// rancher reads them: what closed, what's in play, what's still sitting.
+function sortAnimalRows(rows: AnimalFinancialRow[]): AnimalFinancialRow[] {
+  const rank: Record<AnimalFinancialStatus, number> = { sold: 0, pipeline: 1, held: 2 };
+  return [...rows].sort((left, right) => rank[left.status] - rank[right.status] || right.profit - left.profit);
+}
+
+function buildFinancialInsights(
+  sold: AnimalFinancialRow[],
+  held: AnimalFinancialRow[],
+  topCostCategories: { category: ExpenseCategory; amount: number }[],
+  integrity: { costBlindSpotCount: number; unpricedHeldCount: number },
+): FinancialInsight[] {
+  const insights: FinancialInsight[] = [];
+  const money = (value: number) => `$${Math.round(value).toLocaleString()}`;
+
+  const bestSale = [...sold].sort((left, right) => right.profit - left.profit)[0];
+  if (bestSale && bestSale.profit > 0) {
+    insights.push({
+      id: `win-${bestSale.horseId}`,
+      tone: 'win',
+      title: `${bestSale.horseName} was your best sale`,
+      detail: `Sold for ${money(bestSale.value)} — ${money(bestSale.profit)} profit at ${bestSale.marginPercent.toFixed(0)}% margin.`,
+      horseId: bestSale.horseId,
+      amount: bestSale.profit,
+    });
+  }
+
+  const worstSale = [...sold].sort((left, right) => left.profit - right.profit)[0];
+  if (worstSale && worstSale.profit < 0) {
+    insights.push({
+      id: `loss-${worstSale.horseId}`,
+      tone: 'risk',
+      title: `${worstSale.horseName} sold below break-even`,
+      detail: `Proceeds of ${money(worstSale.value)} came in ${money(-worstSale.profit)} under the ${money(worstSale.invested)} it cost to get there.`,
+      horseId: worstSale.horseId,
+      amount: worstSale.profit,
+    });
+  }
+
+  const underwater = held.filter((row) => row.underwater).sort((left, right) => left.profit - right.profit)[0];
+  if (underwater) {
+    insights.push({
+      id: `underwater-${underwater.horseId}`,
+      tone: 'risk',
+      title: `${underwater.horseName} is priced to lose money`,
+      detail: `Listed at ${money(underwater.value)} — ${money(underwater.invested - underwater.value)} below break-even. Raise the ask to ${money(underwater.safeSalePrice)} to protect your margin.`,
+      horseId: underwater.horseId,
+      amount: underwater.profit,
+    });
+  }
+
+  const bestOpportunity = held
+    .filter((row) => row.value > 0 && row.profit > 0)
+    .sort((left, right) => right.profit - left.profit)[0];
+  if (bestOpportunity) {
+    insights.push({
+      id: `opportunity-${bestOpportunity.horseId}`,
+      tone: 'opportunity',
+      title: `${bestOpportunity.horseName} is your biggest upside`,
+      detail: `Clears ${money(bestOpportunity.profit)} profit at the current ${money(bestOpportunity.value)} ask. Move it to keep the margin.`,
+      horseId: bestOpportunity.horseId,
+      amount: bestOpportunity.profit,
+    });
+  }
+
+  const topCost = topCostCategories[0];
+  if (topCost && topCost.amount > 0) {
+    insights.push({
+      id: `cost-${topCost.category}`,
+      tone: 'info',
+      title: `${topCost.category} is your biggest cost`,
+      detail: `${money(topCost.amount)} across the herd. Trimming it lifts the margin on every animal you sell.`,
+      amount: topCost.amount,
+    });
+  }
+
+  if (integrity.costBlindSpotCount > 0) {
+    const n = integrity.costBlindSpotCount;
+    insights.push({
+      id: 'blindspot-cost',
+      tone: 'info',
+      title: `${n} ${n === 1 ? 'horse has' : 'horses have'} no recorded cost`,
+      detail: `Add a cost basis or log expenses so XBAR can show ${n === 1 ? 'its' : 'their'} real profit instead of guessing.`,
+    });
+  }
+
+  if (integrity.unpricedHeldCount > 0) {
+    const n = integrity.unpricedHeldCount;
+    insights.push({
+      id: 'blindspot-price',
+      tone: 'opportunity',
+      title: `${n} held ${n === 1 ? 'horse has' : 'horses have'} no asking price`,
+      detail: `Set a price to see the projected profit and put ${n === 1 ? 'it' : 'them'} to work in your pipeline.`,
+    });
+  }
+
+  const tonePriority: Record<FinancialInsightTone, number> = { risk: 0, win: 1, opportunity: 2, info: 3 };
+  return insights.sort(
+    (left, right) => tonePriority[left.tone] - tonePriority[right.tone] || (right.amount ?? 0) - (left.amount ?? 0),
+  );
+}

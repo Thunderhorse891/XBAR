@@ -22,6 +22,7 @@ import {
   Sparkles,
   Stethoscope,
   Sprout,
+  TrendingUp,
   Users,
   Wheat,
 } from 'lucide-react';
@@ -65,6 +66,7 @@ const navGroups: NavGroup[] = [
   {
     heading: 'Selling',
     items: [
+      { label: 'Money', path: '/financials', icon: TrendingUp },
       { label: 'Sales', path: '/sales', icon: Gauge },
       { label: 'Buyer follow-up', path: buyerFollowUpPath(), icon: Users },
       { label: 'Sale Packets', path: '/sale-packets', icon: FileText },

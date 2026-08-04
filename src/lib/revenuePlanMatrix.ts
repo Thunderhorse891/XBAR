@@ -66,9 +66,9 @@ export const revenuePlanMatrix: Record<SubscriptionTier, RevenuePlanProfile> = {
     revenueRole: 'High-value operating tier designed to support the revenue target with fewer serious barn accounts.',
     features: [
       {
-        label: 'Business management',
+        label: 'Financial intelligence',
         detail:
-          'Board, training, farrier, expense, late-fee, payroll summary, and profit/loss workflows planned around barn operations.',
+          'Profit-per-animal ranking and a ranch-wide profit & loss that separate money banked from money still at stake, plus underwater-price alerts and cost-drag analysis built from your real costs and offers.',
       },
       {
         label: 'Inventory and supply control',

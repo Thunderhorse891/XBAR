@@ -86,6 +86,7 @@ export const ROUTE_COMMANDS: readonly CommandEntry[] = (
     ['medical', 'Health', 'Care records and due work', '/medical'],
     ['breeding', 'Breeding pipeline', 'Pairings and milestones', '/breeding'],
     ['sales', 'Sales', 'Buyer pipeline and listings', '/sales'],
+    ['financials', 'Money', 'Profit per animal and ranch P&L', '/financials'],
     ['expenses', 'Expenses', 'Receipts and cost tracking', '/expenses'],
     ['reminders', 'Tasks and reminders', 'Daily work queue', '/reminders'],
     ['assets', 'Property and equipment', 'Ranch assets and supplies', '/assets'],
