@@ -1,16 +1,30 @@
-import { useRef, useState } from 'react';
-import type { ChangeEvent } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import type { ChangeEvent, CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Camera, Copy, FileText, HeartPulse, Move, Pencil, Plus, Upload } from 'lucide-react';
 import { HorsesIcon } from '@/components/icons';
 import { ActionButton, Card, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
 import { useHorseRecord, useXbarStore } from '@/store/useXbarStore';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrency, formatPercent } from '@/lib/format';
+import { billingPath } from '@/lib/billingRoutes';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { hasRoleCapability } from '@/lib/permissions';
 import { animalPassportId, identityCompleteness } from '@/lib/animalPassport';
+import { type AnimalFinancialStatus, buildRanchFinancials } from '@/lib/profitIntelligence';
+import { profitIntelligenceGate } from '@/lib/subscriptionGates';
+import type { ChipTone } from '@/types/saas';
 import type { HorseStatus } from '@/types/xbar';
+
+// Stagger index for the motion system; the CSS var drives each child's delay.
+const motionIndex = (index: number): CSSProperties => ({ ['--motion-index' as string]: index }) as CSSProperties;
+
+// How each sale state reads on the per-animal money panel.
+const MONEY_STATUS: Record<AnimalFinancialStatus, { chip: ChipTone; label: string; valueLabel: string }> = {
+  sold: { chip: 'success', label: 'Sold', valueLabel: 'Sold for' },
+  pipeline: { chip: 'info', label: 'In play', valueLabel: 'Best offer' },
+  held: { chip: 'neutral', label: 'Held', valueLabel: 'Asking price' },
+};
 
 const TABS = [
   'Overview',
@@ -42,10 +56,25 @@ export default function AnimalProfile() {
   const pushToast = useUiStore((s) => s.pushToast);
   const uploadHorseMedia = useXbarStore((s) => s.uploadHorseMedia);
   const currentRole = useXbarStore((s) => s.currentRole);
+  const expenseReceipts = useXbarStore((s) => s.expenseReceipts);
+  const salesLeads = useXbarStore((s) => s.salesLeads);
+  const subscription = useXbarStore((s) => s.subscription);
+  // Profit intelligence (projected profit, margin, safe-price) is a Ranch Ops
+  // feature; the per-animal money panel below respects the same gate as the Money
+  // view so it never leaks a paid entitlement.
+  const profitGate = profitIntelligenceGate(subscription);
   const [tab, setTab] = useState<string>('Overview');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const animal = useHorseRecord(id);
+
+  // This animal's honest money picture, straight from the shared engine (same
+  // rules as the Dashboard money band and the Money view), so profit is only ever
+  // shown when both its price and cost are known.
+  const money = useMemo(
+    () => (animal ? (buildRanchFinancials([animal], expenseReceipts, salesLeads).perAnimal[0] ?? null) : null),
+    [animal, expenseReceipts, salesLeads],
+  );
 
   const passportId = animalPassportId(animal?.id);
   const canUploadMedia = hasRoleCapability(currentRole, 'uploadMedia');
@@ -269,96 +298,190 @@ export default function AnimalProfile() {
       </div>
 
       {tab === 'Overview' ? (
-        <div className="xs-grid-2">
-          <Card title="Identity">
-            <dl className="xs-kv">
-              <dt>Name</dt>
-              <dd>{animal.name}</dd>
-              <dt>Breed</dt>
-              <dd>{animal.breed || '—'}</dd>
-              <dt>Sex</dt>
-              <dd>{animal.sex}</dd>
-              {animal.color ? (
-                <>
-                  <dt>Color</dt>
-                  <dd>{animal.color}</dd>
-                </>
-              ) : null}
-              <dt>Age</dt>
-              <dd>{animal.age ? `${animal.age} yrs` : animal.foaledOn ? `Foaled ${animal.foaledOn}` : '—'}</dd>
-              <dt>Registry</dt>
-              <dd>
-                {animal.registered
-                  ? `${animal.registry} · ${animal.registrationNumber || animal.aqhaNumber || '—'}`
-                  : 'Unregistered'}
-              </dd>
-              {animal.bloodline?.sire ? (
-                <>
-                  <dt>Sire</dt>
-                  <dd>{animal.bloodline.sire}</dd>
-                </>
-              ) : null}
-              {animal.bloodline?.dam ? (
-                <>
-                  <dt>Dam</dt>
-                  <dd>{animal.bloodline.dam}</dd>
-                </>
-              ) : null}
-              <dt>Owner</dt>
-              <dd>
-                {animal.owner}
-                {animal.ownerEntity ? ` · ${animal.ownerEntity}` : ''}
-              </dd>
-              <dt>Location</dt>
-              <dd>{location}</dd>
-              <dt>Segment</dt>
-              <dd>{animal.segment}</dd>
-            </dl>
-          </Card>
-          <Card title="What to do next">
-            <div className="xs-nba">
-              <div className="xs-nba__label">Suggested next step</div>
-              <div className="xs-nba__title">
-                {animal.readiness?.blockers?.[0] ?? `Keep ${animal.name}'s records current`}
-              </div>
-            </div>
-            {identity.missing.length ? (
-              <div className="xs-passport-gap">
-                <div className="xs-passport-gap__head">
-                  <span>
-                    Passport {identity.present}/{identity.total} complete
-                  </span>
-                  <StatusChip tone={identityTone}>{identity.percent}%</StatusChip>
+        <>
+          <div className="xs-grid-2">
+            <Card title="Identity">
+              <dl className="xs-kv">
+                <dt>Name</dt>
+                <dd>{animal.name}</dd>
+                <dt>Breed</dt>
+                <dd>{animal.breed || '—'}</dd>
+                <dt>Sex</dt>
+                <dd>{animal.sex}</dd>
+                {animal.color ? (
+                  <>
+                    <dt>Color</dt>
+                    <dd>{animal.color}</dd>
+                  </>
+                ) : null}
+                <dt>Age</dt>
+                <dd>{animal.age ? `${animal.age} yrs` : animal.foaledOn ? `Foaled ${animal.foaledOn}` : '—'}</dd>
+                <dt>Registry</dt>
+                <dd>
+                  {animal.registered
+                    ? `${animal.registry} · ${animal.registrationNumber || animal.aqhaNumber || '—'}`
+                    : 'Unregistered'}
+                </dd>
+                {animal.bloodline?.sire ? (
+                  <>
+                    <dt>Sire</dt>
+                    <dd>{animal.bloodline.sire}</dd>
+                  </>
+                ) : null}
+                {animal.bloodline?.dam ? (
+                  <>
+                    <dt>Dam</dt>
+                    <dd>{animal.bloodline.dam}</dd>
+                  </>
+                ) : null}
+                <dt>Owner</dt>
+                <dd>
+                  {animal.owner}
+                  {animal.ownerEntity ? ` · ${animal.ownerEntity}` : ''}
+                </dd>
+                <dt>Location</dt>
+                <dd>{location}</dd>
+                <dt>Segment</dt>
+                <dd>{animal.segment}</dd>
+              </dl>
+            </Card>
+            <Card title="What to do next">
+              <div className="xs-nba">
+                <div className="xs-nba__label">Suggested next step</div>
+                <div className="xs-nba__title">
+                  {animal.readiness?.blockers?.[0] ?? `Keep ${animal.name}'s records current`}
                 </div>
-                <p className="xs-muted" style={{ fontSize: 12.5, margin: '4px 0 0' }}>
-                  Add to complete the buyer-ready passport: {identity.missing.join(', ')}.
-                </p>
               </div>
-            ) : (
-              <p className="xs-muted" style={{ fontSize: 12.5, marginTop: 10 }}>
-                Passport identity is complete — every core field is on file.
-              </p>
-            )}
-            <div className="xs-toolbar" style={{ marginTop: 12 }}>
-              {drawerFixableMissing.length ? (
-                <ActionButton
-                  size="sm"
-                  icon={<Pencil size={14} />}
-                  onClick={() => openQuickCreate({ action: 'Edit Horse', horseId: animal.id })}
-                >
-                  Complete passport
-                </ActionButton>
+              {identity.missing.length ? (
+                <div className="xs-passport-gap">
+                  <div className="xs-passport-gap__head">
+                    <span>
+                      Passport {identity.present}/{identity.total} complete
+                    </span>
+                    <StatusChip tone={identityTone}>{identity.percent}%</StatusChip>
+                  </div>
+                  <p className="xs-muted" style={{ fontSize: 12.5, margin: '4px 0 0' }}>
+                    Add to complete the buyer-ready passport: {identity.missing.join(', ')}.
+                  </p>
+                </div>
               ) : (
-                <ActionButton size="sm" onClick={() => navigate('/today')}>
-                  Open Care Tasks
-                </ActionButton>
+                <p className="xs-muted" style={{ fontSize: 12.5, marginTop: 10 }}>
+                  Passport identity is complete — every core field is on file.
+                </p>
               )}
-              <ActionButton size="sm" variant="primary" onClick={() => navigate('/sale-packets')}>
-                Open Sale Packets
+              <div className="xs-toolbar" style={{ marginTop: 12 }}>
+                {drawerFixableMissing.length ? (
+                  <ActionButton
+                    size="sm"
+                    icon={<Pencil size={14} />}
+                    onClick={() => openQuickCreate({ action: 'Edit Horse', horseId: animal.id })}
+                  >
+                    Complete passport
+                  </ActionButton>
+                ) : (
+                  <ActionButton size="sm" onClick={() => navigate('/today')}>
+                    Open Care Tasks
+                  </ActionButton>
+                )}
+                <ActionButton size="sm" variant="primary" onClick={() => navigate('/sale-packets')}>
+                  Open Sale Packets
+                </ActionButton>
+              </div>
+            </Card>
+          </div>
+          {profitGate ? (
+            <Card title="Money">
+              <div className="xs-nba">
+                <div className="xs-nba__label">Ranch Ops</div>
+                <div className="xs-nba__title">See this horse's profit, margin, and safe sale price</div>
+              </div>
+              <p className="xs-muted" style={{ fontSize: 12.5, margin: '8px 0 12px' }}>
+                {profitGate}
+              </p>
+              <ActionButton size="sm" variant="primary" onClick={() => navigate(billingPath)}>
+                Upgrade to Ranch Ops
               </ActionButton>
-            </div>
-          </Card>
-        </div>
+            </Card>
+          ) : money ? (
+            <Card title="Money" link="Open Money view" onLink={() => navigate('/financials')}>
+              <div style={{ marginBottom: 10 }}>
+                <StatusChip tone={MONEY_STATUS[money.status].chip}>{MONEY_STATUS[money.status].label}</StatusChip>
+              </div>
+              <div className="xs-money motion-stagger">
+                <button
+                  type="button"
+                  className="xs-money__card motion-lift"
+                  style={motionIndex(0)}
+                  onClick={() => navigate(`/expenses?horse=${animal.id}`)}
+                >
+                  <span className="xs-money__label">Invested</span>
+                  <span className="xs-money__value">{formatCurrency(money.invested)}</span>
+                  <span className="xs-money__meta">
+                    {money.costBlindSpot ? 'Add a cost basis' : 'Cost basis + expenses'}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="xs-money__card motion-lift"
+                  style={motionIndex(1)}
+                  onClick={() => navigate('/financials')}
+                >
+                  <span className="xs-money__label">{MONEY_STATUS[money.status].valueLabel}</span>
+                  <span className="xs-money__value">{money.value > 0 ? formatCurrency(money.value) : '—'}</span>
+                  <span className="xs-money__meta">
+                    {money.status !== 'sold'
+                      ? money.value <= 0
+                        ? 'Set an asking price'
+                        : money.costBlindSpot
+                          ? 'Add a cost basis'
+                          : `Protect at ${formatCurrency(money.safeSalePrice)}`
+                      : money.value > 0
+                        ? 'Recorded sale'
+                        : 'Record the sale amount'}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="xs-money__card motion-lift"
+                  style={motionIndex(2)}
+                  onClick={() => navigate('/financials')}
+                >
+                  <span className="xs-money__label">Profit</span>
+                  {money.value > 0 && !money.costBlindSpot ? (
+                    <span className={`xs-money__value xs-money__value--${money.profit >= 0 ? 'up' : 'down'}`}>
+                      {money.profit >= 0 ? '' : '−'}
+                      {formatCurrency(Math.abs(money.profit))}
+                    </span>
+                  ) : (
+                    <span className="xs-money__value">—</span>
+                  )}
+                  <span className="xs-money__meta">
+                    {money.value > 0 && !money.costBlindSpot
+                      ? `${formatPercent(Math.round(money.marginPercent))} margin`
+                      : 'Needs a price and cost'}
+                  </span>
+                </button>
+              </div>
+              {money.underwater ? (
+                <div className="xs-passport-gap" style={{ marginTop: 12 }}>
+                  <div className="xs-passport-gap__head">
+                    <span>{money.status === 'pipeline' ? 'Offer below break-even' : 'Priced below break-even'}</span>
+                    <StatusChip tone="danger">
+                      {money.status === 'pipeline' ? 'Counter at' : 'Raise to'} {formatCurrency(money.safeSalePrice)}
+                    </StatusChip>
+                  </div>
+                  <p className="xs-muted" style={{ fontSize: 12.5, margin: '4px 0 0' }}>
+                    {money.status === 'pipeline'
+                      ? `The current offer on ${animal.name} is below break-even. Counter at ${formatCurrency(
+                          money.safeSalePrice,
+                        )} or higher to protect your margin.`
+                      : `Selling ${animal.name} at the current price would lock in a loss. Raise the ask to protect your margin.`}
+                  </p>
+                </div>
+              ) : null}
+            </Card>
+          ) : null}
+        </>
       ) : null}
 
       {tab === 'Health' ? (
