@@ -1719,8 +1719,16 @@ export const useXbarStore = create<XbarStore>()(
         const removedHorse = get().horses.find((h) => h.id === horseId);
         set((state) => {
           const horses = state.horses.filter((h) => h.id !== horseId);
+          // Cascade the horse's financial records so the ledger and the Money
+          // P&L stay consistent — otherwise its sale leads and expense receipts
+          // would be orphaned, silently reclassifying costs and dropping realized
+          // proceeds mid-total. Deleting the horse deletes its transactions with it.
+          const salesLeads = state.salesLeads.filter((lead) => lead.horseId !== horseId);
+          const expenseReceipts = state.expenseReceipts.filter((receipt) => receipt.horseId !== horseId);
           return {
             horses,
+            salesLeads,
+            expenseReceipts,
             subscription: { ...state.subscription, usage: { ...state.subscription.usage, horsesUsed: horses.length } },
             auditEvents: [
               createAuditEvent({
@@ -1728,7 +1736,7 @@ export const useXbarStore = create<XbarStore>()(
                 action: 'deleted',
                 entityType: 'horse',
                 entityId: horseId,
-                summary: `Horse record "${removedHorse?.name ?? horseId}" deleted with its documents and timelines`,
+                summary: `Horse record "${removedHorse?.name ?? horseId}" deleted with its expenses, sale leads, and timelines`,
               }),
               ...state.auditEvents,
             ].slice(0, 500),

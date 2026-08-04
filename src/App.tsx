@@ -26,6 +26,7 @@ const GettingStarted = lazy(() => import('./routes/GettingStarted'));
 const BuyerDealRoom = lazy(() => import('./routes/BuyerDealRoom'));
 const SalePacketStudio = lazy(() => import('./routes/SalePacketStudio'));
 const Reports = lazy(() => import('./routes/Reports'));
+const Financials = lazy(() => import('./routes/Financials'));
 const TodayWork = lazy(() => import('./routes/TodayWork'));
 const HerdGroups = lazy(() => import('./routes/HerdGroups'));
 const Pastures = lazy(() => import('./routes/Pastures'));
@@ -72,6 +73,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/buyers': 'Buyer Follow-up',
   '/sale-packets': 'Sale Packets',
   '/reports': 'Reports',
+  '/financials': 'Money',
   '/assets': 'Ranch Assets',
   '/breeding': 'Breeding Records',
   '/documents': 'Documents',
@@ -195,6 +197,7 @@ export default function App() {
               <Route path="sale-packets" element={<SalePacketStudio />} />
               <Route path="sale-packet-studio" element={<Navigate to="/sale-packets" replace />} />
               <Route path="reports" element={<Reports />} />
+              <Route path="financials" element={<Financials />} />
               <Route path="animals" element={<Navigate to="/horses" replace />} />
               <Route path="animals/:id" element={<LegacyHorseRedirect />} />
               <Route path="health-care" element={<HealthCare />} />

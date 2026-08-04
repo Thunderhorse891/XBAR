@@ -1,0 +1,232 @@
+/*
+ * Money view — ranch financial intelligence.
+ * Scoped styles for the P&L hero, insight cards, and per-animal ledger. Built on
+ * the shared design tokens (--xbar-*) and the motion tokens (--motion-*) so it
+ * inherits the app's look and the global reduced-motion guard automatically.
+ */
+
+.fin-hero {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+@media (max-width: 900px) {
+  .fin-hero {
+    grid-template-columns: 1fr;
+  }
+}
+
+.fin-stat {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 20px 22px;
+  border-radius: 18px;
+  border: 1px solid var(--xbar-border, rgba(28, 32, 36, 0.1));
+  background: var(--xbar-surface, #fff);
+  box-shadow: 0 10px 30px rgba(28, 32, 36, 0.05);
+  overflow: hidden;
+}
+.fin-stat--hero {
+  background: linear-gradient(135deg, rgba(20, 24, 28, 0.96), rgba(38, 44, 50, 0.92));
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+.fin-stat__label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+.fin-stat__value {
+  font-family: var(--xbar-font-display, inherit);
+  font-size: clamp(28px, 4vw, 40px);
+  font-weight: 700;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+.fin-stat__value--up {
+  color: var(--xbar-success, #1f9d55);
+}
+.fin-stat__value--down {
+  color: var(--xbar-danger, #d1495b);
+}
+.fin-stat--hero .fin-stat__value--up {
+  color: #6ee7a8;
+}
+.fin-stat--hero .fin-stat__value--down {
+  color: #ff9aa8;
+}
+.fin-stat__sub {
+  font-size: 13px;
+  opacity: 0.72;
+}
+
+/* Locked upgrade card — an honest teaser, never a fake number. */
+.fin-lock {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px;
+  border-radius: 20px;
+  border: 1px solid var(--xbar-border, rgba(28, 32, 36, 0.1));
+  background:
+    radial-gradient(120% 100% at 100% 0%, rgba(191, 149, 63, 0.14), transparent 60%), var(--xbar-surface, #fff);
+}
+.fin-lock__title {
+  font-family: var(--xbar-font-display, inherit);
+  font-size: 20px;
+  font-weight: 700;
+}
+.fin-lock__list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fin-lock__item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.fin-lock__bullet {
+  flex: none;
+  margin-top: 2px;
+  color: var(--xbar-brass, #bf953f);
+}
+
+/* Insight rows — the money moves. */
+.fin-insights {
+  display: grid;
+  gap: 10px;
+}
+.fin-insight {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 14px;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--xbar-border, rgba(28, 32, 36, 0.1));
+  background: var(--xbar-surface, #fff);
+  cursor: default;
+}
+button.fin-insight {
+  cursor: pointer;
+}
+.fin-insight__rail {
+  width: 4px;
+  align-self: stretch;
+  border-radius: 4px;
+  background: var(--xbar-border, #ccc);
+}
+.fin-insight--risk .fin-insight__rail {
+  background: var(--xbar-danger, #d1495b);
+}
+.fin-insight--win .fin-insight__rail {
+  background: var(--xbar-success, #1f9d55);
+}
+.fin-insight--opportunity .fin-insight__rail {
+  background: var(--xbar-brass, #bf953f);
+}
+.fin-insight--info .fin-insight__rail {
+  background: var(--xbar-info, #4a6fa5);
+}
+.fin-insight__title {
+  font-weight: 600;
+  font-size: 14px;
+}
+.fin-insight__detail {
+  font-size: 13px;
+  color: var(--xbar-muted, #5b6169);
+  line-height: 1.4;
+}
+.fin-insight__go {
+  font-size: 18px;
+  color: var(--xbar-muted, #8a9099);
+}
+
+/* Per-animal ledger. */
+.fin-ledger {
+  display: grid;
+  gap: 8px;
+}
+.fin-animal {
+  display: grid;
+  grid-template-columns: 1.4fr repeat(3, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: var(--xbar-surface-soft, rgba(28, 32, 36, 0.03));
+  cursor: pointer;
+}
+.fin-animal__head {
+  color: var(--xbar-muted, #8a9099);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: transparent;
+  cursor: default;
+  padding-bottom: 2px;
+}
+.fin-animal__name {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.fin-animal__title {
+  font-weight: 600;
+  font-size: 14px;
+}
+.fin-animal__cell {
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+}
+.fin-animal__cell--label {
+  font-size: 11px;
+  color: var(--xbar-muted, #8a9099);
+}
+.fin-animal__profit--up {
+  color: var(--xbar-success, #1f9d55);
+  font-weight: 600;
+}
+.fin-animal__profit--down {
+  color: var(--xbar-danger, #d1495b);
+  font-weight: 600;
+}
+@media (max-width: 720px) {
+  .fin-animal {
+    grid-template-columns: 1fr auto;
+  }
+  .fin-animal__cell--hide {
+    display: none;
+  }
+}
+
+/* Cost breakdown. */
+.fin-costs {
+  display: grid;
+  gap: 12px;
+}
+.fin-cost__row {
+  display: grid;
+  gap: 6px;
+}
+.fin-cost__top {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 500;
+}

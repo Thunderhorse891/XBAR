@@ -17,6 +17,7 @@ export const canonicalRoutes = {
   sales: '/sales',
   buyers: '/buyers',
   salePackets: '/sale-packets',
+  financials: '/financials',
   billing: '/billing',
   settings: '/settings',
 } as const;
