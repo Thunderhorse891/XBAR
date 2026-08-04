@@ -2578,6 +2578,62 @@ aside.xs-drawer .xs-drawer__sub {
   color: var(--xbar-danger);
 }
 
+/* Money band — the front-door P&L headline (see Dashboard). */
+.xs-money {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+@media (max-width: 720px) {
+  .xs-money {
+    grid-template-columns: 1fr;
+  }
+}
+.xs-money__card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  padding: 16px 18px;
+  border: 1px solid var(--xbar-border);
+  border-radius: var(--xbar-radius);
+  background: var(--xbar-surface);
+  box-shadow: var(--xbar-shadow-card);
+  cursor: pointer;
+  transition:
+    transform var(--motion-fast, 120ms) var(--ease-emphasized, ease),
+    box-shadow var(--motion-fast, 120ms) var(--ease-emphasized, ease);
+}
+.xs-money__card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 45px rgba(32, 36, 40, 0.1);
+}
+.xs-money__label {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--xbar-text-muted);
+}
+.xs-money__value {
+  font-family: var(--xbar-font-display);
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.xs-money__value--up {
+  color: var(--xbar-success);
+}
+.xs-money__value--down {
+  color: var(--xbar-danger);
+}
+.xs-money__meta {
+  font-size: 11.5px;
+  color: var(--xbar-text-muted);
+}
+
 /* Home working grid */
 
 .xs-homegrid {

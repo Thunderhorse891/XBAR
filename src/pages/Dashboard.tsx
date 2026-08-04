@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { type CSSProperties, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
@@ -16,6 +16,7 @@ import { HorsesIcon } from '@/components/icons';
 import { ActionButton } from '@/components/saas';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { buildBudgetSummary, buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
+import { buildRanchFinancials } from '@/lib/profitIntelligence';
 import { formatCompactCurrency } from '@/lib/format';
 import { events, track } from '@/lib/telemetry';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -24,6 +25,9 @@ import { useXbarStore } from '@/store/useXbarStore';
 // source bigger than the 180px touch icon — icon-512 stays crisp while still
 // being ~4x lighter than the 1.53MB app icon.
 const XBAR_ICON = '/brand/icon-512.png';
+
+// Stagger index for the motion system; the CSS var drives each child's delay.
+const motionIndex = (index: number): CSSProperties => ({ ['--motion-index' as string]: index }) as CSSProperties;
 
 type Tone = 'danger' | 'warning' | 'info' | 'neutral';
 type Signal = {
@@ -61,6 +65,14 @@ export default function Dashboard() {
     const openItems = transferGaps.length + careDue.length + reviewQueue.length;
     return { reviewQueue, transferGaps, careDue, budget, activeSales, readiness, openItems };
   }, [horses, documents, ownershipRecords, expenseReceipts, salesLeads]);
+
+  // The money story on the front door — same honest engine as the Money view, so
+  // the Dashboard and /financials never disagree. These are all ungated figures
+  // (the rancher's own records); the deep breakdown lives on the Money page.
+  const financials = useMemo(
+    () => buildRanchFinancials(horses, expenseReceipts, salesLeads),
+    [horses, expenseReceipts, salesLeads],
+  );
 
   useEffect(() => {
     track(events.pageView, { surface: 'operations_console', empty: isEmpty, horses: horses.length });
@@ -325,9 +337,15 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <div className="xs-ribbon">
-        {ribbon.map((r) => (
-          <button key={r.l} type="button" className="xs-ribbon__item" onClick={() => navigate(r.to)}>
+      <div className="xs-ribbon motion-stagger">
+        {ribbon.map((r, i) => (
+          <button
+            key={r.l}
+            type="button"
+            className="xs-ribbon__item"
+            style={motionIndex(i)}
+            onClick={() => navigate(r.to)}
+          >
             <span
               className={`xs-ribbon__value${r.warn ? ' xs-ribbon__value--warn' : ''}${r.danger ? ' xs-ribbon__value--danger' : ''}`}
             >
@@ -336,6 +354,31 @@ export default function Dashboard() {
             <span className="xs-ribbon__label">{r.l}</span>
           </button>
         ))}
+      </div>
+
+      {/* Money on the front door — is the operation making money? Reuses the Money
+          view's engine so the two never disagree. Tap through for the full P&L. */}
+      <div className="xs-money motion-stagger">
+        <button type="button" className="xs-money__card" style={motionIndex(0)} onClick={() => navigate('/financials')}>
+          <span className="xs-money__label">Profit banked</span>
+          <span className={`xs-money__value xs-money__value--${financials.netProfit >= 0 ? 'up' : 'down'}`}>
+            {financials.netProfit >= 0 ? '' : '−'}
+            {formatCompactCurrency(Math.abs(financials.netProfit))}
+          </span>
+          <span className="xs-money__meta">
+            {financials.soldCount} sold{financials.overheadSpend > 0 ? ' · net of overhead' : ''}
+          </span>
+        </button>
+        <button type="button" className="xs-money__card" style={motionIndex(1)} onClick={() => navigate('/financials')}>
+          <span className="xs-money__label">Collected from sales</span>
+          <span className="xs-money__value">{formatCompactCurrency(financials.realizedProceeds)}</span>
+          <span className="xs-money__meta">Cash in from closed deals</span>
+        </button>
+        <button type="button" className="xs-money__card" style={motionIndex(2)} onClick={() => navigate('/financials')}>
+          <span className="xs-money__label">Invested to date</span>
+          <span className="xs-money__value">{formatCompactCurrency(financials.totalInvested)}</span>
+          <span className="xs-money__meta">Cost basis, expenses &amp; overhead</span>
+        </button>
       </div>
 
       <div className="xs-homegrid">
