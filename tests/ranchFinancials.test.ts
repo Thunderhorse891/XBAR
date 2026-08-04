@@ -156,26 +156,30 @@ test('insights surface the winner, the underwater risk with a safe price, and th
   assert.ok(tones.lastIndexOf('win') < tones.indexOf('info'), 'info trails');
 });
 
-test('a rejected offer is not counted as live pipeline value', () => {
-  const solo = buildRanchFinancials(
-    [horse('r', 2000, 6000, 'Rebel')], // asking 6,000
-    [],
-    [
-      {
-        id: 'lr',
-        horseId: 'r',
-        stage: 'Offer',
-        offerStatus: 'Rejected',
-        offerAmount: 9000, // a rejected 9,000 must not stand in as a live offer
-        offerUpdatedAt: '2026-02-01',
-      } as unknown as SalesLead,
-    ],
-  );
-  assert.equal(solo.pipelineCount, 0);
-  assert.equal(solo.heldCount, 1);
-  const row = solo.perAnimal.find((r) => r.horseId === 'r');
-  assert.equal(row?.status, 'held');
-  assert.equal(row?.value, 6000); // falls back to the asking price, not the rejected 9,000
+const stageOfferLead = (id: string, horseId: string, offerAmount: number, offerStatus?: string): SalesLead =>
+  ({ id, horseId, stage: 'Offer', offerStatus, offerAmount, offerUpdatedAt: '2026-02-01' }) as unknown as SalesLead;
+
+test('rejected and draft offers are not counted as live pipeline value', () => {
+  for (const deadStatus of ['Rejected', 'Draft'] as const) {
+    const solo = buildRanchFinancials(
+      [horse('r', 2000, 6000, 'Rebel')], // asking 6,000
+      [],
+      [stageOfferLead('lr', 'r', 9000, deadStatus)], // a dead 9,000 must not stand in as a live offer
+    );
+    assert.equal(solo.pipelineCount, 0, `${deadStatus} offer must not be pipeline`);
+    assert.equal(solo.heldCount, 1);
+    const row = solo.perAnimal.find((r) => r.horseId === 'r');
+    assert.equal(row?.status, 'held');
+    assert.equal(row?.value, 6000); // falls back to the asking price, not the dead 9,000
+  }
+});
+
+test('a legacy stage-Offer lead with no status still counts as pipeline', () => {
+  const solo = buildRanchFinancials([horse('l', 2000, 6000, 'Legacy')], [], [stageOfferLead('ll', 'l', 9000)]);
+  assert.equal(solo.pipelineCount, 1);
+  const row = solo.perAnimal.find((r) => r.horseId === 'l');
+  assert.equal(row?.status, 'pipeline');
+  assert.equal(row?.value, 9000); // the live offer, since no status marks it dead
 });
 
 test('a cost-blind held horse is never sold as a sure upside', () => {

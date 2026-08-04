@@ -237,6 +237,10 @@ function latestByOfferDate(leads: SalesLead[]): SalesLead | undefined {
 }
 
 const ACTIVE_OFFER_STATUSES = new Set(['Accepted', 'Deposit Due', 'Deposit Paid']);
+// Offers that are not live money on the table: a draft was never sent, a rejected
+// offer is dead. Neither may stand in as pipeline value. A status-less legacy lead
+// is not in this set, so it still counts through the stage fallback.
+const NON_LIVE_OFFER_STATUSES = new Set(['Draft', 'Rejected']);
 
 export function buildRanchFinancials(
   horses: HorseRecord[],
@@ -276,9 +280,9 @@ export function buildRanchFinancials(
       horseLeads.filter(
         (lead) =>
           lead.outcome !== 'Lost' &&
-          // A rejected offer is dead, not live — never let it stand in as pipeline
-          // value just because the lead still sits in the Offer stage.
-          lead.offerStatus !== 'Rejected' &&
+          // A draft or rejected offer is not live money — never let it stand in as
+          // pipeline value just because the lead still sits in the Offer stage.
+          !NON_LIVE_OFFER_STATUSES.has(lead.offerStatus ?? '') &&
           (ACTIVE_OFFER_STATUSES.has(lead.offerStatus ?? '') ||
             (lead.stage === 'Offer' && (lead.offerAmount ?? 0) > 0)),
       ),
