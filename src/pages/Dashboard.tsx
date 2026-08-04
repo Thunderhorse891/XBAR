@@ -81,13 +81,25 @@ export default function Dashboard() {
   // Sold horses whose sale price or cost is missing leave banked profit incomplete.
   // When the net figure is exactly zero for that reason, it isn't a confirmed
   // break-even — it's unknown, so the headline says so instead of a green $0.
-  const bankedGaps = financials.soldMissingCostCount + financials.soldMissingPriceCount;
+  const missingCost = financials.soldMissingCostCount;
+  const missingPrice = financials.soldMissingPriceCount;
+  const bankedGaps = missingCost + missingPrice;
   const bankedUnknown = bankedGaps > 0 && financials.netProfit === 0;
+  // Point the rancher at the data that actually resolves the gap: a missing price
+  // is fixed by recording the sale amount, a missing cost by adding the cost basis.
+  const fixPhrase =
+    missingCost > 0 && missingPrice > 0
+      ? 'add sale prices and costs'
+      : missingPrice > 0
+        ? 'record the sale amount'
+        : 'add costs';
   const bankedMeta = bankedUnknown
-    ? `${financials.soldCount} sold · add costs to see profit`
+    ? `${financials.soldCount} sold · ${fixPhrase} to see profit`
     : `${financials.soldCount} sold${bankedGaps > 0 ? ` · ${bankedGaps} need details` : ''}${
         financials.overheadSpend > 0 ? ' · net of overhead' : ''
       }`;
+  // Cash collected is likewise unknown (not $0) when a closed sale has no amount.
+  const collectedUnknown = missingPrice > 0 && financials.realizedProceeds === 0;
   const moneyBand = (
     <div className="xs-money motion-stagger">
       <button
@@ -114,8 +126,18 @@ export default function Dashboard() {
         onClick={() => navigate('/financials')}
       >
         <span className="xs-money__label">Collected from sales</span>
-        <span className="xs-money__value">{formatCompactCurrency(financials.realizedProceeds)}</span>
-        <span className="xs-money__meta">Cash in from closed deals</span>
+        {collectedUnknown ? (
+          <span className="xs-money__value">—</span>
+        ) : (
+          <span className="xs-money__value">{formatCompactCurrency(financials.realizedProceeds)}</span>
+        )}
+        <span className="xs-money__meta">
+          {collectedUnknown
+            ? 'Record the sale amount on a closed deal'
+            : missingPrice > 0
+              ? `Cash in · ${missingPrice} missing a price`
+              : 'Cash in from closed deals'}
+        </span>
       </button>
       <button
         type="button"
