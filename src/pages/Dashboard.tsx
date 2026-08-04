@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { type CSSProperties, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
@@ -16,6 +16,7 @@ import { HorsesIcon } from '@/components/icons';
 import { ActionButton } from '@/components/saas';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { buildBudgetSummary, buildCareBoardRows, buildTransferGapRows } from '@/lib/dashboardOps';
+import { buildBankedHeadline, buildRanchFinancials } from '@/lib/profitIntelligence';
 import { formatCompactCurrency } from '@/lib/format';
 import { events, track } from '@/lib/telemetry';
 import { useXbarStore } from '@/store/useXbarStore';
@@ -24,6 +25,9 @@ import { useXbarStore } from '@/store/useXbarStore';
 // source bigger than the 180px touch icon — icon-512 stays crisp while still
 // being ~4x lighter than the 1.53MB app icon.
 const XBAR_ICON = '/brand/icon-512.png';
+
+// Stagger index for the motion system; the CSS var drives each child's delay.
+const motionIndex = (index: number): CSSProperties => ({ ['--motion-index' as string]: index }) as CSSProperties;
 
 type Tone = 'danger' | 'warning' | 'info' | 'neutral';
 type Signal = {
@@ -61,6 +65,88 @@ export default function Dashboard() {
     const openItems = transferGaps.length + careDue.length + reviewQueue.length;
     return { reviewQueue, transferGaps, careDue, budget, activeSales, readiness, openItems };
   }, [horses, documents, ownershipRecords, expenseReceipts, salesLeads]);
+
+  // The money story on the front door — same honest engine as the Money view, so
+  // the Dashboard and /financials never disagree. These are all ungated figures
+  // (the rancher's own records); the deep breakdown lives on the Money page.
+  const financials = useMemo(
+    () => buildRanchFinancials(horses, expenseReceipts, salesLeads),
+    [horses, expenseReceipts, salesLeads],
+  );
+
+  // Money band — the front-door P&L headline, reused in both the getting-started
+  // and populated views so real spend is never hidden (a workspace can log
+  // ranch-wide expenses before its first horse; the Money view treats that as a
+  // real, negative picture and so must the Dashboard).
+  // The banked-profit headline state (complete / partial / unknown) comes from the
+  // shared engine helper, so the Dashboard and the Money view present it identically.
+  const banked = buildBankedHeadline(financials);
+  const bankedComplete = banked.state === 'complete';
+  const bankedShowValue = banked.state !== 'unknown';
+  const bankedMeta =
+    banked.state === 'complete'
+      ? `${financials.soldCount} sold${financials.overheadSpend > 0 ? ' · net of overhead' : ''}`
+      : banked.state === 'partial'
+        ? `Partial — ${banked.fixPhrase} to complete`
+        : `${financials.soldCount} sold · ${banked.fixPhrase} to see profit`;
+  // Cash collected is likewise unknown (not $0) when a closed sale has no amount.
+  const missingPrice = financials.soldMissingPriceCount;
+  const collectedUnknown = missingPrice > 0 && financials.realizedProceeds === 0;
+  const moneyBand = (
+    <div className="xs-money motion-stagger">
+      <button
+        type="button"
+        className="xs-money__card motion-lift"
+        style={motionIndex(0)}
+        onClick={() => navigate('/financials')}
+      >
+        <span className="xs-money__label">Profit banked</span>
+        {!bankedShowValue ? (
+          <span className="xs-money__value">—</span>
+        ) : (
+          // Colour it a win/loss only when the result is complete; a partial figure
+          // (sale gaps) stays neutral so it isn't read as a definite outcome.
+          <span
+            className={`xs-money__value${bankedComplete ? ` xs-money__value--${financials.netProfit >= 0 ? 'up' : 'down'}` : ''}`}
+          >
+            {financials.netProfit >= 0 ? '' : '−'}
+            {formatCompactCurrency(Math.abs(financials.netProfit))}
+          </span>
+        )}
+        <span className="xs-money__meta">{bankedMeta}</span>
+      </button>
+      <button
+        type="button"
+        className="xs-money__card motion-lift"
+        style={motionIndex(1)}
+        onClick={() => navigate('/financials')}
+      >
+        <span className="xs-money__label">Collected from sales</span>
+        {collectedUnknown ? (
+          <span className="xs-money__value">—</span>
+        ) : (
+          <span className="xs-money__value">{formatCompactCurrency(financials.realizedProceeds)}</span>
+        )}
+        <span className="xs-money__meta">
+          {collectedUnknown
+            ? 'Record the sale amount on a closed deal'
+            : missingPrice > 0
+              ? `Cash in · ${missingPrice} missing a price`
+              : 'Cash in from closed deals'}
+        </span>
+      </button>
+      <button
+        type="button"
+        className="xs-money__card motion-lift"
+        style={motionIndex(2)}
+        onClick={() => navigate('/financials')}
+      >
+        <span className="xs-money__label">Invested to date</span>
+        <span className="xs-money__value">{formatCompactCurrency(financials.totalInvested)}</span>
+        <span className="xs-money__meta">Cost basis, expenses &amp; overhead</span>
+      </button>
+    </div>
+  );
 
   useEffect(() => {
     track(events.pageView, { surface: 'operations_console', empty: isEmpty, horses: horses.length });
@@ -107,6 +193,10 @@ export default function Dashboard() {
             </button>
           ))}
         </div>
+
+        {/* Even before the first horse, surface real spend so the money picture is
+            never hidden (matches the Money view's overhead-only handling). */}
+        {financials.totalInvested > 0 ? moneyBand : null}
 
         <div className="xs-homegrid">
           <div>
@@ -325,9 +415,15 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <div className="xs-ribbon">
-        {ribbon.map((r) => (
-          <button key={r.l} type="button" className="xs-ribbon__item" onClick={() => navigate(r.to)}>
+      <div className="xs-ribbon motion-stagger">
+        {ribbon.map((r, i) => (
+          <button
+            key={r.l}
+            type="button"
+            className="xs-ribbon__item"
+            style={motionIndex(i)}
+            onClick={() => navigate(r.to)}
+          >
             <span
               className={`xs-ribbon__value${r.warn ? ' xs-ribbon__value--warn' : ''}${r.danger ? ' xs-ribbon__value--danger' : ''}`}
             >
@@ -337,6 +433,10 @@ export default function Dashboard() {
           </button>
         ))}
       </div>
+
+      {/* Money on the front door — is the operation making money? Reuses the Money
+          view's engine so the two never disagree. Tap through for the full P&L. */}
+      {moneyBand}
 
       <div className="xs-homegrid">
         <div>

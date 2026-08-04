@@ -232,6 +232,38 @@ export type RanchFinancials = {
   insights: FinancialInsight[];
 };
 
+// How to present the "Profit banked" headline, honestly. A sold horse missing its
+// sale price or cost leaves the net incomplete: `complete` is a real verdict,
+// `partial` is a concrete floor (overhead / fully-costed sales) that isn't the
+// whole story, and `unknown` has no trustworthy figure at all. Both the Dashboard
+// money band and the Money view render from this so they can never disagree.
+export type BankedHeadlineState = 'complete' | 'partial' | 'unknown';
+
+export type BankedHeadline = {
+  state: BankedHeadlineState;
+  netProfit: number;
+  /** What the rancher must record to complete the figure; '' when complete. */
+  fixPhrase: string;
+};
+
+export function buildBankedHeadline(fin: RanchFinancials): BankedHeadline {
+  const gaps = fin.soldMissingCostCount + fin.soldMissingPriceCount;
+  if (gaps === 0) {
+    return { state: 'complete', netProfit: fin.netProfit, fixPhrase: '' };
+  }
+  // Derive the remediation from the affected rows, not the counts: a sale missing
+  // BOTH price and cost only appears in soldMissingPriceCount (the cost count is
+  // taken over priced sales), so counts alone would omit the cost action.
+  const soldRows = fin.perAnimal.filter((row) => row.status === 'sold');
+  const needsPrice = soldRows.some((row) => row.saleValueUnknown);
+  const needsCost = soldRows.some((row) => row.costBlindSpot);
+  const fixPhrase =
+    needsPrice && needsCost ? 'add sale prices and costs' : needsPrice ? 'record the sale amount' : 'add costs';
+  // A nonzero net here is only the overhead floor / costed-sale subtotal, not a
+  // verdict — that's `partial`; with nothing concrete to show it's `unknown`.
+  return { state: fin.netProfit !== 0 ? 'partial' : 'unknown', netProfit: fin.netProfit, fixPhrase };
+}
+
 function latestByOfferDate(leads: SalesLead[]): SalesLead | undefined {
   return [...leads].sort((left, right) => (right.offerUpdatedAt ?? '').localeCompare(left.offerUpdatedAt ?? ''))[0];
 }
