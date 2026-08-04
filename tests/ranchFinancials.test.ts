@@ -67,7 +67,41 @@ test('gross profit is on sold animals; net profit deducts operating overhead', (
   assert.equal(fin.grossProfitOnSales, 4000); // gross on sold animals
   assert.equal(fin.netProfit, 3700); // 4,000 gross − 300 travel overhead = the real bottom line
   assert.equal(fin.soldMissingPriceCount, 0);
+  assert.equal(fin.soldMissingCostCount, 0);
   assert.ok(Math.abs(fin.realizedMarginPercent - (4000 / 18000) * 100) < 0.01);
+});
+
+test('totalInvested decomposes exactly into herd + sold + overhead', () => {
+  assert.equal(fin.investedInSold, 6000 + 8000); // Ace + Bess break-evens
+  assert.equal(fin.investedInHerd + fin.investedInSold + fin.overheadSpend, fin.totalInvested);
+});
+
+test('a sale with a price but no cost basis shows proceeds, never invented profit', () => {
+  const solo = buildRanchFinancials(
+    [horse('k', 0, 0, 'Koda')], // no cost basis, no asking price
+    [], // and no linked expenses → cost is a blind spot
+    [wonLead('lk', 'k', 10000)], // sold for a known 10,000
+  );
+  assert.equal(solo.realizedProceeds, 10000); // cash collected is known
+  assert.equal(solo.grossProfitOnSales, 0); // but profit is NOT assumed from a zero cost
+  assert.equal(solo.netProfit, 0);
+  assert.equal(solo.soldMissingCostCount, 1);
+  assert.equal(solo.realizedMarginPercent, 0);
+  assert.equal(solo.insights.find((i) => i.id === 'blindspot-sold-cost')?.tone, 'info');
+});
+
+test('a workspace with expenses but no horses still has a (negative) P&L', () => {
+  const overheadOnly = buildRanchFinancials([], [receipt('rent', undefined, 'Other', 5000)], []);
+  assert.equal(overheadOnly.overheadSpend, 5000);
+  assert.equal(overheadOnly.netProfit, -5000);
+  assert.equal(overheadOnly.totalInvested, 5000);
+  assert.equal(overheadOnly.perAnimal.length, 0);
+});
+
+test('a receipt whose horse no longer exists is not silently counted as overhead', () => {
+  const orphaned = buildRanchFinancials([], [receipt('r', 'ghost-horse', 'Feed', 500)], []);
+  assert.equal(orphaned.overheadSpend, 0); // only unlinked (no horseId) receipts are overhead
+  assert.equal(orphaned.totalInvested, 0);
 });
 
 test('unrealized value is separated into pipeline and held, priced from real offers/asks', () => {

@@ -53,7 +53,9 @@ export default function Financials() {
   const locked = profitIntelligenceGate(subscription);
   const maxCost = fin.topCostCategories[0]?.amount ?? 0;
 
-  if (horses.length === 0) {
+  // Only truly empty when there's nothing to account for. A workspace with logged
+  // expenses but no horses yet still has a real (negative) picture worth showing.
+  if (horses.length === 0 && expenseReceipts.length === 0) {
     return (
       <>
         <PageHead
@@ -117,7 +119,9 @@ export default function Financials() {
           <span className="fin-stat__label">Invested to date</span>
           <span className="fin-stat__value">{formatCurrency(fin.totalInvested)}</span>
           <span className="fin-stat__sub">
-            {formatCurrency(fin.investedInHerd)} working in the herd · {formatCurrency(fin.overheadSpend)} overhead
+            {formatCurrency(fin.investedInHerd)} in the herd
+            {fin.investedInSold > 0 ? ` · ${formatCurrency(fin.investedInSold)} in sold horses` : ''}
+            {fin.overheadSpend > 0 ? ` · ${formatCurrency(fin.overheadSpend)} overhead` : ''}
           </span>
         </div>
       </div>
@@ -185,50 +189,55 @@ export default function Financials() {
             </Card>
           ) : null}
 
-          <Card title="Profit per animal" subtitle="Every horse, most profitable first. Tap one to open its record.">
-            <div className="fin-ledger">
-              <div className="fin-animal fin-animal__head">
-                <span>Horse</span>
-                <span className="fin-animal__cell--hide">Invested</span>
-                <span className="fin-animal__cell--hide">Value</span>
-                <span>Profit</span>
-                <span className="fin-animal__cell--hide">Margin</span>
-              </div>
-              {fin.perAnimal.map((row) => {
-                const chip = statusChip[row.status];
-                const priced = row.value > 0;
-                const dir = row.profit >= 0 ? 'up' : 'down';
-                return (
-                  <button
-                    key={row.horseId}
-                    type="button"
-                    className="fin-animal motion-lift"
-                    onClick={() => navigate(`/horses/${row.horseId}`)}
-                  >
-                    <span className="fin-animal__name">
-                      <span className="fin-animal__title">{row.horseName}</span>
-                      <span>
-                        <StatusChip tone={chip.tone}>{chip.label}</StatusChip>
-                        {row.saleValueUnknown ? <StatusChip tone="warning">Sale price?</StatusChip> : null}
-                        {row.underwater ? <StatusChip tone="danger">Priced to lose</StatusChip> : null}
-                        {row.costBlindSpot ? <StatusChip tone="warning">No cost</StatusChip> : null}
+          {fin.perAnimal.length > 0 ? (
+            <Card title="Profit per animal" subtitle="Every horse, most profitable first. Tap one to open its record.">
+              <div className="fin-ledger">
+                <div className="fin-animal fin-animal__head">
+                  <span>Horse</span>
+                  <span className="fin-animal__cell--hide">Invested</span>
+                  <span className="fin-animal__cell--hide">Value</span>
+                  <span>Profit</span>
+                  <span className="fin-animal__cell--hide">Margin</span>
+                </div>
+                {fin.perAnimal.map((row) => {
+                  const chip = statusChip[row.status];
+                  const priced = row.value > 0;
+                  // Profit is only shown when both price and cost are known — a
+                  // missing cost basis leaves proceeds visible but profit unknown.
+                  const profitKnown = priced && !row.costBlindSpot;
+                  const dir = row.profit >= 0 ? 'up' : 'down';
+                  return (
+                    <button
+                      key={row.horseId}
+                      type="button"
+                      className="fin-animal motion-lift"
+                      onClick={() => navigate(`/horses/${row.horseId}`)}
+                    >
+                      <span className="fin-animal__name">
+                        <span className="fin-animal__title">{row.horseName}</span>
+                        <span>
+                          <StatusChip tone={chip.tone}>{chip.label}</StatusChip>
+                          {row.saleValueUnknown ? <StatusChip tone="warning">Sale price?</StatusChip> : null}
+                          {row.underwater ? <StatusChip tone="danger">Priced to lose</StatusChip> : null}
+                          {row.costBlindSpot ? <StatusChip tone="warning">No cost</StatusChip> : null}
+                        </span>
                       </span>
-                    </span>
-                    <span className="fin-animal__cell fin-animal__cell--hide">{formatCurrency(row.invested)}</span>
-                    <span className="fin-animal__cell fin-animal__cell--hide">
-                      {priced ? formatCurrency(row.value) : '—'}
-                    </span>
-                    <span className={`fin-animal__cell fin-animal__profit--${dir}`}>
-                      {priced ? `${row.profit >= 0 ? '+' : '−'}${formatCurrency(Math.abs(row.profit))}` : '—'}
-                    </span>
-                    <span className="fin-animal__cell fin-animal__cell--hide">
-                      {priced ? formatPercent(Math.round(row.marginPercent)) : '—'}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </Card>
+                      <span className="fin-animal__cell fin-animal__cell--hide">{formatCurrency(row.invested)}</span>
+                      <span className="fin-animal__cell fin-animal__cell--hide">
+                        {priced ? formatCurrency(row.value) : '—'}
+                      </span>
+                      <span className={`fin-animal__cell fin-animal__profit--${dir}`}>
+                        {profitKnown ? `${row.profit >= 0 ? '+' : '−'}${formatCurrency(Math.abs(row.profit))}` : '—'}
+                      </span>
+                      <span className="fin-animal__cell fin-animal__cell--hide">
+                        {profitKnown ? formatPercent(Math.round(row.marginPercent)) : '—'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </Card>
+          ) : null}
 
           {fin.topCostCategories.length > 0 ? (
             <Card title="Where the money goes" subtitle="Total spend by category across the herd.">

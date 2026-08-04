@@ -207,12 +207,14 @@ export type RanchFinancials = {
 
   // Unrealized — capital still working in the herd, valued but not yet banked.
   investedInHerd: number;
+  /** Capital that was in the animals now sold — completes the totalInvested breakdown. */
+  investedInSold: number;
   projectedValue: number;
   projectedProfit: number;
   pipelineCount: number;
   heldCount: number;
 
-  // Whole-operation totals.
+  // Whole-operation totals: investedInHerd + investedInSold + overheadSpend.
   totalInvested: number;
   overheadSpend: number;
 
@@ -222,6 +224,8 @@ export type RanchFinancials = {
   unpricedHeldCount: number;
   /** Sold horses whose sale price was never recorded — excluded from banked profit. */
   soldMissingPriceCount: number;
+  /** Sold horses with a price but no cost basis — proceeds shown, profit not assumed. */
+  soldMissingCostCount: number;
 
   perAnimal: AnimalFinancialRow[];
   topCostCategories: { category: ExpenseCategory; amount: number }[];
@@ -297,29 +301,35 @@ export function buildRanchFinancials(
   });
 
   const sold = rows.filter((row) => row.status === 'sold');
-  // Only sales with a recorded amount contribute to banked profit; the rest are
-  // integrity gaps, not revenue.
-  const soldPriced = sold.filter((row) => !row.saleValueUnknown);
+  // Profit — realized or projected — is only computed for animals whose economics
+  // are fully known: a recorded sale/asking price AND a recorded cost. A profit
+  // figure derived from a missing cost basis (invested = 0) would overstate the
+  // gain, so those rows are proceeds we can show but profit we won't invent.
+  const hasKnownProfit = (row: AnimalFinancialRow) => row.value > 0 && !row.costBlindSpot;
+  const soldWithPrice = sold.filter((row) => !row.saleValueUnknown); // cash collected is known
+  const soldBanked = soldWithPrice.filter((row) => !row.costBlindSpot); // profit is knowable
   const pipeline = rows.filter((row) => row.status === 'pipeline');
   const held = rows.filter((row) => row.status === 'held');
   const unrealized = [...pipeline, ...held];
 
-  const realizedProceeds = soldPriced.reduce((sum, row) => sum + row.value, 0);
-  const realizedCost = soldPriced.reduce((sum, row) => sum + row.invested, 0);
-  const grossProfitOnSales = realizedProceeds - realizedCost;
+  // "Collected" is every known sale price; profit is only the fully-costed subset.
+  const realizedProceeds = soldWithPrice.reduce((sum, row) => sum + row.value, 0);
+  const bankedProceeds = soldBanked.reduce((sum, row) => sum + row.value, 0);
+  const realizedCost = soldBanked.reduce((sum, row) => sum + row.invested, 0);
+  const grossProfitOnSales = bankedProceeds - realizedCost;
 
   const investedInHerd = unrealized.reduce((sum, row) => sum + row.invested, 0);
+  const investedInSold = sold.reduce((sum, row) => sum + row.invested, 0);
   const projectedValue = unrealized.reduce((sum, row) => sum + row.value, 0);
-  // Only count animals that actually carry a price toward projected profit.
-  const projectedProfit = unrealized.filter((row) => row.value > 0).reduce((sum, row) => sum + row.profit, 0);
+  const projectedProfit = unrealized.filter(hasKnownProfit).reduce((sum, row) => sum + row.profit, 0);
 
-  // Receipts not linked to any current horse are operating overhead, not part of
-  // any single animal's break-even.
-  const horseIds = new Set(horses.map((horse) => horse.id));
+  // Overhead is expenses tied to no horse at all. A receipt whose horse no longer
+  // exists is not reclassified here — deleteHorse cascades its receipts — so a
+  // deletion can never silently inflate overhead.
   const overheadSpend = receipts
-    .filter((receipt) => !receipt.horseId || !horseIds.has(receipt.horseId))
+    .filter((receipt) => !receipt.horseId)
     .reduce((sum, receipt) => sum + receipt.amount, 0);
-  const totalInvested = rows.reduce((sum, row) => sum + row.invested, 0) + overheadSpend;
+  const totalInvested = investedInHerd + investedInSold + overheadSpend;
 
   // The bottom line: gross profit on sold animals, less operating overhead. This is
   // what the operation actually banked — a real P&L nets overhead out.
@@ -336,16 +346,20 @@ export function buildRanchFinancials(
   const underwaterCount = rows.filter((row) => row.underwater).length;
   const costBlindSpotCount = rows.filter((row) => row.costBlindSpot).length;
   const unpricedHeldCount = held.filter((row) => row.value <= 0).length;
-  const soldMissingPriceCount = sold.length - soldPriced.length;
+  const soldMissingPriceCount = sold.filter((row) => row.saleValueUnknown).length;
+  const soldMissingCostCount = soldWithPrice.filter((row) => row.costBlindSpot).length;
 
   return {
     realizedProceeds,
     realizedCost,
     grossProfitOnSales,
     netProfit,
-    realizedMarginPercent: realizedProceeds > 0 ? (grossProfitOnSales / realizedProceeds) * 100 : 0,
+    // Margin is over the fully-costed proceeds, so it never divides gross by cash
+    // whose cost is unknown.
+    realizedMarginPercent: bankedProceeds > 0 ? (grossProfitOnSales / bankedProceeds) * 100 : 0,
     soldCount: sold.length,
     investedInHerd,
+    investedInSold,
     projectedValue,
     projectedProfit,
     pipelineCount: pipeline.length,
@@ -354,14 +368,16 @@ export function buildRanchFinancials(
     overheadSpend,
     underwaterCount,
     costBlindSpotCount,
+    soldMissingCostCount,
     unpricedHeldCount,
     soldMissingPriceCount,
     perAnimal: sortAnimalRows(rows),
     topCostCategories,
-    insights: buildFinancialInsights(soldPriced, held, topCostCategories, {
+    insights: buildFinancialInsights(soldBanked, held, topCostCategories, {
       costBlindSpotCount,
       unpricedHeldCount,
       soldMissingPriceCount,
+      soldMissingCostCount,
       overheadSpend,
     }),
   };
@@ -382,6 +398,7 @@ function buildFinancialInsights(
     costBlindSpotCount: number;
     unpricedHeldCount: number;
     soldMissingPriceCount: number;
+    soldMissingCostCount: number;
     overheadSpend: number;
   },
 ): FinancialInsight[] {
@@ -469,6 +486,16 @@ function buildFinancialInsights(
       tone: 'info',
       title: `${n} sold ${n === 1 ? 'horse has' : 'horses have'} no recorded sale price`,
       detail: `Record what ${n === 1 ? 'it' : 'they'} sold for so your banked profit is accurate — until then ${n === 1 ? "it's" : "they're"} left out of the total.`,
+    });
+  }
+
+  if (integrity.soldMissingCostCount > 0) {
+    const n = integrity.soldMissingCostCount;
+    insights.push({
+      id: 'blindspot-sold-cost',
+      tone: 'info',
+      title: `${n} sold ${n === 1 ? 'horse has' : 'horses have'} a price but no recorded cost`,
+      detail: `The sale amount counts as collected, but without a cost basis the profit is unknown — add ${n === 1 ? 'its' : 'their'} cost so the sale lands in banked profit.`,
     });
   }
 
