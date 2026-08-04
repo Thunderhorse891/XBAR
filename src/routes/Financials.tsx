@@ -153,7 +153,11 @@ export default function Financials() {
       {locked ? (
         <Card
           title="Unlock full financial intelligence"
-          subtitle="Your banked profit above is real. Ranch Ops turns it into a forward-looking playbook."
+          subtitle={
+            banked.state === 'complete'
+              ? 'Your banked profit above is real. Ranch Ops turns it into a forward-looking playbook.'
+              : 'Complete the missing sale details above to finalize your banked profit — then Ranch Ops turns it into a forward-looking playbook.'
+          }
         >
           <div className="fin-lock">
             <ul className="fin-lock__list">
