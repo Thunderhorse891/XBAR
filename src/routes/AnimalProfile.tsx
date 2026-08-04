@@ -7,10 +7,12 @@ import { ActionButton, Card, StatusChip } from '@/components/saas';
 import { useUiStore } from '@/store/useUiStore';
 import { useHorseRecord, useXbarStore } from '@/store/useXbarStore';
 import { formatCurrency, formatPercent } from '@/lib/format';
+import { billingPath } from '@/lib/billingRoutes';
 import { buyerFollowUpPath } from '@/lib/buyerRoutes';
 import { hasRoleCapability } from '@/lib/permissions';
 import { animalPassportId, identityCompleteness } from '@/lib/animalPassport';
 import { type AnimalFinancialStatus, buildRanchFinancials } from '@/lib/profitIntelligence';
+import { profitIntelligenceGate } from '@/lib/subscriptionGates';
 import type { ChipTone } from '@/types/saas';
 import type { HorseStatus } from '@/types/xbar';
 
@@ -56,6 +58,11 @@ export default function AnimalProfile() {
   const currentRole = useXbarStore((s) => s.currentRole);
   const expenseReceipts = useXbarStore((s) => s.expenseReceipts);
   const salesLeads = useXbarStore((s) => s.salesLeads);
+  const subscription = useXbarStore((s) => s.subscription);
+  // Profit intelligence (projected profit, margin, safe-price) is a Ranch Ops
+  // feature; the per-animal money panel below respects the same gate as the Money
+  // view so it never leaks a paid entitlement.
+  const profitGate = profitIntelligenceGate(subscription);
   const [tab, setTab] = useState<string>('Overview');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -382,7 +389,20 @@ export default function AnimalProfile() {
               </div>
             </Card>
           </div>
-          {money ? (
+          {profitGate ? (
+            <Card title="Money">
+              <div className="xs-nba">
+                <div className="xs-nba__label">Ranch Ops</div>
+                <div className="xs-nba__title">See this horse's profit, margin, and safe sale price</div>
+              </div>
+              <p className="xs-muted" style={{ fontSize: 12.5, margin: '8px 0 12px' }}>
+                {profitGate}
+              </p>
+              <ActionButton size="sm" variant="primary" onClick={() => navigate(billingPath)}>
+                Upgrade to Ranch Ops
+              </ActionButton>
+            </Card>
+          ) : money ? (
             <Card title="Money" link="Open Money view" onLink={() => navigate('/financials')}>
               <div style={{ marginBottom: 10 }}>
                 <StatusChip tone={MONEY_STATUS[money.status].chip}>{MONEY_STATUS[money.status].label}</StatusChip>
