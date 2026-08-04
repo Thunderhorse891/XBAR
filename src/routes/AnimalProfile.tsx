@@ -463,12 +463,17 @@ export default function AnimalProfile() {
               {money.underwater ? (
                 <div className="xs-passport-gap" style={{ marginTop: 12 }}>
                   <div className="xs-passport-gap__head">
-                    <span>Priced below break-even</span>
-                    <StatusChip tone="danger">Raise to {formatCurrency(money.safeSalePrice)}</StatusChip>
+                    <span>{money.status === 'pipeline' ? 'Offer below break-even' : 'Priced below break-even'}</span>
+                    <StatusChip tone="danger">
+                      {money.status === 'pipeline' ? 'Counter at' : 'Raise to'} {formatCurrency(money.safeSalePrice)}
+                    </StatusChip>
                   </div>
                   <p className="xs-muted" style={{ fontSize: 12.5, margin: '4px 0 0' }}>
-                    Selling {animal.name} at the current price would lock in a loss. Raise the ask to protect your
-                    margin.
+                    {money.status === 'pipeline'
+                      ? `The current offer on ${animal.name} is below break-even. Counter at ${formatCurrency(
+                          money.safeSalePrice,
+                        )} or higher to protect your margin.`
+                      : `Selling ${animal.name} at the current price would lock in a loss. Raise the ask to protect your margin.`}
                   </p>
                 </div>
               ) : null}
