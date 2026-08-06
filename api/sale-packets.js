@@ -130,6 +130,27 @@ export default async function handler(req, res) {
 
     const context = loaded.context;
     const ownershipRecord = loaded.ownershipRecord;
+
+    // Identity + server-anchored seal are computed BEFORE the cover so the cover
+    // can print the seal code and a buyer verification link. The seal is derived
+    // from the workspace's authoritative records — never from client input — and
+    // is the tamper-PROOF anchor a buyer verifies against.
+    const packetId = `packet-${randomUUID()}`;
+    const packetPath = `${workspaceId}/${horseId}/${packetId}.pdf`;
+    const seal = buildServerSaleCredential({
+      packetId,
+      horseId,
+      context,
+      ownershipRecord,
+      documents: packetDocs,
+      sealedAt: new Date().toISOString(),
+    });
+    const appOrigin =
+      process.env.PUBLIC_APP_URL ||
+      process.env.VITE_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
+    const verifyUrl = appOrigin ? `${appOrigin}/verify/${packetId}` : `/verify/${packetId}`;
+
     const coverBytes = await createSectionedPdf({
       title: `Sale Packet: ${context.horse.name}`,
       sections: [
@@ -159,6 +180,16 @@ export default async function handler(req, res) {
             ? packetDocs.map((doc, index) => `${index + 1}. ${doc.document_type}: ${doc.title}`)
             : ['No stored documents were attached to this horse.'],
         },
+        {
+          heading: 'XBAR Verification Seal',
+          lines: [
+            `Seal code: ${seal.sealCode}`,
+            `Packet code: ${packetId}`,
+            `Verify this packet: ${verifyUrl}`,
+            'XBAR sealed these facts on its servers when this packet was made.',
+            'If the packet was altered afterward, the verification page will not match.',
+          ],
+        },
       ],
       footer: `XBAR sale packet · ${context.horse.name} · ${context.today_date}`,
     });
@@ -180,20 +211,6 @@ export default async function handler(req, res) {
       });
     }
 
-    const packetId = `packet-${randomUUID()}`;
-    const packetPath = `${workspaceId}/${horseId}/${packetId}.pdf`;
-
-    // Server-anchored seal: computed here from the workspace's authoritative
-    // records, not from anything the client sent, then stored on the row. This is
-    // the tamper-PROOF anchor a buyer can later verify against.
-    const seal = buildServerSaleCredential({
-      packetId,
-      horseId,
-      context,
-      ownershipRecord,
-      documents: packetDocs,
-      sealedAt: new Date().toISOString(),
-    });
     const { error: uploadError } = await supabase.storage
       .from(PACKET_BUCKET)
       .upload(packetPath, Buffer.from(packetBytes), { contentType: 'application/pdf', upsert: true });
@@ -271,6 +288,7 @@ export default async function handler(req, res) {
       unavailableDocuments: unavailable,
       emailed: Boolean(emailResult.ok),
       emailMessage: emailResult.message || '',
+      verifyUrl,
       seal: {
         version: seal.version,
         anchor: seal.anchor,

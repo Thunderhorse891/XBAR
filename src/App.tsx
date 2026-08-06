@@ -38,6 +38,7 @@ const EquipmentPage = lazy(() => import('./routes/Equipment'));
 const BreedingFoaling = lazy(() => import('./routes/BreedingFoaling'));
 const Breeding = lazy(() => import('./routes/Breeding'));
 const BuyerProfile = lazy(() => import('./routes/BuyerProfile'));
+const VerifyPacket = lazy(() => import('./routes/VerifyPacket'));
 const Documents = lazy(() => import('./routes/Documents'));
 const Expenses = lazy(() => import('./routes/Expenses'));
 const Horses = lazy(() => import('./routes/Horses'));
@@ -162,6 +163,8 @@ export default function App() {
         >
           <Routes>
             <Route path="/profiles/:id" element={<BuyerProfile />} />
+            <Route path="/verify" element={<VerifyPacket />} />
+            <Route path="/verify/:packetId" element={<VerifyPacket />} />
             <Route path="/login" element={<Login />} />
             <Route path="/subscribe" element={<Navigate to={billingPath} replace />} />
             <Route

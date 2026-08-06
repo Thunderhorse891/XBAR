@@ -66,6 +66,7 @@ export function SalePacketWizard({
     sealCode?: string;
     sealedAt?: string;
     sealAnchor?: 'local' | 'server';
+    verifyUrl?: string;
   } | null>(null);
   const buyerForm = useForm<BuyerPacketForm>({
     defaultValues: { buyerName: '', buyerEmail: '', watermark: '' },
@@ -131,6 +132,7 @@ export function SalePacketWizard({
     const auth = { workspaceId, accessToken: session?.access_token ?? '' };
     let downloadUrl: string | undefined;
     let serverSeal: RemoteSalePacketSeal | undefined;
+    let verifyUrl: string | undefined;
 
     if (hasBackendIdentity(auth)) {
       const remote = await createSalePacketRemote(auth, {
@@ -157,6 +159,7 @@ export function SalePacketWizard({
       }
       downloadUrl = remote.downloadUrl;
       serverSeal = remote.seal;
+      verifyUrl = remote.verifyUrl;
     }
 
     const build = createSalePacketBuild({
@@ -203,6 +206,7 @@ export function SalePacketWizard({
       sealCode: build.packet.credential?.sealCode,
       sealedAt: build.packet.credential?.sealedAt,
       sealAnchor: build.packet.credential?.anchor,
+      verifyUrl,
     });
     pushToast({
       title: downloadUrl ? 'Sale packet PDF ready' : 'Sale packet recorded',
@@ -540,6 +544,16 @@ export function SalePacketWizard({
                       ? 'Verifiable seal — sealed by XBAR from your records and stored on our servers, so it is tamper-proof. Give this code to your buyer to verify against XBAR.'
                       : 'Verifiable seal — fingerprints every fact in this packet. Give this code to your buyer; if the packet is ever altered, the seal no longer matches. (Sign in to the cloud to have XBAR anchor it server-side.)'}
                   </div>
+                  {generated.verifyUrl && (
+                    <a
+                      href={generated.verifyUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ display: 'inline-block', marginTop: 8, fontSize: 12, fontWeight: 700, color: '#1466d8' }}
+                    >
+                      Open buyer verification page →
+                    </a>
+                  )}
                 </div>
               )}
               <div className="confirm-dialog__acks">
