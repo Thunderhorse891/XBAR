@@ -14,6 +14,7 @@ import type {
   OwnershipStake,
   RanchAsset,
   RoleWorkspace,
+  SaleCredentialSeal,
   SalePacketBuild,
   SalesLead,
   SharedAccessSnapshot,
@@ -194,6 +195,10 @@ export type XbarStore = {
     includesBillOfSale: boolean;
     createdBy: string;
     downloadUrl?: string;
+    /** When a cloud PDF was generated, the server-anchored (tamper-proof) seal
+     * returned with it. If present it is stored as the packet's credential in
+     * place of the client-side one. */
+    serverSeal?: SaleCredentialSeal;
   }) => ActionResult & { packet?: SalePacketBuild };
   logBuyerRoomEvent: (input: {
     horseId: string;

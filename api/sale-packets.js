@@ -11,6 +11,7 @@ import { loadHorseContext } from './_lib/horse-context.js';
 import { createSectionedPdf, assemblePacketPdf } from './_lib/pdf.js';
 import { sendEmail } from './_lib/email.js';
 import { recordAuditEvent } from './_lib/audit.js';
+import { buildServerSaleCredential } from './_lib/sale-credential.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
 import { applyCors } from './_lib/cors.js';
 
@@ -128,6 +129,7 @@ export default async function handler(req, res) {
     }
 
     const context = loaded.context;
+    const ownershipRecord = loaded.ownershipRecord;
     const coverBytes = await createSectionedPdf({
       title: `Sale Packet: ${context.horse.name}`,
       sections: [
@@ -180,6 +182,18 @@ export default async function handler(req, res) {
 
     const packetId = `packet-${randomUUID()}`;
     const packetPath = `${workspaceId}/${horseId}/${packetId}.pdf`;
+
+    // Server-anchored seal: computed here from the workspace's authoritative
+    // records, not from anything the client sent, then stored on the row. This is
+    // the tamper-PROOF anchor a buyer can later verify against.
+    const seal = buildServerSaleCredential({
+      packetId,
+      horseId,
+      context,
+      ownershipRecord,
+      documents: packetDocs,
+      sealedAt: new Date().toISOString(),
+    });
     const { error: uploadError } = await supabase.storage
       .from(PACKET_BUCKET)
       .upload(packetPath, Buffer.from(packetBytes), { contentType: 'application/pdf', upsert: true });
@@ -198,7 +212,7 @@ export default async function handler(req, res) {
       document_ids: packetDocs.map((doc) => doc.document_id),
       status: 'ready',
       size_bytes: packetSizeBytes,
-      payload: { buyerName, unavailable, attachmentCount: attachments.length },
+      payload: { buyerName, unavailable, attachmentCount: attachments.length, seal },
     });
     if (recordError) {
       // Row rejected after the object was written (e.g. the storage trigger on a
@@ -241,6 +255,7 @@ export default async function handler(req, res) {
         documents: packetDocs.length,
         buyerEmail: buyerEmail ? 'set' : '',
         emailed: Boolean(emailResult.ok),
+        sealCode: seal.sealCode,
       },
     });
 
@@ -256,6 +271,14 @@ export default async function handler(req, res) {
       unavailableDocuments: unavailable,
       emailed: Boolean(emailResult.ok),
       emailMessage: emailResult.message || '',
+      seal: {
+        version: seal.version,
+        anchor: seal.anchor,
+        digest: seal.digest,
+        sealCode: seal.sealCode,
+        sealedAt: seal.sealedAt,
+        payload: seal.payload,
+      },
     });
   } catch (error) {
     return sendJson(res, 500, { ok: false, message: `Sale packet assembly failed: ${error.message}` });

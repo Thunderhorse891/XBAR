@@ -7,7 +7,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } fr
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { createSalePacketRemote, hasBackendIdentity } from '@/lib/backendApi';
+import { type RemoteSalePacketSeal, createSalePacketRemote, hasBackendIdentity } from '@/lib/backendApi';
 import { billingPathForTier } from '@/lib/billingRoutes';
 import { assessRevenueAtRisk, computeHorseEconomics } from '@/lib/businessIntelligence';
 import { formatCompactCurrency } from '@/lib/format';
@@ -65,6 +65,7 @@ export function SalePacketWizard({
     downloadUrl?: string;
     sealCode?: string;
     sealedAt?: string;
+    sealAnchor?: 'local' | 'server';
   } | null>(null);
   const buyerForm = useForm<BuyerPacketForm>({
     defaultValues: { buyerName: '', buyerEmail: '', watermark: '' },
@@ -129,6 +130,7 @@ export function SalePacketWizard({
     setIsGenerating(true);
     const auth = { workspaceId, accessToken: session?.access_token ?? '' };
     let downloadUrl: string | undefined;
+    let serverSeal: RemoteSalePacketSeal | undefined;
 
     if (hasBackendIdentity(auth)) {
       const remote = await createSalePacketRemote(auth, {
@@ -154,6 +156,7 @@ export function SalePacketWizard({
         return;
       }
       downloadUrl = remote.downloadUrl;
+      serverSeal = remote.seal;
     }
 
     const build = createSalePacketBuild({
@@ -165,6 +168,7 @@ export function SalePacketWizard({
       includesBillOfSale: false,
       createdBy: currentRole,
       downloadUrl,
+      serverSeal,
     });
     setIsGenerating(false);
 
@@ -198,6 +202,7 @@ export function SalePacketWizard({
       downloadUrl,
       sealCode: build.packet.credential?.sealCode,
       sealedAt: build.packet.credential?.sealedAt,
+      sealAnchor: build.packet.credential?.anchor,
     });
     pushToast({
       title: downloadUrl ? 'Sale packet PDF ready' : 'Sale packet recorded',
@@ -531,8 +536,9 @@ export function SalePacketWizard({
                     {generated.sealCode}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--xbar-text-muted, #526273)', marginTop: 2 }}>
-                    Verifiable seal — fingerprints every fact in this packet. Give this code to your buyer; if the
-                    packet is ever altered, the seal no longer matches.
+                    {generated.sealAnchor === 'server'
+                      ? 'Verifiable seal — sealed by XBAR from your records and stored on our servers, so it is tamper-proof. Give this code to your buyer to verify against XBAR.'
+                      : 'Verifiable seal — fingerprints every fact in this packet. Give this code to your buyer; if the packet is ever altered, the seal no longer matches. (Sign in to the cloud to have XBAR anchor it server-side.)'}
                   </div>
                 </div>
               )}

@@ -76,6 +76,17 @@ async function postJson<T>(path: string, auth: AuthParams, body: Record<string, 
   }
 }
 
+/** Server-anchored seal returned with a cloud packet. Computed on the server
+ * from authoritative records, so it is tamper-PROOF, not just tamper-evident. */
+export type RemoteSalePacketSeal = {
+  version: number;
+  anchor: 'server';
+  digest: string;
+  sealCode: string;
+  sealedAt: string;
+  payload: string;
+};
+
 export type RemoteSalePacket = {
   packetId: string;
   downloadUrl: string;
@@ -84,6 +95,7 @@ export type RemoteSalePacket = {
   includedDocumentIds: string[];
   unavailableDocuments: string[];
   emailed: boolean;
+  seal?: RemoteSalePacketSeal;
 };
 
 export async function createSalePacketRemote(

@@ -181,16 +181,25 @@ export interface SalePacketBuild {
 
 /** Persisted form of a packet's Verifiable Sale Credential. Holds exactly what
  * is needed to display the seal and re-verify it (payload + digest). Mirrors the
- * display/verify surface of SaleCredential in src/lib/saleCredential.ts. */
+ * display/verify surface of SaleCredential in src/lib/saleCredential.ts.
+ *
+ * `anchor` records how strong the seal is:
+ *   - 'local'  — computed client-side; tamper-EVIDENT (detects alteration of the
+ *     bundle, compared against an independently-communicated seal code).
+ *   - 'server' — computed server-side from XBAR's authoritative records and
+ *     stored by XBAR; tamper-PROOF, verifiable against that record.
+ * passportId / sealedBy / manifest are present on local seals; a server seal
+ * seals its own authoritative fact set and omits them. */
 export interface SaleCredentialSeal {
   version: number;
-  passportId: string;
+  anchor: 'local' | 'server';
   sealCode: string;
   digest: string;
   sealedAt: string;
-  sealedBy: string;
-  manifest: string[];
   payload: string;
+  passportId?: string;
+  sealedBy?: string;
+  manifest?: string[];
 }
 
 export interface MedicalRecordDetails {
