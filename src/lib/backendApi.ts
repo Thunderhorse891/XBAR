@@ -95,6 +95,9 @@ export type RemoteSalePacket = {
   includedDocumentIds: string[];
   unavailableDocuments: string[];
   emailed: boolean;
+  /** Absolute (or root-relative) URL a buyer can open to verify this packet
+   * against XBAR's server-anchored seal. Present for cloud packets. */
+  verifyUrl?: string;
   seal?: RemoteSalePacketSeal;
 };
 
