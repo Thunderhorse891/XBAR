@@ -51,6 +51,7 @@ import type {
   IntakeBatch,
   OwnershipStake,
   RoleCapability,
+  SaleCredentialSeal,
   SalesLead,
   WorkspaceInvitationRecord,
 } from '@/types/xbar';
@@ -2064,16 +2065,23 @@ export const useXbarStore = create<XbarStore>()(
             .replace(/[^a-z0-9]+/g, '-')
             .replace(/^-|-$/g, '') || 'horse';
 
-        // Seal the packet: fingerprint every buyer-facing fact + included
-        // document at generation time, from the same records the packet renders.
+        // Seal the packet. When the cloud PDF path returned a server-anchored
+        // (tamper-PROOF) seal, that is the authoritative credential and is stored
+        // as-is. Otherwise (local-only workspace) fall back to the client-side
+        // tamper-EVIDENT seal, fingerprinting the same records the packet renders.
         const state = get();
-        const credential = buildPacketCredential({
-          horse,
-          documents: state.documents,
-          ownershipRecord: state.ownershipRecords.find((record) => record.horseId === input.horseId),
-          selectedDocumentIds: input.documentIds,
-          generatedBy: input.createdBy,
-        });
+        const credential: SaleCredentialSeal = input.serverSeal
+          ? { ...input.serverSeal, anchor: 'server' }
+          : {
+              ...buildPacketCredential({
+                horse,
+                documents: state.documents,
+                ownershipRecord: state.ownershipRecords.find((record) => record.horseId === input.horseId),
+                selectedDocumentIds: input.documentIds,
+                generatedBy: input.createdBy,
+              }),
+              anchor: 'local',
+            };
 
         const packet: SalePacketBuild = {
           id: createId('packet'),
