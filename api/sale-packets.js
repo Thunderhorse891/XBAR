@@ -149,7 +149,10 @@ export default async function handler(req, res) {
       process.env.PUBLIC_APP_URL ||
       process.env.VITE_PUBLIC_APP_URL ||
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
-    const verifyUrl = appOrigin ? `${appOrigin}/verify/${packetId}` : `/verify/${packetId}`;
+    // The SPA (and its public routes) is served under /app — the router basename.
+    // Point verification straight at the canonical path so the link never depends
+    // on a bare-path redirect resolving first.
+    const verifyUrl = `${appOrigin}/app/verify/${packetId}`;
 
     const coverBytes = await createSectionedPdf({
       title: `Sale Packet: ${context.horse.name}`,
