@@ -134,7 +134,7 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
     return { ok: false, status: 400, message: `Batches are limited to ${MAX_FILES_PER_BATCH} files per request.` };
   }
 
-  const entitlements = await getWorkspaceEntitlements(supabase, workspaceId);
+  const entitlements = await getWorkspaceEntitlements(supabase, workspaceId, user?.email);
   const capacity = await checkDocumentCapacity(supabase, workspaceId, expanded.length, entitlements.limits);
   if (!capacity.ok) {
     return { ok: false, status: 403, message: capacity.message };
@@ -357,7 +357,7 @@ async function commitAssignments({ supabase, workspaceId, user, assignments }) {
   }
 
   // Horse-limit gate for review-committed creations, mirroring the auto flow.
-  const entitlements = await getWorkspaceEntitlements(supabase, workspaceId);
+  const entitlements = await getWorkspaceEntitlements(supabase, workspaceId, user?.email);
   const horseCapacity = await checkHorseCapacity(supabase, workspaceId, 0, entitlements.limits);
   let horseSlotsLeft = Math.max(0, entitlements.limits.horseLimit - (horseCapacity.used ?? 0));
 

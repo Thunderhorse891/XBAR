@@ -101,7 +101,7 @@ export default async function handler(req, res) {
   const plannedInserts = newRegistrationCount + noRegistrationRowCount;
 
   if (plannedInserts > 0) {
-    const entitlements = await getWorkspaceEntitlements(supabase, workspaceId);
+    const entitlements = await getWorkspaceEntitlements(supabase, workspaceId, user?.email);
     const capacity = await checkHorseCapacity(supabase, workspaceId, plannedInserts, entitlements.limits);
     if (!capacity.ok) {
       return sendJson(res, 403, { ok: false, message: capacity.message });
