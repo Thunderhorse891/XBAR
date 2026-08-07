@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { BadgeCheck, Loader2, Search, ShieldAlert, ShieldX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { VerifiedByXbar } from '@/components/VerifiedByXbar';
 import { type VerifyResult, verifyPacket } from '@/lib/buyerVerify';
 import './verifyPacket.css';
 
@@ -96,7 +97,9 @@ export default function VerifyPacket() {
                 <span>Sealed on {formatDate(result.seal.sealedAt)}</span>
               </div>
             </div>
-            <div className="verify-seal-code">{result.seal.sealCode}</div>
+            <div className="verify-seal-row">
+              <VerifiedByXbar sealCode={result.seal.sealCode} />
+            </div>
             <p className="verify-note">
               These are the facts XBAR sealed for this packet. Compare them to the copy you were sent — anything
               different means the packet was changed after sealing.
