@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { type RemoteSalePacketSeal, createSalePacketRemote, hasBackendIdentity } from '@/lib/backendApi';
 import { billingPathForTier } from '@/lib/billingRoutes';
+import { openFacebookShareDialog } from '@/lib/facebookSharing';
+import { buildBadgeSnippet, buildShareText } from '@/lib/verificationBadge';
 import { assessRevenueAtRisk, computeHorseEconomics } from '@/lib/businessIntelligence';
 import { formatCompactCurrency } from '@/lib/format';
 import { useCloudStore } from '@/store/useCloudStore';
@@ -113,6 +115,39 @@ export function SalePacketWizard({
   const close = () => {
     reset();
     onClose();
+  };
+
+  const copyToClipboard = async (text: string, successMessage: string) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      pushToast({ message: successMessage, tone: 'success' });
+    } catch {
+      pushToast({ title: 'Copy failed', message: 'Select and copy it manually.', tone: 'warning' });
+    }
+  };
+
+  // Native share sheet when the browser offers one (phones), else Facebook if
+  // configured, else copy the link. The share text is honest — verified/unaltered,
+  // never an appraisal.
+  const shareVerification = async (verifyUrl: string, sealCode?: string) => {
+    if (!verifyUrl) return;
+    const text = buildShareText(horse?.name ?? '', sealCode);
+    const nav =
+      typeof navigator !== 'undefined'
+        ? (navigator as Navigator & { share?: (data: ShareData) => Promise<void> })
+        : undefined;
+    if (nav?.share) {
+      try {
+        await nav.share({ title: 'Verified by XBAR', text, url: verifyUrl });
+        return;
+      } catch {
+        // User dismissed the share sheet, or it failed — fall through to alternatives.
+      }
+    }
+    const fb = openFacebookShareDialog(`/verify/${generated?.packetId ?? ''}`);
+    if (fb.ok) return;
+    await copyToClipboard(verifyUrl, 'Verification link copied — share it with your buyer');
   };
 
   const stepBlockReason =
@@ -545,14 +580,47 @@ export function SalePacketWizard({
                       : 'Verifiable seal — fingerprints every fact in this packet. Give this code to your buyer; if the packet is ever altered, the seal no longer matches. (Sign in to the cloud to have XBAR anchor it server-side.)'}
                   </div>
                   {generated.verifyUrl && (
-                    <a
-                      href={generated.verifyUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ display: 'inline-block', marginTop: 8, fontSize: 12, fontWeight: 700, color: '#1466d8' }}
-                    >
-                      Open buyer verification page →
-                    </a>
+                    <div style={{ marginTop: 10 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                        Share this verification — every buyer who taps it lands on your sealed record:
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        <a
+                          className="button button--ghost button--compact"
+                          href={generated.verifyUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Open verify page
+                        </a>
+                        <button
+                          type="button"
+                          className="button button--ghost button--compact"
+                          onClick={() => void copyToClipboard(generated.verifyUrl ?? '', 'Verification link copied')}
+                        >
+                          Copy link
+                        </button>
+                        <button
+                          type="button"
+                          className="button button--ghost button--compact"
+                          onClick={() =>
+                            void copyToClipboard(
+                              buildBadgeSnippet(generated.verifyUrl ?? '', generated.sealCode ?? ''),
+                              'Badge code copied — paste it into your listing',
+                            )
+                          }
+                        >
+                          Copy “Verified by XBAR” badge
+                        </button>
+                        <button
+                          type="button"
+                          className="button button--ghost button--compact"
+                          onClick={() => void shareVerification(generated.verifyUrl ?? '', generated.sealCode)}
+                        >
+                          Share…
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}

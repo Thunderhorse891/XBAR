@@ -141,12 +141,7 @@
   font-size: 12.5px;
 }
 
-.verify-seal-code {
-  font-family: ui-monospace, 'Courier New', monospace;
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  color: var(--xbar-text, #15202b);
+.verify-seal-row {
   margin: 12px 0 8px;
 }
 
