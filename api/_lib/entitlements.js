@@ -1,8 +1,9 @@
 import { subscriptionPlans } from './subscription-plans.js';
+import { isCompedEmail } from './comp-access.js';
 
 const TIER_ORDER = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
 
-export async function getWorkspaceEntitlements(supabase, workspaceId) {
+export async function getWorkspaceEntitlements(supabase, workspaceId, userEmail) {
   const { data } = await supabase
     .from('workspace_subscription_profiles')
     .select('tier, billing_state')
@@ -13,12 +14,20 @@ export async function getWorkspaceEntitlements(supabase, workspaceId) {
   const billingState = data?.billing_state || 'Manual Billing';
   // Failed payment => the workspace keeps read access but premium generation
   // falls back to the free/Starter feature set until billing recovers.
-  const effectiveTier = billingState === 'Past Due' ? 'Starter' : tier;
+  let effectiveTier = billingState === 'Past Due' ? 'Starter' : tier;
+
+  // Operator comp: an allowlisted email (env XBAR_COMP_EMAILS) always resolves to
+  // full entitlements so internal/QA/owner accounts can exercise every feature.
+  // Off by default — an empty allowlist changes nothing for real customers.
+  if (isCompedEmail(userEmail)) {
+    effectiveTier = 'Enterprise';
+  }
 
   return {
     tier,
     effectiveTier,
     billingState,
+    comped: effectiveTier === 'Enterprise' && isCompedEmail(userEmail),
     limits: subscriptionPlans[effectiveTier].limits,
   };
 }

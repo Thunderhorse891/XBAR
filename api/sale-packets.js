@@ -67,7 +67,7 @@ export default async function handler(req, res) {
   }
   const { supabase, user } = access;
 
-  const entitlements = await getWorkspaceEntitlements(supabase, workspaceId);
+  const entitlements = await getWorkspaceEntitlements(supabase, workspaceId, user?.email);
   if (!tierIncludesPlan(entitlements.effectiveTier, 'Professional')) {
     return sendJson(res, 403, {
       ok: false,

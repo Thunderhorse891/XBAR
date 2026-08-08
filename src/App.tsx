@@ -11,7 +11,9 @@ import { billingPath } from './lib/billingRoutes';
 import { buyerFollowUpPath } from './lib/buyerRoutes';
 import { appBasePath } from './lib/routeCanon';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
+import { isCompedEmail } from './lib/compAccess';
 import { useCloudStore } from './store/useCloudStore';
+import { useXbarStore } from './store/useXbarStore';
 import './routes/operationsHierarchy.css';
 import './routes/interactionSystem.css';
 import './routes/xbarCommandSystem.css';
@@ -116,6 +118,25 @@ function applyRouteMeta(path: string) {
   document.title = path === '/login' ? 'Sign in | XBAR' : routeTitle(path);
 }
 
+// Operator comp bridge: when the signed-in email is on the comp allowlist
+// (VITE_XBAR_COMP_EMAILS), grant the full Enterprise tier so an internal / QA /
+// owner account can exercise every gated feature. Self-heals after a cloud sync
+// that would otherwise restore the real tier. No-op for everyone else, and the
+// server enforces the same allowlist for cloud actions.
+function CompAccessBridge() {
+  const sessionEmail = useCloudStore((state) => state.session?.user?.email ?? '');
+  const tier = useXbarStore((state) => state.subscription.tier);
+  const applySubscriptionTier = useXbarStore((state) => state.applySubscriptionTier);
+
+  useEffect(() => {
+    if (isCompedEmail(sessionEmail) && tier !== 'Enterprise') {
+      applySubscriptionTier('Enterprise', { billingState: 'Manual Billing' });
+    }
+  }, [sessionEmail, tier, applySubscriptionTier]);
+
+  return null;
+}
+
 function RouteTelemetry() {
   const location = useLocation();
   const workspaceId = useCloudStore((state) => state.workspaceId);
@@ -152,6 +173,7 @@ export default function App() {
         <Toaster position="top-right" richColors closeButton />
         <InteractionShell />
         <SubscriptionEnforcement />
+        <CompAccessBridge />
         <RouteTelemetry />
         <Suspense
           fallback={

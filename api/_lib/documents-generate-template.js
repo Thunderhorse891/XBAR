@@ -64,7 +64,7 @@ export default async function handler(req, res) {
     .maybeSingle();
   const minimumPlan = templateRow?.minimum_plan || template.minimumPlan;
 
-  const entitlements = await getWorkspaceEntitlements(supabase, workspaceId);
+  const entitlements = await getWorkspaceEntitlements(supabase, workspaceId, user?.email);
   if (!tierIncludesPlan(entitlements.effectiveTier, minimumPlan)) {
     return sendJson(res, 403, {
       ok: false,

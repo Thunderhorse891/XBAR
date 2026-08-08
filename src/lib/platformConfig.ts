@@ -48,6 +48,16 @@ export const facebookConfig = {
   publicAppUrl: readEnv(env.VITE_PUBLIC_APP_URL),
 };
 
+// Operator comp: emails (env VITE_XBAR_COMP_EMAILS, comma/space separated) that
+// are granted full-tier access for QA/owner use. Empty by default — no effect on
+// any real customer. Mirror of the server-side XBAR_COMP_EMAILS allowlist.
+export const compConfig = {
+  emails: readEnv(env.VITE_XBAR_COMP_EMAILS)
+    .split(/[\s,;]+/)
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean),
+};
+
 export const stripeConfig = {
   managedBillingEnabled: readFlag(env.VITE_MANAGED_BILLING_ENABLED, false),
   paymentLinks: {
