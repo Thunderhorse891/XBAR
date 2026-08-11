@@ -1,0 +1,102 @@
+.owner-tier-switcher {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 16px;
+  padding: 20px 22px;
+  margin-bottom: 24px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.72), rgba(30, 41, 59, 0.55));
+  display: grid;
+  gap: 18px;
+}
+
+.owner-tier-switcher__intro {
+  display: grid;
+  gap: 6px;
+}
+
+.owner-tier-switcher__badge {
+  justify-self: start;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.owner-tier-switcher__intro h2 {
+  margin: 0;
+  font-size: 20px;
+  color: #f8fafc;
+}
+
+.owner-tier-switcher__intro p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(226, 232, 240, 0.78);
+  max-width: 62ch;
+}
+
+.owner-tier-switcher__options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+}
+
+.owner-tier-switcher__option {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.55);
+  color: #e2e8f0;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    transform 0.1s ease,
+    background 0.15s ease;
+}
+
+.owner-tier-switcher__option:hover {
+  border-color: rgba(56, 189, 248, 0.6);
+  transform: translateY(-1px);
+}
+
+.owner-tier-switcher__option:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+.owner-tier-switcher__option strong {
+  font-size: 15px;
+  color: #f8fafc;
+}
+
+.owner-tier-switcher__option span {
+  font-size: 13px;
+  color: rgba(226, 232, 240, 0.85);
+}
+
+.owner-tier-switcher__option small {
+  font-size: 12px;
+  color: rgba(148, 163, 184, 0.9);
+}
+
+.owner-tier-switcher__option--active {
+  border-color: #38bdf8;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.22), rgba(59, 130, 246, 0.14));
+}
+
+.owner-tier-switcher__flag {
+  margin-top: 2px;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #38bdf8;
+}

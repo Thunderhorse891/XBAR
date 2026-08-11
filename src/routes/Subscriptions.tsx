@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { OwnerTierSwitcher } from '@/components/OwnerTierSwitcher';
 import { startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency } from '@/lib/format';
 import { getStripePaymentLink, stripeConfig } from '@/lib/platformConfig';
@@ -190,6 +191,7 @@ export default function Subscriptions() {
     <section className="checkout-route checkout-route--embedded">
       <div className="checkout-grid">
         <section className="checkout-panel checkout-panel--plans" aria-labelledby="checkout-title">
+          <OwnerTierSwitcher />
           <div className="checkout-heading">
             <p>Billing</p>
             <h1 id="checkout-title">Review Billing</h1>

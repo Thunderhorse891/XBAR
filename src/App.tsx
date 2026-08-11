@@ -119,20 +119,37 @@ function applyRouteMeta(path: string) {
 }
 
 // Operator comp bridge: when the signed-in email is on the comp allowlist
-// (VITE_XBAR_COMP_EMAILS), grant the full Enterprise tier so an internal / QA /
-// owner account can exercise every gated feature. Self-heals after a cloud sync
-// that would otherwise restore the real tier. No-op for everyone else, and the
-// server enforces the same allowlist for cloud actions.
+// (VITE_XBAR_COMP_EMAILS), grant the full Enterprise tier ONCE so an internal /
+// QA / owner account starts with every gated feature unlocked. After that first
+// grant the owner is free to switch tiers via the Owner Tier Switcher to preview
+// each plan, so this must not keep forcing Enterprise back on every render — a
+// per-email localStorage marker records that the initial grant already happened.
+// No-op for everyone else, and the server enforces the same allowlist for cloud
+// actions.
 function CompAccessBridge() {
   const sessionEmail = useCloudStore((state) => state.session?.user?.email ?? '');
-  const tier = useXbarStore((state) => state.subscription.tier);
   const applySubscriptionTier = useXbarStore((state) => state.applySubscriptionTier);
 
   useEffect(() => {
-    if (isCompedEmail(sessionEmail) && tier !== 'Enterprise') {
+    if (!isCompedEmail(sessionEmail)) return;
+    const marker = `xbar:comp-initialized:${sessionEmail.trim().toLowerCase()}`;
+    let alreadyGranted = false;
+    try {
+      alreadyGranted = window.localStorage.getItem(marker) === '1';
+    } catch {
+      alreadyGranted = false;
+    }
+    if (alreadyGranted) return;
+
+    if (useXbarStore.getState().subscription.tier !== 'Enterprise') {
       applySubscriptionTier('Enterprise', { billingState: 'Manual Billing' });
     }
-  }, [sessionEmail, tier, applySubscriptionTier]);
+    try {
+      window.localStorage.setItem(marker, '1');
+    } catch {
+      /* storage unavailable — the grant still applied for this session */
+    }
+  }, [sessionEmail, applySubscriptionTier]);
 
   return null;
 }
