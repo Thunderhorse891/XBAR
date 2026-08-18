@@ -30,9 +30,15 @@ async function bootstrapWorkspace(page: Page) {
   const setupHeading = page.getByRole('heading', { name: 'Configure Workspace' });
   const setupVisible = await setupHeading.isVisible({ timeout: 5_000 }).catch(() => false);
   if (!setupVisible) {
-    await page.goto('/app/setup');
+    // Only force the navigation when the app actually landed somewhere else. The
+    // workspace guard redirects to /app/setup itself, and react-router defers that
+    // state update into a transition — so a second goto to the URL the app is
+    // already navigating to races it and Playwright fails the call outright.
+    if (!page.url().includes('/app/setup')) {
+      await page.goto('/app/setup');
+    }
   }
-  await expect(setupHeading).toBeVisible({ timeout: 10_000 });
+  await expect(setupHeading).toBeVisible({ timeout: 30_000 });
 
   // Fill by placeholder — stable against label theming.
   await page.getByPlaceholder('XBAR LLC').fill('XBAR Holdings');
@@ -293,8 +299,13 @@ test('a multi-file batch upload creates one horse per registration paper', async
 
   // Both papers produced their own horse record in the roster.
   await page.getByRole('link', { name: 'Horses', exact: true }).click();
-  await expect(page.getByText('DESERT DAISY', { exact: false })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText('CANYON BELLE', { exact: false })).toBeVisible();
+  // Gate on the route actually rendering: react-router renders navigations inside a
+  // transition, so the dashboard stays mounted for a beat after the click — and it
+  // carries these same horse names in its signal cards, which would otherwise match
+  // here and trip strict mode.
+  await expect(page).toHaveURL(/\/horses$/, { timeout: 15_000 });
+  await expect(page.getByText('DESERT DAISY', { exact: false })).toHaveCount(1, { timeout: 15_000 });
+  await expect(page.getByText('CANYON BELLE', { exact: false })).toHaveCount(1);
 });
 
 test('a Needs-Review document can spawn a new horse from the review stage', async ({ page }) => {
