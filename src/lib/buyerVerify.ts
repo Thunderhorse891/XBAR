@@ -51,7 +51,7 @@ export async function verifyPacket(packetId: string): Promise<VerifyResult> {
     return { state: 'error', message: 'Verification is unreachable. Check your connection and try again.' };
   }
 
-  let body: Record<string, unknown> | null = null;
+  let body: Record<string, unknown> | null;
   try {
     body = (await response.json()) as Record<string, unknown>;
   } catch {
