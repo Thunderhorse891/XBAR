@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useId, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { canPresentPurchaseFlow, canPresentThirdPartySignIn, publicSiteHref } from '@/lib/nativePlatform';
 import { XbarMark } from '@/components/BrandMark';
 import { billingPath } from '@/lib/billingRoutes';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
@@ -248,7 +249,7 @@ export default function Login() {
             >
               {busy === 'password' ? 'Authenticating...' : authMode === 'signin' ? 'Sign In' : 'Create Account'}
             </button>
-            {supabaseReady && (
+            {supabaseReady && canPresentThirdPartySignIn() && (
               <>
                 <div className="clean-divider">
                   <span>or continue with</span>
@@ -280,7 +281,9 @@ export default function Login() {
                 </button>
               </div>
             )}
-            <a href="/pricing">View plans</a>
+            {/* A store build shows no route to pricing: it is a call to action for a
+                non-IAP purchase (3.1.1), and the marketing page is not in the bundle. */}
+            {canPresentPurchaseFlow() ? <a href={publicSiteHref('/pricing')}>View plans</a> : null}
             <span>© 2026 XBAR</span>
           </div>
         </section>

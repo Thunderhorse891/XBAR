@@ -82,3 +82,62 @@ test('subscription prices stay aligned to the current approved pricing table', (
   assert.equal(subscriptionPlans['Ranch Ops'].monthlyRate, 199);
   assert.equal(subscriptionPlans.Enterprise.monthlyRate, 499);
 });
+
+// App Store Review Guideline 3.1.1: a store build must not offer, or link out
+// to, a purchase that bypasses In-App Purchase. The native flag is checked
+// before every other rule, so no combination of role or Stripe configuration
+// can reopen a purchase path inside the app.
+test('a native store build is never ready to purchase, even fully configured as an owner', () => {
+  const result = getCheckoutReadiness({
+    billingEnabled: true,
+    canManageBilling: true,
+    hasManagedIdentity: true,
+    hasPaymentLink: true,
+    checkoutInProgress: false,
+    nativeApp: true,
+  });
+  assert.equal(result.ready, false);
+  assert.equal(result.mode, 'external');
+  assert.match(result.reason, /managed outside the app/i);
+});
+
+test('a native store build stays closed to purchase for every other input combination', () => {
+  for (const billingEnabled of [true, false]) {
+    for (const canManageBilling of [true, false]) {
+      for (const hasManagedIdentity of [true, false]) {
+        for (const hasPaymentLink of [true, false]) {
+          const result = getCheckoutReadiness({
+            billingEnabled,
+            canManageBilling,
+            hasManagedIdentity,
+            hasPaymentLink,
+            checkoutInProgress: false,
+            nativeApp: true,
+          });
+          assert.equal(result.ready, false);
+          assert.equal(result.mode, 'external');
+        }
+      }
+    }
+  }
+});
+
+test('omitting the native flag leaves web checkout behavior unchanged', () => {
+  const web = getCheckoutReadiness({
+    billingEnabled: true,
+    canManageBilling: true,
+    hasManagedIdentity: true,
+    hasPaymentLink: true,
+    checkoutInProgress: false,
+  });
+  const explicitWeb = getCheckoutReadiness({
+    billingEnabled: true,
+    canManageBilling: true,
+    hasManagedIdentity: true,
+    hasPaymentLink: true,
+    checkoutInProgress: false,
+    nativeApp: false,
+  });
+  assert.equal(web.ready, true);
+  assert.deepEqual(web, explicitWeb);
+});

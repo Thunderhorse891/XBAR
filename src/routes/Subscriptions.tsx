@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency } from '@/lib/format';
+import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 import { getStripePaymentLink, stripeConfig } from '@/lib/platformConfig';
 import { productEvent, productEventNames } from '@/lib/productEvents';
 import { revenuePlanMatrix } from '@/lib/revenuePlanMatrix';
@@ -41,19 +42,24 @@ export default function Subscriptions() {
   const decisionProfile = revenuePlanMatrix[decisionTier];
   const hasManagedIdentity = Boolean(session?.access_token && workspaceId);
   const billingEnabled = stripeConfig.managedBillingEnabled;
+  // Store builds never present a purchase path (App Store Guideline 3.1.1).
+  const nativeApp = !canPresentPurchaseFlow();
   const selectedPaymentLink = Boolean(getStripePaymentLink(decisionTier));
   const selectedCheckoutConfigured = billingEnabled || selectedPaymentLink;
   const starterSetup = subscription.tier === 'Starter' && subscription.monthlyRate === 0;
   const continuePath = workspaceReady ? '/' : '/setup';
-  const checkoutReadinessLabel = selectedCheckoutConfigured
-    ? 'Secure checkout opens next.'
-    : 'Online checkout is not configured. Contact support/manual billing required.';
+  const checkoutReadinessLabel = nativeApp
+    ? 'Plans are managed outside the app.'
+    : selectedCheckoutConfigured
+      ? 'Secure checkout opens next.'
+      : 'Online checkout is not configured. Contact support/manual billing required.';
   const selectedReadiness = getCheckoutReadiness({
     billingEnabled,
     canManageBilling,
     hasManagedIdentity,
     hasPaymentLink: selectedPaymentLink,
     checkoutInProgress: checkoutTier !== null,
+    nativeApp,
   });
   const selectedPaidCurrent =
     decisionTier === subscription.tier &&
@@ -69,6 +75,11 @@ export default function Subscriptions() {
   };
 
   const beginCheckout = async (tier: SubscriptionTier) => {
+    // Hard stop before any navigation can happen. The buttons are already
+    // disabled in a store build; this makes it impossible for a later refactor
+    // to reach window.location.assign(stripeUrl) on iOS/Android, which is the
+    // thing App Review actually rejects.
+    if (nativeApp) return;
     setCheckoutTier(tier);
     emit(productEventNames.checkoutStarted, {
       tier,
@@ -82,6 +93,7 @@ export default function Subscriptions() {
       hasManagedIdentity,
       hasPaymentLink: Boolean(getStripePaymentLink(tier)),
       checkoutInProgress: false,
+      nativeApp,
     });
     if (!readiness.ready) {
       emit(productEventNames.checkoutFailed, { tier, reason: readiness.reason }, 'warning');
@@ -139,6 +151,7 @@ export default function Subscriptions() {
       hasManagedIdentity,
       hasPaymentLink: Boolean(getStripePaymentLink(tier)),
       checkoutInProgress: checkoutTier !== null,
+      nativeApp,
     });
 
     return (
@@ -172,7 +185,13 @@ export default function Subscriptions() {
             title={readiness.reason}
             onClick={() => void beginCheckout(tier)}
           >
-            {busy ? 'Opening checkout...' : readiness.mode === 'manual' ? 'Manual billing required' : `Choose ${tier}`}
+            {busy
+              ? 'Opening checkout...'
+              : readiness.mode === 'external'
+                ? 'Managed outside the app'
+                : readiness.mode === 'manual'
+                  ? 'Manual billing required'
+                  : `Choose ${tier}`}
           </button>
         )}
         <small>
