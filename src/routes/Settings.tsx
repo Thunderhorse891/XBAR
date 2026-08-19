@@ -1,3 +1,4 @@
+import { saveTextAsFile } from '@/lib/fileDownload';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader, Panel, Pill } from '@/components/app-ui';
@@ -78,19 +79,17 @@ export default function Settings() {
   }, [workspaceProfile]);
 
   const handleExport = () => {
-    let url = '';
     try {
       const backup = exportWorkspaceBackup();
-      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-      url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `xbar-workspace-${backup.exportedAt.slice(0, 10)}.json`;
-      anchor.click();
+      const saved = saveTextAsFile(
+        `xbar-workspace-${backup.exportedAt.slice(0, 10)}.json`,
+        JSON.stringify(backup, null, 2),
+        'application/json',
+      );
       pushToast({
-        title: 'Backup exported',
-        message: 'Ranch backup downloaded successfully.',
-        tone: 'success',
+        title: saved.ok ? 'Backup exported' : 'Backup not saved',
+        message: saved.ok ? 'Ranch backup downloaded successfully.' : saved.reason,
+        tone: saved.ok ? 'success' : 'warning',
       });
     } catch {
       pushToast({
@@ -98,8 +97,6 @@ export default function Settings() {
         message: 'The ranch backup could not be exported.',
         tone: 'error',
       });
-    } finally {
-      if (url) URL.revokeObjectURL(url);
     }
   };
 

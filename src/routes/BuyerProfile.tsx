@@ -464,13 +464,18 @@ export default function BuyerProfile() {
     )
     .slice(0, 4);
   const downloadBuyerPacket = () => {
-    downloadPublicBuyerPacketArtifact(
+    const saved = downloadPublicBuyerPacketArtifact(
       buildPublicBuyerPacketArtifact({
         horse,
         documents: visibleDocuments.map(({ document }) => document),
         sharedListing,
       }),
     );
+    // Say so when the packet did not reach the device. This is the buyer-facing
+    // surface, so a tap that quietly does nothing is the worst version of it.
+    if (!saved.ok) {
+      pushToast({ title: 'Packet not saved', message: saved.reason, tone: 'warning' });
+    }
   };
 
   return (
