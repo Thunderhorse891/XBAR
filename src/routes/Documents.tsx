@@ -1278,18 +1278,22 @@ export default function Documents() {
                         className="button button--ghost button--compact"
                         type="button"
                         onClick={() => {
-                          const saved = saveTextAsFile(
-                            legalDoc.suggestedFileName,
-                            legalDocumentToHtml(legalDoc),
-                            'text/html;charset=utf-8',
-                          );
-                          pushToast({
-                            title: saved.ok ? 'Legal document exported' : 'Export unavailable',
-                            message: saved.ok
-                              ? `${legalDoc.shortTitle} downloaded as a print-ready file.`
-                              : saved.reason,
-                            tone: saved.ok ? 'success' : 'warning',
-                          });
+                          void (async () => {
+                            const saved = await saveTextAsFile(
+                              legalDoc.suggestedFileName,
+                              legalDocumentToHtml(legalDoc),
+                              'text/html;charset=utf-8',
+                            );
+                            pushToast({
+                              title: saved.ok ? 'Legal document exported' : 'Export unavailable',
+                              message: saved.ok
+                                ? saved.via === 'share-sheet'
+                                  ? `${legalDoc.shortTitle} is ready to save or send.`
+                                  : `${legalDoc.shortTitle} downloaded as a print-ready file.`
+                                : saved.reason,
+                              tone: saved.ok ? 'success' : 'warning',
+                            });
+                          })();
                         }}
                       >
                         Download

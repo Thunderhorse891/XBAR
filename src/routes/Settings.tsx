@@ -78,17 +78,21 @@ export default function Settings() {
     setProfileDraft(workspaceProfile);
   }, [workspaceProfile]);
 
-  const handleExport = () => {
+  const handleExport = async () => {
     try {
       const backup = exportWorkspaceBackup();
-      const saved = saveTextAsFile(
+      const saved = await saveTextAsFile(
         `xbar-workspace-${backup.exportedAt.slice(0, 10)}.json`,
         JSON.stringify(backup, null, 2),
         'application/json',
       );
       pushToast({
         title: saved.ok ? 'Backup exported' : 'Backup not saved',
-        message: saved.ok ? 'Ranch backup downloaded successfully.' : saved.reason,
+        message: saved.ok
+          ? saved.via === 'share-sheet'
+            ? 'Ranch backup is ready to save or send.'
+            : 'Ranch backup downloaded successfully.'
+          : saved.reason,
         tone: saved.ok ? 'success' : 'warning',
       });
     } catch {

@@ -44,7 +44,9 @@ function BuyerActionPanel({
     note?: string;
     amount?: number;
   }) => void;
-  onDownloadPacket: () => void;
+  // Resolves true only when the packet actually reached the device, so the
+  // status text below never claims a download that did not happen.
+  onDownloadPacket: () => Promise<boolean>;
 }) {
   const [mode, setMode] = useState<
     null | 'question' | 'call-requested' | 'proof-requested' | 'offer' | 'packet-downloaded'
@@ -87,13 +89,13 @@ function BuyerActionPanel({
           undefined,
         amount: mode === 'offer' ? offerAmount : undefined,
       });
-      if (mode === 'packet-downloaded') {
-        onDownloadPacket();
-      }
+      const localPacketSaved = mode === 'packet-downloaded' ? await onDownloadPacket() : false;
       setSubmitting(false);
       setStatusText(
         mode === 'packet-downloaded'
-          ? 'Buyer packet downloaded and seller notified.'
+          ? localPacketSaved
+            ? 'Buyer packet downloaded and seller notified.'
+            : 'The seller was notified, but the packet did not save to this device.'
           : 'Delivered to the seller. They will respond using your contact details.',
       );
       setMode(null);
@@ -118,10 +120,12 @@ function BuyerActionPanel({
       const payload = (await response.json().catch(() => ({}))) as { ok?: boolean; message?: string };
       setSubmitting(false);
       if (response.ok && payload.ok) {
-        if (mode === 'packet-downloaded') {
-          onDownloadPacket();
-        }
-        setStatusText(payload.message ?? 'Delivered to the seller.');
+        const packetSaved = mode === 'packet-downloaded' ? await onDownloadPacket() : false;
+        setStatusText(
+          mode === 'packet-downloaded' && !packetSaved
+            ? 'The seller was notified, but the packet did not save to this device.'
+            : (payload.message ?? 'Delivered to the seller.'),
+        );
         setMode(null);
       } else {
         setStatusText(payload.message ?? 'Your message could not be delivered. Try again.');
@@ -463,8 +467,8 @@ export default function BuyerProfile() {
         (asset.kind === 'Hero' || asset.kind === 'Conformation' || asset.kind === 'Sale Still'),
     )
     .slice(0, 4);
-  const downloadBuyerPacket = () => {
-    const saved = downloadPublicBuyerPacketArtifact(
+  const downloadBuyerPacket = async () => {
+    const saved = await downloadPublicBuyerPacketArtifact(
       buildPublicBuyerPacketArtifact({
         horse,
         documents: visibleDocuments.map(({ document }) => document),
@@ -476,6 +480,7 @@ export default function BuyerProfile() {
     if (!saved.ok) {
       pushToast({ title: 'Packet not saved', message: saved.reason, tone: 'warning' });
     }
+    return saved.ok;
   };
 
   return (

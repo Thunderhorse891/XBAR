@@ -24,6 +24,13 @@ done on Linux/CI.
 - **Store-build compliance suite** — `npm run test:mobile-smoke` builds the
   native bundle and asserts the review-critical behavior on it. Run it before
   every submission; CI runs it on every push.
+- **File exports work natively** — `@capacitor/filesystem` + `@capacitor/share`
+  write the generated file to the app's cache and hand it to the iOS share
+  sheet, so exporting a buyer packet, a legal document, a filled template, or a
+  workspace backup puts a real file where the customer chooses. `npx cap sync`
+  installs both pods; no Info.plist key is required, because nothing is written
+  to a user-visible Documents directory. Both plugins are dynamically imported
+  and only load on a native bridge, so the web bundle does not carry them.
 - **Required env for a release build** — set `VITE_PUBLIC_APP_URL` to the public
   site origin so in-app marketing/legal links resolve. Set Supabase values if
   the build should offer cloud sign-in.

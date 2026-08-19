@@ -49,6 +49,23 @@ export function isNativeApp(): boolean {
   }
 }
 
+/**
+ * Whether Capacitor's native bridge is actually live in this page.
+ *
+ * Distinct from isNativeApp(), and the distinction matters. isNativeApp() is
+ * true as soon as the build-time flag is set, which is what makes purchase
+ * gating safe from the first paint. Capacitor plugins, though, only work when
+ * the bridge itself is present — so anything that calls a plugin must ask this
+ * instead, or it will try to talk to a bridge that is not there.
+ */
+export function hasNativeBridge(): boolean {
+  try {
+    return Boolean(capacitor()?.isNativePlatform?.());
+  } catch {
+    return false;
+  }
+}
+
 /** The native platform name, or 'web' when this is not a store build. */
 export function nativePlatform(): 'ios' | 'android' | 'web' {
   try {

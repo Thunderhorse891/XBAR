@@ -124,6 +124,6 @@ export function buildPublicBuyerPacketArtifact(params: {
   };
 }
 
-export function downloadPublicBuyerPacketArtifact(artifact: PublicBuyerPacketArtifact): FileSaveResult {
+export function downloadPublicBuyerPacketArtifact(artifact: PublicBuyerPacketArtifact): Promise<FileSaveResult> {
   return saveTextAsFile(artifact.fileName, artifact.html, 'text/html;charset=utf-8');
 }

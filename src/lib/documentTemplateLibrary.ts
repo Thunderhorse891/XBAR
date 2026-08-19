@@ -425,6 +425,6 @@ export function buildPrefilledDocument(params: {
   };
 }
 
-export function downloadHtmlFile(fileName: string, html: string): FileSaveResult {
+export function downloadHtmlFile(fileName: string, html: string): Promise<FileSaveResult> {
   return saveTextAsFile(fileName, html, 'text/html;charset=utf-8');
 }
