@@ -34,6 +34,24 @@ done on Linux/CI.
 - **Required env for a release build** — set `VITE_PUBLIC_APP_URL` to the public
   site origin so in-app marketing/legal links resolve. Set Supabase values if
   the build should offer cloud sign-in.
+- **Required Supabase setting: the sign-in code template.** In the Supabase
+  dashboard, Authentication → Email Templates → Magic Link, the body must
+  contain `{{ .Token }}`. Supabase only puts the six-digit code in the email
+  when that variable is present; the default template sends a link instead.
+  A link cannot work here — inside the app its callback origin is
+  `capacitor://localhost`, which no email client can open — so without this
+  setting the "Email me a sign-in code" control sends mail that cannot sign
+  anyone in.
+
+  This is not cosmetic. That code is the only way into the store build for an
+  account created through Google, Apple or Facebook: those accounts have no
+  password, and third-party sign-in is disabled on native (see below). Leaving
+  the template unchanged locks those customers out of iOS entirely.
+
+  It cannot be set, verified, or tested from the repository — it is dashboard
+  state. **Confirm it by requesting a code on a TestFlight build and checking
+  that the email contains digits, not a link, before submitting.**
+
 - **Icons & PWA metadata** — `public/brand/` has `apple-touch-icon.png`,
   `icon-192.png`, `icon-512.png`, `icon-512-maskable.png`; `index.html` carries the
   viewport (`viewport-fit=cover`), `theme-color`, and `apple-mobile-web-app-*` meta;
@@ -121,6 +139,14 @@ renders.
   and one-time-code sign-in only. To restore them, run the flow through
   `ASWebAuthenticationSession` (e.g. `@capacitor/browser`) with a registered deep
   link, and verify on a device.
+
+  Hiding those buttons removes the only credential an OAuth-created account
+  has, so the signed-out screen offers "Email me a sign-in code" — verified
+  in-app by `verifyOtp`, with no callback URL involved. **That path depends on
+  the Supabase email template above.** Password reset and magic link cannot
+  substitute for it: both are links, and both return to an origin the app
+  cannot receive.
+
 - **Broken links (2.1) — resolved.** Marketing links (`/pricing`, `/privacy`,
   `/terms`) resolve through `publicSiteHref()` to the absolute public site in a
   store build, because the marketing pages are not in the native bundle and
