@@ -12,7 +12,7 @@ import { useXbarStore } from '@/store/useXbarStore';
 import './cleanEntryExperience.css';
 
 type AuthMode = 'signin' | 'signup';
-type BusyState = 'password' | 'google' | 'facebook' | 'apple' | 'reset' | '';
+type BusyState = 'password' | 'google' | 'facebook' | 'apple' | 'reset' | 'code' | 'verify' | '';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -28,6 +28,11 @@ export default function Login() {
   const [remember, setRemember] = useState(() => localStorage.getItem('xbar-remember-me') === 'true');
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState<BusyState>('');
+  // Passwordless sign-in. This is the only route into the app for an account
+  // created through Google, Apple or Facebook — those have no password, and the
+  // emailed link/reset flows cannot return to a capacitor:// origin.
+  const [codeSent, setCodeSent] = useState(false);
+  const [emailCode, setEmailCode] = useState('');
   const authMode: AuthMode = params.get('mode') === 'signup' ? 'signup' : 'signin';
   const selectedPlan = params.get('plan') ?? '';
   const redirectTarget = useMemo(() => {
@@ -119,6 +124,22 @@ export default function Login() {
     toast(result.ok ? `Continue with ${provider}` : `${provider} sign-in unavailable`, result);
     setBusy('');
   };
+  const requestEmailCode = async () => {
+    setBusy('code');
+    const result = await cloud.sendEmailCode(email);
+    toast(result.ok ? 'Code sent' : 'Could not send a code', result);
+    if (result.ok) setCodeSent(true);
+    setBusy('');
+  };
+
+  const submitEmailCode = async () => {
+    setBusy('verify');
+    const result = await cloud.verifyEmailCode(email, emailCode);
+    toast(result.ok ? 'Welcome back' : 'That code did not work', result);
+    if (result.ok) setEmailCode('');
+    setBusy('');
+  };
+
   const reset = async () => {
     setBusy('reset');
     const result = await cloud.sendPasswordReset(email);
@@ -249,6 +270,55 @@ export default function Login() {
             >
               {busy === 'password' ? 'Authenticating...' : authMode === 'signin' ? 'Sign In' : 'Create Account'}
             </button>
+            {supabaseReady && authMode === 'signin' && (
+              <div className="clean-email-code">
+                {codeSent ? (
+                  <>
+                    <label className="clean-field" htmlFor="signin-code">
+                      <span>Sign-in code</span>
+                      <input
+                        id="signin-code"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        placeholder="6-digit code"
+                        value={emailCode}
+                        onChange={(event) => setEmailCode(event.target.value)}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="clean-secondary-button"
+                      disabled={!emailCode || busy !== ''}
+                      onClick={() => void submitEmailCode()}
+                    >
+                      {busy === 'verify' ? 'Checking...' : 'Sign in with code'}
+                    </button>
+                    <button
+                      type="button"
+                      className="clean-email-code__resend"
+                      disabled={busy !== ''}
+                      onClick={() => void requestEmailCode()}
+                    >
+                      {busy === 'code' ? 'Sending...' : 'Send a new code'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="clean-secondary-button"
+                      disabled={!email || busy !== ''}
+                      onClick={() => void requestEmailCode()}
+                    >
+                      {busy === 'code' ? 'Sending...' : 'Email me a sign-in code'}
+                    </button>
+                    <p className="clean-email-code__hint">
+                      No password? If you first signed up with Google, Apple or Facebook, use this.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
             {supabaseReady && canPresentThirdPartySignIn() && (
               <>
                 <div className="clean-divider">

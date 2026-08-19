@@ -112,6 +112,30 @@ test('@auth the store build hides third-party sign-in, which cannot complete in 
   await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
 });
 
+test('@auth an account with no password still has a way into the store build', async ({ page }) => {
+  // Hiding OAuth on native removed the only credential an account created
+  // through Google, Apple or Facebook has. Password reset cannot rescue it
+  // either: that email's callback is built from the page origin, which is
+  // capacitor://localhost in the app. A one-time code is verified in-app with
+  // no callback at all, so it must be reachable from the signed-out screen —
+  // otherwise those customers are locked out of iOS entirely.
+  await page.goto('/#/login');
+  await expect(page.getByRole('heading', { name: 'Sign In' })).toBeVisible({ timeout: 30_000 });
+
+  const requestCode = page.getByRole('button', { name: 'Email me a sign-in code' });
+  await expect(requestCode).toBeVisible();
+
+  // Disabled until an email is present, then actionable — it must not be decorative.
+  await expect(requestCode).toBeDisabled();
+  await page.getByRole('textbox', { name: /Email/ }).fill('owner@xbar.test');
+  await expect(requestCode).toBeEnabled();
+
+  // Reachable is not the same as findable. An OAuth-only customer arrives at
+  // this screen with no idea why their Google button vanished, so the control
+  // has to say who it is for — otherwise they read the app as broken and leave.
+  await expect(page.getByText(/If you first signed up with Google, Apple or Facebook/)).toBeVisible();
+});
+
 test('the store build refuses a file export instead of silently doing nothing', async ({ page }) => {
   // The regression this guards: a store build whose Capacitor bridge is not live
   // still has document and URL.createObjectURL, because a WKWebView is a browser.

@@ -124,3 +124,29 @@ export function publicSiteHref(path: string): string {
 export function canPresentThirdPartySignIn(): boolean {
   return !isNativeApp();
 }
+
+/**
+ * Origin an emailed auth callback should return to.
+ *
+ * Supabase builds magic-link and password-reset URLs from whatever origin the
+ * caller supplies. On the web that is correctly the current page. Inside a
+ * store build the page origin is `capacitor://localhost` — a scheme no email
+ * client can open and that Supabase will not accept as a redirect — so the
+ * emailed link would be dead on arrival.
+ *
+ * Returning the public site origin at least lands the customer somewhere real.
+ * It signs them in on the web rather than in the app, which is why
+ * `sendEmailCode` / `verifyEmailCode` exist: a code is verified in-app and
+ * needs no callback at all.
+ *
+ * Returns undefined when there is nothing sensible to use, which tells the
+ * Supabase client to fall back to the project's configured Site URL.
+ */
+export function authCallbackOrigin(): string | undefined {
+  if (isNativeApp()) {
+    const origin = (env.VITE_PUBLIC_APP_URL ?? '').trim().replace(/\/+$/, '');
+    return origin || undefined;
+  }
+  if (typeof window === 'undefined') return undefined;
+  return `${window.location.origin}${window.location.pathname}`;
+}
