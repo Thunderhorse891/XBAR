@@ -23,9 +23,11 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-async function openBillingScreen(page: Page) {
-  // Go straight to setup rather than letting the guard bounce us there: billing
-  // always requires a workspace in a fresh profile, so make that explicit.
+// Creates a workspace and leaves the page on the dashboard. Billing and
+// Settings both sit behind workspace setup, so both reach it this way.
+async function createWorkspace(page: Page) {
+  // Go straight to setup rather than letting the guard bounce us there: a fresh
+  // profile always needs a workspace first, so make that explicit.
   await page.goto('/#/setup');
 
   await expect(page.getByRole('heading', { name: 'Configure Workspace' })).toBeVisible({ timeout: 30_000 });
@@ -45,13 +47,19 @@ async function openBillingScreen(page: Page) {
   await expect(page.getByRole('heading', { name: 'Get your horse records in order.' })).toBeVisible({
     timeout: 30_000,
   });
+}
 
-  // Navigate by hash rather than page.goto: a document reload re-runs the init
-  // script, which clears storage and would discard the new workspace.
-  await page.evaluate(() => {
-    window.location.hash = '#/billing';
-  });
+// Navigate by hash rather than page.goto: a document reload re-runs the init
+// script, which clears storage and would discard the new workspace.
+async function goToRoute(page: Page, hash: string) {
+  await page.evaluate((target) => {
+    window.location.hash = target;
+  }, hash);
+}
 
+async function openBillingScreen(page: Page) {
+  await createWorkspace(page);
+  await goToRoute(page, '#/billing');
   await expect(page.getByRole('heading', { name: 'Review Billing' })).toBeVisible({ timeout: 30_000 });
 }
 
@@ -102,4 +110,24 @@ test('@auth the store build hides third-party sign-in, which cannot complete in 
   // Email/password sign-in — the path that does work natively — is still offered.
   await expect(page.getByRole('textbox', { name: /Password/ })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
+});
+
+test('the store build refuses a file export instead of silently doing nothing', async ({ page }) => {
+  // The regression this guards: a store build whose Capacitor bridge is not live
+  // still has document and URL.createObjectURL, because a WKWebView is a browser.
+  // A DOM-only check therefore let the save fall through to the anchor path that
+  // iOS ignores, and report success for a file that was never written.
+  //
+  // Headless Chromium reproduces that state exactly — VITE_NATIVE_APP is set in
+  // this bundle and there is no bridge — so the export here must decline rather
+  // than claim it worked.
+  await createWorkspace(page);
+  await goToRoute(page, '#/settings');
+
+  const exportButton = page.getByRole('button', { name: 'Export backup' });
+  await expect(exportButton).toBeVisible({ timeout: 30_000 });
+  await exportButton.click();
+
+  await expect(page.getByText('Backup not saved')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('Backup exported')).toHaveCount(0);
 });

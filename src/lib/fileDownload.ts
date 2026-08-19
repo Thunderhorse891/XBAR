@@ -102,17 +102,30 @@ function saveViaBrowser(fileName: string, blob: Blob): FileSaveResult {
   }
 }
 
+/**
+ * The browser anchor path is only ever valid outside a store build.
+ *
+ * A WKWebView supplies `document` and `URL.createObjectURL` like any browser, so
+ * a DOM check alone does not keep a store build out of the anchor path — and
+ * that path silently does nothing on iOS while still reporting success. This is
+ * the ordering `canSaveFilesLocally()` already used; the save functions now
+ * agree with it.
+ */
+function saveUnavailableReason(): string | null {
+  if (isNativeApp()) {
+    return 'Saving files is unavailable because the app is still starting up. Try again in a moment.';
+  }
+  if (typeof document === 'undefined' || typeof URL.createObjectURL !== 'function') {
+    return 'This browser cannot save files from XBAR.';
+  }
+  return null;
+}
+
 export async function saveTextAsFile(fileName: string, text: string, mimeType: string): Promise<FileSaveResult> {
   if (hasNativeBridge()) return saveViaShareSheet(fileName, new TextEncoder().encode(text));
 
-  if (typeof document === 'undefined' || typeof URL.createObjectURL !== 'function') {
-    return {
-      ok: false,
-      reason: isNativeApp()
-        ? 'Saving files is unavailable because the app is still starting up. Try again in a moment.'
-        : 'This browser cannot save files from XBAR.',
-    };
-  }
+  const unavailable = saveUnavailableReason();
+  if (unavailable) return { ok: false, reason: unavailable };
 
   return saveViaBrowser(fileName, new Blob([text], { type: mimeType }));
 }
@@ -121,9 +134,8 @@ export async function saveBlobAsFile(fileName: string, blob: Blob): Promise<File
   // arrayBuffer, not text(): a PDF or image must reach the share sheet byte-for-byte.
   if (hasNativeBridge()) return saveViaShareSheet(fileName, new Uint8Array(await blob.arrayBuffer()));
 
-  if (typeof document === 'undefined' || typeof URL.createObjectURL !== 'function') {
-    return { ok: false, reason: 'This browser cannot save files from XBAR.' };
-  }
+  const unavailable = saveUnavailableReason();
+  if (unavailable) return { ok: false, reason: unavailable };
 
   return saveViaBrowser(fileName, blob);
 }
