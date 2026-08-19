@@ -39,12 +39,34 @@ export function tierIncludesPlan(tier, minimumPlan) {
   return tierIndex >= requiredIndex;
 }
 
+/*
+ * A capacity gate that cannot read current usage must not let the action past.
+ *
+ * Every query below used to discard its `error`, so a failed read produced a
+ * null count, `used` became 0, and the limit silently stopped applying — the
+ * plan's enforcement lost its teeth on any transient database error, and the
+ * request looked like a clean pass. That is the same "success with nothing
+ * behind it" failure this codebase treats as a defect, sitting on the code
+ * that protects paid tiers.
+ *
+ * Refusing is the honest outcome. The caller turns this into a 403 the
+ * customer can retry, which is recoverable; an unenforced limit is not.
+ */
+function usageUnavailable(subject) {
+  return {
+    ok: false,
+    message: `Current ${subject} could not be verified, so this action was not applied. Try again in a moment.`,
+  };
+}
+
 export async function checkDocumentCapacity(supabase, workspaceId, incomingCount, limits) {
-  const { count } = await supabase
+  const { count, error } = await supabase
     .from('documents')
     .select('document_id', { count: 'exact', head: true })
     .eq('workspace_id', workspaceId)
     .neq('state', 'Archived');
+
+  if (error) return usageUnavailable('document usage');
 
   const used = Number(count || 0);
   if (used + incomingCount > limits.documentLimit) {
@@ -57,10 +79,12 @@ export async function checkDocumentCapacity(supabase, workspaceId, incomingCount
 }
 
 export async function checkHorseCapacity(supabase, workspaceId, incomingCount, limits) {
-  const { count } = await supabase
+  const { count, error } = await supabase
     .from('horses')
     .select('horse_id', { count: 'exact', head: true })
     .eq('workspace_id', workspaceId);
+
+  if (error) return usageUnavailable('horse count');
 
   const used = Number(count || 0);
   if (used + incomingCount > limits.horseLimit) {
@@ -92,6 +116,8 @@ export async function checkSeatCapacity(supabase, workspaceId, incomingCount, li
     invitationQuery.eq('status', 'pending'),
   ]);
 
+  if (memberships.error || invitations.error) return usageUnavailable('seat usage');
+
   const used = Number(memberships.count || 0) + Number(invitations.count || 0);
   if (used + incomingCount > limits.seatLimit) {
     return {
@@ -103,10 +129,12 @@ export async function checkSeatCapacity(supabase, workspaceId, incomingCount, li
 }
 
 export async function checkSalePacketCapacity(supabase, workspaceId, incomingCount, limits) {
-  const { count } = await supabase
+  const { count, error } = await supabase
     .from('sale_packets')
     .select('packet_id', { count: 'exact', head: true })
     .eq('workspace_id', workspaceId);
+
+  if (error) return usageUnavailable('sale packet count');
 
   const used = Number(count || 0);
   if (used + incomingCount > limits.salePacketLimit) {
@@ -126,7 +154,14 @@ const BYTES_PER_GB = 1024 * 1024 * 1024;
 export async function checkStorageCapacity(supabase, workspaceId, incomingBytes, limits) {
   // Authoritative usage comes from the DB (live documents + sale packets),
   // never a carried-forward or client-estimated figure.
-  const { data } = await supabase.rpc('xbar_workspace_storage_bytes', { p_workspace_id: workspaceId });
+  const { data, error } = await supabase.rpc('xbar_workspace_storage_bytes', { p_workspace_id: workspaceId });
+
+  // A permission error here is a realistic failure, not a hypothetical: the
+  // service role holds EXECUTE on this function through PostgreSQL's default
+  // PUBLIC grant, so revoking that grant without re-granting to service_role
+  // breaks this call. BYPASSRLS does not cover function EXECUTE.
+  if (error) return usageUnavailable('storage usage');
+
   const usedBytes = Number(data || 0);
   const incoming = Math.max(0, Number(incomingBytes) || 0);
   const capBytes = Number(limits.storageLimitGb) * BYTES_PER_GB;

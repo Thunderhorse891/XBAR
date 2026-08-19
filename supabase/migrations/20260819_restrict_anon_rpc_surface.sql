@@ -41,8 +41,13 @@
 -- does not require the invoking role to hold EXECUTE on the trigger function,
 -- so revoking closes the direct RPC path without disarming any enforcement.
 --
--- xbar_workspace_storage_bytes is called only from api/ using the service role,
--- which bypasses grants entirely.
+-- xbar_workspace_storage_bytes is called only from api/ using the service role.
+-- That role is NOT exempt from this revoke: `service_role` has BYPASSRLS, which
+-- covers row-level policies and nothing else — function EXECUTE is an ordinary
+-- privilege, and service_role holds it here only through the default PUBLIC
+-- grant. Revoking from PUBLIC therefore removes its only path, so the grant
+-- below is required, not decorative. Without it checkStorageCapacity's RPC
+-- fails and the storage cap stops being enforced.
 --
 -- xbar_commercial_limits and xbar_subscription_limits are read from inside
 -- other SECURITY DEFINER functions (`select * into limits from ...`), which run
@@ -57,8 +62,10 @@ revoke execute on function public.xbar_enforce_commercial_resource_limits() from
 revoke execute on function public.xbar_enforce_workspace_seat_limits() from public;
 revoke execute on function public.xbar_enforce_storage_limit() from public;
 
--- Server-side accounting: invoked with the service role only.
+-- Server-side accounting: invoked with the service role only. The re-grant is
+-- what keeps that caller working after the revoke above (see the note above).
 revoke execute on function public.xbar_workspace_storage_bytes(p_workspace_id uuid) from public;
+grant execute on function public.xbar_workspace_storage_bytes(p_workspace_id uuid) to service_role;
 
 -- Entitlement lookups: read from inside SECURITY DEFINER callers.
 revoke execute on function public.xbar_commercial_limits(p_workspace_id uuid) from public;
