@@ -27,7 +27,7 @@ function formatLimit(value: number, noun: string) {
 
 export default function Subscriptions() {
   const navigate = useNavigate();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const requestedValue = params.get('plan');
   const requestedTier = tiers.find((tier) => tier === requestedValue);
   const subscription = useXbarStore((state) => state.subscription);
@@ -141,6 +141,16 @@ export default function Subscriptions() {
     navigate(continuePath);
   };
 
+  // Reviewing a plan is separate from buying one. The purchase button is
+  // disabled whenever checkout is unconfigured, the role cannot manage billing,
+  // or this is a store build — which previously left the whole card inert, with
+  // no way to read what a tier actually includes. This always works.
+  const viewPlan = (tier: SubscriptionTier) => {
+    const next = new URLSearchParams(params);
+    next.set('plan', tier);
+    setParams(next, { replace: true });
+  };
+
   const renderPaidPlan = (tier: SubscriptionTier) => {
     const config = subscriptionPlans[tier];
     const profile = revenuePlanMatrix[tier];
@@ -198,6 +208,11 @@ export default function Subscriptions() {
                   : `Choose ${tier}`}
           </button>
         )}
+        {/* Label stays constant — the button's purpose does not change, and the
+            selected state is carried by aria-pressed plus the card highlight. */}
+        <button type="button" className="checkout-plan__view" onClick={() => viewPlan(tier)} aria-pressed={highlighted}>
+          {`See what ${tier} includes`}
+        </button>
         <small>
           {paidCurrent
             ? 'Your active paid capacity.'

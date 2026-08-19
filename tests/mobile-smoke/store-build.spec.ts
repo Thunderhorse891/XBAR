@@ -131,3 +131,27 @@ test('the store build refuses a file export instead of silently doing nothing', 
   await expect(page.getByText('Backup not saved')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText('Backup exported')).toHaveCount(0);
 });
+
+test('every paid tier can be reviewed even when no purchase is possible', async ({ page }) => {
+  // The complaint this fixes: with checkout unconfigured, every paid tier's only
+  // control was a disabled purchase button, so the cards were inert and there
+  // was no way to read what a tier includes. A store build is the strictest
+  // version of that state — purchase is removed entirely — so if the tiers are
+  // reviewable here they are reviewable anywhere.
+  await openBillingScreen(page);
+
+  for (const tier of ['Professional', 'Ranch Ops', 'Enterprise']) {
+    const view = page.getByRole('button', { name: `See what ${tier} includes` });
+    await expect(view).toBeVisible();
+    await expect(view).toBeEnabled();
+    await view.click();
+
+    // The billing summary panel now describes the tier that was clicked, and the
+    // control reports itself as the selected one. Scoped to the summary panel:
+    // the tier name also appears as the plan card's own heading.
+    await expect(page.getByLabel('Payment method').getByRole('heading', { name: tier, exact: true })).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(view).toHaveAttribute('aria-pressed', 'true');
+  }
+});
