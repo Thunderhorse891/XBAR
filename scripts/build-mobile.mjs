@@ -6,6 +6,7 @@
 // /app/* paths inside the WebView.
 
 import { spawn } from 'node:child_process';
+import { loadEnv } from 'vite';
 import { SITE_ORIGIN } from './marketing/render.mjs';
 
 // In-app links to /privacy, /terms and /pricing must resolve to the real
@@ -18,7 +19,15 @@ import { SITE_ORIGIN } from './marketing/render.mjs';
 // a command-line override would ship broken links by default. Default it to the
 // same SITE_ORIGIN the marketing generator canonicalizes to — one source of
 // truth, already correct today, and still overridable for a custom domain.
-const publicAppUrl = (process.env.VITE_PUBLIC_APP_URL || '').trim() || SITE_ORIGIN;
+//
+// Resolve through Vite's own loadEnv rather than process.env alone. Vite lets a
+// prefixed process.env value win over its .env files, so passing a fallback
+// down as an explicit variable would silently beat a VITE_PUBLIC_APP_URL the
+// operator had correctly set in .env.production or .env.local — a custom-domain
+// build would ship the default origin while looking configured.
+const fileEnv = loadEnv('production', process.cwd(), 'VITE_');
+const configuredAppUrl = (process.env.VITE_PUBLIC_APP_URL || fileEnv.VITE_PUBLIC_APP_URL || '').trim();
+const publicAppUrl = configuredAppUrl || SITE_ORIGIN;
 
 const env = {
   ...process.env,
