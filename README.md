@@ -132,7 +132,7 @@ Optional browser configuration is documented in `.env.example`.
 - **Marketing analytics**: every public page loads the first-party beacon `/site.js`, which reports pageviews and CTA clicks to `/api/metrics` — anonymous (no cookies, no identifiers, honors Do Not Track), CSP-safe, logged in the Vercel function stream, and stored in `runtime_events` as `marketing.*` when Supabase is configured.
 - **Go-live preflight**: `npm run preflight` reports which subsystems are configured and what each missing env var keeps switched off; add `-- --url <deployment>` to probe the live `/api/health` and compare.
 - **Webhook replays**: Stripe webhook deliveries are idempotent on `stripe_event_id` — retried events are acknowledged without re-running the subscription sync.
-- **CI**: every push runs lint, format check, production-dependency audit, typecheck, unit tests, build, and a browser smoke test of the built bundle; CodeQL scans weekly and on PRs; Dependabot files grouped weekly updates.
+- **CI**: every push runs lint, format check, production-dependency audit, Supabase schema deployability verification, typecheck, unit tests, build, and a browser smoke test of the built bundle; CodeQL scans weekly and on PRs; Dependabot files grouped weekly updates.
 
 ### Supabase Bootstrap
 
@@ -143,6 +143,8 @@ npm run supabase:prepare
 ```
 
 Then apply `supabase/production-schema.generated.sql` in the Supabase SQL editor. It converts unsupported policy syntax and appends the idempotent workspace RLS hardening migration.
+
+The raw base schema is not deployable on its own: it declares policies with `create policy if not exists`, which PostgreSQL rejects (`ERROR 42601`). `npm run supabase:verify` regenerates the artifact and fails the build if any unsupported statement survives, if conversion drops a policy, or if a migration is missing from the bundle — it runs in CI and as part of `npm test`.
 
 ### Stripe Go-Live
 

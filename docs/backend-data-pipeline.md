@@ -49,6 +49,66 @@ Run order: `supabase/production-schema.sql` → everything in
 `supabase/migrations/` sorted by filename. `npm run supabase:prepare` emits a
 single executable file at `supabase/production-schema.generated.sql`.
 
+**Only ever apply the generated file.** The raw base schema declares its
+policies with `create policy if not exists`, which PostgreSQL does not support
+and rejects with `ERROR 42601` — pasting it into the SQL editor fails on the
+first policy. `supabase:prepare` rewrites each one into an idempotent
+`drop policy if exists` + `create policy` pair. `npm run supabase:verify`
+regenerates the artifact and fails if any unsupported statement survives, if
+conversion loses a policy, or if a migration is missing or out of order; it runs
+in CI and in `npm test` (`tests/schemaDeployability.test.ts`).
+
+### Excluded: the relational-mirror delete guard
+
+`supabase/20260525_block_relational_mirror_deletes.sql` sits outside
+`supabase/migrations/` deliberately and is **not** applied to production. Its
+`BEFORE DELETE` triggers block every direct delete on the nine mirror tables,
+which breaks two shipped flows:
+
+- **Account deletion.** `api/account/delete.js` purges a departing user's
+  private workspaces and depends on `on delete cascade` for the child rows.
+  PostgreSQL fires child row-level `BEFORE DELETE` triggers on cascade deletes,
+  so the guard aborts the parent delete — and the call site swallows the error,
+  leaving the deleted account's data behind.
+- **Cloud sync.** `replaceWorkspaceRows` in `src/lib/cloudWorkspace.ts` treats
+  the local workspace as the source of truth and prunes stale cloud rows,
+  throwing on any delete error. With the guard installed, deleting any record in
+  the app fails the entire cloud push.
+
+Adopting it means moving the mirror tables to soft deletes and reworking both
+call sites — a data-model change, not a migration. The file's header carries the
+full rationale, and `tests/schemaDeployability.test.ts` asserts the exclusion so
+the move cannot happen silently.
+
+### Advisor posture
+
+The production project reports **0 ERROR-level** security advisors. The
+remaining warnings are all schema-discoverability notices, and they are
+accepted deliberately:
+
+- **50 `pg_graphql_*_table_exposed` (25 anon + 25 authenticated).** Every one of
+  the 25 tables has RLS enabled, and `anon` holds no row policy — a pre-auth
+  read returns zero rows. The advisor flags that the table's _shape_ is visible
+  through GraphQL introspection, not that its data is readable.
+- **24 `*_security_definer_function_executable`.** Twelve `xbar_` functions are
+  reachable as RPCs by `anon` and `authenticated`. Two of them
+  (`xbar_resolve_public_listing`, `xbar_track_public_share_view`) are the
+  intended public buyer path and must stay callable; the rest either take a
+  workspace id and re-check membership internally, or are trigger functions that
+  return `trigger` and cannot do anything useful when called over REST.
+- **1 `auth_leaked_password_protection`.** Cleared from the Supabase dashboard
+  (Auth → Password protection), not from SQL.
+
+Revoking `SELECT` on the app tables from `anon` was evaluated and **deferred**.
+It would clear at most the 25 anon-side warnings — the 25 authenticated-side
+ones cannot be revoked without breaking the signed-in app — while adding a
+grant-level divergence between the live project and the schema artifact that
+nothing in CI can verify. The rows are already closed by RLS, so the change buys
+defense-in-depth against a hypothetical future `using (true)` policy, not
+against any exposure that exists today. Revisit it as its own migration (so the
+artifact and the live project stay in step) with the public buyer flow
+(`/app/verify`, public profile pages) re-tested against the revoke.
+
 ### Extended tables
 
 `horses` (new columns)

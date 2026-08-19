@@ -34,6 +34,12 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Verify Supabase schema is deployable
+        # The raw base schema uses `create policy if not exists`, which
+        # PostgreSQL rejects (ERROR 42601). This regenerates the artifact and
+        # fails if a non-deployable schema would ship.
+        run: npm run supabase:verify
+
       - name: Typecheck
         run: npx tsc --noEmit
 
