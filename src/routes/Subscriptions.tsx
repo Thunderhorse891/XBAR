@@ -61,6 +61,10 @@ export default function Subscriptions() {
     checkoutInProgress: checkoutTier !== null,
     nativeApp,
   });
+  // A store build shows no in-app payment surface at all: not the card fields,
+  // not the "due at checkout" framing, not the checkout CTA. Apple reads any of
+  // those as an in-app purchase flow (3.1.1), even with the buttons disabled.
+  const externalBilling = selectedReadiness.mode === 'external';
   const selectedPaidCurrent =
     decisionTier === subscription.tier &&
     subscription.monthlyRate === decisionConfig.monthlyRate &&
@@ -250,12 +254,23 @@ export default function Subscriptions() {
           </div>
 
           <div className="checkout-total">
-            <span>{selectedCheckoutConfigured ? 'Due at checkout' : 'Monthly price'}</span>
+            <span>{selectedCheckoutConfigured && !externalBilling ? 'Due at checkout' : 'Monthly price'}</span>
             <strong>{formatCurrency(decisionConfig.monthlyRate)}</strong>
-            <small>{selectedCheckoutConfigured ? 'then monthly' : 'not charged in app'}</small>
+            <small>{selectedCheckoutConfigured && !externalBilling ? 'then monthly' : 'not charged in app'}</small>
           </div>
 
-          {selectedReadiness.mode === 'manual' ? (
+          {externalBilling ? (
+            <div className="checkout-card-box" aria-label="Billing details">
+              <div className="checkout-card-box__top">
+                <span>Billing</span>
+                <strong>Managed outside the app</strong>
+              </div>
+              <p>
+                Plans are not sold in the app. Your current plan and workspace are unchanged here, and no payment
+                details are collected on this screen.
+              </p>
+            </div>
+          ) : selectedReadiness.mode === 'manual' ? (
             <div className="checkout-card-box" aria-label="Billing details">
               <div className="checkout-card-box__top">
                 <span>Billing</span>
@@ -291,7 +306,22 @@ export default function Subscriptions() {
           )}
 
           <div className="checkout-status-list" aria-label="Billing details">
-            {selectedCheckoutConfigured ? (
+            {externalBilling ? (
+              <>
+                <div>
+                  <span>Billing</span>
+                  <strong>Monthly</strong>
+                </div>
+                <div>
+                  <span>Payment</span>
+                  <strong>Not collected in app</strong>
+                </div>
+                <div>
+                  <span>Workspace</span>
+                  <strong>No plan change</strong>
+                </div>
+              </>
+            ) : selectedCheckoutConfigured ? (
               <>
                 <div>
                   <span>Billing</span>
@@ -335,9 +365,11 @@ export default function Subscriptions() {
               ? 'Opening checkout...'
               : selectedPaidCurrent
                 ? 'Current plan'
-                : selectedReadiness.mode === 'manual'
-                  ? 'Manual billing required'
-                  : 'Continue to secure checkout'}
+                : externalBilling
+                  ? 'Managed outside the app'
+                  : selectedReadiness.mode === 'manual'
+                    ? 'Manual billing required'
+                    : 'Continue to secure checkout'}
           </button>
           <button className="checkout-secondary-action" type="button" onClick={startTrial}>
             Continue with Starter setup

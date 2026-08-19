@@ -1,4 +1,5 @@
 import { saveTextAsFile } from '@/lib/fileDownload';
+import { canPresentThirdPartySignIn } from '@/lib/nativePlatform';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader, Panel, Pill } from '@/components/app-ui';
@@ -741,14 +742,21 @@ export default function Settings() {
             </div>
           </div>
           <div className="inline-actions">
-            <button
-              className="button button--primary button--compact"
-              type="button"
-              onClick={handleFacebookConnect}
-              disabled={!canSyncCloud || cloudBusy || !isSupabaseConfigured()}
-            >
-              {facebookConnected ? 'Reconnect Facebook' : 'Connect Facebook'}
-            </button>
+            {/* Same gate as the login screen: signInWithOAuth cannot complete in an
+                embedded WebView, so a store build must not offer this entry point
+                either — an unusable button is a broken feature (Guideline 2.1). */}
+            {canPresentThirdPartySignIn() ? (
+              <button
+                className="button button--primary button--compact"
+                type="button"
+                onClick={handleFacebookConnect}
+                disabled={!canSyncCloud || cloudBusy || !isSupabaseConfigured()}
+              >
+                {facebookConnected ? 'Reconnect Facebook' : 'Connect Facebook'}
+              </button>
+            ) : (
+              <small>Facebook connection is available in a web browser.</small>
+            )}
           </div>
         </Panel>
 

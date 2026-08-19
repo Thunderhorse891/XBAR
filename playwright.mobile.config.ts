@@ -28,5 +28,15 @@ export default defineConfig({
     url: 'http://127.0.0.1:4176',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
+    env: {
+      // vite.config.ts derives `base` from VITE_STATIC_TARGET, defaulting to
+      // 'github-pages' (base '/XBAR/') whenever GITHUB_ACTIONS is set. The build
+      // scripts set this variable, but `vite preview` is a separate process that
+      // re-reads the config without it — so on a runner the preview server
+      // served the app under /XBAR/ while these tests requested '/', which
+      // 302s and drops the hash route. The app rendered nothing and every
+      // assertion failed, passing locally and failing only in CI.
+      VITE_STATIC_TARGET: 'web',
+    },
   },
 });

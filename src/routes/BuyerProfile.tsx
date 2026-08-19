@@ -81,25 +81,43 @@ function BuyerActionPanel({
     setStatusText('');
 
     if (source === 'local') {
-      onLocalLog({
-        kind: mode,
-        actor: buyerName.trim(),
-        note:
-          [message.trim(), buyerEmail.trim() ? `Contact: ${buyerEmail.trim()}` : ''].filter(Boolean).join(' — ') ||
-          undefined,
-        amount: mode === 'offer' ? offerAmount : undefined,
-      });
+      // Save first, then log. Recording a packet-downloaded event before the save
+      // resolves tells the seller a packet was delivered when it may not have
+      // been — a false signal in the buyer deal room that can trigger a
+      // download follow-up for a download that never happened.
       const localPacketSaved = mode === 'packet-downloaded' ? await onDownloadPacket() : false;
+      if (mode !== 'packet-downloaded' || localPacketSaved) {
+        onLocalLog({
+          kind: mode,
+          actor: buyerName.trim(),
+          note:
+            [message.trim(), buyerEmail.trim() ? `Contact: ${buyerEmail.trim()}` : ''].filter(Boolean).join(' — ') ||
+            undefined,
+          amount: mode === 'offer' ? offerAmount : undefined,
+        });
+      }
       setSubmitting(false);
       setStatusText(
         mode === 'packet-downloaded'
           ? localPacketSaved
             ? 'Buyer packet downloaded and seller notified.'
-            : 'The seller was notified, but the packet did not save to this device.'
+            : 'The packet did not save to this device, so nothing was sent to the seller. Try again.'
           : 'Delivered to the seller. They will respond using your contact details.',
       );
       setMode(null);
       return;
+    }
+
+    // Save before posting. A packet-downloaded inquiry tells the seller a packet
+    // reached the buyer and is counted in the deal room, so it must not be sent
+    // for a save that failed or a share sheet the buyer cancelled.
+    if (mode === 'packet-downloaded') {
+      const packetSaved = await onDownloadPacket();
+      if (!packetSaved) {
+        setSubmitting(false);
+        setStatusText('The packet did not save to this device, so nothing was sent to the seller. Try again.');
+        return;
+      }
     }
 
     try {
@@ -120,12 +138,7 @@ function BuyerActionPanel({
       const payload = (await response.json().catch(() => ({}))) as { ok?: boolean; message?: string };
       setSubmitting(false);
       if (response.ok && payload.ok) {
-        const packetSaved = mode === 'packet-downloaded' ? await onDownloadPacket() : false;
-        setStatusText(
-          mode === 'packet-downloaded' && !packetSaved
-            ? 'The seller was notified, but the packet did not save to this device.'
-            : (payload.message ?? 'Delivered to the seller.'),
-        );
+        setStatusText(payload.message ?? 'Delivered to the seller.');
         setMode(null);
       } else {
         setStatusText(payload.message ?? 'Your message could not be delivered. Try again.');
