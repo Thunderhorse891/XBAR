@@ -17,6 +17,7 @@
 // the store build renders.
 
 import { spawn } from 'node:child_process';
+import { SITE_ORIGIN } from './marketing/render.mjs';
 
 const authMode = process.argv.includes('--auth');
 
@@ -26,7 +27,9 @@ const env = {
   VITE_ROUTER_MODE: 'hash',
   VITE_STATIC_TARGET: 'web',
   VITE_NATIVE_APP: 'true',
-  VITE_PUBLIC_APP_URL: 'https://xbar-horse-management-app.vercel.app',
+  // Same default the real mobile build applies, so the smoke suite asserts
+  // against the origin a release build would actually ship.
+  VITE_PUBLIC_APP_URL: SITE_ORIGIN,
   ...(authMode
     ? {
         VITE_SUPABASE_URL: 'https://mobile-smoke.invalid',

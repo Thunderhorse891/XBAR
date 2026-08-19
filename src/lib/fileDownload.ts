@@ -29,15 +29,27 @@ export function canSaveFilesLocally(): boolean {
   return typeof document !== 'undefined' && typeof URL.createObjectURL === 'function';
 }
 
-/** UTF-8 safe base64, which is what Filesystem.writeFile expects. */
-function toBase64(text: string): string {
-  const bytes = new TextEncoder().encode(text);
+/**
+ * Base64 for Filesystem.writeFile, from raw bytes.
+ *
+ * Takes bytes rather than a string on purpose: routing a binary blob (a packet
+ * PDF, a photo) through a text decode replaces every invalid UTF-8 sequence
+ * with U+FFFD, so the file would arrive corrupted while the save still reported
+ * success. Callers encode text to UTF-8 bytes themselves.
+ *
+ * Chunked because String.fromCharCode is applied to the whole array at once and
+ * a multi-megabyte PDF would otherwise blow the argument limit.
+ */
+function bytesToBase64(bytes: Uint8Array): string {
+  const CHUNK = 0x8000;
   let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
+  for (let index = 0; index < bytes.length; index += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + CHUNK));
+  }
   return btoa(binary);
 }
 
-async function saveViaShareSheet(fileName: string, text: string): Promise<FileSaveResult> {
+async function saveViaShareSheet(fileName: string, bytes: Uint8Array): Promise<FileSaveResult> {
   try {
     const [{ Filesystem, Directory }, { Share }] = await Promise.all([
       import('@capacitor/filesystem'),
@@ -49,7 +61,7 @@ async function saveViaShareSheet(fileName: string, text: string): Promise<FileSa
     // UIFileSharingEnabled to be useful, which is a different decision.
     const written = await Filesystem.writeFile({
       path: fileName,
-      data: toBase64(text),
+      data: bytesToBase64(bytes),
       directory: Directory.Cache,
     });
 
@@ -91,7 +103,7 @@ function saveViaBrowser(fileName: string, blob: Blob): FileSaveResult {
 }
 
 export async function saveTextAsFile(fileName: string, text: string, mimeType: string): Promise<FileSaveResult> {
-  if (hasNativeBridge()) return saveViaShareSheet(fileName, text);
+  if (hasNativeBridge()) return saveViaShareSheet(fileName, new TextEncoder().encode(text));
 
   if (typeof document === 'undefined' || typeof URL.createObjectURL !== 'function') {
     return {
@@ -106,7 +118,8 @@ export async function saveTextAsFile(fileName: string, text: string, mimeType: s
 }
 
 export async function saveBlobAsFile(fileName: string, blob: Blob): Promise<FileSaveResult> {
-  if (hasNativeBridge()) return saveViaShareSheet(fileName, await blob.text());
+  // arrayBuffer, not text(): a PDF or image must reach the share sheet byte-for-byte.
+  if (hasNativeBridge()) return saveViaShareSheet(fileName, new Uint8Array(await blob.arrayBuffer()));
 
   if (typeof document === 'undefined' || typeof URL.createObjectURL !== 'function') {
     return { ok: false, reason: 'This browser cannot save files from XBAR.' };
