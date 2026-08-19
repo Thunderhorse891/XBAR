@@ -232,8 +232,13 @@ export function SalePacketWizard({
       }
     }
 
+    // window.open returns null when the tab is blocked — routine behind a popup
+    // blocker and inside the app's WebView. The packet itself is still built and
+    // its link renders in the panel below, so capture what actually happened
+    // instead of claiming a tab that may never have opened.
+    let openedInNewTab = false;
     if (downloadUrl && typeof window !== 'undefined') {
-      window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+      openedInNewTab = Boolean(window.open(downloadUrl, '_blank', 'noopener,noreferrer'));
     }
     setGenerated({
       packetId: build.packet.id,
@@ -246,7 +251,9 @@ export function SalePacketWizard({
     pushToast({
       title: downloadUrl ? 'Sale packet PDF ready' : 'Sale packet recorded',
       message: downloadUrl
-        ? 'Watermarked PDF opened in a new tab. Buyer activity is now tracked in Buyer follow-up.'
+        ? openedInNewTab
+          ? 'Watermarked PDF opened in a new tab. Buyer activity is now tracked in Buyer follow-up.'
+          : 'Watermarked PDF is ready — your browser blocked the new tab, so open it with the packet link below. Buyer activity is tracked in Buyer follow-up.'
         : `${build.message} Cloud sign-in generates the watermarked PDF; Buyer follow-up is tracking this buyer either way.`,
       tone: 'success',
     });
