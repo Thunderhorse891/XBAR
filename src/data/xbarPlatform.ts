@@ -40,8 +40,6 @@ export const subscriptionSeed: SubscriptionProfile = {
     salePacketLimit: 2,
     storageUsedGb: 0,
     storageLimitGb: 5,
-    sharedAccessSeatsUsed: 0,
-    sharedAccessSeatLimit: 1,
   },
 };
 

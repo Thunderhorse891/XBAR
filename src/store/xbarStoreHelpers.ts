@@ -17,11 +17,7 @@ import {
   nowStamp,
   todayStamp,
 } from '@/lib/xbarRuntime';
-import {
-  countReservedSharedAccessSeats,
-  countReservedWorkspaceSeats,
-  normalizeWorkspaceEmail,
-} from '@/lib/workspaceAccess';
+import { countReservedWorkspaceSeats, normalizeWorkspaceEmail } from '@/lib/workspaceAccess';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { createOwnershipRecord, normalizeOwnershipRecord } from '@/store/xbarStoreLogic';
 import { getCapabilityDeniedMessage, hasRoleCapability } from '@/lib/permissions';
@@ -115,7 +111,6 @@ export function syncDerivedValues(
   });
 
   const seatsUsed = countReservedWorkspaceSeats(state.workspaceMembers, state.workspaceInvitations);
-  const sharedAccessSeatsUsed = countReservedSharedAccessSeats(state.workspaceMembers, state.workspaceInvitations);
 
   return {
     horses,
@@ -132,7 +127,6 @@ export function syncDerivedValues(
         ...state.subscription.usage,
         horsesUsed: horses.length,
         seatsUsed,
-        sharedAccessSeatsUsed,
       },
     },
   };
@@ -388,14 +382,6 @@ export function restorePersistedState(raw: unknown): PersistedXbarState {
             documentLimit: usage.documentLimit ?? usage.ocrLimit ?? initialState.subscription.usage.documentLimit,
             salePacketsGenerated: salePacketBuilds.length,
             salePacketLimit: usage.salePacketLimit ?? initialState.subscription.usage.salePacketLimit,
-            sharedAccessSeatsUsed:
-              usage.sharedAccessSeatsUsed ??
-              usage.portalSeatsUsed ??
-              initialState.subscription.usage.sharedAccessSeatsUsed,
-            sharedAccessSeatLimit:
-              usage.sharedAccessSeatLimit ??
-              usage.portalSeatLimit ??
-              initialState.subscription.usage.sharedAccessSeatLimit,
           },
         }
       : initialState.subscription;

@@ -25,7 +25,7 @@ export const subscriptionTierConfig: Record<
   Pick<SubscriptionProfile, 'monthlyRate' | 'sharedAccessEnabled' | 'featureFlags'> & {
     limits: Pick<
       SubscriptionProfile['usage'],
-      'horseLimit' | 'seatLimit' | 'documentLimit' | 'salePacketLimit' | 'storageLimitGb' | 'sharedAccessSeatLimit'
+      'horseLimit' | 'seatLimit' | 'documentLimit' | 'salePacketLimit' | 'storageLimitGb'
     >;
   }
 > = {
@@ -44,7 +44,6 @@ export const subscriptionTierConfig: Record<
       documentLimit: 250,
       salePacketLimit: 2,
       storageLimitGb: 25,
-      sharedAccessSeatLimit: 0,
     },
   },
   Professional: {
@@ -54,7 +53,7 @@ export const subscriptionTierConfig: Record<
       'Everything in Starter',
       'Share approved sale packets and keep buyer follow-up in one place',
       'Sale listings for buyer-ready horse profiles',
-      '5 team seats and 10 buyer seats',
+      '5 team seats — buyers open shared listings with no account',
       '1,000 documents and 100 GB storage',
     ],
     limits: {
@@ -63,7 +62,6 @@ export const subscriptionTierConfig: Record<
       documentLimit: 1000,
       salePacketLimit: 30,
       storageLimitGb: 100,
-      sharedAccessSeatLimit: 10,
     },
   },
   'Ranch Ops': {
@@ -72,7 +70,7 @@ export const subscriptionTierConfig: Record<
     featureFlags: [
       'Everything in Professional',
       'Run the operation: team roles, breeding, equipment, and supplies',
-      '20 team seats and 40 buyer seats',
+      '20 team seats — buyers open shared listings with no account',
       '5,000 documents and 500 GB storage',
     ],
     limits: {
@@ -81,7 +79,6 @@ export const subscriptionTierConfig: Record<
       documentLimit: 5000,
       salePacketLimit: 250,
       storageLimitGb: 500,
-      sharedAccessSeatLimit: 40,
     },
   },
   Enterprise: {
@@ -90,7 +87,7 @@ export const subscriptionTierConfig: Record<
     featureFlags: [
       'Everything in Ranch Ops',
       'Scale and control for large rosters and teams',
-      '60 team seats and 200 buyer seats',
+      '60 team seats — buyers open shared listings with no account',
       '20,000 documents and 2,500 GB storage',
     ],
     limits: {
@@ -99,7 +96,6 @@ export const subscriptionTierConfig: Record<
       documentLimit: 20000,
       salePacketLimit: 2000,
       storageLimitGb: 2500,
-      sharedAccessSeatLimit: 200,
     },
   },
 };
@@ -125,7 +121,6 @@ export function buildSubscriptionForTier(
       documentLimit: config.limits.documentLimit,
       salePacketLimit: config.limits.salePacketLimit,
       storageLimitGb: config.limits.storageLimitGb,
-      sharedAccessSeatLimit: config.limits.sharedAccessSeatLimit,
     },
   };
 }

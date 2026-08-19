@@ -28,14 +28,7 @@ import { marketingPlans } from '../../scripts/marketing/pricing-data.mjs';
 // and never enforced.
 
 const ASCENDING_TIERS = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
-const LIMIT_KEYS = [
-  'horseLimit',
-  'seatLimit',
-  'documentLimit',
-  'salePacketLimit',
-  'storageLimitGb',
-  'sharedAccessSeatLimit',
-];
+const LIMIT_KEYS = ['horseLimit', 'seatLimit', 'documentLimit', 'salePacketLimit', 'storageLimitGb'];
 
 test('the server defines exactly the published tiers, in the same order', () => {
   // Order matters: the client's planOrder and the server's TIER_ORDER both rely
@@ -77,14 +70,17 @@ test('shared access is enabled from Professional up', () => {
   for (const tier of ['Professional', 'Ranch Ops', 'Enterprise']) {
     assert.equal(serverPlans[tier].sharedAccessEnabled, true, `${tier} must grant shared access`);
   }
-  // A tier with shared access but no buyer seats could never actually share.
-  for (const tier of ['Professional', 'Ranch Ops', 'Enterprise']) {
-    assert.ok(
-      serverPlans[tier].limits.sharedAccessSeatLimit > 0,
-      `${tier} enables shared access but grants no buyer seats`,
+  // Buyers never consume a seat — they open a share link with no account — so
+  // sharedAccessEnabled is the whole tier boundary here, and there is no buyer
+  // capacity number to keep in sync. /pricing publishes the same boundary as a
+  // yes/no, so pin the two together.
+  for (const plan of marketingPlans) {
+    assert.equal(
+      serverPlans[plan.tier].sharedAccessEnabled,
+      plan.sharedAccess,
+      `${plan.tier} buyer sharing drifted between /pricing and the server`,
     );
   }
-  assert.equal(serverPlans.Starter.limits.sharedAccessSeatLimit, 0);
 });
 
 test('every tier publishes a complete, usable set of limits', () => {

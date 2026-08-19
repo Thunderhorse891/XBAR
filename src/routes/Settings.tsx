@@ -482,16 +482,6 @@ export default function Settings() {
                   <Pill tone={subscription.usage.seatsUsed >= subscription.usage.seatLimit ? 'rose' : 'blue'}>
                     {subscription.usage.seatsUsed}/{subscription.usage.seatLimit}
                   </Pill>
-                  <Pill
-                    tone={
-                      subscription.usage.sharedAccessSeatsUsed >= subscription.usage.sharedAccessSeatLimit &&
-                      subscription.usage.sharedAccessSeatLimit > 0
-                        ? 'rose'
-                        : 'emerald'
-                    }
-                  >
-                    {subscription.usage.sharedAccessSeatsUsed}/{subscription.usage.sharedAccessSeatLimit} shared
-                  </Pill>
                 </div>
               </div>
               <div className="inline-metrics">

@@ -461,7 +461,6 @@ export const useXbarStore = create<XbarStore>()(
           members: state.workspaceMembers,
           invitations: state.workspaceInvitations,
           seatLimit: state.subscription.usage.seatLimit,
-          sharedAccessSeatLimit: state.subscription.usage.sharedAccessSeatLimit,
         });
 
         if (validationError) {
