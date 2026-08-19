@@ -20,9 +20,12 @@ import { marketingPlans } from '../../scripts/marketing/pricing-data.mjs';
 // most: if its limits drift, the app enforces something different from what it
 // sold, and the first sign is a customer hitting a wall the UI never showed.
 //
-// Deliberately not asserted: the server's `brandedListings` flag has no
-// counterpart in the client config and is read by nothing today, so it is a
-// server-only field rather than drift.
+// The server used to carry a `brandedListings` flag with no client counterpart.
+// It was removed rather than asserted: every capability it could have gated is
+// already gated elsewhere — listings by sharedAccessEnabled, packet export by
+// the Professional minimum in commercialEngine, and the branded asset pack by
+// its own template minimumPlan — so it was an entitlement the product implied
+// and never enforced.
 
 const ASCENDING_TIERS = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
 const LIMIT_KEYS = [

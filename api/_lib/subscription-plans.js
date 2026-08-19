@@ -7,7 +7,6 @@ export const subscriptionPlans = {
   Starter: {
     monthlyRate: 29,
     sharedAccessEnabled: false,
-    brandedListings: false,
     featureFlags: [
       'Keep clean records — horses, care, documents, expenses, reminders',
       'Documents with OCR intake and review',
@@ -26,7 +25,6 @@ export const subscriptionPlans = {
   Professional: {
     monthlyRate: 79,
     sharedAccessEnabled: true,
-    brandedListings: true,
     featureFlags: [
       'Everything in Starter',
       'Share approved sale packets and keep buyer follow-up in one place',
@@ -46,7 +44,6 @@ export const subscriptionPlans = {
   'Ranch Ops': {
     monthlyRate: 199,
     sharedAccessEnabled: true,
-    brandedListings: true,
     featureFlags: [
       'Everything in Professional',
       'Run the operation: team roles, breeding, equipment, and supplies',
@@ -65,7 +62,6 @@ export const subscriptionPlans = {
   Enterprise: {
     monthlyRate: 499,
     sharedAccessEnabled: true,
-    brandedListings: true,
     featureFlags: [
       'Everything in Ranch Ops',
       'Scale and control for large rosters and teams',
@@ -122,7 +118,6 @@ export function buildSubscriptionProfile(params) {
     renewalDate,
     billingState: normalizeBillingState(params.billingStatus),
     sharedAccessEnabled: plan.sharedAccessEnabled,
-    brandedListings: plan.brandedListings,
     featureFlags: plan.featureFlags,
     usage: {
       horsesUsed: Number(existingUsage.horsesUsed || 0),
