@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import {
   PREVIEWABLE_TIERS,
@@ -182,4 +184,43 @@ test('every sellable tier is previewable, and nothing else is', () => {
   for (const value of ['Platinum', '', null, undefined, 0, {}, 'starter']) {
     assert.equal(isPreviewableTier(value), false, `${String(value)} must not be previewable`);
   }
+});
+
+/*
+ * The preview has to reach the gates that block actions, not only the ones that
+ * render screens.
+ *
+ * RequireSubscriptionFeature reads useEffectiveSubscription, so an authorized
+ * owner previewing Enterprise sees the screen. SubscriptionEnforcement wraps the
+ * store's own actions and read the raw subscription, so the same owner was
+ * refused by a local gate before the request reached the API — while the status
+ * bar told them their session was `Cloud active` and the server would in fact
+ * have granted the tier.
+ *
+ * The wiring is React store plumbing and cannot be exercised from this suite,
+ * so the invariant is asserted against the source: both gate layers must read
+ * the effective subscription, and neither may reach past it to the raw record.
+ */
+test('both gate layers read the effective subscription, not the raw record', async () => {
+  const enforcement = await readFile(path.join(process.cwd(), 'src/components/SubscriptionEnforcement.tsx'), 'utf8');
+
+  assert.match(
+    enforcement,
+    /effectiveSubscriptionSnapshot\(\)/,
+    'the imperative action gates must use the same effective tier as the rendering gates',
+  );
+  assert.doesNotMatch(
+    enforcement,
+    /current\.subscription/,
+    'reading the raw subscription here re-introduces a local refusal the account does not actually have',
+  );
+
+  // The two paths share one resolver, which is what stops them drifting apart
+  // again; separate copies of the authorization rule are how they diverged.
+  const hook = await readFile(path.join(process.cwd(), 'src/hooks/useOwnerPreview.ts'), 'utf8');
+  assert.equal(
+    (hook.match(/overlayTier\(/g) ?? []).length,
+    3,
+    'overlayTier should be defined once and called by both the hook and the snapshot',
+  );
 });

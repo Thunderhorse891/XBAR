@@ -10,6 +10,7 @@ import {
   billingStateForStripeStatus,
   entitledTierForBillingState,
   isKnownBillingState,
+  resolveWebhookTier,
 } from '../../api/_lib/subscription-status.js';
 import { buildSubscriptionProfile, findTierByPriceId, isKnownTier } from '../../api/_lib/subscription-plans.js';
 
@@ -221,5 +222,67 @@ test('an empty price id matches nothing even when price env vars are unset', () 
       if (saved[key] === undefined) delete process.env[key];
       else process.env[key] = saved[key];
     }
+  }
+});
+
+/*
+ * A cancellation must be recordable even when its price id cannot be mapped.
+ *
+ * The webhook refused any event whose price id had no STRIPE_PRICE_ID_* match,
+ * before touching the profile. That is right for an event that grants access
+ * and wrong for one that withdraws it: a subscription canceled after its price
+ * was retired, or while the env var was briefly misconfigured, was rejected —
+ * so the previous Active record stayed in place, every entitlement check kept
+ * granting the old paid tier, and Stripe's retries could not fix it because
+ * they hit the same rejection.
+ */
+
+test('an entitling status with an unmappable price id refuses rather than guessing', () => {
+  for (const status of ENTITLED_STRIPE_STATUSES) {
+    const decision = resolveWebhookTier({ status, mappedTier: null, storedTier: 'Enterprise' });
+    assert.equal(decision.ok, false, `${status} must not write an entitlement from an unknown price`);
+    assert.equal(decision.tier, undefined, 'a refused decision must not carry a tier to write');
+  }
+});
+
+test('a non-entitling status is recorded against the stored tier when its price is unmappable', () => {
+  for (const status of [...INACTIVE_STRIPE_STATUSES, ...PAST_DUE_STRIPE_STATUSES]) {
+    const decision = resolveWebhookTier({ status, mappedTier: null, storedTier: 'Ranch Ops' });
+
+    assert.equal(decision.ok, true, `${status} must still be recorded without a price mapping`);
+    // The stored tier is carried forward as the thing being lost; the billing
+    // state is what removes the access, via entitledTierForBillingState.
+    assert.equal(decision.tier, 'Ranch Ops');
+    assert.equal(entitledTierForBillingState(decision.tier, decision.billingState), BASELINE_TIER);
+  }
+});
+
+test('an unknown status with an unmappable price id is recorded as inactive, not skipped', () => {
+  const decision = resolveWebhookTier({ status: 'some_future_status', mappedTier: null, storedTier: 'Professional' });
+
+  assert.equal(decision.ok, true);
+  assert.equal(decision.billingState, 'Inactive');
+  assert.equal(entitledTierForBillingState(decision.tier, decision.billingState), BASELINE_TIER);
+});
+
+test('a cancellation for a workspace with no stored tier falls back to the baseline', () => {
+  for (const storedTier of [null, undefined, '']) {
+    const decision = resolveWebhookTier({ status: 'canceled', mappedTier: null, storedTier });
+    assert.equal(decision.ok, true);
+    assert.equal(decision.tier, BASELINE_TIER);
+  }
+});
+
+test('a mapped price id always wins, for every status', () => {
+  for (const status of [
+    ...ENTITLED_STRIPE_STATUSES,
+    ...PAST_DUE_STRIPE_STATUSES,
+    ...INACTIVE_STRIPE_STATUSES,
+    'nonsense',
+  ]) {
+    const decision = resolveWebhookTier({ status, mappedTier: 'Professional', storedTier: 'Enterprise' });
+    assert.equal(decision.ok, true);
+    assert.equal(decision.tier, 'Professional', `${status} should record the tier the event's price maps to`);
+    assert.equal(decision.billingState, billingStateForStripeStatus(status));
   }
 });

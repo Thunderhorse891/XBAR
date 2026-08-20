@@ -95,3 +95,39 @@ export function entitledTierForBillingState(tier, billingState) {
   // 'Past Due', 'Inactive', and any unrecognized value stored in the column.
   return BASELINE_TIER;
 }
+
+/**
+ * Which tier a Stripe webhook should write when the event's price id may not
+ * map to a known tier.
+ *
+ * The asymmetry here is the point. Granting access needs to know what was
+ * bought: an unrecognized price id means STRIPE_PRICE_ID_* is misconfigured for
+ * this deployment, and guessing is wrong in both directions — defaulting to
+ * Starter silently downgrades someone who paid for more, while picking anything
+ * else hands out access nobody bought. So an entitling status with an unknown
+ * price refuses, writes nothing, and leaves the event unprocessed for an
+ * operator to see in Stripe's delivery log.
+ *
+ * Withdrawing access needs no such lookup, and refusing it is the more
+ * dangerous failure. A subscription canceled after its price was retired — or
+ * while the env var was briefly wrong — would otherwise be rejected, leaving
+ * the previous Active record in place so every entitlement check keeps granting
+ * the old paid tier, with Stripe's retries unable to correct it until someone
+ * fixes configuration. The stored tier is what the workspace is losing, so it
+ * is carried forward and the billing state does the downgrade.
+ *
+ * @param {{ status: unknown, mappedTier: string | null | undefined, storedTier: string | null | undefined }} params
+ */
+export function resolveWebhookTier({ status, mappedTier, storedTier }) {
+  const billingState = billingStateForStripeStatus(status);
+
+  if (mappedTier) {
+    return { ok: true, tier: mappedTier, billingState };
+  }
+
+  if (billingState === 'Active') {
+    return { ok: false, billingState };
+  }
+
+  return { ok: true, tier: storedTier || BASELINE_TIER, billingState };
+}

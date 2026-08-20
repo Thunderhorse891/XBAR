@@ -158,6 +158,17 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
   // Horse-limit gate for auto-created horses: track remaining slots so the
   // OCR pipeline cannot exceed the tier by creating horses from documents.
   const horseCapacity = await checkHorseCapacity(supabase, workspaceId, 0, entitlements.limits);
+  // Refuse before computing the allowance, exactly as commitAssignments does. A
+  // failed count leaves `used` undefined, and `used ?? 0` would then hand this
+  // batch a full fresh allowance regardless of how many horses already exist —
+  // reading "usage unknown" as "usage zero" is the failure the gates exist to
+  // prevent. Auto-creation makes it worse than a wrong number: the database
+  // trigger may reject the over-limit horse while createHorseFromCandidate
+  // ignores that error, links documents to it, and reports a horse that was
+  // never written.
+  if (!horseCapacity.ok) {
+    return { ok: false, status: horseCapacity.status ?? 403, message: horseCapacity.message };
+  }
   let horseSlotsLeft = Math.max(0, entitlements.limits.horseLimit - (horseCapacity.used ?? 0));
 
   const batchId = `batch-${randomUUID()}`;
