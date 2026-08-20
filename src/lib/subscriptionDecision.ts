@@ -1,4 +1,4 @@
-import type { SubscriptionTier } from '../types/xbar.js';
+import type { SubscriptionProfile, SubscriptionTier } from '../types/xbar.js';
 
 export const planOutcomes: Record<SubscriptionTier, string[]> = {
   Starter: [
@@ -68,4 +68,27 @@ export function recommendedTier(currentTier: SubscriptionTier, requestedTier?: S
   if (requestedTier) return requestedTier;
   const order: SubscriptionTier[] = ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'];
   return order[Math.min(order.indexOf(currentTier) + 1, order.length - 1)];
+}
+
+/**
+ * Whether a billing state means the workspace is actually on a paid plan.
+ *
+ * Mirrors `entitledTierForBillingState` on the server: 'Active' is paying, and
+ * 'Manual Billing' is an operator's deliberate grant. 'Past Due' and 'Inactive'
+ * are not.
+ *
+ * This exists because a plan's *price* was being used as the signal instead.
+ * `monthlyRate > 0` reads as "there is a paid plan here", but the stored rate is
+ * the price of the plan that was bought, which survives a cancellation — so a
+ * canceled Starter subscription looked like a current Starter subscription, its
+ * checkout button was disabled as "your current plan", and the customer could
+ * not resubscribe to the tier they had just lost.
+ */
+export function isEntitledBillingState(billingState: SubscriptionProfile['billingState']): boolean {
+  return billingState === 'Active' || billingState === 'Manual Billing';
+}
+
+/** True when `tier` is the plan this workspace is currently paying for. */
+export function isCurrentPaidPlan(subscription: SubscriptionProfile, tier: SubscriptionTier): boolean {
+  return isEntitledBillingState(subscription.billingState) && subscription.tier === tier;
 }

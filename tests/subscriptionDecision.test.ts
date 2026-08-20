@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { getCheckoutReadiness, planOutcomes, recommendedTier } from '../src/lib/subscriptionDecision.js';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import {
+  getCheckoutReadiness,
+  isCurrentPaidPlan,
+  isEntitledBillingState,
+  planOutcomes,
+  recommendedTier,
+} from '../src/lib/subscriptionDecision.js';
+import type { SubscriptionProfile, SubscriptionTier } from '../src/types/xbar.js';
 import { subscriptionPlans } from '../src/lib/subscriptionPlans.js';
 
 test('hosted payment links keep checkout available when managed billing is paused', () => {
@@ -124,4 +133,64 @@ test('a configured payment link is still purchasable', () => {
   });
   assert.equal(result.ready, true);
   assert.equal(result.mode, 'checkout');
+});
+
+/*
+ * A stored price is not proof of a live plan.
+ *
+ * `monthlyRate` is the rate of the plan that was bought, and it outlives a
+ * cancellation. Four places used `monthlyRate > 0` as the "this plan is
+ * current" signal, so a canceled Starter subscription looked like a current
+ * Starter subscription: the billing screen labelled it as the active plan and
+ * disabled its checkout button, leaving the customer unable to resubscribe to
+ * the tier they had just lost, and the setup checklist marked billing complete.
+ */
+
+function profileWith(billingState: SubscriptionProfile['billingState'], tier: SubscriptionTier) {
+  return { tier, monthlyRate: 29, billingState } as SubscriptionProfile;
+}
+
+test('only a paying or comped state counts as entitled', () => {
+  assert.equal(isEntitledBillingState('Active'), true);
+  assert.equal(isEntitledBillingState('Manual Billing'), true);
+  assert.equal(isEntitledBillingState('Past Due'), false);
+  assert.equal(isEntitledBillingState('Inactive'), false);
+});
+
+test('a lapsed plan is not the current plan, whatever its stored price says', () => {
+  for (const billingState of ['Inactive', 'Past Due'] as const) {
+    const subscription = profileWith(billingState, 'Starter');
+
+    assert.equal(subscription.monthlyRate > 0, true, 'precondition: the old price is still stored');
+    assert.equal(
+      isCurrentPaidPlan(subscription, 'Starter'),
+      false,
+      `${billingState} must not present Starter as current, or its checkout is disabled and the customer cannot resubscribe`,
+    );
+  }
+});
+
+test('an entitled plan is current for its own tier and no other', () => {
+  const subscription = profileWith('Active', 'Professional');
+
+  assert.equal(isCurrentPaidPlan(subscription, 'Professional'), true);
+  assert.equal(isCurrentPaidPlan(subscription, 'Starter'), false);
+  assert.equal(isCurrentPaidPlan(subscription, 'Enterprise'), false);
+});
+
+test('no screen infers an active plan from the stored price', async () => {
+  // The predicate only helps if nothing bypasses it. These are the consumers
+  // that previously read the rate directly.
+  for (const consumer of [
+    'src/routes/Subscriptions.tsx',
+    'src/routes/GettingStarted.tsx',
+    'src/store/useXbarStore.ts',
+  ]) {
+    const source = await readFile(path.join(process.cwd(), consumer), 'utf8');
+    assert.doesNotMatch(
+      source,
+      /monthlyRate > 0/,
+      `${consumer} uses a stored price as an activity signal; use isEntitledBillingState / isCurrentPaidPlan`,
+    );
+  }
 });

@@ -211,9 +211,13 @@ export default async function handler(req, res) {
     // post-upload database exception).
     const storage = await checkStorageCapacity(supabase, workspaceId, packetSizeBytes, entitlements.limits);
     if (!storage.ok) {
-      return sendJson(res, 403, {
+      // Propagate the gate's own status and code. A refusal because usage could
+      // not be read is a retryable 503, not a quota violation — reporting it as
+      // storage_limit_reached tells the customer to upgrade over a transient
+      // database error, and stops clients treating it as retryable.
+      return sendJson(res, storage.status ?? 403, {
         ok: false,
-        code: 'storage_limit_reached',
+        code: storage.retryable ? 'usage_unavailable' : 'storage_limit_reached',
         message: storage.message,
         currentPlan: entitlements.effectiveTier,
         billingState: entitlements.billingState,

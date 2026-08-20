@@ -3,7 +3,15 @@ import test from 'node:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 
-import { BILLING_STATES, BASELINE_TIER, entitledTierForBillingState } from '../../api/_lib/subscription-status.js';
+import {
+  BILLING_STATES,
+  BASELINE_TIER,
+  ENTITLED_STRIPE_STATUSES,
+  INACTIVE_STRIPE_STATUSES,
+  PAST_DUE_STRIPE_STATUSES,
+  billingStateForStripeStatus,
+  entitledTierForBillingState,
+} from '../../api/_lib/subscription-status.js';
 
 /*
  * The database and the API must agree about who is still paying.
@@ -107,4 +115,64 @@ test('the corrective migration is not presented as already applied', () => {
   assert.equal((sql.match(/create or replace function/g) ?? []).length, HELPERS.length);
   assert.doesNotMatch(sql, /drop function/i);
   assert.doesNotMatch(sql, /drop trigger/i);
+});
+
+/*
+ * The schema fix alone leaves existing deployments unchanged.
+ *
+ * The mapper this branch replaces ended with `return 'Manual Billing'`, so
+ * canceled, paused, incomplete and unrecognized statuses are already stored as
+ * an entitled state. The helper migration correctly keeps 'Manual Billing'
+ * entitled — it is a deliberate operator grant — so those rows keep full paid
+ * limits until some later webhook updates them, and a canceled workspace may
+ * never receive another webhook at all.
+ */
+
+test('no Stripe status can produce Manual Billing, which is what makes the reconciliation one-time', () => {
+  const statuses = [
+    ...ENTITLED_STRIPE_STATUSES,
+    ...PAST_DUE_STRIPE_STATUSES,
+    ...INACTIVE_STRIPE_STATUSES,
+    'some_future_status',
+    '',
+    null,
+    undefined,
+  ];
+
+  for (const status of statuses) {
+    assert.notEqual(
+      billingStateForStripeStatus(status),
+      'Manual Billing',
+      `${String(status)} must not be able to recreate the state the reconciliation clears`,
+    );
+  }
+});
+
+test('the legacy reconciliation is documented as a reviewed, data-changing step', () => {
+  const sql = readFileSync(path.join(migrationsDir, '20260820_reconcile_legacy_manual_billing.sql'), 'utf8');
+
+  assert.match(sql, /NOT YET APPLIED/);
+  assert.match(sql, /DRY RUN/, 'a migration that changes entitlements for real workspaces needs a dry run');
+
+  // It moves the mislabelled rows to the state the current mapper would give
+  // them, and leaves the purchased tier alone so nothing is lost.
+  assert.match(sql, /set billing_state = 'Inactive'/);
+  assert.match(sql, /where billing_state = 'Manual Billing'/);
+  assert.doesNotMatch(sql, /set\s+tier\s*=/, 'the purchased tier must survive the reconciliation');
+  assert.doesNotMatch(sql, /delete from/i);
+});
+
+test('the reconciliation runs after the helper fix and before the grants', () => {
+  // Ordering is behavioural, not cosmetic: reconciling before the helpers
+  // understand 'Inactive' would downgrade the billing state without changing
+  // what the triggers enforce.
+  const applied = readdirSync(migrationsDir)
+    .filter((file) => file.endsWith('.sql'))
+    .sort();
+
+  assert.ok(
+    applied.indexOf('20260820_entitlement_helpers_honor_inactive.sql') <
+      applied.indexOf('20260820_reconcile_legacy_manual_billing.sql'),
+    'the helper fix must apply before the data reconciliation',
+  );
 });

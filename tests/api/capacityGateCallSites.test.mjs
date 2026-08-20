@@ -86,5 +86,17 @@ for (const site of callSites) {
         `${site.variable}.used is read before the .ok guard, so an unreadable count becomes a full allowance`,
       );
     }
+
+    // The refusal must carry the gate's own status, not a hardcoded 403.
+    // A gate refuses for two different reasons — over the limit, and usage
+    // could not be read — and the second is a retryable 503. Flattening both
+    // into 403 tells a customer to upgrade because of a transient database
+    // error, and stops clients retrying something that would have succeeded.
+    const block = site.after.slice(guard, guard + 600);
+    assert.match(
+      block,
+      new RegExp(`${site.variable}\\.status`),
+      `the refusal at ${site.file}:${site.line} hardcodes a status instead of propagating ${site.variable}.status`,
+    );
   });
 }

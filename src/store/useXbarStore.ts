@@ -20,6 +20,7 @@ import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { buildPacketCredential } from '@/lib/localSalePacketGenerator';
 import { featureGate } from '@/lib/commercialEngine';
 import { ownerPreviewAuthorization, overlayTier } from '@/lib/ownerPreview';
+import { isCurrentPaidPlan } from '@/lib/subscriptionDecision';
 import { useOwnerPreviewStore } from '@/store/useOwnerPreviewStore';
 import { buildOfferDecision } from '@/lib/profitIntelligence';
 import { scheduleBuyerActivityFollowUp } from '@/lib/salesFollowUp';
@@ -201,7 +202,9 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const state = get();
-        if (state.subscription.tier === tier && state.subscription.monthlyRate > 0) {
+        // Entitlement, not price: the stored rate outlives a cancellation, so
+        // this refused to re-apply a tier the workspace had lapsed out of.
+        if (isCurrentPaidPlan(state.subscription, tier)) {
           return { ok: false, message: `${tier} is already the active plan.` };
         }
 

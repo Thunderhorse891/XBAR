@@ -151,6 +151,41 @@ while saying **Billing not configured yet**. No checkout opens, no subscription
 record is created, and no identifier is invented — missing configuration is
 reported, never faked.
 
+### Pending Supabase migrations (not applied)
+
+Three migrations in `supabase/migrations/` are written and reviewed but have
+**not** been run against any project. They are ordered, and the order matters:
+
+1. `20260820_entitlement_helpers_honor_inactive.sql` — schema. Makes the
+   database's limit helpers agree with the API about which billing states keep
+   a purchased tier. Safe to re-run: both functions are `create or replace`
+   with unchanged signatures, and no trigger is detached.
+2. `20260820_reconcile_legacy_manual_billing.sql` — **data**. Reconciles rows
+   the previous status mapper stored as `Manual Billing` when the subscription
+   had actually canceled, paused, or never completed its first payment. Without
+   this, step 1 changes nothing for those workspaces, because `Manual Billing`
+   is correctly still an entitled state.
+3. `20260820_restrict_anon_rpc_surface.sql` — grants. Closes the unauthenticated
+   RPC surface left by PostgreSQL's default `EXECUTE` grant to `PUBLIC`.
+
+To apply, with the project linked:
+
+```
+supabase db push
+```
+
+or paste each file, in the order above, into the SQL editor.
+
+**Before step 2**, run the dry-run query in the comments at the top of that
+file and read every row it returns. It changes entitlements for real
+workspaces, and a row that was edited by hand in the dashboard is the one case
+the migration cannot distinguish from a mislabelled Stripe status. Going
+forward, comp an account with `XBAR_COMP_EMAILS`, not by setting the column.
+
+After applying, re-run the security advisor and confirm
+`anon_security_definer_function_executable` has dropped to the intended set;
+the counts are documented at the bottom of file 3.
+
 ### Operations
 
 - **Health probe**: `GET /api/health` returns liveness plus subsystem-configured booleans (no secrets, no database touch). Point uptime monitors here.

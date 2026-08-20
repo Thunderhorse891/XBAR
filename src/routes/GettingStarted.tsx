@@ -3,6 +3,7 @@ import { Check } from 'lucide-react';
 import { Card, PageHead, ProgressRing } from '@/components/saas';
 import { billingPath } from '@/lib/billingRoutes';
 import { useXbarStore } from '@/store/useXbarStore';
+import { isEntitledBillingState } from '@/lib/subscriptionDecision';
 
 type Step = {
   id: string;
@@ -88,7 +89,9 @@ export default function GettingStarted() {
       id: 'plan',
       title: 'Review billing',
       detail: `${subscription.tier} billing is set for this workspace.`,
-      done: subscription.billingState === 'Active' || subscription.monthlyRate > 0,
+      // A stored price is not proof of a live plan: it is the rate of whatever
+      // was bought last, and it outlives a cancellation.
+      done: isEntitledBillingState(subscription.billingState),
       action: 'Open billing',
       to: billingPath,
     },

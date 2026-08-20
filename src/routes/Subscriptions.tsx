@@ -6,7 +6,7 @@ import { getStripePaymentLink, stripeConfig } from '@/lib/platformConfig';
 import { productEvent, productEventNames } from '@/lib/productEvents';
 import { revenuePlanMatrix } from '@/lib/revenuePlanMatrix';
 import { trackRuntimeEvent } from '@/lib/runtimeEvents';
-import { getCheckoutReadiness, recommendedTier } from '@/lib/subscriptionDecision';
+import { getCheckoutReadiness, recommendedTier, isCurrentPaidPlan } from '@/lib/subscriptionDecision';
 import { subscriptionPlans } from '@/lib/subscriptionPlans';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -55,10 +55,11 @@ export default function Subscriptions() {
     hasPaymentLink: selectedPaymentLink,
     checkoutInProgress: checkoutTier !== null,
   });
-  const selectedPaidCurrent =
-    decisionTier === subscription.tier &&
-    subscription.monthlyRate === decisionConfig.monthlyRate &&
-    subscription.monthlyRate > 0;
+  // Entitlement, not price. The stored rate is the price of the plan that was
+  // bought and survives a cancellation, so using it as the "this is your
+  // current plan" signal marked a lapsed tier as current and disabled the
+  // checkout the customer needed to resubscribe.
+  const selectedPaidCurrent = isCurrentPaidPlan(subscription, decisionTier);
 
   const emit = (
     eventName: Parameters<typeof productEvent>[0],
@@ -129,8 +130,7 @@ export default function Subscriptions() {
     const config = subscriptionPlans[tier];
     const profile = revenuePlanMatrix[tier];
     const highlighted = tier === decisionTier;
-    const paidCurrent =
-      tier === subscription.tier && subscription.monthlyRate === config.monthlyRate && subscription.monthlyRate > 0;
+    const paidCurrent = isCurrentPaidPlan(subscription, tier);
     const setupCurrent = tier === 'Starter' && starterSetup;
     const busy = checkoutTier === tier;
     const readiness = getCheckoutReadiness({
