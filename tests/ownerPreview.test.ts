@@ -215,12 +215,46 @@ test('both gate layers read the effective subscription, not the raw record', asy
     'reading the raw subscription here re-introduces a local refusal the account does not actually have',
   );
 
-  // The two paths share one resolver, which is what stops them drifting apart
-  // again; separate copies of the authorization rule are how they diverged.
-  const hook = await readFile(path.join(process.cwd(), 'src/hooks/useOwnerPreview.ts'), 'utf8');
+  // Every consumer resolves through one definition, which is what stops them
+  // drifting apart again; separate copies of the authorization rule are how the
+  // rendering gates and the action gates diverged in the first place.
+  const lib = await readFile(path.join(process.cwd(), 'src/lib/ownerPreview.ts'), 'utf8');
   assert.equal(
-    (hook.match(/overlayTier\(/g) ?? []).length,
-    3,
-    'overlayTier should be defined once and called by both the hook and the snapshot',
+    (lib.match(/export function overlayTier\(/g) ?? []).length,
+    1,
+    'overlayTier should be defined exactly once, in lib/ownerPreview',
+  );
+
+  // The three places that decide whether a preview applies: the React hook, the
+  // imperative snapshot the action gates use, and the store's own feature gates.
+  for (const consumer of ['src/hooks/useOwnerPreview.ts', 'src/store/useXbarStore.ts']) {
+    const source = await readFile(path.join(process.cwd(), consumer), 'utf8');
+    assert.match(source, /overlayTier\(/, `${consumer} should resolve previews through the shared overlayTier`);
+    assert.doesNotMatch(
+      source,
+      /function overlayTier\(/,
+      `${consumer} should import overlayTier, not keep its own copy of the rule`,
+    );
+  }
+});
+
+/*
+ * The store's own feature gates run inside actions and cannot use the hook, so
+ * they read the raw subscription and refused an authorized owner's previewed
+ * tier before any request reached the API. There were four of them — the
+ * reported one plus three more for buyer deal rooms — so the guard is on the
+ * call shape rather than on the single site that was named.
+ */
+test('the store evaluates feature gates against the previewed tier', async () => {
+  const store = await readFile(path.join(process.cwd(), 'src/store/useXbarStore.ts'), 'utf8');
+
+  assert.doesNotMatch(
+    store,
+    /featureGate\(get\(\)\.subscription,/,
+    'a feature gate reading the raw subscription re-introduces a local refusal a comped account does not have',
+  );
+  assert.ok(
+    (store.match(/featureGate\(gateSubscription\(get\(\)\.subscription\),/g) ?? []).length >= 4,
+    'every store feature gate should evaluate the previewed tier',
   );
 });

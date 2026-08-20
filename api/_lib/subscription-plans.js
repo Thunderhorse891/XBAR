@@ -1,4 +1,4 @@
-import { BASELINE_TIER, billingStateForStripeStatus } from './subscription-status.js';
+import { BASELINE_TIER, billingStateForStripeStatus, entitledTierForBillingState } from './subscription-status.js';
 
 export const subscriptionPlans = {
   Starter: {
@@ -121,17 +121,37 @@ export function isKnownTier(tier) {
  */
 export function buildSubscriptionProfile(params) {
   const tierRecognized = isKnownTier(params.tier);
-  const tier = tierRecognized ? params.tier : BASELINE_TIER;
+  const purchasedTier = tierRecognized ? params.tier : BASELINE_TIER;
+  const billingState = billingStateForStripeStatus(params.billingStatus);
+
+  // Every entitlement field below comes from the tier the workspace is actually
+  // entitled to right now, not the one it bought.
+  //
+  // This payload is what the client stores and gates on, and the client gates
+  // read `tier`, `sharedAccessEnabled` and the usage limits — none of them look
+  // at billingState. Copying the purchased tier's values into a canceled or
+  // unpaid workspace's payload therefore left it rendering paid features and
+  // passing local gates while the API and the database both enforced Starter.
+  //
+  // `purchasedTier` keeps what was bought, so billing screens can say which
+  // plan lapsed and recovery has something to restore. It is deliberately not
+  // what anything gates on.
+  const tier = entitledTierForBillingState(purchasedTier, billingState);
   const plan = subscriptionPlans[tier];
   const existingUsage = params.existingUsage || {};
   const renewalDate = params.renewalDate || '';
 
   return {
     tier,
+    purchasedTier,
     tierRecognized,
-    monthlyRate: plan.monthlyRate,
+    // The price of the plan that was bought, not of the fallback entitlement.
+    // Quoting Starter's rate to a canceled Enterprise workspace would imply a
+    // charge that is not happening; billingState is what says whether anything
+    // is being billed at all.
+    monthlyRate: subscriptionPlans[purchasedTier].monthlyRate,
     renewalDate,
-    billingState: billingStateForStripeStatus(params.billingStatus),
+    billingState,
     sharedAccessEnabled: plan.sharedAccessEnabled,
     featureFlags: plan.featureFlags,
     usage: {

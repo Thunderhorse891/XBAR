@@ -286,3 +286,61 @@ test('a mapped price id always wins, for every status', () => {
     assert.equal(decision.billingState, billingStateForStripeStatus(status));
   }
 });
+
+/*
+ * The stored payload is what the client gates on, so it must not carry paid
+ * entitlements the billing state does not support.
+ *
+ * The client loads this payload verbatim, and its gates read `tier`,
+ * `sharedAccessEnabled` and the usage limits — none of them consult
+ * billingState. Copying the purchased tier's values in therefore left a
+ * canceled Enterprise workspace rendering paid features and passing every local
+ * gate, while the API and the database both enforced Starter.
+ */
+
+test('a lapsed subscription stores baseline entitlements, not the ones it bought', () => {
+  for (const status of [...INACTIVE_STRIPE_STATUSES, ...PAST_DUE_STRIPE_STATUSES, 'some_future_status']) {
+    const profile = buildSubscriptionProfile({ tier: 'Enterprise', billingStatus: status });
+    const baseline = buildSubscriptionProfile({ tier: BASELINE_TIER, billingStatus: 'active' });
+
+    assert.equal(profile.tier, BASELINE_TIER, `${status} must not leave Enterprise in the gated tier field`);
+    assert.equal(profile.sharedAccessEnabled, baseline.sharedAccessEnabled);
+    assert.deepEqual(profile.featureFlags, baseline.featureFlags);
+
+    for (const limit of [
+      'horseLimit',
+      'seatLimit',
+      'documentLimit',
+      'salePacketLimit',
+      'storageLimitGb',
+      'sharedAccessSeatLimit',
+    ]) {
+      assert.equal(profile.usage[limit], baseline.usage[limit], `${status} leaked the paid ${limit}`);
+    }
+
+    // What was bought is kept, so a billing screen can name the lapsed plan —
+    // but it is not the field anything gates on.
+    assert.equal(profile.purchasedTier, 'Enterprise');
+  }
+});
+
+test('an entitled subscription keeps everything it paid for', () => {
+  for (const status of ENTITLED_STRIPE_STATUSES) {
+    const profile = buildSubscriptionProfile({ tier: 'Enterprise', billingStatus: status });
+
+    assert.equal(profile.tier, 'Enterprise');
+    assert.equal(profile.purchasedTier, 'Enterprise');
+    assert.equal(profile.sharedAccessEnabled, true);
+    assert.equal(profile.usage.horseLimit, 2000);
+  }
+});
+
+test('the quoted rate stays that of the plan that was bought', () => {
+  // Falling back to Starter's rate would imply a charge that is not happening;
+  // billingState is what says whether anything is being billed.
+  const canceled = buildSubscriptionProfile({ tier: 'Enterprise', billingStatus: 'canceled' });
+  const active = buildSubscriptionProfile({ tier: 'Enterprise', billingStatus: 'active' });
+
+  assert.equal(canceled.monthlyRate, active.monthlyRate);
+  assert.equal(canceled.billingState, 'Inactive');
+});

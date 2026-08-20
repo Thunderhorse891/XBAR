@@ -162,3 +162,25 @@ export function featureUnavailableReason(options: {
 export function isPreviewableTier(value: unknown): value is SubscriptionTier {
   return typeof value === 'string' && (PREVIEWABLE_TIERS as readonly string[]).includes(value);
 }
+
+/**
+ * The tier an owner preview should overlay, or null for "show the real plan".
+ *
+ * Every consumer of the preview resolves through this one function: the React
+ * hook, the imperative snapshot the action gates use, and the store's own
+ * feature gates. They were separate reads before, and separate reads are how a
+ * previewed tier ended up unlocking a screen while the action behind it was
+ * still refused against the real plan.
+ *
+ * Authorization is passed in rather than stored, so an unauthorized visitor
+ * holding a stale persisted tier never gets an override.
+ */
+export function overlayTier(
+  authorization: OwnerPreviewAuthorization,
+  previewTier: SubscriptionTier | null,
+  realTier: SubscriptionTier,
+): SubscriptionTier | null {
+  if (!authorization.authorized) return null;
+  if (!previewTier || previewTier === realTier) return null;
+  return previewTier;
+}

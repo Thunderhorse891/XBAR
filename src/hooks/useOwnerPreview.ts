@@ -1,9 +1,10 @@
 import { useMemo } from 'react';
-import type { SubscriptionProfile, SubscriptionTier } from '../types/xbar';
+import type { SubscriptionProfile } from '../types/xbar';
 import { buildSubscriptionForTier } from '../lib/xbarRuntime';
 import {
   ownerPreviewAuthorization,
   ownerPreviewReach,
+  overlayTier,
   type OwnerPreviewAuthorization,
   type OwnerPreviewReach,
 } from '../lib/ownerPreview';
@@ -36,24 +37,6 @@ export type OwnerPreviewStatus = {
   /** What the UI should render — real, or the previewed overlay. */
   effectiveSubscription: SubscriptionProfile;
 };
-
-/**
- * The tier the overlay should apply, or null for "show the real plan".
- *
- * Shared by the hook and by the imperative snapshot below so the two can never
- * disagree about who is previewing what. Authorization is re-derived from the
- * session every time and never read from stored state, so an unauthorized
- * visitor holding a stale persisted tier gets no override.
- */
-function overlayTier(
-  authorization: OwnerPreviewAuthorization,
-  previewTier: SubscriptionTier | null,
-  realTier: SubscriptionTier,
-): SubscriptionTier | null {
-  if (!authorization.authorized) return null;
-  if (!previewTier || previewTier === realTier) return null;
-  return previewTier;
-}
 
 export function useOwnerPreview(): OwnerPreviewStatus {
   const realSubscription = useXbarStore((state) => state.subscription);

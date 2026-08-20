@@ -427,7 +427,13 @@ export interface SubscriptionUsage {
 }
 
 export interface SubscriptionProfile {
+  // What this workspace may use right now. For a lapsed subscription this is
+  // the baseline, not what was bought — every feature gate reads it, so it must
+  // never carry entitlements the billing state does not support.
   tier: SubscriptionTier;
+  // What was bought, kept so billing screens can name the plan that lapsed.
+  // Deliberately not consulted by any gate.
+  purchasedTier?: SubscriptionTier;
   monthlyRate: number;
   renewalDate: string;
   // 'Inactive' covers canceled, paused, unpaid and never-completed

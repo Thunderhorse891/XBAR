@@ -19,6 +19,8 @@ import { hasHorsePhoto, isHorsePhotoAsset } from '@/lib/animalPassport';
 import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { buildPacketCredential } from '@/lib/localSalePacketGenerator';
 import { featureGate } from '@/lib/commercialEngine';
+import { ownerPreviewAuthorization, overlayTier } from '@/lib/ownerPreview';
+import { useOwnerPreviewStore } from '@/store/useOwnerPreviewStore';
 import { buildOfferDecision } from '@/lib/profitIntelligence';
 import { scheduleBuyerActivityFollowUp } from '@/lib/salesFollowUp';
 import {
@@ -55,7 +57,7 @@ import type {
   SalesLead,
   WorkspaceInvitationRecord,
 } from '@/types/xbar';
-import type { BuyerRoomEvent, DocumentRecord, SalePacketBuild } from '@/types/xbar';
+import type { BuyerRoomEvent, DocumentRecord, SalePacketBuild, SubscriptionProfile } from '@/types/xbar';
 import type { XbarStore } from '@/store/xbarStoreTypes';
 import {
   WORKSPACE_SCHEMA_VERSION,
@@ -78,6 +80,29 @@ import {
   selectPersistedState,
   syncDerivedValues,
 } from '@/store/xbarStoreHelpers';
+
+/**
+ * The subscription this store's feature gates should evaluate.
+ *
+ * These four gates run inside store actions, so they cannot use the React hook
+ * and were reading the raw subscription. That refused an authorized owner's
+ * previewed tier locally — for a comp-allowlisted account the server actually
+ * grants that tier, so the refusal was inventing a restriction the account does
+ * not have, and the screen in front of them said the preview was cloud-active.
+ *
+ * Resolved through the same `overlayTier` the hook and the action-gate snapshot
+ * use, so the three cannot disagree. It stays safe because it only decides
+ * which local gate fires first: every cloud write is still authorized by the
+ * API against the real account, so a local-only preview is refused there.
+ */
+function gateSubscription(subscription: SubscriptionProfile): SubscriptionProfile {
+  const overlay = overlayTier(
+    ownerPreviewAuthorization(useCloudStore.getState().session?.user?.email ?? ''),
+    useOwnerPreviewStore.getState().previewTier,
+    subscription.tier,
+  );
+  return overlay ? buildSubscriptionForTier(subscription, overlay) : subscription;
+}
 
 export const useXbarStore = create<XbarStore>()(
   persist(
@@ -1337,7 +1362,7 @@ export const useXbarStore = create<XbarStore>()(
           patch.depositAmount !== undefined ||
           patch.depositStatus !== undefined
         ) {
-          const planBlocked = featureGate(get().subscription, 'buyerDealRoom');
+          const planBlocked = featureGate(gateSubscription(get().subscription), 'buyerDealRoom');
           if (planBlocked) return { ok: false, message: planBlocked };
         }
 
@@ -1594,7 +1619,7 @@ export const useXbarStore = create<XbarStore>()(
       updateBreedingEconomics: (horseId, economics) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageBreeding');
         if (deniedMessage) return { ok: false, message: deniedMessage };
-        const planBlocked = featureGate(get().subscription, 'breedingRevenue');
+        const planBlocked = featureGate(gateSubscription(get().subscription), 'breedingRevenue');
         if (planBlocked) return { ok: false, message: planBlocked };
         if (!get().horses.some((horse) => horse.id === horseId))
           return { ok: false, message: 'Horse record not found.' };
@@ -2182,7 +2207,7 @@ export const useXbarStore = create<XbarStore>()(
         if (deniedMessage) {
           return { ok: false, message: deniedMessage };
         }
-        const planBlocked = featureGate(get().subscription, 'buyerDealRoom');
+        const planBlocked = featureGate(gateSubscription(get().subscription), 'buyerDealRoom');
         if (planBlocked) {
           return { ok: false, message: planBlocked };
         }
@@ -2239,7 +2264,7 @@ export const useXbarStore = create<XbarStore>()(
         if (deniedMessage) {
           return { ok: false, message: deniedMessage };
         }
-        const planBlocked = featureGate(get().subscription, 'buyerDealRoom');
+        const planBlocked = featureGate(gateSubscription(get().subscription), 'buyerDealRoom');
         if (planBlocked) {
           return { ok: false, message: planBlocked };
         }
