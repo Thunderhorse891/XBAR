@@ -21,8 +21,19 @@ import { useXbarStore } from '../store/useXbarStore';
  * object — so the store is never touched and the real plan is still there the
  * moment the preview is switched off.
  *
- * Screens that *display* or *gate on* the plan should read from here. Screens
- * that change the plan must keep using useXbarStore directly: previewing
+ * Which to use, as a rule rather than a list of files:
+ *
+ *   - A screen that GATES A FEATURE reads from here. The question it is asking
+ *     is "may this session use X", and for an allowlisted owner the server
+ *     answers yes, so refusing locally invents a restriction they do not have.
+ *
+ *   - A screen that REPORTS BILLING ITSELF reads useXbarStore directly. The
+ *     question there is "what is this workspace actually paying for", and a
+ *     preview must not answer it — the billing page would claim you had bought
+ *     the tier the owner-mode bar says you are only previewing, and the setup
+ *     checklist would mark billing complete when it is not.
+ *
+ * Anything that CHANGES the plan also uses the store directly: previewing
  * Enterprise must not let anyone act as though they had bought it.
  */
 
