@@ -89,9 +89,27 @@ export function isEntitledBillingState(billingState: SubscriptionProfile['billin
   return billingState === 'Active' || billingState === 'Manual Billing';
 }
 
-/** True when `tier` is the plan this workspace is currently paying for. */
+/**
+ * True when `tier` is the plan this workspace is currently paying for.
+ *
+ * All three conditions are load-bearing, and each covers a case the others miss:
+ *
+ *   - the billing state must be entitled, or a canceled Starter subscription
+ *     would present Starter as current and disable the checkout the customer
+ *     needs to resubscribe;
+ *   - the tier must match, obviously;
+ *   - the rate must be non-zero, because a freshly initialized workspace is
+ *     seeded as Starter / 'Manual Billing' / rate 0. That seed is a setup state,
+ *     not a purchase, and treating it as one labels Starter "Current plan" on a
+ *     brand-new workspace and stops it being bought at all.
+ *
+ * The rate is a *supporting* condition here, not the signal. Reading it alone —
+ * which is what the screens used to do — is what let a lapsed plan look current.
+ */
 export function isCurrentPaidPlan(subscription: SubscriptionProfile, tier: SubscriptionTier): boolean {
-  return isEntitledBillingState(subscription.billingState) && subscription.tier === tier;
+  return (
+    isEntitledBillingState(subscription.billingState) && subscription.tier === tier && subscription.monthlyRate > 0
+  );
 }
 
 /**

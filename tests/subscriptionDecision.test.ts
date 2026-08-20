@@ -171,6 +171,22 @@ test('a lapsed plan is not the current plan, whatever its stored price says', ()
   }
 });
 
+test('a freshly seeded workspace has not bought Starter', () => {
+  // subscriptionSeed is Starter / 'Manual Billing' / rate 0. That is a setup
+  // state, not a purchase: treating it as one labels Starter "Current plan" on
+  // a brand-new workspace and disables the checkout, so it can never be bought.
+  const seeded = subscriptionFixture({ tier: 'Starter', monthlyRate: 0, billingState: 'Manual Billing' });
+
+  assert.equal(isEntitledBillingState(seeded.billingState), true, 'precondition: the seed state is entitled');
+  assert.equal(isCurrentPaidPlan(seeded, 'Starter'), false, 'an unpaid setup must stay purchasable');
+});
+
+test('a real Starter subscription is current', () => {
+  // The counterpart to the seed case: same tier and state, but actually paid.
+  const paid = subscriptionFixture({ tier: 'Starter', monthlyRate: 29, billingState: 'Active' });
+  assert.equal(isCurrentPaidPlan(paid, 'Starter'), true);
+});
+
 test('an entitled plan is current for its own tier and no other', () => {
   const subscription = profileWith('Active', 'Professional');
 

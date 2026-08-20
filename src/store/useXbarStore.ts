@@ -96,6 +96,21 @@ import {
  * which local gate fires first: every cloud write is still authorized by the
  * API against the real account, so a local-only preview is refused there.
  */
+/**
+ * Usage for a limit check: counts from the real workspace, limits from the tier
+ * being previewed.
+ *
+ * The wrapped gates in SubscriptionEnforcement were converted to the previewed
+ * tier, but the checks *inside* these actions still read the raw limits — so an
+ * allowlisted owner previewing Enterprise passed the outer gate and was then
+ * refused by the inner one against their real Starter allowance. Only the
+ * limits move; horsesUsed, storageUsedGb and the rest stay real, so "23 of 5"
+ * still reads correctly.
+ */
+function entitledUsage(subscription: SubscriptionProfile): SubscriptionProfile['usage'] {
+  return gateSubscription(subscription).usage;
+}
+
 function gateSubscription(subscription: SubscriptionProfile): SubscriptionProfile {
   const overlay = overlayTier(
     ownerPreviewAuthorization(useCloudStore.getState().session?.user?.email ?? ''),
@@ -488,8 +503,8 @@ export const useXbarStore = create<XbarStore>()(
           role,
           members: state.workspaceMembers,
           invitations: state.workspaceInvitations,
-          seatLimit: state.subscription.usage.seatLimit,
-          sharedAccessSeatLimit: state.subscription.usage.sharedAccessSeatLimit,
+          seatLimit: entitledUsage(state.subscription).seatLimit,
+          sharedAccessSeatLimit: entitledUsage(state.subscription).sharedAccessSeatLimit,
         });
 
         if (validationError) {
@@ -737,7 +752,8 @@ export const useXbarStore = create<XbarStore>()(
 
         const state = get();
         const storageIncrease = estimateStorageGb(fileList);
-        if (state.subscription.usage.storageUsedGb + storageIncrease > state.subscription.usage.storageLimitGb) {
+        const planUsage = entitledUsage(state.subscription);
+        if (planUsage.storageUsedGb + storageIncrease > planUsage.storageLimitGb) {
           return {
             ok: false,
             message: 'Storage limit reached for the current plan. Upgrade before adding more files.',
@@ -826,7 +842,7 @@ export const useXbarStore = create<XbarStore>()(
                   })
                   .filter((bundle): bundle is NonNullable<typeof bundle> => Boolean(bundle))
               : [];
-          const availableHorseSlots = Math.max(0, state.subscription.usage.horseLimit - state.horses.length);
+          const availableHorseSlots = Math.max(0, entitledUsage(state.subscription).horseLimit - state.horses.length);
           const omittedHorseCount = Math.max(0, createdHorseBundles.length - availableHorseSlots);
           createdHorseBundles = createdHorseBundles.slice(0, availableHorseSlots);
 
@@ -986,7 +1002,7 @@ export const useXbarStore = create<XbarStore>()(
             : attached;
         }
 
-        const availableHorseSlots = Math.max(0, state.subscription.usage.horseLimit - state.horses.length);
+        const availableHorseSlots = Math.max(0, entitledUsage(state.subscription).horseLimit - state.horses.length);
         if (availableHorseSlots < 1) {
           return { ok: false, message: 'Your plan’s horse limit is reached. Upgrade to add more horses.' };
         }
@@ -1082,7 +1098,8 @@ export const useXbarStore = create<XbarStore>()(
         // Pre-flight against the whole selection so we never start uploads that
         // clearly cannot fit; the actual charge below is only for retained files.
         const preflightIncrease = estimateStorageGb(fileList);
-        if (state.subscription.usage.storageUsedGb + preflightIncrease > state.subscription.usage.storageLimitGb) {
+        const mediaUsage = entitledUsage(state.subscription);
+        if (mediaUsage.storageUsedGb + preflightIncrease > mediaUsage.storageLimitGb) {
           return { ok: false, message: 'Storage limit reached for this plan. Upgrade before uploading more media.' };
         }
 
@@ -1211,10 +1228,8 @@ export const useXbarStore = create<XbarStore>()(
 
         const fileList = input.file ? [input.file] : [];
         const storageIncrease = estimateStorageGb(fileList);
-        if (
-          fileList.length &&
-          state.subscription.usage.storageUsedGb + storageIncrease > state.subscription.usage.storageLimitGb
-        ) {
+        const receiptUsage = entitledUsage(state.subscription);
+        if (fileList.length && receiptUsage.storageUsedGb + storageIncrease > receiptUsage.storageLimitGb) {
           return {
             ok: false,
             message: 'Storage limit reached for the current plan. Remove files or upgrade before adding more receipts.',

@@ -258,3 +258,36 @@ test('the store evaluates feature gates against the previewed tier', async () =>
     'every store feature gate should evaluate the previewed tier',
   );
 });
+
+/*
+ * The preview has to reach the limit checks inside the actions too.
+ *
+ * Converting the wrapped gates in SubscriptionEnforcement was only half of it:
+ * the checks *inside* those store actions still read the raw usage limits, so
+ * an allowlisted owner previewing Enterprise passed the outer gate and was then
+ * refused by the inner one against their real Starter allowance — "Seat limit
+ * reached" on a preview the status bar called cloud-active.
+ *
+ * There were seven such reads across six actions, so the guard is on the shape
+ * rather than the sites: no limit may be read straight off the raw
+ * subscription, and every one goes through entitledUsage, which takes counts
+ * from the real workspace and limits from the previewed tier.
+ */
+test('the store checks limits against the previewed tier, not the raw plan', async () => {
+  const store = await readFile(path.join(process.cwd(), 'src/store/useXbarStore.ts'), 'utf8');
+
+  assert.doesNotMatch(
+    store,
+    /state\.subscription\.usage\.\w*Limit/,
+    'a raw limit read here refuses a preview the outer gate has already allowed',
+  );
+
+  assert.ok(
+    (store.match(/entitledUsage\(/g) ?? []).length >= 7,
+    'every inner limit check should resolve through entitledUsage',
+  );
+
+  // Counts must stay real, or a downgrade would reset usage to zero instead of
+  // showing "23 of 5".
+  assert.match(store, /return gateSubscription\(subscription\)\.usage;/);
+});
