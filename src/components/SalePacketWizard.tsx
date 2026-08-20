@@ -232,6 +232,16 @@ export function SalePacketWizard({
       }
     }
 
+    // Whether the tab actually opened is not knowable here, so the message
+    // below does not claim either way. `noopener` makes window.open return null
+    // by spec even on success, and Capacitor's iOS handler returns nil after
+    // passing the URL to UIApplication.shared.open — so the return value is
+    // null on every platform and cannot distinguish a blocked popup from a
+    // working one. Branching on it told every customer their browser had
+    // blocked the tab, including the ones looking at it.
+    //
+    // What is certain: the packet is built and its link renders in the panel
+    // below, so the copy points there and works in both outcomes.
     if (downloadUrl && typeof window !== 'undefined') {
       window.open(downloadUrl, '_blank', 'noopener,noreferrer');
     }
@@ -246,7 +256,7 @@ export function SalePacketWizard({
     pushToast({
       title: downloadUrl ? 'Sale packet PDF ready' : 'Sale packet recorded',
       message: downloadUrl
-        ? 'Watermarked PDF opened in a new tab. Buyer activity is now tracked in Buyer follow-up.'
+        ? 'Watermarked PDF is ready. If it did not open in a new tab, use the packet link below. Buyer activity is tracked in Buyer follow-up.'
         : `${build.message} Cloud sign-in generates the watermarked PDF; Buyer follow-up is tracking this buyer either way.`,
       tone: 'success',
     });

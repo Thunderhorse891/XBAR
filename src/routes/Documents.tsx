@@ -1,3 +1,4 @@
+import { saveTextAsFile } from '@/lib/fileDownload';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -9,7 +10,7 @@ import { SalePacketWizard } from '@/components/SalePacketWizard';
 import { billingPath, billingPathForTier } from '@/lib/billingRoutes';
 import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
 import { formatDateTimeLabel } from '@/lib/format';
-import { downloadLegalHtml, legalDocuments, openPrintableLegalDocument } from '@/lib/legalDocuments';
+import { legalDocumentToHtml, legalDocuments, openPrintableLegalDocument } from '@/lib/legalDocuments';
 import { buildDocumentTrustProfile } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
 import { useCloudStore } from '@/store/useCloudStore';
@@ -1277,12 +1278,22 @@ export default function Documents() {
                         className="button button--ghost button--compact"
                         type="button"
                         onClick={() => {
-                          downloadLegalHtml(legalDoc);
-                          pushToast({
-                            title: 'Legal document exported',
-                            message: `${legalDoc.shortTitle} downloaded as a print-ready file.`,
-                            tone: 'success',
-                          });
+                          void (async () => {
+                            const saved = await saveTextAsFile(
+                              legalDoc.suggestedFileName,
+                              legalDocumentToHtml(legalDoc),
+                              'text/html;charset=utf-8',
+                            );
+                            pushToast({
+                              title: saved.ok ? 'Legal document exported' : 'Export unavailable',
+                              message: saved.ok
+                                ? saved.via === 'share-sheet'
+                                  ? `${legalDoc.shortTitle} is ready to save or send.`
+                                  : `${legalDoc.shortTitle} downloaded as a print-ready file.`
+                                : saved.reason,
+                              tone: saved.ok ? 'success' : 'warning',
+                            });
+                          })();
                         }}
                       >
                         Download

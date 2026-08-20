@@ -393,7 +393,7 @@ const pricing = {
           <tr><th scope="row">Monthly price</th>${marketingPlans.map((plan) => `<td>$${plan.monthlyRate}</td>`).join('')}</tr>
           <tr><th scope="row">Horses</th>${marketingPlans.map((plan) => `<td>${plan.limits.horseLimit.toLocaleString('en-US')}</td>`).join('')}</tr>
           <tr><th scope="row">Team seats</th>${marketingPlans.map((plan) => `<td>${plan.limits.seatLimit}</td>`).join('')}</tr>
-          <tr><th scope="row">Buyer seats</th>${marketingPlans.map((plan) => `<td>${plan.limits.sharedAccessSeatLimit}</td>`).join('')}</tr>
+          <tr><th scope="row">Buyer sharing</th>${marketingPlans.map((plan) => `<td>${plan.sharedAccess ? 'Unlimited — buyers need no account' : 'Not included'}</td>`).join('')}</tr>
           <tr><th scope="row">Documents</th>${marketingPlans.map((plan) => `<td>${plan.limits.documentLimit.toLocaleString('en-US')}</td>`).join('')}</tr>
           <tr><th scope="row">Sale packets</th>${marketingPlans.map((plan) => `<td>${plan.limits.salePacketLimit.toLocaleString('en-US')}</td>`).join('')}</tr>
           <tr><th scope="row">Storage</th>${marketingPlans.map((plan) => `<td>${plan.limits.storageLimitGb.toLocaleString('en-US')} GB</td>`).join('')}</tr>

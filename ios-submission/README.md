@@ -17,8 +17,41 @@ done on Linux/CI.
 - **App identity** — `capacitor.config.ts`: `appId: com.xbar.ranch`, `appName: XBAR`,
   dark launch background (`#05070A`) so a cold start doesn't flash white.
 - **Mobile web build** — `npm run mobile:sync` / `mobile:copy` build the bundle
-  with the hash router (no server to rewrite `/app/*` inside the WebView) and skip
-  the marketing-site post-build. Verified: `dist/index.html` is the SPA app shell.
+  with the hash router (no server to rewrite `/app/*` inside the WebView), skip
+  the marketing-site post-build, and set `VITE_NATIVE_APP=true` so the store
+  build's App Store gates apply from the first paint. Verified:
+  `dist/index.html` is the SPA app shell.
+- **Store-build compliance suite** — `npm run test:mobile-smoke` builds the
+  native bundle and asserts the review-critical behavior on it. Run it before
+  every submission; CI runs it on every push.
+- **File exports work natively** — `@capacitor/filesystem` + `@capacitor/share`
+  write the generated file to the app's cache and hand it to the iOS share
+  sheet, so exporting a buyer packet, a legal document, a filled template, or a
+  workspace backup puts a real file where the customer chooses. `npx cap sync`
+  installs both pods; no Info.plist key is required, because nothing is written
+  to a user-visible Documents directory. Both plugins are dynamically imported
+  and only load on a native bridge, so the web bundle does not carry them.
+- **Required env for a release build** — set `VITE_PUBLIC_APP_URL` to the public
+  site origin so in-app marketing/legal links resolve. Set Supabase values if
+  the build should offer cloud sign-in.
+- **Required Supabase setting: the sign-in code template.** In the Supabase
+  dashboard, Authentication → Email Templates → Magic Link, the body must
+  contain `{{ .Token }}`. Supabase only puts the six-digit code in the email
+  when that variable is present; the default template sends a link instead.
+  A link cannot work here — inside the app its callback origin is
+  `capacitor://localhost`, which no email client can open — so without this
+  setting the "Email me a sign-in code" control sends mail that cannot sign
+  anyone in.
+
+  This is not cosmetic. That code is the only way into the store build for an
+  account created through Google, Apple or Facebook: those accounts have no
+  password, and third-party sign-in is disabled on native (see below). Leaving
+  the template unchanged locks those customers out of iOS entirely.
+
+  It cannot be set, verified, or tested from the repository — it is dashboard
+  state. **Confirm it by requesting a code on a TestFlight build and checking
+  that the email contains digits, not a link, before submitting.**
+
 - **Icons & PWA metadata** — `public/brand/` has `apple-touch-icon.png`,
   `icon-192.png`, `icon-512.png`, `icon-512-maskable.png`; `index.html` carries the
   viewport (`viewport-fit=cover`), `theme-color`, and `apple-mobile-web-app-*` meta;
@@ -76,14 +109,53 @@ done on Linux/CI.
   ship iPad). Capture from the running app.
 - Sign-in demo account for App Review (the app is behind auth).
 
-## Known App Review risk areas for this app
+## App Review risk areas — status
 
-- **Account deletion** — apps with account creation must offer in-app account
-  deletion (Guideline 5.1.1(v)). Confirm this exists or add it before submitting.
-- **Purchases** — subscriptions are sold via Stripe (web checkout). Selling
-  digital subscriptions **inside** the iOS app requires Apple In-App Purchase
-  (Guideline 3.1.1). Keep the iOS build's paywall as an external/managed-on-web
-  flow, or add StoreKit IAP — this is a product decision to make before review.
+Each of these is enforced in code and asserted against the **built store
+bundle** by `npm run test:mobile-smoke`, which CI runs on every push. The store
+bundle differs from the web bundle only by build flag, so the web suites cannot
+see these behaviors — that suite builds the real artifact and checks what it
+renders.
+
+- **Purchases (3.1.1) — resolved.** The store build presents no purchase path.
+  Every plan button renders disabled as "Managed outside the app", and
+  `beginCheckout` returns before any navigation, so no code path reaches Stripe.
+  The gate lives in `getCheckoutReadiness` (one tested decision, not scattered
+  JSX) and is fed by `canPresentPurchaseFlow()` in `src/lib/nativePlatform.ts`.
+  There is also no link out to Stripe or to `/pricing` anywhere in the build —
+  Apple forbids the external link, not just the in-app charge.
+- **Account deletion (5.1.1(v)) — resolved.** In-app deletion ships in Settings,
+  backed by `api/account/delete.js`.
+- **Sign in with Apple (4.8) — satisfied, needs configuration.** The app offers
+  Apple sign-in alongside Google and Facebook, so the requirement is met in
+  code. Configure the Apple provider in Supabase and an Apple Service ID before
+  release _if you re-enable third-party sign-in on native_ — see the next point.
+- **Third-party sign-in in a WebView (2.1) — disabled on native, deliberately.**
+  `supabase.auth.signInWithOAuth` navigates the current WebView to the provider,
+  which inside Capacitor means an embedded WKWebView returning to
+  `capacitor://localhost`. Google refuses OAuth in embedded webviews and that
+  scheme is not a valid provider redirect, so those buttons could not complete —
+  a broken feature is a rejection. The store build therefore shows email/password
+  and one-time-code sign-in only. To restore them, run the flow through
+  `ASWebAuthenticationSession` (e.g. `@capacitor/browser`) with a registered deep
+  link, and verify on a device.
+
+  Hiding those buttons removes the only credential an OAuth-created account
+  has, so the signed-out screen offers "Email me a sign-in code" — verified
+  in-app by `verifyOtp`, with no callback URL involved. **That path depends on
+  the Supabase email template above.** Password reset and magic link cannot
+  substitute for it: both are links, and both return to an origin the app
+  cannot receive.
+
+- **Broken links (2.1) — resolved.** Marketing links (`/pricing`, `/privacy`,
+  `/terms`) resolve through `publicSiteHref()` to the absolute public site in a
+  store build, because the marketing pages are not in the native bundle and
+  there is no server to route them. **Set `VITE_PUBLIC_APP_URL` for mobile
+  builds** — without it those links fall back to relative paths that dead-end.
+- **Export compliance — declared.** `ITSAppUsesNonExemptEncryption` is `false`
+  in `Info.plist.additions.plist` (XBAR uses only standard TLS and Web Crypto).
+  Without the key, every upload stalls on the export question and TestFlight
+  will not distribute the build.
 - **Purpose strings** — keep each usage description specific to the real use.
 
 ---

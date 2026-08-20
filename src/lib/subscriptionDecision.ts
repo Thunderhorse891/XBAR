@@ -30,8 +30,10 @@ export type CheckoutReadiness = {
    * - 'checkout': a secure Stripe checkout (managed session or payment link) completes first.
    * - 'manual': online checkout is not configured, so an admin/manual billing
    *   state must explicitly activate the plan before capacity changes.
+   * - 'external': this is a native store build, so no purchase happens in the
+   *   app at all. Never ready — see the nativeApp note below.
    */
-  mode: 'checkout' | 'manual';
+  mode: 'checkout' | 'manual' | 'external';
   reason: string;
 };
 
@@ -41,7 +43,21 @@ export function getCheckoutReadiness(params: {
   hasManagedIdentity: boolean;
   hasPaymentLink: boolean;
   checkoutInProgress: boolean;
+  /**
+   * True inside an iOS/Android store build. Checked before everything else and
+   * regardless of role or Stripe configuration: App Store Review Guideline
+   * 3.1.1 requires digital subscriptions sold inside the app to use In-App
+   * Purchase, so a store build offers no purchase path rather than sending the
+   * customer to Stripe. Optional, so web callers are unaffected.
+   */
+  nativeApp?: boolean;
 }): CheckoutReadiness {
+  if (params.nativeApp)
+    return {
+      ready: false,
+      mode: 'external',
+      reason: 'Plans are managed outside the app. Your current plan and workspace are unchanged.',
+    };
   if (!params.canManageBilling)
     return { ready: false, mode: 'checkout', reason: 'Ask a workspace owner to change plans.' };
   if (params.checkoutInProgress)

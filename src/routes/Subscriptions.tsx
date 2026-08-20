@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency } from '@/lib/format';
+import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 import { getStripePaymentLink, stripeConfig } from '@/lib/platformConfig';
 import { productEvent, productEventNames } from '@/lib/productEvents';
 import { revenuePlanMatrix } from '@/lib/revenuePlanMatrix';
@@ -26,7 +27,7 @@ function formatLimit(value: number, noun: string) {
 
 export default function Subscriptions() {
   const navigate = useNavigate();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const requestedValue = params.get('plan');
   const requestedTier = tiers.find((tier) => tier === requestedValue);
   const subscription = useXbarStore((state) => state.subscription);
@@ -41,20 +42,29 @@ export default function Subscriptions() {
   const decisionProfile = revenuePlanMatrix[decisionTier];
   const hasManagedIdentity = Boolean(session?.access_token && workspaceId);
   const billingEnabled = stripeConfig.managedBillingEnabled;
+  // Store builds never present a purchase path (App Store Guideline 3.1.1).
+  const nativeApp = !canPresentPurchaseFlow();
   const selectedPaymentLink = Boolean(getStripePaymentLink(decisionTier));
   const selectedCheckoutConfigured = billingEnabled || selectedPaymentLink;
   const starterSetup = subscription.tier === 'Starter' && subscription.monthlyRate === 0;
   const continuePath = workspaceReady ? '/' : '/setup';
-  const checkoutReadinessLabel = selectedCheckoutConfigured
-    ? 'Secure checkout opens next.'
-    : 'Online checkout is not configured. Contact support/manual billing required.';
+  const checkoutReadinessLabel = nativeApp
+    ? 'Plans are managed outside the app.'
+    : selectedCheckoutConfigured
+      ? 'Secure checkout opens next.'
+      : 'Online checkout is not configured. Contact support/manual billing required.';
   const selectedReadiness = getCheckoutReadiness({
     billingEnabled,
     canManageBilling,
     hasManagedIdentity,
     hasPaymentLink: selectedPaymentLink,
     checkoutInProgress: checkoutTier !== null,
+    nativeApp,
   });
+  // A store build shows no in-app payment surface at all: not the card fields,
+  // not the "due at checkout" framing, not the checkout CTA. Apple reads any of
+  // those as an in-app purchase flow (3.1.1), even with the buttons disabled.
+  const externalBilling = selectedReadiness.mode === 'external';
   const selectedPaidCurrent =
     decisionTier === subscription.tier &&
     subscription.monthlyRate === decisionConfig.monthlyRate &&
@@ -69,6 +79,11 @@ export default function Subscriptions() {
   };
 
   const beginCheckout = async (tier: SubscriptionTier) => {
+    // Hard stop before any navigation can happen. The buttons are already
+    // disabled in a store build; this makes it impossible for a later refactor
+    // to reach window.location.assign(stripeUrl) on iOS/Android, which is the
+    // thing App Review actually rejects.
+    if (nativeApp) return;
     setCheckoutTier(tier);
     emit(productEventNames.checkoutStarted, {
       tier,
@@ -82,6 +97,7 @@ export default function Subscriptions() {
       hasManagedIdentity,
       hasPaymentLink: Boolean(getStripePaymentLink(tier)),
       checkoutInProgress: false,
+      nativeApp,
     });
     if (!readiness.ready) {
       emit(productEventNames.checkoutFailed, { tier, reason: readiness.reason }, 'warning');
@@ -125,6 +141,16 @@ export default function Subscriptions() {
     navigate(continuePath);
   };
 
+  // Reviewing a plan is separate from buying one. The purchase button is
+  // disabled whenever checkout is unconfigured, the role cannot manage billing,
+  // or this is a store build — which previously left the whole card inert, with
+  // no way to read what a tier actually includes. This always works.
+  const viewPlan = (tier: SubscriptionTier) => {
+    const next = new URLSearchParams(params);
+    next.set('plan', tier);
+    setParams(next, { replace: true });
+  };
+
   const renderPaidPlan = (tier: SubscriptionTier) => {
     const config = subscriptionPlans[tier];
     const profile = revenuePlanMatrix[tier];
@@ -139,6 +165,7 @@ export default function Subscriptions() {
       hasManagedIdentity,
       hasPaymentLink: Boolean(getStripePaymentLink(tier)),
       checkoutInProgress: checkoutTier !== null,
+      nativeApp,
     });
 
     return (
@@ -172,9 +199,20 @@ export default function Subscriptions() {
             title={readiness.reason}
             onClick={() => void beginCheckout(tier)}
           >
-            {busy ? 'Opening checkout...' : readiness.mode === 'manual' ? 'Manual billing required' : `Choose ${tier}`}
+            {busy
+              ? 'Opening checkout...'
+              : readiness.mode === 'external'
+                ? 'Managed outside the app'
+                : readiness.mode === 'manual'
+                  ? 'Manual billing required'
+                  : `Choose ${tier}`}
           </button>
         )}
+        {/* Label stays constant — the button's purpose does not change, and the
+            selected state is carried by aria-pressed plus the card highlight. */}
+        <button type="button" className="checkout-plan__view" onClick={() => viewPlan(tier)} aria-pressed={highlighted}>
+          {`See what ${tier} includes`}
+        </button>
         <small>
           {paidCurrent
             ? 'Your active paid capacity.'
@@ -231,12 +269,23 @@ export default function Subscriptions() {
           </div>
 
           <div className="checkout-total">
-            <span>{selectedCheckoutConfigured ? 'Due at checkout' : 'Monthly price'}</span>
+            <span>{selectedCheckoutConfigured && !externalBilling ? 'Due at checkout' : 'Monthly price'}</span>
             <strong>{formatCurrency(decisionConfig.monthlyRate)}</strong>
-            <small>{selectedCheckoutConfigured ? 'then monthly' : 'not charged in app'}</small>
+            <small>{selectedCheckoutConfigured && !externalBilling ? 'then monthly' : 'not charged in app'}</small>
           </div>
 
-          {selectedReadiness.mode === 'manual' ? (
+          {externalBilling ? (
+            <div className="checkout-card-box" aria-label="Billing details">
+              <div className="checkout-card-box__top">
+                <span>Billing</span>
+                <strong>Managed outside the app</strong>
+              </div>
+              <p>
+                Plans are not sold in the app. Your current plan and workspace are unchanged here, and no payment
+                details are collected on this screen.
+              </p>
+            </div>
+          ) : selectedReadiness.mode === 'manual' ? (
             <div className="checkout-card-box" aria-label="Billing details">
               <div className="checkout-card-box__top">
                 <span>Billing</span>
@@ -272,7 +321,22 @@ export default function Subscriptions() {
           )}
 
           <div className="checkout-status-list" aria-label="Billing details">
-            {selectedCheckoutConfigured ? (
+            {externalBilling ? (
+              <>
+                <div>
+                  <span>Billing</span>
+                  <strong>Monthly</strong>
+                </div>
+                <div>
+                  <span>Payment</span>
+                  <strong>Not collected in app</strong>
+                </div>
+                <div>
+                  <span>Workspace</span>
+                  <strong>No plan change</strong>
+                </div>
+              </>
+            ) : selectedCheckoutConfigured ? (
               <>
                 <div>
                   <span>Billing</span>
@@ -316,9 +380,11 @@ export default function Subscriptions() {
               ? 'Opening checkout...'
               : selectedPaidCurrent
                 ? 'Current plan'
-                : selectedReadiness.mode === 'manual'
-                  ? 'Manual billing required'
-                  : 'Continue to secure checkout'}
+                : externalBilling
+                  ? 'Managed outside the app'
+                  : selectedReadiness.mode === 'manual'
+                    ? 'Manual billing required'
+                    : 'Continue to secure checkout'}
           </button>
           <button className="checkout-secondary-action" type="button" onClick={startTrial}>
             Continue with Starter setup

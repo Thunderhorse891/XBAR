@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Session } from '@supabase/supabase-js';
+import { authCallbackOrigin } from '@/lib/nativePlatform';
 import { loadWorkspaceAccessProfile } from '@/lib/cloudWorkspace';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
@@ -31,6 +32,18 @@ type CloudStore = {
   sendMagicLink: (email: string) => Promise<CloudActionResult>;
   signUpWithPassword: (email: string, password: string) => Promise<CloudActionResult>;
   sendPasswordReset: (email: string) => Promise<CloudActionResult>;
+  /**
+   * Passwordless sign-in that works without a redirect.
+   *
+   * Every other recovery path builds a callback from window.location.origin,
+   * which is capacitor://localhost inside the app — an origin no email client
+   * can open and Supabase will not allow-list. A one-time code is verified
+   * in-app instead, so it is the only credential-free way into a store build,
+   * and the only route for an account that was created through Google, Apple
+   * or Facebook and therefore has no password at all.
+   */
+  sendEmailCode: (email: string) => Promise<CloudActionResult>;
+  verifyEmailCode: (email: string, code: string) => Promise<CloudActionResult>;
   signInWithFacebook: () => Promise<CloudActionResult>;
   signInWithGoogle: () => Promise<CloudActionResult>;
   signInWithApple: () => Promise<CloudActionResult>;
@@ -108,8 +121,9 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'Enter an email address first.' };
     }
 
-    const emailRedirectTo =
-      typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    // authCallbackOrigin, not window.location.origin: inside the app that is
+    // capacitor://localhost, which no email client can open.
+    const emailRedirectTo = authCallbackOrigin();
     const { error } = await client.auth.signInWithOtp({
       email: trimmedEmail,
       options: {
@@ -189,8 +203,9 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'Enter the email address for this workspace.' };
     }
 
-    const redirectTo =
-      typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    // See authCallbackOrigin: a reset link pointing at capacitor://localhost is
+    // unopenable, so a store build sends the customer to the public site.
+    const redirectTo = authCallbackOrigin();
     const { error } = await client.auth.resetPasswordForEmail(trimmedEmail, {
       redirectTo,
     });
@@ -200,6 +215,56 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     }
 
     return { ok: true, message: 'Password reset email sent.' };
+  },
+  sendEmailCode: async (email) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      return { ok: false, message: 'Enter the email address for this workspace.' };
+    }
+
+    // No emailRedirectTo on purpose: omitting it keeps this flow independent of
+    // the page origin, which is what makes it work inside the app's WebView.
+    // shouldCreateUser is false because this is a sign-in path — without it a
+    // typo would silently create a new account instead of failing.
+    const { error } = await client.auth.signInWithOtp({
+      email: trimmedEmail,
+      options: { shouldCreateUser: false },
+    });
+
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    return { ok: true, message: 'Check your email for a sign-in code.' };
+  },
+  verifyEmailCode: async (email, code) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+
+    const trimmedEmail = email.trim();
+    const trimmedCode = code.trim();
+    if (!trimmedEmail || !trimmedCode) {
+      return { ok: false, message: 'Enter your email and the code from your inbox.' };
+    }
+
+    const { error } = await client.auth.verifyOtp({
+      email: trimmedEmail,
+      token: trimmedCode,
+      type: 'email',
+    });
+
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    return { ok: true, message: 'Signed in.' };
   },
   signInWithFacebook: async () => {
     const client = getSupabaseClient();

@@ -422,8 +422,6 @@ export interface SubscriptionUsage {
   salePacketLimit: number;
   storageUsedGb: number;
   storageLimitGb: number;
-  sharedAccessSeatsUsed: number;
-  sharedAccessSeatLimit: number;
 }
 
 export interface SubscriptionProfile {

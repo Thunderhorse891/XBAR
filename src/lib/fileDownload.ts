@@ -1,0 +1,141 @@
+import { hasNativeBridge, isNativeApp } from './nativePlatform.js';
+
+/**
+ * One place where XBAR turns generated content into a saved file.
+ *
+ * Every caller used to do this inline — create a blob URL, set `download` on an
+ * anchor, click it — and then report success unconditionally. That is a lie in a
+ * store build: iOS WKWebView ignores the `download` attribute, so the tap
+ * produced no file, no error, and a toast saying the export worked.
+ *
+ * There are two real save paths, and the choice deliberately keys off different
+ * signals:
+ *
+ *  - Native uses `hasNativeBridge()`, not `isNativeApp()`. The Capacitor plugins
+ *    only function when the native bridge is actually present; the build-time
+ *    VITE_NATIVE_APP flag says "this bundle is destined for a store build",
+ *    which is the right signal for hiding a paywall early but the wrong one for
+ *    calling a plugin that may not be there.
+ *  - Web uses the anchor, which is what browsers support.
+ *
+ * Anything else returns a reason rather than throwing, because callers render
+ * that text in a toast.
+ */
+export type FileSaveResult = { ok: true; via: 'browser' | 'share-sheet' } | { ok: false; reason: string };
+
+export function canSaveFilesLocally(): boolean {
+  if (hasNativeBridge()) return true;
+  if (isNativeApp()) return false;
+  return typeof document !== 'undefined' && typeof URL.createObjectURL === 'function';
+}
+
+/**
+ * Base64 for Filesystem.writeFile, from raw bytes.
+ *
+ * Takes bytes rather than a string on purpose: routing a binary blob (a packet
+ * PDF, a photo) through a text decode replaces every invalid UTF-8 sequence
+ * with U+FFFD, so the file would arrive corrupted while the save still reported
+ * success. Callers encode text to UTF-8 bytes themselves.
+ *
+ * Chunked because String.fromCharCode is applied to the whole array at once and
+ * a multi-megabyte PDF would otherwise blow the argument limit.
+ */
+function bytesToBase64(bytes: Uint8Array): string {
+  const CHUNK = 0x8000;
+  let binary = '';
+  for (let index = 0; index < bytes.length; index += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + CHUNK));
+  }
+  return btoa(binary);
+}
+
+async function saveViaShareSheet(fileName: string, bytes: Uint8Array): Promise<FileSaveResult> {
+  try {
+    const [{ Filesystem, Directory }, { Share }] = await Promise.all([
+      import('@capacitor/filesystem'),
+      import('@capacitor/share'),
+    ]);
+
+    // Cache, not Documents: the file is a hand-off to the share sheet, not
+    // something XBAR keeps. Writing to Documents would also require
+    // UIFileSharingEnabled to be useful, which is a different decision.
+    const written = await Filesystem.writeFile({
+      path: fileName,
+      data: bytesToBase64(bytes),
+      directory: Directory.Cache,
+    });
+
+    // The share sheet is what lets the customer put the file where they want —
+    // Files, Mail, AirDrop. A plain write would leave it somewhere they cannot
+    // reach, which is no better than the silent failure this replaces.
+    await Share.share({ title: fileName, files: [written.uri] });
+    return { ok: true, via: 'share-sheet' };
+  } catch (error) {
+    // A cancelled share sheet lands here too. Treating it as a failure is
+    // deliberate: the file did not reach anywhere the customer chose, and
+    // claiming otherwise is the behavior this whole change exists to remove.
+    const detail = error instanceof Error ? error.message : '';
+    return {
+      ok: false,
+      reason: detail.toLowerCase().includes('cancel')
+        ? 'Export cancelled — nothing was saved.'
+        : 'The file could not be shared from this device.',
+    };
+  }
+}
+
+function saveViaBrowser(fileName: string, blob: Blob): FileSaveResult {
+  const url = URL.createObjectURL(blob);
+  try {
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.rel = 'noopener';
+    anchor.click();
+    return { ok: true, via: 'browser' };
+  } catch {
+    return { ok: false, reason: 'The file could not be saved.' };
+  } finally {
+    // Revoke on the next tick rather than synchronously: revoking in the same
+    // frame as the click can cancel the download that was just started.
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+}
+
+/**
+ * The browser anchor path is only ever valid outside a store build.
+ *
+ * A WKWebView supplies `document` and `URL.createObjectURL` like any browser, so
+ * a DOM check alone does not keep a store build out of the anchor path — and
+ * that path silently does nothing on iOS while still reporting success. This is
+ * the ordering `canSaveFilesLocally()` already used; the save functions now
+ * agree with it.
+ */
+function saveUnavailableReason(): string | null {
+  if (isNativeApp()) {
+    return 'Saving files is unavailable because the app is still starting up. Try again in a moment.';
+  }
+  if (typeof document === 'undefined' || typeof URL.createObjectURL !== 'function') {
+    return 'This browser cannot save files from XBAR.';
+  }
+  return null;
+}
+
+export async function saveTextAsFile(fileName: string, text: string, mimeType: string): Promise<FileSaveResult> {
+  if (hasNativeBridge()) return saveViaShareSheet(fileName, new TextEncoder().encode(text));
+
+  const unavailable = saveUnavailableReason();
+  if (unavailable) return { ok: false, reason: unavailable };
+
+  return saveViaBrowser(fileName, new Blob([text], { type: mimeType }));
+}
+
+export async function saveBlobAsFile(fileName: string, blob: Blob): Promise<FileSaveResult> {
+  // arrayBuffer, not text(): a PDF or image must reach the share sheet byte-for-byte.
+  if (hasNativeBridge()) return saveViaShareSheet(fileName, new Uint8Array(await blob.arrayBuffer()));
+
+  const unavailable = saveUnavailableReason();
+  if (unavailable) return { ok: false, reason: unavailable };
+
+  return saveViaBrowser(fileName, blob);
+}

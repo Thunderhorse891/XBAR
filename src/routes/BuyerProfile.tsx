@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { publicSiteHref } from '@/lib/nativePlatform';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { EmptyState } from '@/components/EmptyState';
 import { HorseMediaPreview } from '@/components/HorseMediaPreview';
@@ -43,7 +44,9 @@ function BuyerActionPanel({
     note?: string;
     amount?: number;
   }) => void;
-  onDownloadPacket: () => void;
+  // Resolves true only when the packet actually reached the device, so the
+  // status text below never claims a download that did not happen.
+  onDownloadPacket: () => Promise<boolean>;
 }) {
   const [mode, setMode] = useState<
     null | 'question' | 'call-requested' | 'proof-requested' | 'offer' | 'packet-downloaded'
@@ -78,25 +81,43 @@ function BuyerActionPanel({
     setStatusText('');
 
     if (source === 'local') {
-      onLocalLog({
-        kind: mode,
-        actor: buyerName.trim(),
-        note:
-          [message.trim(), buyerEmail.trim() ? `Contact: ${buyerEmail.trim()}` : ''].filter(Boolean).join(' — ') ||
-          undefined,
-        amount: mode === 'offer' ? offerAmount : undefined,
-      });
-      if (mode === 'packet-downloaded') {
-        onDownloadPacket();
+      // Save first, then log. Recording a packet-downloaded event before the save
+      // resolves tells the seller a packet was delivered when it may not have
+      // been — a false signal in the buyer deal room that can trigger a
+      // download follow-up for a download that never happened.
+      const localPacketSaved = mode === 'packet-downloaded' ? await onDownloadPacket() : false;
+      if (mode !== 'packet-downloaded' || localPacketSaved) {
+        onLocalLog({
+          kind: mode,
+          actor: buyerName.trim(),
+          note:
+            [message.trim(), buyerEmail.trim() ? `Contact: ${buyerEmail.trim()}` : ''].filter(Boolean).join(' — ') ||
+            undefined,
+          amount: mode === 'offer' ? offerAmount : undefined,
+        });
       }
       setSubmitting(false);
       setStatusText(
         mode === 'packet-downloaded'
-          ? 'Buyer packet downloaded and seller notified.'
+          ? localPacketSaved
+            ? 'Buyer packet downloaded and seller notified.'
+            : 'The packet did not save to this device, so nothing was sent to the seller. Try again.'
           : 'Delivered to the seller. They will respond using your contact details.',
       );
       setMode(null);
       return;
+    }
+
+    // Save before posting. A packet-downloaded inquiry tells the seller a packet
+    // reached the buyer and is counted in the deal room, so it must not be sent
+    // for a save that failed or a share sheet the buyer cancelled.
+    if (mode === 'packet-downloaded') {
+      const packetSaved = await onDownloadPacket();
+      if (!packetSaved) {
+        setSubmitting(false);
+        setStatusText('The packet did not save to this device, so nothing was sent to the seller. Try again.');
+        return;
+      }
     }
 
     try {
@@ -117,9 +138,6 @@ function BuyerActionPanel({
       const payload = (await response.json().catch(() => ({}))) as { ok?: boolean; message?: string };
       setSubmitting(false);
       if (response.ok && payload.ok) {
-        if (mode === 'packet-downloaded') {
-          onDownloadPacket();
-        }
         setStatusText(payload.message ?? 'Delivered to the seller.');
         setMode(null);
       } else {
@@ -462,14 +480,20 @@ export default function BuyerProfile() {
         (asset.kind === 'Hero' || asset.kind === 'Conformation' || asset.kind === 'Sale Still'),
     )
     .slice(0, 4);
-  const downloadBuyerPacket = () => {
-    downloadPublicBuyerPacketArtifact(
+  const downloadBuyerPacket = async () => {
+    const saved = await downloadPublicBuyerPacketArtifact(
       buildPublicBuyerPacketArtifact({
         horse,
         documents: visibleDocuments.map(({ document }) => document),
         sharedListing,
       }),
     );
+    // Say so when the packet did not reach the device. This is the buyer-facing
+    // surface, so a tap that quietly does nothing is the worst version of it.
+    if (!saved.ok) {
+      pushToast({ title: 'Packet not saved', message: saved.reason, tone: 'warning' });
+    }
+    return saved.ok;
   };
 
   return (
@@ -674,11 +698,11 @@ export default function BuyerProfile() {
             independent verification of registration and health status.
           </p>
           <p style={{ marginTop: '6px' }}>
-            <a href="/terms" style={{ color: 'rgba(100,140,180,0.45)', textDecoration: 'none' }}>
+            <a href={publicSiteHref('/terms')} style={{ color: 'rgba(100,140,180,0.45)', textDecoration: 'none' }}>
               Terms
             </a>{' '}
             ·{' '}
-            <a href="/privacy" style={{ color: 'rgba(100,140,180,0.45)', textDecoration: 'none' }}>
+            <a href={publicSiteHref('/privacy')} style={{ color: 'rgba(100,140,180,0.45)', textDecoration: 'none' }}>
               Privacy
             </a>
           </p>

@@ -712,3 +712,36 @@
     transform: none;
   }
 }
+
+/* Passwordless sign-in. Sits directly under the password submit button, so it
+   keeps the same column rhythm as the fields above it rather than introducing
+   its own layout. The resend control is deliberately quiet — it is a repeat of
+   an action the customer has already taken, not a second offer. */
+.clean-email-code {
+  display: grid;
+  gap: 10px;
+}
+
+.clean-email-code__hint {
+  margin: 0;
+  color: var(--entry-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.clean-email-code__resend {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--entry-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+}
+
+.clean-email-code__resend:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}

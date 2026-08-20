@@ -28,5 +28,21 @@
 
   <key>NSLocationWhenInUseUsageDescription</key>
   <string>XBAR uses your location once to show local weather for planning ranch work. Your location is not stored.</string>
+
+  <!--
+    Export compliance. XBAR uses only standard HTTPS/TLS and the platform's own
+    cryptography (Supabase auth over TLS, SHA-256 for the sale-packet seal via
+    the Web Crypto API); it ships no proprietary or non-standard encryption, so
+    it qualifies for the exemption.
+
+    Declaring this here is what makes uploads quiet: without the key, every
+    build stops in App Store Connect on the export-compliance question and
+    TestFlight will not distribute it until someone answers by hand.
+
+    If XBAR ever adds non-exempt cryptography, flip this to true and file the
+    year-end self-classification report.
+  -->
+  <key>ITSAppUsesNonExemptEncryption</key>
+  <false/>
 </dict>
 </plist>

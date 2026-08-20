@@ -1,3 +1,5 @@
+import { saveTextAsFile } from '@/lib/fileDownload';
+import { canPresentThirdPartySignIn } from '@/lib/nativePlatform';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader, Panel, Pill } from '@/components/app-ui';
@@ -77,20 +79,22 @@ export default function Settings() {
     setProfileDraft(workspaceProfile);
   }, [workspaceProfile]);
 
-  const handleExport = () => {
-    let url = '';
+  const handleExport = async () => {
     try {
       const backup = exportWorkspaceBackup();
-      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-      url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `xbar-workspace-${backup.exportedAt.slice(0, 10)}.json`;
-      anchor.click();
+      const saved = await saveTextAsFile(
+        `xbar-workspace-${backup.exportedAt.slice(0, 10)}.json`,
+        JSON.stringify(backup, null, 2),
+        'application/json',
+      );
       pushToast({
-        title: 'Backup exported',
-        message: 'Ranch backup downloaded successfully.',
-        tone: 'success',
+        title: saved.ok ? 'Backup exported' : 'Backup not saved',
+        message: saved.ok
+          ? saved.via === 'share-sheet'
+            ? 'Ranch backup is ready to save or send.'
+            : 'Ranch backup downloaded successfully.'
+          : saved.reason,
+        tone: saved.ok ? 'success' : 'warning',
       });
     } catch {
       pushToast({
@@ -98,8 +102,6 @@ export default function Settings() {
         message: 'The ranch backup could not be exported.',
         tone: 'error',
       });
-    } finally {
-      if (url) URL.revokeObjectURL(url);
     }
   };
 
@@ -480,16 +482,6 @@ export default function Settings() {
                   <Pill tone={subscription.usage.seatsUsed >= subscription.usage.seatLimit ? 'rose' : 'blue'}>
                     {subscription.usage.seatsUsed}/{subscription.usage.seatLimit}
                   </Pill>
-                  <Pill
-                    tone={
-                      subscription.usage.sharedAccessSeatsUsed >= subscription.usage.sharedAccessSeatLimit &&
-                      subscription.usage.sharedAccessSeatLimit > 0
-                        ? 'rose'
-                        : 'emerald'
-                    }
-                  >
-                    {subscription.usage.sharedAccessSeatsUsed}/{subscription.usage.sharedAccessSeatLimit} shared
-                  </Pill>
                 </div>
               </div>
               <div className="inline-metrics">
@@ -740,14 +732,21 @@ export default function Settings() {
             </div>
           </div>
           <div className="inline-actions">
-            <button
-              className="button button--primary button--compact"
-              type="button"
-              onClick={handleFacebookConnect}
-              disabled={!canSyncCloud || cloudBusy || !isSupabaseConfigured()}
-            >
-              {facebookConnected ? 'Reconnect Facebook' : 'Connect Facebook'}
-            </button>
+            {/* Same gate as the login screen: signInWithOAuth cannot complete in an
+                embedded WebView, so a store build must not offer this entry point
+                either — an unusable button is a broken feature (Guideline 2.1). */}
+            {canPresentThirdPartySignIn() ? (
+              <button
+                className="button button--primary button--compact"
+                type="button"
+                onClick={handleFacebookConnect}
+                disabled={!canSyncCloud || cloudBusy || !isSupabaseConfigured()}
+              >
+                {facebookConnected ? 'Reconnect Facebook' : 'Connect Facebook'}
+              </button>
+            ) : (
+              <small>Facebook connection is available in a web browser.</small>
+            )}
           </div>
         </Panel>
 

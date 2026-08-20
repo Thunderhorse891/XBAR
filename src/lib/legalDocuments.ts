@@ -300,12 +300,8 @@ export function openPrintableLegalDocument(legalDoc: LegalDocument) {
   return true;
 }
 
-export function downloadLegalHtml(legalDoc: LegalDocument) {
-  const blob = new Blob([legalDocumentToHtml(legalDoc)], { type: 'text/html;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const anchor = window.document.createElement('a');
-  anchor.href = url;
-  anchor.download = legalDoc.suggestedFileName;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
+// NOTE: this module is imported directly by scripts/build-marketing.mjs under
+// plain node, so it must stay free of runtime imports — a './x.js' specifier
+// that only exists as .ts breaks the marketing build. Saving a legal document
+// therefore lives with its caller, which composes legalDocumentToHtml() with
+// saveTextAsFile() from ./fileDownload.

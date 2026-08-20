@@ -6,7 +6,6 @@ type InviteValidationParams = {
   members: WorkspaceMemberRecord[];
   invitations: WorkspaceInvitationRecord[];
   seatLimit: number;
-  sharedAccessSeatLimit: number;
 };
 
 export function normalizeWorkspaceEmail(value: string) {
@@ -21,17 +20,6 @@ export function countReservedWorkspaceSeats(
     members.filter((member) => member.status === 'Active').length +
     invitations.filter((invite) => invite.status === 'Pending').length
   );
-}
-
-export function countReservedSharedAccessSeats(
-  members: WorkspaceMemberRecord[],
-  invitations: WorkspaceInvitationRecord[],
-) {
-  const activeOwnerMembers = members.filter((member) => member.status === 'Active' && member.role === 'Owner').length;
-  const pendingOwnerInvites = invitations.filter(
-    (invite) => invite.status === 'Pending' && invite.role === 'Owner',
-  ).length;
-  return activeOwnerMembers + pendingOwnerInvites;
 }
 
 export function validateWorkspaceInvitation(params: InviteValidationParams) {
@@ -56,14 +44,6 @@ export function validateWorkspaceInvitation(params: InviteValidationParams) {
 
   if (countReservedWorkspaceSeats(params.members, params.invitations) >= params.seatLimit) {
     return 'Seat limit reached for the current plan.';
-  }
-
-  if (
-    params.role === 'Owner' &&
-    (params.sharedAccessSeatLimit <= 0 ||
-      countReservedSharedAccessSeats(params.members, params.invitations) >= params.sharedAccessSeatLimit)
-  ) {
-    return 'Shared access seat limit reached for the current plan.';
   }
 
   return null;

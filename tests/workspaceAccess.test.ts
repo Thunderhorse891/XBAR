@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  countReservedSharedAccessSeats,
   countReservedWorkspaceSeats,
   hasBuyerShareAccess,
   validateWorkspaceInvitation,
@@ -40,7 +39,6 @@ const invites: WorkspaceInvitationRecord[] = [
 
 test('counts reserved seats including active members and pending invites', () => {
   assert.equal(countReservedWorkspaceSeats(members, invites), 3);
-  assert.equal(countReservedSharedAccessSeats(members, invites), 2);
 });
 
 test('blocks duplicate or over-capacity invites', () => {
@@ -51,11 +49,27 @@ test('blocks duplicate or over-capacity invites', () => {
       members,
       invitations: invites,
       seatLimit: 6,
-      sharedAccessSeatLimit: 4,
     }),
     'owner@xbar.test already has workspace access.',
   );
 
+  assert.equal(
+    validateWorkspaceInvitation({
+      email: 'new-member@xbar.test',
+      role: 'Ranch Manager',
+      members,
+      invitations: invites,
+      seatLimit: 3,
+    }),
+    'Seat limit reached for the current plan.',
+  );
+});
+
+// Owner-role invites used to be capped by sharedAccessSeatLimit, a number sold
+// as "buyer seats". Buyers never take a seat — they open a share link with no
+// account — so that cap restricted the customer's own people for a reason
+// never advertised. An Owner invite is now bounded only by the team seat limit.
+test('an Owner invite is allowed whenever a team seat is free', () => {
   assert.equal(
     validateWorkspaceInvitation({
       email: 'new-owner@xbar.test',
@@ -63,9 +77,8 @@ test('blocks duplicate or over-capacity invites', () => {
       members,
       invitations: invites,
       seatLimit: 6,
-      sharedAccessSeatLimit: 2,
     }),
-    'Shared access seat limit reached for the current plan.',
+    null,
   );
 });
 
