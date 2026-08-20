@@ -43,7 +43,10 @@ test('Enterprise promises only concrete enforced capacity', () => {
   );
   assert.match(features, /60 team seats/);
   assert.match(features, /20,000 documents/);
-  assert.match(features, /200 buyer seats/);
+  // "client seats", not "buyer seats": the limit caps Horse Owner / Client
+  // accounts (enforced by the xbar_enforce_workspace_seat_limits trigger).
+  // Buyers open a share link with no account and are not counted at all.
+  assert.match(features, /200 client seats/);
 });
 
 test('applying a tier upgrades limits and features while preserving usage counts', async () => {

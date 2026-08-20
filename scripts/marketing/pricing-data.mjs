@@ -35,7 +35,7 @@ export const marketingPlans = [
       'Everything in Starter',
       'Share approved sale packets and keep buyer follow-up in one place',
       'Sale listings for buyer-ready horse profiles',
-      '5 team seats and 10 buyer seats',
+      '5 team seats and 10 client seats',
       '1,000 documents and 100 GB storage',
     ],
     limits: {
@@ -54,7 +54,7 @@ export const marketingPlans = [
     features: [
       'Everything in Professional',
       'Run the operation: team roles, breeding, equipment, and supplies',
-      '20 team seats and 40 buyer seats',
+      '20 team seats and 40 client seats',
       '5,000 documents and 500 GB storage',
     ],
     limits: {
@@ -73,7 +73,7 @@ export const marketingPlans = [
     features: [
       'Everything in Ranch Ops',
       'Scale and control for large rosters and teams',
-      '60 team seats and 200 buyer seats',
+      '60 team seats and 200 client seats',
       '20,000 documents and 2,500 GB storage',
     ],
     limits: {

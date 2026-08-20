@@ -4,7 +4,6 @@ export const subscriptionPlans = {
   Starter: {
     monthlyRate: 29,
     sharedAccessEnabled: false,
-    brandedListings: false,
     featureFlags: [
       'Keep clean records — horses, care, documents, expenses, reminders',
       'Proof vault with OCR intake and review',
@@ -23,12 +22,11 @@ export const subscriptionPlans = {
   Professional: {
     monthlyRate: 79,
     sharedAccessEnabled: true,
-    brandedListings: true,
     featureFlags: [
       'Everything in Starter',
       'Make money: watermarked sale packets and buyer folders',
       'Sale listings — publish buyer-ready horse profiles to shared access',
-      '5 team seats · 10 shared-access seats',
+      '5 team seats and 10 client seats',
       '1,000 document capacity · 100 GB storage',
     ],
     limits: {
@@ -43,11 +41,10 @@ export const subscriptionPlans = {
   'Ranch Ops': {
     monthlyRate: 199,
     sharedAccessEnabled: true,
-    brandedListings: true,
     featureFlags: [
       'Everything in Professional',
       'Run the operation: team roles, breeding program, equipment at scale',
-      '20 team seats · 40 shared-access seats',
+      '20 team seats and 40 client seats',
       '5,000 document capacity · 500 GB storage',
     ],
     limits: {
@@ -62,11 +59,10 @@ export const subscriptionPlans = {
   Enterprise: {
     monthlyRate: 499,
     sharedAccessEnabled: true,
-    brandedListings: true,
     featureFlags: [
       'Everything in Ranch Ops',
       'Scale and control for large rosters and teams',
-      '60 team seats · 200 shared-access seats',
+      '60 team seats and 200 client seats',
       '20,000 document capacity · 2,500 GB storage',
     ],
     limits: {
@@ -137,7 +133,6 @@ export function buildSubscriptionProfile(params) {
     renewalDate,
     billingState: billingStateForStripeStatus(params.billingStatus),
     sharedAccessEnabled: plan.sharedAccessEnabled,
-    brandedListings: plan.brandedListings,
     featureFlags: plan.featureFlags,
     usage: {
       horsesUsed: Number(existingUsage.horsesUsed || 0),
