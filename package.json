@@ -19,7 +19,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "npm run supabase:prepare && node scripts/clean-test-dist.mjs && tsc -p tsconfig.test.json && node --test \".codex-test-dist/tests/*.test.js\" && node --test \"tests/api/*.test.mjs\"",
+    "test": "npm run supabase:prepare && node scripts/clean-test-dist.mjs && tsc -p tsconfig.test.json && node scripts/run-tests.mjs",
     "test:e2e": "playwright test",
     "build:local": "node scripts/build-local.mjs",
     "test:prod-smoke": "npm run build:local && playwright test --config=playwright.prod.config.ts",

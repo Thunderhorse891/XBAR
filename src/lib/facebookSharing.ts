@@ -1,3 +1,4 @@
+import { isNativeApp } from './nativePlatform.js';
 import { facebookConfig, isFacebookSharingConfigured } from './platformConfig.js';
 
 type FacebookShareResult = {
@@ -72,19 +73,48 @@ export function openFacebookShareDialog(path: string, shareToken?: string): Face
     };
   }
 
-  const popup = window.open(dialogUrl, 'xbar-facebook-share', 'popup=yes,width=720,height=760,noopener,noreferrer');
+  // No `noopener` / `noreferrer` in the feature string, deliberately. Either one
+  // makes window.open return null by spec even when the window opens — verified
+  // directly in Chromium — so with them present the check below could never
+  // pass. This function reported "allow pop-ups" on every single call, including
+  // the ones where the dialog was already on screen, and popup.focus() was
+  // unreachable code. Severing `opener` by hand gives the same protection
+  // against reverse-tabnabbing while leaving the return value meaningful, which
+  // is what lets callers fall back to copying the link when a pop-up really was
+  // blocked.
+  const popup = window.open(dialogUrl, 'xbar-facebook-share', 'popup=yes,width=720,height=760');
 
-  if (!popup) {
+  if (popup) {
+    // Both of these are safe on a cross-origin window (checked in Chromium);
+    // guarded anyway, because failing to focus is not a reason to report that
+    // the share window never opened.
+    try {
+      popup.opener = null;
+      popup.focus();
+    } catch {
+      /* the window is open either way, which is what the result reports */
+    }
     return {
-      ok: false,
-      message: 'Allow pop-ups to open the Facebook share window.',
+      ok: true,
+      message: 'Facebook share window opened.',
+      url: dialogUrl,
     };
   }
 
-  popup.focus();
+  // A store build reaches here on success, not failure: Capacitor's WebView
+  // hands the URL to the system browser and returns nil regardless, so a null
+  // popup says nothing about whether the dialog opened. Reporting a blocked
+  // pop-up would send the caller down a fallback it does not need.
+  if (isNativeApp()) {
+    return {
+      ok: true,
+      message: 'Opening the Facebook share window.',
+      url: dialogUrl,
+    };
+  }
+
   return {
-    ok: true,
-    message: 'Facebook share window opened.',
-    url: dialogUrl,
+    ok: false,
+    message: 'Allow pop-ups to open the Facebook share window.',
   };
 }
