@@ -5,6 +5,7 @@ import path from 'node:path';
 import {
   getCheckoutReadiness,
   clampSubscriptionToEntitlement,
+  hasActivePaidPlan,
   isCurrentPaidPlan,
   isEntitledBillingState,
   planOutcomes,
@@ -317,4 +318,45 @@ test('a past-due payload drops to the baseline but keeps the account', () => {
   // Past Due is not the same as gone: the record of what they had is intact, so
   // recovering billing restores the tier rather than re-purchasing it.
   assert.equal(pastDue.billingState, 'Past Due');
+});
+
+/*
+ * The onboarding checklist asks a different question from the billing cards,
+ * but it has the same trap.
+ *
+ * A new workspace is seeded as Starter / 'Manual Billing' / rate 0. That state
+ * is entitled, so an entitlement-only check ticks "Review billing" complete
+ * before anyone has configured or bought anything — inflating onboarding
+ * progress and hiding a real setup step.
+ */
+test('an unconfigured workspace has not completed billing setup', () => {
+  const seeded = subscriptionFixture({ tier: 'Starter', monthlyRate: 0, billingState: 'Manual Billing' });
+
+  assert.equal(isEntitledBillingState(seeded.billingState), true, 'precondition: the seed state is entitled');
+  assert.equal(hasActivePaidPlan(seeded), false, 'a zero-rate seed is a setup state, not a purchase');
+});
+
+test('a paid or deliberately comped workspace has completed billing setup', () => {
+  for (const billingState of ['Active', 'Manual Billing'] as const) {
+    const paid = subscriptionFixture({ tier: 'Professional', monthlyRate: 79, billingState });
+    assert.equal(hasActivePaidPlan(paid), true, `${billingState} with a real rate is configured billing`);
+  }
+});
+
+test('a lapsed workspace has not completed billing setup', () => {
+  for (const billingState of ['Inactive', 'Past Due'] as const) {
+    const lapsed = subscriptionFixture({ tier: 'Professional', monthlyRate: 79, billingState });
+    assert.equal(hasActivePaidPlan(lapsed), false, `${billingState} needs attention, not a completed checkmark`);
+  }
+});
+
+test('no screen decides billing is configured from entitlement alone', async () => {
+  const checklist = await readFile(path.join(process.cwd(), 'src/routes/GettingStarted.tsx'), 'utf8');
+
+  assert.match(checklist, /hasActivePaidPlan\(subscription\)/);
+  assert.doesNotMatch(
+    checklist,
+    /done: isEntitledBillingState\(/,
+    'entitlement alone marks the zero-rate setup seed complete',
+  );
 });

@@ -70,15 +70,36 @@ for (const role of ROLES) {
   if (functions.length === 0) console.log('  (none)');
 }
 
-const anonExtra = byRole
-  .get('anon')
-  .filter((fn) => fn !== 'xbar_resolve_public_listing' && fn !== 'xbar_track_public_share_view');
+// The buyer share flow, and nothing else. Both halves are required: a buyer
+// opens a link with no account, so resolution AND view tracking must stay
+// reachable by anon.
+const REQUIRED_ANON = ['xbar_resolve_public_listing', 'xbar_track_public_share_view'];
+
+const anonFunctions = byRole.get('anon');
+const anonExtra = anonFunctions.filter((fn) => !REQUIRED_ANON.includes(fn));
+const anonMissing = REQUIRED_ANON.filter((fn) => !anonFunctions.includes(fn));
 
 console.log('');
-if (anonExtra.length === 0) {
-  console.log('anon surface is limited to the buyer share flow.');
-} else {
+
+// Checking only for extras made this report success when a required grant had
+// been lost — the drift case the script exists to catch. An over-tight surface
+// is a broken buyer share link, which is as much a failure as an over-broad one
+// and is quieter, so both are reported and both exit non-zero.
+if (anonMissing.length) {
+  console.log(`anon is MISSING ${anonMissing.length} function(s) the buyer share flow needs:`);
+  for (const fn of anonMissing) console.log(`  ${fn}`);
+  console.log('Public share links cannot resolve or record views until these are granted to anon.');
+}
+
+if (anonExtra.length) {
   console.log(`anon can still execute ${anonExtra.length} function(s) beyond the buyer share flow:`);
   for (const fn of anonExtra) console.log(`  ${fn}`);
   console.log('Apply supabase/migrations/20260822_restrict_anon_rpc_surface.sql to close these.');
 }
+
+if (!anonMissing.length && !anonExtra.length) {
+  console.log('anon surface is exactly the buyer share flow.');
+  process.exit(0);
+}
+
+process.exit(1);

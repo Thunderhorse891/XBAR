@@ -159,3 +159,40 @@ test('the legacy resolver is not re-granted to anon', () => {
   assert.ok(keepList, 'expected a keep list in the migration');
   assert.doesNotMatch(keepList[0], /legacy/);
 });
+
+/*
+ * The drift verifier must not report success when a required grant is gone.
+ *
+ * verify-rpc-surface.mjs checked only for functions anon should not reach. A
+ * lost grant on either half of the buyer share flow left that list empty, so
+ * the script printed that the surface was correctly limited and exited zero —
+ * while public links could not resolve or record views. An over-tight surface
+ * is as much a drift failure as an over-broad one, and quieter.
+ */
+test('the verifier checks the anon surface in both directions', () => {
+  const script = readFileSync(path.join(repoRoot, 'scripts', 'verify-rpc-surface.mjs'), 'utf8');
+
+  assert.match(script, /anonMissing/, 'a required grant that disappeared has to be reported');
+  assert.match(script, /anonExtra/, 'and so does anything reachable that should not be');
+
+  // Both halves of the share flow are required; naming only the resolver is how
+  // the tracking RPC gets revoked by mistake.
+  for (const fn of ['xbar_resolve_public_listing', 'xbar_track_public_share_view']) {
+    assert.ok(script.includes(fn), `${fn} must be in the verifier's required set`);
+  }
+
+  // A verifier that always exits zero cannot fail a deployment check.
+  assert.match(script, /process\.exit\(1\)/, 'drift must exit non-zero');
+});
+
+test('the verifier only reports success for an exact match', () => {
+  const script = readFileSync(path.join(repoRoot, 'scripts', 'verify-rpc-surface.mjs'), 'utf8');
+
+  const success = script.indexOf('anon surface is exactly the buyer share flow.');
+  assert.notEqual(success, -1, 'the success message should claim an exact match, not merely a limited one');
+
+  // The success branch has to be guarded by both checks, or it is reachable
+  // with a required function missing.
+  const guard = script.lastIndexOf('if (!anonMissing.length && !anonExtra.length)', success);
+  assert.notEqual(guard, -1, 'success must require both no extras and nothing missing');
+});

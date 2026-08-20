@@ -90,26 +90,28 @@ export function isEntitledBillingState(billingState: SubscriptionProfile['billin
 }
 
 /**
- * True when `tier` is the plan this workspace is currently paying for.
+ * True when this workspace is on a paid plan at all.
  *
- * All three conditions are load-bearing, and each covers a case the others miss:
+ * Both conditions are load-bearing, and each covers a case the other misses:
  *
- *   - the billing state must be entitled, or a canceled Starter subscription
- *     would present Starter as current and disable the checkout the customer
- *     needs to resubscribe;
- *   - the tier must match, obviously;
+ *   - the billing state must be entitled, or a canceled subscription would
+ *     still read as configured;
  *   - the rate must be non-zero, because a freshly initialized workspace is
- *     seeded as Starter / 'Manual Billing' / rate 0. That seed is a setup state,
- *     not a purchase, and treating it as one labels Starter "Current plan" on a
- *     brand-new workspace and stops it being bought at all.
+ *     seeded as Starter / 'Manual Billing' / rate 0. That seed is a setup
+ *     state, not a purchase, and reading it as one tells a brand-new workspace
+ *     its billing is already handled.
  *
- * The rate is a *supporting* condition here, not the signal. Reading it alone —
- * which is what the screens used to do — is what let a lapsed plan look current.
+ * The rate is a *supporting* condition, not the signal. Reading it alone —
+ * which is what these screens used to do — is what let a lapsed plan look
+ * current.
  */
+export function hasActivePaidPlan(subscription: SubscriptionProfile): boolean {
+  return isEntitledBillingState(subscription.billingState) && subscription.monthlyRate > 0;
+}
+
+/** True when `tier` specifically is the plan this workspace is paying for. */
 export function isCurrentPaidPlan(subscription: SubscriptionProfile, tier: SubscriptionTier): boolean {
-  return (
-    isEntitledBillingState(subscription.billingState) && subscription.tier === tier && subscription.monthlyRate > 0
-  );
+  return hasActivePaidPlan(subscription) && subscription.tier === tier;
 }
 
 /**
