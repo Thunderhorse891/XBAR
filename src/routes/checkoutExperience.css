@@ -393,3 +393,14 @@
     transform: none;
   }
 }
+
+/* What a tier includes, shown under its capacity numbers. Rendered regardless
+   of billing configuration — being unable to buy a plan is no reason to stop
+   showing what it contains — so it reads as supporting detail rather than
+   competing with the limits above it. */
+.checkout-plan__features {
+  padding-top: 10px;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  color: var(--checkout-muted, #52606d);
+  font-size: 0.86rem;
+}

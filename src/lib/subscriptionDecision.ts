@@ -49,10 +49,14 @@ export function getCheckoutReadiness(params: {
   if (params.hasPaymentLink)
     return { ready: true, mode: 'checkout', reason: 'Secure checkout opens next. XBAR never stores raw card numbers.' };
   if (!params.billingEnabled) {
+    // Stripe is not configured for this deployment. Say that plainly rather
+    // than implying the customer has a manual route they can take: there is no
+    // action available to them here, and pointing them at "manual billing"
+    // invites a support round-trip that ends the same way.
     return {
       ready: false,
       mode: 'manual',
-      reason: 'Online checkout is not configured. Contact support/manual billing required.',
+      reason: 'Billing is not configured yet, so plans cannot be purchased in the app.',
     };
   }
   if (!params.hasManagedIdentity)

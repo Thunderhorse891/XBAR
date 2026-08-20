@@ -31,8 +31,15 @@ test('billing screen does not imply payment when checkout is not configured', ()
     assert.equal(source.includes(forbidden), false, `${forbidden} should not appear in billing UI`);
   }
 
-  assert.match(source, /Online checkout is not configured\. Contact support\/manual billing required\./);
+  assert.match(source, /Billing is not configured yet, so plans cannot be purchased in the app\./);
   assert.match(source, /Your workspace and current plan were not changed\./);
+
+  // "Manual billing required" pointed the customer at a route they cannot
+  // take: with Stripe absent there is no in-app path, and manual billing is an
+  // operator action recorded server-side, not something a buyer can request
+  // from this screen.
+  assert.equal(source.includes('Manual billing required'), false);
+  assert.equal(source.includes('Contact support/manual billing required'), false);
 });
 
 test('upgrade links use canonical billing path instead of legacy billing routes', () => {

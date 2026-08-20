@@ -47,7 +47,7 @@ export default function Subscriptions() {
   const continuePath = workspaceReady ? '/' : '/setup';
   const checkoutReadinessLabel = selectedCheckoutConfigured
     ? 'Secure checkout opens next.'
-    : 'Online checkout is not configured. Contact support/manual billing required.';
+    : 'Billing is not configured yet, so plans cannot be purchased in the app.';
   const selectedReadiness = getCheckoutReadiness({
     billingEnabled,
     canManageBilling,
@@ -86,7 +86,7 @@ export default function Subscriptions() {
     if (!readiness.ready) {
       emit(productEventNames.checkoutFailed, { tier, reason: readiness.reason }, 'warning');
       pushToast({
-        title: readiness.mode === 'manual' ? 'Manual billing required' : 'Checkout needs attention',
+        title: readiness.mode === 'manual' ? 'Billing not configured yet' : 'Checkout needs attention',
         message: `${readiness.reason} Your workspace and current plan were not changed.`,
         tone: 'warning',
       });
@@ -160,6 +160,16 @@ export default function Subscriptions() {
           <li>{formatLimit(config.limits.horseLimit, 'horses')}</li>
           <li>{formatLimit(config.limits.seatLimit, 'team seats')}</li>
           <li>{formatLimit(config.limits.documentLimit, 'documents')}</li>
+          <li>{formatLimit(config.limits.salePacketLimit, 'sale packets')}</li>
+          <li>{`${config.limits.storageLimitGb} GB storage`}</li>
+        </ul>
+        {/* What the tier includes, not just how much of it. Rendered whatever
+            the billing configuration is: being unable to buy a plan is no
+            reason to stop showing what it contains. */}
+        <ul className="checkout-plan__features">
+          {config.featureFlags.map((feature) => (
+            <li key={feature}>{feature}</li>
+          ))}
         </ul>
         {paidCurrent || setupCurrent ? (
           <button type="button" disabled>
@@ -172,7 +182,11 @@ export default function Subscriptions() {
             title={readiness.reason}
             onClick={() => void beginCheckout(tier)}
           >
-            {busy ? 'Opening checkout...' : readiness.mode === 'manual' ? 'Manual billing required' : `Choose ${tier}`}
+            {busy
+              ? 'Opening checkout...'
+              : readiness.mode === 'manual'
+                ? 'Billing not configured yet'
+                : `Choose ${tier}`}
           </button>
         )}
         <small>
@@ -194,8 +208,8 @@ export default function Subscriptions() {
             <p>Billing</p>
             <h1 id="checkout-title">Review Billing</h1>
             <span>
-              Choose the tier that fits your workflow. Paid plans change only after checkout succeeds or manual billing
-              is explicitly activated.
+              Choose the tier that fits your workflow. Plans change only after checkout succeeds — nothing here changes
+              your workspace on its own.
             </span>
           </div>
 
@@ -203,10 +217,7 @@ export default function Subscriptions() {
             <div>
               <span>Starter setup</span>
               <h2>Start with XBAR</h2>
-              <p>
-                No payment is collected in this local setup flow. Paid plans require checkout or manual billing
-                activation.
-              </p>
+              <p>No payment is collected in this local setup flow. Paid plans require completed checkout.</p>
             </div>
             <button type="button" onClick={startTrial}>
               {workspaceReady ? 'Continue' : 'Continue setup'}
@@ -240,11 +251,12 @@ export default function Subscriptions() {
             <div className="checkout-card-box" aria-label="Billing details">
               <div className="checkout-card-box__top">
                 <span>Billing</span>
-                <strong>Manual billing required</strong>
+                <strong>Billing not configured yet</strong>
               </div>
               <p>
-                Online checkout is not configured. Contact support/manual billing required. Your workspace and plan will
-                not change in the app until manual billing is recorded by an admin.
+                Payment is not set up for this deployment, so no plan can be purchased here and no payment details are
+                collected. Every tier below is still shown in full so you can compare what they include. Your workspace
+                and current plan are unchanged.
               </p>
             </div>
           ) : (
@@ -295,7 +307,7 @@ export default function Subscriptions() {
                 </div>
                 <div>
                   <span>Activation</span>
-                  <strong>Manual billing only</strong>
+                  <strong>Not available in app</strong>
                 </div>
                 <div>
                   <span>Workspace</span>
@@ -317,7 +329,7 @@ export default function Subscriptions() {
               : selectedPaidCurrent
                 ? 'Current plan'
                 : selectedReadiness.mode === 'manual'
-                  ? 'Manual billing required'
+                  ? 'Billing not configured yet'
                   : 'Continue to secure checkout'}
           </button>
           <button className="checkout-secondary-action" type="button" onClick={startTrial}>
