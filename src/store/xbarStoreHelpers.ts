@@ -159,10 +159,13 @@ export function normalizeBatchState(value: unknown): IntakeBatch['state'] {
 }
 
 export function normalizeBillingState(value: unknown): SubscriptionProfile['billingState'] {
-  if (value === 'Active' || value === 'Past Due' || value === 'Manual Billing') {
+  if (value === 'Active' || value === 'Past Due' || value === 'Manual Billing' || value === 'Inactive') {
     return value;
   }
-  return 'Manual Billing';
+  // An unreadable stored value falls to 'Inactive', not 'Manual Billing'.
+  // Manual Billing is an operator's deliberate grant of a paid tier, so it must
+  // never be what corrupt or unrecognized data decays into.
+  return 'Inactive';
 }
 
 export function restoreWorkspaceProfile(raw: unknown): WorkspaceProfile {

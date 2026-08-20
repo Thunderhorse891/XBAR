@@ -430,7 +430,10 @@ export interface SubscriptionProfile {
   tier: SubscriptionTier;
   monthlyRate: number;
   renewalDate: string;
-  billingState: 'Active' | 'Manual Billing' | 'Past Due';
+  // 'Inactive' covers canceled, paused, unpaid and never-completed
+  // subscriptions. It exists so those cannot be filed under 'Manual
+  // Billing', which is an operator grant that carries the paid tier.
+  billingState: 'Active' | 'Manual Billing' | 'Past Due' | 'Inactive';
   sharedAccessEnabled: boolean;
   featureFlags: string[];
   usage: SubscriptionUsage;

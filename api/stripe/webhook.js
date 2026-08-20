@@ -30,7 +30,21 @@ async function syncWorkspaceSubscription({
     throw new Error('Supabase admin credentials are not configured.');
   }
 
-  const tier = findTierByPriceId(priceId) || 'Starter';
+  // An unrecognized price id means STRIPE_PRICE_ID_* is misconfigured for this
+  // deployment, not that the customer bought Starter. Guessing in either
+  // direction is wrong: defaulting to Starter silently downgrades someone who
+  // paid for more, and picking any other tier hands out access nobody bought.
+  //
+  // Failing here writes nothing, so the workspace keeps whatever entitlement it
+  // already had, the event is not marked processed, and the error surfaces in
+  // the webhook response and Stripe's delivery log where an operator sees it.
+  const tier = findTierByPriceId(priceId);
+  if (!tier) {
+    throw new Error(
+      `Unrecognized Stripe price id "${priceId}" — no STRIPE_PRICE_ID_* env var matches it, so the tier is unknown and no entitlement was written.`,
+    );
+  }
+
   const { data: existingProfile } = await supabase
     .from('workspace_subscription_profiles')
     .select('payload')

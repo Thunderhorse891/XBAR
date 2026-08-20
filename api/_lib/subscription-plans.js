@@ -1,3 +1,5 @@
+import { BASELINE_TIER, billingStateForStripeStatus } from './subscription-status.js';
+
 export const subscriptionPlans = {
   Starter: {
     monthlyRate: 29,
@@ -89,33 +91,51 @@ export function getStripePriceIdByTier(tier) {
   return envMap[tier] || '';
 }
 
+/**
+ * Resolve a Stripe price id to a tier, or null when it matches none.
+ *
+ * An empty price id never matches, even when a tier's STRIPE_PRICE_ID_* env var
+ * is also unset — otherwise an unconfigured deployment would resolve every
+ * unknown price to whichever tier happened to be blank.
+ */
 export function findTierByPriceId(priceId) {
-  return Object.keys(subscriptionPlans).find((tier) => getStripePriceIdByTier(tier) === priceId) || null;
+  const normalized = String(priceId ?? '').trim();
+  if (!normalized) return null;
+  return Object.keys(subscriptionPlans).find((tier) => getStripePriceIdByTier(tier) === normalized) || null;
 }
 
+/** Retained name; the decision itself lives in subscription-status.js. */
 export function normalizeBillingState(status) {
-  if (status === 'active' || status === 'trialing') {
-    return 'Active';
-  }
-
-  if (status === 'past_due' || status === 'unpaid' || status === 'incomplete_expired') {
-    return 'Past Due';
-  }
-
-  return 'Manual Billing';
+  return billingStateForStripeStatus(status);
 }
 
+/** True when `tier` is a plan this build actually sells. */
+export function isKnownTier(tier) {
+  return typeof tier === 'string' && Object.prototype.hasOwnProperty.call(subscriptionPlans, tier);
+}
+
+/**
+ * Build a stored subscription profile.
+ *
+ * An unrecognized tier resolves to the baseline rather than being trusted, and
+ * says so via `tierRecognized: false`. It used to be silently rewritten to
+ * Starter, which made a bad tier string indistinguishable from a real Starter
+ * subscription — the profile looked correct and nothing recorded that a value
+ * had been discarded.
+ */
 export function buildSubscriptionProfile(params) {
-  const tier = params.tier in subscriptionPlans ? params.tier : 'Starter';
+  const tierRecognized = isKnownTier(params.tier);
+  const tier = tierRecognized ? params.tier : BASELINE_TIER;
   const plan = subscriptionPlans[tier];
   const existingUsage = params.existingUsage || {};
   const renewalDate = params.renewalDate || '';
 
   return {
     tier,
+    tierRecognized,
     monthlyRate: plan.monthlyRate,
     renewalDate,
-    billingState: normalizeBillingState(params.billingStatus),
+    billingState: billingStateForStripeStatus(params.billingStatus),
     sharedAccessEnabled: plan.sharedAccessEnabled,
     brandedListings: plan.brandedListings,
     featureFlags: plan.featureFlags,

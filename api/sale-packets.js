@@ -68,6 +68,10 @@ export default async function handler(req, res) {
   const { supabase, user } = access;
 
   const entitlements = await getWorkspaceEntitlements(supabase, workspaceId, user?.email);
+  if (!entitlements.ok) {
+    return sendJson(res, entitlements.status, { ok: false, message: entitlements.message });
+  }
+
   if (!tierIncludesPlan(entitlements.effectiveTier, 'Professional')) {
     return sendJson(res, 403, {
       ok: false,
@@ -80,9 +84,11 @@ export default async function handler(req, res) {
   }
   const capacity = await checkSalePacketCapacity(supabase, workspaceId, 1, entitlements.limits);
   if (!capacity.ok) {
-    return sendJson(res, 403, {
+    // A retryable "could not verify" is a 503 and is not a packet-limit
+    // problem, so it must not carry the limit-reached code either.
+    return sendJson(res, capacity.status ?? 403, {
       ok: false,
-      code: 'sale_packet_limit_reached',
+      code: capacity.retryable ? 'usage_unavailable' : 'sale_packet_limit_reached',
       message: capacity.message,
       currentPlan: entitlements.effectiveTier,
       billingState: entitlements.billingState,
