@@ -30,7 +30,8 @@
     "mobile:add:android": "cap add android",
     "mobile:open:ios": "cap open ios",
     "mobile:open:android": "cap open android",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:owner-prod-block": "node scripts/test-owner-mode-prod-block.mjs"
   },
   "lint-staged": {
     "*.{ts,tsx,js,mjs,cjs}": [
