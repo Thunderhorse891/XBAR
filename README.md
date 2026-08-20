@@ -122,7 +122,34 @@ Required for managed Stripe billing and webhook reconciliation:
 - `STRIPE_PRICE_ID_ENTERPRISE`
 - `PUBLIC_APP_URL`
 
-Optional browser configuration is documented in `.env.example`.
+Owner/QA access (all optional, all off by default):
+
+- `XBAR_COMP_EMAILS` (server) — the allowlist that actually grants full
+  entitlements for cloud actions.
+- `VITE_XBAR_COMP_EMAILS` (client) — the matching list so the UI shows what the
+  server will honour. Set both to the same value; setting only the client one
+  shows tiers the server refuses.
+- `VITE_XBAR_LOCAL_OWNER_MODE` (client) — local tier preview for a machine with
+  no cloud account. **Not available in production**: it is compiled in at build
+  time and a production bundle refuses it even when the variable is set, so it
+  cannot be switched on from a URL, from localStorage, or from anything a
+  visitor can edit. It previews the UI only — cloud actions are still authorized
+  against the real account.
+
+Tier preview never writes to a workspace's real subscription, so returning to
+the real plan is switching the overlay off rather than repairing data.
+
+Optional browser configuration is documented in `.env.example`, which states for
+every variable whether it is client-safe or server-only, whether it is needed
+now or later, and what the app does when it is absent.
+
+### Running without Supabase or Stripe
+
+Neither is required. With both absent the app runs locally: records stay in the
+browser, and the billing screen shows every tier, price, limit and feature list
+while saying **Billing not configured yet**. No checkout opens, no subscription
+record is created, and no identifier is invented — missing configuration is
+reported, never faked.
 
 ### Operations
 
