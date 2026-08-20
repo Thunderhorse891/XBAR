@@ -14,6 +14,7 @@ import { EXPENSE_CATEGORIES } from '@/features/expenses/constants';
 import { matchesSearch } from '@/features/expenses/helpers';
 import type { ExpenseFilter } from '@/features/expenses/types';
 import './operationsExperience.css';
+import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 
 const RANCH_WIDE = 'Ranch-wide';
 
@@ -27,7 +28,7 @@ export default function Expenses() {
   const horses = useXbarStore((state) => state.horses);
   const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
   const salesLeads = useXbarStore((state) => state.salesLeads);
-  const subscription = useXbarStore((state) => state.subscription);
+  const subscription = useEffectiveSubscription();
   const addExpenseReceipt = useXbarStore((state) => state.addExpenseReceipt);
   const updateHorse = useXbarStore((state) => state.updateHorse);
   const roleWorkspace = useCurrentRoleWorkspace();

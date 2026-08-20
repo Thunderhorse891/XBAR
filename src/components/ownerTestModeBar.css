@@ -1,0 +1,126 @@
+/*
+ * Owner test mode indicator.
+ *
+ * Deliberately loud and deliberately fixed to the viewport. This element exists
+ * so an operator cannot mistake a previewed tier for their real plan, which
+ * means it has to stay visible while they scroll through the screens they are
+ * inspecting. It only ever renders for an authorized owner.
+ */
+
+.owner-test-bar {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  display: grid;
+  gap: 8px;
+  width: min(320px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border: 1px solid rgba(120, 84, 8, 0.4);
+  border-radius: 10px;
+  background: #fffbea;
+  box-shadow: 0 18px 40px -28px rgba(16, 20, 24, 0.8);
+  color: #3d2f08;
+  font-family: var(--font-ui, inherit);
+  font-size: 12px;
+}
+
+/* Previewing is the state worth noticing, so it gets the stronger treatment. */
+.owner-test-bar--previewing {
+  border-color: rgba(180, 83, 9, 0.75);
+  background: #fff3d6;
+}
+
+.owner-test-bar__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.owner-test-bar__badge {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #92400e;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.owner-test-bar__reach {
+  padding: 2px 7px;
+  border: 1px solid rgba(120, 84, 8, 0.35);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* A local-only preview cannot do cloud work; say so at a glance. */
+.owner-test-bar[data-reach='local-only'] .owner-test-bar__reach {
+  border-color: rgba(120, 84, 8, 0.5);
+  background: rgba(146, 64, 14, 0.12);
+}
+
+.owner-test-bar[data-reach='cloud-active'] .owner-test-bar__reach {
+  border-color: rgba(6, 95, 70, 0.5);
+  background: rgba(6, 95, 70, 0.12);
+  color: #065f46;
+}
+
+.owner-test-bar__plan {
+  flex-basis: 100%;
+  font-weight: 700;
+}
+
+.owner-test-bar__tiers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.owner-test-bar__tier {
+  padding: 6px 8px;
+  border: 1px solid rgba(120, 84, 8, 0.35);
+  border-radius: 7px;
+  background: #fff;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.owner-test-bar__tier[aria-pressed='true'] {
+  border-color: #92400e;
+  background: #92400e;
+  color: #fff;
+}
+
+.owner-test-bar__reset {
+  padding: 7px 9px;
+  border: 1px solid rgba(120, 84, 8, 0.45);
+  border-radius: 7px;
+  background: #fff;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.owner-test-bar__detail {
+  margin: 0;
+  color: #6b5410;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+@media (max-width: 640px) {
+  .owner-test-bar {
+    right: 8px;
+    bottom: 8px;
+    width: calc(100vw - 16px);
+  }
+}

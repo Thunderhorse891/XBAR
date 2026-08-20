@@ -16,6 +16,7 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import type { UserRole } from '@/types/xbar';
+import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 
 function roleLabel(role: UserRole) {
   return role === 'Owner' ? 'Horse Owner / Client' : role;
@@ -37,7 +38,7 @@ export default function Settings() {
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const workspaceMembers = useXbarStore((state) => state.workspaceMembers);
   const workspaceInvitations = useXbarStore((state) => state.workspaceInvitations);
-  const subscription = useXbarStore((state) => state.subscription);
+  const subscription = useEffectiveSubscription();
   const updateWorkspaceProfile = useXbarStore((state) => state.updateWorkspaceProfile);
   const inviteWorkspaceMember = useXbarStore((state) => state.inviteWorkspaceMember);
   const revokeWorkspaceInvitation = useXbarStore((state) => state.revokeWorkspaceInvitation);

@@ -6,14 +6,13 @@ import { RequireSharedListings } from './components/RequireSubscriptionFeature';
 import { RequireWorkspaceSetup } from './components/RequireWorkspaceSetup';
 import { SubscriptionEnforcement } from './components/SubscriptionEnforcement';
 import { InteractionShell } from './components/InteractionSystem';
+import { OwnerTestModeBar } from './components/OwnerTestModeBar';
 import { Toaster } from './components/ui/sonner';
 import { billingPath } from './lib/billingRoutes';
 import { buyerFollowUpPath } from './lib/buyerRoutes';
 import { appBasePath } from './lib/routeCanon';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
-import { isCompedEmail } from './lib/compAccess';
 import { useCloudStore } from './store/useCloudStore';
-import { useXbarStore } from './store/useXbarStore';
 import './routes/operationsHierarchy.css';
 import './routes/interactionSystem.css';
 import './routes/xbarCommandSystem.css';
@@ -118,24 +117,18 @@ function applyRouteMeta(path: string) {
   document.title = path === '/login' ? 'Sign in | XBAR' : routeTitle(path);
 }
 
-// Operator comp bridge: when the signed-in email is on the comp allowlist
-// (VITE_XBAR_COMP_EMAILS), grant the full Enterprise tier so an internal / QA /
-// owner account can exercise every gated feature. Self-heals after a cloud sync
-// that would otherwise restore the real tier. No-op for everyone else, and the
-// server enforces the same allowlist for cloud actions.
-function CompAccessBridge() {
-  const sessionEmail = useCloudStore((state) => state.session?.user?.email ?? '');
-  const tier = useXbarStore((state) => state.subscription.tier);
-  const applySubscriptionTier = useXbarStore((state) => state.applySubscriptionTier);
-
-  useEffect(() => {
-    if (isCompedEmail(sessionEmail) && tier !== 'Enterprise') {
-      applySubscriptionTier('Enterprise', { billingState: 'Manual Billing' });
-    }
-  }, [sessionEmail, tier, applySubscriptionTier]);
-
-  return null;
-}
+// Operator comp access is no longer a bridge that writes to the store.
+//
+// The previous version reacted to a comped email by calling
+// `applySubscriptionTier('Enterprise', { billingState: 'Manual Billing' })`,
+// which overwrites the workspace's real subscription — the same field a genuine
+// plan lives in, persisted and synced — and "self-healed" by rewriting it again
+// after every cloud sync that restored the truth. There was no way back to the
+// real plan because the real plan had been overwritten.
+//
+// Tier preview is now a read-time overlay (src/hooks/useOwnerPreview.ts) that
+// never writes to the subscription, so returning to the real entitlement is
+// simply switching the overlay off. See OwnerTestModeBar for the control.
 
 function RouteTelemetry() {
   const location = useLocation();
@@ -173,8 +166,9 @@ export default function App() {
         <Toaster position="top-right" richColors closeButton />
         <InteractionShell />
         <SubscriptionEnforcement />
-        <CompAccessBridge />
         <RouteTelemetry />
+        {/* Renders nothing unless the viewer is an authorized owner. */}
+        <OwnerTestModeBar />
         <Suspense
           fallback={
             <div className="app-loading-shell" role="status" aria-live="polite">

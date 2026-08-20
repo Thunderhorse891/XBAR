@@ -14,13 +14,14 @@ import { breedingRevenueGate } from '@/lib/subscriptionGates';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
+import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 
 export default function Breeding() {
   const navigate = useNavigate();
   const horses = useXbarStore((state) => state.horses);
   const documents = useXbarStore((state) => state.documents);
   const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
-  const subscription = useXbarStore((state) => state.subscription);
+  const subscription = useEffectiveSubscription();
   const addBreedingEvent = useXbarStore((state) => state.addBreedingEvent);
   const deleteBreedingEvent = useXbarStore((state) => state.deleteBreedingEvent);
   const updateBreedingEconomics = useXbarStore((state) => state.updateBreedingEconomics);

@@ -58,6 +58,26 @@ export const compConfig = {
     .filter(Boolean),
 };
 
+// Local owner preview (development only).
+//
+// VITE_XBAR_LOCAL_OWNER_MODE lets the owner exercise tier-gated screens on a
+// machine with no cloud account at all. Two properties matter more than the
+// convenience:
+//
+//   - It is a build-time variable, so it cannot be turned on from the URL, from
+//     localStorage, or from anything else a visitor can edit at runtime.
+//   - `isDevBuild` is false in every `vite build` output, which is what ships.
+//     A production bundle therefore cannot enable this even if the variable is
+//     set in the deploy environment by mistake.
+//
+// It grants a local *preview* of the UI only. Every cloud action is authorized
+// by the server against the real account, which knows nothing about this flag.
+export const ownerPreviewConfig = {
+  localFlagEnabled: readFlag(env.VITE_XBAR_LOCAL_OWNER_MODE, false),
+  isDevBuild: Boolean(env.DEV),
+  isProdBuild: Boolean(env.PROD),
+};
+
 export const stripeConfig = {
   managedBillingEnabled: readFlag(env.VITE_MANAGED_BILLING_ENABLED, false),
   paymentLinks: {

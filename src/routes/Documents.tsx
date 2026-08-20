@@ -17,6 +17,7 @@ import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import { buildHorseEnrichmentFromEntities, normalizeOwnershipRecord } from '@/store/xbarStoreLogic';
 import type { DocumentRecord, DocumentSource } from '@/types/xbar';
 import { documentSources } from '@/features/documents/constants';
+import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 import {
   PIPELINE_STAGES,
   buildProofLinks,
@@ -37,7 +38,7 @@ export default function Documents() {
   const documents = useXbarStore((state) => state.documents);
   const horses = useXbarStore((state) => state.horses);
   const intakeBatches = useXbarStore((state) => state.intakeBatches);
-  const subscription = useXbarStore((state) => state.subscription);
+  const subscription = useEffectiveSubscription();
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const salePacketBuilds = useXbarStore((state) => state.salePacketBuilds);
   const createDocumentIntake = useXbarStore((state) => state.createDocumentIntake);
