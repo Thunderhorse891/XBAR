@@ -11,6 +11,7 @@ import {
   ownerPreviewReachLabel,
   resolveOwnerPreviewAuthorization,
   type OwnerPreviewEnvironment,
+  ownerPreviewReachDetail,
 } from '../src/lib/ownerPreview.js';
 
 /*
@@ -290,4 +291,31 @@ test('the store checks limits against the previewed tier, not the raw plan', asy
   // Counts must stay real, or a downgrade would reset usage to zero instead of
   // showing "23 of 5".
   assert.match(store, /return gateSubscription\(subscription\)\.usage;/);
+});
+
+/*
+ * The comp allowlist does not reach the database.
+ *
+ * XBAR_COMP_EMAILS is honoured by getWorkspaceEntitlements, so the API grants
+ * the tier — but it is keyed on email and lives in the API, while the limit
+ * triggers read workspace_subscription_profiles and see only the stored plan.
+ * A seat, storage or resource cap can therefore refuse a write the API just
+ * allowed. The reach copy is what a customer reads before trying, so it must
+ * not promise that every cloud action works.
+ */
+test('the cloud-active copy does not promise writes the database will refuse', () => {
+  const detail = ownerPreviewReachDetail('cloud-active');
+
+  assert.doesNotMatch(
+    detail,
+    /cloud actions run at this tier/,
+    'this claimed every cloud write succeeds, which the limit triggers do not honour',
+  );
+  assert.match(detail, /API grants this tier/);
+  assert.match(detail, /real plan|stored tier/, 'the database boundary has to be stated, not implied');
+});
+
+test('each reach level says something different about what will work', () => {
+  const details = (['local-only', 'cloud-ready', 'cloud-active'] as const).map(ownerPreviewReachDetail);
+  assert.equal(new Set(details).size, 3, 'three levels exist because they behave differently');
 });

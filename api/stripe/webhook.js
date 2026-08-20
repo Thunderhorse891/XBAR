@@ -31,11 +31,22 @@ async function syncWorkspaceSubscription({
     throw new Error('Supabase admin credentials are not configured.');
   }
 
-  const { data: existingProfile } = await supabase
+  const { data: existingProfile, error: existingProfileError } = await supabase
     .from('workspace_subscription_profiles')
     .select('tier, payload')
     .eq('workspace_id', workspaceId)
     .maybeSingle();
+
+  // A failed read is not the same as "no row", and the difference is
+  // destructive. resolveWebhookTier falls back to the baseline when there is no
+  // stored tier, which is right for a workspace that has never subscribed — but
+  // if this SELECT merely errored while the upserts below succeed, a canceled
+  // Professional or Enterprise subscription would be rewritten as Starter,
+  // losing the purchased tier and its rate permanently rather than being marked
+  // inactive. Throwing writes nothing and leaves the event for Stripe to retry.
+  if (existingProfileError) {
+    throw new Error(`Could not read the existing subscription profile: ${existingProfileError.message}`);
+  }
 
   // The asymmetry between granting and withdrawing access lives in
   // resolveWebhookTier, next to the rest of the billing-status policy, so it is

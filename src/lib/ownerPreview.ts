@@ -100,10 +100,20 @@ export function ownerPreviewAuthorization(sessionEmail: string | null | undefine
 /**
  * How far a previewed tier can actually be exercised.
  *
- * The distinction is the whole point of showing it. A comped account is backed
- * by the server allowlist, so cloud writes at that tier genuinely succeed. A
- * local dev preview is the UI only — the API will still answer according to the
- * real account, so anything that touches the cloud will be refused.
+ * The distinction is the whole point of showing it, and it has three levels
+ * rather than two, because the comp allowlist does not reach all the way down.
+ *
+ * A local dev preview is the UI only: the API answers according to the real
+ * account, so anything touching the cloud is refused.
+ *
+ * A comped account goes further — `XBAR_COMP_EMAILS` is honoured by
+ * `getWorkspaceEntitlements`, so the API grants the tier and feature-level
+ * checks pass. But the allowlist is keyed on email and lives in the API, while
+ * the database's limit triggers read `workspace_subscription_profiles` and see
+ * only the workspace's stored plan. A write that hits a seat, storage, or
+ * commercial-resource cap can therefore still be refused at the real tier after
+ * the API has allowed it. That is a real boundary, not a rounding error, so the
+ * copy below says so rather than promising that every cloud action works.
  */
 export type OwnerPreviewReach = 'local-only' | 'cloud-ready' | 'cloud-active';
 
@@ -130,7 +140,7 @@ export function ownerPreviewReachLabel(reach: OwnerPreviewReach): string {
 export function ownerPreviewReachDetail(reach: OwnerPreviewReach): string {
   switch (reach) {
     case 'cloud-active':
-      return 'Your account is on the operator allowlist, so cloud actions run at this tier too.';
+      return 'Your account is on the operator allowlist, so the API grants this tier. Database limits still follow the workspace\u2019s real plan, so seat, storage and record caps can refuse a write at the stored tier.';
     case 'cloud-ready':
       return 'Your email is on the operator allowlist. Sign in to a cloud workspace to use this tier for real work.';
     default:

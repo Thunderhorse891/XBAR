@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import {
   BASELINE_TIER,
@@ -343,4 +345,32 @@ test('the quoted rate stays that of the plan that was bought', () => {
 
   assert.equal(canceled.monthlyRate, active.monthlyRate);
   assert.equal(canceled.billingState, 'Inactive');
+});
+
+/*
+ * The webhook's stored-tier fallback must not be reached by a failed read.
+ *
+ * resolveWebhookTier falls back to the baseline when there is no stored tier,
+ * which is correct for a workspace that never subscribed. If the lookup merely
+ * errored, that fallback rewrites a canceled Professional or Enterprise
+ * subscription as Starter — losing the purchased tier and its rate permanently
+ * instead of marking it inactive. Discarding the error is what makes the two
+ * cases indistinguishable, and it is the same defect this policy module exists
+ * to remove, so it is guarded at the call site.
+ */
+test('the webhook does not treat a failed profile lookup as an absent profile', async () => {
+  const source = await readFile(path.join(process.cwd(), 'api/stripe/webhook.js'), 'utf8');
+
+  assert.match(
+    source,
+    /const \{ data: existingProfile, error: existingProfileError \} = await supabase/,
+    'the profile lookup must capture its error, not discard it',
+  );
+
+  // Order matters: the guard has to run before the fallback that consumes the
+  // stored tier, or the destructured error is captured and still ignored.
+  const guard = source.indexOf('if (existingProfileError)');
+  const fallback = source.indexOf('resolveWebhookTier(');
+  assert.notEqual(guard, -1, 'the captured error must actually be acted on');
+  assert.ok(guard < fallback, 'the error must be handled before the stored tier is used');
 });
