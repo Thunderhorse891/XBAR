@@ -181,8 +181,11 @@ commit;
 --
 --      or paste the file into the SQL editor for that branch.
 --
---   2. Confirm the anon surface actually shrank. This should return only
---      xbar_resolve_public_listing:
+--   2. Confirm the anon surface actually shrank. This should return exactly the
+--      two functions the buyer share flow needs and nothing else:
+--
+--        xbar_resolve_public_listing
+--        xbar_track_public_share_view
 --
 --        select p.proname, r.rolname
 --        from pg_proc p
@@ -201,7 +204,13 @@ commit;
 --      exercises xbar_workspace_storage_bytes through the service role.
 --
 --   4. Re-run Supabase's security advisor and confirm the
---      anon_security_definer_function_executable count drops to 1.
+--      anon_security_definer_function_executable count drops to 2 — the two
+--      RPCs above, which are anon-reachable by design because a buyer opens a
+--      share link with no account.
+--
+--      Two, not one: xbar_track_public_share_view is re-granted deliberately
+--      alongside the resolver. Reading a lower number as success, or revoking
+--      the tracking RPC to reach one, breaks public-view recording.
 --
 --   5. Only then apply to production, ideally in a low-traffic window.
 --

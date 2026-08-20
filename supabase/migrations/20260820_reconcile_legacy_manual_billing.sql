@@ -25,69 +25,108 @@
 -- entitlements from getWorkspaceEntitlements, until some later webhook happens
 -- to update it. A canceled workspace may never receive another webhook at all.
 --
--- WHY A BLANKET UPDATE IS SAFE HERE
--- ---------------------------------
--- Because nothing ever created a 'Manual Billing' row on purpose.
--- public.workspace_subscription_profiles is written from exactly one place in
--- the application — the Stripe webhook (api/stripe/webhook.js) — and the only
--- value it could ever have written for that column came from the mapper above.
--- There is no admin endpoint, no seed, and no operator tool that sets it. Every
--- such row is therefore a mislabelled Stripe status, not a deliberate comp.
+-- WHICH ROWS THIS TOUCHES, AND WHICH IT WILL NOT
+-- ----------------------------------------------
+-- Only rows that are demonstrably Stripe-backed: a profile in 'Manual Billing'
+-- whose workspace also has a workspace_billing_customers row carrying a
+-- stripe_subscription_id. Those can only have come from the mapper above.
 --
--- The exception this cannot see: a row edited by hand in the Supabase
--- dashboard. That is exactly what the dry-run is for.
+-- A 'Manual Billing' profile with no Stripe subscription behind it is left
+-- alone. It was never written by the webhook, so it was created deliberately —
+-- by hand, or by an invoicing arrangement — and downgrading it would revoke
+-- access somebody granted on purpose.
 --
--- Going forward, comping an account is done with the XBAR_COMP_EMAILS
--- allowlist (api/_lib/comp-access.js), which the server mirrors to the client.
--- The mapper can no longer produce 'Manual Billing' from any Stripe status, so
--- this reconciliation is one-time rather than recurring.
+-- XBAR_COMP_EMAILS is NOT a substitute for those rows, which is why they are
+-- preserved rather than migrated and re-granted. The allowlist is keyed on
+-- email rather than workspace, always grants Enterprise rather than a specific
+-- tier, and is applied by the API — the database limit triggers read
+-- workspace_subscription_profiles and never see it, so a comp expressed that
+-- way would not raise the seat, storage or commercial caps the triggers
+-- enforce.
 --
--- DRY RUN — run this first, on its own, and review every row it returns
--- ---------------------------------------------------------------------
+-- Going forward the mapper can no longer produce 'Manual Billing' from any
+-- Stripe status, so this reconciliation is one-time rather than recurring.
+--
+-- DRY RUN — run this first and read every row it returns
+-- ------------------------------------------------------
 --   select p.workspace_id,
 --          p.tier,
 --          p.billing_state,
 --          p.updated_at,
 --          c.stripe_subscription_id,
---          c.stripe_price_id
+--          case when coalesce(c.stripe_subscription_id, '') <> ''
+--               then 'will be reconciled'
+--               else 'left alone — not Stripe-backed, decide by hand'
+--          end as disposition
 --     from public.workspace_subscription_profiles p
 --     left join public.workspace_billing_customers c using (workspace_id)
 --    where p.billing_state = 'Manual Billing'
---    order by p.updated_at desc;
+--    order by disposition, p.updated_at desc;
 --
--- A row with a stripe_subscription_id is a lapsed Stripe subscription and
--- should be reconciled. A row WITHOUT one was never driven by Stripe, so if any
--- appear, they were created by hand: decide those individually before running
--- the update, and re-grant them afterwards through XBAR_COMP_EMAILS rather than
--- by re-setting the column.
+-- Rows marked 'left alone' are the ones this migration cannot judge. If any of
+-- them are in fact lapsed Stripe subscriptions, reconcile them individually.
 --
 -- WHAT THIS DOES
 -- --------------
--- Moves those rows to 'Inactive', which is the state the current mapper would
--- have produced for the statuses involved. The purchased tier in `tier` is left
--- untouched, so nothing is lost: entitledTierForBillingState and the SQL
--- helpers resolve an Inactive workspace to Starter, and a workspace that
--- resubscribes is restored by the next webhook.
+-- Moves the matching rows to 'Inactive', the state the current mapper would
+-- have produced for the statuses involved.
+--
+-- Both copies of the billing state are updated, and that matters: the column
+-- is what the API and the database triggers read, but the client reads the
+-- `payload` JSON and gates on it. Updating only the column would leave the API
+-- and triggers enforcing Starter while the UI kept granting the former paid
+-- tier from a payload that still said 'Manual Billing'.
+--
+-- The payload's tier and limits are deliberately NOT rewritten here. Doing so
+-- would mean restating the whole plan matrix — including feature-flag copy — in
+-- SQL, where it would drift from api/_lib/subscription-plans.js. Instead the
+-- client clamps a payload to its billing state on the way in
+-- (restorePersistedState in src/store/xbarStoreHelpers.ts), so the corrected
+-- billingState is enough to bring the UI down to the baseline. That clamp also
+-- covers payloads this migration never sees — including the window between a
+-- subscription lapsing and the next webhook.
+--
+-- `tier` is left untouched in both places, so nothing is lost: the purchased
+-- plan is still recorded, and a workspace that resubscribes is restored by the
+-- next webhook.
 --
 -- Idempotent: re-running matches nothing, because the mapper can no longer
 -- create 'Manual Billing'.
 
 begin;
 
-update public.workspace_subscription_profiles
+update public.workspace_subscription_profiles p
    set billing_state = 'Inactive',
+       payload = jsonb_set(
+         coalesce(p.payload, '{}'::jsonb),
+         '{billingState}',
+         '"Inactive"'::jsonb,
+         true
+       ),
        updated_at = now()
- where billing_state = 'Manual Billing';
+ where p.billing_state = 'Manual Billing'
+   and exists (
+     select 1
+       from public.workspace_billing_customers c
+      where c.workspace_id = p.workspace_id
+        and coalesce(c.stripe_subscription_id, '') <> ''
+   );
 
 commit;
 
 -- AFTER APPLYING
 -- --------------
--- Confirm nothing is left behind:
+-- Confirm only deliberate rows are left:
 --
---   select count(*) from public.workspace_subscription_profiles
---    where billing_state = 'Manual Billing';   -- expect 0
+--   select p.workspace_id, c.stripe_subscription_id
+--     from public.workspace_subscription_profiles p
+--     left join public.workspace_billing_customers c using (workspace_id)
+--    where p.billing_state = 'Manual Billing';
 --
--- Then spot-check one reconciled workspace through the API: it should report
--- the Starter feature set with its purchased tier still recorded, and the seat
--- and storage triggers should enforce Starter limits.
+-- Every row returned should be one you recognise as an intentional manual
+-- account. None should carry a stripe_subscription_id.
+--
+-- Then spot-check one reconciled workspace: the API should report the Starter
+-- feature set with its purchased tier still recorded, the seat and storage
+-- triggers should enforce Starter limits, and the app should show the baseline
+-- rather than the former paid tier.

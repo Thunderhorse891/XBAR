@@ -17,6 +17,7 @@ import {
   nowStamp,
   todayStamp,
 } from '@/lib/xbarRuntime';
+import { clampSubscriptionToEntitlement } from '@/lib/subscriptionDecision';
 import {
   countReservedSharedAccessSeats,
   countReservedWorkspaceSeats,
@@ -402,6 +403,10 @@ export function restorePersistedState(raw: unknown): PersistedXbarState {
           },
         }
       : initialState.subscription;
+
+  // Policy lives in subscriptionDecision; this is the ingest point that applies
+  // it to the cloud import, the local rehydrate, and a hand-imported backup.
+  const entitledSubscription = clampSubscriptionToEntitlement(subscription);
   const legacySavedHorseIds = Array.isArray(state.savedHorseIds) ? (state.savedHorseIds as string[]) : [];
   const sharedListings = Array.isArray(state.sharedListings)
     ? (state.sharedListings as SharedListingRecord[]).map((listing) =>
@@ -431,7 +436,7 @@ export function restorePersistedState(raw: unknown): PersistedXbarState {
       ? (state.expenseReceipts as ExpenseReceipt[])
       : initialState.expenseReceipts,
     ranchAssets: Array.isArray(state.ranchAssets) ? (state.ranchAssets as RanchAsset[]) : initialState.ranchAssets,
-    subscription,
+    subscription: entitledSubscription,
     roleWorkspaces: Array.isArray(state.roleWorkspaces)
       ? (state.roleWorkspaces as RoleWorkspace[])
       : initialState.roleWorkspaces,

@@ -157,9 +157,24 @@ test('the legacy reconciliation is documented as a reviewed, data-changing step'
   // It moves the mislabelled rows to the state the current mapper would give
   // them, and leaves the purchased tier alone so nothing is lost.
   assert.match(sql, /set billing_state = 'Inactive'/);
-  assert.match(sql, /where billing_state = 'Manual Billing'/);
+  assert.match(sql, /p\.billing_state = 'Manual Billing'/);
   assert.doesNotMatch(sql, /set\s+tier\s*=/, 'the purchased tier must survive the reconciliation');
   assert.doesNotMatch(sql, /delete from/i);
+
+  // Only demonstrably Stripe-backed rows. A Manual Billing profile with no
+  // Stripe subscription behind it was created deliberately — by hand or by an
+  // invoicing arrangement — and the comp allowlist is not a substitute for it,
+  // because the database limit triggers never see the allowlist.
+  assert.match(
+    sql,
+    /stripe_subscription_id, ''\) <> ''/,
+    'the reconciliation must not downgrade manual accounts that Stripe never created',
+  );
+
+  // The client gates on the payload, not on the column, so the payload's
+  // billing state has to move with it or the UI keeps granting the paid tier.
+  assert.match(sql, /jsonb_set\(/);
+  assert.match(sql, /'\{billingState\}'/);
 });
 
 test('the reconciliation runs after the helper fix and before the grants', () => {

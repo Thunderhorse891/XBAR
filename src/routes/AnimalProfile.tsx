@@ -13,6 +13,7 @@ import { hasRoleCapability } from '@/lib/permissions';
 import { animalPassportId, identityCompleteness } from '@/lib/animalPassport';
 import { type AnimalFinancialStatus, buildRanchFinancials } from '@/lib/profitIntelligence';
 import { profitIntelligenceGate } from '@/lib/subscriptionGates';
+import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 import type { ChipTone } from '@/types/saas';
 import type { HorseStatus } from '@/types/xbar';
 
@@ -58,7 +59,7 @@ export default function AnimalProfile() {
   const currentRole = useXbarStore((s) => s.currentRole);
   const expenseReceipts = useXbarStore((s) => s.expenseReceipts);
   const salesLeads = useXbarStore((s) => s.salesLeads);
-  const subscription = useXbarStore((s) => s.subscription);
+  const subscription = useEffectiveSubscription();
   // Profit intelligence (projected profit, margin, safe-price) is a Ranch Ops
   // feature; the per-animal money panel below respects the same gate as the Money
   // view so it never leaks a paid entitlement.

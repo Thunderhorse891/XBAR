@@ -1,4 +1,5 @@
 import type { SubscriptionProfile, SubscriptionTier } from '../types/xbar.js';
+import { buildSubscriptionForTier } from './xbarRuntime.js';
 
 export const planOutcomes: Record<SubscriptionTier, string[]> = {
   Starter: [
@@ -91,4 +92,29 @@ export function isEntitledBillingState(billingState: SubscriptionProfile['billin
 /** True when `tier` is the plan this workspace is currently paying for. */
 export function isCurrentPaidPlan(subscription: SubscriptionProfile, tier: SubscriptionTier): boolean {
   return isEntitledBillingState(subscription.billingState) && subscription.tier === tier;
+}
+
+/**
+ * Reduce a subscription to what its billing state actually supports.
+ *
+ * A stored profile can claim entitlements its billing state does not carry. It
+ * may predate the effective-tier fix, or simply be the last profile written
+ * before the subscription lapsed — a canceled workspace may never receive
+ * another webhook to correct it. That object is what every client gate reads,
+ * so clamping it on the way in means no stale payload can grant more than the
+ * billing state allows, whatever produced it.
+ *
+ * The purchased tier and its rate are carried through, so a billing screen can
+ * still name the plan that lapsed. Usage counts survive too: only the limits
+ * change, so "23 of 5 horses" reads correctly after a downgrade.
+ */
+export function clampSubscriptionToEntitlement(subscription: SubscriptionProfile): SubscriptionProfile {
+  if (isEntitledBillingState(subscription.billingState)) return subscription;
+
+  return {
+    ...buildSubscriptionForTier(subscription, 'Starter'),
+    purchasedTier: subscription.purchasedTier ?? subscription.tier,
+    monthlyRate: subscription.monthlyRate,
+    billingState: subscription.billingState,
+  };
 }

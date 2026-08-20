@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   getCheckoutReadiness,
+  clampSubscriptionToEntitlement,
   isCurrentPaidPlan,
   isEntitledBillingState,
   planOutcomes,
@@ -193,4 +194,111 @@ test('no screen infers an active plan from the stored price', async () => {
       `${consumer} uses a stored price as an activity signal; use isEntitledBillingState / isCurrentPaidPlan`,
     );
   }
+});
+
+/*
+ * A stored payload must not be able to grant more than its billing state
+ * allows, whatever produced it.
+ *
+ * The client reads the subscription payload from the cloud and gates on it
+ * directly — `tier`, `sharedAccessEnabled` and the usage limits. A payload can
+ * disagree with its own billing state for reasons no single fix covers: it may
+ * predate the effective-tier change, or simply be the last profile written
+ * before the subscription lapsed, and a canceled workspace may never receive
+ * another webhook to correct it.
+ *
+ * The policy lives here; restorePersistedState applies it at ingest, so the same
+ * guard covers the cloud import, the local rehydrate, and a hand-imported
+ * backup file.
+ */
+
+/** Zeroed counts plus Starter limits — the shape a fresh profile has. */
+const initialUsage = {
+  horsesUsed: 0,
+  seatsUsed: 0,
+  documentsProcessed: 0,
+  salePacketsGenerated: 0,
+  storageUsedGb: 0,
+  sharedAccessSeatsUsed: 0,
+  ...subscriptionPlans.Starter.limits,
+};
+
+/** A complete profile, so fixtures only state the fields under test. */
+function subscriptionFixture(
+  overrides: Partial<Omit<SubscriptionProfile, 'usage'>> & { usage?: Partial<SubscriptionProfile['usage']> },
+): SubscriptionProfile {
+  return {
+    tier: 'Starter',
+    monthlyRate: 29,
+    renewalDate: '2026-01-01',
+    billingState: 'Active',
+    sharedAccessEnabled: false,
+    featureFlags: [],
+    ...overrides,
+    usage: {
+      ...(initialUsage as SubscriptionProfile['usage']),
+      ...(overrides.usage ?? {}),
+    },
+  };
+}
+
+test('a stored payload is clamped to what its billing state supports', () => {
+  const lapsed = clampSubscriptionToEntitlement(
+    subscriptionFixture({
+      tier: 'Enterprise',
+      monthlyRate: 499,
+      billingState: 'Inactive',
+      sharedAccessEnabled: true,
+      featureFlags: ['Everything in Ranch Ops'],
+      usage: { horseLimit: 2000, seatLimit: 60, documentLimit: 20000 },
+    }),
+  );
+
+  assert.equal(lapsed.tier, 'Starter', 'a lapsed payload must not keep the tier the gates read');
+  assert.equal(lapsed.sharedAccessEnabled, false);
+  assert.equal(lapsed.usage.horseLimit, 5);
+  assert.equal(lapsed.usage.seatLimit, 1);
+
+  // What was bought survives, so the billing screen can still name it.
+  assert.equal(lapsed.purchasedTier, 'Enterprise');
+  assert.equal(lapsed.monthlyRate, 499);
+  assert.equal(lapsed.billingState, 'Inactive');
+});
+
+test('an entitled payload is left untouched', () => {
+  for (const billingState of ['Active', 'Manual Billing'] as const) {
+    const restored = clampSubscriptionToEntitlement(
+      subscriptionFixture({
+        tier: 'Enterprise',
+        monthlyRate: 499,
+        billingState,
+        sharedAccessEnabled: true,
+        featureFlags: [],
+        usage: { horseLimit: 2000, seatLimit: 60 },
+      }),
+    );
+
+    assert.equal(restored.tier, 'Enterprise', `${billingState} is entitled and must keep its tier`);
+    assert.equal(restored.sharedAccessEnabled, true);
+    assert.equal(restored.usage.horseLimit, 2000);
+  }
+});
+
+test('a past-due payload drops to the baseline but keeps the account', () => {
+  const pastDue = clampSubscriptionToEntitlement(
+    subscriptionFixture({
+      tier: 'Ranch Ops',
+      monthlyRate: 199,
+      billingState: 'Past Due',
+      sharedAccessEnabled: true,
+      featureFlags: [],
+      usage: { horseLimit: 200 },
+    }),
+  );
+
+  assert.equal(pastDue.tier, 'Starter');
+  assert.equal(pastDue.purchasedTier, 'Ranch Ops');
+  // Past Due is not the same as gone: the record of what they had is intact, so
+  // recovering billing restores the tier rather than re-purchasing it.
+  assert.equal(pastDue.billingState, 'Past Due');
 });
