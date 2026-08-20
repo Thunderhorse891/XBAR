@@ -149,7 +149,7 @@ test('no Stripe status can produce Manual Billing, which is what makes the recon
 });
 
 test('the legacy reconciliation is documented as a reviewed, data-changing step', () => {
-  const sql = readFileSync(path.join(migrationsDir, '20260820_reconcile_legacy_manual_billing.sql'), 'utf8');
+  const sql = readFileSync(path.join(migrationsDir, '20260821_reconcile_legacy_manual_billing.sql'), 'utf8');
 
   assert.match(sql, /NOT YET APPLIED/);
   assert.match(sql, /DRY RUN/, 'a migration that changes entitlements for real workspaces needs a dry run');
@@ -177,6 +177,24 @@ test('the legacy reconciliation is documented as a reviewed, data-changing step'
   assert.match(sql, /'\{billingState\}'/);
 });
 
+test('every migration has a unique version prefix', () => {
+  // Supabase takes the digits before the first underscore as the migration
+  // version, so two files sharing a prefix are two migrations claiming one
+  // version and `supabase db push` has nothing to order them by. The three
+  // added here were all 20260820, which would have failed the documented apply
+  // path before any of them ran.
+  const versions = readdirSync(migrationsDir)
+    .filter((file) => file.endsWith('.sql'))
+    .map((file) => file.split('_')[0]);
+
+  const duplicates = versions.filter((version, index) => versions.indexOf(version) !== index);
+  assert.deepEqual(duplicates, [], `these migration versions are claimed more than once: ${duplicates.join(', ')}`);
+  assert.ok(
+    versions.every((version) => /^\d{8,14}$/.test(version)),
+    'a migration version must be a timestamp Supabase can order',
+  );
+});
+
 test('the reconciliation runs after the helper fix and before the grants', () => {
   // Ordering is behavioural, not cosmetic: reconciling before the helpers
   // understand 'Inactive' would downgrade the billing state without changing
@@ -185,9 +203,22 @@ test('the reconciliation runs after the helper fix and before the grants', () =>
     .filter((file) => file.endsWith('.sql'))
     .sort();
 
+  const order = [
+    '20260820_entitlement_helpers_honor_inactive.sql',
+    '20260821_reconcile_legacy_manual_billing.sql',
+    '20260822_restrict_anon_rpc_surface.sql',
+  ].map((file) => applied.indexOf(file));
+
   assert.ok(
-    applied.indexOf('20260820_entitlement_helpers_honor_inactive.sql') <
-      applied.indexOf('20260820_reconcile_legacy_manual_billing.sql'),
-    'the helper fix must apply before the data reconciliation',
+    order.every((position) => position !== -1),
+    'all three migrations should be present under their documented names',
+  );
+  // Schema, then the data it enables, then the grants. Reconciling before the
+  // helpers understand 'Inactive' would change the billing state without
+  // changing what the triggers enforce.
+  assert.deepEqual(
+    order,
+    [...order].sort((a, b) => a - b),
+    'the three must apply in the documented order',
   );
 });

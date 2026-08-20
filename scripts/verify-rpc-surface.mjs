@@ -5,7 +5,7 @@
  * The static test (tests/api/supabaseRpcSurface.test.mjs) can only check what
  * the SQL files say. This checks what a database actually grants, which is the
  * question that matters when applying
- * supabase/migrations/20260820_restrict_anon_rpc_surface.sql — deployments
+ * supabase/migrations/20260822_restrict_anon_rpc_surface.sql — deployments
  * drift from migration files, so the file being correct does not establish that
  * the database is.
  *
@@ -80,5 +80,5 @@ if (anonExtra.length === 0) {
 } else {
   console.log(`anon can still execute ${anonExtra.length} function(s) beyond the buyer share flow:`);
   for (const fn of anonExtra) console.log(`  ${fn}`);
-  console.log('Apply supabase/migrations/20260820_restrict_anon_rpc_surface.sql to close these.');
+  console.log('Apply supabase/migrations/20260822_restrict_anon_rpc_surface.sql to close these.');
 }

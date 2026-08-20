@@ -5,7 +5,7 @@ import path from 'node:path';
 
 const repoRoot = process.cwd();
 const migrationsDir = path.join(repoRoot, 'supabase', 'migrations');
-const SECURITY_MIGRATION = '20260820_restrict_anon_rpc_surface.sql';
+const SECURITY_MIGRATION = '20260822_restrict_anon_rpc_surface.sql';
 
 /*
  * The anon RPC surface.

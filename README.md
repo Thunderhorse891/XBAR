@@ -154,18 +154,21 @@ reported, never faked.
 ### Pending Supabase migrations (not applied)
 
 Three migrations in `supabase/migrations/` are written and reviewed but have
-**not** been run against any project. They are ordered, and the order matters:
+**not** been run against any project. The order matters, and it is carried by
+the version prefixes rather than by convention — Supabase takes the digits
+before the first underscore as the migration version, so each file needs its
+own:
 
 1. `20260820_entitlement_helpers_honor_inactive.sql` — schema. Makes the
    database's limit helpers agree with the API about which billing states keep
    a purchased tier. Safe to re-run: both functions are `create or replace`
    with unchanged signatures, and no trigger is detached.
-2. `20260820_reconcile_legacy_manual_billing.sql` — **data**. Reconciles rows
+2. `20260821_reconcile_legacy_manual_billing.sql` — **data**. Reconciles rows
    the previous status mapper stored as `Manual Billing` when the subscription
    had actually canceled, paused, or never completed its first payment. Without
    this, step 1 changes nothing for those workspaces, because `Manual Billing`
    is correctly still an entitled state.
-3. `20260820_restrict_anon_rpc_surface.sql` — grants. Closes the unauthenticated
+3. `20260822_restrict_anon_rpc_surface.sql` — grants. Closes the unauthenticated
    RPC surface left by PostgreSQL's default `EXECUTE` grant to `PUBLIC`.
 
 To apply, with the project linked:
