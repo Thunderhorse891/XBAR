@@ -96,9 +96,14 @@ export default function Reports() {
   // Keying this on horses alone hid every logged receipt from a workspace that
   // had recorded general ranch spend before adding its first horse — and took
   // both exports away with it — even though the report totals receipts that are
-  // not tied to a horse and renders fine with an empty roster. Financials.tsx
-  // already had this exact condition; I should have followed it.
-  if (horses.length === 0 && expenseReceipts.length === 0 && salesLeads.length === 0) {
+  // not tied to a horse and renders fine with an empty roster.
+  //
+  // Documents count for the same reason, and matter more than they look:
+  // DocumentRecord.horseId is optional, so an operation can upload documents
+  // before its first horse exists. The document count is one of the two things
+  // this screen keeps open to every tier, so hiding it here contradicted the
+  // gating decision three lines up.
+  if (horses.length === 0 && expenseReceipts.length === 0 && salesLeads.length === 0 && documents.length === 0) {
     return (
       <div className="ops-experience">
         <section className="ops-hero ops-hero--solo" aria-labelledby="reports-title">

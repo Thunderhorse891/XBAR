@@ -124,8 +124,13 @@ Required for managed Stripe billing and webhook reconciliation:
 
 Owner/QA access (all optional, all off by default):
 
-- `XBAR_COMP_EMAILS` (server) — the allowlist that actually grants full
-  entitlements for cloud actions.
+- `XBAR_COMP_EMAILS` (server) — the allowlist that grants full entitlements for
+  API-checked cloud actions. It is keyed on email rather than workspace, always
+  grants Enterprise rather than a chosen tier, and is applied by the API only —
+  the database limit triggers read `workspace_subscription_profiles` and never
+  see it. So it is a preview and QA tool, **not** a way to comp a paying
+  customer: the API would report Enterprise while seat, storage and commercial
+  writes were still refused at the stored tier.
 - `VITE_XBAR_COMP_EMAILS` (client) — the matching list so the UI shows what the
   server will honour. Set both to the same value; setting only the client one
   shows tiers the server refuses.
@@ -183,17 +188,23 @@ psql "$DATABASE_URL" -f supabase/migrations/20260820_entitlement_helpers_honor_i
 #     and its disposition. Run that query and read every row.
 # 2b. The migration is inert on its own — applying it without the setting below
 #     changes nothing and prints "reconciliation SKIPPED". Re-run it with:
-#     Omit the second -c entirely if the dry-run showed nothing to preserve;
-#     a literal '<uuid>,<uuid>' aborts the migration rather than being ignored.
+#     Omit either list entirely if it is empty; a literal '<uuid>,<uuid>'
+#     aborts the migration rather than being ignored.
 psql "$DATABASE_URL" \
   -c "set xbar.reconcile_confirmed = 'yes'" \
   -c "set xbar.reconcile_exclude = '<uuid>,<uuid>'" \
+  -c "set xbar.reconcile_terminal = '<uuid>,<uuid>'" \
   -f supabase/migrations/20260821_reconcile_legacy_manual_billing.sql
 # 2c. Confirm the outcome. The AFTER APPLYING block at the bottom of that file
 #     lists every remaining Manual Billing row with its disposition. It reads
 #     xbar.reconcile_exclude, so restate the same list if you run it in a new
 #     session, and expect the rows you excluded to come back Stripe-backed and
 #     still Manual Billing — that is what excluding them did.
+# 2d. Clear all three so they cannot colour later work in the same session:
+psql "$DATABASE_URL" \
+  -c "reset xbar.reconcile_confirmed" \
+  -c "reset xbar.reconcile_exclude" \
+  -c "reset xbar.reconcile_terminal"
 
 # 3. grants — staging first, then production
 psql "$STAGING_DATABASE_URL" -f supabase/migrations/20260822_restrict_anon_rpc_surface.sql
@@ -206,15 +217,22 @@ through Stripe at some point; it does **not** prove the current `Manual Billing`
 value came from the old mapper. If you deliberately moved a paying customer to
 manual invoicing, or comped them after they had been paying, that row looks
 identical from inside the database — list its workspace id here and it is left
-alone. Going forward, comp an account with `XBAR_COMP_EMAILS`, not by setting
-the column.
+alone.
+
+`xbar.reconcile_terminal` is the other half of that decision. A reconciled row
+is written `subscriptionRecoverable: true` by default, which withholds checkout
+so a paused or unpaid subscription cannot be bought a second time. A **canceled**
+subscription will never send another webhook to correct that flag, so a
+customer who wants to come back would stay blocked. List the workspaces you have
+confirmed in the Stripe dashboard are canceled or expired, and they are written
+`false` and can purchase immediately. The migration's RECOVERABILITY section
+carries a query over `workspace_subscription_events` to shortlist them.
 
 Use plain `set`, not `set local`: these are issued before the migration's own
 `begin`, and `set local` outside a transaction block applies nothing — the
 migration would read an empty setting and report `reconciliation SKIPPED` while
 you believed you had confirmed it. Being session-scoped, they outlive the
-migration, so `reset xbar.reconcile_confirmed` and `reset xbar.reconcile_exclude`
-when you are finished.
+migration — step 2d above clears all three when you are finished.
 
 After applying, re-run the security advisor and confirm
 `anon_security_definer_function_executable` has dropped to the intended set;

@@ -513,9 +513,68 @@ test('the reports screen gates profit intelligence behind the same feature check
 test('the reports empty state requires that there be nothing at all to report', async () => {
   const source = await readFile(path.join(process.cwd(), 'src/routes/Reports.tsx'), 'utf8');
 
-  assert.match(
-    source,
-    /horses\.length === 0 && expenseReceipts\.length === 0 && salesLeads\.length === 0/,
-    'the empty state must consider receipts and offers, not only horses',
+  // Every slice the report can render from. Asserted as a set rather than as a
+  // literal expression, so the check does not care about ordering or
+  // formatting — only that nothing reportable is missing from it.
+  const guard = source.slice(
+    source.indexOf('Only truly empty'),
+    source.indexOf('return (', source.indexOf('Only truly empty')),
   );
+  for (const slice of ['horses', 'expenseReceipts', 'salesLeads', 'documents']) {
+    assert.match(guard, new RegExp(`${slice}\\.length === 0`), `the empty state must consider ${slice}`);
+  }
+});
+
+/*
+ * The runbook has to name every setting the migration reads.
+ *
+ * This is the shape that has cost the most rounds on this PR: a setting
+ * documented where nobody looks, and absent from the command people actually
+ * copy. An operator following the README verbatim would never set
+ * xbar.reconcile_terminal, so every reconciled row would be written recoverable
+ * — and a canceled subscription sends no further webhook to correct it, so
+ * those customers would be blocked from resubscribing indefinitely.
+ */
+test('the runbook sets every reconciliation variable the migration reads', async () => {
+  const readme = await readFile(path.join(process.cwd(), 'README.md'), 'utf8');
+  const migration = await readFile(
+    path.join(process.cwd(), 'supabase/migrations/20260821_reconcile_legacy_manual_billing.sql'),
+    'utf8',
+  );
+
+  // Driven from the migration rather than from a list written here, so a
+  // setting added later is covered without anyone remembering to add it.
+  const settings = [...migration.matchAll(/current_setting\('(xbar\.[a-z_]+)', true\)/g)].map((match) => match[1]);
+  assert.ok(settings.length >= 3, `expected the migration to read several settings, found ${settings.length}`);
+
+  for (const setting of [...new Set(settings)]) {
+    assert.match(readme, new RegExp(`set ${setting.replace('.', '\\.')} = `), `the runbook must set ${setting}`);
+    assert.match(readme, new RegExp(`reset ${setting.replace('.', '\\.')}`), `the runbook must reset ${setting}`);
+  }
+});
+
+/*
+ * The runbook must not point comps at the email allowlist.
+ *
+ * The migration states plainly that XBAR_COMP_EMAILS cannot replace a
+ * deliberate 'Manual Billing' grant: it is keyed on email, always grants
+ * Enterprise, and is applied by the API, so the database limit triggers never
+ * see it. A workspace comped that way reports Enterprise while its seat,
+ * storage and commercial writes are refused at the stored tier — the exact
+ * API/database split this PR exists to close.
+ */
+test('the runbook does not recommend the email allowlist as a comp mechanism', async () => {
+  const readme = await readFile(path.join(process.cwd(), 'README.md'), 'utf8');
+
+  assert.doesNotMatch(
+    readme,
+    /comp an account with `XBAR_COMP_EMAILS`/,
+    'the allowlist is invisible to the database limit triggers',
+  );
+
+  // It may still be described — it is a real variable — but the description
+  // has to carry the limitation.
+  if (readme.includes('XBAR_COMP_EMAILS')) {
+    assert.match(readme, /database limit triggers[\s\S]{0,120}never\s+see it/);
+  }
 });
