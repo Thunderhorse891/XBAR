@@ -34,7 +34,11 @@ if (!connection) {
 const ROLES = ['anon', 'authenticated', 'service_role'];
 
 const query = `
-select r.rolname, p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' as signature
+select r.rolname,
+       p.proname || '(' || coalesce((
+         select string_agg(format_type(t, null), ', ' order by ord)
+         from unnest(p.proargtypes) with ordinality as a(t, ord)
+       ), '') || ')' as signature
 from pg_proc p
 join pg_namespace n on n.oid = p.pronamespace
 cross join (select unnest(array[${ROLES.map((role) => `'${role}'`).join(',')}]) as rolname) r
@@ -76,6 +80,12 @@ for (const role of ROLES) {
 // Exact signatures, matching the migration's allowlist. Comparing bare names
 // would report an exact surface while an unintended overload of one of these
 // names stayed executable — the drift this script exists to catch.
+//
+// Built from proargtypes, not pg_get_function_identity_arguments, which keeps
+// parameter names and would render these as
+// `xbar_resolve_public_listing(p_share_path text, p_share_token text)` —
+// matching nothing here, so a correct database would report both RPCs as
+// extra AND missing at once. Verified against PostgreSQL 16.
 const REQUIRED_ANON = ['xbar_resolve_public_listing(text, text)', 'xbar_track_public_share_view(text, text)'];
 
 const anonFunctions = byRole.get('anon');

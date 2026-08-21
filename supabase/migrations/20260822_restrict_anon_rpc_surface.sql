@@ -63,6 +63,14 @@ declare
   -- unintended `xbar_resolve_public_listing(uuid)` would keep it reachable by
   -- anon — through the very migration written to close that surface. Only
   -- these two signatures serve the buyer flow.
+  --
+  -- Signatures are built from proargtypes via format_type, NOT from
+  -- pg_get_function_identity_arguments: that function preserves parameter
+  -- names, so it renders these as
+  -- `xbar_resolve_public_listing(p_share_path text, p_share_token text)` and
+  -- never matches a type-only allowlist. Verified against PostgreSQL 16.
+  -- Getting that wrong is not a near-miss — the allowlist matches nothing, the
+  -- loop revokes both buyer RPCs, and every public share link stops resolving.
   keep_public text[] := array[
     'xbar_resolve_public_listing(text, text)',
     'xbar_track_public_share_view(text, text)'
@@ -75,7 +83,12 @@ begin
     where n.nspname = 'public'
       and p.prosecdef                       -- SECURITY DEFINER only
       and p.proname like 'xbar\_%'
-      and not (p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' = any(keep_public))
+      and not (
+        p.proname || '(' || coalesce((
+        select string_agg(format_type(t, null), ', ' order by ord)
+        from unnest(p.proargtypes) with ordinality as a(t, ord)
+      ), '') || ')' = any(keep_public)
+      )
     order by p.proname
   loop
     -- Both are needed, and neither substitutes for the other.
@@ -153,14 +166,26 @@ do $$
 declare
   fn text;
 begin
-  foreach fn in array array['xbar_resolve_public_listing', 'xbar_track_public_share_view']
+  -- Matched on the same exact signatures as the revoke above. Matching on
+  -- proname here would hand every overload of these names straight back to
+  -- anon immediately after the revoke removed it, leaving the migration
+  -- finishing with the unintended function publicly executable — the revoke
+  -- would have been undone by the line meant to restore the buyer flow.
+  foreach fn in array array[
+    'xbar_resolve_public_listing(text, text)',
+    'xbar_track_public_share_view(text, text)'
+  ]
   loop
     execute coalesce(
       (
         select string_agg(format('grant execute on function %s to anon, authenticated', p.oid::regprocedure), '; ')
         from pg_proc p
         join pg_namespace n on n.oid = p.pronamespace
-        where n.nspname = 'public' and p.proname = fn
+        where n.nspname = 'public'
+          and p.proname || '(' || coalesce((
+            select string_agg(format_type(t, null), ', ' order by ord)
+            from unnest(p.proargtypes) with ordinality as a(t, ord)
+          ), '') || ')' = fn
       ),
       'select 1'
     );

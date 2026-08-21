@@ -207,7 +207,33 @@ test('the verifier only reports success for an exact match', () => {
  * shared the blind spot: it selected `proname` and compared names, so it could
  * report an exact surface while the overload stayed executable.
  */
+
+/** Source with comment lines removed, so prose about a pitfall is not read as using it. */
+function withoutComments(source, marker) {
+  return source
+    .split('\n')
+    .filter((line) => !line.trim().startsWith(marker))
+    .join('\n');
+}
+
 const PUBLIC_RPC_SIGNATURES = ['xbar_resolve_public_listing(text, text)', 'xbar_track_public_share_view(text, text)'];
+
+test('the re-grant is restricted to the same exact signatures', () => {
+  const sql = readFileSync(path.join(migrationsDir, SECURITY_MIGRATION), 'utf8');
+
+  // The revoke and the re-grant have to agree. Matching the re-grant on
+  // proname hands every overload of an allowlisted name straight back to anon
+  // immediately after the revoke removed it — the revoke undone by the block
+  // meant to restore the buyer flow. Confirmed on PostgreSQL 16.
+  assert.doesNotMatch(
+    sql,
+    /where n\.nspname = 'public' and p\.proname = fn/,
+    'a proname-only re-grant restores every overload of the allowlisted names',
+  );
+  for (const signature of PUBLIC_RPC_SIGNATURES) {
+    assert.ok(sql.includes(`'${signature}'`));
+  }
+});
 
 test('the migration allowlists exact signatures', () => {
   const sql = readFileSync(path.join(migrationsDir, SECURITY_MIGRATION), 'utf8');
@@ -218,7 +244,15 @@ test('the migration allowlists exact signatures', () => {
 
   // The comparison has to build the signature, or the exact names above are
   // decorative and the match is still by name.
-  assert.match(sql, /pg_get_function_identity_arguments\(p\.oid\)/);
+  //
+  // Specifically NOT pg_get_function_identity_arguments: it preserves parameter
+  // names, so it renders these as
+  // `xbar_resolve_public_listing(p_share_path text, p_share_token text)` and
+  // matches nothing in a type-only allowlist. Confirmed on PostgreSQL 16 — with
+  // it, the migration leaves an unintended overload granted to anon.
+  const sqlCode = withoutComments(sql, '--');
+  assert.match(sqlCode, /format_type\(t, null\)/);
+  assert.doesNotMatch(sqlCode, /pg_get_function_identity_arguments/);
   assert.doesNotMatch(
     sql,
     /not \(p\.proname = any\(keep_public\)\)/,
@@ -233,7 +267,10 @@ test('the verifier compares the same signatures the migration keeps', () => {
     assert.ok(script.includes(`'${signature}'`), `the verifier should require ${signature} exactly`);
   }
 
-  // Its query must select the signature too, or it compares names against
-  // signatures and reports everything as missing.
-  assert.match(script, /pg_get_function_identity_arguments\(p\.oid\)/);
+  // Its query must build the same representation, or it compares one shape
+  // against another and reports every required RPC as extra AND missing at
+  // once on a correctly configured database.
+  const scriptCode = withoutComments(script, '//');
+  assert.match(scriptCode, /format_type\(t, null\)/);
+  assert.doesNotMatch(scriptCode, /pg_get_function_identity_arguments/);
 });
