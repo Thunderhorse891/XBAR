@@ -335,3 +335,60 @@ test('the runbook does not tell an operator to push all three at once', async ()
   assert.match(readme, /xbar\.reconcile_confirmed/);
   assert.match(readme, /xbar\.reconcile_exclude/);
 });
+
+/*
+ * Reconciling a legacy row must say whether Stripe can still bill it.
+ *
+ * The migration moves a row to 'Inactive', which answers what it is ENTITLED
+ * to. It does not answer whether a subscription is still live, and those come
+ * apart exactly here: the old mapper sent `canceled` (over) and `paused` /
+ * `incomplete` (resumable) to the same 'Manual Billing' value, so the stored
+ * data cannot tell them apart and workspace_billing_customers has no status
+ * column to consult.
+ *
+ * Subscriptions.tsx reads an absent `subscriptionRecoverable` as "no live
+ * subscription" and enables checkout, so writing 'Inactive' without the field
+ * would offer a second subscription to a workspace whose paused one is about
+ * to resume — the duplicate billing the client-side guard was just added to
+ * prevent, reintroduced through the database.
+ *
+ * Verified on PostgreSQL 16: a reconciled row is written recoverable, a
+ * workspace listed in xbar.reconcile_terminal is written not-recoverable, and
+ * an excluded row is not touched at all.
+ */
+test('reconciliation records whether Stripe can still bill the workspace', () => {
+  const sql = readFileSync(path.join(migrationsDir, '20260821_reconcile_legacy_manual_billing.sql'), 'utf8');
+
+  // The field is written, in the same statement that writes billingState —
+  // not left to a webhook that a canceled subscription may never send.
+  assert.match(sql, /\{subscriptionRecoverable\}/);
+
+  const update = sql.indexOf('update public.workspace_subscription_profiles');
+  const recoverable = sql.indexOf('{subscriptionRecoverable}');
+  const billingState = sql.indexOf('{billingState}', update);
+  assert.ok(update !== -1 && recoverable > update, 'the field must be written by the update itself');
+  assert.ok(billingState > update, 'both payload fields are written together');
+
+  // Defaults to recoverable. The operator opts a workspace OUT by confirming
+  // in Stripe that it is over — the reverse default would silently enable
+  // checkout on a live subscription.
+  assert.match(sql, /to_jsonb\(not \(p\.workspace_id = any\(terminal\)\)\)/);
+
+  // Parsed like the exclusion list, with the same loud failure on a typo: a
+  // mistyped id must not quietly flip a workspace to purchasable.
+  assert.match(sql, /current_setting\('xbar\.reconcile_terminal', true\)/);
+  const terminalParse = sql.slice(sql.indexOf('terminal := coalesce'));
+  assert.match(terminalParse.slice(0, 300), /trim\(value\)::uuid/);
+});
+
+test('the operator is told about the terminal list wherever the others are named', () => {
+  const sql = readFileSync(path.join(migrationsDir, '20260821_reconcile_legacy_manual_billing.sql'), 'utf8');
+
+  // In the runtime notice, not only in a comment block. The notice is what an
+  // operator actually reads when the migration skips, and a setting that is
+  // only documented in a header is a setting nobody sets.
+  assert.match(sql, /raise notice 'xbar: {3}set xbar\.reconcile_terminal/);
+
+  // And reset alongside the others, so it cannot colour a later run.
+  assert.match(sql, /reset xbar\.reconcile_terminal;/);
+});

@@ -249,12 +249,20 @@ export async function createSectionedPdf({ title, sections, footer = '', letterh
           }
 
           const valueLines = wrapLine(field.value, font, BODY_SIZE, maxWidth - LABEL_WIDTH);
+          // Room for the whole block, so a label never sits alone at the foot
+          // of a page with its value overleaf.
           ensureRoom(valueLines.length * (BODY_SIZE + LINE_GAP));
           text(field.label, MARGIN, BODY_SIZE, bold, MUTED);
           for (const valueLine of valueLines) {
+            // Checked BEFORE drawing, like paragraph() does. Checking after
+            // each line meant the last line of the last field could start a
+            // page for a line that was never coming — a trailing sheet
+            // carrying nothing but the footer and "Page 2 of 2". The block
+            // reservation above covers the common case; this catches a block
+            // taller than a page, where it cannot.
+            ensureRoom(BODY_SIZE + LINE_GAP);
             text(valueLine, MARGIN + LABEL_WIDTH, BODY_SIZE, font, INK);
             y -= BODY_SIZE + LINE_GAP;
-            ensureRoom(BODY_SIZE + LINE_GAP);
           }
         }
         continue;

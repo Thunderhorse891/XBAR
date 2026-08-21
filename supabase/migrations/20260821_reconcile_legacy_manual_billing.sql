@@ -130,11 +130,65 @@ begin;
 -- would revoke their entitlements. There is no way to tell those apart from
 -- inside the database, so the choice belongs to a person.
 --
+-- RECOVERABILITY
+-- --------------
+-- Moving a row to 'Inactive' answers what it is ENTITLED to. It does not answer
+-- whether Stripe can still charge it, and those come apart exactly here.
+--
+-- Every row this migration touches has a stripe_subscription_id, so a Stripe
+-- subscription exists or existed. The old mapper sent `canceled` (over),
+-- `paused` and `incomplete` (resumable) and anything unrecognized to the same
+-- 'Manual Billing' value, so the stored data cannot tell them apart — and
+-- workspace_billing_customers has no status column to consult.
+--
+-- The app reads `payload.subscriptionRecoverable` to decide whether to offer
+-- checkout. An absent field is read as "no live subscription", so writing
+-- 'Inactive' without it would enable the plan buttons on a paused subscription
+-- Stripe is about to resume, and the customer would be billed for two.
+--
+-- So the payload is written with `subscriptionRecoverable: true` by default.
+-- That fails toward withholding checkout, which is the same direction the
+-- application's own policy fails in (api/_lib/subscription-status.js): a
+-- wrongly withheld purchase costs a support message, a duplicate subscription
+-- takes money and needs a refund.
+--
+-- For workspaces you have CONFIRMED in the Stripe dashboard are canceled or
+-- expired, list them and they are written as `false` so they can buy again
+-- immediately:
+--
+--     set xbar.reconcile_terminal = '<uuid>,<uuid>';
+--
+-- Explicit and auditable, like the exclusion list, and for the same reason:
+-- the database cannot make this call, and guessing it in either direction
+-- costs somebody money.
+--
+-- To build that list, the last webhook payload recorded for each workspace is
+-- usually enough to see which subscriptions ended:
+--
+--     select distinct on (e.workspace_id)
+--            e.workspace_id,
+--            e.event_type,
+--            e.payload #>> '{data,object,status}' as last_status,
+--            e.processed_at
+--       from public.workspace_subscription_events e
+--      where e.workspace_id in (
+--              select p.workspace_id
+--                from public.workspace_subscription_profiles p
+--               where p.billing_state = 'Manual Billing'
+--            )
+--      order by e.workspace_id, e.processed_at desc;
+--
+-- Treat that as a shortlist, not proof: events can be pruned, and the most
+-- recent one for a workspace may not be a subscription event. Confirm anything
+-- you are about to mark terminal against Stripe itself.
+--
 -- To run it, after reading the dry-run output:
 --
 --     set xbar.reconcile_confirmed = 'yes';
 --     -- and, for any row the dry-run showed that is a deliberate grant:
 --     set xbar.reconcile_exclude = '<uuid>,<uuid>';
+--     -- and, for any row you confirmed in Stripe is canceled or expired:
+--     set xbar.reconcile_terminal = '<uuid>,<uuid>';
 --
 -- Plain `set`, not `set local`. `set local` is scoped to a transaction block,
 -- and these are issued BEFORE this file's `begin` — where PostgreSQL answers
@@ -152,7 +206,9 @@ do $$
 declare
   confirmed  text := coalesce(current_setting('xbar.reconcile_confirmed', true), '');
   raw_excl   text := coalesce(current_setting('xbar.reconcile_exclude', true), '');
+  raw_term   text := coalesce(current_setting('xbar.reconcile_terminal', true), '');
   excluded   uuid[];
+  terminal   uuid[];
   changed    integer;
 begin
   if confirmed <> 'yes' then
@@ -164,6 +220,8 @@ begin
     raise notice 'xbar:   set xbar.reconcile_confirmed = ''yes'';';
     raise notice 'xbar: and, for deliberate manual grants the dry-run listed:';
     raise notice 'xbar:   set xbar.reconcile_exclude = ''<uuid>,<uuid>'';';
+    raise notice 'xbar: and, for subscriptions Stripe confirms are over:';
+    raise notice 'xbar:   set xbar.reconcile_terminal = ''<uuid>,<uuid>'';';
     return;
   end if;
 
@@ -175,12 +233,27 @@ begin
     where trim(value) <> ''
   ), '{}'::uuid[]);
 
+  -- Same parsing, same loud failure on a typo. See RECOVERABILITY below.
+  terminal := coalesce((
+    select array_agg(trim(value)::uuid)
+    from unnest(string_to_array(raw_term, ',')) as value
+    where trim(value) <> ''
+  ), '{}'::uuid[]);
+
   update public.workspace_subscription_profiles p
      set billing_state = 'Inactive',
          payload = jsonb_set(
-           coalesce(p.payload, '{}'::jsonb),
-           '{billingState}',
-           '"Inactive"'::jsonb,
+           jsonb_set(
+             coalesce(p.payload, '{}'::jsonb),
+             '{billingState}',
+             '"Inactive"'::jsonb,
+             true
+           ),
+           -- Whether Stripe can still bill this workspace. See RECOVERABILITY
+           -- at the top of this file: true unless the operator has confirmed in
+           -- Stripe that the subscription is over.
+           '{subscriptionRecoverable}',
+           to_jsonb(not (p.workspace_id = any(terminal))),
            true
          ),
          updated_at = now()
@@ -194,7 +267,10 @@ begin
      );
 
   get diagnostics changed = row_count;
-  raise notice 'xbar: reconciled % row(s); % excluded by request.', changed, coalesce(array_length(excluded, 1), 0);
+  raise notice 'xbar: reconciled % row(s); % excluded by request; % marked terminal.',
+    changed,
+    coalesce(array_length(excluded, 1), 0),
+    coalesce(array_length(terminal, 1), 0);
 end
 $$;
 
@@ -244,6 +320,7 @@ commit;
 --
 --   reset xbar.reconcile_confirmed;
 --   reset xbar.reconcile_exclude;
+--   reset xbar.reconcile_terminal;
 --
 -- Then spot-check one reconciled workspace: the API should report the Starter
 -- feature set with its purchased tier still recorded, the seat and storage

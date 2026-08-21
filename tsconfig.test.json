@@ -25,6 +25,7 @@
     "src/lib/cloudSyncPolicy.ts",
     "src/lib/workspaceStorage.ts",
     "src/vite-env.d.ts",
+    "src/types/api-pdf.d.ts",
     "tests/**/*.ts"
   ]
 }

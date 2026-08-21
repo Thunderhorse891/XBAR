@@ -5,6 +5,7 @@ import path from 'node:path';
 import {
   getCheckoutReadiness,
   clampSubscriptionToEntitlement,
+  normalizeTier,
   hasActivePaidPlan,
   isCurrentPaidPlan,
   isEntitledBillingState,
@@ -477,4 +478,63 @@ test('the billing screen selects the lapsed tier rather than recommending from i
     'passing the lapsed tier through recommendedTier advances a plan instead of restoring it',
   );
   assert.match(source, /lapsedTier \?\? recommendedTier\(subscription\.tier\)/);
+});
+
+/*
+ * A tier string the build does not sell must never reach the plan tables.
+ *
+ * Persisted state and imported backups are cast to `SubscriptionProfile`
+ * without validation, so an old, renamed, or hand-edited tier arrives looking
+ * real. The billing screen indexes `subscriptionPlans` and `revenuePlanMatrix`
+ * with `purchasedTier` when a subscription has lapsed — both return `undefined`
+ * for an unknown string, and the route throws on the first field it reads. One
+ * bad value in a restored backup takes the whole screen down.
+ *
+ * Normalized at the restore boundary rather than in the screen that crashed:
+ * every consumer of these two fields has the same exposure, and guarding the
+ * one that was reported is how the rest would have survived.
+ */
+test('an unknown tier decays to the baseline rather than to a paid plan', () => {
+  assert.equal(normalizeTier('Platinum Elite'), 'Starter');
+  assert.equal(normalizeTier(''), 'Starter');
+  assert.equal(normalizeTier(undefined), 'Starter');
+  assert.equal(normalizeTier(null), 'Starter');
+  assert.equal(normalizeTier(42), 'Starter');
+  assert.equal(normalizeTier({ tier: 'Enterprise' }), 'Starter');
+
+  // Prototype keys are not tiers. `subscriptionPlans['constructor']` is truthy
+  // through the prototype chain, so a naive `in` or truthiness check would
+  // accept it and hand the screen an object that is not a plan.
+  assert.equal(normalizeTier('constructor'), 'Starter');
+  assert.equal(normalizeTier('toString'), 'Starter');
+
+  // Real tiers pass through untouched.
+  for (const tier of Object.keys(subscriptionPlans) as SubscriptionTier[]) {
+    assert.equal(normalizeTier(tier), tier);
+  }
+});
+
+test('clamping a lapsed subscription with an unknown tier leaves the screen renderable', () => {
+  // The shape a restored backup arrives in: a tier this build does not sell,
+  // on a subscription that has lapsed — the exact path that reaches the plan
+  // tables through purchasedTier.
+  const clamped = clampSubscriptionToEntitlement({
+    tier: 'Platinum Elite',
+    purchasedTier: 'Platinum Elite',
+    billingState: 'Inactive',
+    monthlyRate: 999,
+    renewalDate: '',
+    sharedAccessEnabled: true,
+    featureFlags: [],
+    usage: {},
+  } as unknown as SubscriptionProfile);
+
+  assert.ok(subscriptionPlans[clamped.tier], 'tier must index a real plan');
+  assert.ok(subscriptionPlans[clamped.purchasedTier as SubscriptionTier], 'purchasedTier must index a real plan');
+
+  // The exact expression Subscriptions.tsx uses to pick the plan to show.
+  const lapsedTier = isEntitledBillingState(clamped.billingState) ? undefined : clamped.purchasedTier;
+  const decisionTier = lapsedTier ?? recommendedTier(clamped.tier);
+  assert.ok(subscriptionPlans[decisionTier], 'the selected plan must exist');
+  assert.notEqual(subscriptionPlans[decisionTier].monthlyRate, undefined, 'and carry the fields the screen reads');
 });

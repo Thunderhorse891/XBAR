@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 
-import { asField, fieldsInLine, wrapLine } from '../../api/_lib/pdf.js';
+import { asField, createSectionedPdf, fieldsInLine, wrapLine } from '../../api/_lib/pdf.js';
 
 /*
  * How a template line becomes a row on the page.
@@ -151,4 +151,32 @@ test('a long URL breaks after a separator where one is available', async () => {
   // Readability, not just fit: a reader retyping the address from paper needs
   // the break to fall somewhere they can see it.
   assert.ok(/[/?&=\-_.,;:#+~%]$/.test(lines[0]), `expected the first line to end at a separator, got "${lines[0]}"`);
+});
+
+/*
+ * A page is added because there is something to put on it.
+ *
+ * Room was checked AFTER drawing each value line, so the last line of the last
+ * field could start a page for a line that was never coming: a trailing sheet
+ * carrying nothing but the footer and "Page 2 of 2". Verified against the
+ * previous code, which produced exactly that at 34 one-line fields.
+ */
+test('a section that just fits does not add a page for nothing', async () => {
+  // Swept across the boundary rather than pinned to one count, so a layout
+  // change that moves the break is still covered.
+  for (let count = 26; count <= 34; count += 1) {
+    const lines = Array.from({ length: count }, (_, index) => `Field ${index + 1}: value ${index + 1}`);
+    const bytes = await createSectionedPdf({ title: 'Boundary', sections: [{ heading: 'S', lines }], footer: 'f' });
+    const pdf = await PDFDocument.load(bytes);
+    assert.equal(pdf.getPageCount(), 1, `${count} one-line fields must fit on one page`);
+  }
+});
+
+test('content that genuinely overflows still gets its second page', async () => {
+  // Guards the fix: never adding a page would satisfy the test above and lose
+  // every field past the first page.
+  const lines = Array.from({ length: 60 }, (_, index) => `Field ${index + 1}: value ${index + 1}`);
+  const bytes = await createSectionedPdf({ title: 'Overflow', sections: [{ heading: 'S', lines }], footer: 'f' });
+  const pdf = await PDFDocument.load(bytes);
+  assert.ok(pdf.getPageCount() >= 2, 'sixty fields do not fit on one page');
 });

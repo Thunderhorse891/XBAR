@@ -17,7 +17,7 @@ import {
   nowStamp,
   todayStamp,
 } from '@/lib/xbarRuntime';
-import { clampSubscriptionToEntitlement } from '@/lib/subscriptionDecision';
+import { clampSubscriptionToEntitlement, normalizeTier } from '@/lib/subscriptionDecision';
 import {
   countReservedSharedAccessSeats,
   countReservedWorkspaceSeats,
@@ -380,6 +380,16 @@ export function restorePersistedState(raw: unknown): PersistedXbarState {
       ? {
           ...(state.subscription as SubscriptionProfile),
           billingState: normalizeBillingState((state.subscription as SubscriptionProfile).billingState),
+          // Both tier fields, not just the entitled one. `purchasedTier` is
+          // what the billing screen indexes the plan tables with when a
+          // subscription has lapsed, so an unknown value there is as fatal as
+          // one in `tier` — and it is the field an old backup is most likely to
+          // carry, since it holds whatever was bought however long ago.
+          tier: normalizeTier((state.subscription as SubscriptionProfile).tier),
+          purchasedTier: normalizeTier(
+            (state.subscription as SubscriptionProfile).purchasedTier ??
+              (state.subscription as SubscriptionProfile).tier,
+          ),
           sharedAccessEnabled:
             (state.subscription as SubscriptionProfile).sharedAccessEnabled ??
             (state.subscription as SubscriptionProfile & { ownerPortalEnabled?: boolean }).ownerPortalEnabled ??

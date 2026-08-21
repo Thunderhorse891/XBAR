@@ -1,133 +1,357 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, PageHead, ReadinessChart, StatusChip } from '@/components/saas';
-import { useXbarStore } from '@/store/useXbarStore';
+import { EmptyState } from '@/components/EmptyState';
+import { MetricCard, Panel, Pill } from '@/components/app-ui';
+import { ReadinessChart } from '@/components/saas';
 import { HorsesIcon } from '@/components/icons';
+import { formatCompactCurrency, formatCurrency } from '@/lib/format';
+import { buildRanchReport } from '@/lib/ranchReport';
+import { downloadRanchReportCsv, downloadRanchReportPdf } from '@/lib/ranchReportExport';
+import { useUiStore } from '@/store/useUiStore';
+import { useXbarStore } from '@/store/useXbarStore';
+import './operationsExperience.css';
+import './reportsExperience.css';
 
+/*
+ * What the operation is worth, what it costs, and what is holding money up.
+ *
+ * This screen used to show three counts and a readiness donut — nothing about
+ * money, and no way to get any of it out of the app. The arithmetic was already
+ * in the product (businessIntelligence.ts) but only ever appeared per-horse in
+ * the sale-packet wizard and as alerts on the reminders screen, so there was no
+ * place that answered the question an owner actually asks.
+ */
 export default function Reports() {
   const navigate = useNavigate();
-  const horses = useXbarStore((s) => s.horses);
-  const documents = useXbarStore((s) => s.documents);
-  const salesLeads = useXbarStore((s) => s.salesLeads);
+  const pushToast = useUiStore((state) => state.pushToast);
+  const horses = useXbarStore((state) => state.horses);
+  const documents = useXbarStore((state) => state.documents);
+  const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
+  const salesLeads = useXbarStore((state) => state.salesLeads);
+  const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
+  const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
+  const [exporting, setExporting] = useState<'pdf' | null>(null);
 
-  const model = useMemo(() => {
-    const scores = horses.map((h) => h.readiness?.score ?? 0);
-    const avg = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
-    const ready = scores.filter((s) => s >= 95).length;
-    const gettingThere = scores.filter((s) => s >= 75 && s < 95).length;
-    const notReady = scores.filter((s) => s < 75).length;
-    const segments = [
-      { label: 'Ready to sell', value: ready, tone: 'var(--xbar-success)' },
-      { label: 'Getting there', value: gettingThere, tone: 'var(--xbar-warning)' },
-      { label: 'Not ready', value: notReady, tone: 'var(--xbar-danger)' },
-    ];
-    const needsReview = documents.filter(
-      (d) => d.state === 'Needs Review' || d.state === 'Queued' || d.state === 'Matched',
-    ).length;
-    const activeSales = salesLeads.filter((l) => l.stage !== 'Closed').length;
-    const buyers = new Set(salesLeads.map((l) => l.name)).size;
-    return { avg, segments, needsReview, activeSales, buyers };
-  }, [horses, documents, salesLeads]);
+  const report = useMemo(
+    () => buildRanchReport({ horses, documents, expenseReceipts, salesLeads, ownershipRecords }),
+    [horses, documents, expenseReceipts, salesLeads, ownershipRecords],
+  );
+
+  const readinessSegments = [
+    { label: 'Ready to sell', value: report.readiness.ready, tone: 'var(--xbar-success)' },
+    { label: 'Getting there', value: report.readiness.gettingThere, tone: 'var(--xbar-warning)' },
+    { label: 'Not ready', value: report.readiness.notReady, tone: 'var(--xbar-danger)' },
+  ];
+
+  const handlePdf = async () => {
+    setExporting('pdf');
+    try {
+      await downloadRanchReportPdf(report, workspaceProfile.ranchName);
+    } catch {
+      // Rendering happens in this tab with data already in memory, so the only
+      // way here is a genuine failure. Say so rather than leaving a button that
+      // looks like it worked.
+      pushToast({
+        title: 'Report could not be created',
+        message: 'Nothing was saved. Try again, or export the spreadsheet instead.',
+        tone: 'warning',
+      });
+    } finally {
+      setExporting(null);
+    }
+  };
 
   if (horses.length === 0) {
     return (
-      <>
-        <PageHead
-          eyebrow="Account"
-          title="Reports"
-          subtitle="See how ready your horses are to sell, and what documents need attention."
-        />
-        <Card>
-          <div className="xs-empty">Add horses and documents to see your reports here.</div>
-        </Card>
-      </>
+      <div className="ops-experience">
+        <section className="ops-hero ops-hero--solo" aria-labelledby="reports-title">
+          <div>
+            <div className="ops-kicker">Ranch reporting</div>
+            <h1 id="reports-title">Know what the herd is worth</h1>
+            <p>
+              Cost per horse, break-even, what is waiting on documents, and where the spend is going — in one report you
+              can hand to a banker or an accountant.
+            </p>
+          </div>
+        </section>
+        <Panel title="Nothing to report yet" description="Add horses and log receipts to see the numbers here.">
+          <EmptyState
+            title="No horses on record"
+            description="The report is built from your horses, receipts, documents and offers. Add a horse to get started."
+            action={
+              <button className="button button--primary" type="button" onClick={() => navigate('/horses')}>
+                Add a horse
+              </button>
+            }
+          />
+        </Panel>
+      </div>
     );
   }
 
   return (
-    <>
-      <PageHead
-        eyebrow="Account"
-        title="Reports"
-        subtitle="See how ready your horses are to sell, and what documents need attention."
-      />
-
-      <div className="xs-grid-2">
-        <Card title="Ready to Sell" subtitle="How close your horses are to being sale-ready">
-          <div className="xs-readiness">
+    <div className="ops-experience">
+      <section className="ops-hero" aria-labelledby="reports-title">
+        <div>
+          <div className="ops-kicker">Ranch reporting</div>
+          <h1 id="reports-title">Know what the herd is worth</h1>
+          <p>
+            Cost per horse, break-even, what is waiting on documents, and where the spend is going. Export it and hand
+            it to a banker, an accountant or a partner.
+          </p>
+          <div className="ops-hero__actions">
+            <button className="button button--primary" type="button" onClick={handlePdf} disabled={exporting === 'pdf'}>
+              {exporting === 'pdf' ? 'Creating PDF…' : 'Download PDF report'}
+            </button>
+            <button className="button button--ghost" type="button" onClick={() => downloadRanchReportCsv(report)}>
+              Export spreadsheet
+            </button>
+          </div>
+        </div>
+        <div className="ops-hero__ledger" aria-label="Money summary">
+          <span>Invested to date</span>
+          <strong>{formatCompactCurrency(report.money.investedToDate)}</strong>
+          <small>{formatCurrency(report.money.monthlyBurn)} per month, 3-month average</small>
+          <div className="ops-hero__mini-grid">
             <div>
-              <ReadinessChart
-                score={model.avg}
-                segments={model.segments}
-                mark={<HorsesIcon width={26} height={26} />}
-              />
-              <div className="xs-legend">
-                {model.segments.map((seg) => (
-                  <span key={seg.label} className="xs-legend__item">
-                    <span className="xs-legend__swatch" style={{ background: seg.tone }} /> {seg.label} · {seg.value}
-                  </span>
-                ))}
+              <span>Listed</span>
+              <b>{formatCompactCurrency(report.money.listedValue)}</b>
+            </div>
+            <div>
+              <span>Held up</span>
+              <b>{formatCompactCurrency(report.money.valueAtRisk)}</b>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="ops-metric-grid">
+        <MetricCard
+          className="ops-metric-card"
+          label="Ready to close"
+          value={formatCompactCurrency(report.money.readyValue)}
+          detail="Listed value with no blockers"
+          tone="emerald"
+        />
+        <MetricCard
+          className="ops-metric-card"
+          label="Waiting on documents"
+          value={formatCompactCurrency(report.money.valueAtRisk)}
+          detail={`${report.risk.items.length} horse${report.risk.items.length === 1 ? '' : 's'} blocked`}
+          tone={report.money.valueAtRisk > 0 ? 'amber' : 'slate'}
+        />
+        <MetricCard
+          className="ops-metric-card"
+          label="Open offers"
+          value={formatCompactCurrency(report.money.pipelineValue)}
+          detail={`${formatCurrency(report.money.depositsHeld)} in deposits held`}
+          tone="blue"
+        />
+        <MetricCard
+          className="ops-metric-card"
+          label="Spent this month"
+          value={formatCompactCurrency(report.money.investedThisMonth)}
+          detail={`${formatCompactCurrency(report.money.investedInHorses)} tied to horses`}
+          tone="slate"
+        />
+      </div>
+
+      {report.risk.items.length > 0 ? (
+        <Panel
+          className="ops-panel"
+          title="What is holding up a sale"
+          description="Listed dollars a buyer cannot close on today, largest first."
+        >
+          <div className="report-risk">
+            {report.risk.items.map((item) => (
+              <div className="report-risk__row" key={item.horseId}>
+                <div className="report-risk__main">
+                  <span className="report-risk__name">{item.horseName}</span>
+                  <span className="report-risk__blockers">{item.blockers.join(' · ')}</span>
+                </div>
+                <span className="report-risk__amount">{formatCurrency(item.askPrice)}</span>
+                <button
+                  className="button button--ghost button--compact"
+                  type="button"
+                  onClick={() => navigate(item.actionRoute)}
+                >
+                  {item.actionLabel}
+                </button>
               </div>
-            </div>
-            <div className="xs-rows">
-              {horses.map((h) => {
-                const score = h.readiness?.score ?? 0;
-                return (
-                  <div
-                    key={h.id}
-                    className="xs-row"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => navigate(`/horses/${h.id}`)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        navigate(`/horses/${h.id}`);
-                      }
-                    }}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <span className="xs-row__main">
-                      <span className="xs-row__title">{h.name}</span>
-                      <span className="xs-row__meta">{score}% ready</span>
+            ))}
+          </div>
+        </Panel>
+      ) : null}
+
+      <Panel
+        className="ops-panel"
+        title="Cost and margin by horse"
+        description="What each horse has cost, what it burns per month, and the lowest price worth taking."
+      >
+        <div className="report-table-scroll">
+          <table className="report-table">
+            <thead>
+              <tr>
+                <th scope="col">Horse</th>
+                <th scope="col" className="report-table__num">
+                  Invested
+                </th>
+                <th scope="col" className="report-table__num">
+                  Per month
+                </th>
+                <th scope="col" className="report-table__num">
+                  Asking
+                </th>
+                <th scope="col" className="report-table__num">
+                  Break-even
+                </th>
+                <th scope="col" className="report-table__num">
+                  Margin
+                </th>
+                <th scope="col" className="report-table__num">
+                  Floor
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.horses.map((horse) => (
+                <tr
+                  key={horse.horseId}
+                  onClick={() => navigate(`/horses/${horse.horseId}`)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      navigate(`/horses/${horse.horseId}`);
+                    }
+                  }}
+                  tabIndex={0}
+                  role="link"
+                  aria-label={`${horse.horseName}, open profile`}
+                >
+                  <th scope="row">
+                    <span className="report-table__name">{horse.horseName}</span>
+                    <span className="report-table__meta">{horse.status}</span>
+                  </th>
+                  <td className="report-table__num">{formatCurrency(horse.investedToDate)}</td>
+                  <td className="report-table__num">{formatCurrency(horse.monthlyBurn)}</td>
+                  {/* A horse with no asking price is not listed. Showing $0
+                      would read as "worth nothing" rather than "not for sale",
+                      and the three derived columns are meaningless without it. */}
+                  {horse.askPrice > 0 ? (
+                    <>
+                      <td className="report-table__num">{formatCurrency(horse.askPrice)}</td>
+                      <td className="report-table__num">{formatCurrency(horse.breakEvenPrice)}</td>
+                      <td className="report-table__num">
+                        <Pill tone={horse.projectedMargin >= 0 ? 'emerald' : 'rose'}>
+                          {formatCurrency(horse.projectedMargin)} · {horse.marginPercent}%
+                        </Pill>
+                      </td>
+                      <td className="report-table__num">{formatCurrency(horse.safeDiscountFloor)}</td>
+                    </>
+                  ) : (
+                    <td className="report-table__num report-table__muted" colSpan={4}>
+                      Not listed for sale
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
+      <div className="ops-workspace ops-workspace--columns">
+        <Panel
+          className="ops-panel"
+          title="Where the spend goes"
+          description={`${formatCurrency(report.money.investedToDate)} recorded across ${report.categories.length} categor${report.categories.length === 1 ? 'y' : 'ies'}.`}
+        >
+          {report.categories.length ? (
+            <div className="report-bars">
+              {report.categories.map((category) => (
+                <div className="report-bar" key={category.category}>
+                  <div className="report-bar__head">
+                    <span>{category.category}</span>
+                    <span>
+                      {formatCurrency(category.total)} · {category.share}%
                     </span>
-                    <StatusChip tone={score >= 95 ? 'success' : score >= 75 ? 'warning' : 'danger'}>
-                      {score >= 95 ? 'Ready' : score >= 75 ? 'Getting there' : 'Not ready'}
-                    </StatusChip>
                   </div>
-                );
-              })}
+                  <div className="report-bar__track">
+                    <div className="report-bar__fill" style={{ width: `${Math.max(category.share, 2)}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              compact
+              title="No receipts logged"
+              description="Upload receipts to see where the money goes and what each horse costs."
+              action={
+                <button className="button button--ghost" type="button" onClick={() => navigate('/expenses')}>
+                  Log a receipt
+                </button>
+              }
+            />
+          )}
+        </Panel>
+
+        <Panel
+          className="ops-panel"
+          title="Sale readiness"
+          description={`${report.readiness.average}% average across ${report.horseCount} horse${report.horseCount === 1 ? '' : 's'}.`}
+        >
+          <div className="report-readiness">
+            <ReadinessChart
+              score={report.readiness.average}
+              segments={readinessSegments}
+              mark={<HorsesIcon width={26} height={26} />}
+            />
+            <div className="xs-legend">
+              {readinessSegments.map((segment) => (
+                <span key={segment.label} className="xs-legend__item">
+                  <span className="xs-legend__swatch" style={{ background: segment.tone }} /> {segment.label} ·{' '}
+                  {segment.value}
+                </span>
+              ))}
             </div>
           </div>
-        </Card>
-
-        <Card title="Documents" subtitle="What needs checking">
-          <div className="xs-bigstat">
-            <span className="xs-bigstat__num">{model.needsReview}</span>
-            <span className="xs-bigstat__txt">to check</span>
-          </div>
-          <button type="button" className="xs-btn xs-btn--block" onClick={() => navigate('/documents')}>
-            Open Documents
-          </button>
-        </Card>
+          {report.documentsToReview > 0 ? (
+            <button className="button button--ghost button--block" type="button" onClick={() => navigate('/documents')}>
+              {report.documentsToReview} document{report.documentsToReview === 1 ? '' : 's'} to review
+            </button>
+          ) : null}
+        </Panel>
       </div>
 
-      <div className="xs-grid-3">
-        <Card>
-          <div className="xs-card__sub">Horses for sale</div>
-          <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 30, fontWeight: 700 }}>
-            {model.activeSales}
+      {report.anomalies.length > 0 ? (
+        <Panel
+          className="ops-panel"
+          title="Running above trend"
+          description="Categories more than 25% above their three-month average."
+        >
+          <div className="report-risk">
+            {report.anomalies.map((anomaly) => (
+              <div className="report-risk__row" key={anomaly.category}>
+                <div className="report-risk__main">
+                  <span className="report-risk__name">{anomaly.category}</span>
+                  <span className="report-risk__blockers">
+                    {formatCurrency(anomaly.monthTotal)} this month vs {formatCurrency(anomaly.trailingAverage)} average
+                  </span>
+                </div>
+                <span className="report-risk__amount">+{anomaly.deltaPercent}%</span>
+                <button
+                  className="button button--ghost button--compact"
+                  type="button"
+                  onClick={() => navigate(anomaly.actionRoute)}
+                >
+                  {anomaly.actionLabel}
+                </button>
+              </div>
+            ))}
           </div>
-        </Card>
-        <Card>
-          <div className="xs-card__sub">Buyers in progress</div>
-          <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 30, fontWeight: 700 }}>{model.buyers}</div>
-        </Card>
-        <Card>
-          <div className="xs-card__sub">Average ready-to-sell</div>
-          <div style={{ fontFamily: 'var(--xbar-font-display)', fontSize: 30, fontWeight: 700 }}>{model.avg}%</div>
-        </Card>
-      </div>
-    </>
+        </Panel>
+      ) : null}
+    </div>
   );
 }

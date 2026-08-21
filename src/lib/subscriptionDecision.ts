@@ -1,5 +1,5 @@
 import type { SubscriptionProfile, SubscriptionTier } from '../types/xbar.js';
-import { buildSubscriptionForTier } from './xbarRuntime.js';
+import { buildSubscriptionForTier, subscriptionTierConfig } from './xbarRuntime.js';
 
 export const planOutcomes: Record<SubscriptionTier, string[]> = {
   Starter: [
@@ -157,12 +157,36 @@ export function isCurrentPaidPlan(subscription: SubscriptionProfile, tier: Subsc
  * still name the plan that lapsed. Usage counts survive too: only the limits
  * change, so "23 of 5 horses" reads correctly after a downgrade.
  */
+/**
+ * Coerce a stored tier to one this build actually sells.
+ *
+ * Persisted state and imported backups are cast to `SubscriptionProfile`
+ * without validation, so an old, renamed, or hand-edited tier string reaches
+ * the app as if it were real. Anything that indexes `subscriptionTierConfig` with it
+ * gets `undefined` and throws on the first field it reads — the billing screen
+ * does exactly that with `purchasedTier` when a lapsed plan is selected, so a
+ * single bad string in a restored backup takes the whole route down.
+ *
+ * Falls back to the baseline for the same reason `normalizeBillingState` falls
+ * to 'Inactive': an unreadable value must decay to the least-privileged
+ * option, never to a paid one.
+ */
+export function normalizeTier(value: unknown): SubscriptionTier {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(subscriptionTierConfig, value)
+    ? (value as SubscriptionTier)
+    : 'Starter';
+}
+
 export function clampSubscriptionToEntitlement(subscription: SubscriptionProfile): SubscriptionProfile {
   if (isEntitledBillingState(subscription.billingState)) return subscription;
 
   return {
     ...buildSubscriptionForTier(subscription, 'Starter'),
-    purchasedTier: subscription.purchasedTier ?? subscription.tier,
+    // Normalized here too, not only at restore. This function is the other
+    // producer of purchasedTier, and it is the value the billing screen indexes
+    // the plan tables with — leaving it unchecked in one of the two producers
+    // is how the crash would have come back.
+    purchasedTier: normalizeTier(subscription.purchasedTier ?? subscription.tier),
     monthlyRate: subscription.monthlyRate,
     billingState: subscription.billingState,
   };
