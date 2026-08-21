@@ -261,6 +261,71 @@ test('the reconciliation is inert unless an operator confirms it', () => {
   assert.match(sql, /trim\(value\)::uuid/);
 });
 
+/*
+ * Every instruction that hands the operator a `set` must use the session form.
+ *
+ * `set local` is scoped to a transaction block. Both documented paths issue
+ * these settings BEFORE the migration's own `begin` — the README passes them
+ * with `psql -c`, and the in-file instruction is pasted above the file — where
+ * PostgreSQL answers `WARNING: SET LOCAL can only be used in transaction
+ * blocks` and applies nothing. The migration then reads an empty setting and
+ * prints "reconciliation SKIPPED" while the operator believes they confirmed
+ * it. Verified against PostgreSQL 16.
+ *
+ * Asserted by shape across the whole file and the README rather than at the
+ * lines that were wrong: the instruction appeared in three places (a comment
+ * block, a runtime `raise notice`, and the runbook) and fixing one is exactly
+ * how the other two survived.
+ */
+test('no reconciliation instruction tells the operator to use set local', () => {
+  const sql = readFileSync(path.join(migrationsDir, '20260821_reconcile_legacy_manual_billing.sql'), 'utf8');
+  const readme = readFileSync(path.join(repoRoot, 'README.md'), 'utf8');
+
+  // Prose may discuss `set local` to explain why it is wrong. An instruction
+  // is the form that actually sets one of these two variables.
+  const badInstruction = /set\s+local\s+xbar\.reconcile_(confirmed|exclude)/i;
+  assert.ok(!badInstruction.test(sql), 'the migration must not instruct `set local`');
+  assert.ok(!badInstruction.test(readme), 'the README must not instruct `set local`');
+
+  // And the working form is present in both, including the runtime notice the
+  // operator reads when the migration skips.
+  assert.match(sql, /raise notice 'xbar: {3}set xbar\.reconcile_confirmed/);
+  assert.match(readme, /set xbar\.reconcile_confirmed = 'yes'/);
+});
+
+/*
+ * The post-apply check must agree with the exclusion list it just honored.
+ *
+ * An excluded row is by definition a Stripe-backed workspace left on
+ * `Manual Billing` — that is what excluding it did. An earlier version of this
+ * note told the operator that no surviving row should carry a
+ * stripe_subscription_id, which declared the intended outcome invalid and
+ * pointed them at revoking the grant they had deliberately kept.
+ */
+test('the post-apply check classifies excluded rows as preserved, not as errors', () => {
+  const sql = readFileSync(path.join(migrationsDir, '20260821_reconcile_legacy_manual_billing.sql'), 'utf8');
+  const after = sql.slice(sql.indexOf('-- AFTER APPLYING\n-- --------------'));
+  assert.ok(after.length > 0, 'the AFTER APPLYING section must exist');
+
+  // It reads the same setting the UPDATE honored, so a preserved row is
+  // recognisable rather than indistinguishable from a missed one.
+  assert.match(after, /current_setting\('xbar\.reconcile_exclude', true\)/);
+  assert.match(after, /preserved on purpose/);
+
+  // Only a Stripe-backed, non-excluded row is a problem.
+  assert.match(after, /UNEXPECTED/);
+
+  // The retracted instruction must not come back in any form.
+  assert.ok(
+    !/None should carry a stripe_subscription_id/i.test(after),
+    'an excluded row is supposed to keep its stripe_subscription_id',
+  );
+
+  // The setting does not survive a new psql invocation, so the check has to say
+  // to restate it; without that it reports every preserved row as UNEXPECTED.
+  assert.match(after, /restate/i);
+});
+
 test('the runbook does not tell an operator to push all three at once', async () => {
   const readme = readFileSync(path.join(repoRoot, 'README.md'), 'utf8');
 

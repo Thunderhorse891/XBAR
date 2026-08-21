@@ -183,10 +183,17 @@ psql "$DATABASE_URL" -f supabase/migrations/20260820_entitlement_helpers_honor_i
 #     and its disposition. Run that query and read every row.
 # 2b. The migration is inert on its own — applying it without the setting below
 #     changes nothing and prints "reconciliation SKIPPED". Re-run it with:
+#     Omit the second -c entirely if the dry-run showed nothing to preserve;
+#     a literal '<uuid>,<uuid>' aborts the migration rather than being ignored.
 psql "$DATABASE_URL" \
   -c "set xbar.reconcile_confirmed = 'yes'" \
   -c "set xbar.reconcile_exclude = '<uuid>,<uuid>'" \
   -f supabase/migrations/20260821_reconcile_legacy_manual_billing.sql
+# 2c. Confirm the outcome. The AFTER APPLYING block at the bottom of that file
+#     lists every remaining Manual Billing row with its disposition. It reads
+#     xbar.reconcile_exclude, so restate the same list if you run it in a new
+#     session, and expect the rows you excluded to come back Stripe-backed and
+#     still Manual Billing — that is what excluding them did.
 
 # 3. grants — staging first, then production
 psql "$STAGING_DATABASE_URL" -f supabase/migrations/20260822_restrict_anon_rpc_surface.sql
@@ -201,6 +208,13 @@ manual invoicing, or comped them after they had been paying, that row looks
 identical from inside the database — list its workspace id here and it is left
 alone. Going forward, comp an account with `XBAR_COMP_EMAILS`, not by setting
 the column.
+
+Use plain `set`, not `set local`: these are issued before the migration's own
+`begin`, and `set local` outside a transaction block applies nothing — the
+migration would read an empty setting and report `reconciliation SKIPPED` while
+you believed you had confirmed it. Being session-scoped, they outlive the
+migration, so `reset xbar.reconcile_confirmed` and `reset xbar.reconcile_exclude`
+when you are finished.
 
 After applying, re-run the security advisor and confirm
 `anon_security_definer_function_executable` has dropped to the intended set;

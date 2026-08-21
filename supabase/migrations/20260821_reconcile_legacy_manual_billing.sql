@@ -132,14 +132,22 @@ begin;
 --
 -- To run it, after reading the dry-run output:
 --
---     set local xbar.reconcile_confirmed = 'yes';
+--     set xbar.reconcile_confirmed = 'yes';
 --     -- and, for any row the dry-run showed that is a deliberate grant:
---     set local xbar.reconcile_exclude = '<uuid>,<uuid>';
+--     set xbar.reconcile_exclude = '<uuid>,<uuid>';
 --
--- Both are `set local`, so they are scoped to this file's transaction and revert
--- at `commit`. They cannot be left on by accident — and by the same token they
--- are not readable afterwards, which is why the AFTER APPLYING check below has
--- to restate the exclusion list rather than inherit it.
+-- Plain `set`, not `set local`. `set local` is scoped to a transaction block,
+-- and these are issued BEFORE this file's `begin` — where PostgreSQL answers
+-- with `WARNING: SET LOCAL can only be used in transaction blocks` and applies
+-- nothing. The migration would then read an empty setting and print
+-- "reconciliation SKIPPED" while the operator believed they had confirmed it.
+-- Verified against PostgreSQL 16. This form matches the psql invocation in
+-- README.md and works whether you pass it with `-c` or paste it into a SQL
+-- editor above the file.
+--
+-- Being session-scoped, they outlive this file's `commit`. That is what lets the
+-- AFTER APPLYING check below classify the rows you excluded — but it also means
+-- they persist until the session ends, so `reset` them when you are done.
 do $$
 declare
   confirmed  text := coalesce(current_setting('xbar.reconcile_confirmed', true), '');
@@ -150,7 +158,12 @@ begin
   if confirmed <> 'yes' then
     raise notice 'xbar: reconciliation SKIPPED — no rows changed.';
     raise notice 'xbar: read the dry-run at the top of this file, then re-run with';
-    raise notice 'xbar:   set local xbar.reconcile_confirmed = ''yes'';';
+    -- Plain `set`. `set local` here would be issued outside a transaction block,
+    -- where PostgreSQL warns and applies nothing — so an operator who copied
+    -- this notice verbatim would land straight back on this same message.
+    raise notice 'xbar:   set xbar.reconcile_confirmed = ''yes'';';
+    raise notice 'xbar: and, for deliberate manual grants the dry-run listed:';
+    raise notice 'xbar:   set xbar.reconcile_exclude = ''<uuid>,<uuid>'';';
     return;
   end if;
 
@@ -189,16 +202,16 @@ commit;
 
 -- AFTER APPLYING
 -- --------------
--- `set local` above is TRANSACTION-scoped, so both settings are gone the moment
--- this file's `commit` runs — verified against PostgreSQL 16. This query cannot
--- inherit the exclusion list, not even in the very same psql session. Restate it
--- here with a plain `set`, exactly as you passed it to the apply block:
+-- This reads `xbar.reconcile_exclude` so it can tell a row you kept on purpose
+-- from one that was missed. Run it in the same session that applied the file and
+-- it inherits the setting. Run it anywhere else — a new psql invocation, a
+-- different SQL editor tab — and it sees nothing, so restate the same list first:
 --
 --   set xbar.reconcile_exclude = '<uuid>,<uuid>';  -- omit if you excluded nothing
 --
--- Skipping that line is not a small inaccuracy: with the setting empty, every
--- row you deliberately preserved is reported as UNEXPECTED below — the same
--- wrong instruction this note was rewritten to remove.
+-- Not a small inaccuracy to skip: with the setting empty, every row you
+-- deliberately preserved is reported as UNEXPECTED below — the same wrong
+-- instruction this note was rewritten to remove.
 --
 --   select p.workspace_id,
 --          p.tier,
@@ -226,8 +239,10 @@ commit;
 -- stripe_subscription_id, which would have sent you to revoke the exact grant
 -- you had just decided to keep.
 --
--- Then clear the setting, so it cannot colour a later query in the same session:
+-- Then clear both settings, so they cannot silently apply to later work in the
+-- same session:
 --
+--   reset xbar.reconcile_confirmed;
 --   reset xbar.reconcile_exclude;
 --
 -- Then spot-check one reconciled workspace: the API should report the Starter
