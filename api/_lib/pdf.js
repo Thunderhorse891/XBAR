@@ -3,10 +3,21 @@ import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib';
 const PAGE_WIDTH = 612; // US Letter
 const PAGE_HEIGHT = 792;
 const MARGIN = 56;
-const BODY_SIZE = 11;
-const HEADING_SIZE = 14;
-const TITLE_SIZE = 20;
-const LINE_GAP = 5;
+const BODY_SIZE = 10.5;
+const HEADING_SIZE = 12;
+const TITLE_SIZE = 22;
+const LINE_GAP = 6;
+const SECTION_GAP = 18;
+
+// A label column wide enough for the longest label the templates actually use
+// ("Registration number", "Balance due on or before"), so values line up down
+// the page instead of starting wherever the label happened to end.
+const LABEL_WIDTH = 168;
+
+const INK = rgb(0.09, 0.1, 0.13);
+const MUTED = rgb(0.42, 0.45, 0.5);
+const RULE = rgb(0.82, 0.84, 0.87);
+const ACCENT = rgb(0.16, 0.35, 0.55);
 
 function wrapLine(text, font, size, maxWidth) {
   const words = String(text).split(/\s+/).filter(Boolean);
@@ -27,9 +38,58 @@ function wrapLine(text, font, size, maxWidth) {
   return lines;
 }
 
-// Renders { title, sections: [{ heading, lines }], footer } into a paginated
-// US Letter PDF. Returns a Uint8Array.
-export async function createSectionedPdf({ title, sections, footer = '' }) {
+/*
+ * Templates express almost everything as "Label: value", often several to a
+ * line separated by wide spaces:
+ *
+ *   Breed: {{horse.breed}}    Color: {{horse.color}}    Sex: {{horse.gender}}
+ *
+ * Rendering those as running text is what made these read like a memo rather
+ * than a document: the reader has to scan each line to find where one field
+ * ends and the next begins. Splitting them into stacked label/value rows is the
+ * single largest change here, and it applies to nearly every line of every
+ * template without any template being rewritten.
+ */
+const BLANK_RUN = /_{3,}/g;
+
+export function asField(part) {
+  const match = /^([^:]{1,40}):\s*(.*)$/.exec(String(part).trim());
+  if (!match) return null;
+
+  // A run of underscores is a space to write in — that is how the templates
+  // write signature and date lines, and it is also what renderPlaceholders
+  // substitutes for a value the workspace has not filled in yet. Both mean the
+  // same thing to whoever is holding the page, so both become a ruled blank
+  // rather than a row of typed underscores.
+  //
+  // Stripped rather than tested for, because a value can be partly known:
+  // "Registration #: {{registrationNumber}} ({{registry}})" with no registry
+  // yields "AQHA 5488210 (____________)". Blanking the whole field there would
+  // drop a real registration number off a bill of sale. What survives the strip
+  // is what the workspace actually knows; only an empty residue is a blank.
+  const value = match[2]
+    .replace(BLANK_RUN, ' ')
+    .replace(/\(\s*\)/g, '') // an empty parenthetical left by a missing value
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  return { label: match[1].trim(), value };
+}
+
+/** One line, split into the fields it actually contains, or null if it is prose. */
+export function fieldsInLine(line) {
+  const parts = String(line)
+    .split(/\s{2,}/)
+    .filter(Boolean);
+  if (!parts.length) return null;
+
+  const fields = parts.map(asField);
+  // All or nothing: a line that is part field and part prose is left as prose,
+  // because splitting it would strand the prose in a value column.
+  return fields.every(Boolean) ? fields : null;
+}
+
+export async function createSectionedPdf({ title, sections, footer = '', letterhead = '', reference = '' }) {
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -38,52 +98,121 @@ export async function createSectionedPdf({ title, sections, footer = '' }) {
   let page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
   let y = PAGE_HEIGHT - MARGIN;
 
+  const newPage = () => {
+    page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+    // Room reserved at the foot of every page for the footer rule and text.
+    y = PAGE_HEIGHT - MARGIN;
+  };
+
   const ensureRoom = (needed) => {
-    if (y - needed < MARGIN) {
-      page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-      y = PAGE_HEIGHT - MARGIN;
+    if (y - needed < MARGIN + 28) newPage();
+  };
+
+  const text = (value, x, size, useFont, color) => {
+    page.drawText(String(value), { x, y: y - size, size, font: useFont, color });
+  };
+
+  const paragraph = (value, { size = BODY_SIZE, useFont = font, color = INK, indent = 0 } = {}) => {
+    for (const line of wrapLine(value, useFont, size, maxWidth - indent)) {
+      ensureRoom(size + LINE_GAP);
+      text(line, MARGIN + indent, size, useFont, color);
+      y -= size + LINE_GAP;
     }
   };
 
-  const drawWrapped = (text, options) => {
-    const lines = wrapLine(text, options.font, options.size, maxWidth);
-    for (const line of lines) {
-      ensureRoom(options.size + LINE_GAP);
-      page.drawText(line, {
-        x: MARGIN,
-        y: y - options.size,
-        size: options.size,
-        font: options.font,
-        color: rgb(0.1, 0.1, 0.12),
-      });
-      y -= options.size + LINE_GAP;
-    }
+  const rule = (color = RULE, inset = 0) => {
+    ensureRoom(8);
+    page.drawLine({
+      start: { x: MARGIN + inset, y },
+      end: { x: PAGE_WIDTH - MARGIN, y },
+      thickness: 0.75,
+      color,
+    });
+    y -= 8;
   };
 
-  drawWrapped(title, { font: bold, size: TITLE_SIZE });
-  y -= 8;
+  // Letterhead: whose document this is, before what it is.
+  if (letterhead) {
+    ensureRoom(30);
+    text(letterhead, MARGIN, 10, bold, ACCENT);
+    y -= 16;
+  }
+
+  paragraph(title, { size: TITLE_SIZE, useFont: bold });
+  if (reference) {
+    y -= 2;
+    paragraph(reference, { size: 9, color: MUTED });
+  }
+  y -= 4;
+  rule(ACCENT);
+  y -= 6;
 
   for (const section of sections || []) {
-    ensureRoom(HEADING_SIZE + 18);
-    y -= 10;
-    drawWrapped(section.heading, { font: bold, size: HEADING_SIZE });
+    // Keep a heading with at least its first line, so a section never starts
+    // alone at the foot of a page.
+    ensureRoom(HEADING_SIZE + BODY_SIZE + SECTION_GAP);
+    y -= SECTION_GAP - LINE_GAP;
+    paragraph(section.heading, { size: HEADING_SIZE, useFont: bold });
+    y -= 2;
+    rule();
+
     for (const line of section.lines || []) {
-      drawWrapped(line, { font, size: BODY_SIZE });
+      const fields = fieldsInLine(line);
+      if (fields) {
+        for (const field of fields) {
+          if (!field.value) {
+            // A blank to fill in: label, then a ruled space the width of the
+            // value column, so a printed document can be completed by hand.
+            ensureRoom(BODY_SIZE + LINE_GAP + 6);
+            text(field.label, MARGIN, BODY_SIZE, bold, MUTED);
+            page.drawLine({
+              start: { x: MARGIN + LABEL_WIDTH, y: y - BODY_SIZE + 1 },
+              end: { x: PAGE_WIDTH - MARGIN, y: y - BODY_SIZE + 1 },
+              thickness: 0.6,
+              color: RULE,
+            });
+            y -= BODY_SIZE + LINE_GAP + 4;
+            continue;
+          }
+
+          const valueLines = wrapLine(field.value, font, BODY_SIZE, maxWidth - LABEL_WIDTH);
+          ensureRoom(valueLines.length * (BODY_SIZE + LINE_GAP));
+          text(field.label, MARGIN, BODY_SIZE, bold, MUTED);
+          for (const valueLine of valueLines) {
+            text(valueLine, MARGIN + LABEL_WIDTH, BODY_SIZE, font, INK);
+            y -= BODY_SIZE + LINE_GAP;
+            ensureRoom(BODY_SIZE + LINE_GAP);
+          }
+        }
+        continue;
+      }
+
+      paragraph(line);
     }
   }
 
-  if (footer) {
-    const pages = pdf.getPages();
-    for (const footerPage of pages) {
-      footerPage.drawText(footer, {
-        x: MARGIN,
-        y: MARGIN / 2,
-        size: 8,
-        font,
-        color: rgb(0.45, 0.45, 0.5),
-      });
+  // Footer on every page: who generated it, and where the reader is in it.
+  // "Page 2" alone does not tell anyone whether they have the whole document.
+  const pages = pdf.getPages();
+  pages.forEach((footerPage, index) => {
+    footerPage.drawLine({
+      start: { x: MARGIN, y: MARGIN - 6 },
+      end: { x: PAGE_WIDTH - MARGIN, y: MARGIN - 6 },
+      thickness: 0.5,
+      color: RULE,
+    });
+    if (footer) {
+      footerPage.drawText(footer, { x: MARGIN, y: MARGIN - 20, size: 8, font, color: MUTED });
     }
-  }
+    const stamp = `Page ${index + 1} of ${pages.length}`;
+    footerPage.drawText(stamp, {
+      x: PAGE_WIDTH - MARGIN - font.widthOfTextAtSize(stamp, 8),
+      y: MARGIN - 20,
+      size: 8,
+      font,
+      color: MUTED,
+    });
+  });
 
   return pdf.save();
 }
