@@ -222,3 +222,51 @@ test('the reconciliation runs after the helper fix and before the grants', () =>
     'the three must apply in the documented order',
   );
 });
+
+/*
+ * The data reconciliation must not run just because a migration was applied.
+ *
+ * `supabase db push` applies every pending migration in one command, so a data
+ * change that needs review cannot depend on the operator stopping in the
+ * middle. And the predicate it uses — a populated stripe_subscription_id —
+ * proves the workspace was billed through Stripe at some point, not that its
+ * current 'Manual Billing' value came from the old mapper. An operator who
+ * deliberately moved a paying customer to manual invoicing leaves the same
+ * trace, and reconciling it would revoke entitlements they granted on purpose.
+ *
+ * So the UPDATE is gated on a session setting the operator has to set by hand,
+ * with an exclusion list for the rows the dry-run shows are deliberate.
+ * Verified on PostgreSQL 16: applied with no setting it reports
+ * "reconciliation SKIPPED" and changes nothing; with the setting it reconciles
+ * the Stripe-backed row and leaves an excluded one untouched; a malformed uuid
+ * in the exclusion list aborts before any row is written.
+ */
+test('the reconciliation is inert unless an operator confirms it', () => {
+  const sql = readFileSync(path.join(migrationsDir, '20260821_reconcile_legacy_manual_billing.sql'), 'utf8');
+
+  assert.match(sql, /current_setting\('xbar\.reconcile_confirmed', true\)/);
+  assert.match(sql, /reconciliation SKIPPED/);
+
+  // The guard must return before the UPDATE, not merely warn beside it.
+  const guard = sql.indexOf("if confirmed <> 'yes' then");
+  const update = sql.indexOf('update public.workspace_subscription_profiles');
+  assert.ok(guard !== -1 && guard < update, 'the confirmation check must precede the update');
+
+  // An exclusion list, applied inside the same statement.
+  assert.match(sql, /current_setting\('xbar\.reconcile_exclude', true\)/);
+  assert.match(sql, /not \(p\.workspace_id = any\(excluded\)\)/);
+
+  // Cast rather than filtered: a typo'd exclusion must fail loudly, not
+  // silently drop the row it was meant to protect.
+  assert.match(sql, /trim\(value\)::uuid/);
+});
+
+test('the runbook does not tell an operator to push all three at once', async () => {
+  const readme = readFileSync(path.join(repoRoot, 'README.md'), 'utf8');
+
+  // `supabase db push` may be named — it is named to warn against it — but not
+  // as the command to run, which would apply the data migration unreviewed.
+  assert.match(readme, /one at a time/);
+  assert.match(readme, /xbar\.reconcile_confirmed/);
+  assert.match(readme, /xbar\.reconcile_exclude/);
+});

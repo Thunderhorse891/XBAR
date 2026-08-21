@@ -113,22 +113,74 @@
 
 begin;
 
-update public.workspace_subscription_profiles p
-   set billing_state = 'Inactive',
-       payload = jsonb_set(
-         coalesce(p.payload, '{}'::jsonb),
-         '{billingState}',
-         '"Inactive"'::jsonb,
-         true
-       ),
-       updated_at = now()
- where p.billing_state = 'Manual Billing'
-   and exists (
-     select 1
-       from public.workspace_billing_customers c
-      where c.workspace_id = p.workspace_id
-        and coalesce(c.stripe_subscription_id, '') <> ''
-   );
+-- REQUIRES AN EXPLICIT DECISION. Applying this file on its own changes nothing.
+--
+-- Two reasons this is not automatic.
+--
+-- First, `supabase db push` applies every pending migration in one command, so
+-- a data change that must be reviewed cannot rely on the operator stopping in
+-- the middle. Left as a plain UPDATE, it would run before anyone read the
+-- dry-run above.
+--
+-- Second, and more important: a populated stripe_subscription_id proves the
+-- workspace was billed through Stripe at some point. It does NOT prove the
+-- CURRENT 'Manual Billing' value came from the old mapper. An operator who
+-- deliberately moved a paying customer onto manual invoicing — or comped them
+-- after they had been paying — leaves exactly the same trace, and this file
+-- would revoke their entitlements. There is no way to tell those apart from
+-- inside the database, so the choice belongs to a person.
+--
+-- To run it, after reading the dry-run output:
+--
+--     set local xbar.reconcile_confirmed = 'yes';
+--     -- and, for any row the dry-run showed that is a deliberate grant:
+--     set local xbar.reconcile_exclude = '<uuid>,<uuid>';
+--
+-- Both are session settings, so they cannot be left on by accident.
+do $$
+declare
+  confirmed  text := coalesce(current_setting('xbar.reconcile_confirmed', true), '');
+  raw_excl   text := coalesce(current_setting('xbar.reconcile_exclude', true), '');
+  excluded   uuid[];
+  changed    integer;
+begin
+  if confirmed <> 'yes' then
+    raise notice 'xbar: reconciliation SKIPPED — no rows changed.';
+    raise notice 'xbar: read the dry-run at the top of this file, then re-run with';
+    raise notice 'xbar:   set local xbar.reconcile_confirmed = ''yes'';';
+    return;
+  end if;
+
+  -- A malformed uuid raises here rather than being silently dropped: a typo in
+  -- an exclusion must not quietly downgrade the workspace it was meant to save.
+  excluded := coalesce((
+    select array_agg(trim(value)::uuid)
+    from unnest(string_to_array(raw_excl, ',')) as value
+    where trim(value) <> ''
+  ), '{}'::uuid[]);
+
+  update public.workspace_subscription_profiles p
+     set billing_state = 'Inactive',
+         payload = jsonb_set(
+           coalesce(p.payload, '{}'::jsonb),
+           '{billingState}',
+           '"Inactive"'::jsonb,
+           true
+         ),
+         updated_at = now()
+   where p.billing_state = 'Manual Billing'
+     and not (p.workspace_id = any(excluded))
+     and exists (
+       select 1
+         from public.workspace_billing_customers c
+        where c.workspace_id = p.workspace_id
+          and coalesce(c.stripe_subscription_id, '') <> ''
+     );
+
+  get diagnostics changed = row_count;
+  raise notice 'xbar: reconciled % row(s); % excluded by request.', changed, coalesce(array_length(excluded, 1), 0);
+end
+$$;
 
 commit;
 

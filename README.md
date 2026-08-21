@@ -171,19 +171,36 @@ own:
 3. `20260822_restrict_anon_rpc_surface.sql` — grants. Closes the unauthenticated
    RPC surface left by PostgreSQL's default `EXECUTE` grant to `PUBLIC`.
 
-To apply, with the project linked:
+Apply them **one at a time**, not with a single `supabase db push`. That command
+applies every pending migration in one go, which would run the data
+reconciliation before anyone had read its dry-run.
 
 ```
-supabase db push
+# 1. schema only — safe to apply directly
+psql "$DATABASE_URL" -f supabase/migrations/20260820_entitlement_helpers_honor_inactive.sql
+
+# 2a. READ FIRST: the dry-run at the top of the file lists every candidate row
+#     and its disposition. Run that query and read every row.
+# 2b. The migration is inert on its own — applying it without the setting below
+#     changes nothing and prints "reconciliation SKIPPED". Re-run it with:
+psql "$DATABASE_URL" \
+  -c "set xbar.reconcile_confirmed = 'yes'" \
+  -c "set xbar.reconcile_exclude = '<uuid>,<uuid>'" \
+  -f supabase/migrations/20260821_reconcile_legacy_manual_billing.sql
+
+# 3. grants — staging first, then production
+psql "$STAGING_DATABASE_URL" -f supabase/migrations/20260822_restrict_anon_rpc_surface.sql
+node scripts/verify-rpc-surface.mjs "$STAGING_DATABASE_URL"
 ```
 
-or paste each file, in the order above, into the SQL editor.
-
-**Before step 2**, run the dry-run query in the comments at the top of that
-file and read every row it returns. It changes entitlements for real
-workspaces, and a row that was edited by hand in the dashboard is the one case
-the migration cannot distinguish from a mislabelled Stripe status. Going
-forward, comp an account with `XBAR_COMP_EMAILS`, not by setting the column.
+`xbar.reconcile_exclude` is how you keep a row the migration would otherwise
+downgrade. A populated `stripe_subscription_id` proves the workspace was billed
+through Stripe at some point; it does **not** prove the current `Manual Billing`
+value came from the old mapper. If you deliberately moved a paying customer to
+manual invoicing, or comped them after they had been paying, that row looks
+identical from inside the database — list its workspace id here and it is left
+alone. Going forward, comp an account with `XBAR_COMP_EMAILS`, not by setting
+the column.
 
 After applying, re-run the security advisor and confirm
 `anon_security_definer_function_executable` has dropped to the intended set;
