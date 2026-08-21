@@ -36,7 +36,11 @@ export default function Subscriptions() {
   const workspaceId = useCloudStore((state) => state.workspaceId);
   const pushToast = useUiStore((state) => state.pushToast);
   const [checkoutTier, setCheckoutTier] = useState<SubscriptionTier | null>(null);
-  const decisionTier = requestedTier ?? recommendedTier(subscription.tier);
+  // After a lapse, `tier` is the baseline the workspace fell back to, so
+  // recommending from it offers Professional to someone who just lost
+  // Enterprise. purchasedTier is what they had, and restoring it is the
+  // obviously useful default — that is the reason the field is kept.
+  const decisionTier = requestedTier ?? recommendedTier(subscription.purchasedTier ?? subscription.tier);
   const decisionConfig = subscriptionPlans[decisionTier];
   const decisionProfile = revenuePlanMatrix[decisionTier];
   const hasManagedIdentity = Boolean(session?.access_token && workspaceId);
@@ -44,6 +48,9 @@ export default function Subscriptions() {
   const selectedPaymentLink = Boolean(getStripePaymentLink(decisionTier));
   const selectedCheckoutConfigured = billingEnabled || selectedPaymentLink;
   const starterSetup = subscription.tier === 'Starter' && subscription.monthlyRate === 0;
+  // A past-due workspace still has a live Stripe subscription. Buying here
+  // would open a second one beside it, so every checkout path is blocked.
+  const paymentPastDue = subscription.billingState === 'Past Due';
   const continuePath = workspaceReady ? '/' : '/setup';
   const checkoutReadinessLabel = selectedCheckoutConfigured
     ? 'Secure checkout opens next.'
@@ -54,6 +61,7 @@ export default function Subscriptions() {
     hasManagedIdentity,
     hasPaymentLink: selectedPaymentLink,
     checkoutInProgress: checkoutTier !== null,
+    paymentPastDue,
   });
   // Entitlement, not price. The stored rate is the price of the plan that was
   // bought and survives a cancellation, so using it as the "this is your
@@ -83,11 +91,17 @@ export default function Subscriptions() {
       hasManagedIdentity,
       hasPaymentLink: Boolean(getStripePaymentLink(tier)),
       checkoutInProgress: false,
+      paymentPastDue,
     });
     if (!readiness.ready) {
       emit(productEventNames.checkoutFailed, { tier, reason: readiness.reason }, 'warning');
       pushToast({
-        title: readiness.mode === 'manual' ? 'Billing not configured yet' : 'Checkout needs attention',
+        title:
+          readiness.mode === 'manual'
+            ? 'Billing not configured yet'
+            : readiness.mode === 'recover'
+              ? 'Payment needs to be settled first'
+              : 'Checkout needs attention',
         message: `${readiness.reason} Your workspace and current plan were not changed.`,
         tone: 'warning',
       });
@@ -139,6 +153,7 @@ export default function Subscriptions() {
       hasManagedIdentity,
       hasPaymentLink: Boolean(getStripePaymentLink(tier)),
       checkoutInProgress: checkoutTier !== null,
+      paymentPastDue,
     });
 
     return (
@@ -186,7 +201,9 @@ export default function Subscriptions() {
               ? 'Opening checkout...'
               : readiness.mode === 'manual'
                 ? 'Billing not configured yet'
-                : `Choose ${tier}`}
+                : readiness.mode === 'recover'
+                  ? 'Payment needs attention'
+                  : `Choose ${tier}`}
           </button>
         )}
         <small>

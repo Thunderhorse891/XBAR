@@ -360,3 +360,52 @@ test('no screen decides billing is configured from entitlement alone', async () 
     'entitlement alone marks the zero-rate setup seed complete',
   );
 });
+
+/*
+ * A past-due workspace must not be sold a second subscription.
+ *
+ * Making isCurrentPaidPlan honour billingState had a consequence I did not
+ * follow through: a past-due plan stopped counting as "current", which enabled
+ * every plan button and sent the selection to startManagedCheckout. That
+ * endpoint opens a `mode: 'subscription'` session, so the customer would end up
+ * paying for two subscriptions at once, both emitting webhooks that fight over
+ * the same entitlement row. Refusing is the only safe answer the app can give —
+ * settling the existing payment happens through Stripe.
+ */
+test('a past-due workspace is refused checkout on every path', () => {
+  const base = {
+    billingEnabled: true,
+    canManageBilling: true,
+    hasManagedIdentity: true,
+    checkoutInProgress: false,
+    paymentPastDue: true,
+  };
+
+  // Both configurations that would otherwise open checkout: the payment-link
+  // path and the managed-session path.
+  for (const hasPaymentLink of [true, false]) {
+    const readiness = getCheckoutReadiness({ ...base, hasPaymentLink });
+
+    assert.equal(readiness.ready, false, `hasPaymentLink=${hasPaymentLink} must not open checkout`);
+    assert.equal(readiness.mode, 'recover');
+    // The customer is not told to upgrade or that billing is unconfigured —
+    // neither is true, and both would send them somewhere useless.
+    assert.match(readiness.reason, /did not go through/);
+    assert.doesNotMatch(readiness.reason, /not configured/);
+  }
+});
+
+test('a workspace that is not past due still reaches checkout', () => {
+  // Guards the fix: blocking everything would satisfy the test above.
+  const readiness = getCheckoutReadiness({
+    billingEnabled: true,
+    canManageBilling: true,
+    hasManagedIdentity: true,
+    hasPaymentLink: true,
+    checkoutInProgress: false,
+    paymentPastDue: false,
+  });
+
+  assert.equal(readiness.ready, true);
+  assert.equal(readiness.mode, 'checkout');
+});

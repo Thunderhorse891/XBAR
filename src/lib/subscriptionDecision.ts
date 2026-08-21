@@ -31,8 +31,11 @@ export type CheckoutReadiness = {
    * - 'checkout': a secure Stripe checkout (managed session or payment link) completes first.
    * - 'manual': online checkout is not configured, so an admin/manual billing
    *   state must explicitly activate the plan before capacity changes.
+   * - 'recover': a subscription already exists but its payment failed. Buying
+   *   again would create a second subscription beside it, so this mode never
+   *   offers checkout.
    */
-  mode: 'checkout' | 'manual';
+  mode: 'checkout' | 'manual' | 'recover';
   reason: string;
 };
 
@@ -42,11 +45,29 @@ export function getCheckoutReadiness(params: {
   hasManagedIdentity: boolean;
   hasPaymentLink: boolean;
   checkoutInProgress: boolean;
+  /** True when the workspace's existing subscription is in 'Past Due'. */
+  paymentPastDue?: boolean;
 }): CheckoutReadiness {
   if (!params.canManageBilling)
     return { ready: false, mode: 'checkout', reason: 'Ask a workspace owner to change plans.' };
   if (params.checkoutInProgress)
     return { ready: false, mode: 'checkout', reason: 'A secure checkout session is already opening.' };
+  // Before any branch that could open checkout, including the payment-link one.
+  //
+  // A past-due workspace still has a live Stripe subscription; api/stripe/checkout.js
+  // creates a `mode: 'subscription'` session, so completing one here would leave
+  // the customer paying for two subscriptions at once, with both emitting
+  // webhooks that fight over the same entitlement record. Refusing is the only
+  // safe answer available in the app — recovering the existing payment happens
+  // through Stripe, not here.
+  if (params.paymentPastDue) {
+    return {
+      ready: false,
+      mode: 'recover',
+      reason:
+        'The last payment on this workspace did not go through. That subscription has to be settled with the card issuer or through Stripe’s payment email — starting a new checkout here would bill you twice.',
+    };
+  }
   if (params.hasPaymentLink)
     return { ready: true, mode: 'checkout', reason: 'Secure checkout opens next. XBAR never stores raw card numbers.' };
   if (!params.billingEnabled) {
