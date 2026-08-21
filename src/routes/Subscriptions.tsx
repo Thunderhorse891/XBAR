@@ -64,9 +64,19 @@ export default function Subscriptions() {
   const selectedPaymentLink = Boolean(getStripePaymentLink(decisionTier));
   const selectedCheckoutConfigured = billingEnabled || selectedPaymentLink;
   const starterSetup = subscription.tier === 'Starter' && subscription.monthlyRate === 0;
-  // A past-due workspace still has a live Stripe subscription. Buying here
-  // would open a second one beside it, so every checkout path is blocked.
-  const paymentPastDue = subscription.billingState === 'Past Due';
+  // A workspace whose Stripe subscription can still bill it. Buying here would
+  // open a second one beside it, so every checkout path is blocked.
+  //
+  // Read from the profile rather than derived from billingState, which cannot
+  // answer this: 'Inactive' covers a canceled subscription, which is gone, and
+  // a paused or unpaid one, which Stripe resumes once payment is sorted out.
+  // Testing that state for the past-due value missed both of the latter and
+  // left their plan buttons enabled.
+  //
+  // Older profiles predate the field. Absent is read as no live subscription —
+  // the same answer as a workspace that never had one, which is what those
+  // profiles were written before Stripe could tell us otherwise.
+  const subscriptionRecoverable = subscription.subscriptionRecoverable === true;
   const continuePath = workspaceReady ? '/' : '/setup';
   const checkoutReadinessLabel = selectedCheckoutConfigured
     ? 'Secure checkout opens next.'
@@ -77,7 +87,7 @@ export default function Subscriptions() {
     hasManagedIdentity,
     hasPaymentLink: selectedPaymentLink,
     checkoutInProgress: checkoutTier !== null,
-    paymentPastDue,
+    subscriptionRecoverable,
   });
   // Entitlement, not price. The stored rate is the price of the plan that was
   // bought and survives a cancellation, so using it as the "this is your
@@ -107,7 +117,7 @@ export default function Subscriptions() {
       hasManagedIdentity,
       hasPaymentLink: Boolean(getStripePaymentLink(tier)),
       checkoutInProgress: false,
-      paymentPastDue,
+      subscriptionRecoverable,
     });
     if (!readiness.ready) {
       emit(productEventNames.checkoutFailed, { tier, reason: readiness.reason }, 'warning');
@@ -169,7 +179,7 @@ export default function Subscriptions() {
       hasManagedIdentity,
       hasPaymentLink: Boolean(getStripePaymentLink(tier)),
       checkoutInProgress: checkoutTier !== null,
-      paymentPastDue,
+      subscriptionRecoverable,
     });
 
     return (

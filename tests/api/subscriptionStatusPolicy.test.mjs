@@ -12,7 +12,10 @@ import {
   billingStateForStripeStatus,
   entitledTierForBillingState,
   isKnownBillingState,
+  isRecoverableStripeStatus,
   resolveWebhookTier,
+  RECOVERABLE_STRIPE_STATUSES,
+  TERMINAL_STRIPE_STATUSES,
 } from '../../api/_lib/subscription-status.js';
 import { buildSubscriptionProfile, findTierByPriceId, isKnownTier } from '../../api/_lib/subscription-plans.js';
 
@@ -373,4 +376,92 @@ test('the webhook does not treat a failed profile lookup as an absent profile', 
   const fallback = source.indexOf('resolveWebhookTier(');
   assert.notEqual(guard, -1, 'the captured error must actually be acted on');
   assert.ok(guard < fallback, 'the error must be handled before the stored tier is used');
+});
+
+/*
+ * Entitlement and billability are different questions, and one state cannot
+ * answer both.
+ *
+ * `paused` and `unpaid` map to 'Inactive' — correctly, they carry no paid
+ * access — but Stripe keeps their subscription: a paused one resumes once
+ * payment details are added, and an unpaid one's invoices can be reopened and
+ * paid (node_modules/stripe/types/Subscriptions.d.ts). The billing screen read
+ * `billingState === 'Past Due'` to decide whether to offer checkout, so those
+ * two got enabled plan buttons and could open a SECOND `mode: 'subscription'`
+ * session beside the live one — duplicate billing, with two streams of webhooks
+ * fighting over one entitlement row.
+ */
+test('recoverable is not the same question as entitled', () => {
+  // The exact overlap that made the old guard wrong: not entitled, yet still
+  // billable. Neither state alone identifies these.
+  for (const status of ['unpaid', 'paused']) {
+    assert.equal(billingStateForStripeStatus(status), 'Inactive', `${status} grants nothing`);
+    assert.equal(isRecoverableStripeStatus(status), true, `${status} can still bill`);
+  }
+
+  // And the reverse: entitled, so there is nothing to recover.
+  for (const status of ENTITLED_STRIPE_STATUSES) {
+    assert.equal(isRecoverableStripeStatus(status), false);
+  }
+});
+
+test('every recoverable status is flagged on the profile, and terminal ones are not', () => {
+  for (const status of RECOVERABLE_STRIPE_STATUSES) {
+    const profile = buildSubscriptionProfile({ tier: 'Enterprise', billingStatus: status });
+    assert.equal(profile.subscriptionRecoverable, true, `${status} leaves a billable subscription`);
+  }
+
+  // Terminal subscriptions cannot be revived, so buying again is correct —
+  // otherwise a canceled customer could never come back.
+  for (const status of TERMINAL_STRIPE_STATUSES) {
+    const profile = buildSubscriptionProfile({ tier: 'Enterprise', billingStatus: status });
+    assert.equal(profile.subscriptionRecoverable, false, `${status} is over`);
+  }
+
+  // No status at all means no Stripe subscription — every new workspace. These
+  // must be able to purchase.
+  for (const absent of ['', '   ', null, undefined]) {
+    const profile = buildSubscriptionProfile({ tier: 'Starter', billingStatus: absent });
+    assert.equal(profile.subscriptionRecoverable, false, 'a workspace with no subscription can buy');
+  }
+});
+
+/*
+ * The two policies fail in opposite directions, on purpose.
+ *
+ * Entitlement fails closed: the risk is granting access nobody paid for.
+ * Billability fails toward withholding checkout: the risk is charging a
+ * customer twice. A wrongly withheld purchase costs a support message; a
+ * duplicate subscription takes money and needs a refund.
+ */
+test('an unrecognized status is unentitled and treated as still billable', () => {
+  for (const status of ['some_future_status', 'ACTIVE_BUT_NOT_REALLY', 'null']) {
+    assert.equal(billingStateForStripeStatus(status), 'Inactive', `${status} must not entitle`);
+    assert.equal(isRecoverableStripeStatus(status), true, `${status} must not offer checkout`);
+  }
+});
+
+/*
+ * The screen must read the flag, not re-derive it.
+ *
+ * Asserted by shape rather than at the one call site the review named: the
+ * value was passed to getCheckoutReadiness from three places in this file, and
+ * fixing the named one is exactly how the other two would have survived.
+ */
+test('the billing screen reads the profile flag rather than testing Past Due', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/routes/Subscriptions.tsx'), 'utf8');
+
+  assert.match(source, /const subscriptionRecoverable = subscription\.subscriptionRecoverable === true;/);
+
+  // The retired derivation must not come back anywhere in the file, in any
+  // form that feeds the checkout guard.
+  assert.doesNotMatch(source, /billingState === 'Past Due'/);
+
+  // Every call into the readiness helper carries the flag. A call that omits it
+  // silently reverts to offering checkout on a recoverable subscription.
+  const calls = source.match(/getCheckoutReadiness\(\{[\s\S]*?\}\)/g) || [];
+  assert.ok(calls.length >= 3, `expected the three readiness call sites, found ${calls.length}`);
+  for (const call of calls) {
+    assert.match(call, /subscriptionRecoverable/, `a getCheckoutReadiness call omits the guard:\n${call}`);
+  }
 });

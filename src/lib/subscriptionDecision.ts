@@ -31,9 +31,9 @@ export type CheckoutReadiness = {
    * - 'checkout': a secure Stripe checkout (managed session or payment link) completes first.
    * - 'manual': online checkout is not configured, so an admin/manual billing
    *   state must explicitly activate the plan before capacity changes.
-   * - 'recover': a subscription already exists but its payment failed. Buying
-   *   again would create a second subscription beside it, so this mode never
-   *   offers checkout.
+   * - 'recover': a subscription already exists and can still bill the customer.
+   *   Buying again would create a second subscription beside it, so this mode
+   *   never offers checkout.
    */
   mode: 'checkout' | 'manual' | 'recover';
   reason: string;
@@ -45,8 +45,16 @@ export function getCheckoutReadiness(params: {
   hasManagedIdentity: boolean;
   hasPaymentLink: boolean;
   checkoutInProgress: boolean;
-  /** True when the workspace's existing subscription is in 'Past Due'. */
-  paymentPastDue?: boolean;
+  /**
+   * True when a Stripe subscription still exists that could bill again.
+   *
+   * Not the same as 'Past Due'. Checking only that state missed `paused` and
+   * `unpaid`, which map to 'Inactive' yet leave a recoverable subscription:
+   * Stripe resumes a paused one once payment details are added and reopens an
+   * unpaid one's invoices. Those workspaces got enabled plan buttons, so a
+   * second subscription could be created beside the first.
+   */
+  subscriptionRecoverable?: boolean;
 }): CheckoutReadiness {
   if (!params.canManageBilling)
     return { ready: false, mode: 'checkout', reason: 'Ask a workspace owner to change plans.' };
@@ -54,18 +62,18 @@ export function getCheckoutReadiness(params: {
     return { ready: false, mode: 'checkout', reason: 'A secure checkout session is already opening.' };
   // Before any branch that could open checkout, including the payment-link one.
   //
-  // A past-due workspace still has a live Stripe subscription; api/stripe/checkout.js
-  // creates a `mode: 'subscription'` session, so completing one here would leave
-  // the customer paying for two subscriptions at once, with both emitting
-  // webhooks that fight over the same entitlement record. Refusing is the only
-  // safe answer available in the app — recovering the existing payment happens
-  // through Stripe, not here.
-  if (params.paymentPastDue) {
+  // These workspaces still have a Stripe subscription that can charge them;
+  // api/stripe/checkout.js creates a `mode: 'subscription'` session, so
+  // completing one here would leave the customer paying for two subscriptions
+  // at once, with both emitting webhooks that fight over the same entitlement
+  // record. Refusing is the only safe answer available in the app — resuming or
+  // settling the existing subscription happens through Stripe, not here.
+  if (params.subscriptionRecoverable) {
     return {
       ready: false,
       mode: 'recover',
       reason:
-        'The last payment on this workspace did not go through. That subscription has to be settled with the card issuer or through Stripe’s payment email — starting a new checkout here would bill you twice.',
+        'This workspace still has a subscription with Stripe that has not been settled or resumed. Sort that one out through the card issuer or Stripe’s billing email — starting a new checkout here would bill you twice.',
     };
   }
   if (params.hasPaymentLink)

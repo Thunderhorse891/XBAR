@@ -1,4 +1,9 @@
-import { BASELINE_TIER, billingStateForStripeStatus, entitledTierForBillingState } from './subscription-status.js';
+import {
+  BASELINE_TIER,
+  billingStateForStripeStatus,
+  entitledTierForBillingState,
+  isRecoverableStripeStatus,
+} from './subscription-status.js';
 
 export const subscriptionPlans = {
   Starter: {
@@ -152,6 +157,14 @@ export function buildSubscriptionProfile(params) {
     monthlyRate: subscriptionPlans[purchasedTier].monthlyRate,
     renewalDate,
     billingState,
+    // Whether a Stripe subscription still exists that could bill again.
+    //
+    // billingState cannot answer this: 'Inactive' covers both a canceled
+    // subscription, which is gone, and a paused or unpaid one, which Stripe
+    // will resume once payment is sorted out. The billing screen has to tell
+    // those apart — offering checkout on the second kind opens a second
+    // subscription beside the live one and bills the customer twice.
+    subscriptionRecoverable: isRecoverableStripeStatus(params.billingStatus),
     sharedAccessEnabled: plan.sharedAccessEnabled,
     featureFlags: plan.featureFlags,
     usage: {

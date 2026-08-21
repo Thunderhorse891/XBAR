@@ -19,7 +19,64 @@ const MUTED = rgb(0.42, 0.45, 0.5);
 const RULE = rgb(0.82, 0.84, 0.87);
 const ACCENT = rgb(0.16, 0.35, 0.55);
 
-function wrapLine(text, font, size, maxWidth) {
+/*
+ * Characters a long unbroken token may be split after.
+ *
+ * Breaking a URL after a separator keeps the fragments legible and lets a
+ * reader retype the address from the page. Splitting mid-word is the fallback,
+ * not the goal.
+ */
+const TOKEN_BREAK_AFTER = new Set(['/', '?', '&', '=', '-', '_', '.', ',', ';', ':', '#', '+', '~', '%']);
+
+/**
+ * Split a single token that is wider than the column it has to fit in.
+ *
+ * Every returned chunk fits, which is the whole point: the caller cannot wrap
+ * on whitespace because there is none.
+ */
+function breakToken(word, font, size, maxWidth) {
+  const chunks = [];
+  let current = '';
+  // Offset within `current` just past the most recent separator.
+  let lastBreak = -1;
+
+  for (const char of word) {
+    const attempt = current + char;
+    // `!current` lets a single character through even in a column too narrow
+    // to hold it, so a pathological width cannot loop forever.
+    if (font.widthOfTextAtSize(attempt, size) <= maxWidth || !current) {
+      current = attempt;
+      if (TOKEN_BREAK_AFTER.has(char)) lastBreak = current.length;
+      continue;
+    }
+
+    // Prefer ending the chunk after a separator, unless doing so would throw
+    // away most of a line that is already full.
+    if (lastBreak > 0 && lastBreak >= current.length / 2) {
+      chunks.push(current.slice(0, lastBreak));
+      current = current.slice(lastBreak) + char;
+    } else {
+      chunks.push(current);
+      current = char;
+    }
+    lastBreak = TOKEN_BREAK_AFTER.has(char) ? current.length : -1;
+  }
+
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+/*
+ * Wrap text to a column width.
+ *
+ * Splits on whitespace, and falls back to breaking a token that has none. That
+ * fallback is not theoretical: the sale-packet cover renders
+ * `Verify this packet: <origin>/app/verify/<packetId>`, and with the deployed
+ * origin that URL measures ~353pt against a 332pt value column — it was emitted
+ * whole and drawn past the right margin, and a longer packet id ran clean off
+ * the 612pt page, taking the verification link with it.
+ */
+export function wrapLine(text, font, size, maxWidth) {
   const words = String(text).split(/\s+/).filter(Boolean);
   if (!words.length) return [''];
 
@@ -27,13 +84,29 @@ function wrapLine(text, font, size, maxWidth) {
   let current = '';
   for (const word of words) {
     const attempt = current ? `${current} ${word}` : word;
-    if (font.widthOfTextAtSize(attempt, size) <= maxWidth || !current) {
+    if (font.widthOfTextAtSize(attempt, size) <= maxWidth) {
       current = attempt;
-    } else {
-      lines.push(current);
-      current = word;
+      continue;
     }
+
+    // Does not fit beside what is already on the line, so end that line first.
+    if (current) {
+      lines.push(current);
+      current = '';
+    }
+
+    if (font.widthOfTextAtSize(word, size) <= maxWidth) {
+      current = word;
+      continue;
+    }
+
+    // Wider than the column on its own. Previously the `!current` escape here
+    // accepted it whole and let it draw past the page edge.
+    const pieces = breakToken(word, font, size, maxWidth);
+    lines.push(...pieces.slice(0, -1));
+    current = pieces[pieces.length - 1];
   }
+
   if (current) lines.push(current);
   return lines;
 }

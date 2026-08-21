@@ -372,13 +372,13 @@ test('no screen decides billing is configured from entitlement alone', async () 
  * the same entitlement row. Refusing is the only safe answer the app can give —
  * settling the existing payment happens through Stripe.
  */
-test('a past-due workspace is refused checkout on every path', () => {
+test('a workspace with a recoverable subscription is refused checkout on every path', () => {
   const base = {
     billingEnabled: true,
     canManageBilling: true,
     hasManagedIdentity: true,
     checkoutInProgress: false,
-    paymentPastDue: true,
+    subscriptionRecoverable: true,
   };
 
   // Both configurations that would otherwise open checkout: the payment-link
@@ -390,12 +390,12 @@ test('a past-due workspace is refused checkout on every path', () => {
     assert.equal(readiness.mode, 'recover');
     // The customer is not told to upgrade or that billing is unconfigured —
     // neither is true, and both would send them somewhere useless.
-    assert.match(readiness.reason, /did not go through/);
+    assert.match(readiness.reason, /settled or resumed/);
     assert.doesNotMatch(readiness.reason, /not configured/);
   }
 });
 
-test('a workspace that is not past due still reaches checkout', () => {
+test('a workspace with no live subscription still reaches checkout', () => {
   // Guards the fix: blocking everything would satisfy the test above.
   const readiness = getCheckoutReadiness({
     billingEnabled: true,
@@ -403,7 +403,30 @@ test('a workspace that is not past due still reaches checkout', () => {
     hasManagedIdentity: true,
     hasPaymentLink: true,
     checkoutInProgress: false,
-    paymentPastDue: false,
+    subscriptionRecoverable: false,
+  });
+
+  assert.equal(readiness.ready, true);
+  assert.equal(readiness.mode, 'checkout');
+});
+
+/*
+ * A profile written before this field existed must not block checkout.
+ *
+ * Absent is read as "no live subscription", which is what those profiles meant:
+ * they were written when Stripe could not tell us otherwise. Reading absent as
+ * recoverable would lock every existing workspace out of buying a plan.
+ */
+test('a profile without the field is treated as having no live subscription', () => {
+  const legacy = { tier: 'Starter', billingState: 'Inactive' } as Partial<SubscriptionProfile>;
+  const readiness = getCheckoutReadiness({
+    billingEnabled: true,
+    canManageBilling: true,
+    hasManagedIdentity: true,
+    hasPaymentLink: true,
+    checkoutInProgress: false,
+    // The same expression Subscriptions.tsx uses.
+    subscriptionRecoverable: legacy.subscriptionRecoverable === true,
   });
 
   assert.equal(readiness.ready, true);

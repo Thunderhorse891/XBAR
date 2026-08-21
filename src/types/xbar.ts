@@ -440,6 +440,17 @@ export interface SubscriptionProfile {
   // subscriptions. It exists so those cannot be filed under 'Manual
   // Billing', which is an operator grant that carries the paid tier.
   billingState: 'Active' | 'Manual Billing' | 'Past Due' | 'Inactive';
+  // True when a Stripe subscription still exists that could bill again —
+  // past_due, unpaid, paused, or a first payment that never completed.
+  //
+  // billingState cannot answer this. 'Inactive' covers a canceled subscription,
+  // which is gone, and a paused or unpaid one, which resumes once payment is
+  // sorted out. Buying a plan on the second kind opens a second subscription
+  // beside the live one, so the billing screen routes those to recovery instead
+  // of checkout. Absent on profiles written before this field existed, which is
+  // read as "no live subscription" — the same answer as a workspace that never
+  // had one.
+  subscriptionRecoverable?: boolean;
   sharedAccessEnabled: boolean;
   featureFlags: string[];
   usage: SubscriptionUsage;

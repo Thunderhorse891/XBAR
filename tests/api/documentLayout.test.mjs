@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { asField, fieldsInLine } from '../../api/_lib/pdf.js';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
+
+import { asField, fieldsInLine, wrapLine } from '../../api/_lib/pdf.js';
 
 /*
  * How a template line becomes a row on the page.
@@ -58,4 +60,95 @@ test('prose is left alone', () => {
 test('a line that is part field and part prose stays prose', () => {
   // Splitting it would strand the sentence in a value column.
   assert.equal(fieldsInLine('Deposit: $3,000    The balance is due on delivery of the horse.'), null);
+});
+
+/*
+ * Nothing may be drawn wider than the column it is drawn into.
+ *
+ * wrapLine only broke on whitespace, and had an escape that emitted a token
+ * wider than the column whole rather than dropping it to the next line. The
+ * sale-packet cover renders `Verify this packet: <origin>/app/verify/<packetId>`
+ * through the value column, which is 332pt wide: with the deployed origin that
+ * URL measures ~353pt and was drawn past the right margin, and a longer packet
+ * id ran clean off the 612pt page — taking the verification link, the one thing
+ * on that page a buyer has to be able to read, with it.
+ */
+const VALUE_COLUMN = 612 - 2 * 56 - 168;
+
+async function helvetica() {
+  const doc = await PDFDocument.create();
+  return doc.embedFont(StandardFonts.Helvetica);
+}
+
+test('a URL too wide for its column is broken instead of overflowing', async () => {
+  const font = await helvetica();
+  const url = 'https://xbar-horse-management-app.vercel.app/app/verify/pk_1a2b3c4d5e6f';
+
+  // The premise: this is genuinely wider than the column, so the test cannot
+  // pass because the input happened to fit.
+  assert.ok(
+    font.widthOfTextAtSize(url, 10.5) > VALUE_COLUMN,
+    'the fixture URL must actually overflow, or this proves nothing',
+  );
+
+  const lines = wrapLine(`Verify this packet: ${url}`, font, 10.5, VALUE_COLUMN);
+
+  assert.ok(lines.length > 1, 'it must wrap');
+  for (const line of lines) {
+    assert.ok(
+      font.widthOfTextAtSize(line, 10.5) <= VALUE_COLUMN,
+      `"${line}" is ${font.widthOfTextAtSize(line, 10.5).toFixed(1)}pt in a ${VALUE_COLUMN}pt column`,
+    );
+  }
+
+  // Broken, not truncated. A URL that renders inside the margin but has lost
+  // characters is worse than one that overflows: it looks correct and is not.
+  assert.equal(lines.join('').replace(/\s+/g, ''), `Verify this packet: ${url}`.replace(/\s+/g, ''));
+});
+
+test('a token with no separators at all is still broken to fit', async () => {
+  const font = await helvetica();
+  // No whitespace and nothing in TOKEN_BREAK_AFTER, so the character-level
+  // fallback is the only thing that can wrap this.
+  const blob = 'A'.repeat(300);
+  const lines = wrapLine(blob, font, 10.5, VALUE_COLUMN);
+
+  assert.ok(lines.length > 1);
+  for (const line of lines) {
+    assert.ok(font.widthOfTextAtSize(line, 10.5) <= VALUE_COLUMN);
+  }
+  assert.equal(lines.join(''), blob);
+});
+
+test('ordinary text is unaffected by the token-breaking fallback', async () => {
+  const font = await helvetica();
+
+  // Guards the fix: breaking everything by character would satisfy the tests
+  // above and would ruin every other line in every document.
+  assert.deepEqual(wrapLine('Purchase price: $18,500', font, 10.5, VALUE_COLUMN), ['Purchase price: $18,500']);
+  assert.deepEqual(wrapLine('', font, 10.5, VALUE_COLUMN), ['']);
+
+  // A paragraph still breaks between words, never inside one.
+  const prose =
+    'The seller warrants that the horse described above is free of any lien or encumbrance at the time of sale.';
+  for (const line of wrapLine(prose, font, 10.5, VALUE_COLUMN)) {
+    assert.ok(font.widthOfTextAtSize(line, 10.5) <= VALUE_COLUMN);
+    for (const word of line.split(' ')) {
+      assert.ok(prose.split(/\s+/).includes(word), `"${word}" was split mid-word`);
+    }
+  }
+});
+
+test('a long URL breaks after a separator where one is available', async () => {
+  const font = await helvetica();
+  const lines = wrapLine(
+    'https://xbar-horse-management-app.vercel.app/app/verify/pk_1a2b3c4d5e6f',
+    font,
+    10.5,
+    VALUE_COLUMN,
+  );
+
+  // Readability, not just fit: a reader retyping the address from paper needs
+  // the break to fall somewhere they can see it.
+  assert.ok(/[/?&=\-_.,;:#+~%]$/.test(lines[0]), `expected the first line to end at a separator, got "${lines[0]}"`);
 });

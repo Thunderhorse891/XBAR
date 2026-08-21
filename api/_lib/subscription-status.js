@@ -58,6 +58,56 @@ export const INACTIVE_STRIPE_STATUSES = Object.freeze([
   'paused',
 ]);
 
+/**
+ * Statuses where a Stripe subscription object still exists and can resume
+ * billing the customer.
+ *
+ * This is a different question from entitlement, and collapsing the two caused
+ * a real defect. `paused` and `unpaid` both map to 'Inactive' — correctly, they
+ * carry no paid access — but Stripe keeps the subscription: a paused one
+ * resumes once payment details are added, and an unpaid one's invoices can be
+ * reopened and paid (node_modules/stripe/types/Subscriptions.d.ts). `incomplete`
+ * is the same shape: the subscription exists and its first invoice can still be
+ * paid.
+ *
+ * So a workspace in any of these has a subscription that may start charging
+ * again. Offering checkout there creates a SECOND `mode: 'subscription'`
+ * session beside the first, and the customer is billed twice while two streams
+ * of webhooks fight over one entitlement record.
+ *
+ * `canceled` and `incomplete_expired` are terminal — nothing can revive them —
+ * so buying again is exactly right there.
+ */
+export const RECOVERABLE_STRIPE_STATUSES = Object.freeze(['past_due', 'unpaid', 'paused', 'incomplete']);
+
+/** Statuses where the subscription is over and cannot bill again. */
+export const TERMINAL_STRIPE_STATUSES = Object.freeze(['canceled', 'incomplete_expired']);
+
+/**
+ * True when a status leaves a subscription that could bill the customer again.
+ *
+ * Fails toward `true`, which is the opposite direction from
+ * `billingStateForStripeStatus`, and deliberately so — the two protect against
+ * opposite harms. Entitlement fails closed because the risk is granting access
+ * nobody paid for. Here the risk is charging a customer twice for the same
+ * workspace, so an unrecognized status is treated as a live subscription and
+ * checkout is withheld. A wrongly withheld purchase costs a support message; a
+ * duplicate subscription takes money and needs a refund.
+ *
+ * The empty case is not "unknown": no status means no Stripe subscription at
+ * all, which is every new workspace. Those must be able to buy.
+ */
+export function isRecoverableStripeStatus(status) {
+  const normalized = String(status ?? '')
+    .trim()
+    .toLowerCase();
+
+  if (!normalized) return false;
+  if (ENTITLED_STRIPE_STATUSES.includes(normalized)) return false;
+  if (TERMINAL_STRIPE_STATUSES.includes(normalized)) return false;
+  return true;
+}
+
 /** Every billing state that may be stored on a workspace profile. */
 export const BILLING_STATES = Object.freeze(['Active', 'Past Due', 'Manual Billing', 'Inactive']);
 
