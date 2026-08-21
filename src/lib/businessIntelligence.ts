@@ -1,5 +1,6 @@
 import type { DocumentRecord, ExpenseReceipt, HorseRecord, OwnershipRecord } from '../types/xbar.js';
 import { normalizeOwnershipRecord } from '../store/xbarStoreLogic.js';
+import { monthKeyForDate, monthKeyOf, trailingMonthKeys } from './receiptMonths.js';
 
 /*
  * Business intelligence over the structured records: prices the operational
@@ -119,21 +120,19 @@ export interface SpendAnomaly {
 const ANOMALY_THRESHOLD_PERCENT = 25;
 const MINIMUM_MONTH_SPEND = 50;
 
-function monthKey(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-}
-
 // Flags categories where this month's spend runs more than 25% above the
 // trailing three-month average (ignoring trivial totals).
 export function detectSpendAnomalies(receipts: ExpenseReceipt[], now: Date = new Date()): SpendAnomaly[] {
-  const currentKey = monthKey(now);
-  const trailingKeys = [1, 2, 3].map((offset) => monthKey(new Date(now.getFullYear(), now.getMonth() - offset, 1)));
+  const currentKey = monthKeyForDate(now);
+  const trailingKeys = trailingMonthKeys(now, 3);
 
   const totals = new Map<string, { current: number; trailing: number }>();
   for (const receipt of receipts) {
-    const date = new Date(receipt.receiptDate);
-    if (Number.isNaN(date.getTime())) continue;
-    const key = monthKey(date);
+    // Read from the date string, not from a parsed Date. A date-only value is
+    // parsed as UTC, so in US time zones a receipt dated the 1st was filed
+    // under the previous month and dropped out of this month's total.
+    const key = monthKeyOf(receipt.receiptDate);
+    if (key === null) continue;
     const bucket = totals.get(receipt.category) ?? { current: 0, trailing: 0 };
     if (key === currentKey) bucket.current += receipt.amount;
     else if (trailingKeys.includes(key)) bucket.trailing += receipt.amount;
@@ -173,6 +172,7 @@ export interface HorseEconomics {
 }
 
 const CARRY_MONTHS = 2; // expected months on market while a buyer closes
+const TRAILING_MONTHS = 3; // complete months the burn figure averages over
 const PROTECTED_MARGIN = 0.15; // never discount below cost + 15%
 
 // Margin intelligence for a sale horse: what it cost, what it burns per
@@ -186,12 +186,16 @@ export function computeHorseEconomics(
   const horseReceipts = receipts.filter((receipt) => receipt.horseId === horse.id);
   const costToDate = horseReceipts.reduce((sum, receipt) => sum + receipt.amount, 0);
 
-  const trailingStart = new Date(now.getFullYear(), now.getMonth() - 3, 1).getTime();
+  // The three COMPLETE months before this one, so the divisor matches the
+  // period. A range from three months back to today spans four calendar months
+  // and was divided by three, overstating every horse's monthly cost by a third
+  // for an operation that spends evenly.
+  const trailingWindow = new Set(trailingMonthKeys(now, TRAILING_MONTHS));
   const trailingSpend = horseReceipts.reduce((sum, receipt) => {
-    const date = Date.parse(receipt.receiptDate);
-    return !Number.isNaN(date) && date >= trailingStart && date <= now.getTime() ? sum + receipt.amount : sum;
+    const key = monthKeyOf(receipt.receiptDate);
+    return key !== null && trailingWindow.has(key) ? sum + receipt.amount : sum;
   }, 0);
-  const monthlyBurn = Math.round(trailingSpend / 3);
+  const monthlyBurn = Math.round(trailingSpend / TRAILING_MONTHS);
 
   const askPrice = horse.sale?.askPrice ?? 0;
   const breakEvenPrice = Math.round(costToDate + monthlyBurn * CARRY_MONTHS);

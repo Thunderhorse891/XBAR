@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { buildRanchReport, type RanchReportInput } from '../src/lib/ranchReport.js';
 import { ranchReportFileName, ranchReportSections, ranchReportToCsv } from '../src/lib/ranchReportExport.js';
+import { monthKeyOf, trailingMonthKeys } from '../src/lib/receiptMonths.js';
 import type { ExpenseReceipt, HorseRecord, SalesLead } from '../src/types/xbar.js';
 
 /*
@@ -105,17 +106,21 @@ test('receipts outside the trailing window do not inflate monthly burn', () => {
   const report = buildRanchReport(
     input({
       expenseReceipts: [
-        receipt({ id: 'r1', amount: 900, receiptDate: '2026-08-02' }),
+        receipt({ id: 'r1', amount: 900, receiptDate: '2026-07-02' }),
         // Two years old. Part of invested-to-date, but not of what the
         // operation costs to run right now.
         receipt({ id: 'r2', amount: 50_000, receiptDate: '2024-03-01' }),
+        // This month, which is still in progress. Counted as spend, but not
+        // averaged against whole months — see the burn tests below.
+        receipt({ id: 'r3', amount: 4_000, receiptDate: '2026-08-19' }),
       ],
     }),
     NOW,
   );
 
-  assert.equal(report.money.investedToDate, 50_900);
-  assert.equal(report.money.monthlyBurn, 300, '900 over three months');
+  assert.equal(report.money.investedToDate, 54_900);
+  assert.equal(report.money.investedThisMonth, 4_000);
+  assert.equal(report.money.monthlyBurn, 300, '900 over three complete months');
 });
 
 test('only open offers count as pipeline, and only paid deposits as held', () => {
@@ -302,4 +307,109 @@ test('each horse is one row, so two horses cannot be read as one', () => {
   // A horse with no asking price says so rather than showing a $0 margin.
   const unlisted = section.lines.find((line) => line.startsWith('Second Horse'));
   assert.match(unlisted ?? '', /not listed for sale/);
+});
+
+/*
+ * A receipt date is calendar data, not an instant.
+ *
+ * `new Date('2026-08-01')` is parsed as UTC midnight per the date-only form, so
+ * in any negative-UTC zone — which is every US ranch — it lands on July 31
+ * locally. Reading `.getMonth()` off it filed receipts dated the 1st under the
+ * previous month, dropping them from "spent this month" and from each
+ * category's monthly total.
+ */
+test('the month comes from the date string, not from a parsed instant', () => {
+  assert.equal(monthKeyOf('2026-08-01'), '2026-08');
+  assert.equal(monthKeyOf('2026-08-31'), '2026-08');
+  assert.equal(monthKeyOf('2026-01-01'), '2026-01');
+  // A value carrying a time is an instant, not a calendar date, so it is read
+  // in the local zone — the month the person looking at it would name.
+  assert.equal(monthKeyOf('2026-08-15T12:00:00Z'), '2026-08');
+
+  // The value the old code consulted. In a US zone this is July, which is the
+  // whole defect; the helper never looks at it.
+  const throughDate = new Date('2026-08-01');
+  assert.equal(`${throughDate.getUTCFullYear()}-08`, '2026-08', 'sanity: the string really does say August');
+
+  // Unusable input is skipped rather than silently filed under some month.
+  assert.equal(monthKeyOf(''), null);
+  assert.equal(monthKeyOf('not a date'), null);
+});
+
+test('a receipt dated the first of the month counts as this month', () => {
+  const report = buildRanchReport(
+    input({ expenseReceipts: [receipt({ id: 'r1', amount: 500, receiptDate: '2026-08-01' })] }),
+    NOW,
+  );
+
+  assert.equal(report.money.investedThisMonth, 500);
+  assert.equal(report.categories[0].thisMonth, 500);
+});
+
+/*
+ * Three months, divided by three.
+ *
+ * The window ran from three months back to today, which spans FOUR calendar
+ * months — May, June, July and part of August on the 21st — and divided by
+ * three. An operation spending $300 a month reported $400, in the UI, the CSV
+ * and the banker-facing PDF alike.
+ */
+test('monthly burn averages exactly the three complete months before this one', () => {
+  assert.deepEqual(trailingMonthKeys(NOW, 3), ['2026-07', '2026-06', '2026-05']);
+
+  // The reviewer's case: $300 in each of the four months the old window
+  // touched. The answer is $300, not $400.
+  const report = buildRanchReport(
+    input({
+      expenseReceipts: [
+        receipt({ id: 'r1', amount: 300, receiptDate: '2026-05-15' }),
+        receipt({ id: 'r2', amount: 300, receiptDate: '2026-06-15' }),
+        receipt({ id: 'r3', amount: 300, receiptDate: '2026-07-15' }),
+        receipt({ id: 'r4', amount: 300, receiptDate: '2026-08-15' }),
+      ],
+    }),
+    NOW,
+  );
+
+  assert.equal(report.money.monthlyBurn, 300);
+  // The August receipt is still counted where it belongs.
+  assert.equal(report.money.investedToDate, 1_200);
+  assert.equal(report.money.investedThisMonth, 300);
+});
+
+test('a quiet month lowers the burn rather than being dropped from the divisor', () => {
+  // Guards the fix: averaging only "months that had receipts" would report
+  // $600 here and overstate what the operation costs to run.
+  const report = buildRanchReport(
+    input({
+      expenseReceipts: [
+        receipt({ id: 'r1', amount: 600, receiptDate: '2026-06-10' }),
+        receipt({ id: 'r2', amount: 600, receiptDate: '2026-07-10' }),
+      ],
+    }),
+    NOW,
+  );
+
+  assert.equal(report.money.monthlyBurn, 400, '1200 over three months, May included as a real quiet month');
+});
+
+test('per-horse monthly burn uses the same window as the herd figure', () => {
+  // The two were computed in different files with the same defect. A report
+  // whose per-horse column and herd total disagree is worse than either being
+  // wrong alone, because it looks like an arithmetic error to the reader.
+  const report = buildRanchReport(
+    input({
+      horses: [horse({ id: 'h1', name: 'Only Horse' })],
+      expenseReceipts: [
+        receipt({ id: 'r1', amount: 300, horseId: 'h1', receiptDate: '2026-05-15' }),
+        receipt({ id: 'r2', amount: 300, horseId: 'h1', receiptDate: '2026-06-15' }),
+        receipt({ id: 'r3', amount: 300, horseId: 'h1', receiptDate: '2026-07-15' }),
+        receipt({ id: 'r4', amount: 300, horseId: 'h1', receiptDate: '2026-08-15' }),
+      ],
+    }),
+    NOW,
+  );
+
+  assert.equal(report.horses[0].monthlyBurn, 300);
+  assert.equal(report.horses[0].monthlyBurn, report.money.monthlyBurn);
 });

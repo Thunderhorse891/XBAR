@@ -465,3 +465,57 @@ test('the billing screen reads the profile flag rather than testing Past Due', a
     assert.match(call, /subscriptionRecoverable/, `a getCheckoutReadiness call omits the guard:\n${call}`);
   }
 });
+
+/*
+ * The Reports screen must gate profit intelligence like every other screen.
+ *
+ * `commercialEngine.ts` assigns profitIntelligence to Ranch Ops, and
+ * Financials and Expenses have gated it all along. Surfacing cost, break-even,
+ * margin and spend trends on Reports without the same gate made that screen a
+ * way around the paywall — and the PDF/CSV exports made it a way around the
+ * paywall in a file you could keep and pass on.
+ *
+ * Asserted against the source because this suite has no DOM. What it checks is
+ * the shape that matters: the gate is consulted, it is fed the EFFECTIVE
+ * subscription so owner preview still works, and neither export can run while
+ * locked.
+ */
+test('the reports screen gates profit intelligence behind the same feature check', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/routes/Reports.tsx'), 'utf8');
+
+  assert.match(source, /profitIntelligenceGate/, 'the screen must consult the gate');
+
+  // Effective, not real. A screen that gates a feature reads the preview, so an
+  // allowlisted owner previewing Ranch Ops sees what a Ranch Ops customer sees.
+  assert.match(source, /const subscription = useEffectiveSubscription\(\);/);
+  assert.match(source, /const locked = profitIntelligenceGate\(subscription\);/);
+
+  // Both exports refuse on their own rather than trusting a disabled button.
+  // The export IS the paid capability — a file that leaves the app is the thing
+  // being gated, so the check belongs in the handler.
+  for (const handler of ['handlePdf', 'handleCsv']) {
+    const start = source.indexOf(`const ${handler} =`);
+    assert.notEqual(start, -1, `${handler} must exist`);
+    const body = source.slice(start, start + 400);
+    assert.match(body, /if \(locked\) return;/, `${handler} must refuse while locked`);
+  }
+});
+
+/*
+ * A workspace with receipts but no horses still has a report.
+ *
+ * Keying the empty state on horses alone hid every logged receipt from an
+ * operation that recorded general ranch spend before adding its first horse,
+ * and took both exports with it — even though buildRanchReport totals receipts
+ * that are not tied to a horse and renders fine with an empty roster.
+ * Financials.tsx already had the right condition.
+ */
+test('the reports empty state requires that there be nothing at all to report', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/routes/Reports.tsx'), 'utf8');
+
+  assert.match(
+    source,
+    /horses\.length === 0 && expenseReceipts\.length === 0 && salesLeads\.length === 0/,
+    'the empty state must consider receipts and offers, not only horses',
+  );
+});

@@ -6,6 +6,7 @@ import {
   type RevenueRiskAssessment,
   type SpendAnomaly,
 } from './businessIntelligence.js';
+import { monthKeyForDate, monthKeyOf, trailingMonthKeys } from './receiptMonths.js';
 
 /*
  * The whole-operation report, in dollars.
@@ -97,13 +98,17 @@ export interface RanchReportInput {
   ownershipRecords: OwnershipRecord[];
 }
 
+/** How many complete months the burn figure averages over. */
+const TRAILING_MONTHS = 3;
+
 /** Offer stages that represent money still in play. */
 const OPEN_OFFER_STAGES = new Set(['New', 'Qualified', 'Offer']);
 
 function sameMonth(value: string, now: Date): boolean {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return false;
-  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+  // Compared as calendar months, never as instants. See receiptMonths.ts: a
+  // date-only value is parsed as UTC, so in US time zones a receipt dated the
+  // 1st read as the previous month and vanished from this month's totals.
+  return monthKeyOf(value) === monthKeyForDate(now);
 }
 
 function sum(values: number[]): number {
@@ -111,19 +116,26 @@ function sum(values: number[]): number {
 }
 
 /**
- * Trailing three-month average spend across every receipt.
+ * Average spend over the three complete months before this one.
  *
- * Deliberately averaged over three whole months rather than over "months that
- * had receipts": a quiet month is a real month of low burn, and dropping it
- * would overstate what the operation actually costs to run.
+ * Averaged over three whole months rather than over "months that had
+ * receipts": a quiet month is a real month of low burn, and dropping it would
+ * overstate what the operation actually costs to run. The current month is
+ * excluded for the same reason in reverse — it is partial, and averaging it
+ * against whole months would make the figure fall every 1st and climb back
+ * over the following weeks.
  */
 function trailingMonthlyBurn(receipts: ExpenseReceipt[], now: Date): number {
-  const start = new Date(now.getFullYear(), now.getMonth() - 3, 1).getTime();
+  // Exactly the three complete months before this one, so the divisor matches
+  // the period. A range from three months back to today spans FOUR calendar
+  // months and was divided by three: an operation spending $300 a month
+  // reported $400, in the UI, the CSV and the banker-facing PDF alike.
+  const window = new Set(trailingMonthKeys(now, TRAILING_MONTHS));
   const trailing = receipts.filter((receipt) => {
-    const date = Date.parse(receipt.receiptDate);
-    return !Number.isNaN(date) && date >= start && date <= now.getTime();
+    const key = monthKeyOf(receipt.receiptDate);
+    return key !== null && window.has(key);
   });
-  return Math.round(sum(trailing.map((receipt) => receipt.amount)) / 3);
+  return Math.round(sum(trailing.map((receipt) => receipt.amount)) / TRAILING_MONTHS);
 }
 
 export function buildRanchReport(input: RanchReportInput, now: Date = new Date()): RanchReport {

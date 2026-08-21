@@ -132,12 +132,24 @@ test('horse economics compute burn, break-even, and the safe discount floor', as
     { id: 'e4', horseId: 'other', category: 'Feed', amount: 999, receiptDate: now.toISOString() } as ExpenseReceipt,
   ];
   const economics = computeHorseEconomics(horse('h1', 'Spirit', 12000), receipts, now);
+
+  // Everything ever spent on this horse, whenever it was spent.
   assert.equal(economics.costToDate, 2400);
-  assert.equal(economics.monthlyBurn, 300);
-  assert.equal(economics.breakEvenPrice, 3000);
-  assert.equal(economics.safeDiscountFloor, 3450);
-  assert.equal(economics.projectedMargin, 9000);
-  assert.equal(economics.marginPercent, 75);
+
+  // Burn averages the three COMPLETE months before this one, so only e2 ($600,
+  // last month) is inside the window: 600 / 3 = 200. e1 is this month, which is
+  // still in progress and is reported as current spend rather than averaged
+  // against whole months; e3 is a year old.
+  //
+  // This previously read 300, which was the old defect in disguise: the window
+  // ran from three months back to today, spanning four calendar months, and
+  // divided by three — $900 over two months came out as $300 by coincidence.
+  assert.equal(economics.monthlyBurn, 200);
+
+  assert.equal(economics.breakEvenPrice, 2800, 'cost to date plus two months of carry');
+  assert.equal(economics.safeDiscountFloor, 3220, 'break-even plus the 15% protected margin');
+  assert.equal(economics.projectedMargin, 9200);
+  assert.equal(economics.marginPercent, 77);
 });
 
 test('an active medical review prices the listing as blocked with disclosure required', () => {

@@ -211,3 +211,16 @@
     transition: none;
   }
 }
+
+/* Specificity matters here: `.ops-hero__ledger strong` in
+   operationsExperience.css is (0,1,1) and a bare class is (0,1,0), so a
+   single-class rule loses and the headline kept its currency-sized font. */
+.ops-hero__ledger strong.report-locked__headline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* The ledger headline is sized for a compact currency figure. "Locked" plus
+     its padlock is far wider and ran off the panel at that scale. */
+  font-size: clamp(1.6rem, 2.6vw, 2.4rem);
+  line-height: 1.1;
+}

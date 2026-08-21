@@ -1,12 +1,16 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Lock } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { ReadinessChart } from '@/components/saas';
 import { HorsesIcon } from '@/components/icons';
+import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
+import { billingPath } from '@/lib/billingRoutes';
 import { formatCompactCurrency, formatCurrency } from '@/lib/format';
 import { buildRanchReport } from '@/lib/ranchReport';
 import { downloadRanchReportCsv, downloadRanchReportPdf } from '@/lib/ranchReportExport';
+import { profitIntelligenceGate } from '@/lib/subscriptionGates';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import './operationsExperience.css';
@@ -20,6 +24,17 @@ import './reportsExperience.css';
  * in the product (businessIntelligence.ts) but only ever appeared per-horse in
  * the sale-packet wizard and as alerts on the reminders screen, so there was no
  * place that answered the question an owner actually asks.
+ *
+ * The money half is profit intelligence, which is a Ranch Ops feature —
+ * `commercialEngine.ts` says so, and Financials and Expenses have gated it all
+ * along. Surfacing cost, break-even, margin and spend anomalies here without
+ * the same gate made this screen a way around the paywall, and the exports made
+ * it a way around it in a file you could keep. So the gate wraps the analytics
+ * AND both export buttons.
+ *
+ * Readiness and the document count stay open. They were on this screen before
+ * this change and are not profit intelligence, so gating them would take
+ * something away from Starter rather than protect something paid.
  */
 export default function Reports() {
   const navigate = useNavigate();
@@ -30,6 +45,11 @@ export default function Reports() {
   const salesLeads = useXbarStore((state) => state.salesLeads);
   const ownershipRecords = useXbarStore((state) => state.ownershipRecords);
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
+  // Effective, not real: an allowlisted owner previewing Ranch Ops sees what a
+  // Ranch Ops customer sees. This screen gates a feature, so it reads the
+  // preview — unlike the billing screen, which reports on billing itself.
+  const subscription = useEffectiveSubscription();
+  const locked = profitIntelligenceGate(subscription);
   const [exporting, setExporting] = useState<'pdf' | null>(null);
 
   const report = useMemo(
@@ -44,6 +64,11 @@ export default function Reports() {
   ];
 
   const handlePdf = async () => {
+    // Checked here as well as on the button. The button is disabled when
+    // locked, but a disabled button is a rendering detail — the export is the
+    // paid capability, and it must refuse on its own rather than trusting that
+    // nothing reached it.
+    if (locked) return;
     setExporting('pdf');
     try {
       await downloadRanchReportPdf(report, workspaceProfile.ranchName);
@@ -61,7 +86,19 @@ export default function Reports() {
     }
   };
 
-  if (horses.length === 0) {
+  const handleCsv = () => {
+    if (locked) return;
+    downloadRanchReportCsv(report);
+  };
+
+  // Only truly empty when there is nothing to report on at all.
+  //
+  // Keying this on horses alone hid every logged receipt from a workspace that
+  // had recorded general ranch spend before adding its first horse — and took
+  // both exports away with it — even though the report totals receipts that are
+  // not tied to a horse and renders fine with an empty roster. Financials.tsx
+  // already had this exact condition; I should have followed it.
+  if (horses.length === 0 && expenseReceipts.length === 0 && salesLeads.length === 0) {
     return (
       <div className="ops-experience">
         <section className="ops-hero ops-hero--solo" aria-labelledby="reports-title">
@@ -100,201 +137,246 @@ export default function Reports() {
             it to a banker, an accountant or a partner.
           </p>
           <div className="ops-hero__actions">
-            <button className="button button--primary" type="button" onClick={handlePdf} disabled={exporting === 'pdf'}>
-              {exporting === 'pdf' ? 'Creating PDF…' : 'Download PDF report'}
-            </button>
-            <button className="button button--ghost" type="button" onClick={() => downloadRanchReportCsv(report)}>
-              Export spreadsheet
-            </button>
+            {locked ? (
+              <button className="button button--primary" type="button" onClick={() => navigate(billingPath)}>
+                Unlock with Ranch Ops
+              </button>
+            ) : (
+              <>
+                <button
+                  className="button button--primary"
+                  type="button"
+                  onClick={handlePdf}
+                  disabled={exporting === 'pdf'}
+                >
+                  {exporting === 'pdf' ? 'Creating PDF…' : 'Download PDF report'}
+                </button>
+                <button className="button button--ghost" type="button" onClick={handleCsv}>
+                  Export spreadsheet
+                </button>
+              </>
+            )}
           </div>
         </div>
-        <div className="ops-hero__ledger" aria-label="Money summary">
-          <span>Invested to date</span>
-          <strong>{formatCompactCurrency(report.money.investedToDate)}</strong>
-          <small>{formatCurrency(report.money.monthlyBurn)} per month, 3-month average</small>
-          <div className="ops-hero__mini-grid">
-            <div>
-              <span>Listed</span>
-              <b>{formatCompactCurrency(report.money.listedValue)}</b>
-            </div>
-            <div>
-              <span>Held up</span>
-              <b>{formatCompactCurrency(report.money.valueAtRisk)}</b>
+        {locked ? (
+          <div className="ops-hero__ledger" aria-label="Ranch reporting is a Ranch Ops feature">
+            <span>Ranch Ops</span>
+            <strong className="report-locked__headline">
+              <Lock size={22} aria-hidden="true" /> Locked
+            </strong>
+            <small>Cost per horse, break-even, margin and spend trends — with PDF and spreadsheet export.</small>
+          </div>
+        ) : (
+          <div className="ops-hero__ledger" aria-label="Money summary">
+            <span>Invested to date</span>
+            <strong>{formatCompactCurrency(report.money.investedToDate)}</strong>
+            <small>{formatCurrency(report.money.monthlyBurn)} per month, 3-month average</small>
+            <div className="ops-hero__mini-grid">
+              <div>
+                <span>Listed</span>
+                <b>{formatCompactCurrency(report.money.listedValue)}</b>
+              </div>
+              <div>
+                <span>Held up</span>
+                <b>{formatCompactCurrency(report.money.valueAtRisk)}</b>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </section>
 
-      <div className="ops-metric-grid">
-        <MetricCard
-          className="ops-metric-card"
-          label="Ready to close"
-          value={formatCompactCurrency(report.money.readyValue)}
-          detail="Listed value with no blockers"
-          tone="emerald"
-        />
-        <MetricCard
-          className="ops-metric-card"
-          label="Waiting on documents"
-          value={formatCompactCurrency(report.money.valueAtRisk)}
-          detail={`${report.risk.items.length} horse${report.risk.items.length === 1 ? '' : 's'} blocked`}
-          tone={report.money.valueAtRisk > 0 ? 'amber' : 'slate'}
-        />
-        <MetricCard
-          className="ops-metric-card"
-          label="Open offers"
-          value={formatCompactCurrency(report.money.pipelineValue)}
-          detail={`${formatCurrency(report.money.depositsHeld)} in deposits held`}
-          tone="blue"
-        />
-        <MetricCard
-          className="ops-metric-card"
-          label="Spent this month"
-          value={formatCompactCurrency(report.money.investedThisMonth)}
-          detail={`${formatCompactCurrency(report.money.investedInHorses)} tied to horses`}
-          tone="slate"
-        />
-      </div>
-
-      {report.risk.items.length > 0 ? (
+      {locked ? (
         <Panel
           className="ops-panel"
-          title="What is holding up a sale"
-          description="Listed dollars a buyer cannot close on today, largest first."
+          title="Unlock ranch reporting"
+          description="Cost per horse, break-even and margin, what is holding each sale up, and where the spend is going — with PDF and spreadsheet export."
         >
-          <div className="report-risk">
-            {report.risk.items.map((item) => (
-              <div className="report-risk__row" key={item.horseId}>
-                <div className="report-risk__main">
-                  <span className="report-risk__name">{item.horseName}</span>
-                  <span className="report-risk__blockers">{item.blockers.join(' · ')}</span>
-                </div>
-                <span className="report-risk__amount">{formatCurrency(item.askPrice)}</span>
-                <button
-                  className="button button--ghost button--compact"
-                  type="button"
-                  onClick={() => navigate(item.actionRoute)}
-                >
-                  {item.actionLabel}
-                </button>
-              </div>
-            ))}
-          </div>
+          <EmptyState
+            title={locked}
+            description="Ranch Ops turns the records you already keep into the numbers a banker, an accountant or a partner asks for."
+            action={
+              <button className="button button--primary" type="button" onClick={() => navigate(billingPath)}>
+                See Ranch Ops
+              </button>
+            }
+          />
         </Panel>
-      ) : null}
+      ) : (
+        <>
+          <div className="ops-metric-grid">
+            <MetricCard
+              className="ops-metric-card"
+              label="Ready to close"
+              value={formatCompactCurrency(report.money.readyValue)}
+              detail="Listed value with no blockers"
+              tone="emerald"
+            />
+            <MetricCard
+              className="ops-metric-card"
+              label="Waiting on documents"
+              value={formatCompactCurrency(report.money.valueAtRisk)}
+              detail={`${report.risk.items.length} horse${report.risk.items.length === 1 ? '' : 's'} blocked`}
+              tone={report.money.valueAtRisk > 0 ? 'amber' : 'slate'}
+            />
+            <MetricCard
+              className="ops-metric-card"
+              label="Open offers"
+              value={formatCompactCurrency(report.money.pipelineValue)}
+              detail={`${formatCurrency(report.money.depositsHeld)} in deposits held`}
+              tone="blue"
+            />
+            <MetricCard
+              className="ops-metric-card"
+              label="Spent this month"
+              value={formatCompactCurrency(report.money.investedThisMonth)}
+              detail={`${formatCompactCurrency(report.money.investedInHorses)} tied to horses`}
+              tone="slate"
+            />
+          </div>
 
-      <Panel
-        className="ops-panel"
-        title="Cost and margin by horse"
-        description="What each horse has cost, what it burns per month, and the lowest price worth taking."
-      >
-        <div className="report-table-scroll">
-          <table className="report-table">
-            <thead>
-              <tr>
-                <th scope="col">Horse</th>
-                <th scope="col" className="report-table__num">
-                  Invested
-                </th>
-                <th scope="col" className="report-table__num">
-                  Per month
-                </th>
-                <th scope="col" className="report-table__num">
-                  Asking
-                </th>
-                <th scope="col" className="report-table__num">
-                  Break-even
-                </th>
-                <th scope="col" className="report-table__num">
-                  Margin
-                </th>
-                <th scope="col" className="report-table__num">
-                  Floor
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.horses.map((horse) => (
-                <tr
-                  key={horse.horseId}
-                  onClick={() => navigate(`/horses/${horse.horseId}`)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      navigate(`/horses/${horse.horseId}`);
-                    }
-                  }}
-                  tabIndex={0}
-                  role="link"
-                  aria-label={`${horse.horseName}, open profile`}
-                >
-                  <th scope="row">
-                    <span className="report-table__name">{horse.horseName}</span>
-                    <span className="report-table__meta">{horse.status}</span>
-                  </th>
-                  <td className="report-table__num">{formatCurrency(horse.investedToDate)}</td>
-                  <td className="report-table__num">{formatCurrency(horse.monthlyBurn)}</td>
-                  {/* A horse with no asking price is not listed. Showing $0
+          {report.risk.items.length > 0 ? (
+            <Panel
+              className="ops-panel"
+              title="What is holding up a sale"
+              description="Listed dollars a buyer cannot close on today, largest first."
+            >
+              <div className="report-risk">
+                {report.risk.items.map((item) => (
+                  <div className="report-risk__row" key={item.horseId}>
+                    <div className="report-risk__main">
+                      <span className="report-risk__name">{item.horseName}</span>
+                      <span className="report-risk__blockers">{item.blockers.join(' · ')}</span>
+                    </div>
+                    <span className="report-risk__amount">{formatCurrency(item.askPrice)}</span>
+                    <button
+                      className="button button--ghost button--compact"
+                      type="button"
+                      onClick={() => navigate(item.actionRoute)}
+                    >
+                      {item.actionLabel}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+          ) : null}
+
+          <Panel
+            className="ops-panel"
+            title="Cost and margin by horse"
+            description="What each horse has cost, what it burns per month, and the lowest price worth taking."
+          >
+            <div className="report-table-scroll">
+              <table className="report-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Horse</th>
+                    <th scope="col" className="report-table__num">
+                      Invested
+                    </th>
+                    <th scope="col" className="report-table__num">
+                      Per month
+                    </th>
+                    <th scope="col" className="report-table__num">
+                      Asking
+                    </th>
+                    <th scope="col" className="report-table__num">
+                      Break-even
+                    </th>
+                    <th scope="col" className="report-table__num">
+                      Margin
+                    </th>
+                    <th scope="col" className="report-table__num">
+                      Floor
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.horses.map((horse) => (
+                    <tr
+                      key={horse.horseId}
+                      onClick={() => navigate(`/horses/${horse.horseId}`)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          navigate(`/horses/${horse.horseId}`);
+                        }
+                      }}
+                      tabIndex={0}
+                      role="link"
+                      aria-label={`${horse.horseName}, open profile`}
+                    >
+                      <th scope="row">
+                        <span className="report-table__name">{horse.horseName}</span>
+                        <span className="report-table__meta">{horse.status}</span>
+                      </th>
+                      <td className="report-table__num">{formatCurrency(horse.investedToDate)}</td>
+                      <td className="report-table__num">{formatCurrency(horse.monthlyBurn)}</td>
+                      {/* A horse with no asking price is not listed. Showing $0
                       would read as "worth nothing" rather than "not for sale",
                       and the three derived columns are meaningless without it. */}
-                  {horse.askPrice > 0 ? (
-                    <>
-                      <td className="report-table__num">{formatCurrency(horse.askPrice)}</td>
-                      <td className="report-table__num">{formatCurrency(horse.breakEvenPrice)}</td>
-                      <td className="report-table__num">
-                        <Pill tone={horse.projectedMargin >= 0 ? 'emerald' : 'rose'}>
-                          {formatCurrency(horse.projectedMargin)} · {horse.marginPercent}%
-                        </Pill>
-                      </td>
-                      <td className="report-table__num">{formatCurrency(horse.safeDiscountFloor)}</td>
-                    </>
-                  ) : (
-                    <td className="report-table__num report-table__muted" colSpan={4}>
-                      Not listed for sale
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
-
-      <div className="ops-workspace ops-workspace--columns">
-        <Panel
-          className="ops-panel"
-          title="Where the spend goes"
-          description={`${formatCurrency(report.money.investedToDate)} recorded across ${report.categories.length} categor${report.categories.length === 1 ? 'y' : 'ies'}.`}
-        >
-          {report.categories.length ? (
-            <div className="report-bars">
-              {report.categories.map((category) => (
-                <div className="report-bar" key={category.category}>
-                  <div className="report-bar__head">
-                    <span>{category.category}</span>
-                    <span>
-                      {formatCurrency(category.total)} · {category.share}%
-                    </span>
-                  </div>
-                  <div className="report-bar__track">
-                    <div className="report-bar__fill" style={{ width: `${Math.max(category.share, 2)}%` }} />
-                  </div>
-                </div>
-              ))}
+                      {horse.askPrice > 0 ? (
+                        <>
+                          <td className="report-table__num">{formatCurrency(horse.askPrice)}</td>
+                          <td className="report-table__num">{formatCurrency(horse.breakEvenPrice)}</td>
+                          <td className="report-table__num">
+                            <Pill tone={horse.projectedMargin >= 0 ? 'emerald' : 'rose'}>
+                              {formatCurrency(horse.projectedMargin)} · {horse.marginPercent}%
+                            </Pill>
+                          </td>
+                          <td className="report-table__num">{formatCurrency(horse.safeDiscountFloor)}</td>
+                        </>
+                      ) : (
+                        <td className="report-table__num report-table__muted" colSpan={4}>
+                          Not listed for sale
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          ) : (
-            <EmptyState
-              compact
-              title="No receipts logged"
-              description="Upload receipts to see where the money goes and what each horse costs."
-              action={
-                <button className="button button--ghost" type="button" onClick={() => navigate('/expenses')}>
-                  Log a receipt
-                </button>
-              }
-            />
-          )}
-        </Panel>
+          </Panel>
+        </>
+      )}
+
+      <div className={`ops-workspace${locked ? '' : ' ops-workspace--columns'}`}>
+        {locked ? null : (
+          <Panel
+            className="ops-panel"
+            title="Where the spend goes"
+            description={`${formatCurrency(report.money.investedToDate)} recorded across ${report.categories.length} categor${report.categories.length === 1 ? 'y' : 'ies'}.`}
+          >
+            {report.categories.length ? (
+              <div className="report-bars">
+                {report.categories.map((category) => (
+                  <div className="report-bar" key={category.category}>
+                    <div className="report-bar__head">
+                      <span>{category.category}</span>
+                      <span>
+                        {formatCurrency(category.total)} · {category.share}%
+                      </span>
+                    </div>
+                    <div className="report-bar__track">
+                      <div className="report-bar__fill" style={{ width: `${Math.max(category.share, 2)}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                compact
+                title="No receipts logged"
+                description="Upload receipts to see where the money goes and what each horse costs."
+                action={
+                  <button className="button button--ghost" type="button" onClick={() => navigate('/expenses')}>
+                    Log a receipt
+                  </button>
+                }
+              />
+            )}
+          </Panel>
+        )}
 
         <Panel
           className="ops-panel"
@@ -324,7 +406,7 @@ export default function Reports() {
         </Panel>
       </div>
 
-      {report.anomalies.length > 0 ? (
+      {!locked && report.anomalies.length > 0 ? (
         <Panel
           className="ops-panel"
           title="Running above trend"
