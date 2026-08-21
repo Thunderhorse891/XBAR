@@ -20,6 +20,98 @@ const RULE = rgb(0.82, 0.84, 0.87);
 const ACCENT = rgb(0.16, 0.35, 0.55);
 
 /*
+ * Everything drawn here goes through pdf-lib's standard Helvetica, which is
+ * WinAnsi-encoded (CP1252). Handing it anything outside that set does not
+ * degrade — it THROWS, so one horse called `Dvořák` fails the whole document.
+ *
+ * Verified against pdf-lib by probing every codepoint to 0x2FFF; the encodable
+ * set is exactly CP1252:
+ *
+ *   0x20-0x7E, 0xA0-0xFF, and the scattered extras — Œœ Šš Ÿ Žž ƒ ˆ ˜
+ *   – — ' ' ‚ " " „ † ‡ • … ‰ ‹ › € ™
+ *
+ * Embedding a Unicode font would be the complete fix, but that needs fontkit
+ * and a multi-megabyte typeface — a new dependency and a much larger bundle.
+ * Failing to produce a bill of sale is far worse than producing one that spells
+ * a name without its háčeks, so unsupported characters are folded down instead:
+ * accents are decomposed to their base letter (ř becomes r, ñ becomes n), and
+ * anything with no Latin equivalent at all — CJK, emoji — becomes '?' so the
+ * rest of the document still renders.
+ */
+const WINANSI_EXTRAS = new Set([
+  0x152, 0x153, 0x160, 0x161, 0x178, 0x17d, 0x17e, 0x192, 0x2c6, 0x2dc, 0x2013, 0x2014, 0x2018, 0x2019, 0x201a, 0x201c,
+  0x201d, 0x201e, 0x2020, 0x2021, 0x2022, 0x2026, 0x2030, 0x2039, 0x203a, 0x20ac, 0x2122,
+]);
+
+/*
+ * Letters whose accent is a stroke through the glyph rather than a combining
+ * mark. NFKD leaves them intact, so they need naming explicitly or a Polish or
+ * Croatian owner surname renders as '?ukasz'.
+ */
+const STROKED_LATIN = new Map([
+  ['\u0141', 'L'],
+  ['\u0142', 'l'],
+  ['\u0110', 'D'],
+  ['\u0111', 'd'],
+  ['\u0126', 'H'],
+  ['\u0127', 'h'],
+  ['\u0166', 'T'],
+  ['\u0167', 't'],
+]);
+
+function encodable(codePoint) {
+  if (codePoint >= 0x20 && codePoint <= 0x7e) return true;
+  if (codePoint >= 0xa0 && codePoint <= 0xff) return true;
+  return WINANSI_EXTRAS.has(codePoint);
+}
+
+/**
+ * Fold a string down to what the standard font can actually draw.
+ *
+ * Applied once, at the entry to createSectionedPdf, so measuring and drawing
+ * always see the same string. Sanitizing at draw time instead would wrap on one
+ * string and render another, and the layout would drift by however much the
+ * substitutions changed the width.
+ */
+export function toDrawableText(value) {
+  const raw = String(value ?? '');
+  let out = '';
+
+  for (const char of raw) {
+    // Kept exactly as written whenever the font can draw it. CP1252 already
+    // covers é, ñ, ü, ç and the rest of Latin-1, so folding first would spell
+    // `Café` as `Cafe` for no reason.
+    if (encodable(char.codePointAt(0))) {
+      out += char;
+      continue;
+    }
+
+    if (char === '\t') {
+      out += ' ';
+      continue;
+    }
+
+    const stroked = STROKED_LATIN.get(char);
+    if (stroked) {
+      out += stroked;
+      continue;
+    }
+
+    // NFKD splits an accented letter into base + combining mark; dropping the
+    // marks leaves a base letter the font can draw. This is what turns ř into
+    // r.
+    const folded = char.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+    const drawable = [...folded].every((part) => encodable(part.codePointAt(0)));
+
+    // No Latin equivalent — CJK, emoji. A visible placeholder beats a silent
+    // deletion, which would render two different horses under the same name.
+    out += drawable && folded ? folded : '?';
+  }
+
+  return out;
+}
+
+/*
  * Characters a long unbroken token may be split after.
  *
  * Breaking a URL after a separator keeps the fragments legible and lets a
@@ -162,7 +254,21 @@ export function fieldsInLine(line) {
   return fields.every(Boolean) ? fields : null;
 }
 
-export async function createSectionedPdf({ title, sections, footer = '', letterhead = '', reference = '' }) {
+export async function createSectionedPdf(input) {
+  // Folded once, here, so every downstream measurement and draw sees the same
+  // text. See toDrawableText: the standard font throws on anything outside
+  // CP1252, so one unusual character in one horse's name would otherwise fail
+  // the entire document.
+  const title = toDrawableText(input.title);
+  const footer = toDrawableText(input.footer ?? '');
+  const letterhead = toDrawableText(input.letterhead ?? '');
+  const reference = toDrawableText(input.reference ?? '');
+  const sections = (input.sections || []).map((section) => ({
+    ...section,
+    heading: toDrawableText(section.heading),
+    lines: (section.lines || []).map(toDrawableText),
+  }));
+
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);

@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 
-import { asField, createSectionedPdf, fieldsInLine, wrapLine } from '../../api/_lib/pdf.js';
+import { asField, createSectionedPdf, fieldsInLine, toDrawableText, wrapLine } from '../../api/_lib/pdf.js';
 
 /*
  * How a template line becomes a row on the page.
@@ -179,4 +179,56 @@ test('content that genuinely overflows still gets its second page', async () => 
   const bytes = await createSectionedPdf({ title: 'Overflow', sections: [{ heading: 'S', lines }], footer: 'f' });
   const pdf = await PDFDocument.load(bytes);
   assert.ok(pdf.getPageCount() >= 2, 'sixty fields do not fit on one page');
+});
+
+/*
+ * One unusual character in one name must not fail an entire document.
+ *
+ * pdf-lib's standard Helvetica is WinAnsi-encoded and THROWS on anything
+ * outside CP1252 rather than degrading — so a horse called `Dvořák`, or an
+ * owner who put an emoji in a name field, took down every bill of sale, sale
+ * packet cover and ranch report that mentioned them.
+ */
+test('a name outside WinAnsi still produces a document', async () => {
+  for (const name of ['Dvořák', '馬', 'Docs Best 🐴', 'Łukasz', 'Đorđe']) {
+    const bytes = await createSectionedPdf({
+      title: 'Bill of Sale',
+      sections: [{ heading: 'Horse', lines: [`Registered Name: ${name}`] }],
+      footer: 'f',
+    });
+    assert.ok(bytes.length > 0, `${name} must render`);
+  }
+
+  // Every field the caller supplies goes through the same fold, not just the
+  // section lines — a title or letterhead is just as likely to carry a name.
+  const bytes = await createSectionedPdf({
+    title: 'Dvořák 馬',
+    letterhead: 'Dvořák Ranch',
+    reference: 'Packet 馬',
+    sections: [{ heading: 'Dvořák', lines: ['Owner: Dvořák'] }],
+    footer: 'Dvořák',
+  });
+  assert.ok(bytes.length > 0);
+});
+
+test('folding keeps what the font can already draw', async () => {
+  // Guards the fix. Stripping accents wholesale would satisfy the test above
+  // and quietly respell every Latin-1 name the product handles correctly today
+  // — CP1252 covers é, ñ, ü, ç and the rest.
+  assert.equal(toDrawableText('Café Olé'), 'Café Olé');
+  assert.equal(toDrawableText('Señor Ñandú'), 'Señor Ñandú');
+  assert.equal(toDrawableText('Ostrož Žižka'), 'Ostrož Žižka');
+  assert.equal(toDrawableText('Peppy — San "Badger"'), 'Peppy — San "Badger"');
+
+  // Only what cannot be drawn is folded, and only as far as it has to be.
+  assert.equal(toDrawableText('Dvořák'), 'Dvorák', 'ř folds, á is kept');
+  assert.equal(toDrawableText('Łukasz'), 'Lukasz', 'a stroked letter has no combining mark to drop');
+
+  // No Latin equivalent: a visible placeholder, never a silent deletion, which
+  // would render two different horses under the same name.
+  assert.equal(toDrawableText('馬'), '?');
+  assert.equal(toDrawableText('A🐴B'), 'A?B');
+
+  assert.equal(toDrawableText(''), '');
+  assert.equal(toDrawableText(undefined), '');
 });

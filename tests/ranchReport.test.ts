@@ -413,3 +413,58 @@ test('per-horse monthly burn uses the same window as the herd figure', () => {
   assert.equal(report.horses[0].monthlyBurn, 300);
   assert.equal(report.horses[0].monthlyBurn, report.money.monthlyBurn);
 });
+
+/*
+ * A spreadsheet handed to a banker must not run code on their machine.
+ *
+ * Quoting a CSV field does not stop Excel, LibreOffice or Sheets parsing a
+ * leading `=`, `+`, `-` or `@` as a formula. This report is explicitly built to
+ * be exported and passed on, and it carries user-entered and imported horse
+ * names, so a crafted name is a live payload on the recipient's machine.
+ */
+test('names that look like formulas are neutralized in the spreadsheet', () => {
+  const payloads = ['=HYPERLINK("http://evil.test","click")', '+1+1', '-2+3', '@SUM(A1:A9)', '\t=1+1'];
+
+  const report = buildRanchReport(
+    input({
+      horses: payloads.map((name, index) => horse({ id: `h${index}`, name })),
+      expenseReceipts: [receipt({ id: 'r1', amount: 100 })],
+    }),
+    NOW,
+  );
+  const csv = ranchReportToCsv(report);
+
+  for (const payload of payloads) {
+    // Compared against the escaped form: quotes inside the value are doubled by
+    // CSV escaping, so the raw payload never appears verbatim.
+    const escaped = payload.replace(/"/g, '""');
+    // Present, and prefixed so the cell is read as text rather than evaluated.
+    assert.ok(csv.includes(`"'${escaped}`), `"${payload}" must be neutralized`);
+    // And never opening a cell unguarded.
+    assert.ok(!csv.includes(`,"${escaped}`), `"${payload}" must not start a cell unguarded`);
+  }
+});
+
+test('ordinary names and negative numbers survive the spreadsheet unchanged', () => {
+  // Guards the fix twice over. Prefixing everything would corrupt every cell,
+  // and prefixing numbers would turn a negative margin into the text '-500 and
+  // break every sum in the sheet.
+  const report = buildRanchReport(
+    input({
+      horses: [horse({ id: 'h1', name: 'Docs Best Chex', sale: { askPrice: 1_000 } } as never)],
+      // Spend far above the asking price, so the projected margin is negative.
+      expenseReceipts: [receipt({ id: 'r1', amount: 9_000, horseId: 'h1' })],
+    }),
+    NOW,
+  );
+  const csv = ranchReportToCsv(report);
+
+  assert.ok(csv.includes('"Docs Best Chex"'), 'an ordinary name is untouched');
+  assert.ok(!csv.includes('"\'Docs'), 'an ordinary name is not prefixed');
+
+  assert.ok(report.horses[0].projectedMargin < 0, 'the fixture must actually produce a negative number');
+  assert.ok(
+    csv.includes(`"${report.horses[0].projectedMargin}"`),
+    'a negative number stays a number rather than becoming text',
+  );
+});

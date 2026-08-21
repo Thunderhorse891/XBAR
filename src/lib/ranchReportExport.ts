@@ -15,15 +15,36 @@ import type { RanchReport } from './ranchReport.js';
  * fail, on the screen whose whole job is to be handed to someone else.
  */
 
+/*
+ * Characters that make a spreadsheet treat a cell as a formula rather than as
+ * text. Quoting does not help: Excel, LibreOffice and Sheets all parse a
+ * leading `=`, `+`, `-` or `@` inside a quoted field, and a tab or carriage
+ * return can carry the leading character past a naive check.
+ */
+const FORMULA_LEAD = /^[\t\r=+\-@]/;
+
 /**
  * Escape one CSV field.
  *
  * Quotes everything rather than deciding per value. A horse called
  * `Docs Best, Jr.` and a blocker list containing commas both round-trip, and
  * the rule is one line instead of a set of cases to get wrong.
+ *
+ * Text that would otherwise be read as a formula is prefixed with an
+ * apostrophe, which spreadsheets consume as "treat the rest as text". This
+ * file is meant to be handed to a banker or an accountant and opened in Excel,
+ * so a horse name imported as `=HYPERLINK(...)` would execute on their machine,
+ * not on the ranch's.
+ *
+ * Numbers are never prefixed. They are passed as numbers by every caller here,
+ * so gating on the type keeps `-500` a negative number instead of turning it
+ * into the text `'-500` and breaking every sum in the sheet.
  */
 function csvField(value: string | number): string {
-  return `"${String(value).replace(/"/g, '""')}"`;
+  if (typeof value === 'number') return `"${value}"`;
+  const text = String(value);
+  const guarded = FORMULA_LEAD.test(text) ? `'${text}` : text;
+  return `"${guarded.replace(/"/g, '""')}"`;
 }
 
 function csvRow(cells: (string | number)[]): string {
