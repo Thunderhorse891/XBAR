@@ -8,9 +8,10 @@ import { revenuePlanMatrix } from '@/lib/revenuePlanMatrix';
 import { trackRuntimeEvent } from '@/lib/runtimeEvents';
 import {
   getCheckoutReadiness,
-  recommendedTier,
   isCurrentPaidPlan,
   isEntitledBillingState,
+  isSubscriptionRecoverable,
+  recommendedTier,
 } from '@/lib/subscriptionDecision';
 import { subscriptionPlans } from '@/lib/subscriptionPlans';
 import { useCloudStore } from '@/store/useCloudStore';
@@ -73,10 +74,13 @@ export default function Subscriptions() {
   // Testing that state for the past-due value missed both of the latter and
   // left their plan buttons enabled.
   //
-  // Older profiles predate the field. Absent is read as no live subscription —
-  // the same answer as a workspace that never had one, which is what those
-  // profiles were written before Stripe could tell us otherwise.
-  const subscriptionRecoverable = subscription.subscriptionRecoverable === true;
+  // Older profiles predate the field, and reading absent as "no live
+  // subscription" was wrong: the previous mapper stored past_due, unpaid and
+  // incomplete_expired all as 'Past Due' and never produced 'Inactive', so
+  // every legacy lapsed workspace sits in 'Past Due' with no flag — and two of
+  // those three statuses can still be collected on. isSubscriptionRecoverable
+  // falls back to the billing state for exactly that population.
+  const subscriptionRecoverable = isSubscriptionRecoverable(subscription);
   const continuePath = workspaceReady ? '/' : '/setup';
   const checkoutReadinessLabel = selectedCheckoutConfigured
     ? 'Secure checkout opens next.'

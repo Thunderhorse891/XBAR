@@ -451,7 +451,16 @@ test('an unrecognized status is unentitled and treated as still billable', () =>
 test('the billing screen reads the profile flag rather than testing Past Due', async () => {
   const source = await readFile(path.join(process.cwd(), 'src/routes/Subscriptions.tsx'), 'utf8');
 
-  assert.match(source, /const subscriptionRecoverable = subscription\.subscriptionRecoverable === true;/);
+  // Resolved through the policy helper, not read off the profile. Reading the
+  // raw field treats an absent value as "no live subscription", which is wrong
+  // for every legacy 'Past Due' row on an upgraded deployment — the previous
+  // mapper stored past_due, unpaid and incomplete_expired all as 'Past Due'.
+  assert.match(source, /const subscriptionRecoverable = isSubscriptionRecoverable\(subscription\);/);
+  assert.doesNotMatch(
+    source,
+    /subscription\.subscriptionRecoverable === true/,
+    'the raw field must not be read directly; the fallback lives in the helper',
+  );
 
   // The retired derivation must not come back anywhere in the file, in any
   // form that feeds the checkout guard.

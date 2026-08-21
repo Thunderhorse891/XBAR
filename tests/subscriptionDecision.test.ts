@@ -5,6 +5,7 @@ import path from 'node:path';
 import {
   getCheckoutReadiness,
   clampSubscriptionToEntitlement,
+  isSubscriptionRecoverable,
   normalizeTier,
   hasActivePaidPlan,
   isCurrentPaidPlan,
@@ -419,7 +420,7 @@ test('a workspace with no live subscription still reaches checkout', () => {
  * recoverable would lock every existing workspace out of buying a plan.
  */
 test('a profile without the field is treated as having no live subscription', () => {
-  const legacy = { tier: 'Starter', billingState: 'Inactive' } as Partial<SubscriptionProfile>;
+  const legacy = { tier: 'Starter', billingState: 'Inactive' } as SubscriptionProfile;
   const readiness = getCheckoutReadiness({
     billingEnabled: true,
     canManageBilling: true,
@@ -427,11 +428,64 @@ test('a profile without the field is treated as having no live subscription', ()
     hasPaymentLink: true,
     checkoutInProgress: false,
     // The same expression Subscriptions.tsx uses.
-    subscriptionRecoverable: legacy.subscriptionRecoverable === true,
+    subscriptionRecoverable: isSubscriptionRecoverable(legacy),
   });
 
   assert.equal(readiness.ready, true);
   assert.equal(readiness.mode, 'checkout');
+});
+
+/*
+ * Legacy 'Past Due' profiles carry no flag and must still block checkout.
+ *
+ * The previous mapper stored past_due, unpaid AND incomplete_expired as
+ * 'Past Due', and never produced 'Inactive' at all — so on any upgraded
+ * deployment every lapsed workspace is sitting in 'Past Due' with no
+ * subscriptionRecoverable field, and two of those three statuses leave a
+ * subscription Stripe can still collect on.
+ *
+ * The billing screen used to block checkout on 'Past Due' outright. Replacing
+ * that test with a field those rows do not carry re-enabled checkout for the
+ * entire legacy population — the duplicate billing the flag exists to prevent,
+ * reintroduced by the fix for it. The reconciliation migration does not help:
+ * it only touches 'Manual Billing' rows.
+ */
+test('a legacy Past Due profile blocks checkout even without the flag', () => {
+  const legacy = { tier: 'Starter', purchasedTier: 'Enterprise', billingState: 'Past Due' } as SubscriptionProfile;
+  assert.equal(legacy.subscriptionRecoverable, undefined, 'the fixture must actually lack the field');
+  assert.equal(isSubscriptionRecoverable(legacy), true);
+
+  const readiness = getCheckoutReadiness({
+    billingEnabled: true,
+    canManageBilling: true,
+    hasManagedIdentity: true,
+    hasPaymentLink: true,
+    checkoutInProgress: false,
+    subscriptionRecoverable: isSubscriptionRecoverable(legacy),
+  });
+
+  assert.equal(readiness.ready, false, 'a live subscription must not be bought twice');
+  assert.equal(readiness.mode, 'recover');
+});
+
+test('a stored flag always wins over the fallback', () => {
+  // The fallback is only for profiles that predate the field. Once Stripe has
+  // told us, its answer is the one that counts — including the case the
+  // fallback would get wrong on its own: a workspace whose subscription really
+  // is over but whose stored state has not caught up.
+  assert.equal(
+    isSubscriptionRecoverable({ billingState: 'Past Due', subscriptionRecoverable: false } as SubscriptionProfile),
+    false,
+  );
+  assert.equal(
+    isSubscriptionRecoverable({ billingState: 'Inactive', subscriptionRecoverable: true } as SubscriptionProfile),
+    true,
+  );
+
+  // And a workspace that never subscribed can still buy: no flag, not Past Due.
+  assert.equal(isSubscriptionRecoverable({ billingState: 'Manual Billing' } as SubscriptionProfile), false);
+  assert.equal(isSubscriptionRecoverable({ billingState: 'Active' } as SubscriptionProfile), false);
+  assert.equal(isSubscriptionRecoverable({ billingState: 'Inactive' } as SubscriptionProfile), false);
 });
 
 /*

@@ -114,6 +114,33 @@ export function recommendedTier(currentTier: SubscriptionTier, requestedTier?: S
  * checkout button was disabled as "your current plan", and the customer could
  * not resubscribe to the tier they had just lost.
  */
+/**
+ * Whether a Stripe subscription still exists that could bill this workspace.
+ *
+ * Reads the stored flag when the profile has one. A profile written before the
+ * field existed does not, and the fallback is the whole point of this function:
+ * the previous mapper stored `past_due`, `unpaid` AND `incomplete_expired` as
+ * 'Past Due' and never produced 'Inactive' at all, so every legacy lapsed
+ * workspace is sitting in 'Past Due' with no flag — and two of those three
+ * statuses leave a subscription Stripe can still collect on.
+ *
+ * Before the flag existed the billing screen blocked checkout on 'Past Due'
+ * outright. Replacing that test with a field those rows do not carry re-enabled
+ * checkout for all of them, which is exactly the duplicate billing the flag was
+ * added to prevent. So an absent flag falls back to the billing state, which
+ * restores the old behaviour for legacy rows and costs nothing for new ones.
+ *
+ * 'Past Due' is itself the evidence of a live subscription — it is the state a
+ * workspace is put in *because* Stripe is still trying to collect — so no
+ * separate check for Stripe linkage is needed.
+ */
+export function isSubscriptionRecoverable(subscription: SubscriptionProfile): boolean {
+  if (typeof subscription.subscriptionRecoverable === 'boolean') {
+    return subscription.subscriptionRecoverable;
+  }
+  return subscription.billingState === 'Past Due';
+}
+
 export function isEntitledBillingState(billingState: SubscriptionProfile['billingState']): boolean {
   return billingState === 'Active' || billingState === 'Manual Billing';
 }
