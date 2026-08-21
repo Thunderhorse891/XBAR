@@ -34,7 +34,7 @@ if (!connection) {
 const ROLES = ['anon', 'authenticated', 'service_role'];
 
 const query = `
-select r.rolname, p.proname
+select r.rolname, p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' as signature
 from pg_proc p
 join pg_namespace n on n.oid = p.pronamespace
 cross join (select unnest(array[${ROLES.map((role) => `'${role}'`).join(',')}]) as rolname) r
@@ -43,7 +43,7 @@ where n.nspname = 'public'
   and p.proname like 'xbar\\_%'
   and exists (select 1 from pg_roles where rolname = r.rolname)
   and has_function_privilege(r.rolname, p.oid, 'EXECUTE')
-order by r.rolname, p.proname;
+order by r.rolname, signature;
 `;
 
 const result = spawnSync('psql', [connection, '-tAF', '\t', '-c', query], { encoding: 'utf8' });
@@ -73,7 +73,10 @@ for (const role of ROLES) {
 // The buyer share flow, and nothing else. Both halves are required: a buyer
 // opens a link with no account, so resolution AND view tracking must stay
 // reachable by anon.
-const REQUIRED_ANON = ['xbar_resolve_public_listing', 'xbar_track_public_share_view'];
+// Exact signatures, matching the migration's allowlist. Comparing bare names
+// would report an exact surface while an unintended overload of one of these
+// names stayed executable — the drift this script exists to catch.
+const REQUIRED_ANON = ['xbar_resolve_public_listing(text, text)', 'xbar_track_public_share_view(text, text)'];
 
 const anonFunctions = byRole.get('anon');
 const anonExtra = anonFunctions.filter((fn) => !REQUIRED_ANON.includes(fn));

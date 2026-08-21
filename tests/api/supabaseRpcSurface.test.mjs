@@ -196,3 +196,44 @@ test('the verifier only reports success for an exact match', () => {
   const guard = script.lastIndexOf('if (!anonMissing.length && !anonExtra.length)', success);
   assert.notEqual(guard, -1, 'success must require both no extras and nothing missing');
 });
+
+/*
+ * The anon allowlist must name exact signatures, not bare function names.
+ *
+ * `not (p.proname = any(keep_public))` exempts *every* overload of a listed
+ * name from the revoke. A drifted database carrying an unintended
+ * `xbar_resolve_public_listing(uuid)` would therefore keep it reachable by anon
+ * — through the migration written to close exactly that surface. The verifier
+ * shared the blind spot: it selected `proname` and compared names, so it could
+ * report an exact surface while the overload stayed executable.
+ */
+const PUBLIC_RPC_SIGNATURES = ['xbar_resolve_public_listing(text, text)', 'xbar_track_public_share_view(text, text)'];
+
+test('the migration allowlists exact signatures', () => {
+  const sql = readFileSync(path.join(migrationsDir, SECURITY_MIGRATION), 'utf8');
+
+  for (const signature of PUBLIC_RPC_SIGNATURES) {
+    assert.ok(sql.includes(`'${signature}'`), `keep_public should name ${signature} exactly`);
+  }
+
+  // The comparison has to build the signature, or the exact names above are
+  // decorative and the match is still by name.
+  assert.match(sql, /pg_get_function_identity_arguments\(p\.oid\)/);
+  assert.doesNotMatch(
+    sql,
+    /not \(p\.proname = any\(keep_public\)\)/,
+    'a name-only exclusion exempts every overload of an allowlisted name',
+  );
+});
+
+test('the verifier compares the same signatures the migration keeps', () => {
+  const script = readFileSync(path.join(repoRoot, 'scripts', 'verify-rpc-surface.mjs'), 'utf8');
+
+  for (const signature of PUBLIC_RPC_SIGNATURES) {
+    assert.ok(script.includes(`'${signature}'`), `the verifier should require ${signature} exactly`);
+  }
+
+  // Its query must select the signature too, or it compares names against
+  // signatures and reports everything as missing.
+  assert.match(script, /pg_get_function_identity_arguments\(p\.oid\)/);
+});

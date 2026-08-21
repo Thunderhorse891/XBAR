@@ -58,7 +58,15 @@ declare
   -- referenced from nowhere in src/ or api/, so it is a second, unmaintained
   -- anon entry point to the same listing data. See the note at the bottom
   -- about restoring it if old share links turn out to still reach it.
-  keep_public text[] := array['xbar_resolve_public_listing', 'xbar_track_public_share_view'];
+  -- Exact signatures, not names. A name-only allowlist exempts every overload
+  -- of these names from the revoke, so a drifted database carrying an
+  -- unintended `xbar_resolve_public_listing(uuid)` would keep it reachable by
+  -- anon — through the very migration written to close that surface. Only
+  -- these two signatures serve the buyer flow.
+  keep_public text[] := array[
+    'xbar_resolve_public_listing(text, text)',
+    'xbar_track_public_share_view(text, text)'
+  ];
 begin
   for target in
     select p.oid::regprocedure::text as signature, p.proname as name
@@ -67,7 +75,7 @@ begin
     where n.nspname = 'public'
       and p.prosecdef                       -- SECURITY DEFINER only
       and p.proname like 'xbar\_%'
-      and not (p.proname = any(keep_public))
+      and not (p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' = any(keep_public))
     order by p.proname
   loop
     -- Both are needed, and neither substitutes for the other.

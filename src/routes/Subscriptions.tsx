@@ -6,7 +6,12 @@ import { getStripePaymentLink, stripeConfig } from '@/lib/platformConfig';
 import { productEvent, productEventNames } from '@/lib/productEvents';
 import { revenuePlanMatrix } from '@/lib/revenuePlanMatrix';
 import { trackRuntimeEvent } from '@/lib/runtimeEvents';
-import { getCheckoutReadiness, recommendedTier, isCurrentPaidPlan } from '@/lib/subscriptionDecision';
+import {
+  getCheckoutReadiness,
+  recommendedTier,
+  isCurrentPaidPlan,
+  isEntitledBillingState,
+} from '@/lib/subscriptionDecision';
 import { subscriptionPlans } from '@/lib/subscriptionPlans';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -38,9 +43,20 @@ export default function Subscriptions() {
   const [checkoutTier, setCheckoutTier] = useState<SubscriptionTier | null>(null);
   // After a lapse, `tier` is the baseline the workspace fell back to, so
   // recommending from it offers Professional to someone who just lost
-  // Enterprise. purchasedTier is what they had, and restoring it is the
-  // obviously useful default — that is the reason the field is kept.
-  const decisionTier = requestedTier ?? recommendedTier(subscription.purchasedTier ?? subscription.tier);
+  // Enterprise. purchasedTier is what they had.
+  //
+  // It is selected directly rather than passed through recommendedTier, which
+  // advances to the next plan up: feeding a lapsed Professional through it
+  // returns Ranch Ops, and Ranch Ops returns Enterprise. Restoring what lapsed
+  // is not an upgrade recommendation, so the recommender is the wrong function
+  // for it — it only looked right for Enterprise, where the clamp hides the
+  // advance.
+  //
+  // Only when the workspace is not currently entitled. An active or comped
+  // workspace has purchasedTier === tier, and there the upgrade recommendation
+  // is exactly what the screen should lead with.
+  const lapsedTier = isEntitledBillingState(subscription.billingState) ? undefined : subscription.purchasedTier;
+  const decisionTier = requestedTier ?? lapsedTier ?? recommendedTier(subscription.tier);
   const decisionConfig = subscriptionPlans[decisionTier];
   const decisionProfile = revenuePlanMatrix[decisionTier];
   const hasManagedIdentity = Boolean(session?.access_token && workspaceId);

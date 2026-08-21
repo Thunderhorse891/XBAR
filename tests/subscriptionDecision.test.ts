@@ -409,3 +409,49 @@ test('a workspace that is not past due still reaches checkout', () => {
   assert.equal(readiness.ready, true);
   assert.equal(readiness.mode, 'checkout');
 });
+
+/*
+ * Restoring a lapsed plan is not an upgrade recommendation.
+ *
+ * The first version of this fix passed purchasedTier through recommendedTier,
+ * which advances to the next plan up. It produced the right answer only for
+ * Enterprise, where the clamp hides the advance — and Enterprise is the single
+ * case I reasoned about. Every tier is covered here for that reason.
+ */
+test('a lapsed plan defaults to the tier that lapsed, at every tier', () => {
+  for (const tier of ['Starter', 'Professional', 'Ranch Ops', 'Enterprise'] as const) {
+    const lapsed = subscriptionFixture({
+      tier: 'Starter', // the baseline it fell back to
+      purchasedTier: tier,
+      billingState: 'Inactive',
+      monthlyRate: 0,
+    });
+
+    const lapsedTier = isEntitledBillingState(lapsed.billingState) ? undefined : lapsed.purchasedTier;
+    assert.equal(lapsedTier, tier, `a lapsed ${tier} should offer ${tier} back, not the next plan up`);
+  }
+});
+
+test('an entitled workspace still gets an upgrade recommendation', () => {
+  // Guards the other half: always preferring purchasedTier would make the
+  // billing screen suggest the plan you already have.
+  for (const billingState of ['Active', 'Manual Billing'] as const) {
+    const current = subscriptionFixture({ tier: 'Professional', purchasedTier: 'Professional', billingState });
+
+    const lapsedTier = isEntitledBillingState(current.billingState) ? undefined : current.purchasedTier;
+    assert.equal(lapsedTier, undefined, `${billingState} must not be treated as a lapse`);
+    assert.equal(recommendedTier(current.tier), 'Ranch Ops');
+  }
+});
+
+test('the billing screen selects the lapsed tier rather than recommending from it', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/routes/Subscriptions.tsx'), 'utf8');
+
+  // The exact shape of the bug: purchasedTier fed into the upgrade recommender.
+  assert.doesNotMatch(
+    source,
+    /recommendedTier\(\s*subscription\.purchasedTier/,
+    'passing the lapsed tier through recommendedTier advances a plan instead of restoring it',
+  );
+  assert.match(source, /lapsedTier \?\? recommendedTier\(subscription\.tier\)/);
+});
