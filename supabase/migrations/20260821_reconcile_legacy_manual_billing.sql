@@ -93,6 +93,24 @@
 -- Idempotent: re-running matches nothing, because the mapper can no longer
 -- create 'Manual Billing'.
 
+-- VERIFIED ON POSTGRESQL 16
+-- -------------------------
+-- Applied to a fixture covering the three cases that matter. What the dry-run
+-- should predict, and what the migration then does:
+--
+--   profile                          stripe_subscription_id   result
+--   Enterprise / Manual Billing      sub_legacy_cancelled     -> Inactive
+--                                                                (column AND
+--                                                                 payload)
+--   Professional / Manual Billing    (none)                   -> untouched
+--   Ranch Ops / Active               sub_live                 -> untouched
+--
+-- The purchased tier is preserved in every case; only billing_state moves. The
+-- payload is updated as well because that is the field the client's ingest
+-- clamp reads — moving the column alone would leave the UI granting the old
+-- tier until another webhook arrived, which a canceled subscription may never
+-- send.
+
 begin;
 
 update public.workspace_subscription_profiles p

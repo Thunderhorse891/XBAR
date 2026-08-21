@@ -43,6 +43,24 @@
 -- so re-running replaces the body and nothing else. No trigger is dropped or
 -- recreated, so enforcement stays attached throughout.
 
+-- VERIFIED ON POSTGRESQL 16
+-- -------------------------
+-- Applied to a fixture holding one Enterprise profile per billing state, then
+-- calling xbar_subscription_limits for each (Enterprise is 60 seats / 2500 GB,
+-- Starter is 1 / 25):
+--
+--   billing_state      before this migration   after
+--   Active                     60 / 2500       60 / 2500
+--   Manual Billing             60 / 2500       60 / 2500
+--   Inactive                   60 / 2500        1 / 25   <- the fix
+--   Past Due                    1 / 25          1 / 25
+--   unrecognized value         60 / 2500        1 / 25   <- fails safe now
+--   no profile row at all       1 / 25          1 / 25
+--
+-- The two rows that change are the point: a workspace that stopped paying kept
+-- full Enterprise limits at the trigger level, and so did any billing state
+-- this codebase does not define.
+
 begin;
 
 create or replace function public.xbar_subscription_limits(p_workspace_id uuid)
