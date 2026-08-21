@@ -165,3 +165,45 @@ test('an active medical review prices the listing as blocked with disclosure req
   assert.match(result.items[0]!.blockers[0] ?? '', /medical review/);
   assert.equal(result.items[0]!.actionRoute, '/medical?horse=h1');
 });
+
+/*
+ * The purchase price belongs in a horse's economics.
+ *
+ * computeHorseEconomics summed linked receipts only, so a horse bought for
+ * $10,000 with nothing spent on it reported $0 to date — and this figure is
+ * what safeDiscountFloor is built from. The sale-packet wizard shows that floor
+ * to a seller as the lowest price worth taking, so a floor that ignores the
+ * purchase price can talk somebody into an offer below their real break-even.
+ */
+test('horse economics include what the horse cost to buy', async () => {
+  const { computeHorseEconomics } = await import('../src/lib/businessIntelligence.js');
+
+  const bought = computeHorseEconomics(horse('h1', 'Bought', 20000), [], now);
+  assert.equal(bought.costToDate, 0, 'the helper fixture has no cost basis');
+
+  const withBasis = computeHorseEconomics({ ...horse('h1', 'Bought', 20000), costBasis: 10_000 } as never, [], now);
+  assert.equal(withBasis.costToDate, 10_000);
+  assert.equal(withBasis.breakEvenPrice, 10_000, 'no receipts, so no carry to add');
+  assert.equal(withBasis.projectedMargin, 10_000, '20,000 asking less 10,000 break-even');
+  assert.equal(withBasis.safeDiscountFloor, 11_500, 'break-even plus the 15% protected margin');
+
+  // And it adds to spend rather than replacing it.
+  const both = computeHorseEconomics(
+    { ...horse('h1', 'Bought', 20000), costBasis: 10_000 } as never,
+    [
+      {
+        id: 'e1',
+        horseId: 'h1',
+        category: 'Feed',
+        amount: 600,
+        receiptDate: new Date(now.getFullYear(), now.getMonth() - 1, 2).toISOString(),
+      } as ExpenseReceipt,
+    ],
+    now,
+  );
+  assert.equal(both.costToDate, 10_600);
+
+  // A negative basis must not reduce what a horse has cost.
+  const negative = computeHorseEconomics({ ...horse('h1', 'Bought', 20000), costBasis: -500 } as never, [], now);
+  assert.equal(negative.costToDate, 0);
+});

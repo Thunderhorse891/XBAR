@@ -62,6 +62,8 @@ export function ranchReportToCsv(report: RanchReport): string {
   lines.push(csvRow(['Horses', report.horseCount]));
   lines.push(csvRow(['Listed for sale', report.listedCount]));
   lines.push(csvRow(['Invested to date', report.money.investedToDate]));
+  lines.push(csvRow(['Of that, purchase prices', report.money.acquisitionCost]));
+  lines.push(csvRow(['Of that, recorded spend', report.money.receiptSpend]));
   lines.push(csvRow(['Invested in horses', report.money.investedInHorses]));
   lines.push(csvRow(['Invested this month', report.money.investedThisMonth]));
   lines.push(csvRow(['Monthly burn (3-month average)', report.money.monthlyBurn]));
@@ -144,7 +146,9 @@ export function ranchReportSections(report: RanchReport) {
     heading: 'Where the money is',
     lines: [
       `Invested to date: ${money(report.money.investedToDate)}`,
-      `Of that, tied to specific horses: ${money(report.money.investedInHorses)}`,
+      `Of that, purchase prices: ${money(report.money.acquisitionCost)}`,
+      `Of that, recorded spend: ${money(report.money.receiptSpend)}`,
+      `Tied to specific horses: ${money(report.money.investedInHorses)}`,
       `Spent this month: ${money(report.money.investedThisMonth)}`,
       `Monthly burn (3-month average): ${money(report.money.monthlyBurn)}`,
       `Listed for sale: ${money(report.money.listedValue)}`,
@@ -197,8 +201,10 @@ export function ranchReportSections(report: RanchReport) {
   if (report.categories.length) {
     sections.push({
       heading: 'Spend by category',
+      // Percent of recorded spend, not of invested-to-date — acquisitions are
+      // not a spend category, so saying "of total" here would not add up.
       lines: report.categories.map(
-        (category) => `${category.category}: ${money(category.total)} (${category.share}% of total)`,
+        (category) => `${category.category}: ${money(category.total)} (${category.share}% of spend)`,
       ),
     });
   }

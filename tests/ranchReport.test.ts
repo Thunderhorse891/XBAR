@@ -513,3 +513,99 @@ test('ordinary names and negative numbers survive the spreadsheet unchanged', ()
     'a negative number stays a number rather than becoming text',
   );
 });
+
+/*
+ * What a horse cost to buy is money the operation put in.
+ *
+ * The report summed receipts alone, so a horse bought for $10,000 with nothing
+ * spent on it yet appeared as $0 invested — with a break-even that ignored the
+ * purchase and a margin overstated by the whole of it. `buildHorseProfitProfile`
+ * has always defined break-even as `costBasis + spend`; this now agrees.
+ */
+test('a purchase price counts as invested even with no receipts', () => {
+  const report = buildRanchReport(
+    input({
+      horses: [horse({ id: 'h1', name: 'Bought Outright', costBasis: 10_000 } as never)],
+    }),
+    NOW,
+  );
+
+  assert.equal(report.money.acquisitionCost, 10_000);
+  assert.equal(report.money.investedToDate, 10_000);
+  assert.equal(report.money.investedInHorses, 10_000);
+  assert.equal(report.horses[0].investedToDate, 10_000, 'the per-horse row must agree with the herd total');
+
+  // Break-even carries it too, which is what the "do not go below" floor is
+  // built from — the figure a seller negotiates against.
+  assert.ok(report.horses[0].breakEvenPrice >= 10_000);
+  assert.ok(report.horses[0].safeDiscountFloor > report.horses[0].breakEvenPrice);
+});
+
+test('invested to date is purchases plus spend, and says which is which', () => {
+  const report = buildRanchReport(
+    input({
+      horses: [
+        horse({ id: 'h1', name: 'A', costBasis: 8_000 } as never),
+        horse({ id: 'h2', name: 'B', costBasis: 2_000 } as never),
+      ],
+      expenseReceipts: [
+        receipt({ id: 'r1', amount: 500, horseId: 'h1' }),
+        // Ranch overhead, tied to no horse.
+        receipt({ id: 'r2', amount: 300 }),
+      ],
+    }),
+    NOW,
+  );
+
+  assert.equal(report.money.acquisitionCost, 10_000);
+  assert.equal(report.money.receiptSpend, 800);
+  assert.equal(report.money.investedToDate, 10_800);
+  assert.equal(report.money.investedInHorses, 10_500, 'purchases plus horse-tied receipts, not overhead');
+
+  // A purchase has no date, so it cannot be attributed to a month. Counting it
+  // would put a horse bought two years ago in whatever month the report ran.
+  assert.equal(report.money.investedThisMonth, 800);
+  assert.equal(report.money.monthlyBurn, 0, 'an acquisition is not a recurring cost');
+});
+
+test('category shares stay percentages of spend, not of invested to date', () => {
+  // Guards the fix: dividing by a total that includes acquisitions would leave
+  // the categories summing to well under 100% with nothing on the page
+  // explaining the gap — on a document handed to a banker.
+  const report = buildRanchReport(
+    input({
+      horses: [horse({ id: 'h1', name: 'A', costBasis: 90_000 } as never)],
+      expenseReceipts: [
+        receipt({ id: 'r1', amount: 750, horseId: 'h1', category: 'Feed' }),
+        receipt({ id: 'r2', amount: 250, horseId: 'h1', category: 'Vet Care' }),
+      ],
+    }),
+    NOW,
+  );
+
+  assert.equal(report.money.investedToDate, 91_000);
+  assert.deepEqual(
+    report.categories.map((row) => [row.category, row.share]),
+    [
+      ['Feed', 75],
+      ['Vet Care', 25],
+    ],
+  );
+  assert.equal(
+    report.categories.reduce((total, row) => total + row.share, 0),
+    100,
+  );
+});
+
+test('a negative or missing cost basis contributes nothing', () => {
+  const report = buildRanchReport(
+    input({
+      horses: [horse({ id: 'h1', name: 'No basis' }), horse({ id: 'h2', name: 'Bad basis', costBasis: -500 } as never)],
+      expenseReceipts: [receipt({ id: 'r1', amount: 100 })],
+    }),
+    NOW,
+  );
+
+  assert.equal(report.money.acquisitionCost, 0, 'a negative basis must not reduce what was invested');
+  assert.equal(report.money.investedToDate, 100);
+});

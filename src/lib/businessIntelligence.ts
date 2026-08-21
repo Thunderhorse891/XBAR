@@ -184,7 +184,18 @@ export function computeHorseEconomics(
   now: Date = new Date(),
 ): HorseEconomics {
   const horseReceipts = receipts.filter((receipt) => receipt.horseId === horse.id);
-  const costToDate = horseReceipts.reduce((sum, receipt) => sum + receipt.amount, 0);
+
+  // What the horse has cost, which is the purchase plus everything spent since.
+  //
+  // costBasis was omitted, so a horse bought for $10,000 with no receipts yet
+  // reported $0 invested — and this figure is what `safeDiscountFloor` is built
+  // from. A seller negotiating against a floor that ignores the purchase price
+  // can accept an offer well below their actual break-even, which is real money
+  // and the reason this is fixed here rather than only in the report that
+  // surfaced it. buildHorseProfitProfile has always defined it as
+  // `costBasis + spend`; this now agrees with it.
+  const costBasis = Math.max(0, horse.costBasis ?? 0);
+  const costToDate = costBasis + horseReceipts.reduce((sum, receipt) => sum + receipt.amount, 0);
 
   // The three COMPLETE months before this one, so the divisor matches the
   // period. A range from three months back to today spans four calendar months

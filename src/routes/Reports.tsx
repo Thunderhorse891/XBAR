@@ -234,7 +234,7 @@ export default function Reports() {
               className="ops-metric-card"
               label="Spent this month"
               value={formatCompactCurrency(report.money.investedThisMonth)}
-              detail={`${formatCompactCurrency(report.money.investedInHorses)} tied to horses`}
+              detail={`${formatCompactCurrency(report.money.acquisitionCost)} of that is purchase prices`}
               tone="slate"
             />
           </div>
@@ -350,7 +350,7 @@ export default function Reports() {
           <Panel
             className="ops-panel"
             title="Where the spend goes"
-            description={`${formatCurrency(report.money.investedToDate)} recorded across ${report.categories.length} categor${report.categories.length === 1 ? 'y' : 'ies'}.`}
+            description={`${formatCurrency(report.money.receiptSpend)} of recorded spend across ${report.categories.length} categor${report.categories.length === 1 ? 'y' : 'ies'}.`}
           >
             {report.categories.length ? (
               <div className="report-bars">

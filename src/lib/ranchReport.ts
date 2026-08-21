@@ -28,9 +28,13 @@ import { monthKeyForDate, monthKeyOf, trailingMonthKeys } from './receiptMonths.
  */
 
 export interface RanchReportMoney {
-  /** Every receipt ever recorded, whether or not it is tied to a horse. */
+  /** Everything the operation has put in: what horses cost to buy, plus spend. */
   investedToDate: number;
-  /** Receipts tied to a specific horse. The remainder is general ranch spend. */
+  /** Purchase prices of the horses on the roster. */
+  acquisitionCost: number;
+  /** Every receipt ever recorded, whether or not it is tied to a horse. */
+  receiptSpend: number;
+  /** Acquisitions plus the receipts tied to a horse. The rest is ranch overhead. */
   investedInHorses: number;
   investedThisMonth: number;
   /** Trailing three-month average spend across the whole operation. */
@@ -172,18 +176,28 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
     categoryTotals.set(receipt.category, bucket);
   }
 
-  const investedToDate = sum(expenseReceipts.map((receipt) => receipt.amount));
+  const receiptSpend = sum(expenseReceipts.map((receipt) => receipt.amount));
   const categories: CategorySpendRow[] = [...categoryTotals.entries()]
     .map(([category, bucket]) => ({
       category,
       total: bucket.total,
+      // A share of receipt spend, not of invested-to-date. Acquisitions are not
+      // a spend category and have no receipt behind them, so dividing by a
+      // total that includes them would leave the categories summing to less
+      // than 100% with nothing on the page explaining the gap.
+      //
       // Guarded rather than assumed non-zero: with no receipts at all this is
       // 0/0, and a report that renders "NaN%" to a banker is worse than one
       // that renders nothing.
-      share: investedToDate > 0 ? Math.round((bucket.total / investedToDate) * 100) : 0,
+      share: receiptSpend > 0 ? Math.round((bucket.total / receiptSpend) * 100) : 0,
       thisMonth: bucket.thisMonth,
     }))
     .sort((a, b) => b.total - a.total);
+
+  // What the horses cost to buy. Real money the operation has put in, and
+  // invisible until now: a horse bought for $10,000 with no receipts against it
+  // reported $0 invested in the UI, the CSV and the banker-facing PDF alike.
+  const acquisitionCost = sum(horses.map((horse) => Math.max(0, horse.costBasis ?? 0)));
 
   const scores = horses.map((horse) => horse.readiness?.score ?? 0);
   const readiness: RanchReportReadiness = {
@@ -220,8 +234,14 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
       (document) => document.state === 'Needs Review' || document.state === 'Queued' || document.state === 'Matched',
     ).length,
     money: {
-      investedToDate,
-      investedInHorses: sum(expenseReceipts.filter((receipt) => receipt.horseId).map((receipt) => receipt.amount)),
+      investedToDate: receiptSpend + acquisitionCost,
+      acquisitionCost,
+      receiptSpend,
+      investedInHorses:
+        acquisitionCost + sum(expenseReceipts.filter((receipt) => receipt.horseId).map((receipt) => receipt.amount)),
+      // Receipts only. A purchase price carries no date, so it cannot be
+      // attributed to a month without inventing one — and a horse bought two
+      // years ago would land in whatever month this report was run.
       investedThisMonth: sum(
         expenseReceipts.filter((receipt) => sameMonth(receipt.receiptDate, now)).map((receipt) => receipt.amount),
       ),
