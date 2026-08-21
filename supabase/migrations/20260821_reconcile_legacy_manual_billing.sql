@@ -136,7 +136,10 @@ begin;
 --     -- and, for any row the dry-run showed that is a deliberate grant:
 --     set local xbar.reconcile_exclude = '<uuid>,<uuid>';
 --
--- Both are session settings, so they cannot be left on by accident.
+-- Both are `set local`, so they are scoped to this file's transaction and revert
+-- at `commit`. They cannot be left on by accident — and by the same token they
+-- are not readable afterwards, which is why the AFTER APPLYING check below has
+-- to restate the exclusion list rather than inherit it.
 do $$
 declare
   confirmed  text := coalesce(current_setting('xbar.reconcile_confirmed', true), '');
@@ -186,15 +189,46 @@ commit;
 
 -- AFTER APPLYING
 -- --------------
--- Confirm only deliberate rows are left:
+-- `set local` above is TRANSACTION-scoped, so both settings are gone the moment
+-- this file's `commit` runs — verified against PostgreSQL 16. This query cannot
+-- inherit the exclusion list, not even in the very same psql session. Restate it
+-- here with a plain `set`, exactly as you passed it to the apply block:
 --
---   select p.workspace_id, c.stripe_subscription_id
+--   set xbar.reconcile_exclude = '<uuid>,<uuid>';  -- omit if you excluded nothing
+--
+-- Skipping that line is not a small inaccuracy: with the setting empty, every
+-- row you deliberately preserved is reported as UNEXPECTED below — the same
+-- wrong instruction this note was rewritten to remove.
+--
+--   select p.workspace_id,
+--          p.tier,
+--          coalesce(c.stripe_subscription_id, '(none)') as stripe_subscription,
+--          case
+--            when coalesce(c.stripe_subscription_id, '') = ''
+--              then 'never a candidate — no Stripe link'
+--            when p.workspace_id = any(coalesce((
+--                   select array_agg(trim(value)::uuid)
+--                   from unnest(string_to_array(
+--                     coalesce(current_setting('xbar.reconcile_exclude', true), ''), ',')) as value
+--                   where trim(value) <> ''
+--                 ), '{}'::uuid[]))
+--              then 'preserved on purpose — in xbar.reconcile_exclude'
+--            else 'UNEXPECTED — Stripe-backed, not excluded, still Manual Billing'
+--          end as disposition
 --     from public.workspace_subscription_profiles p
 --     left join public.workspace_billing_customers c using (workspace_id)
---    where p.billing_state = 'Manual Billing';
+--    where p.billing_state = 'Manual Billing'
+--    order by disposition, p.workspace_id;
 --
--- Every row returned should be one you recognise as an intentional manual
--- account. None should carry a stripe_subscription_id.
+-- Only the third disposition is a problem. A row you excluded is SUPPOSED to
+-- come back Stripe-backed and still Manual Billing — that is what excluding it
+-- did. An earlier version of this note said no surviving row should carry a
+-- stripe_subscription_id, which would have sent you to revoke the exact grant
+-- you had just decided to keep.
+--
+-- Then clear the setting, so it cannot colour a later query in the same session:
+--
+--   reset xbar.reconcile_exclude;
 --
 -- Then spot-check one reconciled workspace: the API should report the Starter
 -- feature set with its purchased tier still recorded, the seat and storage
