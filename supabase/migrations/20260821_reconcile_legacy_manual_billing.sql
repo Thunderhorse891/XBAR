@@ -163,12 +163,18 @@ begin;
 -- costs somebody money.
 --
 -- To build that list, the last webhook payload recorded for each workspace is
--- usually enough to see which subscriptions ended:
+-- usually enough to see which subscriptions ended.
+--
+-- The status is at the TOP level of the payload, not under {data,object}:
+-- api/stripe/webhook.js stores `event.data.object` — the subscription itself —
+-- rather than the enclosing Stripe event, so reaching down through a data/object
+-- path returns null for every row and the shortlist comes back empty. Verified
+-- against PostgreSQL 16 with a stored payload of the shape the webhook writes.
 --
 --     select distinct on (e.workspace_id)
 --            e.workspace_id,
 --            e.event_type,
---            e.payload #>> '{data,object,status}' as last_status,
+--            e.payload ->> 'status' as last_status,
 --            e.processed_at
 --       from public.workspace_subscription_events e
 --      where e.workspace_id in (

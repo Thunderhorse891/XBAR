@@ -175,7 +175,14 @@ export default function Reports() {
           <div className="ops-hero__ledger" aria-label="Money summary">
             <span>Invested to date</span>
             <strong>{formatCompactCurrency(report.money.investedToDate)}</strong>
-            <small>{formatCurrency(report.money.monthlyBurn)} per month, 3-month average</small>
+            {/* Invested-to-date now includes what the horses cost to buy, so the
+                split is shown here — otherwise the headline cannot be
+                reconciled against the receipts a rancher has on file. */}
+            <small>
+              {formatCompactCurrency(report.money.acquisitionCost)} in purchases ·{' '}
+              {formatCompactCurrency(report.money.receiptSpend)} in spend · {formatCurrency(report.money.monthlyBurn)}
+              /mo
+            </small>
             <div className="ops-hero__mini-grid">
               <div>
                 <span>Listed</span>
@@ -234,7 +241,12 @@ export default function Reports() {
               className="ops-metric-card"
               label="Spent this month"
               value={formatCompactCurrency(report.money.investedThisMonth)}
-              detail={`${formatCompactCurrency(report.money.acquisitionCost)} of that is purchase prices`}
+              // Not "of that": buildRanchReport deliberately excludes purchase
+              // prices from investedThisMonth, because a purchase carries no date.
+              // Presenting a lifetime acquisition total as part of this month's
+              // spend contradicted the model directly — "$100 spent this month,
+              // $10,000 of that is purchase prices".
+              detail={`${formatCompactCurrency(report.money.receiptSpend)} of recorded spend all-time`}
               tone="slate"
             />
           </div>

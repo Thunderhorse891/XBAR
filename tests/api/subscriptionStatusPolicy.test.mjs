@@ -587,3 +587,25 @@ test('the runbook does not recommend the email allowlist as a comp mechanism', a
     assert.match(readme, /database limit triggers[\s\S]{0,120}never\s+see it/);
   }
 });
+
+/*
+ * A caption must not contradict the model it is captioning.
+ *
+ * buildRanchReport deliberately excludes purchase prices from
+ * investedThisMonth — a purchase carries no date, so attributing it to a month
+ * would file a horse bought two years ago under whenever the report was run.
+ * The "Spent this month" card then rendered the lifetime acquisition total as
+ * its detail line, producing "$100 spent this month · $10,000 of that is
+ * purchase prices": two figures from different periods, presented as parts of
+ * one.
+ */
+test('the spent-this-month card does not caption itself with lifetime purchases', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/routes/Reports.tsx'), 'utf8');
+
+  const start = source.indexOf('label="Spent this month"');
+  assert.notEqual(start, -1, 'the card must exist');
+  const card = source.slice(start, source.indexOf('/>', start));
+
+  assert.match(card, /value=\{formatCompactCurrency\(report\.money\.investedThisMonth\)\}/);
+  assert.ok(!/detail=.*acquisitionCost/.test(card), 'a lifetime acquisition total is not part of this month spend');
+});

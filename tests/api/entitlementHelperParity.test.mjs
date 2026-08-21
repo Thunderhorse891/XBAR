@@ -392,3 +392,30 @@ test('the operator is told about the terminal list wherever the others are named
   // And reset alongside the others, so it cannot colour a later run.
   assert.match(sql, /reset xbar\.reconcile_terminal;/);
 });
+
+/*
+ * The runbook's shortlist query must match what the webhook actually stores.
+ *
+ * api/stripe/webhook.js stores `event.data.object` — the subscription itself —
+ * not the enclosing Stripe event. A query reaching for `{data,object,status}`
+ * therefore returns null for every row, the shortlist comes back empty, and an
+ * operator has no way to identify which subscriptions are terminal. Reconciled
+ * rows default to recoverable, and a canceled subscription sends no further
+ * webhook to correct that, so those customers stay blocked from buying
+ * indefinitely. Verified against PostgreSQL 16 with a payload of the shape the
+ * webhook writes.
+ */
+test('the terminal-status shortlist reads the payload shape the webhook writes', () => {
+  const sql = readFileSync(path.join(migrationsDir, '20260821_reconcile_legacy_manual_billing.sql'), 'utf8');
+  const webhook = readFileSync(path.join(repoRoot, 'api/stripe/webhook.js'), 'utf8');
+
+  // The premise, asserted rather than assumed: the row stores the subscription
+  // object. If this ever changes, this test should be what notices.
+  assert.match(webhook, /const payload = event\.data\.object;/);
+
+  assert.match(sql, /payload ->> 'status'/, 'status is at the top level of the stored payload');
+  assert.ok(
+    !sql.includes("payload #>> '{data,object,status}'"),
+    'that path returns null for every row the webhook writes',
+  );
+});
