@@ -188,13 +188,13 @@ test('the verifier checks the anon surface in both directions', () => {
 test('the verifier only reports success for an exact match', () => {
   const script = readFileSync(path.join(repoRoot, 'scripts', 'verify-rpc-surface.mjs'), 'utf8');
 
-  const success = script.indexOf('anon surface is exactly the buyer share flow.');
+  const success = script.indexOf('anon surface is exactly the buyer share flow');
   assert.notEqual(success, -1, 'the success message should claim an exact match, not merely a limited one');
 
-  // The success branch has to be guarded by both checks, or it is reachable
-  // with a required function missing.
-  const guard = script.lastIndexOf('if (!anonMissing.length && !anonExtra.length)', success);
-  assert.notEqual(guard, -1, 'success must require both no extras and nothing missing');
+  // The success branch has to be guarded by every check, or it is reachable
+  // with a required grant missing — for anon, or for any other role.
+  const guard = script.lastIndexOf('if (!anonMissing.length && !anonExtra.length && !anyRoleMissing)', success);
+  assert.notEqual(guard, -1, 'success must require no extras, nothing missing, and no role short a grant');
 });
 
 /*
@@ -273,4 +273,36 @@ test('the verifier compares the same signatures the migration keeps', () => {
   const scriptCode = withoutComments(script, '//');
   assert.match(scriptCode, /format_type\(t, null\)/);
   assert.doesNotMatch(scriptCode, /pg_get_function_identity_arguments/);
+});
+
+/*
+ * Success must depend on every role, not just anon.
+ *
+ * The verifier gated its exit code on the anonymous surface alone. If
+ * `authenticated` lost an RLS-helper grant, or `service_role` lost the storage
+ * RPC, it printed the reduced lists and still exited 0 — the same "reports
+ * success in the drift case it exists to catch" defect as the earlier
+ * extras-only check, one role over. Both are quiet failures: the first makes
+ * every signed-in read fail with "permission denied for function", the second
+ * leaves the storage gate unable to read usage.
+ *
+ * Verified on PostgreSQL 16: revoking either grant makes the script name the
+ * missing signature and exit 1, while the correct state still exits 0.
+ */
+test('the verifier requires the non-anonymous grants too', () => {
+  const script = readFileSync(path.join(repoRoot, 'scripts', 'verify-rpc-surface.mjs'), 'utf8');
+  const code = withoutComments(script, '//');
+
+  for (const required of [
+    'xbar_has_workspace_access(uuid)',
+    'xbar_can_manage_workspace(uuid)',
+    'xbar_commercial_limits(uuid)',
+    'xbar_subscription_limits(uuid)',
+    'xbar_workspace_storage_bytes(uuid)',
+  ]) {
+    assert.ok(code.includes(`'${required}'`), `${required} should be required of its role`);
+  }
+
+  // The success branch has to consider them, or naming them changes nothing.
+  assert.match(code, /!anonMissing\.length && !anonExtra\.length && !anyRoleMissing/);
 });

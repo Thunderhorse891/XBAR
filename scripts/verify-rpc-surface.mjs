@@ -88,6 +88,30 @@ for (const role of ROLES) {
 // extra AND missing at once. Verified against PostgreSQL 16.
 const REQUIRED_ANON = ['xbar_resolve_public_listing(text, text)', 'xbar_track_public_share_view(text, text)'];
 
+// The grants the application cannot work without, per role. Losing one of
+// these is drift this script exists to catch, and it is the quiet kind: a
+// missing RLS-helper grant makes every signed-in read fail with "permission
+// denied for function", and a missing storage grant makes the capacity gate
+// unable to read usage. Reporting only on `anon` meant the script printed the
+// reduced lists and still exited 0.
+//
+// anon is exhaustive — it must be exactly this set. The other two are minimums:
+// extra grants there are not a security problem the way an anon grant is.
+const REQUIRED_BY_ROLE = {
+  authenticated: [
+    'xbar_has_workspace_access(uuid)',
+    'xbar_can_manage_workspace(uuid)',
+    'xbar_commercial_limits(uuid)',
+    'xbar_subscription_limits(uuid)',
+  ],
+  service_role: ['xbar_workspace_storage_bytes(uuid)'],
+};
+
+const roleMissing = Object.entries(REQUIRED_BY_ROLE).map(([role, required]) => ({
+  role,
+  missing: required.filter((fn) => !byRole.get(role).includes(fn)),
+}));
+
 const anonFunctions = byRole.get('anon');
 const anonExtra = anonFunctions.filter((fn) => !REQUIRED_ANON.includes(fn));
 const anonMissing = REQUIRED_ANON.filter((fn) => !anonFunctions.includes(fn));
@@ -110,8 +134,21 @@ if (anonExtra.length) {
   console.log('Apply supabase/migrations/20260822_restrict_anon_rpc_surface.sql to close these.');
 }
 
-if (!anonMissing.length && !anonExtra.length) {
-  console.log('anon surface is exactly the buyer share flow.');
+for (const { role, missing } of roleMissing) {
+  if (!missing.length) continue;
+  console.log(`${role} is MISSING ${missing.length} grant(s) the application needs:`);
+  for (const fn of missing) console.log(`  ${fn}`);
+  console.log(
+    role === 'authenticated'
+      ? 'Signed-in reads will fail with "permission denied for function" until these are granted.'
+      : 'Storage capacity cannot be read, so the storage gate refuses every upload.',
+  );
+}
+
+const anyRoleMissing = roleMissing.some(({ missing }) => missing.length > 0);
+
+if (!anonMissing.length && !anonExtra.length && !anyRoleMissing) {
+  console.log('anon surface is exactly the buyer share flow, and every required grant is present.');
   process.exit(0);
 }
 
