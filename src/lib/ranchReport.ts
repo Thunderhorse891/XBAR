@@ -6,6 +6,7 @@ import {
   type RevenueRiskAssessment,
   type SpendAnomaly,
 } from './businessIntelligence.js';
+import { NON_LIVE_OFFER_STATUSES } from './profitIntelligence.js';
 import { monthKeyForDate, monthKeyOf, trailingMonthKeys } from './receiptMonths.js';
 
 /*
@@ -192,7 +193,24 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
     notReady: scores.filter((score) => score < 75).length,
   };
 
-  const openOffers = salesLeads.filter((lead) => OPEN_OFFER_STAGES.has(lead.stage) && lead.outcome !== 'Lost');
+  // Money genuinely still on the table.
+  //
+  // The stage alone is not enough: the Sales editor moves stage and offer
+  // status independently, so a lead can sit in 'Offer' with a status of
+  // 'Draft' (never sent) or 'Rejected' (dead). Counting either would quote a
+  // pipeline figure to a banker that no buyer has agreed to.
+  //
+  // The predicate is buildRanchFinancials's, using its own exported set rather
+  // than a second copy of the rule — a report that disagrees with the Money
+  // screen about the same number is worse than either being wrong alone. A
+  // legacy lead with no status is deliberately not in that set, so it still
+  // counts through the stage.
+  const openOffers = salesLeads.filter(
+    (lead) =>
+      OPEN_OFFER_STAGES.has(lead.stage) &&
+      lead.outcome !== 'Lost' &&
+      !NON_LIVE_OFFER_STATUSES.has(lead.offerStatus ?? ''),
+  );
 
   return {
     generatedAt: now.toISOString(),
@@ -211,7 +229,10 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
       listedValue: risk.totalListedValue,
       valueAtRisk: risk.valueAtRisk,
       readyValue: risk.readyValue,
-      pipelineValue: sum(openOffers.map((lead) => lead.offerAmount ?? 0)),
+      // The counter when there is one, like buildRanchFinancials: once a buyer
+      // has countered, the counter is what is actually on the table, and
+      // reporting the original ask would overstate the pipeline.
+      pipelineValue: sum(openOffers.map((lead) => lead.counterOfferAmount || lead.offerAmount || 0)),
       depositsHeld: sum(
         salesLeads.filter((lead) => lead.depositStatus === 'Paid').map((lead) => lead.depositAmount ?? 0),
       ),

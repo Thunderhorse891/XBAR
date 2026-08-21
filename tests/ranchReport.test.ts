@@ -123,6 +123,51 @@ test('receipts outside the trailing window do not inflate monthly burn', () => {
   assert.equal(report.money.monthlyBurn, 300, '900 over three complete months');
 });
 
+/*
+ * A draft or rejected offer is not money on the table.
+ *
+ * The Sales editor moves stage and offer status independently, so a lead can
+ * sit in 'Offer' with a status of 'Draft' — never sent — or 'Rejected' — dead.
+ * Counting either quotes a pipeline figure to a banker that no buyer ever
+ * agreed to.
+ *
+ * The rule is buildRanchFinancials's, imported rather than restated: a report
+ * that disagrees with the Money screen about the same number is worse than
+ * either being wrong alone.
+ */
+test('draft and rejected offers are not pipeline value', () => {
+  const report = buildRanchReport(
+    input({
+      salesLeads: [
+        lead({ id: 'live', stage: 'Offer', offerAmount: 12_000, offerStatus: 'Submitted' }),
+        lead({ id: 'draft', stage: 'Offer', offerAmount: 40_000, offerStatus: 'Draft' }),
+        lead({ id: 'rejected', stage: 'Offer', offerAmount: 50_000, offerStatus: 'Rejected' }),
+        // No status at all: a legacy lead, which still counts through its stage.
+        lead({ id: 'legacy', stage: 'Qualified', offerAmount: 3_000 }),
+      ],
+    }),
+    NOW,
+  );
+
+  assert.equal(report.money.pipelineValue, 15_000);
+});
+
+test('a countered offer contributes the counter, not the original ask', () => {
+  // Once a buyer has countered, the counter is what is on the table. Reporting
+  // the original would overstate the pipeline — and would disagree with the
+  // Money screen, which already uses the counter.
+  const report = buildRanchReport(
+    input({
+      salesLeads: [
+        lead({ id: 'c1', stage: 'Offer', offerAmount: 39_000, counterOfferAmount: 30_000, offerStatus: 'Countered' }),
+      ],
+    }),
+    NOW,
+  );
+
+  assert.equal(report.money.pipelineValue, 30_000);
+});
+
 test('only open offers count as pipeline, and only paid deposits as held', () => {
   const report = buildRanchReport(
     input({
