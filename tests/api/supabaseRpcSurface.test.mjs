@@ -126,7 +126,8 @@ test('service_role is granted the storage RPC explicitly', () => {
   // an ordinary privilege, and service_role held it here only through the
   // default PUBLIC grant, so revoking PUBLIC without this line silently
   // disables the storage cap that api/_lib/entitlements.js enforces.
-  assert.match(sql, /'xbar_workspace_storage_bytes',\s*'service_role'/);
+  // By signature, not name: a bare name would also grant any overload.
+  assert.match(sql, /'xbar_workspace_storage_bytes\(uuid\)',\s*'service_role'/);
 });
 
 test('the migration is driven by the catalog rather than a fixed function list', () => {
@@ -305,4 +306,38 @@ test('the verifier requires the non-anonymous grants too', () => {
 
   // The success branch has to consider them, or naming them changes nothing.
   assert.match(code, /!anonMissing\.length && !anonExtra\.length && !anyRoleMissing/);
+});
+
+/*
+ * The internal re-grant needs exact signatures too.
+ *
+ * There are two re-grant blocks in this migration. The public one was moved to
+ * exact signatures; this one — the RLS helpers, entitlement lookups and storage
+ * RPC — was left matching on proname, so an unintended
+ * `xbar_has_workspace_access(text)` would be granted to every authenticated
+ * user by the migration that had just revoked its PUBLIC access.
+ *
+ * Reproduced on PostgreSQL 16: with a name-only predicate the overload appears
+ * in authenticated's grants; with exact signatures it does not.
+ */
+test('the internal re-grant names exact signatures', () => {
+  const sql = readFileSync(path.join(migrationsDir, SECURITY_MIGRATION), 'utf8');
+  const code = withoutComments(sql, '--');
+
+  for (const required of [
+    'xbar_has_workspace_access(uuid)',
+    'xbar_can_manage_workspace(uuid)',
+    'xbar_commercial_limits(uuid)',
+    'xbar_subscription_limits(uuid)',
+    'xbar_workspace_storage_bytes(uuid)',
+  ]) {
+    assert.ok(code.includes(`'${required}'`), `${required} should be re-granted by signature`);
+  }
+
+  // Neither re-grant block may fall back to a bare name match.
+  assert.doesNotMatch(
+    code,
+    /p\.proname = grantee\.fn_name/,
+    'a proname-only re-grant hands every overload of the name to the role',
+  );
 });

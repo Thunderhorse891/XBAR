@@ -125,23 +125,29 @@ begin
         -- PUBLIC grant is removed. Without it every read fails with
         -- "permission denied for function" — this is the line that makes
         -- revoking PUBLIC safe rather than catastrophic.
-        ('xbar_has_workspace_access', 'authenticated'),
-        ('xbar_can_manage_workspace', 'authenticated'),
+        ('xbar_has_workspace_access(uuid)', 'authenticated'),
+        ('xbar_can_manage_workspace(uuid)', 'authenticated'),
         -- Entitlement lookups read from inside other SECURITY DEFINER
         -- functions, but the schema grants them to authenticated already and
         -- that grant is preserved here rather than quietly dropped.
-        ('xbar_commercial_limits', 'authenticated'),
-        ('xbar_subscription_limits', 'authenticated'),
+        ('xbar_commercial_limits(uuid)', 'authenticated'),
+        ('xbar_subscription_limits(uuid)', 'authenticated'),
         -- Storage accounting is called from api/_lib/entitlements.js with the
         -- service role. service_role is NOT exempt from the revoke above:
         -- BYPASSRLS covers row-level policies and nothing else, and function
         -- EXECUTE is an ordinary privilege that service_role held here only
         -- through the default PUBLIC grant. Without this grant the storage cap
         -- stops being enforceable.
-        ('xbar_workspace_storage_bytes', 'service_role'),
-        ('xbar_workspace_storage_bytes', 'authenticated')
+        ('xbar_workspace_storage_bytes(uuid)', 'service_role'),
+        ('xbar_workspace_storage_bytes(uuid)', 'authenticated')
     ) as t(fn_name, role_name)
   loop
+    -- Matched on exact signature, like the revoke and the public re-grant. On
+    -- proname alone, an unintended overload such as
+    -- xbar_has_workspace_access(text) would be granted to every authenticated
+    -- user by the migration that had just revoked its PUBLIC access — the same
+    -- mistake as the anon re-grant, in the block beside it.
+    --
     -- coalesce so a database that lacks one of these still applies the rest;
     -- execute(NULL) would abort the block.
     execute coalesce(
@@ -149,7 +155,11 @@ begin
         select string_agg(format('grant execute on function %s to %I', p.oid::regprocedure, grantee.role_name), '; ')
         from pg_proc p
         join pg_namespace n on n.oid = p.pronamespace
-        where n.nspname = 'public' and p.proname = grantee.fn_name
+        where n.nspname = 'public'
+          and p.proname || '(' || coalesce((
+            select string_agg(format_type(t, null), ', ' order by ord)
+            from unnest(p.proargtypes) with ordinality as a(t, ord)
+          ), '') || ')' = grantee.fn_name
       ),
       'select 1'
     );
