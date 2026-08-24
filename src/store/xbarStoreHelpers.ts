@@ -295,7 +295,9 @@ export function restoreWorkspaceInvitations(raw: unknown): WorkspaceInvitationRe
 
 export function createExpenseReceiptRecord(
   input: ExpenseReceiptInput,
-  patch?: Partial<Pick<ExpenseReceipt, 'fileUrl' | 'storagePath' | 'fileName' | 'mimeType' | 'fileSizeBytes'>>,
+  patch?: Partial<
+    Pick<ExpenseReceipt, 'fileUrl' | 'storagePath' | 'localFileKey' | 'fileName' | 'mimeType' | 'fileSizeBytes'>
+  >,
 ): ExpenseReceipt {
   const file = input.file ?? undefined;
   return {
@@ -310,6 +312,7 @@ export function createExpenseReceiptRecord(
     uploadedAt: nowStamp(),
     uploadedBy: input.uploadedBy.trim(),
     fileUrl: patch?.fileUrl,
+    localFileKey: patch?.localFileKey,
     storagePath: patch?.storagePath,
     fileName: patch?.fileName ?? file?.name,
     mimeType: patch?.mimeType ?? file?.type ?? undefined,

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { inflateSync } from 'node:zlib';
 import path from 'node:path';
 import test from 'node:test';
 
@@ -355,4 +356,101 @@ test('a short footer is left exactly as written', () => {
   // ordinary footers get clipped, would satisfy the test above.
   const short = 'XBAR Ranch Ledger';
   assert.equal(toDrawableText(short), short);
+});
+
+/*
+ * Reading back what was actually drawn.
+ *
+ * pdf-lib compresses its content streams, so the operators have to be inflated
+ * before the positions can be read. Done with node:zlib rather than an external
+ * tool so this runs anywhere the rest of the suite does — and read from the
+ * rendered document rather than from the layout code, because the defect below
+ * was invisible in the code and obvious on the page.
+ */
+function drawnText(bytes) {
+  const raw = Buffer.from(bytes).toString('latin1');
+  let operators = '';
+  const streams = /stream\r?\n/g;
+  let match;
+  while ((match = streams.exec(raw))) {
+    const start = match.index + match[0].length;
+    const end = raw.indexOf('endstream', start);
+    try {
+      operators += `${inflateSync(Buffer.from(raw.slice(start, end), 'latin1')).toString('latin1')}\n`;
+    } catch {
+      // Not a deflate stream (fonts, metadata). Nothing to read here.
+    }
+  }
+
+  const drawn = [];
+  let position = null;
+  for (const line of operators.split('\n')) {
+    const move = /^1 0 0 1 ([\d.]+) ([\d.]+) Tm$/.exec(line.trim());
+    if (move) {
+      position = { x: Number(move[1]), y: Number(move[2]) };
+      continue;
+    }
+    const show = /^<([0-9A-Fa-f]*)> Tj$/.exec(line.trim());
+    if (show && position) {
+      drawn.push({ ...position, text: Buffer.from(show[1], 'hex').toString('latin1') });
+    }
+  }
+  return drawn;
+}
+
+// Helvetica-Bold at body size, which is what a field label is drawn in.
+async function helveticaBold() {
+  const doc = await PDFDocument.create();
+  return doc.embedFont(StandardFonts.HelveticaBold);
+}
+
+test('a label too wide for its column does not print through its value', async () => {
+  const bold = await helveticaBold();
+  const horseName = 'Thunderhorse Quarter Horse Champion';
+
+  // The premise: a horse name is a LABEL here, `asField` accepts up to 40
+  // characters, and this one is wider than the 168pt column it would be drawn
+  // in. Without this the test could pass on an input that always fitted.
+  assert.ok(asField(`${horseName}: Sale Prep`), 'the fixture must parse as a field');
+  assert.ok(
+    bold.widthOfTextAtSize(horseName, 10.5) > 168,
+    'the fixture label must actually overflow its column, or this proves nothing',
+  );
+
+  const bytes = await createSectionedPdf({
+    title: 'XBAR Ranch Report',
+    sections: [
+      {
+        heading: 'Cost and margin by horse',
+        lines: [`${horseName}: Sale Prep · invested $12,000 · asking $42,000`],
+      },
+    ],
+  });
+
+  const drawn = drawnText(bytes);
+  const label = drawn.find((item) => item.text.startsWith('Thunderhorse'));
+  const value = drawn.find((item) => item.text.startsWith('Sale Prep'));
+
+  assert.ok(label && value, 'both the label and its value must be on the page');
+  // Same baseline meant the label was drawn straight through the money beside
+  // it — on the page whose entire job is to be handed to a banker.
+  assert.notEqual(label.y, value.y, 'an oversized label must take its own line');
+  assert.ok(label.y > value.y, 'the label must come first, with the value below it');
+});
+
+test('an ordinary label still shares its line with its value', async () => {
+  const bytes = await createSectionedPdf({
+    title: 'XBAR Ranch Report',
+    sections: [{ heading: 'Horse identity', lines: ['Registration number: AQHA X0123456'] }],
+  });
+
+  const drawn = drawnText(bytes);
+  const label = drawn.find((item) => item.text === 'Registration number');
+  const value = drawn.find((item) => item.text === 'AQHA X0123456');
+
+  assert.ok(label && value, 'both halves must be drawn');
+  // The stacking fix must apply ONLY to labels that do not fit. Stacking every
+  // label would turn every document in the product into a single column.
+  assert.equal(label.y, value.y, 'a label that fits must stay on its value’s line');
+  assert.equal(value.x, 56 + 168, 'and the value must stay in its column');
 });

@@ -2,6 +2,7 @@ import { apiConfig, isRelationalCloudEnabled, isSnapshotFallbackEnabled, supabas
 import { publicShareEventToBuyerRoomEvent, type PublicShareEventRow } from '@/lib/buyerDealRoom';
 import { createId, todayStamp } from '@/lib/xbarRuntime';
 import { getSupabaseClient } from '@/lib/supabaseClient';
+import { openLocalFile } from '@/lib/localFileVault';
 import type { Session } from '@supabase/supabase-js';
 import type {
   DocumentRecord,
@@ -1169,13 +1170,37 @@ export async function uploadDocumentAssetToCloud(params: { file: File; horseId?:
   };
 }
 
-export async function getDocumentAccessUrl(document: Pick<DocumentRecord, 'fileUrl' | 'storagePath'>) {
+/**
+ * Resolve a record to something the browser can open.
+ *
+ * The on-device vault is consulted before cloud storage, and deliberately so:
+ * a file kept locally needs no session, no network and no signed URL, so
+ * checking it first is both faster and the only branch that works for the
+ * workspaces this product says it supports. `release` is present only for those
+ * — an object URL holds the blob in memory until it is revoked.
+ */
+export async function getDocumentAccessUrl(
+  document: Pick<DocumentRecord, 'fileUrl' | 'storagePath' | 'localFileKey'>,
+): Promise<{ ok: true; url: string; release?: () => void } | { ok: false; message: string }> {
   const directFileUrl = document.fileUrl?.trim();
   if (directFileUrl) {
     return {
       ok: true,
       url: directFileUrl,
     } as const;
+  }
+
+  if (document.localFileKey) {
+    const handle = await openLocalFile(document.localFileKey);
+    if (handle) {
+      return { ok: true, url: handle.url, release: handle.release } as const;
+    }
+    if (!document.storagePath) {
+      return {
+        ok: false,
+        message: 'This file was saved on a different device or browser, and is not stored on this one.',
+      } as const;
+    }
   }
 
   if (!document.storagePath) {

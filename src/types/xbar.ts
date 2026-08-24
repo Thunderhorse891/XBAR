@@ -173,6 +173,15 @@ export interface SalePacketBuild {
   status: 'draft' | 'generated' | 'shared';
   fileName?: string;
   downloadUrl?: string;
+  /**
+   * Key into the on-device file vault holding the generated packet.
+   *
+   * Set when the packet was rendered in the browser rather than by the cloud
+   * PDF service. Persisted deliberately: an object URL dies with the page, so a
+   * packet whose only address was a `blob:` URL was a broken link on the next
+   * reload — which is every time the seller went back to send it.
+   */
+  localFileKey?: string;
   /** Verifiable Sale Credential sealed at generation time — a tamper-evident
    * fingerprint of every buyer-facing fact in the packet. Present on packets
    * generated after the credential shipped; older records may omit it. */
@@ -351,6 +360,8 @@ export interface DocumentRecord {
   entities: DocumentEntities;
   fileUrl?: string;
   storagePath?: string;
+  /** Key into the on-device file vault, when the bytes are held locally. */
+  localFileKey?: string;
   fileName?: string;
   mimeType?: string;
   fileSizeBytes?: number;
@@ -406,6 +417,8 @@ export interface ExpenseReceipt {
   uploadedBy: string;
   fileUrl?: string;
   storagePath?: string;
+  /** Key into the on-device file vault, when the bytes are held locally. */
+  localFileKey?: string;
   fileName?: string;
   mimeType?: string;
   fileSizeBytes?: number;

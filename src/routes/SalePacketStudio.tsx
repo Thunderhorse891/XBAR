@@ -4,7 +4,9 @@ import { FileText, Plus, Upload } from 'lucide-react';
 import { ActionButton, Card, PageHead, StatusChip } from '@/components/saas';
 import { SalePacketWizard } from '@/components/SalePacketWizard';
 import { useXbarStore } from '@/store/useXbarStore';
-import type { DocumentType } from '@/types/xbar';
+import { useUiStore } from '@/store/useUiStore';
+import { openStoredFileInTab } from '@/lib/openStoredFile';
+import type { DocumentType, SalePacketBuild } from '@/types/xbar';
 
 const REQUIRED = [
   { id: 'coggins', label: 'Coggins (negative)' },
@@ -41,6 +43,18 @@ export default function SalePacketStudio() {
   const requestedHorseId = params.get('horse');
   const [wizardHorseId, setWizardHorseId] = useState<string | null>(requestedHorseId);
   const [wizardOpen, setWizardOpen] = useState<boolean>(Boolean(requestedHorseId));
+  const [openingPacketId, setOpeningPacketId] = useState('');
+  const pushToast = useUiStore((state) => state.pushToast);
+
+  const openPacket = async (packet: SalePacketBuild) => {
+    setOpeningPacketId(packet.id);
+    const result = await openStoredFileInTab(packet);
+    setOpeningPacketId('');
+
+    if (!result.ok) {
+      pushToast({ title: 'Packet unavailable', message: result.message, tone: 'error' });
+    }
+  };
 
   const readiness = useMemo(
     () =>
@@ -170,6 +184,19 @@ export default function SalePacketStudio() {
                     <a className="xs-btn xs-btn--sm" href={packet.downloadUrl} download={packet.fileName}>
                       Download
                     </a>
+                  ) : packet.localFileKey ? (
+                    // Generated in the browser and kept in this device's vault.
+                    // Its address is created on demand: an object URL saved at
+                    // generation time is dead by the next page load, which is
+                    // when a seller comes back to this list to send the packet.
+                    <button
+                      className="xs-btn xs-btn--sm"
+                      type="button"
+                      onClick={() => void openPacket(packet)}
+                      disabled={openingPacketId === packet.id}
+                    >
+                      {openingPacketId === packet.id ? 'Opening...' : 'Open'}
+                    </button>
                   ) : null}
                 </div>
               );

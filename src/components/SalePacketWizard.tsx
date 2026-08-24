@@ -8,6 +8,10 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { type RemoteSalePacketSeal, createSalePacketRemote, hasBackendIdentity } from '@/lib/backendApi';
+import { type LocalSalePacket, buildLocalSalePacket } from '@/lib/localSalePacketGenerator';
+import { storeLocalFile } from '@/lib/localFileVault';
+import { openStoredFileInTab } from '@/lib/openStoredFile';
+import type { SaleCredentialSeal } from '@/types/xbar';
 import { billingPathForTier } from '@/lib/billingRoutes';
 import { openFacebookShareDialog } from '@/lib/facebookSharing';
 import { buildBadgeSnippet, buildShareText } from '@/lib/verificationBadge';
@@ -51,6 +55,7 @@ export function SalePacketWizard({
   const createSalePacketBuild = useXbarStore((state) => state.createSalePacketBuild);
   const logBuyerRoomEvent = useXbarStore((state) => state.logBuyerRoomEvent);
   const createSalesLead = useXbarStore((state) => state.createSalesLead);
+  const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const currentRole = useXbarStore((state) => state.currentRole);
   const session = useCloudStore((state) => state.session);
   const workspaceId = useCloudStore((state) => state.workspaceId);
@@ -65,6 +70,7 @@ export function SalePacketWizard({
   const [generated, setGenerated] = useState<{
     packetId: string;
     downloadUrl?: string;
+    localFileKey?: string;
     sealCode?: string;
     sealedAt?: string;
     sealAnchor?: 'local' | 'server';
@@ -168,6 +174,9 @@ export function SalePacketWizard({
     let downloadUrl: string | undefined;
     let serverSeal: RemoteSalePacketSeal | undefined;
     let verifyUrl: string | undefined;
+    let localPacket: LocalSalePacket | undefined;
+    let localSeal: SaleCredentialSeal | undefined;
+    let localFileKey: string | undefined;
 
     if (hasBackendIdentity(auth)) {
       const remote = await createSalePacketRemote(auth, {
@@ -195,6 +204,39 @@ export function SalePacketWizard({
       downloadUrl = remote.downloadUrl;
       serverSeal = remote.seal;
       verifyUrl = remote.verifyUrl;
+    } else {
+      /*
+       * No cloud identity — render the packet here.
+       *
+       * This branch used to produce no document at all: the build was recorded,
+       * `downloadUrl` stayed undefined, and the toast told the seller to sign in
+       * to the cloud to get the PDF. A workspace running the way this product
+       * says it can run therefore had no artifact to send a buyer, even though
+       * the generator that makes one has been in the repository the whole time.
+       */
+      localPacket = buildLocalSalePacket({
+        horse,
+        workspaceProfile,
+        documents,
+        ownershipRecord: ownershipRecords.find((record) => record.horseId === horse.id),
+        selectedDocumentIds: docSelection,
+        generatedBy: currentRole,
+        watermark: effectiveWatermark,
+      });
+      localSeal = { ...localPacket.credential, anchor: 'local' as const };
+
+      // Kept in the on-device vault rather than only as an object URL: a
+      // `blob:` address dies with the page, so the packet the seller went back
+      // to send the next morning was a dead link.
+      try {
+        localFileKey = await storeLocalFile(
+          new Blob([localPacket.html], { type: 'text/html' }),
+          localPacket.fileName,
+          'text/html',
+        );
+      } catch (error) {
+        console.error('Storing the generated packet on this device failed.', error);
+      }
     }
 
     const build = createSalePacketBuild({
@@ -207,6 +249,9 @@ export function SalePacketWizard({
       createdBy: currentRole,
       downloadUrl,
       serverSeal,
+      localSeal,
+      localFileKey,
+      fileName: localPacket?.fileName,
     });
     setIsGenerating(false);
 
@@ -234,21 +279,38 @@ export function SalePacketWizard({
 
     if (downloadUrl && typeof window !== 'undefined') {
       window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+    } else if (localFileKey) {
+      const opened = await openStoredFileInTab(build.packet);
+      if (!opened.ok) {
+        pushToast({ title: 'Packet could not be opened', message: opened.message, tone: 'warning' });
+      }
     }
     setGenerated({
       packetId: build.packet.id,
       downloadUrl,
+      localFileKey,
       sealCode: build.packet.credential?.sealCode,
       sealedAt: build.packet.credential?.sealedAt,
       sealAnchor: build.packet.credential?.anchor,
       verifyUrl,
     });
+
+    // Three genuinely different outcomes, said plainly. The old copy had two,
+    // and told a seller with a finished packet in front of them to sign in to
+    // the cloud to get one.
+    const packetStored = Boolean(downloadUrl || localFileKey);
     pushToast({
-      title: downloadUrl ? 'Sale packet PDF ready' : 'Sale packet recorded',
+      title: downloadUrl
+        ? 'Sale packet PDF ready'
+        : localFileKey
+          ? 'Sale packet ready on this device'
+          : 'Sale packet recorded',
       message: downloadUrl
         ? 'Watermarked PDF opened in a new tab. Buyer activity is now tracked in Buyer follow-up.'
-        : `${build.message} Cloud sign-in generates the watermarked PDF; Buyer follow-up is tracking this buyer either way.`,
-      tone: 'success',
+        : localFileKey
+          ? 'Watermarked packet opened in a new tab and saved on this device. Print it to PDF to send it, or sign in to the cloud for a server-sealed PDF.'
+          : `${build.message} The packet could not be saved on this device, so only the record was kept. Buyer follow-up is tracking this buyer either way.`,
+      tone: packetStored ? 'success' : 'warning',
     });
   };
 
@@ -625,7 +687,7 @@ export function SalePacketWizard({
                 </div>
               )}
               <div className="confirm-dialog__acks">
-                {generated.downloadUrl && (
+                {generated.downloadUrl ? (
                   <a
                     className="button button--primary button--compact"
                     href={generated.downloadUrl}
@@ -634,7 +696,24 @@ export function SalePacketWizard({
                   >
                     Download packet PDF
                   </a>
-                )}
+                ) : generated.localFileKey ? (
+                  // Not an <a href>: the packet lives in this device's vault,
+                  // and the object URL that reaches it has to be created on
+                  // demand and released afterwards.
+                  <button
+                    className="button button--primary button--compact"
+                    type="button"
+                    onClick={() => {
+                      void openStoredFileInTab({ localFileKey: generated.localFileKey }).then((result) => {
+                        if (!result.ok) {
+                          pushToast({ title: 'Packet unavailable', message: result.message, tone: 'error' });
+                        }
+                      });
+                    }}
+                  >
+                    Open packet
+                  </button>
+                ) : null}
                 <button
                   className="button button--ghost button--compact"
                   type="button"

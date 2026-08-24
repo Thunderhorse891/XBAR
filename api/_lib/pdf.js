@@ -14,6 +14,18 @@ const SECTION_GAP = 18;
 // the page instead of starting wherever the label happened to end.
 const LABEL_WIDTH = 168;
 
+/*
+ * Clear space between the longest inline label and the value beside it.
+ *
+ * A label is drawn unwrapped at the left margin while its value starts at a
+ * fixed column, so a label wider than the column runs straight through the
+ * value. `asField` accepts labels up to 40 characters, and a horse name is a
+ * label here — `Thunderhorse Quarter Horse Champion` measures about 198pt in
+ * Helvetica-Bold at body size, 30pt past the column, and overprinted the
+ * status and the money beside it on the banker-facing page.
+ */
+const LABEL_GUTTER = 10;
+
 const INK = rgb(0.09, 0.1, 0.13);
 const MUTED = rgb(0.42, 0.45, 0.5);
 const RULE = rgb(0.82, 0.84, 0.87);
@@ -381,6 +393,26 @@ export async function createSectionedPdf(input) {
     y -= 2;
     rule();
 
+    /*
+     * Draw a label that will not fit its column on its own line(s), and report
+     * that it did so.
+     *
+     * Returns false for a label that fits, leaving it to be drawn inline as
+     * before — which is nearly every label in nearly every template. Only the
+     * oversized case stacks, so the columns the rest of the page is built on
+     * survive.
+     */
+    const drawOversizedLabel = (label) => {
+      if (bold.widthOfTextAtSize(label, BODY_SIZE) <= LABEL_WIDTH - LABEL_GUTTER) return false;
+
+      for (const labelLine of wrapLine(label, bold, BODY_SIZE, maxWidth)) {
+        ensureRoom(BODY_SIZE + LINE_GAP);
+        text(labelLine, MARGIN, BODY_SIZE, bold, MUTED);
+        y -= BODY_SIZE + LINE_GAP;
+      }
+      return true;
+    };
+
     for (const line of section.lines || []) {
       const fields = fieldsInLine(line);
       if (fields) {
@@ -388,8 +420,9 @@ export async function createSectionedPdf(input) {
           if (!field.value) {
             // A blank to fill in: label, then a ruled space the width of the
             // value column, so a printed document can be completed by hand.
+            const stackedBlankLabel = drawOversizedLabel(field.label);
             ensureRoom(BODY_SIZE + LINE_GAP + 6);
-            text(field.label, MARGIN, BODY_SIZE, bold, MUTED);
+            if (!stackedBlankLabel) text(field.label, MARGIN, BODY_SIZE, bold, MUTED);
             page.drawLine({
               start: { x: MARGIN + LABEL_WIDTH, y: y - BODY_SIZE + 1 },
               end: { x: PAGE_WIDTH - MARGIN, y: y - BODY_SIZE + 1 },
@@ -400,11 +433,12 @@ export async function createSectionedPdf(input) {
             continue;
           }
 
+          const stackedLabel = drawOversizedLabel(field.label);
           const valueLines = wrapLine(field.value, font, BODY_SIZE, maxWidth - LABEL_WIDTH);
           // Room for the whole block, so a label never sits alone at the foot
           // of a page with its value overleaf.
           ensureRoom(valueLines.length * (BODY_SIZE + LINE_GAP));
-          text(field.label, MARGIN, BODY_SIZE, bold, MUTED);
+          if (!stackedLabel) text(field.label, MARGIN, BODY_SIZE, bold, MUTED);
           for (const valueLine of valueLines) {
             // Checked BEFORE drawing, like paragraph() does. Checking after
             // each line meant the last line of the last field could start a

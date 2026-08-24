@@ -7,7 +7,8 @@ import { Panel, Pill } from '@/components/app-ui';
 import { EmptyState } from '@/components/EmptyState';
 import { SalePacketWizard } from '@/components/SalePacketWizard';
 import { billingPath, billingPathForTier } from '@/lib/billingRoutes';
-import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
+import { openStoredFileInTab } from '@/lib/openStoredFile';
+import { hasStoredFile, storedFileLabel } from '@/lib/storedFiles';
 import { formatDateTimeLabel } from '@/lib/format';
 import { downloadLegalHtml, legalDocuments, openPrintableLegalDocument } from '@/lib/legalDocuments';
 import { buildDocumentTrustProfile } from '@/lib/xbarPhaseTwo';
@@ -15,7 +16,7 @@ import { useUiStore } from '@/store/useUiStore';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import { buildHorseEnrichmentFromEntities, normalizeOwnershipRecord } from '@/store/xbarStoreLogic';
-import type { DocumentRecord, DocumentSource } from '@/types/xbar';
+import type { DocumentRecord, DocumentSource, SalePacketBuild } from '@/types/xbar';
 import { documentSources } from '@/features/documents/constants';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 import {
@@ -82,6 +83,7 @@ export default function Documents() {
     | null
   >(null);
   const [openingDocumentId, setOpeningDocumentId] = useState('');
+  const [openingPacketId, setOpeningPacketId] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const uploadOpen = searchParams.get('upload') === '1';
@@ -197,38 +199,34 @@ export default function Documents() {
     setMenuState({ type: 'surface', surfaceId, x: event.clientX, y: event.clientY });
   };
 
-  const openDocument = async (document: Pick<DocumentRecord, 'id' | 'title' | 'fileUrl' | 'storagePath'>) => {
-    const previewWindow = typeof window !== 'undefined' ? window.open('', '_blank') : null;
-    if (previewWindow) {
-      previewWindow.opener = null;
-    }
+  // Packets generated in the browser live in this device's vault, so their
+  // address has to be created on demand — a `blob:` URL persisted at generation
+  // time would already be dead by the time this list rendered it.
+  const openPacket = async (packet: SalePacketBuild) => {
+    setOpeningPacketId(packet.id);
+    const result = await openStoredFileInTab(packet);
+    setOpeningPacketId('');
 
+    if (!result.ok) {
+      pushToast({ title: 'Packet unavailable', message: result.message, tone: 'error' });
+    }
+  };
+
+  const openDocument = async (
+    document: Pick<DocumentRecord, 'id' | 'title' | 'fileUrl' | 'storagePath' | 'localFileKey'>,
+  ) => {
     setOpeningDocumentId(document.id);
-    const access = await getDocumentAccessUrl(document);
+    const result = await openStoredFileInTab(document);
     setOpeningDocumentId('');
 
-    if (!access.ok) {
-      previewWindow?.close();
-      pushToast({
-        title: 'File unavailable',
-        message: access.message,
-        tone: 'error',
-      });
-      return;
+    if (!result.ok) {
+      pushToast({ title: 'File unavailable', message: result.message, tone: 'error' });
     }
-
-    if (previewWindow) {
-      previewWindow.location.href = access.url;
-      previewWindow.focus();
-      return;
-    }
-
-    window.open(access.url, '_blank', 'noopener,noreferrer');
   };
 
   const menuItems = menuDocument
     ? [
-        ...(menuDocument.fileUrl || menuDocument.storagePath
+        ...(hasStoredFile(menuDocument)
           ? [
               {
                 id: 'open-file',
@@ -282,7 +280,7 @@ export default function Documents() {
       ? [
           ...(menuState.surfaceId === 'review'
             ? [
-                ...(reviewQueue[0] && (reviewQueue[0].fileUrl || reviewQueue[0].storagePath)
+                ...(reviewQueue[0] && hasStoredFile(reviewQueue[0])
                   ? [
                       {
                         id: 'open-next',
@@ -886,12 +884,13 @@ export default function Documents() {
                           </td>
                           <td>
                             <div className="inline-actions inline-actions--card">
-                              {document.fileUrl || document.storagePath ? (
+                              {hasStoredFile(document) ? (
                                 <button
                                   className="button button--ghost button--compact"
                                   type="button"
                                   onClick={() => void openDocument(document)}
                                   disabled={openingDocumentId === document.id}
+                                  title={storedFileLabel(document)}
                                 >
                                   {openingDocumentId === document.id ? 'Opening...' : 'Open file'}
                                 </button>
@@ -1222,6 +1221,15 @@ export default function Documents() {
                             >
                               Download PDF
                             </a>
+                          ) : packet.localFileKey ? (
+                            <button
+                              className="button button--ghost button--compact"
+                              type="button"
+                              onClick={() => void openPacket(packet)}
+                              disabled={openingPacketId === packet.id}
+                            >
+                              {openingPacketId === packet.id ? 'Opening...' : 'Open packet'}
+                            </button>
                           ) : null}
                           <Pill
                             tone={

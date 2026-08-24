@@ -34,6 +34,7 @@ import {
   upsertSharedListingInCloud,
 } from '@/lib/cloudWorkspace';
 import { workspaceStateStorage } from '@/lib/workspaceStorage';
+import { referencedVaultKeys, storeLocalFile, sweepLocalFileVault } from '@/lib/localFileVault';
 import {
   canMarkTransferClear,
   computeOwnershipConfidence,
@@ -778,7 +779,7 @@ export const useXbarStore = create<XbarStore>()(
                   horseId: selectedHorse?.id ?? horseId,
                 });
               } catch (error) {
-                console.error('Cloud document upload failed; storing file locally instead.', error);
+                console.error('Cloud document upload failed; keeping the file on this device instead.', error);
               }
               const document = await buildDocumentRecord({
                 file,
@@ -788,7 +789,21 @@ export const useXbarStore = create<XbarStore>()(
                 horses: get().horses,
                 existingDocuments: get().documents,
               });
-              const localFileUrl = undefined;
+              // Cloud storage did not take this file — it is either not
+              // configured for this build or the upload failed. Keeping the
+              // bytes on the device is the whole local-first promise, and it
+              // was not being kept: this used to assign `undefined` directly
+              // under a log line announcing a local save that never happened,
+              // so a workspace with no Supabase project stored a file's name,
+              // type and size and dropped its contents.
+              let localFileKey: string | undefined;
+              if (!uploadedAsset) {
+                try {
+                  localFileKey = await storeLocalFile(file, file.name, file.type);
+                } catch (error) {
+                  console.error('On-device file storage failed; this record will carry no file.', error);
+                }
+              }
               processedFiles += 1;
               set(() => ({
                 documentIntakeProgress: { processed: processedFiles, total: totalFiles, phase: 'Reading documents' },
@@ -799,7 +814,7 @@ export const useXbarStore = create<XbarStore>()(
                 fileName: file.name,
                 mimeType: file.type || undefined,
                 fileSizeBytes: file.size,
-                fileUrl: localFileUrl,
+                localFileKey,
                 storagePath: uploadedAsset?.storagePath,
               };
             }),
@@ -854,7 +869,12 @@ export const useXbarStore = create<XbarStore>()(
             );
             documents = documents.map((document) => createdDocumentMap.get(document.id) ?? document);
           }
-          const localDocumentCount = documents.filter((document) => !document.storagePath).length;
+          // Only the files nobody can open. A document held in the on-device
+          // vault has its bytes and opens on this device, so counting it as
+          // "metadata only" would report a data-loss event that did not occur.
+          const localDocumentCount = documents.filter(
+            (document) => !document.storagePath && !document.localFileKey,
+          ).length;
           const createdHorses = createdHorseBundles.map((bundle) => bundle.horse);
           const createdOwnershipRecords = createdHorseBundles.map((bundle) => bundle.ownershipRecord);
 
@@ -900,7 +920,7 @@ export const useXbarStore = create<XbarStore>()(
 
           return {
             ok: true,
-            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the upload batch.` : ''}${omittedHorseCount ? ` ${omittedHorseCount} additional horse candidate${omittedHorseCount === 1 ? ' was' : 's were'} left for review because the horse limit was reached.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only because cloud file storage is not available.` : ''}`,
+            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the upload batch.` : ''}${omittedHorseCount ? ` ${omittedHorseCount} additional horse candidate${omittedHorseCount === 1 ? ' was' : 's were'} left for review because the horse limit was reached.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only — this browser could not store the file on this device either.` : ''}`,
             id: batch.id,
             createdHorseIds: createdHorses.map((horse) => horse.id),
           };
@@ -1245,13 +1265,24 @@ export const useXbarStore = create<XbarStore>()(
                 horseId: input.horseId,
               });
             } catch (error) {
-              console.error('Cloud receipt upload failed; storing receipt locally instead.', error);
+              console.error('Cloud receipt upload failed; keeping the file on this device instead.', error);
             }
           }
 
-          const localFileUrl = undefined;
+          // Same as the document path: when the cloud did not take the file,
+          // the device does. A receipt is the evidence behind a number an
+          // accountant will ask about, so storing the amount and discarding the
+          // scan is the one outcome that must not happen quietly.
+          let localFileKey: string | undefined;
+          if (input.file && !uploadedAsset) {
+            try {
+              localFileKey = await storeLocalFile(input.file, input.file.name, input.file.type);
+            } catch (error) {
+              console.error('On-device receipt storage failed; this record will carry no file.', error);
+            }
+          }
           const receipt = createExpenseReceiptRecord(input, {
-            fileUrl: localFileUrl,
+            localFileKey,
             storagePath: uploadedAsset?.storagePath,
             fileName: input.file?.name,
             mimeType: input.file?.type || undefined,
@@ -2115,16 +2146,23 @@ export const useXbarStore = create<XbarStore>()(
         const state = get();
         const credential: SaleCredentialSeal = input.serverSeal
           ? { ...input.serverSeal, anchor: 'server' }
-          : {
-              ...buildPacketCredential({
-                horse,
-                documents: state.documents,
-                ownershipRecord: state.ownershipRecords.find((record) => record.horseId === input.horseId),
-                selectedDocumentIds: input.documentIds,
-                generatedBy: input.createdBy,
-              }),
-              anchor: 'local',
-            };
+          : input.localSeal
+            ? // The seal the browser actually printed onto the packet. Sealing
+              // again here would fingerprint the same records at a later
+              // instant and produce a different digest, so the code on the
+              // document and the code in the app would not match — and matching
+              // them is the whole purpose of showing a buyer either one.
+              { ...input.localSeal, anchor: 'local' }
+            : {
+                ...buildPacketCredential({
+                  horse,
+                  documents: state.documents,
+                  ownershipRecord: state.ownershipRecords.find((record) => record.horseId === input.horseId),
+                  selectedDocumentIds: input.documentIds,
+                  generatedBy: input.createdBy,
+                }),
+                anchor: 'local',
+              };
 
         const packet: SalePacketBuild = {
           id: createId('packet'),
@@ -2137,8 +2175,12 @@ export const useXbarStore = create<XbarStore>()(
           documentIds: input.documentIds,
           includesBillOfSale: input.includesBillOfSale,
           status: 'generated',
-          fileName: `sale-packet-${slug}-${todayStamp()}.pdf`,
+          // `.pdf` only when a PDF was actually produced. A locally rendered
+          // packet is HTML, and a file named `.pdf` that is not one fails to
+          // open on the buyer's machine with no explanation.
+          fileName: input.fileName ?? `sale-packet-${slug}-${todayStamp()}.pdf`,
           downloadUrl: input.downloadUrl,
+          localFileKey: input.localFileKey,
           credential,
         };
         const auditEvent = createAuditEvent({
@@ -2505,6 +2547,20 @@ export const useXbarStore = create<XbarStore>()(
       storage: createJSONStorage(() => workspaceStateStorage),
       version: WORKSPACE_SCHEMA_VERSION,
       migrate: (persistedState) => restorePersistedState(persistedState),
+      /*
+       * Reclaim file bytes the workspace no longer points at.
+       *
+       * Records in this app are archived far more often than they are deleted,
+       * and deleting a horse cascades to its receipts, so hunting down every
+       * removal path is how an orphaned blob survives forever. Reconciling the
+       * vault against the rehydrated state catches all of them at once,
+       * including paths that do not exist yet. It never throws: failing to
+       * reclaim space is not a reason to stop the app from starting.
+       */
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        void sweepLocalFileVault(referencedVaultKeys(state.documents, state.expenseReceipts, state.salePacketBuilds));
+      },
       partialize: (state) =>
         selectPersistedState({
           horses: state.horses,
