@@ -48,6 +48,32 @@ const WINANSI_EXTRAS = new Set([
  * mark. NFKD leaves them intact, so they need naming explicitly or a Polish or
  * Croatian owner surname renders as '?ukasz'.
  */
+/** Clear space kept between the footer text and the right-aligned page stamp. */
+const FOOTER_GAP = 12;
+
+/**
+ * Shorten text to fit a width, ending with an ellipsis when it had to be cut.
+ *
+ * Used where wrapping is not available — the footer has only the page margin
+ * beneath it, so a second line would fall outside the document's frame.
+ */
+function truncateToWidth(value, font, size, maxWidth) {
+  const text = String(value ?? '');
+  if (maxWidth <= 0) return '';
+  if (font.widthOfTextAtSize(text, size) <= maxWidth) return text;
+
+  const ellipsis = '...';
+  const room = maxWidth - font.widthOfTextAtSize(ellipsis, size);
+  if (room <= 0) return '';
+
+  let out = '';
+  for (const char of text) {
+    if (font.widthOfTextAtSize(out + char, size) > room) break;
+    out += char;
+  }
+  return `${out.trimEnd()}${ellipsis}`;
+}
+
 /*
  * Whitespace that carries no glyph. These are not "unsupported characters" to
  * be replaced — they are separators, and the wrapper already treats them as
@@ -408,17 +434,36 @@ export async function createSectionedPdf(input) {
       thickness: 0.5,
       color: RULE,
     });
-    if (footer) {
-      footerPage.drawText(footer, { x: MARGIN, y: MARGIN - 20, size: 8, font, color: MUTED });
-    }
+    // The stamp is placed first so the footer knows how much room is left.
+    // Both are drawn on the same baseline — the footer from the left, the
+    // stamp from the right — and the footer carries an unbounded workspace
+    // business name, so without a reserved gap a long legal name runs straight
+    // through "Page N of M" and neither is readable. A 90-character name
+    // overlapped by 27pt.
     const stamp = `Page ${index + 1} of ${pages.length}`;
+    const stampWidth = font.widthOfTextAtSize(stamp, 8);
     footerPage.drawText(stamp, {
-      x: PAGE_WIDTH - MARGIN - font.widthOfTextAtSize(stamp, 8),
+      x: PAGE_WIDTH - MARGIN - stampWidth,
       y: MARGIN - 20,
       size: 8,
       font,
       color: MUTED,
     });
+
+    if (footer) {
+      // Truncated rather than wrapped: this sits below the footer rule with
+      // only the page margin beneath it, so a second line would print outside
+      // the document's own frame. The page stamp is the part that must stay
+      // legible — a reader needs to know whether they have the whole document.
+      const available = PAGE_WIDTH - 2 * MARGIN - stampWidth - FOOTER_GAP;
+      footerPage.drawText(truncateToWidth(footer, font, 8, available), {
+        x: MARGIN,
+        y: MARGIN - 20,
+        size: 8,
+        font,
+        color: MUTED,
+      });
+    }
   });
 
   return pdf.save();
