@@ -30,17 +30,27 @@ import { hasStoredFile, storedFileLabel, storedFileLocation } from '../src/lib/s
 type StoredRecord = { key: string; [field: string]: unknown };
 
 interface FakeOptions {
-  /** Make every write abort, the way a browser signals "out of quota". */
+  /** Abort the transaction outright, before the request itself succeeds. */
   abortWrites?: boolean;
+  /**
+   * Let the request succeed and then abort while committing.
+   *
+   * This is how a browser out of storage quota actually behaves, and it is the
+   * case that made resolving on `request.onsuccess` unsafe: the write reports
+   * success and is then rolled back.
+   */
+  abortOnCommit?: boolean;
 }
 
 /**
  * A minimal IndexedDB.
  *
- * Callbacks fire on a macrotask, never synchronously, because that is the one
- * behaviour of the real API this code depends on: the vault assigns
- * `request.onsuccess` on the line AFTER it issues the request, so an
- * implementation that called back synchronously would silently test nothing.
+ * Two behaviours of the real API are modelled deliberately, because the vault
+ * depends on both. Callbacks fire on a macrotask, never synchronously — the
+ * vault assigns `request.onsuccess` on the line AFTER it issues the request, so
+ * a synchronous stand-in would silently test nothing. And writes are buffered
+ * until the transaction commits, so an abort rolls them back rather than
+ * leaving them applied.
  */
 function installFakeIndexedDb(options: FakeOptions = {}) {
   const stores = new Map<string, Map<string, StoredRecord>>();
@@ -65,22 +75,50 @@ function installFakeIndexedDb(options: FakeOptions = {}) {
           transaction(storeName: string) {
             const data = makeStore(storeName);
             const transaction: Record<string, unknown> = { error: null };
-            const issue = <T>(compute: () => T) => {
+            // Writes wait here until the transaction commits, so an abort
+            // leaves the store exactly as it was.
+            const buffered: (() => void)[] = [];
+            let settled = false;
+
+            const commit = () => {
+              if (settled) return;
+              settled = true;
+              if (options.abortOnCommit) {
+                (transaction.onabort as (() => void) | undefined)?.();
+                return;
+              }
+              for (const write of buffered) write();
+              (transaction.oncomplete as (() => void) | undefined)?.();
+            };
+
+            const issue = <T>(compute: () => T, write?: () => void) => {
               const childRequest: Record<string, unknown> = { result: undefined, error: null };
               later(() => {
                 if (options.abortWrites) {
+                  settled = true;
                   (transaction.onabort as (() => void) | undefined)?.();
                   return;
                 }
                 childRequest.result = compute();
+                if (write) buffered.push(write);
                 (childRequest.onsuccess as (() => void) | undefined)?.();
+                later(commit);
               });
               return childRequest;
             };
+
             transaction.objectStore = () => ({
-              put: (value: StoredRecord) => issue(() => data.set(value.key, value)),
+              put: (value: StoredRecord) =>
+                issue(
+                  () => undefined,
+                  () => data.set(value.key, value),
+                ),
               get: (key: string) => issue(() => data.get(key)),
-              delete: (key: string) => issue(() => data.delete(key)),
+              delete: (key: string) =>
+                issue(
+                  () => undefined,
+                  () => data.delete(key),
+                ),
               getAll: () => issue(() => [...data.values()]),
             });
             return transaction;
@@ -146,6 +184,36 @@ test('a storage failure is raised, never swallowed', async () => {
     );
   } finally {
     restore();
+  }
+});
+
+test('a write rolled back at commit is reported as a failure, not as a key', async () => {
+  const restore = installFakeIndexedDb({ abortOnCommit: true });
+  try {
+    // A successful `put` is not a durable write: the browser can still abort
+    // the transaction while committing, which is exactly what it does when it
+    // runs out of quota. Resolving on the request handed the caller a key for a
+    // blob that had been rolled back — the record then persisted that key and
+    // reported success, rebuilding the silent file loss one level down.
+    await assert.rejects(
+      () => storeLocalFile(new Blob(['rolled back']), 'scan.pdf'),
+      (error: unknown) => {
+        assert.ok(error instanceof LocalFileVaultError);
+        assert.match((error as Error).message, /room|storage/i);
+        return true;
+      },
+    );
+  } finally {
+    restore();
+  }
+
+  // And nothing was left behind: the rollback is real, so a caller that ignored
+  // the rejection could not find the file either.
+  const restoreClean = installFakeIndexedDb();
+  try {
+    assert.deepEqual(await listLocalFiles(), []);
+  } finally {
+    restoreClean();
   }
 });
 

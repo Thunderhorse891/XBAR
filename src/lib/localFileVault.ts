@@ -98,9 +98,25 @@ async function withStore<T>(mode: IDBTransactionMode, action: (store: IDBObjectS
       const transaction = database.transaction(STORE_NAME, mode);
       const store = transaction.objectStore(STORE_NAME);
       const request = action(store);
-      request.onsuccess = () => resolve(request.result);
+
+      /*
+       * The result is held, not returned, until the transaction COMMITS.
+       *
+       * A successful `put` is not a durable write. IndexedDB can still abort
+       * the transaction while committing — a browser hitting its storage quota
+       * does exactly that — and everything in it is rolled back. Resolving on
+       * `request.onsuccess` handed back a key for a blob that no longer
+       * existed, and the caller then persisted that key and reported success:
+       * the silent file loss this whole module exists to stop, rebuilt one
+       * level down.
+       */
+      let result: T;
+      request.onsuccess = () => {
+        result = request.result;
+      };
       request.onerror = () =>
         reject(new LocalFileVaultError('Local file storage rejected the request.', { cause: request.error }));
+      transaction.oncomplete = () => resolve(result);
       transaction.onerror = () =>
         reject(new LocalFileVaultError('Local file storage rejected the request.', { cause: transaction.error }));
       transaction.onabort = () =>
@@ -111,6 +127,8 @@ async function withStore<T>(mode: IDBTransactionMode, action: (store: IDBObjectS
         );
     });
   } finally {
+    // Safe here only because the promise above now settles on the
+    // transaction's own completion rather than on the request's.
     database.close();
   }
 }
