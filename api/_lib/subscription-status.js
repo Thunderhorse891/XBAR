@@ -108,6 +108,31 @@ export function isRecoverableStripeStatus(status) {
   return true;
 }
 
+/**
+ * True when a STORED entitlement payload describes a subscription Stripe can
+ * still bill.
+ *
+ * The same question as `isRecoverableStripeStatus`, asked of a row in the
+ * database rather than of a webhook. It exists so the server can enforce the
+ * no-duplicate-checkout rule itself: the client refusing to offer the button is
+ * a courtesy, not a control — an admin can call the endpoint directly, and an
+ * older cached bundle will.
+ *
+ * Legacy rows written by the previous mapper carry no `subscriptionRecoverable`
+ * field, and every one of them that was `past_due` or `unpaid` was stored as
+ * `Past Due`. Reading an absent field as "not recoverable" would re-open
+ * duplicate checkout for that entire population, so the billing state answers
+ * for them. This mirrors `isSubscriptionRecoverable` in
+ * `src/lib/subscriptionDecision.ts` exactly; the two must agree.
+ */
+export function isStoredSubscriptionRecoverable(entitlementPayload) {
+  if (!entitlementPayload || typeof entitlementPayload !== 'object') return false;
+  if (typeof entitlementPayload.subscriptionRecoverable === 'boolean') {
+    return entitlementPayload.subscriptionRecoverable;
+  }
+  return entitlementPayload.billingState === 'Past Due';
+}
+
 /** Every billing state that may be stored on a workspace profile. */
 export const BILLING_STATES = Object.freeze(['Active', 'Past Due', 'Manual Billing', 'Inactive']);
 

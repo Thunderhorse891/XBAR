@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
+import { useDayKey } from '@/hooks/useDayKey';
 import { MetricCard, Panel, Pill } from '@/components/app-ui';
 import { ReadinessChart } from '@/components/saas';
 import { HorsesIcon } from '@/components/icons';
@@ -52,9 +53,30 @@ export default function Reports() {
   const locked = profitIntelligenceGate(subscription);
   const [exporting, setExporting] = useState<'pdf' | null>(null);
 
-  const report = useMemo(
-    () => buildRanchReport({ horses, documents, expenseReceipts, salesLeads, ownershipRecords }),
+  const reportInput = useMemo(
+    () => ({ horses, documents, expenseReceipts, salesLeads, ownershipRecords }),
     [horses, documents, expenseReceipts, salesLeads, ownershipRecords],
+  );
+
+  /*
+   * Half of this report is a function of the clock, not of the data: the
+   * generated date, what counts as "this month", the trailing three-month
+   * window, the spend anomalies measured against it, and every Coggins-expiry
+   * verdict in the risk assessment.
+   *
+   * Memoized on the data alone, a tab left open on this screen overnight kept
+   * yesterday's answers until something in the workspace changed. `dayKey`
+   * changes at midnight and nowhere else, so the report refreshes exactly when
+   * its time-dependent parts actually move.
+   */
+  const dayKey = useDayKey();
+
+  const report = useMemo(
+    () => buildRanchReport(reportInput),
+    // dayKey is a dependency because it is what makes the clock observable
+    // here; buildRanchReport reads the current time itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [reportInput, dayKey],
   );
 
   const readinessSegments = [
@@ -71,7 +93,11 @@ export default function Reports() {
     if (locked) return;
     setExporting('pdf');
     try {
-      await downloadRanchReportPdf(report, workspaceProfile.ranchName);
+      // Built fresh, not from the memo. This file is handed to a banker with a
+      // date printed on it; the screen refreshes at midnight, but an export
+      // fired in the seconds before that must not carry yesterday's date and
+      // last month's totals into a document that outlives the tab.
+      await downloadRanchReportPdf(buildRanchReport(reportInput), workspaceProfile.ranchName);
     } catch {
       // Rendering happens in this tab with data already in memory, so the only
       // way here is a genuine failure. Say so rather than leaving a button that
@@ -88,7 +114,7 @@ export default function Reports() {
 
   const handleCsv = () => {
     if (locked) return;
-    downloadRanchReportCsv(report);
+    downloadRanchReportCsv(buildRanchReport(reportInput));
   };
 
   // Only truly empty when there is nothing to report on at all.

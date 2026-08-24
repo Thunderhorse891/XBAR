@@ -52,7 +52,28 @@ export async function openStoredFileInTab(record: StoredFileRef): Promise<OpenSt
     return { ok: true };
   }
 
-  window.open(access.url, '_blank', 'noopener,noreferrer');
+  /*
+   * Nothing was opened up front, so this is a second attempt after an await —
+   * and by then the click no longer counts as user activation in most browsers,
+   * so it is the attempt most likely to be blocked. Its return value is the
+   * only signal that happened.
+   *
+   * Reporting `ok` here told the caller a tab had opened when none had. The
+   * sale-packet wizard is where that bites: it resolves and stores the packet
+   * before opening it, so the seller was told their packet was open in a new
+   * tab, saw no tab, and had no idea the packet existed at all.
+   */
+  const opened = typeof window === 'undefined' ? null : window.open(access.url, '_blank', 'noopener,noreferrer');
+  if (!opened) {
+    // Released immediately rather than on the timer: nothing consumed the URL,
+    // so there is nothing to keep it alive for.
+    release?.();
+    return {
+      ok: false,
+      message: 'Your browser blocked the new tab. Allow pop-ups for this site, then try again.',
+    };
+  }
+
   scheduleRelease();
   return { ok: true };
 }

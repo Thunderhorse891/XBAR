@@ -1,6 +1,7 @@
 import Stripe from 'stripe';
 import { readJsonBody, sendJson } from '../_lib/http.js';
 import { buildSubscriptionProfile, getStripePriceIdByTier } from '../_lib/subscription-plans.js';
+import { isStoredSubscriptionRecoverable } from '../_lib/subscription-status.js';
 import { requireWorkspaceAccess } from '../_lib/supabase-admin.js';
 import { applyCors } from '../_lib/cors.js';
 import { checkoutSchema, parseBody } from '../_lib/validation.js';
@@ -85,11 +86,43 @@ export default async function handler(req, res) {
   }
 
   const { supabase, user } = access;
-  const { data: billingCustomer } = await supabase
+  const { data: billingCustomer, error: billingCustomerError } = await supabase
     .from('workspace_billing_customers')
-    .select('stripe_customer_id, entitlement_payload')
+    .select('stripe_customer_id, stripe_subscription_id, entitlement_payload')
     .eq('workspace_id', workspaceId)
     .maybeSingle();
+
+  // Fail closed on an unreadable billing row. Everything below decides whether
+  // this workspace already has a subscription Stripe can bill; a failed read
+  // answers nothing, and guessing "no" here charges a customer twice.
+  if (billingCustomerError) {
+    return sendJson(res, 503, {
+      ok: false,
+      code: 'billing_unavailable',
+      retryable: true,
+      message: 'Your billing status could not be verified just now. Try again in a moment.',
+    });
+  }
+
+  /*
+   * Refuse a second subscription for one Stripe can still collect on.
+   *
+   * The client hides the buttons for these workspaces, but that is a courtesy,
+   * not a control: an admin can call this endpoint directly, and an older
+   * cached bundle will. Enforced here because the harm is money — a `paused`,
+   * `unpaid` or `incomplete` subscription that gets a second Checkout Session
+   * bills the customer twice and leaves two webhook streams fighting over one
+   * entitlement record. Recovery goes through the billing portal, which acts on
+   * the subscription that already exists.
+   */
+  if (isStoredSubscriptionRecoverable(billingCustomer?.entitlement_payload)) {
+    return sendJson(res, 409, {
+      ok: false,
+      code: 'subscription_recoverable',
+      message:
+        'This workspace already has a subscription that can be reactivated. Update the payment method in the billing portal instead of starting a new plan.',
+    });
+  }
 
   let stripeCustomerId = billingCustomer?.stripe_customer_id || '';
   if (!stripeCustomerId) {

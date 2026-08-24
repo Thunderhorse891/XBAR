@@ -1,0 +1,84 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+
+import { isStoredSubscriptionRecoverable } from '../../api/_lib/subscription-status.js';
+
+/*
+ * A workspace whose subscription Stripe can still bill must not be sold a
+ * second one. That rule was enforced only in the browser: the plan buttons were
+ * hidden, and the endpoint behind them would happily create another
+ * `mode: 'subscription'` Checkout Session for anyone who called it — an admin
+ * with curl, or simply an older cached bundle.
+ *
+ * The harm is money. A duplicated subscription bills the customer twice and
+ * leaves two webhook streams fighting over one entitlement record.
+ */
+
+test('a stored payload that says recoverable is recoverable', () => {
+  assert.equal(isStoredSubscriptionRecoverable({ subscriptionRecoverable: true }), true);
+  assert.equal(isStoredSubscriptionRecoverable({ subscriptionRecoverable: false }), false);
+});
+
+test('a legacy row with no flag is answered by its billing state', () => {
+  // The previous mapper stored past_due AND unpaid as 'Past Due' and wrote no
+  // flag. Reading an absent field as "not recoverable" would re-open duplicate
+  // checkout for that entire population on the day this deploys.
+  assert.equal(isStoredSubscriptionRecoverable({ billingState: 'Past Due' }), true);
+  assert.equal(isStoredSubscriptionRecoverable({ billingState: 'Active' }), false);
+  assert.equal(isStoredSubscriptionRecoverable({ billingState: 'Inactive' }), false);
+});
+
+test('a workspace that has never had a subscription can buy one', () => {
+  // Every new workspace is this case; refusing here would sell nothing at all.
+  assert.equal(isStoredSubscriptionRecoverable(null), false);
+  assert.equal(isStoredSubscriptionRecoverable(undefined), false);
+  assert.equal(isStoredSubscriptionRecoverable({}), false);
+  assert.equal(isStoredSubscriptionRecoverable('Past Due'), false);
+});
+
+test('the flag wins over the billing state when both are present', () => {
+  // A reconciled row carries both, and the flag is the reconciliation's answer.
+  assert.equal(isStoredSubscriptionRecoverable({ subscriptionRecoverable: false, billingState: 'Past Due' }), false);
+  assert.equal(isStoredSubscriptionRecoverable({ subscriptionRecoverable: true, billingState: 'Inactive' }), true);
+});
+
+test('the client and the server ask the same question the same way', () => {
+  const client = readFileSync('src/lib/subscriptionDecision.ts', 'utf8');
+  const server = readFileSync('api/_lib/subscription-status.js', 'utf8');
+
+  // Two copies of a money rule that disagree is worse than either being wrong
+  // alone, so both must keep the flag-then-billing-state order.
+  for (const [name, source] of [
+    ['client', client],
+    ['server', server],
+  ]) {
+    assert.match(source, /typeof \w+\.subscriptionRecoverable === 'boolean'/, `${name} must prefer the explicit flag`);
+    assert.match(source, /billingState === 'Past Due'/, `${name} must fall back to the billing state`);
+  }
+});
+
+test('the checkout endpoint refuses before it creates a session', () => {
+  const source = readFileSync('api/stripe/checkout.js', 'utf8');
+
+  const guard = source.indexOf('isStoredSubscriptionRecoverable(');
+  const createSession = source.indexOf('stripe.checkout.sessions.create(');
+  const createCustomer = source.indexOf('stripe.customers.create(');
+
+  assert.ok(guard > -1, 'the endpoint must enforce recoverability itself, not rely on the UI');
+  assert.ok(guard < createSession, 'the refusal must come before a Checkout Session is created');
+  // Also before the customer is created: a refused request should leave nothing
+  // behind in Stripe.
+  assert.ok(guard < createCustomer, 'the refusal must come before a Stripe customer is created');
+  assert.match(source, /code: 'subscription_recoverable'/, 'the client needs a code it can act on');
+});
+
+test('an unreadable billing row is a retryable refusal, not a sale', () => {
+  const source = readFileSync('api/stripe/checkout.js', 'utf8');
+
+  // Same fail-closed rule as the capacity gates: a failed read establishes
+  // nothing, and guessing "no subscription" here charges someone twice.
+  assert.match(source, /select\('stripe_customer_id, stripe_subscription_id, entitlement_payload'\)/);
+  assert.match(source, /if \(billingCustomerError\) \{[\s\S]{0,400}sendJson\(res, 503,/);
+  assert.match(source, /retryable: true/);
+});

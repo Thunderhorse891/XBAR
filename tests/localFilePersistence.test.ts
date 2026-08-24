@@ -202,3 +202,48 @@ test('the seller is told how much of the packet is actually in it', async () => 
     'an incomplete packet must not be announced as simply ready',
   );
 });
+
+test('a blocked tab is reported, not counted as opened', async () => {
+  const source = await readFile('src/lib/openStoredFile.ts', 'utf8');
+
+  // The fallback runs after an await, so the click no longer counts as user
+  // activation and this is the attempt most likely to be blocked. Its return
+  // value is the only signal that happened — and the wizard tells the seller
+  // their packet is open in a new tab on the strength of it.
+  assert.match(
+    source,
+    /const opened = typeof window === 'undefined' \? null : window\.open\(/,
+    'the fallback window must be captured, not fired and forgotten',
+  );
+  assert.match(
+    source,
+    /if \(!opened\) \{[\s\S]{0,300}ok: false,/,
+    'a blocked tab must return a failure the caller can show',
+  );
+  assert.match(
+    source,
+    /if \(!opened\) \{[\s\S]{0,200}release\?\.\(\);/,
+    'nothing consumed the object URL, so it must be released immediately',
+  );
+});
+
+test('the reports screen refreshes when the day changes, and exports are built fresh', async () => {
+  const source = await readFile('src/routes/Reports.tsx', 'utf8');
+
+  // Memoized on the data alone, a tab left open overnight kept yesterday's
+  // generated date, "this month" totals, trailing window and anomalies.
+  assert.match(source, /const dayKey = useDayKey\(\);/, 'the clock must be a dependency of the report');
+  assert.match(source, /\[reportInput, dayKey\]/, 'the memo must recompute at the day boundary');
+
+  // The exported file outlives the tab and carries a date a banker will read.
+  assert.match(
+    source,
+    /downloadRanchReportPdf\(buildRanchReport\(reportInput\), workspaceProfile\.ranchName\)/,
+    'the PDF export must build a report at the moment of export',
+  );
+  assert.match(
+    source,
+    /downloadRanchReportCsv\(buildRanchReport\(reportInput\)\)/,
+    'the CSV export must build a report at the moment of export',
+  );
+});
