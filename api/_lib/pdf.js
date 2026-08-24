@@ -48,6 +48,13 @@ const WINANSI_EXTRAS = new Set([
  * mark. NFKD leaves them intact, so they need naming explicitly or a Polish or
  * Croatian owner surname renders as '?ukasz'.
  */
+/*
+ * Whitespace that carries no glyph. These are not "unsupported characters" to
+ * be replaced — they are separators, and the wrapper already treats them as
+ * such, so they collapse to a space.
+ */
+const WHITESPACE_CONTROLS = new Set(['\t', '\n', '\r', '\v', '\f', '\u0085', '\u2028', '\u2029']);
+
 const STROKED_LATIN = new Map([
   ['\u0141', 'L'],
   ['\u0142', 'l'],
@@ -86,7 +93,11 @@ export function toDrawableText(value) {
       continue;
     }
 
-    if (char === '\t') {
+    // Whitespace controls become spaces, never '?'. wrapLine splits on /\s+/,
+    // so before this fold a newline inside a value acted as a word break — a
+    // multiline medical note wrapped naturally. Turning it into a literal '?'
+    // both printed a spurious character and welded the two lines together.
+    if (WHITESPACE_CONTROLS.has(char)) {
       out += ' ';
       continue;
     }
@@ -311,10 +322,19 @@ export async function createSectionedPdf(input) {
   };
 
   // Letterhead: whose document this is, before what it is.
+  //
+  // Wrapped like everything else. This was drawn as a single unbounded line, so
+  // a long ranch name — Settings imposes no limit on it — ran past the right
+  // edge and was clipped, on the one line of the page that says whose document
+  // it is. The title directly below it has always wrapped.
   if (letterhead) {
-    ensureRoom(30);
-    text(letterhead, MARGIN, 10, bold, ACCENT);
-    y -= 16;
+    const lines = wrapLine(letterhead, bold, 10, maxWidth);
+    ensureRoom(lines.length * 14 + 16);
+    for (const line of lines) {
+      text(line, MARGIN, 10, bold, ACCENT);
+      y -= 12;
+    }
+    y -= 4;
   }
 
   paragraph(title, { size: TITLE_SIZE, useFont: bold });

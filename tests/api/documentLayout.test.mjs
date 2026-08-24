@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
 
 import { PDFDocument, StandardFonts } from 'pdf-lib';
@@ -231,4 +233,75 @@ test('folding keeps what the font can already draw', async () => {
 
   assert.equal(toDrawableText(''), '');
   assert.equal(toDrawableText(undefined), '');
+});
+
+/*
+ * A line break is a separator, not an unsupported character.
+ *
+ * Before the WinAnsi fold, `wrapLine` split on /\s+/, so a newline inside a
+ * value acted as a word break and a multiline medical note wrapped naturally.
+ * The fold then treated `\n` as a glyph it could not draw and replaced it with
+ * '?', which both printed a spurious character and welded the two lines into
+ * one word.
+ */
+test('line breaks inside a value become spaces, not question marks', () => {
+  assert.equal(toDrawableText('Initial exam\nFollow-up required'), 'Initial exam Follow-up required');
+  assert.equal(toDrawableText('tab\there'), 'tab here');
+
+  // Every whitespace control, including the Unicode line/paragraph separators.
+  for (const control of ['\n', '\r', '\v', '\f', '\u0085', '\u2028', '\u2029']) {
+    assert.equal(toDrawableText(`A${control}B`), 'A B', `${JSON.stringify(control)} must become a space`);
+  }
+
+  // Guards the fix from the other side: a real unsupported glyph is still a
+  // visible placeholder, not a space, or two horses would render alike.
+  assert.equal(toDrawableText('A馬B'), 'A?B');
+});
+
+test('a multiline note renders as one wrapped value', async () => {
+  const bytes = await createSectionedPdf({
+    title: 'Health Record',
+    sections: [{ heading: 'Notes', lines: ['Medical: Initial exam\nFollow-up required in 14 days'] }],
+    footer: 'f',
+  });
+  assert.ok(bytes.length > 0);
+});
+
+/*
+ * The letterhead is user-controlled and unbounded.
+ *
+ * Settings imposes no maximum on a ranch name, and this was drawn as a single
+ * unbounded line while the title directly below it had always wrapped. A long
+ * name ran past the right edge and was clipped — on the one line of the page
+ * that says whose document it is.
+ */
+test('a long letterhead wraps inside the page instead of clipping', async () => {
+  const { PDFDocument, StandardFonts } = await import('pdf-lib');
+  const doc = await PDFDocument.create();
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const maxWidth = 612 - 2 * 56;
+
+  const name =
+    'Thunderhorse Quarter Horses and Cattle Company of the Northern Front Range and High Plains Cooperative Limited Liability Company';
+
+  // The premise: this genuinely does not fit, so the test cannot pass by luck.
+  assert.ok(bold.widthOfTextAtSize(name, 10) > maxWidth, 'the fixture must actually overflow');
+
+  const lines = wrapLine(name, bold, 10, maxWidth);
+  assert.ok(lines.length > 1, 'it must wrap');
+  for (const line of lines) {
+    assert.ok(bold.widthOfTextAtSize(line, 10) <= maxWidth, `"${line}" overruns the page`);
+  }
+
+  const bytes = await createSectionedPdf({ title: 'Bill of Sale', letterhead: name, sections: [], footer: 'f' });
+  assert.ok(bytes.length > 0);
+
+  // The wrapping above only proves the helper works. This asserts the
+  // letterhead actually goes THROUGH it — reverting the draw site to a single
+  // unbounded `text(letterhead, ...)` leaves every assertion above green,
+  // which is how a weak test lets a fixed bug come back.
+  const source = readFileSync(path.join(process.cwd(), 'api/_lib/pdf.js'), 'utf8');
+  const block = source.slice(source.indexOf('if (letterhead) {'), source.indexOf('paragraph(title'));
+  assert.match(block, /wrapLine\(letterhead, bold, 10, maxWidth\)/, 'the letterhead must be wrapped before drawing');
+  assert.ok(!/text\(letterhead,/.test(block), 'the raw letterhead must never be drawn as a single unbounded line');
 });
