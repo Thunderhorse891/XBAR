@@ -1318,9 +1318,15 @@ export const useXbarStore = create<XbarStore>()(
             },
           }));
 
+          // Warn only when the bytes are genuinely gone. A receipt held in the
+          // on-device vault opens from this browser, so telling its owner the
+          // file "requires cloud storage" would send them to configure Supabase
+          // to recover a scan they already have — the same stale warning the
+          // document path carried, one function down.
+          const receiptFileLost = Boolean(input.file) && !uploadedAsset?.storagePath && !localFileKey;
           return {
             ok: true,
-            message: `${receipt.category} receipt logged.${input.file && !uploadedAsset?.storagePath ? ' Receipt file metadata was saved, but the file itself requires cloud storage.' : ''}`,
+            message: `${receipt.category} receipt logged.${receiptFileLost ? ' The receipt file could not be saved — this browser could not store it on this device, and cloud storage is unavailable.' : ''}`,
             id: receipt.id,
           };
         } catch (error) {

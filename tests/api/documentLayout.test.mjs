@@ -454,3 +454,47 @@ test('an ordinary label still shares its line with its value', async () => {
   assert.equal(label.y, value.y, 'a label that fits must stay on its value’s line');
   assert.equal(value.x, 56 + 168, 'and the value must stay in its column');
 });
+
+test('an oversized label is never stranded at the foot of a page', async () => {
+  const horseName = 'Thunderhorse Quarter Horse Champion';
+
+  /*
+   * Swept rather than pinned to the one filler count that happens to land the
+   * label on the page boundary today.
+   *
+   * On the previous renderer exactly one length in this range reproduced it —
+   * 33 fields — because the label was drawn, and `y` advanced, before anything
+   * measured the value. A fixture pinned to 33 would stop testing anything the
+   * first time a spacing constant moved the boundary; sweeping finds it
+   * wherever it is.
+   */
+  let overflowed = 0;
+
+  for (let fieldCount = 28; fieldCount <= 45; fieldCount += 1) {
+    const filler = Array.from({ length: fieldCount }, (_, index) => `Field ${index + 1}: value ${index + 1}`);
+    const bytes = await createSectionedPdf({
+      title: 'XBAR Ranch Report',
+      sections: [
+        {
+          heading: 'Cost and margin by horse',
+          lines: [...filler, `${horseName}: Sale Prep · invested $12,000 · asking $42,000`],
+        },
+      ],
+    });
+
+    if ((await PDFDocument.load(bytes)).getPageCount() > 1) overflowed += 1;
+
+    const drawn = drawnText(bytes);
+    const label = drawn.findIndex((item) => item.text.startsWith('Thunderhorse'));
+    const value = drawn.findIndex((item) => item.text.startsWith('Sale Prep'));
+    assert.ok(label > -1 && value > -1, `both halves must be drawn at ${fieldCount} fields`);
+
+    // Drawing order follows page order, so a break between them shows up as the
+    // outgoing page's footer and page stamp sitting in between.
+    const between = drawn.slice(label + 1, value).map((item) => item.text);
+    assert.deepEqual(between, [], `label and value split at ${fieldCount} fields by: ${between.join(' | ')}`);
+  }
+
+  // The range has to actually cross a page boundary, or it proves nothing.
+  assert.ok(overflowed > 0, 'the sweep must include lengths that overflow onto a second page');
+});

@@ -1,0 +1,178 @@
+import { readLocalFile } from './localFileVault.js';
+import type { DocumentRecord } from '../types/xbar.js';
+
+/*
+ * Putting the actual documents into a locally generated sale packet.
+ *
+ * The cloud path downloads each selected document and appends it into one PDF,
+ * with an "Items Not Embedded" appendix for anything it could not include. The
+ * local path shipped a summary that listed the documents by title and contained
+ * none of them — while the wizard told the seller their approved documents were
+ * "bundled". A buyer opening that packet would find no Coggins, no
+ * registration, and nothing saying either was missing.
+ *
+ * This resolves the bytes that are genuinely on this device, and names what is
+ * not, so the packet can say both truthfully.
+ */
+
+/** One file, ready to be embedded in the packet HTML. */
+export interface LocalPacketAttachment {
+  id: string;
+  label: string;
+  fileName: string;
+  dataUrl: string;
+  sizeBytes: number;
+}
+
+/** A document that was selected but could not be attached, and why. */
+export interface UnattachedDocument {
+  title: string;
+  reason: string;
+}
+
+/**
+ * The same ceiling the cloud packet builder uses, so a seller does not get a
+ * different set of documents depending on which path produced the packet.
+ */
+export const MAX_PACKET_ATTACHMENTS = 20;
+
+/**
+ * Total source bytes allowed across all attachments.
+ *
+ * Base64 adds about a third, so 25MB of documents becomes a ~34MB HTML file.
+ * Past roughly that, browsers and mail servers start refusing it, and a packet
+ * the buyer cannot open is worse than one that says a file was too large to
+ * include.
+ */
+export const MAX_PACKET_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
+export interface AttachmentPlan {
+  attach: DocumentRecord[];
+  excluded: UnattachedDocument[];
+}
+
+function label(document: DocumentRecord): string {
+  return `${document.type}: ${document.title}`;
+}
+
+/**
+ * Decide, from metadata alone, which documents can go in.
+ *
+ * Kept pure and separate from reading the vault so the rules — what counts as
+ * available, which ceiling was hit, what the seller is told — can be tested
+ * without a browser, and so every exclusion has to carry a reason.
+ */
+export function planPacketAttachments(
+  documents: DocumentRecord[],
+  limits: { maxCount?: number; maxBytes?: number } = {},
+): AttachmentPlan {
+  const maxCount = limits.maxCount ?? MAX_PACKET_ATTACHMENTS;
+  const maxBytes = limits.maxBytes ?? MAX_PACKET_ATTACHMENT_BYTES;
+
+  const attach: DocumentRecord[] = [];
+  const excluded: UnattachedDocument[] = [];
+  let usedBytes = 0;
+
+  for (const document of documents) {
+    if (!document.localFileKey) {
+      excluded.push({
+        title: label(document),
+        // Distinguished deliberately: "in the cloud" is recoverable by signing
+        // in, "no file" means the record never had one. Telling a seller to
+        // sign in to retrieve a file that does not exist wastes their evening.
+        reason: document.storagePath
+          ? 'stored in cloud storage, not on this device'
+          : 'no file was attached to this record',
+      });
+      continue;
+    }
+
+    if (attach.length >= maxCount) {
+      excluded.push({ title: label(document), reason: `over the ${maxCount}-document packet limit` });
+      continue;
+    }
+
+    // An unknown size counts as zero rather than blocking the attachment: the
+    // read below is what finally decides, and refusing a file because its
+    // recorded size is missing would drop a real document for a metadata gap.
+    const size = document.fileSizeBytes ?? 0;
+    if (usedBytes + size > maxBytes) {
+      excluded.push({ title: label(document), reason: 'too large to include in this packet' });
+      continue;
+    }
+
+    usedBytes += size;
+    attach.push(document);
+  }
+
+  return { attach, excluded };
+}
+
+/**
+ * How many bytes are turned into characters per `String.fromCharCode` call.
+ *
+ * Spreading a whole file into one call overflows the argument limit — a 5MB
+ * scan is 5 million arguments — and it fails as a RangeError deep inside the
+ * conversion, which reads like a corrupt file rather than a size problem.
+ */
+const BASE64_CHUNK_BYTES = 0x8000;
+
+/**
+ * Read a blob back as a `data:` URL.
+ *
+ * Data URLs are what let the packet be ONE file. A sale packet is emailed, put
+ * on a USB stick, and opened on a phone; a folder of loose files with an index
+ * referencing them by relative path survives none of that.
+ *
+ * Built on `arrayBuffer` and `btoa` rather than `FileReader`, which is a
+ * browser-only global — the conversion is the part most worth testing, and a
+ * FileReader implementation could only ever be tested in a browser.
+ */
+async function toDataUrl(blob: Blob, mimeType: string): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += BASE64_CHUNK_BYTES) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + BASE64_CHUNK_BYTES));
+  }
+
+  return `data:${mimeType || 'application/octet-stream'};base64,${btoa(binary)}`;
+}
+
+/**
+ * Resolve the planned documents to embeddable attachments.
+ *
+ * A document that plans in but cannot be read moves to `excluded` rather than
+ * being dropped. Silently shipping a packet one document short is the failure
+ * this whole change exists to remove.
+ */
+export async function resolvePacketAttachments(
+  documents: DocumentRecord[],
+  limits?: { maxCount?: number; maxBytes?: number },
+): Promise<{ attachments: LocalPacketAttachment[]; unattached: UnattachedDocument[] }> {
+  const plan = planPacketAttachments(documents, limits);
+  const attachments: LocalPacketAttachment[] = [];
+  const unattached = [...plan.excluded];
+
+  for (const document of plan.attach) {
+    try {
+      const entry = await readLocalFile(document.localFileKey as string);
+      if (!entry) {
+        unattached.push({ title: label(document), reason: 'the stored file is no longer on this device' });
+        continue;
+      }
+      attachments.push({
+        id: document.id,
+        label: label(document),
+        fileName: entry.name || document.fileName || document.title,
+        dataUrl: await toDataUrl(entry.blob, entry.type || document.mimeType || ''),
+        sizeBytes: entry.size,
+      });
+    } catch (error) {
+      console.error('Reading a packet document from this device failed.', error);
+      unattached.push({ title: label(document), reason: 'the stored file could not be read' });
+    }
+  }
+
+  return { attachments, unattached };
+}

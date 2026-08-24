@@ -159,3 +159,46 @@ test('a receipt scan can be opened, not just counted', async () => {
     'the evidence behind a number an accountant will ask about must be viewable',
   );
 });
+
+test('a locally generated packet contains the documents it lists', async () => {
+  const wizard = await readFile('src/components/SalePacketWizard.tsx', 'utf8');
+  const generator = await readFile('src/lib/localSalePacketGenerator.ts', 'utf8');
+
+  assert.match(
+    wizard,
+    /const resolved = await resolvePacketAttachments\(/,
+    'the no-cloud branch must read the selected documents, not just their titles',
+  );
+  assert.match(
+    wizard,
+    /attachments: resolved\.attachments,\s*unattached: resolved\.unattached,/,
+    'both halves must reach the packet — what is in it and what is not',
+  );
+  assert.match(
+    generator,
+    /<a download="\$\{escapeHtml\(file\.fileName\)\}" href="\$\{escapeHtml\(file\.dataUrl\)\}"/,
+    'each attached file must be openable from the packet itself',
+  );
+  assert.match(
+    generator,
+    /Not included in this packet:/,
+    'a document that could not be embedded must be named on the page, not omitted',
+  );
+});
+
+test('the seller is told how much of the packet is actually in it', async () => {
+  const source = await readFile('src/components/SalePacketWizard.tsx', 'utf8');
+
+  // "N of M documents embedded" is the difference between the seller finding a
+  // missing Coggins now and the buyer finding it.
+  assert.match(
+    source,
+    /\$\{localPacket\?\.attachedFiles \?\? 0\} of \$\{docSelection\.length\} document/,
+    'the confirmation must state how many of the selected documents were embedded',
+  );
+  assert.match(
+    source,
+    /localPacket\?\.unattachedDocuments\.length\s*\?\s*'Sale packet ready — some files not included'/,
+    'an incomplete packet must not be announced as simply ready',
+  );
+});

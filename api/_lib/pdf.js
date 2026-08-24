@@ -394,23 +394,32 @@ export async function createSectionedPdf(input) {
     rule();
 
     /*
-     * Draw a label that will not fit its column on its own line(s), and report
-     * that it did so.
+     * How a label that will not fit its column has to be drawn.
      *
-     * Returns false for a label that fits, leaving it to be drawn inline as
+     * Returns null for a label that fits, leaving it to be drawn inline as
      * before — which is nearly every label in nearly every template. Only the
      * oversized case stacks, so the columns the rest of the page is built on
      * survive.
+     *
+     * Measured separately from drawing so the caller can reserve room for the
+     * label AND its value together. Drawing the label first advanced `y` before
+     * anything had checked whether the value still fitted, which stranded the
+     * label at the foot of a page with its value overleaf — the exact thing the
+     * reservation below exists to prevent.
      */
-    const drawOversizedLabel = (label) => {
-      if (bold.widthOfTextAtSize(label, BODY_SIZE) <= LABEL_WIDTH - LABEL_GUTTER) return false;
+    const oversizedLabelLines = (label) =>
+      bold.widthOfTextAtSize(label, BODY_SIZE) <= LABEL_WIDTH - LABEL_GUTTER
+        ? null
+        : wrapLine(label, bold, BODY_SIZE, maxWidth);
 
-      for (const labelLine of wrapLine(label, bold, BODY_SIZE, maxWidth)) {
+    const drawLabelLines = (labelLines) => {
+      for (const labelLine of labelLines) {
+        // Only reachable for a label taller than a whole page; the block
+        // reservation at each call site covers everything else.
         ensureRoom(BODY_SIZE + LINE_GAP);
         text(labelLine, MARGIN, BODY_SIZE, bold, MUTED);
         y -= BODY_SIZE + LINE_GAP;
       }
-      return true;
     };
 
     for (const line of section.lines || []) {
@@ -420,9 +429,10 @@ export async function createSectionedPdf(input) {
           if (!field.value) {
             // A blank to fill in: label, then a ruled space the width of the
             // value column, so a printed document can be completed by hand.
-            const stackedBlankLabel = drawOversizedLabel(field.label);
-            ensureRoom(BODY_SIZE + LINE_GAP + 6);
-            if (!stackedBlankLabel) text(field.label, MARGIN, BODY_SIZE, bold, MUTED);
+            const blankLabelLines = oversizedLabelLines(field.label);
+            ensureRoom((blankLabelLines?.length ?? 0) * (BODY_SIZE + LINE_GAP) + BODY_SIZE + LINE_GAP + 6);
+            if (blankLabelLines) drawLabelLines(blankLabelLines);
+            else text(field.label, MARGIN, BODY_SIZE, bold, MUTED);
             page.drawLine({
               start: { x: MARGIN + LABEL_WIDTH, y: y - BODY_SIZE + 1 },
               end: { x: PAGE_WIDTH - MARGIN, y: y - BODY_SIZE + 1 },
@@ -433,12 +443,14 @@ export async function createSectionedPdf(input) {
             continue;
           }
 
-          const stackedLabel = drawOversizedLabel(field.label);
+          const labelLines = oversizedLabelLines(field.label);
           const valueLines = wrapLine(field.value, font, BODY_SIZE, maxWidth - LABEL_WIDTH);
-          // Room for the whole block, so a label never sits alone at the foot
-          // of a page with its value overleaf.
-          ensureRoom(valueLines.length * (BODY_SIZE + LINE_GAP));
-          if (!stackedLabel) text(field.label, MARGIN, BODY_SIZE, bold, MUTED);
+          // Room for the whole block — the stacked label's lines included — so
+          // a label never sits alone at the foot of a page with its value
+          // overleaf.
+          ensureRoom(((labelLines?.length ?? 0) + valueLines.length) * (BODY_SIZE + LINE_GAP));
+          if (labelLines) drawLabelLines(labelLines);
+          else text(field.label, MARGIN, BODY_SIZE, bold, MUTED);
           for (const valueLine of valueLines) {
             // Checked BEFORE drawing, like paragraph() does. Checking after
             // each line meant the last line of the last field could start a

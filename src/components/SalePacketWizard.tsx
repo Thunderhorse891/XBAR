@@ -9,9 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { type RemoteSalePacketSeal, createSalePacketRemote, hasBackendIdentity } from '@/lib/backendApi';
 import { type LocalSalePacket, buildLocalSalePacket } from '@/lib/localSalePacketGenerator';
+import { resolvePacketAttachments } from '@/lib/localPacketAttachments';
 import { storeLocalFile } from '@/lib/localFileVault';
 import { openStoredFileInTab } from '@/lib/openStoredFile';
-import type { SaleCredentialSeal } from '@/types/xbar';
+import type { DocumentRecord, SaleCredentialSeal } from '@/types/xbar';
 import { billingPathForTier } from '@/lib/billingRoutes';
 import { openFacebookShareDialog } from '@/lib/facebookSharing';
 import { buildBadgeSnippet, buildShareText } from '@/lib/verificationBadge';
@@ -214,6 +215,17 @@ export function SalePacketWizard({
        * says it can run therefore had no artifact to send a buyer, even though
        * the generator that makes one has been in the repository the whole time.
        */
+      // The documents themselves, not just their titles. The cloud path appends
+      // each selected file into the packet PDF; the local path listed them and
+      // contained none of them, while this wizard told the seller they were
+      // "bundled" — so a buyer could open a supposedly complete packet with no
+      // Coggins and no registration in it, and nothing saying so.
+      const resolved = await resolvePacketAttachments(
+        docSelection
+          .map((id) => documents.find((record) => record.id === id))
+          .filter((record): record is DocumentRecord => Boolean(record)),
+      );
+
       localPacket = buildLocalSalePacket({
         horse,
         workspaceProfile,
@@ -222,6 +234,8 @@ export function SalePacketWizard({
         selectedDocumentIds: docSelection,
         generatedBy: currentRole,
         watermark: effectiveWatermark,
+        attachments: resolved.attachments,
+        unattached: resolved.unattached,
       });
       localSeal = { ...localPacket.credential, anchor: 'local' as const };
 
@@ -303,14 +317,19 @@ export function SalePacketWizard({
       title: downloadUrl
         ? 'Sale packet PDF ready'
         : localFileKey
-          ? 'Sale packet ready on this device'
+          ? localPacket?.unattachedDocuments.length
+            ? 'Sale packet ready — some files not included'
+            : 'Sale packet ready on this device'
           : 'Sale packet recorded',
       message: downloadUrl
         ? 'Watermarked PDF opened in a new tab. Buyer activity is now tracked in Buyer follow-up.'
         : localFileKey
-          ? 'Watermarked packet opened in a new tab and saved on this device. Print it to PDF to send it, or sign in to the cloud for a server-sealed PDF.'
+          ? // Says what is in it. A count the seller can check against what they
+            // selected is the difference between finding a missing Coggins now
+            // and the buyer finding it.
+            `${localPacket?.attachedFiles ?? 0} of ${docSelection.length} document${docSelection.length === 1 ? '' : 's'} embedded in the packet, opened in a new tab and saved on this device.${localPacket?.unattachedDocuments.length ? ` Not included: ${localPacket.unattachedDocuments.map((item) => item.title).join(', ')}.` : ''}`
           : `${build.message} The packet could not be saved on this device, so only the record was kept. Buyer follow-up is tracking this buyer either way.`,
-      tone: packetStored ? 'success' : 'warning',
+      tone: packetStored && !localPacket?.unattachedDocuments.length ? 'success' : 'warning',
     });
   };
 
