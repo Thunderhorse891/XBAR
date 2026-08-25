@@ -26,6 +26,19 @@ function horse(overrides: Partial<HorseRecord> & { id: string; name: string }): 
   } as unknown as HorseRecord;
 }
 
+/** A sale profile with the fields these tests do not care about filled in. */
+function sale(overrides: Partial<HorseRecord['sale']>): HorseRecord['sale'] {
+  return {
+    askPrice: 0,
+    listingState: 'Draft',
+    buyerConfidence: 0,
+    inquiryCount: 0,
+    watchlistCount: 0,
+    socialReady: false,
+    ...overrides,
+  } as HorseRecord['sale'];
+}
+
 function receipt(overrides: Partial<ExpenseReceipt> & { id: string; amount: number }): ExpenseReceipt {
   return {
     title: 'Receipt',
@@ -185,6 +198,29 @@ test('only open offers count as pipeline, and only paid deposits as held', () =>
 
   assert.equal(report.money.pipelineValue, 20_000);
   assert.equal(report.money.depositsHeld, 2_000);
+});
+
+test('the listed count agrees with the risk population it sits beside', () => {
+  const report = buildRanchReport(
+    input({
+      horses: [
+        horse({ id: 'priced', name: 'Priced', sale: sale({ askPrice: 42_000 }) }),
+        // Sale inventory with no price entered yet. `assessRevenueAtRisk`
+        // counts these — getting a horse ready to sell starts long before
+        // anyone decides what to ask — so a headline count testing `askPrice >
+        // 0` reported a smaller herd than the blockers list underneath it.
+        horse({ id: 'prep', name: 'In Prep', status: 'Sale Prep', sale: sale({}) }),
+        horse({ id: 'ready', name: 'Market Ready', sale: sale({ listingState: 'Market Ready' }) }),
+        horse({ id: 'review', name: 'Buyer Review', sale: sale({ listingState: 'Buyer Review' }) }),
+        // Genuinely not for sale: out at pasture, no price, no listing state.
+        horse({ id: 'keeper', name: 'Keeper', status: 'Pasture', sale: sale({}) }),
+      ],
+    }),
+    NOW,
+  );
+
+  assert.equal(report.listedCount, 4);
+  assert.equal(report.risk.items.length, 4, 'the two figures must describe the same horses');
 });
 
 test('a deposit on a completed sale is no longer held', () => {

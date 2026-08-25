@@ -39,6 +39,28 @@ function hasCurrentCoggins(horseId: string, documents: DocumentRecord[], now: Da
 
 // A horse counts as sale inventory when it carries an asking price or is in
 // sale prep. Risk = listed dollars a buyer cannot close on today.
+/**
+ * Is this horse part of the sale inventory?
+ *
+ * Exported because two places on the ranch report answer this question and were
+ * answering it differently: the risk assessment counted a horse in `Sale Prep`
+ * with no price entered yet, while the headline "Listed for sale" count tested
+ * `askPrice > 0` alone. The same report then showed a smaller herd than the
+ * blockers list below it, with nothing on the page explaining the gap.
+ *
+ * A price is sufficient but not necessary. Getting a horse ready to sell is
+ * where the readiness work happens, and it starts long before anyone decides
+ * what to ask for it.
+ */
+export function isSaleInventory(horse: HorseRecord): boolean {
+  return (
+    (horse.sale?.askPrice ?? 0) > 0 ||
+    horse.status === 'Sale Prep' ||
+    horse.sale?.listingState === 'Market Ready' ||
+    horse.sale?.listingState === 'Buyer Review'
+  );
+}
+
 export function assessRevenueAtRisk(
   horses: HorseRecord[],
   ownershipRecords: OwnershipRecord[],
@@ -51,12 +73,7 @@ export function assessRevenueAtRisk(
 
   for (const horse of horses) {
     const askPrice = horse.sale?.askPrice ?? 0;
-    const listed =
-      askPrice > 0 ||
-      horse.status === 'Sale Prep' ||
-      horse.sale?.listingState === 'Market Ready' ||
-      horse.sale?.listingState === 'Buyer Review';
-    if (!listed) continue;
+    if (!isSaleInventory(horse)) continue;
     totalListedValue += askPrice;
 
     const blockers: string[] = [];

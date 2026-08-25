@@ -342,6 +342,30 @@ export function selectPersistedState(state: PersistedXbarState): PersistedXbarSt
   };
 }
 
+/**
+ * Would this backup restore, in full?
+ *
+ * The shape check `workspaceBackupPayload` performs is a *precondition*, not a
+ * guarantee: `{ workspace: { horses: [null] } }` has a `horses` key and passes
+ * it, then `restorePersistedState` dereferences the null and throws. That
+ * mattered once restoring also wrote file bytes into the vault under keys the
+ * backup carries — the blobs of the workspace currently loaded were replaced
+ * before anything discovered the payload was unusable, and the UI then reported
+ * the import as blocked.
+ *
+ * Runs the real normalization rather than a deeper set of shape assertions, so
+ * this cannot drift from what the import actually does. It is pure, so running
+ * it twice costs only the work.
+ */
+export function canRestorePersistedState(raw: unknown): boolean {
+  try {
+    restorePersistedState(raw);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function restorePersistedState(raw: unknown): PersistedXbarState {
   const state = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const horses = Array.isArray(state.horses)

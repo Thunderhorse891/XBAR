@@ -277,3 +277,33 @@ test('account deletion purges the vault, not just the workspace', async () => {
     'the files are in their own database and need their own purge',
   );
 });
+
+test('a structurally broken backup is refused before any blob is written', async () => {
+  const source = await readFile('src/routes/Settings.tsx', 'utf8');
+
+  // The shape check is a precondition, not a guarantee: `{ horses: [null] }`
+  // has a `horses` key and passes it, then `restorePersistedState` dereferences
+  // the null and throws — after the vault has already been overwritten with the
+  // backup's blobs, under keys the CURRENT workspace still points at.
+  const shapeAt = source.indexOf('workspaceBackupPayload(payload)');
+  const deepAt = source.indexOf('canRestorePersistedState(workspace)');
+  const filesAt = source.indexOf('importLocalFiles(payload.files)');
+
+  assert.ok(deepAt > -1, 'the full normalization must run before anything is written');
+  assert.ok(shapeAt < deepAt, 'the cheap check comes first');
+  assert.ok(deepAt < filesAt, 'nothing may be written until the payload is known to restore');
+  assert.match(source, /Nothing on this device was changed/, 'the refusal must say the device is untouched');
+});
+
+test('the full normalization is what decides, so it cannot drift from the import', async () => {
+  const source = await readFile('src/store/xbarStoreHelpers.ts', 'utf8');
+
+  // Deliberately runs `restorePersistedState` rather than asserting a deeper
+  // set of shapes: a second description of "valid" would drift from the one the
+  // import actually applies.
+  assert.match(
+    source,
+    /export function canRestorePersistedState\(raw: unknown\): boolean \{\s*try \{\s*restorePersistedState\(raw\);/,
+    'validation must run the real normalization',
+  );
+});

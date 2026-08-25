@@ -556,12 +556,26 @@ async function appendAttachment(pdf, attachment, fallbackNotes) {
 
 export async function applyWatermark(pdf, watermarkText) {
   if (!watermarkText) return;
+
+  /*
+   * Folded to CP1252 before it is measured, not just before it is drawn.
+   *
+   * The watermark is buyer-supplied — `Copy for {name} - {date}` — and the
+   * standard font THROWS on anything outside WinAnsi rather than degrading, so
+   * `widthOfTextAtSize` fails on a buyer called `Dvořák` or `馬` and takes the
+   * whole cloud sale packet with it. `createSectionedPdf` folds its own inputs;
+   * this path was missed, and it is the one carrying a name nobody at the ranch
+   * chose the spelling of.
+   */
+  const drawable = toDrawableText(watermarkText);
+  if (!drawable) return;
+
   const font = await pdf.embedFont(StandardFonts.HelveticaBold);
   for (const page of pdf.getPages()) {
     const { width, height } = page.getSize();
-    const size = Math.min(42, (width * 1.4) / Math.max(watermarkText.length, 8));
-    const textWidth = font.widthOfTextAtSize(watermarkText, size);
-    page.drawText(watermarkText, {
+    const size = Math.min(42, (width * 1.4) / Math.max(drawable.length, 8));
+    const textWidth = font.widthOfTextAtSize(drawable, size);
+    page.drawText(drawable, {
       x: width / 2 - textWidth / 2.8,
       y: height / 5,
       size,

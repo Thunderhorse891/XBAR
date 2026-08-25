@@ -1,6 +1,7 @@
 import type { DocumentRecord, ExpenseReceipt, HorseRecord, OwnershipRecord, SalesLead } from '../types/xbar.js';
 import {
   assessRevenueAtRisk,
+  isSaleInventory,
   computeHorseEconomics,
   detectSpendAnomalies,
   type RevenueRiskAssessment,
@@ -238,7 +239,11 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
     // tomorrow, on a page whose monthly totals are keyed to today.
     generatedOn: dayKeyFor(now),
     horseCount: horses.length,
-    listedCount: horseRows.filter((row) => row.askPrice > 0).length,
+    // The risk assessment's own predicate, not a second copy of it. Testing
+    // `askPrice > 0` here counted fewer horses than the blockers list directly
+    // below reported on — a horse in Sale Prep with no price yet is sale
+    // inventory, and the report disagreed with itself about that.
+    listedCount: horses.filter(isSaleInventory).length,
     documentsToReview: documents.filter(
       (document) => document.state === 'Needs Review' || document.state === 'Queued' || document.state === 'Matched',
     ).length,

@@ -6,7 +6,14 @@ import test from 'node:test';
 
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 
-import { asField, createSectionedPdf, fieldsInLine, toDrawableText, wrapLine } from '../../api/_lib/pdf.js';
+import {
+  applyWatermark,
+  asField,
+  createSectionedPdf,
+  fieldsInLine,
+  toDrawableText,
+  wrapLine,
+} from '../../api/_lib/pdf.js';
 
 /*
  * How a template line becomes a row on the page.
@@ -497,4 +504,29 @@ test('an oversized label is never stranded at the foot of a page', async () => {
 
   // The range has to actually cross a page boundary, or it proves nothing.
   assert.ok(overflowed > 0, 'the sweep must include lengths that overflow onto a second page');
+});
+
+test('a buyer name outside WinAnsi does not take down the sale packet', async () => {
+  // The watermark is buyer-supplied — `Copy for {name} - {date}` — and the
+  // standard font THROWS rather than degrading, so `widthOfTextAtSize` failed
+  // before anything was drawn. createSectionedPdf folds its own inputs; this
+  // path was missed, and it carries the one name nobody at the ranch chose the
+  // spelling of.
+  for (const mark of ['Copy for Dvořák - 2026-08-25', 'Copy for 馬', 'Copy for Jane Doe']) {
+    const pdf = await PDFDocument.create();
+    pdf.addPage();
+    await applyWatermark(pdf, mark);
+    const bytes = await pdf.save();
+    assert.ok(bytes.byteLength > 0, `${mark} must produce a document`);
+  }
+});
+
+test('an empty watermark still stamps nothing, rather than stamping "?"', async () => {
+  const pdf = await PDFDocument.create();
+  pdf.addPage();
+  // A mark that folds away to nothing must not become a page of replacement
+  // characters across every sheet of a buyer's packet.
+  await applyWatermark(pdf, '​​');
+  const drawn = drawnText(await pdf.save());
+  assert.deepEqual(drawn, []);
 });

@@ -16,6 +16,7 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
 import { workspaceBackupPayload } from '@/store/xbarStoreLogic';
+import { canRestorePersistedState } from '@/store/xbarStoreHelpers';
 import {
   type PortableLocalFile,
   type UnbackedUpFile,
@@ -209,10 +210,28 @@ export default function Settings() {
        * report "Import blocked" — leaving real documents silently pointing at
        * some other file's bytes.
        */
-      if (!workspaceBackupPayload(payload)) {
+      const workspace = workspaceBackupPayload(payload);
+      if (!workspace) {
         pushToast({
           title: 'Import blocked',
           message: 'Backup file is missing the XBAR workspace payload.',
+          tone: 'error',
+        });
+        return;
+      }
+
+      /*
+       * The shape check is a precondition, not a guarantee.
+       *
+       * `{ workspace: { horses: [null] } }` has a `horses` key and passes it,
+       * then `restorePersistedState` dereferences the null and throws — after
+       * the vault has already been overwritten. So the real normalization runs
+       * first, on a payload that has not touched anything yet.
+       */
+      if (!canRestorePersistedState(workspace)) {
+        pushToast({
+          title: 'Import blocked',
+          message: 'This backup file is damaged and could not be read. Nothing on this device was changed.',
           tone: 'error',
         });
         return;
