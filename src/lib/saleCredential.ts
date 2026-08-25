@@ -34,10 +34,19 @@
 import { sha256 } from './sha256.js';
 
 /*
- * v3: attachment digests cover the file's decoded BYTES rather than the base64
- * text that carried them. Same tamper-evidence either way, but only the bytes
- * are what `shasum -a 256` prints for the file a buyer saves out of the packet,
- * and a seal nobody can practically recompute is a seal that only gets read.
+ * v3, two changes from v2:
+ *
+ *  - Attachment digests cover the file's decoded BYTES rather than the base64
+ *    text that carried them. Same tamper-evidence either way, but only the
+ *    bytes are what `shasum -a 256` prints for a file saved out of the packet,
+ *    and a seal nobody can practically recompute is a seal that only gets read.
+ *  - `care` no longer carries `veterinarian`, `farrier` or `medicalNotes`. The
+ *    payload is published inside the packet so the digest can be recomputed,
+ *    which makes everything sealed also everything disclosed — so the sealed
+ *    set had to narrow to what a buyer may actually see.
+ *
+ * Both land under one version because no v3 packet exists outside this branch;
+ * two different payload shapes must never share a version number.
  */
 export const SALE_CREDENTIAL_VERSION = 3 as const;
 
@@ -69,7 +78,6 @@ export interface CredentialIdentity {
   microchipId: string;
   sire: string;
   dam: string;
-  owner: string;
 }
 
 /** Buyer-facing sale terms the packet renders. */
@@ -88,12 +96,22 @@ export interface CredentialOwnership {
 }
 
 /** Buyer-facing care & disclosure summary the packet renders. */
+/**
+ * Care facts the seal covers — and therefore the care facts the packet shows.
+ *
+ * `veterinarian`, `farrier` and `medicalNotes` were here and are deliberately
+ * gone. The first two are third parties' contact details; the third is
+ * unreviewed internal free text. None of them belong in a document emailed to a
+ * prospective buyer, and leaving them in the payload would publish them twice
+ * over now that the payload is printed inside the packet for verification.
+ *
+ * Health disclosure did not go away with them: it comes from the vet records
+ * and Coggins the seller deliberately attached, which the buyer can read in
+ * full rather than through someone's shorthand.
+ */
 export interface CredentialCare {
   status: string;
   lastVetVisit: string;
-  veterinarian: string;
-  farrier: string;
-  medicalNotes: string;
 }
 
 /** Release-gate verdict the packet renders. */
@@ -213,7 +231,6 @@ export function buildCredentialPayload(input: SaleCredentialInput): string {
       microchipId: input.identity.microchipId,
       sire: input.identity.sire,
       dam: input.identity.dam,
-      owner: input.identity.owner,
     },
     sale: {
       askPrice: input.sale.askPrice,
@@ -229,9 +246,6 @@ export function buildCredentialPayload(input: SaleCredentialInput): string {
     care: {
       status: input.care.status,
       lastVetVisit: input.care.lastVetVisit,
-      veterinarian: input.care.veterinarian,
-      farrier: input.care.farrier,
-      medicalNotes: input.care.medicalNotes,
     },
     documents,
     attachments,

@@ -51,7 +51,6 @@ function input(overrides: Partial<SaleCredentialInput> = {}): SaleCredentialInpu
       microchipId: '985141000123456',
       sire: 'Smokin Whiz',
       dam: 'Docs Starlight',
-      owner: 'Erin Wyrick',
     },
     sale: { askPrice: 45000, listingState: 'Buyer Review' },
     ownership: {
@@ -64,9 +63,6 @@ function input(overrides: Partial<SaleCredentialInput> = {}): SaleCredentialInpu
     care: {
       status: 'Sale Prep',
       lastVetVisit: '2026-06-01',
-      veterinarian: 'Dr. Vasquez',
-      farrier: 'J. Reed',
-      medicalNotes: 'Sound; routine care current.',
     },
     documents: docs(),
     release: { status: 'Ready to release', allowed: true, blockers: [], warnings: [] },
@@ -132,9 +128,12 @@ test('changing a document summary or confidence changes the seal', () => {
   assert.notEqual(base.digest, editedConfidence.digest);
 });
 
-test('changing the medical-notes disclosure changes the seal', () => {
+test('changing the last vet visit changes the seal', () => {
+  // Was `medicalNotes`, which no longer belongs in a buyer-facing payload. The
+  // property under test is the same: a care fact the packet shows is sealed,
+  // so editing it after the fact breaks the digest.
   const base = buildSaleCredential(input());
-  const tampered = buildSaleCredential(input({ care: { ...input().care, medicalNotes: 'No disclosures.' } }));
+  const tampered = buildSaleCredential(input({ care: { ...input().care, lastVetVisit: '2020-01-01' } }));
   assert.notEqual(base.digest, tampered.digest);
 });
 

@@ -18,6 +18,7 @@ import { hasRoleCapability } from '@/lib/permissions';
 import { hasHorsePhoto, isHorsePhotoAsset } from '@/lib/animalPassport';
 import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { buildPacketCredential } from '@/lib/localSalePacketGenerator';
+import { toPacketDisclosure } from '@/lib/salePacketDisclosure';
 import { featureGate } from '@/lib/commercialEngine';
 import { ownerPreviewAuthorization, overlayTier } from '@/lib/ownerPreview';
 import { isCurrentPaidPlan } from '@/lib/subscriptionDecision';
@@ -2160,16 +2161,22 @@ export const useXbarStore = create<XbarStore>()(
               // document and the code in the app would not match — and matching
               // them is the whole purpose of showing a buyer either one.
               { ...input.localSeal, anchor: 'local' }
-            : {
-                ...buildPacketCredential({
-                  horse,
-                  documents: state.documents,
-                  ownershipRecord: state.ownershipRecords.find((record) => record.horseId === input.horseId),
-                  selectedDocumentIds: input.documentIds,
-                  generatedBy: input.createdBy,
-                }),
-                anchor: 'local',
-              };
+            : (() => {
+                const packetOwnership = state.ownershipRecords.find((record) => record.horseId === input.horseId);
+                return {
+                  ...buildPacketCredential({
+                    horse,
+                    documents: state.documents,
+                    ownershipRecord: packetOwnership,
+                    // Explicit, like the generator's — the seal covers the
+                    // buyer-safe allowlist, never the raw record.
+                    disclosure: toPacketDisclosure(horse, packetOwnership, state.workspaceProfile),
+                    selectedDocumentIds: input.documentIds,
+                    generatedBy: input.createdBy,
+                  }),
+                  anchor: 'local' as const,
+                };
+              })();
 
         const packet: SalePacketBuild = {
           id: createId('packet'),

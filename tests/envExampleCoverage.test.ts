@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 
 const repoRoot = process.cwd();
@@ -92,4 +92,33 @@ test('the billing section states what happens with Stripe absent', () => {
   // will actually look for it.
   assert.match(envExample, /Billing not configured yet/);
   assert.match(envExample, /No checkout opens, no subscription record is created/);
+});
+
+/*
+ * The npm test script names every suite explicitly, so a test file that nobody
+ * adds to it never runs — and a test that never runs is worse than no test,
+ * because the coverage looks present. `tests/salePacketDisclosure.test.ts` was
+ * written, passed locally, and sat unexecuted in `npm test` until the totals
+ * did not move.
+ *
+ * Same invariant as the rest of this file — every X is registered in Y — which
+ * is why it lives here rather than in a new file that would need registering to
+ * check that files get registered.
+ */
+test('every test file is actually run by npm test', () => {
+  const script = JSON.parse(read('package.json')).scripts.test as string;
+  const suites = readdirSync(path.join(repoRoot, 'tests'))
+    .filter((name) => name.endsWith('.test.ts'))
+    .map((name) => name.replace(/\.ts$/, '.js'));
+
+  const missing = suites.filter((name) => !script.includes(`/tests/${name}`));
+  assert.deepEqual(missing, [], `these suites are never executed: ${missing.join(', ')}`);
+});
+
+test('every api test file is actually run by npm test', () => {
+  const script = JSON.parse(read('package.json')).scripts.test as string;
+  const suites = readdirSync(path.join(repoRoot, 'tests/api')).filter((name) => name.endsWith('.test.mjs'));
+
+  const missing = suites.filter((name) => !script.includes(`tests/api/${name}`));
+  assert.deepEqual(missing, [], `these api suites are never executed: ${missing.join(', ')}`);
 });
