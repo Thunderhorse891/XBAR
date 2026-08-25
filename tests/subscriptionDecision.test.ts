@@ -592,3 +592,46 @@ test('clamping a lapsed subscription with an unknown tier leaves the screen rend
   assert.ok(subscriptionPlans[decisionTier], 'the selected plan must exist');
   assert.notEqual(subscriptionPlans[decisionTier].monthlyRate, undefined, 'and carry the fields the screen reads');
 });
+
+test('a paying workspace is not offered a second subscription', () => {
+  // Not recoverable — it is working fine — so the recoverability check misses
+  // it entirely, and the billing screen enables every other tier's button. That
+  // is the ordinary upgrade path, and it opened a second `mode: 'subscription'`
+  // session beside the one already being paid for.
+  const readiness = getCheckoutReadiness({
+    billingEnabled: true,
+    canManageBilling: true,
+    hasManagedIdentity: true,
+    hasPaymentLink: true,
+    checkoutInProgress: false,
+    subscriptionRecoverable: false,
+    subscriptionActive: true,
+  });
+
+  assert.equal(readiness.ready, false);
+  assert.match(readiness.reason, /billing portal/);
+});
+
+test('a workspace with no plan is still allowed to buy one', () => {
+  const readiness = getCheckoutReadiness({
+    billingEnabled: true,
+    canManageBilling: true,
+    hasManagedIdentity: true,
+    hasPaymentLink: true,
+    checkoutInProgress: false,
+    subscriptionRecoverable: false,
+    subscriptionActive: false,
+  });
+
+  // The guard must not become a blanket refusal: nobody could ever subscribe.
+  assert.equal(readiness.ready, true);
+});
+
+test('the billing screen asks both questions, not just recoverability', async () => {
+  const source = await readFile('src/routes/Subscriptions.tsx', 'utf8');
+
+  assert.match(source, /const subscriptionActive = hasActivePaidPlan\(subscription\);/);
+  // Both call sites — the selected-plan readiness and the per-plan card — or
+  // one of them still offers a button the server refuses.
+  assert.equal((source.match(/subscriptionActive,/g) ?? []).length, 2);
+});

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-import { isStoredSubscriptionRecoverable } from '../../api/_lib/subscription-status.js';
+import { checkoutBlockReason, isStoredSubscriptionRecoverable } from '../../api/_lib/subscription-status.js';
 
 /*
  * A workspace whose subscription Stripe can still bill must not be sold a
@@ -58,10 +58,71 @@ test('the client and the server ask the same question the same way', () => {
   }
 });
 
+const billing = (subscriptionId, payload) => ({
+  stripe_subscription_id: subscriptionId,
+  entitlement_payload: payload,
+});
+
+test('a workspace with no subscription may buy one', () => {
+  assert.equal(checkoutBlockReason(null), null, 'a brand new workspace');
+  assert.equal(checkoutBlockReason(billing('', {})), null, 'a billing row with no subscription');
+});
+
+test('an abandoned checkout session does not lock the customer out of buying', () => {
+  // `checkout.js` writes an `incomplete` payload with subscriptionRecoverable
+  // true the moment a session is created, and an EMPTY subscription id. Nothing
+  // clears it if the customer closes the tab — so a guard reading the payload
+  // alone refused that workspace every subsequent attempt, for good. A safety
+  // guard that stops people paying is worse than the harm it was added for.
+  const abandoned = billing('', { billingState: 'Inactive', subscriptionRecoverable: true });
+
+  assert.equal(
+    isStoredSubscriptionRecoverable(abandoned.entitlement_payload),
+    true,
+    'the payload still says recoverable',
+  );
+  assert.equal(checkoutBlockReason(abandoned), null, 'but there is no subscription to recover');
+});
+
+test('an active subscription is not sold a second one', () => {
+  // The billing screen enables every other tier's button, so this is the
+  // ordinary upgrade path — not an edge case. Its payload is not recoverable,
+  // so a recoverability-only guard let it straight through to a second
+  // `mode: 'subscription'` session beside the one being paid for.
+  const active = billing('sub_live', { billingState: 'Active', subscriptionRecoverable: false });
+
+  assert.equal(checkoutBlockReason(active), 'subscription_active');
+});
+
+test('a live subscription that lapsed is recoverable, not duplicable', () => {
+  assert.equal(
+    checkoutBlockReason(billing('sub_live', { billingState: 'Inactive', subscriptionRecoverable: true })),
+    'subscription_recoverable',
+  );
+  // Legacy rows carry no flag; the billing state answers for them.
+  assert.equal(checkoutBlockReason(billing('sub_live', { billingState: 'Past Due' })), 'subscription_recoverable');
+});
+
+test('a canceled subscription can be replaced with a new one', () => {
+  // Terminal states leave the id behind, but there is nothing left to
+  // duplicate — and refusing here would mean a former customer could never
+  // come back.
+  assert.equal(
+    checkoutBlockReason(billing('sub_dead', { billingState: 'Inactive', subscriptionRecoverable: false })),
+    null,
+  );
+});
+
+test('a comped workspace is not sold a subscription beside its grant', () => {
+  // Manual Billing is an operator decision. If it also carries a Stripe
+  // subscription id, that subscription is live and must not be duplicated.
+  assert.equal(checkoutBlockReason(billing('sub_live', { billingState: 'Manual Billing' })), 'subscription_active');
+});
+
 test('the checkout endpoint refuses before it creates a session', () => {
   const source = readFileSync('api/stripe/checkout.js', 'utf8');
 
-  const guard = source.indexOf('isStoredSubscriptionRecoverable(');
+  const guard = source.indexOf('checkoutBlockReason(billingCustomer)');
   const createSession = source.indexOf('stripe.checkout.sessions.create(');
   const createCustomer = source.indexOf('stripe.customers.create(');
 
@@ -70,7 +131,8 @@ test('the checkout endpoint refuses before it creates a session', () => {
   // Also before the customer is created: a refused request should leave nothing
   // behind in Stripe.
   assert.ok(guard < createCustomer, 'the refusal must come before a Stripe customer is created');
-  assert.match(source, /code: 'subscription_recoverable'/, 'the client needs a code it can act on');
+  assert.match(source, /code: blockReason,/, 'the client needs a code it can act on');
+  assert.match(source, /subscription_active/, 'and the two refusals must be distinguishable');
 });
 
 test('an unreadable billing row is a retryable refusal, not a sale', () => {

@@ -166,9 +166,52 @@ export function isKnownBillingState(billingState) {
  * line that turns the mistake into free paid access.
  */
 export function entitledTierForBillingState(tier, billingState) {
-  if (billingState === 'Active' || billingState === 'Manual Billing') return tier;
+  if (isEntitledBillingState(billingState)) return tier;
   // 'Past Due', 'Inactive', and any unrecognized value stored in the column.
   return BASELINE_TIER;
+}
+
+/** The two states that grant the purchased tier. */
+export function isEntitledBillingState(billingState) {
+  return billingState === 'Active' || billingState === 'Manual Billing';
+}
+
+/*
+ * Why a workspace may not start a NEW subscription, or null when it may.
+ *
+ * Two failures sat either side of the earlier guard, and both are about the
+ * same missing distinction: an open Checkout Session is not a subscription.
+ *
+ *   - `api/stripe/checkout.js` writes an `incomplete` profile the moment a
+ *     session is created, with an EMPTY `stripe_subscription_id`. Nothing
+ *     clears it if the customer closes the tab, so keying the refusal on the
+ *     entitlement payload alone locked that workspace out of buying anything,
+ *     for good. A safety guard that stops people paying is worse than the harm
+ *     it was added for.
+ *
+ *   - An actively paying workspace choosing a different tier had
+ *     `subscriptionRecoverable: false`, so it sailed through and got a SECOND
+ *     `mode: 'subscription'` session beside the one it was already paying for.
+ *     The billing screen enables those buttons, so this is the ordinary upgrade
+ *     path, not an edge case.
+ *
+ * So the question is not "is this recoverable" but "does a subscription Stripe
+ * can still act on already exist". A real subscription id is what says one
+ * does; terminal states — canceled, expired — leave the id behind but nothing
+ * to duplicate, so those workspaces must be able to buy again.
+ */
+export function checkoutBlockReason(billingCustomer) {
+  const subscriptionId = String(billingCustomer?.stripe_subscription_id ?? '').trim();
+  // No subscription: a new workspace, or a checkout session nobody completed.
+  if (!subscriptionId) return null;
+
+  const payload = billingCustomer?.entitlement_payload;
+  if (isEntitledBillingState(payload?.billingState)) return 'subscription_active';
+  if (isStoredSubscriptionRecoverable(payload)) return 'subscription_recoverable';
+
+  // Canceled or expired: the id is a record of what was, not something Stripe
+  // will bill again.
+  return null;
 }
 
 /**

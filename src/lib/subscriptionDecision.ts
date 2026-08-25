@@ -55,6 +55,17 @@ export function getCheckoutReadiness(params: {
    * second subscription could be created beside the first.
    */
   subscriptionRecoverable?: boolean;
+  /**
+   * True when the workspace is already paying for a plan.
+   *
+   * A different rule from `subscriptionRecoverable` and it has to be checked
+   * too: an actively paying workspace is NOT recoverable, so it passed the
+   * check below and its other-tier buttons opened a second
+   * `mode: 'subscription'` session beside the one it was already paying for.
+   * The billing screen enables those buttons, so that is the ordinary upgrade
+   * path — the most common way anyone would have hit it.
+   */
+  subscriptionActive?: boolean;
 }): CheckoutReadiness {
   if (!params.canManageBilling)
     return { ready: false, mode: 'checkout', reason: 'Ask a workspace owner to change plans.' };
@@ -68,6 +79,14 @@ export function getCheckoutReadiness(params: {
   // at once, with both emitting webhooks that fight over the same entitlement
   // record. Refusing is the only safe answer available in the app — resuming or
   // settling the existing subscription happens through Stripe, not here.
+  if (params.subscriptionActive) {
+    return {
+      ready: false,
+      mode: 'manual',
+      reason:
+        'This workspace already has an active subscription. Change plans in the billing portal so the existing one is updated rather than duplicated.',
+    };
+  }
   if (params.subscriptionRecoverable) {
     return {
       ready: false,

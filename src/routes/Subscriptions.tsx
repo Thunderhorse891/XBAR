@@ -10,6 +10,7 @@ import {
   getCheckoutReadiness,
   isCurrentPaidPlan,
   isEntitledBillingState,
+  hasActivePaidPlan,
   isSubscriptionRecoverable,
   recommendedTier,
 } from '@/lib/subscriptionDecision';
@@ -81,6 +82,11 @@ export default function Subscriptions() {
   // those three statuses can still be collected on. isSubscriptionRecoverable
   // falls back to the billing state for exactly that population.
   const subscriptionRecoverable = isSubscriptionRecoverable(subscription);
+  // A paying workspace changing tiers is the other way to end up with two
+  // subscriptions, and it is not recoverable, so the check above misses it
+  // entirely. api/stripe/checkout.js refuses these server-side; this stops the
+  // screen offering a button that would be refused.
+  const subscriptionActive = hasActivePaidPlan(subscription);
   const continuePath = workspaceReady ? '/' : '/setup';
   const checkoutReadinessLabel = selectedCheckoutConfigured
     ? 'Secure checkout opens next.'
@@ -122,6 +128,7 @@ export default function Subscriptions() {
       hasPaymentLink: Boolean(getStripePaymentLink(tier)),
       checkoutInProgress: false,
       subscriptionRecoverable,
+      subscriptionActive,
     });
     if (!readiness.ready) {
       emit(productEventNames.checkoutFailed, { tier, reason: readiness.reason }, 'warning');
@@ -184,6 +191,7 @@ export default function Subscriptions() {
       hasPaymentLink: Boolean(getStripePaymentLink(tier)),
       checkoutInProgress: checkoutTier !== null,
       subscriptionRecoverable,
+      subscriptionActive,
     });
 
     return (

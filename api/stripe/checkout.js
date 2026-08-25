@@ -1,7 +1,7 @@
 import Stripe from 'stripe';
 import { readJsonBody, sendJson } from '../_lib/http.js';
 import { buildSubscriptionProfile, getStripePriceIdByTier } from '../_lib/subscription-plans.js';
-import { isStoredSubscriptionRecoverable } from '../_lib/subscription-status.js';
+import { checkoutBlockReason } from '../_lib/subscription-status.js';
 import { requireWorkspaceAccess } from '../_lib/supabase-admin.js';
 import { applyCors } from '../_lib/cors.js';
 import { checkoutSchema, parseBody } from '../_lib/validation.js';
@@ -105,22 +105,26 @@ export default async function handler(req, res) {
   }
 
   /*
-   * Refuse a second subscription for one Stripe can still collect on.
+   * Refuse a second subscription when one already exists that Stripe can act on.
    *
-   * The client hides the buttons for these workspaces, but that is a courtesy,
-   * not a control: an admin can call this endpoint directly, and an older
-   * cached bundle will. Enforced here because the harm is money — a `paused`,
-   * `unpaid` or `incomplete` subscription that gets a second Checkout Session
-   * bills the customer twice and leaves two webhook streams fighting over one
-   * entitlement record. Recovery goes through the billing portal, which acts on
-   * the subscription that already exists.
+   * The client hides the buttons for some of these, but that is a courtesy, not
+   * a control: an admin can call this endpoint directly, and an older cached
+   * bundle will. Enforced here because the harm is money — a second Checkout
+   * Session beside a live subscription bills the customer twice and leaves two
+   * webhook streams fighting over one entitlement record.
+   *
+   * Both changes go through the billing portal, which acts on the subscription
+   * that already exists rather than creating another one.
    */
-  if (isStoredSubscriptionRecoverable(billingCustomer?.entitlement_payload)) {
+  const blockReason = checkoutBlockReason(billingCustomer);
+  if (blockReason) {
     return sendJson(res, 409, {
       ok: false,
-      code: 'subscription_recoverable',
+      code: blockReason,
       message:
-        'This workspace already has a subscription that can be reactivated. Update the payment method in the billing portal instead of starting a new plan.',
+        blockReason === 'subscription_active'
+          ? 'This workspace already has an active subscription. Change plans in the billing portal so the existing subscription is updated rather than duplicated.'
+          : 'This workspace already has a subscription that can be reactivated. Update the payment method in the billing portal instead of starting a new plan.',
     });
   }
 
