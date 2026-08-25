@@ -58,20 +58,23 @@ function label(document: DocumentRecord): string {
 /**
  * Decide, from metadata alone, which documents can go in.
  *
- * Kept pure and separate from reading the vault so the rules — what counts as
- * available, which ceiling was hit, what the seller is told — can be tested
- * without a browser, and so every exclusion has to carry a reason.
+ * Eligibility only: does this record point at a file on this device at all?
+ *
+ * The ceilings deliberately do NOT live here. Both of the values this pass
+ * could budget against are guesses — `fileSizeBytes` is optional and a legacy
+ * record may not carry it, and a `localFileKey` can be dangling after a partial
+ * restore. Spending a count slot or a byte allowance on a guess lets an
+ * unreadable record displace a file that could actually have been bundled: put
+ * twenty stale keys ahead of one good document and the good one was reported
+ * over-limit while the packet embedded nothing.
+ *
+ * So this pass answers the one question it can answer for certain, with a
+ * reason for every exclusion, and `resolvePacketAttachments` applies the limits
+ * against the bytes and the files the vault really has.
  */
-export function planPacketAttachments(
-  documents: DocumentRecord[],
-  limits: { maxCount?: number; maxBytes?: number } = {},
-): AttachmentPlan {
-  const maxCount = limits.maxCount ?? MAX_PACKET_ATTACHMENTS;
-  const maxBytes = limits.maxBytes ?? MAX_PACKET_ATTACHMENT_BYTES;
-
+export function planPacketAttachments(documents: DocumentRecord[]): AttachmentPlan {
   const attach: DocumentRecord[] = [];
   const excluded: UnattachedDocument[] = [];
-  let usedBytes = 0;
 
   for (const document of documents) {
     if (!document.localFileKey) {
@@ -87,23 +90,6 @@ export function planPacketAttachments(
       continue;
     }
 
-    if (attach.length >= maxCount) {
-      excluded.push({ title: label(document), reason: `over the ${maxCount}-document packet limit` });
-      continue;
-    }
-
-    // An unknown size counts as zero rather than blocking the attachment:
-    // refusing a file because its recorded size is missing would drop a real
-    // document for a metadata gap. `resolvePacketAttachments` re-checks the cap
-    // against the bytes the vault actually holds, which is what finally
-    // decides — this pass only avoids reading files it can already rule out.
-    const size = document.fileSizeBytes ?? 0;
-    if (usedBytes + size > maxBytes) {
-      excluded.push({ title: label(document), reason: 'too large to include in this packet' });
-      continue;
-    }
-
-    usedBytes += size;
     attach.push(document);
   }
 
@@ -136,22 +122,29 @@ export async function resolvePacketAttachments(
   documents: DocumentRecord[],
   limits?: { maxCount?: number; maxBytes?: number },
 ): Promise<{ attachments: LocalPacketAttachment[]; unattached: UnattachedDocument[] }> {
-  const plan = planPacketAttachments(documents, limits);
+  const plan = planPacketAttachments(documents);
+  const maxCount = limits?.maxCount ?? MAX_PACKET_ATTACHMENTS;
   const maxBytes = limits?.maxBytes ?? MAX_PACKET_ATTACHMENT_BYTES;
   const attachments: LocalPacketAttachment[] = [];
   const unattached = [...plan.excluded];
   /*
-   * The bytes the vault actually holds, which is the only figure that binds.
+   * Both ceilings bind here, against what the vault actually returned.
    *
-   * `planPacketAttachments` budgets against `fileSizeBytes`, an optional field
-   * a legacy record may not carry — and an absent size counts as zero there, on
-   * purpose. Without this second check that made the cap advisory: a handful of
-   * records with no recorded size could produce a base64 packet of any size at
+   * A slot is spent only once a file has been read, so a dangling key costs
+   * nothing but the read: unreadable records can no longer displace files that
+   * could have been bundled. And the bytes are the real bytes, not the
+   * optional `fileSizeBytes` a legacy record may not carry — without that, a
+   * handful of size-less records could produce a base64 packet of any size at
    * all, which is a browser tab running out of memory rather than a document.
    */
   let usedBytes = 0;
 
   for (const document of plan.attach) {
+    if (attachments.length >= maxCount) {
+      unattached.push({ title: label(document), reason: `over the ${maxCount}-document packet limit` });
+      continue;
+    }
+
     try {
       const entry = await readLocalFile(document.localFileKey as string);
       if (!entry) {

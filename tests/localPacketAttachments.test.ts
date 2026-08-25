@@ -57,46 +57,87 @@ test('a document with no file on this device is excluded with the reason why', (
   ]);
 });
 
-test('nothing is dropped silently — every selected document is either in or explained', () => {
-  const documents = Array.from({ length: 25 }, (_, index) =>
-    document({ id: `d${index}`, title: `Doc ${index}`, localFileKey: `vault-${index}` }),
-  );
+test('nothing is dropped silently — every selected document is either in or explained', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    const documents = [];
+    for (let index = 0; index < 25; index += 1) {
+      const key = await storeLocalFile(new Blob(['x']), `doc-${index}.pdf`);
+      documents.push(document({ id: `d${index}`, title: `Doc ${index}`, localFileKey: key }));
+    }
 
-  const plan = planPacketAttachments(documents);
+    // The count binds on files that actually resolved, so it is asserted where
+    // it is now applied.
+    const { attachments, unattached } = await resolvePacketAttachments(documents);
 
-  assert.equal(plan.attach.length, MAX_PACKET_ATTACHMENTS);
-  assert.equal(plan.attach.length + plan.excluded.length, documents.length);
-  assert.match(plan.excluded[0].reason, /over the 20-document packet limit/);
+    assert.equal(attachments.length, MAX_PACKET_ATTACHMENTS);
+    assert.equal(attachments.length + unattached.length, documents.length);
+    assert.match(unattached[0].reason, /over the 20-document packet limit/);
+  } finally {
+    restore();
+  }
 });
 
-test('the byte ceiling stops at the file that would cross it, not at the first big one', () => {
-  const plan = planPacketAttachments(
-    [
-      document({ id: 'small', title: 'Coggins', localFileKey: 'vault-a', fileSizeBytes: 400 }),
-      document({ id: 'huge', title: 'Video', type: 'Media Kit', localFileKey: 'vault-b', fileSizeBytes: 5_000 }),
-      // Still fits in what is left, so it must not be excluded just because a
-      // bigger file came before it.
-      document({
-        id: 'also-small',
-        title: 'Memo',
-        type: 'Ownership Memo',
-        localFileKey: 'vault-c',
-        fileSizeBytes: 400,
-      }),
-    ],
-    { maxBytes: 1_000 },
-  );
+test('unreadable records do not spend the slots that readable files need', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    // Twenty dangling keys — a partial restore leaves exactly this — followed
+    // by one real file. Spending a slot before reading meant the good document
+    // was reported over-limit and the packet embedded nothing at all.
+    const documents = Array.from({ length: MAX_PACKET_ATTACHMENTS }, (_, index) =>
+      document({ id: `stale${index}`, title: `Stale ${index}`, localFileKey: `vault-missing-${index}` }),
+    );
+    const key = await storeLocalFile(new Blob(['%PDF-1.4 REAL']), 'real.pdf');
+    documents.push(document({ id: 'real', title: 'Real', localFileKey: key }));
 
-  assert.deepEqual(
-    plan.attach.map((record) => record.id),
-    ['small', 'also-small'],
-  );
-  assert.deepEqual(plan.excluded, [{ title: 'Media Kit: Video', reason: 'too large to include in this packet' }]);
+    const { attachments, unattached } = await resolvePacketAttachments(documents);
+
+    assert.deepEqual(
+      attachments.map((item) => item.fileName),
+      ['real.pdf'],
+    );
+    assert.equal(unattached.length, MAX_PACKET_ATTACHMENTS);
+    assert.ok(
+      unattached.every((entry) => /no longer on this device/.test(entry.reason)),
+      'the stale records must be reported as missing, not as over-limit',
+    );
+  } finally {
+    restore();
+  }
 });
 
-test('a file with no recorded size is still attached', () => {
+test('the byte ceiling stops at the file that would cross it, not at the first big one', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    const small = await storeLocalFile(new Blob(['a'.repeat(400)]), 'coggins.pdf');
+    const huge = await storeLocalFile(new Blob(['b'.repeat(5_000)]), 'video.mp4');
+    const alsoSmall = await storeLocalFile(new Blob(['c'.repeat(400)]), 'memo.pdf');
+
+    const { attachments, unattached } = await resolvePacketAttachments(
+      [
+        document({ id: 'small', title: 'Coggins', localFileKey: small }),
+        document({ id: 'huge', title: 'Video', type: 'Media Kit', localFileKey: huge }),
+        // Still fits in what is left, so it must not be excluded just because a
+        // bigger file came before it.
+        document({ id: 'also-small', title: 'Memo', type: 'Ownership Memo', localFileKey: alsoSmall }),
+      ],
+      { maxBytes: 1_000 },
+    );
+
+    assert.deepEqual(
+      attachments.map((item) => item.fileName),
+      ['coggins.pdf', 'memo.pdf'],
+    );
+    assert.deepEqual(unattached, [{ title: 'Media Kit: Video', reason: 'too large to include in this packet' }]);
+  } finally {
+    restore();
+  }
+});
+
+test('a file with no recorded size is still eligible', () => {
   // Refusing a real document over a missing metadata field would drop it from a
-  // packet for no reason the seller could see or fix.
+  // packet for no reason the seller could see or fix. `fileSizeBytes` is
+  // optional and the vault read is what decides.
   const plan = planPacketAttachments([document({ id: 'd1', title: 'Coggins', localFileKey: 'vault-a' })]);
 
   assert.deepEqual(
@@ -192,13 +233,10 @@ test('the byte ceiling binds on the bytes the vault holds, not on recorded sizes
     const first = await storeLocalFile(new Blob(['aaaaaa']), 'first.pdf');
     const second = await storeLocalFile(new Blob(['bbbbbb']), 'second.pdf');
 
-    const plan = planPacketAttachments(
-      [
-        document({ id: 'd1', title: 'First', localFileKey: first }),
-        document({ id: 'd2', title: 'Second', localFileKey: second }),
-      ],
-      { maxBytes: 8 },
-    );
+    const plan = planPacketAttachments([
+      document({ id: 'd1', title: 'First', localFileKey: first }),
+      document({ id: 'd2', title: 'Second', localFileKey: second }),
+    ]);
     assert.equal(plan.attach.length, 2, 'the planner must let both through, or this proves nothing');
 
     const { attachments, unattached } = await resolvePacketAttachments(
