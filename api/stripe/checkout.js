@@ -124,7 +124,9 @@ export default async function handler(req, res) {
       message:
         blockReason === 'subscription_active'
           ? 'This workspace already has an active subscription. Change plans in the billing portal so the existing subscription is updated rather than duplicated.'
-          : 'This workspace already has a subscription that can be reactivated. Update the payment method in the billing portal instead of starting a new plan.',
+          : blockReason === 'subscription_recoverable'
+            ? 'This workspace already has a subscription that can be reactivated. Update the payment method in the billing portal instead of starting a new plan.'
+            : 'This workspace has a subscription on file whose status could not be confirmed. Check it in the billing portal before starting a new plan.',
     });
   }
 

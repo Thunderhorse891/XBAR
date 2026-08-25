@@ -103,6 +103,30 @@ test('a live subscription that lapsed is recoverable, not duplicable', () => {
   assert.equal(checkoutBlockReason(billing('sub_live', { billingState: 'Past Due' })), 'subscription_recoverable');
 });
 
+test('an unreadable payload beside a live subscription id fails closed', () => {
+  // `entitlement_payload` defaults to `{}` in the schema, and a row can carry a
+  // real subscription id beside that empty object. Reading "no entitled state,
+  // not recoverable" as "proven canceled" turned the least informative case
+  // into the most permissive one, while the only reliable evidence on the row
+  // said a subscription exists.
+  assert.equal(checkoutBlockReason(billing('sub_live', {})), 'subscription_unverified');
+  assert.equal(checkoutBlockReason(billing('sub_live', null)), 'subscription_unverified');
+  assert.equal(checkoutBlockReason(billing('sub_live', undefined)), 'subscription_unverified');
+  // A state nobody recognizes is also unknown, not terminal.
+  assert.equal(checkoutBlockReason(billing('sub_live', { billingState: 'Something New' })), 'subscription_unverified');
+});
+
+test('terminal is something the payload has to assert', () => {
+  // Both writers set the flag explicitly — buildSubscriptionProfile and the
+  // reconciliation migration — so an ABSENT flag beside a live id is unknown,
+  // and only an explicit false is proof there is nothing left to duplicate.
+  assert.equal(
+    checkoutBlockReason(billing('sub_dead', { billingState: 'Inactive', subscriptionRecoverable: false })),
+    null,
+  );
+  assert.equal(checkoutBlockReason(billing('sub_dead', { billingState: 'Inactive' })), 'subscription_unverified');
+});
+
 test('a canceled subscription can be replaced with a new one', () => {
   // Terminal states leave the id behind, but there is nothing left to
   // duplicate — and refusing here would mean a former customer could never

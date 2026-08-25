@@ -209,9 +209,28 @@ export function checkoutBlockReason(billingCustomer) {
   if (isEntitledBillingState(payload?.billingState)) return 'subscription_active';
   if (isStoredSubscriptionRecoverable(payload)) return 'subscription_recoverable';
 
-  // Canceled or expired: the id is a record of what was, not something Stripe
-  // will bill again.
-  return null;
+  /*
+   * Past this point a subscription id exists and the payload has not explained
+   * it away — so the payload is the thing in doubt, not the subscription.
+   *
+   * `entitlement_payload` defaults to `{}` in the schema, and a row can carry a
+   * real subscription id beside that empty object. Reading "no entitled state,
+   * not recoverable" as "proven canceled" turned the least informative case
+   * into the most permissive one, and the only reliable evidence on the row —
+   * a non-empty subscription id — says a subscription exists.
+   *
+   * Terminal is therefore something the payload has to ASSERT, which both
+   * writers do: `buildSubscriptionProfile` and the reconciliation migration
+   * both set `subscriptionRecoverable` explicitly. An absent flag beside a live
+   * id is unknown, and unknown fails toward not charging anyone twice.
+   */
+  if (payload && typeof payload === 'object' && typeof payload.subscriptionRecoverable === 'boolean') {
+    // Explicitly not recoverable: canceled or expired. Nothing left to
+    // duplicate, and a former customer must be able to come back.
+    return null;
+  }
+
+  return 'subscription_unverified';
 }
 
 /**

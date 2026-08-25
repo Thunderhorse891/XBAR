@@ -631,7 +631,9 @@ test('the billing screen asks both questions, not just recoverability', async ()
   const source = await readFile('src/routes/Subscriptions.tsx', 'utf8');
 
   assert.match(source, /const subscriptionActive = hasActivePaidPlan\(subscription\);/);
-  // Both call sites — the selected-plan readiness and the per-plan card — or
-  // one of them still offers a button the server refuses.
-  assert.equal((source.match(/subscriptionActive,/g) ?? []).length, 2);
+  // All THREE call sites — the selected-plan readiness, the per-plan card, and
+  // the click handler. Missing any one leaves a control that promises checkout
+  // and is then refused: with only two, the prominent CTA stayed enabled while
+  // every plan card below it was disabled.
+  assert.equal((source.match(/subscriptionActive,/g) ?? []).length, 3);
 });

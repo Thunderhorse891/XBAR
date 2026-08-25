@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { startManagedCheckout } from '@/lib/billingApi';
+import { isBillingPolicyRefusal, startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency } from '@/lib/format';
 import { getStripePaymentLink, stripeConfig } from '@/lib/platformConfig';
 import { productEvent, productEventNames } from '@/lib/productEvents';
@@ -98,6 +98,10 @@ export default function Subscriptions() {
     hasPaymentLink: selectedPaymentLink,
     checkoutInProgress: checkoutTier !== null,
     subscriptionRecoverable,
+    // The third call site. Without it the prominent CTA promised secure
+    // checkout while every plan card below it was disabled and clicking the CTA
+    // was refused — all three have to answer the same question.
+    subscriptionActive,
   });
   // Entitlement, not price. The stored rate is the price of the plan that was
   // bought and survives a cancellation, so using it as the "this is your
@@ -153,7 +157,16 @@ export default function Subscriptions() {
       return;
     }
 
-    const fallback = getStripePaymentLink(tier);
+    /*
+     * A policy refusal is not a transport failure, and must not fall back.
+     *
+     * The payment link is an unguarded subscription checkout that never
+     * consults the workspace's billing row, so redirecting to it here undid the
+     * server's refusal completely — the customer saw an ordinary Stripe page
+     * and paid a second time. Everything else still falls back, because that is
+     * how a workspace with no cloud session legitimately buys a plan.
+     */
+    const fallback = isBillingPolicyRefusal(managed.code) ? '' : getStripePaymentLink(tier);
     if (fallback) {
       emit(
         productEventNames.checkoutRedirected,
