@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { type RemoteSalePacketSeal, createSalePacketRemote, hasBackendIdentity } from '@/lib/backendApi';
-import { type LocalSalePacket, buildLocalSalePacket } from '@/lib/localSalePacketGenerator';
+import { type LocalSalePacket, buildLocalSalePacket, isBuyerSafeDocumentType } from '@/lib/localSalePacketGenerator';
 import { resolvePacketAttachments } from '@/lib/localPacketAttachments';
 import { storeLocalFile } from '@/lib/localFileVault';
 import { openStoredFileInTab } from '@/lib/openStoredFile';
@@ -104,7 +104,19 @@ export function SalePacketWizard({
   );
   const cogginsBlocked = (risk?.blockers ?? []).some((blocker) => blocker.includes('Coggins'));
   const careHold = horse?.status === 'Medical Review';
-  const readyDocs = documents.filter((document) => document.horseId === effectiveHorseId && document.state === 'Ready');
+  /*
+   * Buyer-safe types only, which is both what gets offered and what gets
+   * selected by default.
+   *
+   * `Breeding Contract` is a Ready document on the horse and was therefore
+   * ticked automatically — a commercial agreement with a third party, sent to a
+   * stranger under the heading "approved documents". Listing its title was
+   * already wrong; embedding its full contents makes it a disclosure.
+   */
+  const readyDocs = documents.filter(
+    (document) =>
+      document.horseId === effectiveHorseId && document.state === 'Ready' && isBuyerSafeDocumentType(document.type),
+  );
   const docSelection = selectedDocIds ?? readyDocs.map((document) => document.id);
   const defaultWatermark = `Copy for ${buyerName.trim() || 'buyer review'} – ${new Date().toISOString().slice(0, 10)}`;
   const effectiveWatermark = watermark.trim() || defaultWatermark;

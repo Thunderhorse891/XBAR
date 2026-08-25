@@ -8,6 +8,7 @@ import {
   sealCodeFromDigest,
   verifySaleCredential,
 } from '../src/lib/saleCredential.js';
+import { sha256 } from '../src/lib/sha256.js';
 
 function docs(): CredentialDocument[] {
   return [
@@ -32,6 +33,8 @@ function docs(): CredentialDocument[] {
 
 function input(overrides: Partial<SaleCredentialInput> = {}): SaleCredentialInput {
   return {
+    // Most packets embed nothing; the cases that do override this.
+    attachments: [],
     passportId: 'XB-7Q2K-9F3M',
     identity: {
       name: 'Docs Smokin Gun',
@@ -224,4 +227,53 @@ test('payload is canonical JSON with sorted top-level keys', () => {
   const parsed = JSON.parse(payload) as Record<string, unknown>;
   const keys = Object.keys(parsed);
   assert.deepEqual(keys, [...keys].sort());
+});
+
+test('swapping an embedded file breaks the seal', () => {
+  const file = {
+    id: 'doc-1',
+    fileName: 'coggins-2026.pdf',
+    sizeBytes: 18,
+    digest: sha256('%PDF-1.4 NEGATIVE'),
+  };
+
+  const sealed = buildSaleCredential(input({ attachments: [file] }));
+
+  // Same name, same size, same document metadata — different bytes. This is the
+  // whole attack: once the packet carries the FILES, a seal over their titles
+  // proves nothing about what the buyer opens, while the packet tells them a
+  // matching seal means it is unaltered.
+  const tampered = buildSaleCredential(input({ attachments: [{ ...file, digest: sha256('%PDF-1.4 FORGED') }] }));
+
+  assert.notEqual(tampered.digest, sealed.digest);
+  assert.notEqual(tampered.sealCode, sealed.sealCode);
+});
+
+test('the same files in a different read order seal identically', () => {
+  const a = { id: 'doc-a', fileName: 'a.pdf', sizeBytes: 3, digest: sha256('aaa') };
+  const b = { id: 'doc-b', fileName: 'b.pdf', sizeBytes: 3, digest: sha256('bbb') };
+
+  // The vault returns files in whatever order it reads them; the seal must not
+  // depend on that, or two identical packets would carry different codes.
+  assert.equal(
+    buildSaleCredential(input({ attachments: [a, b] })).digest,
+    buildSaleCredential(input({ attachments: [b, a] })).digest,
+  );
+});
+
+test('the manifest says whether files were sealed by content', () => {
+  const withFiles = buildSaleCredential(
+    input({ attachments: [{ id: 'doc-1', fileName: 'coggins.pdf', sizeBytes: 4, digest: sha256('abcd') }] }),
+  );
+  const withoutFiles = buildSaleCredential(input());
+
+  // The manifest is printed beside the seal, so it has to distinguish "these
+  // files are covered" from "this packet carries no files".
+  assert.ok(withFiles.manifest.some((line) => /Embedded files sealed by content: 1/.test(line)));
+  assert.ok(withoutFiles.manifest.some((line) => /Embedded files: none in this packet/.test(line)));
+});
+
+test('a packet with no embedded files still seals and verifies', () => {
+  const sealed = buildSaleCredential(input());
+  assert.equal(verifySaleCredential(sealed.payload, sealed.digest).valid, true);
 });

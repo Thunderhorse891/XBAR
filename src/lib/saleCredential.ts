@@ -98,6 +98,25 @@ export interface CredentialRelease {
   warnings: string[];
 }
 
+/**
+ * One file physically embedded in the packet.
+ *
+ * Sealed by the digest of its BYTES, not by its name or size. Once a packet
+ * carries the documents themselves rather than a list of their titles, a seal
+ * over the titles proves nothing about what a buyer actually opens: swap the
+ * base64 behind `Coggins 2026` and every sealed fact still matches. The packet
+ * tells its reader that a matching seal means it is unaltered, so that has to
+ * be true of the files too.
+ */
+export interface CredentialAttachment {
+  /** The document record's id, so the file lines up with its metadata entry. */
+  id: string;
+  fileName: string;
+  sizeBytes: number;
+  /** SHA-256 of the file's bytes. */
+  digest: string;
+}
+
 export interface SaleCredentialInput {
   /** Stable public identifier for the animal (never the internal record id). */
   passportId: string;
@@ -106,6 +125,8 @@ export interface SaleCredentialInput {
   ownership: CredentialOwnership;
   care: CredentialCare;
   documents: CredentialDocument[];
+  /** Files embedded in the packet. Empty when the packet only lists documents. */
+  attachments: CredentialAttachment[];
   release: CredentialRelease;
   /** Human labels of the ownership proofs that were VERIFIED at seal time. */
   verifiedProofs: string[];
@@ -157,6 +178,17 @@ export function buildCredentialPayload(input: SaleCredentialInput): string {
     }))
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
+  // Sorted by id like the documents above, so the same set of files always
+  // serializes identically regardless of the order they were read in.
+  const attachments = [...input.attachments]
+    .map((file) => ({
+      id: file.id,
+      fileName: file.fileName,
+      sizeBytes: file.sizeBytes,
+      digest: file.digest,
+    }))
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
   const payload: Json = {
     version: SALE_CREDENTIAL_VERSION,
     passportId: input.passportId,
@@ -196,6 +228,7 @@ export function buildCredentialPayload(input: SaleCredentialInput): string {
       medicalNotes: input.care.medicalNotes,
     },
     documents,
+    attachments,
     release: {
       status: input.release.status,
       allowed: input.release.allowed,
@@ -230,6 +263,9 @@ function buildManifest(input: SaleCredentialInput): string[] {
     `Ownership: ${input.ownership.legalOwner || 'unknown'} · transfer ${input.ownership.transferStatus || 'unknown'}`,
     `Care & disclosure summary sealed`,
     `Proof documents sealed: ${input.documents.length}`,
+    input.attachments.length
+      ? `Embedded files sealed by content: ${input.attachments.length}`
+      : 'Embedded files: none in this packet',
     input.verifiedProofs.length
       ? `Verified proofs: ${[...input.verifiedProofs].sort().join(', ')}`
       : 'Verified proofs: none verified at seal time',
