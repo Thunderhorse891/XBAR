@@ -30,6 +30,7 @@ import {
   type CommandEntry,
 } from '@/lib/commandPalette';
 import { interactionHint, type SurfaceMode } from '@/lib/interactionState';
+import { onWorkspacePersistFailure } from '@/lib/workspaceStorage';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -298,6 +299,7 @@ export function InteractionShell() {
   const cloudSession = useCloudStore((state) => state.session);
   const paletteOpen = useUiStore((state) => state.commandPaletteOpen);
   const setPaletteOpen = useUiStore((state) => state.setCommandPaletteOpen);
+  const pushToast = useUiStore((state) => state.pushToast);
   const drawer = useUiStore((state) => state.rightDrawer);
   const closeDrawer = useUiStore((state) => state.closeRightDrawer);
   const exitFocus = useUiStore((state) => state.exitFocusMode);
@@ -310,6 +312,31 @@ export function InteractionShell() {
   // must never populate unless the viewer is actually entitled to the app.
   // Mirror RequireCloudAuth's grant rule; when suppressed the palette still
   // offers navigation, whose targets redirect an unauthenticated user to login.
+  /*
+   * Say so when the workspace cannot be saved.
+   *
+   * Mounted here because InteractionShell is the one component present on every
+   * route, including /login. A storage failure is silent otherwise: the app
+   * looks identical to one that saved, and a rancher who spent an evening
+   * entering records into a browser out of quota loses all of it on reload.
+   *
+   * Deduplicated per session — persist writes on every state change, so an
+   * unwritable workspace would otherwise produce a toast per keystroke.
+   */
+  useEffect(() => {
+    let reported = false;
+    return onWorkspacePersistFailure(() => {
+      if (reported) return;
+      reported = true;
+      pushToast({
+        title: 'This browser could not save your workspace',
+        message:
+          'Your work is still here for now, but it will be lost when you reload. Free up browser storage, or leave private browsing, and try again.',
+        tone: 'error',
+      });
+    });
+  }, [pushToast]);
+
   const privateIndexAllowed = isPrivateIndexAllowed({
     supabaseConfigured: isSupabaseConfigured(),
     hasLocalEntry: hasCommandCenterEntry(),

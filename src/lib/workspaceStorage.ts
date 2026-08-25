@@ -22,15 +22,20 @@ function readLegacyValue(name: string) {
   }
 }
 
-function writeLegacyValue(name: string, value: string) {
+function writeLegacyValue(name: string, value: string): boolean {
   if (!hasBrowserStorage()) {
-    return;
+    return false;
   }
 
   try {
     window.localStorage.setItem(name, value);
+    return true;
   } catch {
-    // Ignore quota issues here and fall back to IndexedDB only.
+    // Reported rather than ignored. This is the LAST place the workspace can be
+    // written — IndexedDB has already refused — so a swallowed failure here is
+    // the whole ranch's records not being saved with nothing on screen saying
+    // so. See notifyPersistFailure below.
+    return false;
   }
 }
 
@@ -152,6 +157,48 @@ export function shouldProtectMeaningfulWorkspaceWrite(existingValue: string | nu
   return hasMeaningfulPersistedWorkspace(existingValue) && !hasMeaningfulPersistedWorkspace(nextValue);
 }
 
+/*
+ * Telling someone when the workspace could not be saved.
+ *
+ * zustand's persist middleware discards whatever `setItem` returns, so a
+ * storage failure had no way out of this module and the app went on looking
+ * exactly like one that had saved. A rancher entering a day of records into a
+ * browser that is out of quota, or in a private window with storage disabled,
+ * would lose all of it on reload with nothing having said a word.
+ *
+ * A listener rather than a thrown error: throwing here aborts the state update
+ * that triggered the write, so the failure to SAVE would also become a failure
+ * to EDIT. The work stays in memory and usable; the app just stops claiming it
+ * is safe.
+ */
+export interface WorkspacePersistFailure {
+  /** The storage key that could not be written. */
+  name: string;
+}
+
+type PersistFailureListener = (failure: WorkspacePersistFailure) => void;
+
+const persistFailureListeners = new Set<PersistFailureListener>();
+
+/** Subscribe to persistence failures. Returns an unsubscribe function. */
+export function onWorkspacePersistFailure(listener: PersistFailureListener): () => void {
+  persistFailureListeners.add(listener);
+  return () => {
+    persistFailureListeners.delete(listener);
+  };
+}
+
+function notifyPersistFailure(name: string) {
+  for (const listener of persistFailureListeners) {
+    try {
+      listener({ name });
+    } catch (error) {
+      // A broken listener must not take down the write path it is reporting on.
+      console.error('A workspace persistence listener threw.', error);
+    }
+  }
+}
+
 export const workspaceStateStorage: StateStorage = {
   async getItem(name) {
     const indexedValue = await readIndexedValue(name);
@@ -179,7 +226,12 @@ export const workspaceStateStorage: StateStorage = {
 
     const persisted = await writeIndexedValue(name, value);
     if (!persisted) {
-      writeLegacyValue(name, value);
+      if (!writeLegacyValue(name, value)) {
+        // Both stores refused. The app carries on with the workspace in memory,
+        // which is the right behaviour — losing the current session's work on
+        // top of a storage failure helps nobody — but it must not look saved.
+        notifyPersistFailure(name);
+      }
       return;
     }
 
