@@ -1181,7 +1181,21 @@ export async function uploadDocumentAssetToCloud(params: { file: File; horseId?:
  */
 export async function getDocumentAccessUrl(
   document: Pick<DocumentRecord, 'fileUrl' | 'storagePath' | 'localFileKey'>,
-): Promise<{ ok: true; url: string; release?: () => void } | { ok: false; message: string }> {
+): Promise<
+  | {
+      ok: true;
+      url: string;
+      release?: () => void;
+      /**
+       * False when the file must be downloaded rather than rendered in a tab.
+       * Absent for cloud URLs, which are served from Supabase's origin and
+       * cannot reach this app's storage whatever their type.
+       */
+      inlineSafe?: boolean;
+      fileName?: string;
+    }
+  | { ok: false; message: string }
+> {
   const directFileUrl = document.fileUrl?.trim();
   if (directFileUrl) {
     return {
@@ -1193,7 +1207,15 @@ export async function getDocumentAccessUrl(
   if (document.localFileKey) {
     const handle = await openLocalFile(document.localFileKey);
     if (handle) {
-      return { ok: true, url: handle.url, release: handle.release } as const;
+      return {
+        ok: true,
+        url: handle.url,
+        release: handle.release,
+        // Carried through so the caller downloads rather than navigating. The
+        // url is already inert either way; this is what stops a blank tab.
+        inlineSafe: handle.inlineSafe,
+        fileName: handle.name,
+      } as const;
     }
     if (!document.storagePath) {
       return {

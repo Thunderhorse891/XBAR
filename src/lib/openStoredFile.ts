@@ -62,6 +62,29 @@ export async function openStoredFileInTab(record: StoredFileRef): Promise<OpenSt
     window.setTimeout(release, OBJECT_URL_LIFETIME_MS);
   };
 
+  /*
+   * A file that must not run as a document is downloaded, never navigated to.
+   *
+   * The vault has already re-typed it inert, so navigating would download it
+   * anyway — but it would leave a blank tab sitting there while it did, and the
+   * seller would think the click failed. Downloading is both the safe answer
+   * and the honest one.
+   */
+  if (access.inlineSafe === false) {
+    previewWindow?.close();
+    if (typeof document !== 'undefined') {
+      const link = document.createElement('a');
+      link.href = access.url;
+      link.download = access.fileName ?? 'download';
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
+    scheduleRelease();
+    return { ok: true };
+  }
+
   if (previewWindow) {
     previewWindow.location.href = access.url;
     previewWindow.focus();

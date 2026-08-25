@@ -17,6 +17,7 @@
     "src/store/xbarStoreLogic.ts",
     "src/types/xbar.ts",
     "src/lib/salePacketDisclosure.ts",
+    "src/lib/packetVerifierScript.ts",
     "src/lib/xbarRuntime.ts",
     "src/lib/xbarPhaseTwo.ts",
     "src/lib/xbarGrowth.ts",

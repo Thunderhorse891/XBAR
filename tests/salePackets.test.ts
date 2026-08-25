@@ -124,11 +124,9 @@ test('the packet publishes what it was sealed from', async () => {
 });
 
 test('the packet rehashes its own files rather than trusting the printed seal', async () => {
-  const generator = await readFile('src/lib/localSalePacketGenerator.ts', 'utf8');
-  const script = generator.slice(
-    generator.indexOf('const PACKET_VERIFIER_SCRIPT'),
-    generator.indexOf('export function buildLocalSalePacket'),
-  );
+  // The script lives in its own module now: a CSP hash covers exact bytes, so
+  // isolating those bytes gives the hash one obvious source.
+  const script = await readFile('src/lib/packetVerifierScript.ts', 'utf8');
 
   assert.match(script, /crypto\.subtle\.digest\('SHA-256'/, 'the check must actually hash');
   assert.match(

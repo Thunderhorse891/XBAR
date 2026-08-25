@@ -23,6 +23,7 @@ import {
   clearLocalFileVault,
   exportLocalFiles,
   importLocalFiles,
+  listLocalFiles,
   referencedVaultKeys,
 } from '@/lib/localFileVault';
 import type { UserRole } from '@/types/xbar';
@@ -117,7 +118,22 @@ export default function Settings() {
         ),
       );
 
-      const blob = new Blob([JSON.stringify({ ...backup, files }, null, 2)], { type: 'application/json' });
+      /*
+       * The omissions travel WITH the archive, not only in the toast.
+       *
+       * A file left out here — missing, unreadable, or past the size budget —
+       * produced a warning that lived exactly as long as the toast. The archive
+       * itself recorded nothing, so importing it months later restored records
+       * pointing at files that were never in the backup, and reported an
+       * ordinary success: import can only report entries it was given and
+       * failed to write, and these were never given.
+       *
+       * Recording them means a restore can say which files to go and find, and
+       * why they are not here.
+       */
+      const blob = new Blob([JSON.stringify({ ...backup, files, omittedFiles: skipped }, null, 2)], {
+        type: 'application/json',
+      });
       url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
@@ -196,7 +212,7 @@ export default function Settings() {
     if (!file) return;
     try {
       const text = await file.text();
-      const payload = JSON.parse(text) as { files?: PortableLocalFile[] };
+      const payload = JSON.parse(text) as { files?: PortableLocalFile[]; omittedFiles?: UnbackedUpFile[] };
 
       /*
        * Validate, then write files, then write records.
@@ -245,6 +261,61 @@ export default function Settings() {
         : { restored: 0, failed: [] as UnbackedUpFile[] };
       const result = importWorkspaceBackup(payload);
 
+      /*
+       * Reconcile what the workspace REFERENCES against what the vault holds.
+       *
+       * `failed` covers only files that were in the archive and would not
+       * write. It cannot see a file the export left out, because that file is
+       * not in `payload.files` at all — and those are the ones that matter,
+       * since they are exactly the records that now point at nothing.
+       *
+       * Asking the vault after the restore catches all of it at once: files
+       * omitted at export, an archive truncated or hand-edited since, and a
+       * backup written before omissions were recorded. The archive's own
+       * `omittedFiles` list is used only to say WHY, which reconciliation
+       * cannot reconstruct.
+       */
+      let danglingNote = '';
+      if (result.ok) {
+        try {
+          // Read back what was actually restored, through the same accessor
+          // the export used — so the two sides ask the same question.
+          const restoredWorkspace = exportWorkspaceBackup().workspace as {
+            documents?: { localFileKey?: string }[];
+            expenseReceipts?: { localFileKey?: string }[];
+            salePacketBuilds?: { localFileKey?: string }[];
+          };
+          const referenced = referencedVaultKeys(
+            restoredWorkspace.documents ?? [],
+            restoredWorkspace.expenseReceipts ?? [],
+            restoredWorkspace.salePacketBuilds ?? [],
+          );
+          const held = new Set((await listLocalFiles()).map((entry) => entry.key));
+          const dangling = referenced.filter((key) => !held.has(key));
+
+          if (dangling.length) {
+            const reasons = new Map(
+              (Array.isArray(payload.omittedFiles) ? payload.omittedFiles : []).map((entry) => [
+                entry.name,
+                entry.reason,
+              ]),
+            );
+            const named = dangling
+              .slice(0, 5)
+              .map((key) => (reasons.has(key) ? `${key} (${reasons.get(key)})` : key))
+              .join('; ');
+            danglingNote = ` ${dangling.length} record${dangling.length === 1 ? '' : 's'} still point at ${
+              dangling.length === 1 ? 'a file' : 'files'
+            } that is not on this device: ${named}${dangling.length > 5 ? '; …' : ''}`;
+          }
+        } catch {
+          // The vault being unreadable is its own failure and is reported where
+          // files are used. Not being able to COUNT the gaps must not turn a
+          // successful restore into a failed one.
+          danglingNote = ' Files on this device could not be checked against the restored records.';
+        }
+      }
+
       // A file that did not come back leaves a record pointing at nothing, and
       // this is the only place the rancher can be told which one.
       const restoredNote = restored ? ` ${restored} file${restored === 1 ? '' : 's'} restored to this device.` : '';
@@ -252,14 +323,11 @@ export default function Settings() {
         ? ` ${failed.length} could not be restored: ${failed.map((entry) => `${entry.name} (${entry.reason})`).join('; ')}`
         : '';
 
+      const incomplete = failed.length > 0 || danglingNote !== '';
       pushToast({
-        title: !result.ok
-          ? 'Import blocked'
-          : failed.length
-            ? 'Backup imported — some files missing'
-            : 'Backup imported',
-        message: result.ok ? `${result.message}${restoredNote}${failedNote}` : result.message,
-        tone: !result.ok ? 'error' : failed.length ? 'warning' : 'success',
+        title: !result.ok ? 'Import blocked' : incomplete ? 'Backup imported — some files missing' : 'Backup imported',
+        message: result.ok ? `${result.message}${restoredNote}${failedNote}${danglingNote}` : result.message,
+        tone: !result.ok ? 'error' : incomplete ? 'warning' : 'success',
       });
     } catch {
       pushToast({ title: 'Import failed', message: 'Choose a valid XBAR backup JSON file.', tone: 'error' });

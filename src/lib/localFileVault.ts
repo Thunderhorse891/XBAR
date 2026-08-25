@@ -538,7 +538,48 @@ export interface LocalFileHandle {
   name: string;
   type: string;
   size: number;
+  /**
+   * False when the file is not safe to render in a tab under this origin, and
+   * must be downloaded instead. The url is already re-typed inert in that case.
+   */
+  inlineSafe: boolean;
   release: () => void;
+}
+
+/**
+ * Types a stored file may be VIEWED as, in a tab, under this app's origin.
+ *
+ * An allowlist, and the reason is that an object URL is same-origin with the
+ * page that created it. Navigating a tab to one runs the file as a document
+ * belonging to XBAR — so an active format can read `localStorage` and the whole
+ * IndexedDB workspace and ship it anywhere.
+ *
+ * SVG is the sharp case and the reason this exists: it is an executable
+ * document that every `accept="image/*"` input takes without comment, so a
+ * seller can be sent one, file it as a horse photo, and hand it script
+ * execution in their own workspace by clicking "Open file". The deployed CSP
+ * blocks inline scripts, but local and static-preview builds are supported
+ * modes that ship no CSP at all, and a control that only works on one host is
+ * not a control.
+ *
+ * PDF is included deliberately: browsers render it in their own sandboxed
+ * viewer rather than as a same-origin document.
+ */
+const INLINE_VIEWABLE_TYPES = new Set([
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'image/avif',
+  'image/bmp',
+  'image/tiff',
+  'text/plain',
+]);
+
+/** Whether a stored file may be rendered in a tab rather than downloaded. */
+export function isInlineViewableType(type: string): boolean {
+  return INLINE_VIEWABLE_TYPES.has(type.trim().toLowerCase().split(';')[0].trim());
 }
 
 /**
@@ -548,13 +589,22 @@ export interface LocalFileHandle {
  * different device, or browser storage was cleared. That is a real state a
  * local-first workspace can be in, and the caller has to say so rather than
  * showing a broken link.
+ *
+ * Anything outside the inline allowlist is handed back re-typed as
+ * `application/octet-stream` and flagged `inlineSafe: false`. Both halves
+ * matter: the flag lets the caller offer a download instead of a tab, and the
+ * re-typing means a caller that navigates anyway downloads an inert blob rather
+ * than executing it. The guarantee belongs here, at the one place object URLs
+ * are minted, rather than in each of the four screens that open files.
  */
 export async function openLocalFile(key: string): Promise<LocalFileHandle | null> {
   const entry = await readLocalFile(key);
   if (!entry) return null;
 
   hookPageUnload();
-  const url = URL.createObjectURL(entry.blob);
+  const inlineSafe = isInlineViewableType(entry.type);
+  const blob = inlineSafe ? entry.blob : new Blob([entry.blob], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
   outstandingUrls.add(url);
 
   return {
@@ -562,6 +612,7 @@ export async function openLocalFile(key: string): Promise<LocalFileHandle | null
     name: entry.name,
     type: entry.type,
     size: entry.size,
+    inlineSafe,
     release: () => {
       if (!outstandingUrls.delete(url)) return;
       URL.revokeObjectURL(url);

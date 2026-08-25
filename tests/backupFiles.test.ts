@@ -175,7 +175,11 @@ test('the backup handlers carry files, and the restore keeps their keys', async 
   const source = await readFile('src/routes/Settings.tsx', 'utf8');
 
   assert.match(source, /exportLocalFiles\(\s*referencedVaultKeys\(/, 'the export must read the vault');
-  assert.match(source, /JSON\.stringify\(\{ \.\.\.backup, files \}/, 'the files must go into the backup file');
+  assert.match(
+    source,
+    /JSON\.stringify\(\{ \.\.\.backup, files, omittedFiles: skipped \}/,
+    'the files AND the record of what was left out must go into the backup file',
+  );
   /*
    * The order is load-bearing in BOTH directions, so both are pinned.
    *
@@ -306,4 +310,88 @@ test('the full normalization is what decides, so it cannot drift from the import
     /export function canRestorePersistedState\(raw: unknown\): boolean \{\s*try \{\s*restorePersistedState\(raw\);/,
     'validation must run the real normalization',
   );
+});
+
+test('a backup remembers what it could not include', async () => {
+  const source = await readFile('src/routes/Settings.tsx', 'utf8');
+
+  /*
+   * The omission warning used to live exactly as long as the toast.
+   *
+   * A file left out of the archive — missing, unreadable, or past the size
+   * budget — was named on screen and nowhere else. Import could not report it
+   * later because it can only report entries it was GIVEN and failed to write,
+   * and an omitted file is not in `files` at all. So restoring that archive
+   * months later brought back records pointing at nothing, under an ordinary
+   * success message.
+   */
+  assert.match(source, /omittedFiles: skipped/, 'the archive must record what it left out');
+  assert.match(source, /omittedFiles\?: UnbackedUpFile\[\]/, 'and the importer must be able to read it back');
+});
+
+test('an import checks the restored records against the files actually present', async () => {
+  const source = await readFile('src/routes/Settings.tsx', 'utf8');
+
+  /*
+   * The load-bearing half. Reading the archive's own manifest only covers
+   * omissions the exporter knew about; reconciling against the vault after the
+   * restore also catches an archive truncated or edited since, and one written
+   * before omissions were recorded at all. The manifest is then used only to
+   * say WHY, which reconciliation cannot reconstruct.
+   */
+  const reconcileAt = source.indexOf('const held = new Set((await listLocalFiles()).map');
+  const restoreRecordsAt = source.indexOf('importWorkspaceBackup(payload)');
+
+  assert.ok(reconcileAt > -1, 'the import must ask the vault what it actually holds');
+  assert.ok(restoreRecordsAt < reconcileAt, 'the check must run against the RESTORED records, not the old ones');
+  assert.match(source, /still point at/, 'a record pointing at a missing file must be named');
+  assert.match(
+    source,
+    /const incomplete = failed\.length > 0 \|\| danglingNote !== '';/,
+    'a dangling reference must downgrade the result, not leave it reporting plain success',
+  );
+});
+
+test('a file that cannot run as a document is never opened as one', async () => {
+  const vault = await readFile('src/lib/localFileVault.ts', 'utf8');
+  const opener = await readFile('src/lib/openStoredFile.ts', 'utf8');
+
+  /*
+   * An object URL is same-origin with the page that made it, so navigating a
+   * tab to one runs the file as an XBAR document — with the workspace's
+   * localStorage and IndexedDB in reach. SVG is the case that matters: every
+   * `accept="image/*"` input takes one without comment, so a seller can be sent
+   * one, file it as a horse photo, and hand it script execution by clicking
+   * "Open file". The deployed CSP blocks inline scripts, but local and
+   * static-preview builds ship no CSP, and a control that works on one host
+   * only is not a control.
+   */
+  assert.match(vault, /const INLINE_VIEWABLE_TYPES = new Set\(\[/, 'inline viewing must be an allowlist');
+  assert.ok(!/'image\/svg\+xml'/.test(vault), 'SVG is an executable document and must not be inline-viewable');
+  assert.ok(!/'text\/html'/.test(vault), 'HTML must not be inline-viewable');
+
+  // Re-typed at the one place object URLs are minted, so a caller that
+  // navigates anyway downloads an inert blob instead of executing it.
+  assert.match(
+    vault,
+    /const blob = inlineSafe \? entry\.blob : new Blob\(\[entry\.blob\], \{ type: 'application\/octet-stream' \}\);/,
+  );
+  assert.match(opener, /if \(access\.inlineSafe === false\) \{/, 'the opener must download rather than navigate');
+  assert.match(opener, /link\.download = access\.fileName \?\? 'download';/);
+});
+
+test('a PDF is still viewable, so the guard did not break opening files', async () => {
+  const { isInlineViewableType } = await import('../src/lib/localFileVault.js');
+
+  // The point is to stop active content rendering under this origin, not to
+  // stop people reading their own receipts. A browser renders PDF in its own
+  // sandboxed viewer rather than as a same-origin document.
+  assert.equal(isInlineViewableType('application/pdf'), true);
+  assert.equal(isInlineViewableType('image/png'), true);
+  assert.equal(isInlineViewableType('image/jpeg; charset=binary'), true, 'a parameter must not defeat the match');
+  assert.equal(isInlineViewableType('IMAGE/PNG'), true, 'the type is case-insensitive');
+
+  assert.equal(isInlineViewableType('image/svg+xml'), false);
+  assert.equal(isInlineViewableType('text/html'), false);
+  assert.equal(isInlineViewableType(''), false, 'an unknown type is not assumed safe');
 });
