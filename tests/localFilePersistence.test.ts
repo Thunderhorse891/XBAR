@@ -287,3 +287,29 @@ test('both IndexedDB writers wait for the commit, not the request', async () => 
     assert.match(source, /transaction\.onabort = /, `${path} must reject when the transaction is rolled back`);
   }
 });
+
+test('the packet summary does not claim a tab that never opened', async () => {
+  const source = await readFile('src/components/SalePacketWizard.tsx', 'utf8');
+
+  // The blocked-tab warning and the success summary were both firing: the
+  // seller got "your browser blocked the new tab" immediately followed by
+  // "opened in a new tab". This branch runs after attachment resolution and an
+  // IndexedDB write, so the block is the common case, not the rare one.
+  assert.match(source, /packetTabOpened = opened\.ok;/, 'the wizard must record whether a tab actually opened');
+  assert.match(
+    source,
+    /packetTabOpened \? ' and opened in a new tab' : ' — open it from Sale packets when you are ready'/,
+    'the summary must describe the packet as saved but not opened when the tab was blocked',
+  );
+});
+
+test('a refused file-vault purge is not reported as a completed deletion', async () => {
+  const source = await readFile('src/routes/Settings.tsx', 'utf8');
+
+  assert.match(source, /const \{ cleared \} = await clearLocalFileVault\(\);/, 'the purge result must be read');
+  assert.match(
+    source,
+    /cleared \? 'Account deleted' : 'Account deleted — files still on this device'/,
+    'files left on the device must not be described as permanently deleted',
+  );
+});

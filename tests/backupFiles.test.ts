@@ -202,7 +202,8 @@ test('deleting the account leaves nothing on the device', async () => {
     await storeLocalFile(new Blob(['a receipt']), 'receipt.pdf');
     assert.equal((await listLocalFiles()).length, 2);
 
-    await clearLocalFileVault();
+    const { cleared } = await clearLocalFileVault();
+    assert.equal(cleared, true);
 
     // `persist.clearStorage()` operates on the workspace database and knows
     // nothing about this one, so without an explicit purge the proof documents
@@ -216,8 +217,55 @@ test('deleting the account leaves nothing on the device', async () => {
 test('purging a device with no vault at all is not an error', async () => {
   delete (globalThis as { indexedDB?: unknown }).indexedDB;
   // Runs after the account is already gone server-side; throwing here would
-  // show a deletion error for data that is genuinely deleted.
-  await clearLocalFileVault();
+  // show a deletion error for data that is genuinely deleted. Nothing to clear
+  // is a clean outcome, not a failed one.
+  assert.deepEqual(await clearLocalFileVault(), { cleared: true });
+});
+
+test('a vault that cannot be read reports every requested file, not silence', async () => {
+  // IndexedDB exists but the vault cannot be enumerated — blocked by another
+  // tab, or storage temporarily unreadable. Returning empty files AND empty
+  // skipped said the same thing as a workspace with no local files, so Settings
+  // downloaded a metadata-only backup and called it a success.
+  const restore = installFakeIndexedDb({ abortWrites: true });
+  try {
+    const { files, skipped } = await exportLocalFiles(['vault-a', 'vault-b']);
+
+    assert.deepEqual(files, []);
+    assert.deepEqual(skipped.map((entry) => entry.name).sort(), ['vault-a', 'vault-b']);
+    assert.ok(
+      skipped.every((entry) => /could not be read/.test(entry.reason)),
+      'the reason must distinguish an unreadable vault from a missing file',
+    );
+  } finally {
+    restore();
+  }
+});
+
+test('a browser with no vault at all still names what the backup is missing', async () => {
+  delete (globalThis as { indexedDB?: unknown }).indexedDB;
+
+  const { files, skipped } = await exportLocalFiles(['vault-a']);
+
+  assert.deepEqual(files, []);
+  assert.deepEqual(skipped, [{ name: 'vault-a', reason: 'this browser cannot store or read files on this device' }]);
+});
+
+test('a refused deletion is reported, not counted as cleared', async () => {
+  const restore = installFakeIndexedDb({ refuseDelete: true });
+  try {
+    await storeLocalFile(new Blob(['registration papers']), 'registration.pdf');
+
+    const { cleared } = await clearLocalFileVault();
+
+    // The account is gone server-side either way, but the proof documents are
+    // still on this machine — "permanently deleted" would be false about the
+    // part the person can still see.
+    assert.equal(cleared, false);
+    assert.equal((await listLocalFiles()).length, 1);
+  } finally {
+    restore();
+  }
 });
 
 test('account deletion purges the vault, not just the workspace', async () => {

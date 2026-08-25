@@ -18,6 +18,8 @@ export interface FakeOptions {
    * success and is then rolled back.
    */
   abortOnCommit?: boolean;
+  /** Make `deleteDatabase` fail, the way a browser refusing the deletion does. */
+  refuseDelete?: boolean;
 }
 
 /**
@@ -46,6 +48,10 @@ export function installFakeIndexedDb(options: FakeOptions = {}) {
     deleteDatabase() {
       const request: Record<string, unknown> = {};
       later(() => {
+        if (options.refuseDelete) {
+          (request.onerror as (() => void) | undefined)?.();
+          return;
+        }
         stores.clear();
         (request.onsuccess as (() => void) | undefined)?.();
       });

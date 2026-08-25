@@ -291,10 +291,17 @@ export function SalePacketWizard({
       }
     }
 
+    // Whether a tab actually opened, which is not the same as whether the packet
+    // exists. This branch runs after attachment resolution and an IndexedDB
+    // write, so the click is long past counting as user activation and browsers
+    // commonly refuse — the summary below used to announce a tab that was never
+    // there, directly contradicting the warning the seller had just been shown.
+    let packetTabOpened = false;
     if (downloadUrl && typeof window !== 'undefined') {
       window.open(downloadUrl, '_blank', 'noopener,noreferrer');
     } else if (localFileKey) {
       const opened = await openStoredFileInTab(build.packet);
+      packetTabOpened = opened.ok;
       if (!opened.ok) {
         pushToast({ title: 'Packet could not be opened', message: opened.message, tone: 'warning' });
       }
@@ -327,7 +334,7 @@ export function SalePacketWizard({
           ? // Says what is in it. A count the seller can check against what they
             // selected is the difference between finding a missing Coggins now
             // and the buyer finding it.
-            `${localPacket?.attachedFiles ?? 0} of ${docSelection.length} document${docSelection.length === 1 ? '' : 's'} embedded in the packet, opened in a new tab and saved on this device.${localPacket?.unattachedDocuments.length ? ` Not included: ${localPacket.unattachedDocuments.map((item) => item.title).join(', ')}.` : ''}`
+            `${localPacket?.attachedFiles ?? 0} of ${docSelection.length} document${docSelection.length === 1 ? '' : 's'} embedded in the packet, saved on this device${packetTabOpened ? ' and opened in a new tab' : ' — open it from Sale packets when you are ready'}.${localPacket?.unattachedDocuments.length ? ` Not included: ${localPacket.unattachedDocuments.map((item) => item.title).join(', ')}.` : ''}`
           : `${build.message} The packet could not be saved on this device, so only the record was kept. Buyer follow-up is tracking this buyer either way.`,
       tone: packetStored && !localPacket?.unattachedDocuments.length ? 'success' : 'warning',
     });

@@ -286,18 +286,33 @@ export async function exportLocalFiles(
 ): Promise<{ files: PortableLocalFile[]; skipped: UnbackedUpFile[] }> {
   const files: PortableLocalFile[] = [];
   const skipped: UnbackedUpFile[] = [];
+  const wanted = new Set(keys);
+
+  /*
+   * When the vault cannot be read at all, every requested file is missing from
+   * the backup — say so for each of them.
+   *
+   * Returning empty `files` AND empty `skipped` reported the same thing as a
+   * workspace that genuinely has no local files, so Settings downloaded a
+   * metadata-only backup and called it a success. That is the missing-key
+   * defect again, one branch up, on the path where MORE is lost rather than
+   * less: not one file omitted, but all of them.
+   */
+  const allUnreadable = (reason: string) => ({
+    files,
+    skipped: [...wanted].map((key) => ({ name: key, reason })),
+  });
 
   if (!isLocalFileVaultAvailable()) {
-    return { files, skipped };
+    return allUnreadable('this browser cannot store or read files on this device');
   }
 
-  const wanted = new Set(keys);
   let stored: LocalFileSummary[];
   try {
     stored = (await listLocalFiles()).filter((entry) => wanted.has(entry.key));
   } catch (error) {
     console.error("Reading this device's files for the backup failed.", error);
-    return { files, skipped };
+    return allUnreadable("this device's file storage could not be read");
   }
 
   /*
@@ -432,20 +447,26 @@ export function referencedVaultKeys(...groups: { localFileKey?: string }[][]): s
  * by the time this runs, and an exception here would leave the user staring at
  * a deletion error for data that is genuinely deleted.
  */
-export async function clearLocalFileVault(): Promise<void> {
+export async function clearLocalFileVault(): Promise<{ cleared: boolean }> {
   const factory = getIndexedDb();
-  if (!factory) return;
+  // Nothing to clear, which is a clean outcome rather than a failed one.
+  if (!factory) return { cleared: true };
 
   try {
-    await new Promise<void>((resolve) => {
+    return await new Promise<{ cleared: boolean }>((resolve) => {
       const request = factory.deleteDatabase(DATABASE_NAME);
-      request.onsuccess = () => resolve();
-      request.onerror = () => resolve();
-      // Another tab holding the database open would block this indefinitely.
-      request.onblocked = () => resolve();
+      request.onsuccess = () => resolve({ cleared: true });
+      // Reported, not resolved as success. A browser that refuses the deletion
+      // leaves registration papers and receipts on the device, and the account
+      // screen was saying "permanently deleted" over the top of them.
+      request.onerror = () => resolve({ cleared: false });
+      // Another tab holding the database open blocks this indefinitely, so it
+      // resolves rather than hanging — but it has not cleared anything.
+      request.onblocked = () => resolve({ cleared: false });
     });
   } catch (error) {
     console.error("Clearing this device's files failed.", error);
+    return { cleared: false };
   }
 }
 

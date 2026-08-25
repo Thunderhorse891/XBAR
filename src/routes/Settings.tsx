@@ -175,9 +175,19 @@ export default function Settings() {
     // nothing about. Without this, registration papers, receipts and generated
     // packets stayed on the device while the UI reported the account
     // permanently deleted.
-    await clearLocalFileVault();
+    const { cleared } = await clearLocalFileVault();
     setDeleteConfirm('');
-    pushToast({ title: 'Account deleted', message: result.message, tone: 'success' });
+    // The server side is done either way — the account is gone. But if this
+    // browser refused to drop the file database, the proof documents are still
+    // on this machine, and "permanently deleted" would be false about the part
+    // the person can still see.
+    pushToast({
+      title: cleared ? 'Account deleted' : 'Account deleted — files still on this device',
+      message: cleared
+        ? result.message
+        : `${result.message} This browser would not remove the files stored on this device; close other XBAR tabs and clear this site's data to finish removing them.`,
+      tone: cleared ? 'success' : 'warning',
+    });
     navigate('/login', { replace: true });
   };
 
