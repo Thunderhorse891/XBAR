@@ -78,19 +78,64 @@ async function withStore<T>(mode: IDBTransactionMode, action: (store: IDBObjectS
       const transaction = database.transaction(STORE_NAME, mode);
       const store = transaction.objectStore(STORE_NAME);
       const request = action(store);
-      request.onsuccess = () => resolve(request.result);
+
+      /*
+       * Held until the transaction COMMITS, not returned on the request.
+       *
+       * A successful `put` is not a durable write: IndexedDB can still abort
+       * while committing — a browser out of quota does exactly that — and the
+       * whole transaction is rolled back. Resolving on `request.onsuccess` made
+       * `writeIndexedValue` return true for a write that never landed, which
+       * skipped both the localStorage fallback and the failure notice below.
+       * The workspace then looked saved and was gone on reload.
+       *
+       * The file vault carries the identical rule in its own `withStore`. Two
+       * copies, because these are deliberately separate databases; if a third
+       * ever appears it needs this too.
+       */
+      let result: T;
+      request.onsuccess = () => {
+        result = request.result;
+      };
       request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed.'));
+      transaction.oncomplete = () => resolve(result);
       transaction.onerror = () => reject(transaction.error ?? new Error('IndexedDB transaction failed.'));
+      transaction.onabort = () => reject(transaction.error ?? new Error('IndexedDB transaction aborted.'));
     });
   } finally {
+    // Safe only because the promise above settles on the transaction's own
+    // completion rather than on the request's.
     database.close();
   }
 }
 
+/*
+ * Whether the last workspace read failed, as opposed to finding nothing.
+ *
+ * These are the same value — `null` — and telling them apart is load-bearing.
+ * The file-vault sweep reclaims blobs the workspace no longer references, so a
+ * transient read failure that hydrates the empty initial state would classify
+ * EVERY stored document, receipt and packet as an orphan and delete all of
+ * them, permanently, on a start-up that recovers on the next reload.
+ *
+ * "Nothing stored" is a real and common state — a fresh install — so the sweep
+ * cannot simply refuse on an empty reference set. It has to know which kind of
+ * empty this is.
+ */
+let workspaceReadFailure = false;
+
+export function didWorkspaceReadFail(): boolean {
+  return workspaceReadFailure;
+}
+
 async function readIndexedValue(name: string) {
   try {
-    return await withStore<string | null>('readonly', (store) => store.get(name));
-  } catch {
+    const value = await withStore<string | null>('readonly', (store) => store.get(name));
+    workspaceReadFailure = false;
+    return value;
+  } catch (error) {
+    console.error('Reading the persisted workspace failed.', error);
+    workspaceReadFailure = true;
     return null;
   }
 }

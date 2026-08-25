@@ -33,7 +33,7 @@ import {
   uploadMediaAssetToCloud,
   upsertSharedListingInCloud,
 } from '@/lib/cloudWorkspace';
-import { workspaceStateStorage } from '@/lib/workspaceStorage';
+import { didWorkspaceReadFail, workspaceStateStorage } from '@/lib/workspaceStorage';
 import { referencedVaultKeys, storeLocalFile, sweepLocalFileVault } from '@/lib/localFileVault';
 import {
   canMarkTransferClear,
@@ -2560,6 +2560,23 @@ export const useXbarStore = create<XbarStore>()(
        */
       onRehydrateStorage: () => (state) => {
         if (!state) return;
+
+        /*
+         * Never sweep against a workspace we failed to read.
+         *
+         * `readIndexedValue` returns null both when there is nothing stored and
+         * when the read threw, and persist hydrates the empty initial state
+         * either way. On a transient failure — the database briefly locked by
+         * another tab, a storage hiccup — the reference set is empty while the
+         * vault still holds every document, receipt and packet the ranch owns,
+         * and the sweep would delete all of it permanently on a start-up that
+         * would have recovered on the next reload.
+         *
+         * A genuinely empty workspace is a real state and still sweeps; this
+         * refuses only the case where "empty" means "unknown".
+         */
+        if (didWorkspaceReadFail()) return;
+
         void sweepLocalFileVault(referencedVaultKeys(state.documents, state.expenseReceipts, state.salePacketBuilds));
       },
       partialize: (state) =>

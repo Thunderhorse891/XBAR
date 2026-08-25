@@ -19,6 +19,7 @@ import { workspaceBackupPayload } from '@/store/xbarStoreLogic';
 import {
   type PortableLocalFile,
   type UnbackedUpFile,
+  clearLocalFileVault,
   exportLocalFiles,
   importLocalFiles,
   referencedVaultKeys,
@@ -170,6 +171,11 @@ export default function Settings() {
     } catch {
       // best effort — the account is already deleted on the server
     }
+    // The files live in their own database, which `persist.clearStorage` knows
+    // nothing about. Without this, registration papers, receipts and generated
+    // packets stayed on the device while the UI reported the account
+    // permanently deleted.
+    await clearLocalFileVault();
     setDeleteConfirm('');
     pushToast({ title: 'Account deleted', message: result.message, tone: 'success' });
     navigate('/login', { replace: true });

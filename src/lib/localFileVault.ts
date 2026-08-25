@@ -420,6 +420,36 @@ export function referencedVaultKeys(...groups: { localFileKey?: string }[][]): s
 }
 
 /**
+ * Remove every file this device is holding.
+ *
+ * For account deletion, which clears the workspace database and the in-memory
+ * state but knew nothing about this one — so registration papers, receipts and
+ * generated packets stayed on disk while the UI reported the account
+ * permanently deleted.
+ *
+ * Deletes the whole database rather than each entry, so nothing survives a
+ * partially-failed loop. Never throws: the account is already gone server-side
+ * by the time this runs, and an exception here would leave the user staring at
+ * a deletion error for data that is genuinely deleted.
+ */
+export async function clearLocalFileVault(): Promise<void> {
+  const factory = getIndexedDb();
+  if (!factory) return;
+
+  try {
+    await new Promise<void>((resolve) => {
+      const request = factory.deleteDatabase(DATABASE_NAME);
+      request.onsuccess = () => resolve();
+      request.onerror = () => resolve();
+      // Another tab holding the database open would block this indefinitely.
+      request.onblocked = () => resolve();
+    });
+  } catch (error) {
+    console.error("Clearing this device's files failed.", error);
+  }
+}
+
+/**
  * Which stored keys no longer belong to any record.
  *
  * Kept as a pure function so the sweep below can be tested without a database,

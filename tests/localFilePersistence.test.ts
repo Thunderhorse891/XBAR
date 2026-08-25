@@ -247,3 +247,43 @@ test('the reports screen refreshes when the day changes, and exports are built f
     'the CSV export must build a report at the moment of export',
   );
 });
+
+test('the vault is never swept against a workspace that failed to read', async () => {
+  const source = await readFile('src/store/useXbarStore.ts', 'utf8');
+
+  /*
+   * The worst thing in this whole area. A transient read failure hydrates the
+   * empty initial state, so the reference set is empty while the vault still
+   * holds every document the ranch owns — and the sweep would delete all of it
+   * permanently, on a start-up that would have recovered on the next reload.
+   */
+  const guardAt = source.indexOf('didWorkspaceReadFail()');
+  const sweepAt = source.indexOf('sweepLocalFileVault(');
+
+  assert.ok(guardAt > -1, 'the sweep must know whether the workspace was actually read');
+  assert.ok(guardAt < sweepAt, 'the guard must come before the sweep, not after it');
+  assert.match(source, /if \(didWorkspaceReadFail\(\)\) return;/, 'a failed read must skip the sweep entirely');
+});
+
+test('both IndexedDB writers wait for the commit, not the request', async () => {
+  // The same rule in two deliberately separate databases. Getting it right in
+  // one and not the other is exactly what happened: the vault was fixed and the
+  // workspace store kept resolving on `request.onsuccess` for another two
+  // commits.
+  for (const path of ['src/lib/localFileVault.ts', 'src/lib/workspaceStorage.ts']) {
+    const source = await readFile(path, 'utf8');
+    assert.match(
+      source,
+      /transaction\.oncomplete = \(\) => resolve\(result\);/,
+      `${path} must resolve on the transaction's completion`,
+    );
+    // Scoped to the store helper: opening a DATABASE legitimately resolves on
+    // its request, because there is no transaction involved in an open.
+    assert.match(
+      source,
+      /request\.onsuccess = \(\) => \{\s*result = request\.result;\s*\};/,
+      `${path} must hold the request's result rather than resolving with it`,
+    );
+    assert.match(source, /transaction\.onabort = /, `${path} must reject when the transaction is rolled back`);
+  }
+});

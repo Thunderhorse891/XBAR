@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import {
   base64ToBytes,
+  clearLocalFileVault,
   blobToBase64,
   exportLocalFiles,
   importLocalFiles,
@@ -192,4 +193,39 @@ test('the backup handlers carry files, and the restore keeps their keys', async 
   assert.ok(restoreFilesAt < restoreRecordsAt, 'files must land before the records that point at them');
   assert.match(source, /some files missing/, 'a partial restore must say so rather than reporting success');
   assert.match(source, /some files not included/, 'an incomplete backup must say so rather than reporting success');
+});
+
+test('deleting the account leaves nothing on the device', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    await storeLocalFile(new Blob(['registration papers']), 'registration.pdf');
+    await storeLocalFile(new Blob(['a receipt']), 'receipt.pdf');
+    assert.equal((await listLocalFiles()).length, 2);
+
+    await clearLocalFileVault();
+
+    // `persist.clearStorage()` operates on the workspace database and knows
+    // nothing about this one, so without an explicit purge the proof documents
+    // stayed on disk while the UI reported the account permanently deleted.
+    assert.deepEqual(await listLocalFiles(), []);
+  } finally {
+    restore();
+  }
+});
+
+test('purging a device with no vault at all is not an error', async () => {
+  delete (globalThis as { indexedDB?: unknown }).indexedDB;
+  // Runs after the account is already gone server-side; throwing here would
+  // show a deletion error for data that is genuinely deleted.
+  await clearLocalFileVault();
+});
+
+test('account deletion purges the vault, not just the workspace', async () => {
+  const source = await readFile('src/routes/Settings.tsx', 'utf8');
+
+  assert.match(
+    source,
+    /await useXbarStore\.persist\.clearStorage\(\);[\s\S]{0,400}await clearLocalFileVault\(\);/,
+    'the files are in their own database and need their own purge',
+  );
 });

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { onWorkspacePersistFailure, workspaceStateStorage } from '../src/lib/workspaceStorage.js';
+import { didWorkspaceReadFail, onWorkspacePersistFailure, workspaceStateStorage } from '../src/lib/workspaceStorage.js';
 import { installFakeIndexedDb } from './helpers/fakeIndexedDb.js';
 
 /*
@@ -101,5 +101,47 @@ test('one broken listener does not stop the others, or the write path', async ()
     unsubscribeBroken();
     unsubscribeGood();
     restoreWindow();
+  }
+});
+
+test('a write rolled back at commit is a failure, not a save', async () => {
+  // The put succeeds and the transaction then aborts, which is what a browser
+  // out of quota actually does. Resolving on the request made
+  // `writeIndexedValue` return true for a write that never landed, so both the
+  // localStorage fallback AND the failure notice were skipped: the workspace
+  // looked saved and was gone on reload.
+  const restoreDb = installFakeIndexedDb({ abortOnCommit: true });
+  const restoreWindow = installBrokenLocalStorage();
+
+  const failures: string[] = [];
+  const unsubscribe = onWorkspacePersistFailure((failure) => failures.push(failure.name));
+
+  try {
+    await workspaceStateStorage.setItem('xbar-live-workspace', JSON.stringify({ state: { horses: [{ id: 'h1' }] } }));
+    assert.deepEqual(failures, ['xbar-live-workspace'], 'a rolled-back write must be reported');
+  } finally {
+    unsubscribe();
+    restoreWindow();
+    restoreDb();
+  }
+});
+
+test('a failed read is distinguishable from an empty workspace', async () => {
+  // Both are `null`, and telling them apart is what stops the file-vault sweep
+  // deleting every stored document after a transient read failure.
+  const restoreWorking = installFakeIndexedDb();
+  try {
+    await workspaceStateStorage.getItem('xbar-live-workspace');
+    assert.equal(didWorkspaceReadFail(), false, 'nothing stored is not a failure');
+  } finally {
+    restoreWorking();
+  }
+
+  const restoreBroken = installFakeIndexedDb({ abortWrites: true });
+  try {
+    await workspaceStateStorage.getItem('xbar-live-workspace');
+    assert.equal(didWorkspaceReadFail(), true, 'a read that threw must be recorded as a failure');
+  } finally {
+    restoreBroken();
   }
 });

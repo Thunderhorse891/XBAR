@@ -41,6 +41,16 @@ export function installFakeIndexedDb(options: FakeOptions = {}) {
   };
 
   const factory = {
+    // `clearLocalFileVault` deletes the whole database rather than each entry,
+    // so the double has to model that or the purge cannot be tested.
+    deleteDatabase() {
+      const request: Record<string, unknown> = {};
+      later(() => {
+        stores.clear();
+        (request.onsuccess as (() => void) | undefined)?.();
+      });
+      return request;
+    },
     // The name and version the vault passes are ignored: this stand-in holds
     // one database, and versioning is the browser's problem, not the test's.
     open() {
