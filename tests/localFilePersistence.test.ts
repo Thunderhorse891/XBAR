@@ -313,3 +313,38 @@ test('a refused file-vault purge is not reported as a completed deletion', async
     'files left on the device must not be described as permanently deleted',
   );
 });
+
+test('a throwing file lookup becomes a result, not an escaping rejection', async () => {
+  const source = await readFile('src/lib/openStoredFile.ts', 'utf8');
+
+  /*
+   * The vault rejects when IndexedDB is unreadable, and the Supabase client has
+   * its own ways to blow up. An escaping rejection breaks this helper's own
+   * contract: the pre-opened blank tab stays on screen, and every caller keeps
+   * its "Opening..." state forever, because all of them only handle
+   * `{ ok: false }`.
+   */
+  assert.match(
+    source,
+    /try \{\s*access = await getDocumentAccessUrl\(record\);\s*\} catch \(error\) \{/,
+    'resolution must be guarded',
+  );
+  assert.match(
+    source,
+    /\} catch \(error\) \{[\s\S]{0,300}previewWindow\?\.close\(\);[\s\S]{0,200}return \{ ok: false/,
+    'the blank tab must be closed and a failure returned',
+  );
+});
+
+test('the packet attachment cap is enforced against the vault, not against metadata', async () => {
+  const source = await readFile('src/lib/localPacketAttachments.ts', 'utf8');
+
+  // `fileSizeBytes` is optional and an absent one budgets as zero, so the
+  // planner's cap alone was advisory.
+  assert.match(
+    source,
+    /if \(usedBytes \+ entry\.size > maxBytes\) \{/,
+    'the resolve pass must re-check the ceiling against real bytes',
+  );
+  assert.match(source, /usedBytes \+= entry\.size;/, 'and must accumulate them');
+});

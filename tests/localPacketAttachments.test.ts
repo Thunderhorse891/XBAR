@@ -179,3 +179,44 @@ test('a file with no recorded type still gets a usable data URL', async () => {
     restore();
   }
 });
+
+test('the byte ceiling binds on the bytes the vault holds, not on recorded sizes', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    // Neither record carries `fileSizeBytes`, so the planner budgets both at
+    // zero and lets them through — deliberately, since refusing a real document
+    // over a missing metadata field would drop it for no visible reason. That
+    // made the cap advisory: enough size-less records could produce a base64
+    // packet of any size at all, which is a tab running out of memory rather
+    // than a document.
+    const first = await storeLocalFile(new Blob(['aaaaaa']), 'first.pdf');
+    const second = await storeLocalFile(new Blob(['bbbbbb']), 'second.pdf');
+
+    const plan = planPacketAttachments(
+      [
+        document({ id: 'd1', title: 'First', localFileKey: first }),
+        document({ id: 'd2', title: 'Second', localFileKey: second }),
+      ],
+      { maxBytes: 8 },
+    );
+    assert.equal(plan.attach.length, 2, 'the planner must let both through, or this proves nothing');
+
+    const { attachments, unattached } = await resolvePacketAttachments(
+      [
+        document({ id: 'd1', title: 'First', localFileKey: first }),
+        document({ id: 'd2', title: 'Second', localFileKey: second }),
+      ],
+      { maxBytes: 8 },
+    );
+
+    assert.deepEqual(
+      attachments.map((item) => item.fileName),
+      ['first.pdf'],
+    );
+    // Excluded, not silently dropped — and with the planner's own wording, since
+    // the seller does not care which pass measured it.
+    assert.deepEqual(unattached, [{ title: 'Coggins: Second', reason: 'too large to include in this packet' }]);
+  } finally {
+    restore();
+  }
+});

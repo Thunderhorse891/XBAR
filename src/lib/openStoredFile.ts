@@ -32,7 +32,24 @@ export async function openStoredFileInTab(record: StoredFileRef): Promise<OpenSt
     previewWindow.opener = null;
   }
 
-  const access = await getDocumentAccessUrl(record);
+  /*
+   * Resolution can THROW, not merely return a failure.
+   *
+   * The vault rejects when IndexedDB is unreadable, and the Supabase client has
+   * its own ways to blow up. An escaping rejection breaks this function's own
+   * contract: the blank tab stays open on the screen, and Documents, Expenses
+   * and the studio list never clear their "Opening..." state or show a toast,
+   * because each of them only handles `{ ok: false }`. The result is a stuck
+   * button and an empty tab, with no explanation anywhere.
+   */
+  let access: Awaited<ReturnType<typeof getDocumentAccessUrl>>;
+  try {
+    access = await getDocumentAccessUrl(record);
+  } catch (error) {
+    console.error('Resolving a stored file failed.', error);
+    previewWindow?.close();
+    return { ok: false, message: 'This file could not be read from storage. Try again in a moment.' };
+  }
 
   if (!access.ok) {
     previewWindow?.close();

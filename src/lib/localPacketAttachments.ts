@@ -92,9 +92,11 @@ export function planPacketAttachments(
       continue;
     }
 
-    // An unknown size counts as zero rather than blocking the attachment: the
-    // read below is what finally decides, and refusing a file because its
-    // recorded size is missing would drop a real document for a metadata gap.
+    // An unknown size counts as zero rather than blocking the attachment:
+    // refusing a file because its recorded size is missing would drop a real
+    // document for a metadata gap. `resolvePacketAttachments` re-checks the cap
+    // against the bytes the vault actually holds, which is what finally
+    // decides — this pass only avoids reading files it can already rule out.
     const size = document.fileSizeBytes ?? 0;
     if (usedBytes + size > maxBytes) {
       excluded.push({ title: label(document), reason: 'too large to include in this packet' });
@@ -135,8 +137,19 @@ export async function resolvePacketAttachments(
   limits?: { maxCount?: number; maxBytes?: number },
 ): Promise<{ attachments: LocalPacketAttachment[]; unattached: UnattachedDocument[] }> {
   const plan = planPacketAttachments(documents, limits);
+  const maxBytes = limits?.maxBytes ?? MAX_PACKET_ATTACHMENT_BYTES;
   const attachments: LocalPacketAttachment[] = [];
   const unattached = [...plan.excluded];
+  /*
+   * The bytes the vault actually holds, which is the only figure that binds.
+   *
+   * `planPacketAttachments` budgets against `fileSizeBytes`, an optional field
+   * a legacy record may not carry — and an absent size counts as zero there, on
+   * purpose. Without this second check that made the cap advisory: a handful of
+   * records with no recorded size could produce a base64 packet of any size at
+   * all, which is a browser tab running out of memory rather than a document.
+   */
+  let usedBytes = 0;
 
   for (const document of plan.attach) {
     try {
@@ -145,6 +158,13 @@ export async function resolvePacketAttachments(
         unattached.push({ title: label(document), reason: 'the stored file is no longer on this device' });
         continue;
       }
+      if (usedBytes + entry.size > maxBytes) {
+        // Same reason string as the planner's: the seller does not care which
+        // pass measured it, only that this document is not in the packet.
+        unattached.push({ title: label(document), reason: 'too large to include in this packet' });
+        continue;
+      }
+      usedBytes += entry.size;
       attachments.push({
         id: document.id,
         label: label(document),
