@@ -115,9 +115,13 @@ test('a local-only workspace can still buy a plan', async () => {
   // workspace with no cloud session legitimately reaches Stripe, and it has to
   // stay open — which is exactly why it is CODED rather than left uncoded and
   // indistinguishable from a fetch that threw.
+  // `[^}]` already matches a newline, so the `(?:[^}]|\n)` this replaced gave
+  // the engine two ways to consume the same character — ambiguity a lazy
+  // quantifier turns into exponential backtracking, which is what CodeQL
+  // flagged. One unambiguous class does the same job in linear time.
   assert.match(
     client,
-    /if \(!params\.workspaceId \|\| !params\.accessToken\) \{\s*return \{\s*ok: false,(?:[^}]|\n)*?code: NO_MANAGED_IDENTITY,/,
+    /if \(!params\.workspaceId \|\| !params\.accessToken\) \{\s*return \{\s*ok: false,[^}]*?code: NO_MANAGED_IDENTITY,/,
     'the no-identity path must carry the one code that permits a fallback',
   );
 });
