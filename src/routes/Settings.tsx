@@ -15,7 +15,14 @@ import { workspaceStorageDriverLabel } from '@/lib/workspaceStorage';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
-import { type PortableLocalFile, exportLocalFiles, importLocalFiles, referencedVaultKeys } from '@/lib/localFileVault';
+import { workspaceBackupPayload } from '@/store/xbarStoreLogic';
+import {
+  type PortableLocalFile,
+  type UnbackedUpFile,
+  exportLocalFiles,
+  importLocalFiles,
+  referencedVaultKeys,
+} from '@/lib/localFileVault';
 import type { UserRole } from '@/types/xbar';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 
@@ -174,20 +181,50 @@ export default function Settings() {
       const text = await file.text();
       const payload = JSON.parse(text) as { files?: PortableLocalFile[] };
 
-      // Files first, then the records that point at them. Restored under their
-      // ORIGINAL keys — a fresh key would leave every document pointing at
-      // nothing. A backup written before this shipped has no `files`, and
-      // restores exactly as it always did.
-      const restored = Array.isArray(payload.files) ? await importLocalFiles(payload.files) : 0;
+      /*
+       * Validate, then write files, then write records.
+       *
+       * The order is load-bearing in both directions. Files must land before
+       * the records that point at them, or a record briefly references a blob
+       * that is not there yet. But the vault must not be touched at all until
+       * the workspace payload is known to be acceptable: restoration preserves
+       * keys and uses `put`, so writing first and rejecting after would
+       * overwrite blobs belonging to the workspace currently loaded and then
+       * report "Import blocked" — leaving real documents silently pointing at
+       * some other file's bytes.
+       */
+      if (!workspaceBackupPayload(payload)) {
+        pushToast({
+          title: 'Import blocked',
+          message: 'Backup file is missing the XBAR workspace payload.',
+          tone: 'error',
+        });
+        return;
+      }
+
+      // Restored under their ORIGINAL keys — a fresh key would leave every
+      // document pointing at nothing. A backup written before this shipped has
+      // no `files`, and restores exactly as it always did.
+      const { restored, failed } = Array.isArray(payload.files)
+        ? await importLocalFiles(payload.files)
+        : { restored: 0, failed: [] as UnbackedUpFile[] };
       const result = importWorkspaceBackup(payload);
 
+      // A file that did not come back leaves a record pointing at nothing, and
+      // this is the only place the rancher can be told which one.
+      const restoredNote = restored ? ` ${restored} file${restored === 1 ? '' : 's'} restored to this device.` : '';
+      const failedNote = failed.length
+        ? ` ${failed.length} could not be restored: ${failed.map((entry) => `${entry.name} (${entry.reason})`).join('; ')}`
+        : '';
+
       pushToast({
-        title: result.ok ? 'Backup imported' : 'Import blocked',
-        message:
-          result.ok && restored
-            ? `${result.message} ${restored} file${restored === 1 ? '' : 's'} restored to this device.`
-            : result.message,
-        tone: result.ok ? 'success' : 'error',
+        title: !result.ok
+          ? 'Import blocked'
+          : failed.length
+            ? 'Backup imported — some files missing'
+            : 'Backup imported',
+        message: result.ok ? `${result.message}${restoredNote}${failedNote}` : result.message,
+        tone: !result.ok ? 'error' : failed.length ? 'warning' : 'success',
       });
     } catch {
       pushToast({ title: 'Import failed', message: 'Choose a valid XBAR backup JSON file.', tone: 'error' });

@@ -300,6 +300,23 @@ export async function exportLocalFiles(
     return { files, skipped };
   }
 
+  /*
+   * A record can name a file this device does not have — most often because the
+   * workspace came from a cloud snapshot written on another machine.
+   *
+   * Filtering the vault by the wanted keys silently drops those, so the backup
+   * reported plain success (or even "no files were stored on this device")
+   * while carrying records whose proof was somewhere else entirely. Someone
+   * could then clear their storage believing the backup was complete. Named,
+   * not dropped.
+   */
+  const found = new Set(stored.map((entry) => entry.key));
+  for (const key of wanted) {
+    if (!found.has(key)) {
+      skipped.push({ name: key, reason: 'the file is not stored on this device' });
+    }
+  }
+
   let usedBytes = 0;
   for (const summary of [...stored].sort((a, b) => a.size - b.size)) {
     if (usedBytes + summary.size > maxBytes) {
@@ -339,12 +356,27 @@ export async function exportLocalFiles(
  * document pointing at nothing. Returns how many were restored, so the caller
  * can tell the rancher what actually came back.
  */
-export async function importLocalFiles(files: PortableLocalFile[]): Promise<number> {
-  if (!isLocalFileVaultAvailable()) return 0;
+export async function importLocalFiles(
+  files: PortableLocalFile[],
+): Promise<{ restored: number; failed: UnbackedUpFile[] }> {
+  const failed: UnbackedUpFile[] = [];
+
+  if (!isLocalFileVaultAvailable()) {
+    return {
+      restored: 0,
+      failed: files.map((file) => ({
+        name: file?.name || file?.key || 'a file',
+        reason: 'this browser cannot store files on this device',
+      })),
+    };
+  }
 
   let restored = 0;
   for (const file of files) {
-    if (!file?.key || typeof file.data !== 'string') continue;
+    if (!file?.key || typeof file.data !== 'string') {
+      failed.push({ name: file?.name || 'an unnamed entry', reason: 'the backup entry is malformed' });
+      continue;
+    }
     try {
       const bytes = base64ToBytes(file.data);
       const entry: LocalFileEntry = {
@@ -358,11 +390,16 @@ export async function importLocalFiles(files: PortableLocalFile[]): Promise<numb
       await withStore('readwrite', (store) => store.put(entry));
       restored += 1;
     } catch (error) {
-      // One unreadable entry must not abandon the rest of the restore.
+      // One unreadable entry must not abandon the rest of the restore — but it
+      // must not vanish either. A record whose blob failed to land keeps a
+      // localFileKey that resolves to nothing, and only this list can tell the
+      // rancher which of their proof did not come back.
       console.error('Restoring a backed-up file failed.', error);
+      failed.push({ name: file.name || file.key, reason: 'the file could not be written to this device' });
     }
   }
-  return restored;
+
+  return { restored, failed };
 }
 
 /**

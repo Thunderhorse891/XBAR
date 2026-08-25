@@ -48,6 +48,7 @@ import {
   validateLeadInput,
   validateLocationPatch,
   validateNewHorseInput,
+  workspaceBackupPayload,
 } from '@/store/xbarStoreLogic';
 import type {
   BreedingEconomics,
@@ -2524,17 +2525,11 @@ export const useXbarStore = create<XbarStore>()(
         workspace: selectPersistedState(get()),
       }),
       importWorkspaceBackup: (backup) => {
-        const payload =
-          backup && typeof backup === 'object' && 'workspace' in (backup as Record<string, unknown>)
-            ? (backup as { workspace: unknown }).workspace
-            : backup;
-        if (
-          !payload ||
-          typeof payload !== 'object' ||
-          (!('horses' in (payload as Record<string, unknown>)) &&
-            !('documents' in (payload as Record<string, unknown>)) &&
-            !('subscription' in (payload as Record<string, unknown>)))
-        ) {
+        // The same check `workspaceBackupPayload` offers callers that need to
+        // know before they change anything — see the file-restore path in
+        // Settings, which must not write blobs for a backup this would reject.
+        const payload = workspaceBackupPayload(backup);
+        if (!payload) {
           return {
             ok: false,
             message: 'Backup file is missing the XBAR workspace payload.',

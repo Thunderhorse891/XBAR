@@ -43,8 +43,9 @@ test('a file survives a backup and a restore onto an empty device', async () => 
   try {
     assert.deepEqual(await listLocalFiles(), []);
 
-    const count = await importLocalFiles(exported.files);
-    assert.equal(count, 1);
+    const { restored, failed } = await importLocalFiles(exported.files);
+    assert.equal(restored, 1);
+    assert.deepEqual(failed, []);
 
     const entry = await readLocalFile(exported.files[0].key);
     assert.ok(entry, 'the record’s key must resolve on the new device');
@@ -106,14 +107,49 @@ test('a restore does not abandon the remaining files when one entry is corrupt',
     };
     const corrupt = { ...good, key: 'vault-bad', name: 'bad.pdf', data: '!!! not base64 !!!' };
 
-    const count = await importLocalFiles([corrupt, good]);
+    const { restored, failed } = await importLocalFiles([corrupt, good]);
 
-    assert.equal(count, 1, 'the good file must still be restored');
+    assert.equal(restored, 1, 'the good file must still be restored');
+    // Skipping it quietly leaves a record whose localFileKey resolves to
+    // nothing, with no way for the rancher to know which proof did not return.
+    assert.deepEqual(failed, [{ name: 'bad.pdf', reason: 'the file could not be written to this device' }]);
     assert.ok(await readLocalFile('vault-good'));
     assert.equal(await readLocalFile('vault-bad'), null);
   } finally {
     restore();
   }
+});
+
+test('a referenced file that is not on this device is named, not dropped', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    const present = await storeLocalFile(new Blob(['here']), 'here.pdf');
+
+    // A record can name a file this device does not have — most often because
+    // the workspace arrived from a cloud snapshot written on another machine.
+    // Filtering the vault by the wanted keys dropped those silently, so the
+    // backup reported success while omitting proof the records still claim.
+    const { files, skipped } = await exportLocalFiles([present, 'vault-elsewhere']);
+
+    assert.deepEqual(
+      files.map((file) => file.name),
+      ['here.pdf'],
+    );
+    assert.deepEqual(skipped, [{ name: 'vault-elsewhere', reason: 'the file is not stored on this device' }]);
+  } finally {
+    restore();
+  }
+});
+
+test('a device that cannot store files reports every one, rather than restoring none quietly', async () => {
+  delete (globalThis as { indexedDB?: unknown }).indexedDB;
+
+  const { restored, failed } = await importLocalFiles([
+    { key: 'vault-a', name: 'a.pdf', type: '', size: 1, storedAt: '', data: '' },
+  ]);
+
+  assert.equal(restored, 0);
+  assert.deepEqual(failed, [{ name: 'a.pdf', reason: 'this browser cannot store files on this device' }]);
 });
 
 test('base64 round-trips bytes exactly, across the chunk boundary', async () => {
@@ -139,12 +175,21 @@ test('the backup handlers carry files, and the restore keeps their keys', async 
 
   assert.match(source, /exportLocalFiles\(\s*referencedVaultKeys\(/, 'the export must read the vault');
   assert.match(source, /JSON\.stringify\(\{ \.\.\.backup, files \}/, 'the files must go into the backup file');
-  // Files before records: a record restored ahead of its bytes is briefly a
-  // broken reference, and the count is what the rancher is told.
-  assert.match(
-    source,
-    /const restored = Array\.isArray\(payload\.files\) \? await importLocalFiles\(payload\.files\) : 0;\s*const result = importWorkspaceBackup\(payload\);/,
-    'the restore must put the files back before the records that point at them',
-  );
+  /*
+   * The order is load-bearing in BOTH directions, so both are pinned.
+   *
+   * Files must land before the records that point at them. But the vault must
+   * not be touched until the payload is known to be acceptable: restoration
+   * preserves keys and uses `put`, so writing first and rejecting after would
+   * overwrite blobs belonging to the workspace currently loaded.
+   */
+  const validateAt = source.indexOf('workspaceBackupPayload(payload)');
+  const restoreFilesAt = source.indexOf('importLocalFiles(payload.files)');
+  const restoreRecordsAt = source.indexOf('importWorkspaceBackup(payload)');
+
+  assert.ok(validateAt > -1, 'the payload must be validated before anything is written');
+  assert.ok(validateAt < restoreFilesAt, 'a rejected backup must not overwrite this workspace’s files');
+  assert.ok(restoreFilesAt < restoreRecordsAt, 'files must land before the records that point at them');
+  assert.match(source, /some files missing/, 'a partial restore must say so rather than reporting success');
   assert.match(source, /some files not included/, 'an incomplete backup must say so rather than reporting success');
 });
