@@ -86,8 +86,8 @@ test('the packet seal covers the bytes of every embedded file', async () => {
   // packet is unaltered.
   assert.match(
     generator,
-    /digest: sha256\(file\.dataUrl\.slice\(file\.dataUrl\.indexOf\(','\) \+ 1\)\)/,
-    'each attachment must be fingerprinted by its bytes',
+    /digest: sha256Bytes\(base64ToBytes\(file\.dataUrl\.slice\(file\.dataUrl\.indexOf\(','\) \+ 1\)\)\)/,
+    'each attachment must be fingerprinted by its decoded bytes, so `shasum -a 256` on the saved file prints the recorded digest',
   );
   assert.match(
     generator,
@@ -96,7 +96,88 @@ test('the packet seal covers the bytes of every embedded file', async () => {
   );
   assert.match(
     generator,
-    /and the contents of \$\{attachments\.length/,
+    /and the bytes of \$\{attachments\.length/,
     'the seal note must say the file contents are covered',
   );
+});
+
+test('the packet publishes what it was sealed from', async () => {
+  const generator = await readFile('src/lib/localSalePacketGenerator.ts', 'utf8');
+
+  /*
+   * A seal nobody can recompute is decoration. The packet printed a code and a
+   * digest and told the buyer that comparing the code with the seller's proved
+   * the packet unaltered — but published neither the sealed record nor any way
+   * to rehash the embedded files, so swapping an attachment and leaving the
+   * printed code alone passed the buyer's instructed check.
+   */
+  assert.match(
+    generator,
+    /<pre class="verify__payload" id="xbar-credential-payload">\$\{escapeHtml\(credential\.payload\)\}<\/pre>/,
+    'the sealed record itself must be published, or the digest cannot be recomputed',
+  );
+  assert.match(
+    generator,
+    /data-xbar-file="\$\{escapeHtml\(file\.id\)\}"/,
+    'each embedded file must be identifiable so it can be matched to its sealed entry',
+  );
+});
+
+test('the packet rehashes its own files rather than trusting the printed seal', async () => {
+  const generator = await readFile('src/lib/localSalePacketGenerator.ts', 'utf8');
+  const script = generator.slice(
+    generator.indexOf('const PACKET_VERIFIER_SCRIPT'),
+    generator.indexOf('export function buildLocalSalePacket'),
+  );
+
+  assert.match(script, /crypto\.subtle\.digest\('SHA-256'/, 'the check must actually hash');
+  assert.match(
+    script,
+    /querySelectorAll\('a\[data-xbar-file\]'\)/,
+    'the files must be read out of the page, not taken from the record they are being checked against',
+  );
+  assert.match(
+    script,
+    /is not the one that was sealed/,
+    'a swapped attachment must be reported, which is the attack the seal exists to catch',
+  );
+  assert.match(
+    script,
+    /was sealed but is missing from this packet/,
+    'a removed attachment must be reported too — dropping the inconvenient file is the cheaper forgery',
+  );
+
+  /*
+   * The facts are read back OUT of the sealed record. Everything printed above
+   * the seal — the ask price, the transfer status, even the "Sealed facts"
+   * list — is ordinary editable HTML, and editing it alone leaves the digest
+   * intact. Printing what the digest actually covers is what makes that edit
+   * visible to the buyer.
+   */
+  assert.match(script, /The facts this seal covers, read out of the sealed record/);
+  assert.match(script, /parsed\.sale\.askPrice/, 'the sealed ask price must be shown, not the one on the page');
+  assert.match(script, /parsed\.ownership\.transferStatus/, 'the sealed transfer status must be shown');
+});
+
+test('the packet no longer claims that reading the seal proves anything', async () => {
+  const generator = await readFile('src/lib/localSalePacketGenerator.ts', 'utf8');
+
+  /*
+   * The old copy: "Compare this seal code with the one the seller gives you
+   * directly: if they match, the packet is unaltered." False. The code is text
+   * in the file; whoever swapped an attachment could leave it untouched, and
+   * the buyer's comparison still matched.
+   */
+  assert.doesNotMatch(
+    generator,
+    /if they match, the packet is unaltered/,
+    'the packet must not promise that comparing two printed strings proves anything',
+  );
+  assert.match(generator, /Reading the code above proves nothing by itself/);
+  assert.match(
+    generator,
+    /this does not trust the button above/,
+    'the by-hand route must be offered, because the in-page script is as editable as the rest of the file',
+  );
+  assert.match(generator, /shasum -a 256/, 'the by-hand steps must name a tool the buyer already has');
 });

@@ -68,43 +68,56 @@ test('upgrade links use canonical billing path instead of legacy billing routes'
   }
 });
 
-test('a policy refusal never falls back to an unguarded payment link', async () => {
+test('only a missing managed identity may fall back to a payment link', async () => {
   const client = await readFile('src/lib/billingApi.ts', 'utf8');
   const screen = await readFile('src/routes/Subscriptions.tsx', 'utf8');
 
   /*
    * The payment link is a `mode: 'subscription'` checkout that never consults
-   * the workspace's billing row. Redirecting to it after the server refused
-   * reinstated the duplicate-charge path the refusal exists to close — and
-   * silently: the customer saw an ordinary Stripe page and paid.
+   * the workspace's billing row. Following it after the endpoint refused
+   * reinstated the duplicate-charge path the refusal exists to close.
+   *
+   * Blocking a LIST of refusal codes was not enough, which is why this is an
+   * allowlist now: `fetch` rejecting or a malformed body yields an UNCODED
+   * failure, and those are exactly the cases where the endpoint guard never
+   * ran — so a workspace with a live subscription still reached the link.
    */
   assert.match(client, /code: payload\.code,/, 'the server refusal code must survive the client boundary');
-  for (const code of [
-    'subscription_active',
-    'subscription_recoverable',
-    'subscription_unverified',
-    'billing_unavailable',
-  ]) {
-    assert.match(client, new RegExp(`'${code}'`), `${code} must be treated as a policy refusal`);
-  }
-
+  assert.match(
+    client,
+    /export function canUsePaymentLinkFallback\(code\?: string\): boolean \{\s*return code === NO_MANAGED_IDENTITY;/,
+    'the fallback must be an allowlist of one, not a blocklist of known refusals',
+  );
   assert.match(
     screen,
-    /const fallback = isBillingPolicyRefusal\(managed\.code\) \? '' : getStripePaymentLink\(tier\);/,
-    'the screen must not offer the payment link after a policy refusal',
+    /const fallback = canUsePaymentLinkFallback\(managed\.code\) \? getStripePaymentLink\(tier\) : '';/,
+    'the screen must reach the payment link only for the no-identity case',
   );
 });
 
-test('an ordinary checkout failure still falls back', async () => {
+test('a transport failure is not evidence that a second subscription is safe', async () => {
   const client = await readFile('src/lib/billingApi.ts', 'utf8');
 
-  // A local-only workspace has no cloud session, so `startManagedCheckout`
-  // returns early with no code at all — and the payment link is how those
-  // workspaces legitimately buy a plan. Scoping the block to server codes is
-  // what keeps that path open.
+  // `fetch` rejecting, or a response body that will not parse, lands in the
+  // catch with no code. Under the old blocklist that fell through to the
+  // payment link — the one case where the server never got to check the
+  // billing row at all. A network error says nothing about whether the
+  // customer already pays us.
+  assert.doesNotMatch(client, /POLICY_REFUSAL_CODES/, 'the blocklist must be gone, not merely bypassed');
+  assert.doesNotMatch(client, /isBillingPolicyRefusal/, 'the blocklist predicate must be gone');
+});
+
+test('a local-only workspace can still buy a plan', async () => {
+  const client = await readFile('src/lib/billingApi.ts', 'utf8');
+
+  // Without a workspace id and access token the endpoint cannot be called, so
+  // no billing row can be found and none can be duplicated. That path is how a
+  // workspace with no cloud session legitimately reaches Stripe, and it has to
+  // stay open — which is exactly why it is CODED rather than left uncoded and
+  // indistinguishable from a fetch that threw.
   assert.match(
     client,
-    /export function isBillingPolicyRefusal\(code\?: string\): boolean \{\s*return Boolean\(code && POLICY_REFUSAL_CODES\.has\(code\)\);/,
-    'an absent code must not be treated as a refusal',
+    /if \(!params\.workspaceId \|\| !params\.accessToken\) \{\s*return \{\s*ok: false,(?:[^}]|\n)*?code: NO_MANAGED_IDENTITY,/,
+    'the no-identity path must carry the one code that permits a fallback',
   );
 });

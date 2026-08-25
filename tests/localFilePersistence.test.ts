@@ -176,8 +176,8 @@ test('a locally generated packet contains the documents it lists', async () => {
   );
   assert.match(
     generator,
-    /<a download="\$\{escapeHtml\(file\.fileName\)\}" href="\$\{escapeHtml\(file\.dataUrl\)\}"/,
-    'each attached file must be openable from the packet itself',
+    /<a data-xbar-file="\$\{escapeHtml\(file\.id\)\}" download="\$\{escapeHtml\(file\.fileName\)\}" href="\$\{escapeHtml\(file\.dataUrl\)\}"/,
+    'each attached file must be openable from the packet itself, and identifiable so the seal check can match it to its sealed entry',
   );
   assert.match(
     generator,

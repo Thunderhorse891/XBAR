@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { isBillingPolicyRefusal, startManagedCheckout } from '@/lib/billingApi';
+import { canUsePaymentLinkFallback, startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency } from '@/lib/format';
 import { getStripePaymentLink, stripeConfig } from '@/lib/platformConfig';
 import { productEvent, productEventNames } from '@/lib/productEvents';
@@ -158,15 +158,22 @@ export default function Subscriptions() {
     }
 
     /*
-     * A policy refusal is not a transport failure, and must not fall back.
+     * The payment link is reached only when there was no identity to check.
      *
-     * The payment link is an unguarded subscription checkout that never
-     * consults the workspace's billing row, so redirecting to it here undid the
-     * server's refusal completely — the customer saw an ordinary Stripe page
-     * and paid a second time. Everything else still falls back, because that is
-     * how a workspace with no cloud session legitimately buys a plan.
+     * It is an unguarded `mode: 'subscription'` checkout that consults no
+     * billing row, so following it after the endpoint refused undid the refusal
+     * completely — the customer saw an ordinary Stripe page and paid twice.
+     * Blocking a list of refusal codes was not enough: `fetch` rejecting or a
+     * malformed body produces an UNCODED failure, and in exactly those cases the
+     * endpoint's guard never ran, so a workspace with a live subscription still
+     * got the link. A network error says nothing about whether a customer
+     * already pays us.
+     *
+     * So the rule is an allowlist. Only `no_managed_identity` — no workspace id,
+     * no access token, therefore no billing row that could hold a subscription —
+     * falls back, which is how a local-only workspace legitimately buys a plan.
      */
-    const fallback = isBillingPolicyRefusal(managed.code) ? '' : getStripePaymentLink(tier);
+    const fallback = canUsePaymentLinkFallback(managed.code) ? getStripePaymentLink(tier) : '';
     if (fallback) {
       emit(
         productEventNames.checkoutRedirected,

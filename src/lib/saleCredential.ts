@@ -33,7 +33,13 @@
 
 import { sha256 } from './sha256.js';
 
-export const SALE_CREDENTIAL_VERSION = 2 as const;
+/*
+ * v3: attachment digests cover the file's decoded BYTES rather than the base64
+ * text that carried them. Same tamper-evidence either way, but only the bytes
+ * are what `shasum -a 256` prints for the file a buyer saves out of the packet,
+ * and a seal nobody can practically recompute is a seal that only gets read.
+ */
+export const SALE_CREDENTIAL_VERSION = 3 as const;
 
 /** Every buyer-facing metadata field of one included document. File bytes are
  * generated server-side; these fields are what the packet renders, so covering

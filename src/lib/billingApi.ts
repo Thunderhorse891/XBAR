@@ -13,29 +13,35 @@ type CheckoutResult =
       code?: string;
     };
 
-/*
- * Refusals that must never fall through to a Stripe Payment Link.
+/**
+ * The one failure that legitimately ends at a Stripe Payment Link: there is no
+ * managed identity to check a billing row against.
  *
- * The payment link is an unguarded `mode: 'subscription'` checkout — it does
- * not consult the workspace's billing row at all. So redirecting to it after
- * `api/stripe/checkout.js` refused reinstates the exact duplicate-charge path
- * the refusal exists to close, and does it silently: the customer sees a normal
- * Stripe page and pays.
- *
- * Scoped to server codes on purpose. An ordinary failure — no cloud session, a
- * network blip, checkout not configured — still falls back, because that is the
- * legitimate way a local-only workspace buys a plan.
+ * Without a workspace id and access token the endpoint cannot be called at all,
+ * so no subscription can be found — and therefore none can be duplicated. That
+ * is how a local-only workspace buys a plan, and it must keep working.
  */
-const POLICY_REFUSAL_CODES = new Set([
-  'subscription_active',
-  'subscription_recoverable',
-  'subscription_unverified',
-  // The billing row could not be read. Unknown is not permission to charge.
-  'billing_unavailable',
-]);
+export const NO_MANAGED_IDENTITY = 'no_managed_identity';
 
-export function isBillingPolicyRefusal(code?: string): boolean {
-  return Boolean(code && POLICY_REFUSAL_CODES.has(code));
+/**
+ * Whether a failed managed checkout may fall back to the unguarded payment link.
+ *
+ * Reads as an allowlist, and that direction is the point. Blocking a list of
+ * known refusal CODES left every *uncoded* failure falling through — and `fetch`
+ * rejecting, or a malformed response body, produces exactly that. Those are the
+ * cases where the endpoint's guard never got to run, so a workspace whose
+ * billing row holds an active or recoverable subscription would be handed a
+ * `mode: 'subscription'` payment link that consults no billing row at all, and
+ * charged a second time. A network error is not evidence that a customer has no
+ * subscription; it is the absence of evidence either way.
+ *
+ * So: fall back only when we affirmatively know there was no identity to check.
+ * Everything else — server refusals, transport failures, unparseable responses —
+ * stops and tells the customer, because none of them establish that a second
+ * subscription is safe to create.
+ */
+export function canUsePaymentLinkFallback(code?: string): boolean {
+  return code === NO_MANAGED_IDENTITY;
 }
 
 function buildApiUrl(path: string) {
@@ -59,6 +65,10 @@ export async function startManagedCheckout(params: {
   if (!params.workspaceId || !params.accessToken) {
     return {
       ok: false,
+      // Coded, because this is the ONLY failure a payment link may follow. It
+      // has to be told apart from a fetch that threw, which looks identical
+      // from the caller's side and is not safe to fall back on.
+      code: NO_MANAGED_IDENTITY,
       message: 'Sign in to continue to secure checkout.',
     };
   }
@@ -82,7 +92,7 @@ export async function startManagedCheckout(params: {
       return {
         ok: false,
         message: payload.message ?? 'Secure checkout is not ready yet.',
-        // Carried through so the caller can tell a policy refusal from a
+        // Carried through so the caller can tell a server refusal from a
         // transport failure. Flattening them together is what let a refused
         // checkout redirect to an unguarded payment link.
         code: payload.code,
