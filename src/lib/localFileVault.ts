@@ -186,6 +186,185 @@ export async function localFileVaultBytes(): Promise<number> {
   return entries.reduce((total, entry) => total + entry.size, 0);
 }
 
+/*
+ * Getting bytes in and out of the vault as text.
+ *
+ * Two callers need this — a sale packet embeds its documents as `data:` URLs,
+ * and a workspace backup carries them inside a JSON file — so the conversion
+ * lives here rather than in either of them. Both are round trips of the same
+ * bytes, and having them agree matters: a backup written by one encoder and
+ * read by another that disagrees about padding loses files silently.
+ */
+
+/**
+ * How many bytes are turned into characters per `String.fromCharCode` call.
+ *
+ * Spreading a whole file into one call overflows the argument limit — a 5MB
+ * scan is 5 million arguments — and it fails as a RangeError deep inside the
+ * conversion, which reads like a corrupt file rather than a size problem.
+ */
+const BASE64_CHUNK_BYTES = 0x8000;
+
+/**
+ * Base64 a blob.
+ *
+ * Built on `arrayBuffer` and `btoa` rather than `FileReader`, which is a
+ * browser-only global — the conversion is the part most worth testing, and a
+ * FileReader implementation could only ever be tested in a browser.
+ */
+export async function blobToBase64(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += BASE64_CHUNK_BYTES) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + BASE64_CHUNK_BYTES));
+  }
+
+  return btoa(binary);
+}
+
+/** The inverse. Throws on input that is not base64, which a hand-edited backup can be. */
+export function base64ToBytes(encoded: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(encoded);
+  // Backed by a plain ArrayBuffer, not the SharedArrayBuffer the default type
+  // allows: a Blob part has to be transferable memory.
+  const bytes = new Uint8Array(new ArrayBuffer(binary.length));
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+/*
+ * Carrying the vault between devices.
+ *
+ * `exportWorkspaceBackup` writes the workspace as JSON, and the records in it
+ * keep only an opaque `localFileKey`. Restored on a second device — or on the
+ * same one after browser storage was cleared — every document and receipt was
+ * listed as stored on-device and could not be opened. The backup a rancher runs
+ * precisely so they do not lose their proof was quietly leaving all of it
+ * behind.
+ */
+
+/** One vault entry in a form that survives JSON. */
+export interface PortableLocalFile {
+  key: string;
+  name: string;
+  type: string;
+  size: number;
+  storedAt: string;
+  /** The file's bytes, base64. */
+  data: string;
+}
+
+/** A file the backup could not carry, and why — named rather than dropped. */
+export interface UnbackedUpFile {
+  name: string;
+  reason: string;
+}
+
+/**
+ * Total source bytes a backup will carry.
+ *
+ * Base64 adds about a third, and the backup is built as one JSON string in
+ * memory before it is downloaded, so this is a ceiling on what the browser can
+ * actually serialize rather than a policy preference. A backup that cannot be
+ * written at all protects nothing; one that names the files it left out can be
+ * acted on.
+ */
+export const MAX_BACKUP_FILE_BYTES = 200 * 1024 * 1024;
+
+/**
+ * Read the referenced files out of the vault, largest-last.
+ *
+ * Ordered smallest first so a budget that cannot fit everything still carries
+ * the most files it can, rather than being consumed by one video.
+ */
+export async function exportLocalFiles(
+  keys: Iterable<string>,
+  maxBytes = MAX_BACKUP_FILE_BYTES,
+): Promise<{ files: PortableLocalFile[]; skipped: UnbackedUpFile[] }> {
+  const files: PortableLocalFile[] = [];
+  const skipped: UnbackedUpFile[] = [];
+
+  if (!isLocalFileVaultAvailable()) {
+    return { files, skipped };
+  }
+
+  const wanted = new Set(keys);
+  let stored: LocalFileSummary[];
+  try {
+    stored = (await listLocalFiles()).filter((entry) => wanted.has(entry.key));
+  } catch (error) {
+    console.error("Reading this device's files for the backup failed.", error);
+    return { files, skipped };
+  }
+
+  let usedBytes = 0;
+  for (const summary of [...stored].sort((a, b) => a.size - b.size)) {
+    if (usedBytes + summary.size > maxBytes) {
+      skipped.push({ name: summary.name, reason: 'too large to fit in the backup file' });
+      continue;
+    }
+
+    try {
+      const entry = await readLocalFile(summary.key);
+      if (!entry) {
+        skipped.push({ name: summary.name, reason: 'the stored file is no longer on this device' });
+        continue;
+      }
+      files.push({
+        key: entry.key,
+        name: entry.name,
+        type: entry.type,
+        size: entry.size,
+        storedAt: entry.storedAt,
+        data: await blobToBase64(entry.blob),
+      });
+      usedBytes += entry.size;
+    } catch (error) {
+      console.error('Reading a file for the backup failed.', error);
+      skipped.push({ name: summary.name, reason: 'the stored file could not be read' });
+    }
+  }
+
+  return { files, skipped };
+}
+
+/**
+ * Put backed-up files back, under the keys the records already point at.
+ *
+ * Deliberately not `storeLocalFile`, which mints a new key: the restored
+ * records carry the original `localFileKey`, so a new one would leave every
+ * document pointing at nothing. Returns how many were restored, so the caller
+ * can tell the rancher what actually came back.
+ */
+export async function importLocalFiles(files: PortableLocalFile[]): Promise<number> {
+  if (!isLocalFileVaultAvailable()) return 0;
+
+  let restored = 0;
+  for (const file of files) {
+    if (!file?.key || typeof file.data !== 'string') continue;
+    try {
+      const bytes = base64ToBytes(file.data);
+      const entry: LocalFileEntry = {
+        key: file.key,
+        name: file.name || 'restored-file',
+        type: file.type || '',
+        size: bytes.byteLength,
+        storedAt: file.storedAt || new Date().toISOString(),
+        blob: new Blob([bytes], { type: file.type || 'application/octet-stream' }),
+      };
+      await withStore('readwrite', (store) => store.put(entry));
+      restored += 1;
+    } catch (error) {
+      // One unreadable entry must not abandon the rest of the restore.
+      console.error('Restoring a backed-up file failed.', error);
+    }
+  }
+  return restored;
+}
+
 /**
  * Every vault key the workspace still points at.
  *

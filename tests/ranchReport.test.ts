@@ -187,6 +187,42 @@ test('only open offers count as pipeline, and only paid deposits as held', () =>
   assert.equal(report.money.depositsHeld, 2_000);
 });
 
+test('a deposit on a completed sale is no longer held', () => {
+  const report = buildRanchReport(
+    input({
+      salesLeads: [
+        // Still open: the ranch is holding this money and owes it back if the
+        // deal falls through.
+        lead({ id: 'open', stage: 'Offer', depositAmount: 2_000, depositStatus: 'Paid' }),
+        // Won: the Sales editor leaves depositStatus 'Paid' in place after the
+        // sale closes, so counting that field alone kept the deposit on the
+        // books forever — in the UI, the CSV and the banker-facing PDF.
+        lead({ id: 'won', stage: 'Closed', outcome: 'Won', depositAmount: 5_000, depositStatus: 'Paid' }),
+        // Lost is deliberately still counted: that money is usually sitting in
+        // the ranch's account pending a refund decision.
+        lead({ id: 'lost', stage: 'Offer', outcome: 'Lost', depositAmount: 750, depositStatus: 'Paid' }),
+      ],
+    }),
+    NOW,
+  );
+
+  assert.equal(report.money.depositsHeld, 2_750);
+});
+
+test('the report is dated by the local calendar, not by UTC', () => {
+  // 6pm on the 24th in a negative-UTC zone is already the 25th in UTC. The
+  // monthly figures on this report are computed in the local calendar, so a
+  // UTC-derived date printed tomorrow beside today's totals — on the page and
+  // in the exported filename.
+  const evening = new Date(2026, 7, 24, 18, 30, 0);
+  const report = buildRanchReport(input({}), evening);
+
+  assert.equal(report.generatedOn, '2026-08-24');
+  assert.equal(ranchReportFileName(report, 'pdf'), 'xbar-ranch-report-2026-08-24.pdf');
+  // The instant is still available for anything that needs ordering.
+  assert.equal(report.generatedAt, evening.toISOString());
+});
+
 test('horses are ordered by what they have cost', () => {
   const report = buildRanchReport(
     input({

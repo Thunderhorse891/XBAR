@@ -8,6 +8,7 @@ import {
 } from './businessIntelligence.js';
 import { NON_LIVE_OFFER_STATUSES } from './profitIntelligence.js';
 import { monthKeyForDate, monthKeyOf, trailingMonthKeys } from './receiptMonths.js';
+import { dayKeyFor } from '../hooks/useDayKey.js';
 
 /*
  * The whole-operation report, in dollars.
@@ -81,7 +82,10 @@ export interface RanchReportReadiness {
 }
 
 export interface RanchReport {
+  /** The exact instant, for anything that needs ordering or a timestamp. */
   generatedAt: string;
+  /** That instant as a local calendar date — what a reader is shown. */
+  generatedOn: string;
   horseCount: number;
   listedCount: number;
   documentsToReview: number;
@@ -228,6 +232,11 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
 
   return {
     generatedAt: now.toISOString(),
+    // The same instant as a LOCAL calendar date, because that is the calendar
+    // every other figure here is computed in. `generatedAt.slice(0, 10)` is the
+    // UTC day: for a ranch in Denver generating a report at 6pm, it reads as
+    // tomorrow, on a page whose monthly totals are keyed to today.
+    generatedOn: dayKeyFor(now),
     horseCount: horses.length,
     listedCount: horseRows.filter((row) => row.askPrice > 0).length,
     documentsToReview: documents.filter(
@@ -253,8 +262,20 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
       // has countered, the counter is what is actually on the table, and
       // reporting the original ask would overstate the pipeline.
       pipelineValue: sum(openOffers.map((lead) => lead.counterOfferAmount || lead.offerAmount || 0)),
+      // Money the operation is holding that is not yet its own.
+      //
+      // A deposit on a deal closed as Won has been applied to the sale — the
+      // Sales editor leaves `depositStatus: 'Paid'` in place afterwards, so
+      // counting on that field alone kept the deposit on the books forever and
+      // overstated the figure in the UI, the CSV and the banker-facing PDF.
+      //
+      // `Lost` is deliberately still counted: that money is usually sitting in
+      // the ranch's account pending a refund or a forfeiture decision, so it is
+      // genuinely still held. Only a completed sale has consumed it.
       depositsHeld: sum(
-        salesLeads.filter((lead) => lead.depositStatus === 'Paid').map((lead) => lead.depositAmount ?? 0),
+        salesLeads
+          .filter((lead) => lead.depositStatus === 'Paid' && lead.outcome !== 'Won')
+          .map((lead) => lead.depositAmount ?? 0),
       ),
     },
     readiness,

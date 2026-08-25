@@ -55,7 +55,7 @@ export function ranchReportToCsv(report: RanchReport): string {
   const lines: string[] = [];
 
   lines.push(csvRow(['XBAR Ranch Report']));
-  lines.push(csvRow(['Generated', report.generatedAt]));
+  lines.push(csvRow(['Generated', report.generatedOn]));
   lines.push('');
 
   lines.push(csvRow(['Summary']));
@@ -233,9 +233,16 @@ export function ranchReportSections(report: RanchReport) {
   return sections;
 }
 
-/** `xbar-ranch-report-2026-08-21.csv` — sorts chronologically in a folder. */
+/**
+ * `xbar-ranch-report-2026-08-21.csv` — sorts chronologically in a folder.
+ *
+ * The local calendar date, not `generatedAt.slice(0, 10)`. That slice is the
+ * UTC day, so a report exported on a US evening arrived in the rancher's
+ * downloads folder dated tomorrow — and sorted ahead of one they would run in
+ * the morning.
+ */
 export function ranchReportFileName(report: RanchReport, extension: string): string {
-  return `xbar-ranch-report-${report.generatedAt.slice(0, 10)}.${extension}`;
+  return `xbar-ranch-report-${report.generatedOn}.${extension}`;
 }
 
 function downloadBlob(blob: Blob, fileName: string): void {

@@ -216,6 +216,8 @@ declare
   excluded   uuid[];
   terminal   uuid[];
   changed    integer;
+  -- The second entitlement copy, counted separately so a mismatch is visible.
+  billing_changed integer;
 begin
   if confirmed <> 'yes' then
     raise notice 'xbar: reconciliation SKIPPED — no rows changed.';
@@ -246,37 +248,85 @@ begin
     where trim(value) <> ''
   ), '{}'::uuid[]);
 
-  update public.workspace_subscription_profiles p
-     set billing_state = 'Inactive',
-         payload = jsonb_set(
-           jsonb_set(
-             coalesce(p.payload, '{}'::jsonb),
-             '{billingState}',
-             '"Inactive"'::jsonb,
+  /*
+   * BOTH entitlement copies, in one statement.
+   *
+   * The workspace's entitlement is stored twice: workspace_subscription_profiles
+   * .payload, which the app reads, and workspace_billing_customers
+   * .entitlement_payload, which the Stripe endpoints read. Updating only the
+   * first left api/stripe/checkout.js looking at an untouched legacy
+   * 'Manual Billing' payload with no subscriptionRecoverable field — so its
+   * duplicate-checkout guard read false and offered a second subscription to
+   * precisely the workspaces this migration exists to reconcile.
+   *
+   * Written as one data-modifying CTE rather than two statements because the
+   * second could not find its rows on its own: the first has already changed
+   * billing_state, so re-running the 'Manual Billing' predicate would match
+   * nothing. `returning` carries the exact row set across.
+   */
+  with reconciled as (
+    update public.workspace_subscription_profiles p
+       set billing_state = 'Inactive',
+           payload = jsonb_set(
+             jsonb_set(
+               coalesce(p.payload, '{}'::jsonb),
+               '{billingState}',
+               '"Inactive"'::jsonb,
+               true
+             ),
+             -- Whether Stripe can still bill this workspace. See RECOVERABILITY
+             -- at the top of this file: true unless the operator has confirmed in
+             -- Stripe that the subscription is over.
+             '{subscriptionRecoverable}',
+             to_jsonb(not (p.workspace_id = any(terminal))),
              true
            ),
-           -- Whether Stripe can still bill this workspace. See RECOVERABILITY
-           -- at the top of this file: true unless the operator has confirmed in
-           -- Stripe that the subscription is over.
-           '{subscriptionRecoverable}',
-           to_jsonb(not (p.workspace_id = any(terminal))),
-           true
-         ),
-         updated_at = now()
-   where p.billing_state = 'Manual Billing'
-     and not (p.workspace_id = any(excluded))
-     and exists (
-       select 1
-         from public.workspace_billing_customers c
-        where c.workspace_id = p.workspace_id
-          and coalesce(c.stripe_subscription_id, '') <> ''
-     );
+           updated_at = now()
+     where p.billing_state = 'Manual Billing'
+       and not (p.workspace_id = any(excluded))
+       and exists (
+         select 1
+           from public.workspace_billing_customers c
+          where c.workspace_id = p.workspace_id
+            and coalesce(c.stripe_subscription_id, '') <> ''
+       )
+    returning p.workspace_id, not (p.workspace_id = any(terminal)) as recoverable
+  ), billing as (
+    update public.workspace_billing_customers c
+       set entitlement_payload = jsonb_set(
+             jsonb_set(
+               coalesce(c.entitlement_payload, '{}'::jsonb),
+               '{billingState}',
+               '"Inactive"'::jsonb,
+               true
+             ),
+             '{subscriptionRecoverable}',
+             to_jsonb(r.recoverable),
+             true
+           ),
+           updated_at = now()
+      from reconciled r
+     where c.workspace_id = r.workspace_id
+    returning c.workspace_id
+  )
+  select count(*), (select count(*) from billing)
+    into changed, billing_changed
+    from reconciled;
 
-  get diagnostics changed = row_count;
-  raise notice 'xbar: reconciled % row(s); % excluded by request; % marked terminal.',
+  raise notice 'xbar: reconciled % profile row(s) and % billing row(s); % excluded by request; % marked terminal.',
     changed,
+    billing_changed,
     coalesce(array_length(excluded, 1), 0),
     coalesce(array_length(terminal, 1), 0);
+
+  -- The profile predicate requires a billing row with a Stripe subscription id,
+  -- so these must match. If they ever do not, one copy of the entitlement is
+  -- stale and the checkout guard is reading it — say so rather than finishing
+  -- quietly.
+  if changed <> billing_changed then
+    raise exception 'xbar: reconciled % profile row(s) but % billing row(s); entitlement copies would be left inconsistent.',
+      changed, billing_changed;
+  end if;
 end
 $$;
 

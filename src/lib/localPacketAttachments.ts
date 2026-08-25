@@ -1,4 +1,4 @@
-import { readLocalFile } from './localFileVault.js';
+import { blobToBase64, readLocalFile } from './localFileVault.js';
 import type { DocumentRecord } from '../types/xbar.js';
 
 /*
@@ -109,34 +109,18 @@ export function planPacketAttachments(
 }
 
 /**
- * How many bytes are turned into characters per `String.fromCharCode` call.
- *
- * Spreading a whole file into one call overflows the argument limit — a 5MB
- * scan is 5 million arguments — and it fails as a RangeError deep inside the
- * conversion, which reads like a corrupt file rather than a size problem.
- */
-const BASE64_CHUNK_BYTES = 0x8000;
-
-/**
  * Read a blob back as a `data:` URL.
  *
  * Data URLs are what let the packet be ONE file. A sale packet is emailed, put
  * on a USB stick, and opened on a phone; a folder of loose files with an index
  * referencing them by relative path survives none of that.
  *
- * Built on `arrayBuffer` and `btoa` rather than `FileReader`, which is a
- * browser-only global — the conversion is the part most worth testing, and a
- * FileReader implementation could only ever be tested in a browser.
+ * The encoding itself lives in the vault, shared with the workspace backup:
+ * both are round trips of the same bytes, and two encoders that disagree lose
+ * files silently.
  */
 async function toDataUrl(blob: Blob, mimeType: string): Promise<string> {
-  const bytes = new Uint8Array(await blob.arrayBuffer());
-
-  let binary = '';
-  for (let offset = 0; offset < bytes.length; offset += BASE64_CHUNK_BYTES) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + BASE64_CHUNK_BYTES));
-  }
-
-  return `data:${mimeType || 'application/octet-stream'};base64,${btoa(binary)}`;
+  return `data:${mimeType || 'application/octet-stream'};base64,${await blobToBase64(blob)}`;
 }
 
 /**

@@ -15,7 +15,10 @@ import { ranchReportSections } from './ranchReportExport.js';
  * both at once instead of in whichever one someone remembered.
  */
 export async function renderReportPdf(report: RanchReport, ranchName: string): Promise<Uint8Array> {
-  const generatedOn = report.generatedAt.slice(0, 10);
+  // The report's own local calendar date. See ranchReport.ts: the UTC slice
+  // printed tomorrow's date on a US evening, beside monthly totals keyed to
+  // today — on the page that goes to a banker.
+  const generatedOn = report.generatedOn;
   return createSectionedPdf({
     title: 'Ranch Report',
     letterhead: ranchName || 'XBAR Ranch Ledger',

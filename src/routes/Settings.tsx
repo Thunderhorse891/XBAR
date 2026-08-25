@@ -15,6 +15,7 @@ import { workspaceStorageDriverLabel } from '@/lib/workspaceStorage';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
+import { type PortableLocalFile, exportLocalFiles, importLocalFiles, referencedVaultKeys } from '@/lib/localFileVault';
 import type { UserRole } from '@/types/xbar';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 
@@ -69,6 +70,7 @@ export default function Settings() {
   const [cloudBusy, setCloudBusy] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [exportingBackup, setExportingBackup] = useState(false);
   const facebookConnected = cloudSession?.user?.app_metadata?.provider === 'facebook';
   const activeMembers = workspaceMembers.filter((member) => member.status === 'Active');
   const pendingInvites = workspaceInvitations.filter((invite) => invite.status === 'Pending');
@@ -78,20 +80,53 @@ export default function Settings() {
     setProfileDraft(workspaceProfile);
   }, [workspaceProfile]);
 
-  const handleExport = () => {
+  /*
+   * The backup carries the files, not just the records that mention them.
+   *
+   * The workspace JSON keeps only an opaque `localFileKey` per document and
+   * receipt; the bytes live in a separate IndexedDB store. Restored on a second
+   * device, every one of those records was listed as stored on-device and could
+   * not be opened — the backup a rancher runs precisely so they do not lose
+   * their proof was leaving all of it behind.
+   */
+  const handleExport = async () => {
+    if (exportingBackup) return;
+    setExportingBackup(true);
     let url = '';
     try {
       const backup = exportWorkspaceBackup();
-      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      const workspace = backup.workspace as {
+        documents?: { localFileKey?: string }[];
+        expenseReceipts?: { localFileKey?: string }[];
+        salePacketBuilds?: { localFileKey?: string }[];
+      };
+      const { files, skipped } = await exportLocalFiles(
+        referencedVaultKeys(
+          workspace.documents ?? [],
+          workspace.expenseReceipts ?? [],
+          workspace.salePacketBuilds ?? [],
+        ),
+      );
+
+      const blob = new Blob([JSON.stringify({ ...backup, files }, null, 2)], { type: 'application/json' });
       url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
       anchor.download = `xbar-workspace-${backup.exportedAt.slice(0, 10)}.json`;
       anchor.click();
+
+      // What went in, and what did not. A backup that quietly omits files is
+      // the failure this change exists to remove, so an incomplete one says so
+      // rather than reporting plain success.
+      const fileSummary = files.length
+        ? `${files.length} file${files.length === 1 ? '' : 's'} included.`
+        : 'No files were stored on this device.';
       pushToast({
-        title: 'Backup exported',
-        message: 'Ranch backup downloaded successfully.',
-        tone: 'success',
+        title: skipped.length ? 'Backup exported — some files not included' : 'Backup exported',
+        message: skipped.length
+          ? `${fileSummary} ${skipped.length} could not be included: ${skipped.map((entry) => `${entry.name} (${entry.reason})`).join('; ')}`
+          : `Ranch backup downloaded. ${fileSummary}`,
+        tone: skipped.length ? 'warning' : 'success',
       });
     } catch {
       pushToast({
@@ -101,6 +136,7 @@ export default function Settings() {
       });
     } finally {
       if (url) URL.revokeObjectURL(url);
+      setExportingBackup(false);
     }
   };
 
@@ -136,10 +172,21 @@ export default function Settings() {
     if (!file) return;
     try {
       const text = await file.text();
-      const result = importWorkspaceBackup(JSON.parse(text));
+      const payload = JSON.parse(text) as { files?: PortableLocalFile[] };
+
+      // Files first, then the records that point at them. Restored under their
+      // ORIGINAL keys — a fresh key would leave every document pointing at
+      // nothing. A backup written before this shipped has no `files`, and
+      // restores exactly as it always did.
+      const restored = Array.isArray(payload.files) ? await importLocalFiles(payload.files) : 0;
+      const result = importWorkspaceBackup(payload);
+
       pushToast({
         title: result.ok ? 'Backup imported' : 'Import blocked',
-        message: result.message,
+        message:
+          result.ok && restored
+            ? `${result.message} ${restored} file${restored === 1 ? '' : 's'} restored to this device.`
+            : result.message,
         tone: result.ok ? 'success' : 'error',
       });
     } catch {
@@ -800,10 +847,10 @@ export default function Settings() {
           <button
             className="button button--primary button--compact"
             type="button"
-            onClick={handleExport}
-            disabled={!canManageSettings}
+            onClick={() => void handleExport()}
+            disabled={!canManageSettings || exportingBackup}
           >
-            Export backup
+            {exportingBackup ? 'Preparing backup...' : 'Export backup'}
           </button>
           <button
             className="button button--ghost button--compact"
