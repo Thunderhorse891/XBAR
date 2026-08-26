@@ -302,9 +302,30 @@ export default function Settings() {
        * verifiable: opened from disk it is not same-origin with XBAR, and its
        * verifier runs there with no CSP to satisfy.
        */
-      const { restored, failed } = Array.isArray(payload.files)
+      const { restored, failed, remapped } = Array.isArray(payload.files)
         ? await importLocalFiles(payload.files, { workspaceId: vaultOwnerId() })
-        : { restored: 0, failed: [] as UnbackedUpFile[] };
+        : { restored: 0, failed: [] as UnbackedUpFile[], remapped: {} as Record<string, string> };
+
+      /*
+       * Follow any keys the vault had to re-mint.
+       *
+       * A key in this backup can already exist in the origin-wide vault owned by
+       * ANOTHER account in this browser. Restoring over it would destroy that
+       * account's only local copy, so the vault mints a fresh key instead — and
+       * the restored records still point at the old one until they are rewritten
+       * here. Without this the file lands and the document opens to nothing.
+       */
+      if (Object.keys(remapped).length > 0) {
+        for (const group of ['documents', 'expenseReceipts', 'salePacketBuilds'] as const) {
+          const records = (workspace as Record<string, unknown>)[group];
+          if (!Array.isArray(records)) continue;
+          for (const record of records as { localFileKey?: string }[]) {
+            const next = record?.localFileKey ? remapped[record.localFileKey] : undefined;
+            if (next) record.localFileKey = next;
+          }
+        }
+      }
+
       const result = importWorkspaceBackup(payload);
 
       /*

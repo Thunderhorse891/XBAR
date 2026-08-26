@@ -431,7 +431,23 @@ export async function exportLocalFiles(
 export async function importLocalFiles(
   files: PortableLocalFile[],
   context: { workspaceId: string },
-): Promise<{ restored: number; failed: UnbackedUpFile[] }> {
+): Promise<{ restored: number; failed: UnbackedUpFile[]; remapped: Record<string, string> }> {
+  /*
+   * Keys are preserved only when they are free, or already ours.
+   *
+   * The vault is origin-wide and the keys in a backup were minted in whatever
+   * workspace exported it. Restoring under the original key therefore
+   * OVERWRITES a colliding entry belonging to another account in this browser
+   * and retags it to the importer — after which a sweep or account deletion of
+   * the importer permanently removes the only local copy the other account
+   * still referenced. Someone else's document, destroyed by your restore.
+   *
+   * A colliding key from another workspace is minted fresh instead, and the
+   * mapping is returned so the caller can rewrite the restored records to point
+   * at the new key. Without that rewrite the file would land and the record
+   * would still point at the old one.
+   */
+  const remapped: Record<string, string> = {};
   const failed: UnbackedUpFile[] = [];
 
   if (!isLocalFileVaultAvailable()) {
@@ -441,6 +457,7 @@ export async function importLocalFiles(
         name: file?.name || file?.key || 'a file',
         reason: 'this browser cannot store files on this device',
       })),
+      remapped: {},
     };
   }
 
@@ -451,9 +468,16 @@ export async function importLocalFiles(
       continue;
     }
     try {
+      const existing = await readLocalFile(file.key);
+      let key = file.key;
+      if (existing && existing.workspaceId !== context.workspaceId) {
+        key = createVaultKey();
+        remapped[file.key] = key;
+      }
+
       const bytes = base64ToBytes(file.data);
       const entry: LocalFileEntry = {
-        key: file.key,
+        key,
         name: file.name || 'restored-file',
         type: file.type || '',
         size: bytes.byteLength,
@@ -492,7 +516,7 @@ export async function importLocalFiles(
     }
   }
 
-  return { restored, failed };
+  return { restored, failed, remapped };
 }
 
 /**

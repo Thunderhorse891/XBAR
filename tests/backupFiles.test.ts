@@ -602,3 +602,74 @@ test('the preflight refuses a payload that normalizes into unusable records', as
   const checkAt = source.indexOf('for (const collection of IDENTIFIED_COLLECTIONS)');
   assert.ok(normalizeAt > -1 && checkAt > normalizeAt, 'the records are validated after they are normalized');
 });
+
+test('an imported key never overwrites another workspace file', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    /*
+     * The vault is origin-wide and the keys in a backup were minted wherever it
+     * was exported. Restoring under the original key overwrote a colliding
+     * entry belonging to ANOTHER account in this browser and retagged it to the
+     * importer — after which a sweep or account deletion of the importer
+     * permanently removed the only local copy the other account still
+     * referenced. Someone else's document, destroyed by your restore.
+     */
+    const theirs = await storeLocalFile(new Blob(['theirs']), 'theirs.pdf', undefined, 'ws-a');
+
+    const { restored, remapped } = await importLocalFiles(
+      [{ key: theirs, name: 'mine.pdf', type: '', size: 4, storedAt: '', data: btoa('mine') }],
+      { workspaceId: 'ws-b' },
+    );
+
+    assert.equal(restored, 1);
+    assert.equal(typeof remapped[theirs], 'string', 'the collision must be reported so records can follow it');
+    assert.notEqual(remapped[theirs], theirs);
+
+    const survivor = await readLocalFile(theirs);
+    assert.equal(survivor?.workspaceId, 'ws-a', 'the other workspace must keep its file and its ownership');
+
+    const mine = await readLocalFile(remapped[theirs]);
+    assert.equal(mine?.workspaceId, 'ws-b', 'and the import lands under a key of its own');
+  } finally {
+    restore();
+  }
+});
+
+test('a key that is free, or already ours, is preserved', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    // Remapping unconditionally would break the ordinary restore-onto-an-empty
+    // -device case, which is what backups are mostly for.
+    const { remapped } = await importLocalFiles(
+      [{ key: 'vault-free', name: 'a.pdf', type: '', size: 1, storedAt: '', data: btoa('a') }],
+      { workspaceId: 'ws-b' },
+    );
+    assert.deepEqual(remapped, {}, 'a free key is kept');
+
+    const ours = await storeLocalFile(new Blob(['ours']), 'ours.pdf', undefined, 'ws-b');
+    const second = await importLocalFiles(
+      [{ key: ours, name: 'ours.pdf', type: '', size: 4, storedAt: '', data: btoa('new!') }],
+      { workspaceId: 'ws-b' },
+    );
+    assert.deepEqual(second.remapped, {}, 're-importing our own backup overwrites our own file, as it should');
+  } finally {
+    restore();
+  }
+});
+
+test('restored records follow a re-minted key', async () => {
+  const settings = await readFile('src/routes/Settings.tsx', 'utf8');
+  const logic = await readFile('src/store/xbarStoreLogic.ts', 'utf8');
+
+  assert.match(settings, /if \(next\) record\.localFileKey = next;/, 'the records must be rewritten to the new key');
+
+  /*
+   * That rewrite mutates the object `workspaceBackupPayload` returned, and
+   * relies on it being the SAME object `importWorkspaceBackup` will read. Both
+   * of its branches return a reference rather than a copy — pinned here,
+   * because if that ever became a copy the remap would silently stop applying
+   * and documents would restore pointing at nothing.
+   */
+  assert.match(logic, /\? \(backup as \{ workspace: unknown \}\)\.workspace\s*:\s*backup;/);
+  assert.ok(!/return \{ \.\.\.record \};/.test(logic), 'workspaceBackupPayload must not start returning a copy');
+});

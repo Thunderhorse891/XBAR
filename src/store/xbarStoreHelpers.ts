@@ -411,6 +411,31 @@ export function canRestorePersistedState(raw: unknown): boolean {
     }
   }
 
+  /*
+   * Horses need more than an id, and "identity is the invariant" was too narrow.
+   *
+   * `{ id: 'horse-1', name: 'Horse' }` has an id and normalizes cleanly, but
+   * normalization does not supply the nested objects — so the state installs
+   * and the first route to reach `horse.readiness.packetStatus` or
+   * `horse.sale.askPrice` throws on a screen the rancher just opened.
+   *
+   * Only the shapes routes actually dereference are checked, and only on
+   * horses, which is the record with the deep reads. A full runtime schema for
+   * every collection is a second description of "valid" that would drift from
+   * the types — the trade the original comment was right about, and the reason
+   * this stops at the fields that actually crash.
+   */
+  for (const horse of state.horses as unknown[]) {
+    const record = horse as Record<string, unknown>;
+    for (const nested of ['bloodline', 'assignments', 'sale', 'readiness']) {
+      const value = record[nested];
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    }
+    for (const list of ['gallery', 'breedingTimeline', 'documentFacts', 'alerts']) {
+      if (!Array.isArray(record[list])) return false;
+    }
+  }
+
   return true;
 }
 
