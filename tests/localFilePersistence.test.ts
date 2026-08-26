@@ -563,8 +563,8 @@ test('the sweep refuses when the records on screen belong to another workspace',
   assert.match(store, /rememberRecordsOwner\(vaultOwnerId\(\)\)/);
   assert.equal(
     (store.match(/rememberRecordsOwner\(/g) ?? []).length,
-    2,
-    'the marker must be written wherever the whole record set is replaced — import and setup',
+    3,
+    'the marker must be written wherever the whole record set is replaced — a backup import, and BOTH of initializeWorkspace’s success paths',
   );
 
   // Browser state, not workspace data: carried inside a backup it would travel

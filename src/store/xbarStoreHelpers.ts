@@ -456,7 +456,23 @@ export function canRestorePersistedState(raw: unknown): boolean {
    * exactly how `owner` and `legalOwner` survived the previous sweep. Fields
    * passed into helpers have to be read for, not grepped for.
    */
-  const NESTED_SHAPES: Record<string, { objects?: string[]; lists?: string[]; strings?: string[] }> = {
+  /*
+   * `itemShapes` validates what is INSIDE an array, which `lists` cannot.
+   *
+   * `breedingTimeline: [null]` satisfies `Array.isArray` and then throws the
+   * moment Breeding reads `event.id`. Every array here holds objects whose
+   * fields are dereferenced somewhere, so each entry must at least be a plain
+   * object; `strings` adds the fields a route calls a string method on.
+   */
+  const NESTED_SHAPES: Record<
+    string,
+    {
+      objects?: string[];
+      lists?: string[];
+      strings?: string[];
+      itemShapes?: Record<string, { strings?: string[] }>;
+    }
+  > = {
     horses: {
       // `horse.location.barn` / `.pasture` — Horses.tsx:121, Breeding.tsx:268.
       objects: ['bloodline', 'assignments', 'sale', 'readiness', 'location'],
@@ -481,6 +497,20 @@ export function canRestorePersistedState(raw: unknown): boolean {
       // `horse.owner` → `rawName.trim()` — commandPalette.ts:121.
       // `h.segment.toLowerCase()` — Sales.tsx:320.
       strings: ['name', 'owner', 'segment'],
+      itemShapes: {
+        // `event.title.toLowerCase()` — Breeding.tsx:293; `event.id` — :311.
+        breedingTimeline: { strings: ['id', 'title'] },
+        // `ev.id === eventId` — useXbarStore.ts:1848.
+        medicalTimeline: { strings: ['id'] },
+        // `asset.status` / `asset.kind` — xbarPhaseTwo.ts:241, publicShare.ts:109.
+        gallery: { strings: ['status', 'kind'] },
+        // `stake.share` / `stake.role` / `stake.name` — ownership/selectors.ts:13-14.
+        ownership: { strings: ['name', 'role'] },
+        // `fact.id === factId` — useXbarStore.ts:2513.
+        documentFacts: { strings: ['id'] },
+        // `horse.alerts.some(...)` reads fields off each alert — xbarPhaseTwo.ts:253.
+        alerts: {},
+      },
     },
     // `document.entities.horseName` and four siblings — Documents.tsx:724.
     // `document.title.trim()` — useXbarStore.ts:842, beside optional-chained
@@ -569,6 +599,21 @@ export function canRestorePersistedState(raw: unknown): boolean {
        */
       for (const field of shape.strings ?? []) {
         if (typeof valueAtPath(record, field) !== 'string') return false;
+      }
+      /*
+       * The entries, not just the container. A `null` in one of these arrays
+       * throws on the first property access, and the routes reach for these
+       * fields without checking.
+       */
+      for (const [list, itemShape] of Object.entries(shape.itemShapes ?? {})) {
+        const entries = valueAtPath(record, list);
+        if (!Array.isArray(entries)) return false;
+        for (const item of entries as unknown[]) {
+          if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+          for (const field of itemShape.strings ?? []) {
+            if (typeof (item as Record<string, unknown>)[field] !== 'string') return false;
+          }
+        }
       }
     }
   }

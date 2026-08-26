@@ -912,6 +912,20 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * is already stored, which is the same too-late ordering as the rest of these.
    */
   assert.match(helpers, /'readiness\.blockers',/);
+
+  /*
+   * The entries, not just the container. `breedingTimeline: [null]` satisfies
+   * `Array.isArray` and throws the moment Breeding reads `event.id`; a non-null
+   * entry with no `title` throws on `event.title.toLowerCase()`.
+   */
+  assert.match(helpers, /breedingTimeline: \{ strings: \['id', 'title'\] \}/);
+  assert.match(helpers, /gallery: \{ strings: \['status', 'kind'\] \}/);
+  assert.match(helpers, /ownership: \{ strings: \['name', 'role'\] \}/);
+  assert.match(
+    helpers,
+    /if \(!item \|\| typeof item !== 'object' \|\| Array\.isArray\(item\)\) return false;/,
+    'a null entry is the whole point — every item must be a plain object',
+  );
   assert.match(helpers, /path\.split\('\.'\)\.reduce/, 'the table has to be able to express a path, not just a field');
 
   /*
@@ -923,8 +937,8 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    */
   assert.equal(
     (helpers.match(/valueAtPath\(record, /g) ?? []).length,
-    3,
-    'objects, lists and strings must all resolve paths, or a valid archive is rejected',
+    4,
+    'objects, lists, strings and item shapes must all resolve paths, or a valid archive is rejected',
   );
 
   /*
@@ -960,19 +974,6 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   assert.match(helpers, /if \(typeof valueAtPath\(record, field\) !== 'string'\) return false;/);
 
   /*
-   * All THREE loops must resolve the path, and OVER-REJECTION is the failure to
-   * watch here rather than over-acceptance: a loop still doing `record[list]`
-   * looks up the literal key `'readiness.blockers'`, finds nothing, and refuses
-   * every well-formed horse — turning away a backup that restores perfectly,
-   * which no amount of caution justifies.
-   */
-  assert.equal(
-    (helpers.match(/valueAtPath\(record, /g) ?? []).length,
-    3,
-    'objects, lists and strings must all resolve paths, or a valid archive is rejected',
-  );
-
-  /*
    * Tied to the dereferences the guard exists for, so this fails if a route
    * stops reading them — at which point the entry is dead weight — rather than
    * asserting a list against itself.
@@ -998,6 +999,9 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     ['src/routes/AnimalProfile.tsx', /animal\.activity\.length/],
     ['src/routes/Ownership.tsx', /selectedRecord\.auditTrail\.length/],
     ['src/store/useXbarStore.ts', /horse\.readiness\.blockers\.filter\(/],
+    ['src/routes/Breeding.tsx', /event\.title\.toLowerCase\(\)/],
+    ['src/lib/xbarPhaseTwo.ts', /asset\.kind === 'Hero' && asset\.status === 'Approved'/],
+    ['src/features/ownership/selectors.ts', /stake\.role === 'Legal Owner'/],
   ] as const) {
     assert.match(await readFile(route, 'utf8'), deref, `${route} still reads this unguarded`);
   }
@@ -1151,4 +1155,33 @@ test('a file that cannot be moved is named rather than counted as moved', async 
   } finally {
     restoreFailing();
   }
+});
+
+test('a new workspace claims its records on the path first-run actually takes', async () => {
+  const store = await readFile('src/store/useXbarStore.ts', 'utf8');
+  const setup = await readFile('src/routes/SetupWorkspace.tsx', 'utf8');
+
+  /*
+   * `initializeWorkspace` has TWO success returns, and the marker was only on
+   * the second — the profile update. `SetupWorkspace` calls the action and
+   * navigates away, so a brand-new local ranch on a Supabase-configured
+   * deployment carried no owner marker at all and the sweep withheld itself
+   * forever: orphaned blobs accumulating until the rancher happened to edit
+   * their profile.
+   */
+  assert.match(setup, /initializeWorkspace\(/, 'first-run really does go through this action');
+
+  const createdAt = store.indexOf("? 'Workspace created and legacy starter records were cleared.'");
+  const updatedAt = store.indexOf("return { ok: true, message: 'Workspace profile updated.' };");
+  const markers = [...store.matchAll(/rememberRecordsOwner\(vaultOwnerId\(\)\)/g)].map((match) => match.index ?? -1);
+
+  assert.ok(
+    markers.some((at) => at < createdAt),
+    'the creation path must claim the records — it is the one first-run takes',
+  );
+  assert.ok(
+    markers.some((at) => at > createdAt && at < updatedAt),
+    'and the update path still must, since either can be the first workspace this browser owns',
+  );
+  assert.equal(markers.length, 3, 'creation, update, and the backup import — a new one needs reviewing');
 });

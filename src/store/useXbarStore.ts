@@ -169,6 +169,19 @@ export const useXbarStore = create<XbarStore>()(
           workspaceProfile: nextProfile,
         });
 
+        /*
+         * The CREATION path, which is the one first-run actually takes.
+         *
+         * `initializeWorkspace` has two success returns, and the marker was
+         * only on the second — the profile update. `SetupWorkspace.tsx` calls
+         * this action and navigates away, so a brand-new local ranch on a
+         * Supabase-configured deployment carried no owner marker at all, and
+         * the sweep withheld itself forever: blobs from deleted documents,
+         * receipts and packets accumulating until the rancher happened to edit
+         * their profile.
+         */
+        rememberRecordsOwner(vaultOwnerId());
+
         return {
           ok: true,
           message: resetLegacyDemo
@@ -213,12 +226,8 @@ export const useXbarStore = create<XbarStore>()(
           sharedAccess: derived.sharedAccess,
           horses: derived.horses,
         });
-        /*
-         * Setting a workspace up claims the records for whoever is here now.
-         * Without this a browser that has only ever been local carries no
-         * marker, and the sweep withholds itself on a Supabase-configured
-         * deployment forever — blobs from deleted documents never reclaimed.
-         */
+        // The UPDATE path. Both returns claim the records, because either one
+        // can be the moment this browser first has a workspace to own.
         rememberRecordsOwner(vaultOwnerId());
         return { ok: true, message: 'Workspace profile updated.' };
       },
