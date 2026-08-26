@@ -965,6 +965,27 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   );
 
   assert.match(helpers, /gallery: \{ strings: \['status', 'kind'\] \}/);
+
+  /*
+   * `documentFacts` checked only `id`, so
+   * `{ id: 'fact-1', label: {}, value: 'x' }` installed and then threw on the
+   * Documents tab of the restored horse — `{f.label}` and `{f.value}` go
+   * straight into JSX.
+   *
+   * `decision` is the same crash and cannot be required: it is optional in the
+   * type and genuinely absent on most facts, so demanding it would turn away
+   * valid archives. `{f.decision ?? 'Review'}` does not protect it — `??`
+   * catches null and undefined, never an object.
+   */
+  assert.match(
+    shapeTable,
+    /documentFacts: \{\s*strings: \['id', 'label', 'value'\],\s*optionalStrings: \['decision'\],\s*\}/,
+  );
+  assert.match(
+    helperCode,
+    /for \(const field of itemShape\.optionalStrings \?\? \[\]\) \{[\s\S]{0,200}?value !== undefined && value !== null && typeof value !== 'string'/,
+    'an absent optional field must pass; a wrong-typed one must not',
+  );
   assert.match(helpers, /ownership: \{ strings: \['name', 'role'\] \}/);
   assert.match(
     helpers,
@@ -1059,6 +1080,9 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     ['src/routes/AnimalProfile.tsx', /<div className="xs-tl__title">\{e\.title\}<\/div>/],
     ['src/routes/AnimalProfile.tsx', /\{e\.summary\} · \{e\.date\}/],
     ['src/components/InteractionSystem.tsx', /<dd>\{fact\.value\}<\/dd>/],
+    ['src/routes/AnimalProfile.tsx', /<span className="xs-mrow__title">\{f\.label\}<\/span>/],
+    ['src/routes/AnimalProfile.tsx', /<span className="xs-mrow__detail">\{f\.value\}<\/span>/],
+    ['src/routes/AnimalProfile.tsx', /\{f\.decision \?\? 'Review'\}/],
     ['src/routes/Expenses.tsx', /uploadedBy: roleWorkspace\.label,/],
     /*
      * And the one that throws at the read: `formatDateLabel` calls `.trim()`

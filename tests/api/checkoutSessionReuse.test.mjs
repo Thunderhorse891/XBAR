@@ -764,3 +764,52 @@ test('the billing row is read after the claim, and only once', () => {
     'the entitlement gate must run on the post-claim row, and only on it',
   );
 });
+
+test('the lock stores an absolute instant, not a session-zone wall clock', () => {
+  const sql = readFileSync('supabase/migrations/20260826_checkout_session_lock.sql', 'utf8');
+  // Comments stripped: the explanation below names the broken expression, and
+  // an assertion satisfied by its own rationale proves nothing.
+  const statements = sql.replace(/--[^\n]*/g, '');
+
+  /*
+   * `timezone('utc', now())` strips the zone and yields a bare `timestamp`
+   * holding the UTC wall clock. Assigning that to a `timestamptz` column
+   * reinterprets it in the SESSION's TimeZone, so the stored instant is off by
+   * the session offset — while `p_stale_before` arrives from
+   * api/_lib/checkout-session.js as a real UTC instant.
+   *
+   * Verified against PostgreSQL 16.13, claiming and then immediately
+   * re-claiming the same workspace:
+   *
+   *   zone               skew      second claim   reclaim after TTL
+   *   Asia/Kolkata       -5:30     GRANTED        granted
+   *   America/New_York   +4:00     refused        REFUSED
+   *   UTC                 0:00     refused        granted
+   *
+   * The first row is two concurrent `mode: 'subscription'` sessions — the
+   * double charge the lock exists to prevent. The second is a dead
+   * invocation's lock still unclaimable hours later, wedging the workspace out
+   * of buying anything. The third is why this survived a round of verification
+   * against a real database: a UTC session cannot express the bug.
+   */
+  assert.doesNotMatch(
+    statements,
+    /checkout_lock_at\s*=\s*timezone\(/,
+    'the update must not store a zone-stripped wall clock',
+  );
+  assert.doesNotMatch(
+    statements,
+    /values \(p_workspace_id, timezone\(/,
+    'nor may the insert, which is the path a first-ever checkout takes',
+  );
+  assert.match(statements, /values \(p_workspace_id, now\(\), p_token\)/);
+  assert.match(statements, /set checkout_lock_at = now\(\),/);
+
+  /*
+   * Tied to the API side, because the comparison is what makes the zone matter:
+   * both ends must be absolute instants or the lease arithmetic is nonsense.
+   */
+  const api = readFileSync('api/_lib/checkout-session.js', 'utf8');
+  assert.match(api, /const staleBefore = new Date\(now\.getTime\(\) - CHECKOUT_LOCK_MS\)\.toISOString\(\);/);
+  assert.match(api, /\.update\(\{ checkout_lock_at: now\.toISOString\(\) \}\)/);
+});

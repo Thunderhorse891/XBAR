@@ -122,10 +122,40 @@ as $$
 declare
   claimed boolean;
 begin
+  -- `now()`, NOT `timezone('utc', now())`.
+  --
+  -- `timezone('utc', now())` strips the zone and returns a bare `timestamp`
+  -- holding the UTC wall clock. Assigning that to a `timestamptz` column
+  -- reinterprets it in the SESSION's TimeZone, so the stored instant is off by
+  -- the session's offset — and it is compared against `p_stale_before`, which
+  -- the API sends as a real UTC instant.
+  --
+  -- Both directions break the lock, verified against PostgreSQL 16:
+  --
+  --   Asia/Kolkata (+05:30)     stored 5h30m in the PAST, so the very next
+  --                             request finds the lock already stale and
+  --                             claims it — two concurrent subscription
+  --                             sessions, which is the double charge this
+  --                             whole mechanism exists to prevent.
+  --   America/New_York (-04:00) stored 4h in the FUTURE, so a dead
+  --                             invocation's lock is still unclaimable three
+  --                             hours later, wedging the workspace out of
+  --                             buying anything.
+  --
+  -- A UTC session hides it completely — the skew is zero and every test
+  -- passes — which is why this survived a round of verification against a real
+  -- database. Supabase defaults to UTC, so this is latent rather than active
+  -- there, but a role or database carrying `SET TimeZone`, or a self-hosted
+  -- deployment, fires it.
+  --
+  -- `now()` is already `timestamptz`: an absolute instant, correct in every
+  -- session zone. `renewCheckoutLock` in api/_lib/checkout-session.js writes
+  -- `now.toISOString()`, which is likewise absolute, so this also stops the
+  -- claim and the renewal disagreeing about when the lock was taken.
   insert into public.workspace_billing_customers as billing (workspace_id, checkout_lock_at, checkout_lock_token)
-  values (p_workspace_id, timezone('utc', now()), p_token)
+  values (p_workspace_id, now(), p_token)
   on conflict (workspace_id) do update
-    set checkout_lock_at = timezone('utc', now()),
+    set checkout_lock_at = now(),
         checkout_lock_token = p_token
     where billing.checkout_lock_at is null
        or billing.checkout_lock_at < p_stale_before

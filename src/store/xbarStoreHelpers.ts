@@ -497,7 +497,21 @@ export function canRestorePersistedState(raw: unknown): boolean {
       objects?: string[];
       lists?: string[];
       strings?: string[];
-      itemShapes?: Record<string, { strings?: string[] }>;
+      itemShapes?: Record<
+        string,
+        {
+          strings?: string[];
+          /*
+           * Fields that must be a string WHEN PRESENT.
+           *
+           * `strings` cannot express this: it demands presence, and demanding
+           * an optional field turns away every archive that legitimately omits
+           * it — over-rejection, which loses a valid backup rather than a
+           * broken one.
+           */
+          optionalStrings?: string[];
+        }
+      >;
       /*
        * Arrays whose entries are strings. `itemShapes` cannot express this —
        * it requires every entry to be a plain object — and `lists` stops at
@@ -546,8 +560,27 @@ export function canRestorePersistedState(raw: unknown): boolean {
         gallery: { strings: ['status', 'kind'] },
         // `stake.share` / `stake.role` / `stake.name` — ownership/selectors.ts:13-14.
         ownership: { strings: ['name', 'role'] },
-        // `fact.id === factId` — useXbarStore.ts:2513.
-        documentFacts: { strings: ['id'] },
+        /*
+         * `fact.id === factId` — useXbarStore.ts:2513 — and `{f.label}` /
+         * `{f.value}` rendered straight into JSX at AnimalProfile.tsx:528-529.
+         * Checking only `id` let `{ id: 'fact-1', label: {}, value: 'x' }`
+         * install and then throw "Objects are not valid as a React child" on
+         * the Documents tab of the restored horse.
+         *
+         * Both have been required by DocumentFact since the first commit of
+         * types/xbar.ts, so requiring them cannot turn away a real archive.
+         */
+        documentFacts: {
+          strings: ['id', 'label', 'value'],
+          /*
+           * `{f.decision ?? 'Review'}` — AnimalProfile.tsx:534. `??` catches
+           * null and undefined, not an object, so a non-string `decision`
+           * renders and crashes exactly like `label` does. It is optional in
+           * the type and genuinely absent on most facts, so it can only be
+           * checked when present.
+           */
+          optionalStrings: ['decision'],
+        },
         // `horse.alerts.some(...)` reads fields off each alert — xbarPhaseTwo.ts:253.
         alerts: {},
       },
@@ -675,6 +708,14 @@ export function canRestorePersistedState(raw: unknown): boolean {
           if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
           for (const field of itemShape.strings ?? []) {
             if (typeof (item as Record<string, unknown>)[field] !== 'string') return false;
+          }
+          /*
+           * Absent is fine, wrong-typed is not. An optional field a backup
+           * DOES supply still reaches the same render as a required one.
+           */
+          for (const field of itemShape.optionalStrings ?? []) {
+            const value = (item as Record<string, unknown>)[field];
+            if (value !== undefined && value !== null && typeof value !== 'string') return false;
           }
         }
       }
