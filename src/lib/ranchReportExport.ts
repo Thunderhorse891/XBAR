@@ -153,7 +153,9 @@ export function ranchReportSections(report: RanchReport) {
       `Monthly burn (3-month average): ${money(report.money.monthlyBurn)}`,
       `Listed for sale: ${money(report.money.listedValue)}`,
       `Ready to close today: ${money(report.money.readyValue)}`,
-      `Waiting on documents: ${money(report.money.valueAtRisk)}`,
+      // Any blocker, not only a document one — a medical review or an unmarked
+      // transfer lands here too, and this page is read by a lender.
+      `Held up by blockers: ${money(report.money.valueAtRisk)}`,
       `Open offers: ${money(report.money.pipelineValue)}`,
       `Deposits held: ${money(report.money.depositsHeld)}`,
     ],

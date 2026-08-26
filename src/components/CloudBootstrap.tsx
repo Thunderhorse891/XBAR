@@ -11,6 +11,7 @@ export function CloudBootstrap() {
   const workspaceId = useCloudStore((state) => state.workspaceId);
   const workspaceRole = useCloudStore((state) => state.workspaceRole);
   const autosaveReady = useCloudStore((state) => state.autosaveReady);
+  const autosaveUnlocked = useCloudStore((state) => state.autosaveUnlocked);
   const setLastSyncAt = useCloudStore((state) => state.setLastSyncAt);
   const setSyncState = useCloudStore((state) => state.setSyncState);
   const setAutosaveReady = useCloudStore((state) => state.setAutosaveReady);
@@ -19,7 +20,6 @@ export function CloudBootstrap() {
   const exportWorkspaceBackup = useXbarStore((state) => state.exportWorkspaceBackup);
   const workspaceHydrated = useWorkspaceHydrated();
   const hydrationKeyRef = useRef('');
-  const autosaveUnlockedRef = useRef(false);
   const lastPersistedSignatureRef = useRef('');
 
   useEffect(() => {
@@ -42,9 +42,8 @@ export function CloudBootstrap() {
 
     if (cloudStatus !== 'signed-in' || !session?.user.id) {
       hydrationKeyRef.current = '';
-      autosaveUnlockedRef.current = false;
       lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
-      setAutosaveReady(false);
+      setAutosaveReady(false, false);
       setSyncState('idle');
       return;
     }
@@ -52,16 +51,16 @@ export function CloudBootstrap() {
     const hydrationKey = `${session.user.id}:${workspaceId || 'primary'}`;
     if (hydrationKeyRef.current === hydrationKey) return;
     hydrationKeyRef.current = hydrationKey;
-    autosaveUnlockedRef.current = false;
-    setAutosaveReady(false);
+    setAutosaveReady(false, false);
     let cancelled = false;
 
     const finish = (unlocked: boolean, state: 'idle' | 'error', message: string) => {
       if (cancelled) return;
-      autosaveUnlockedRef.current = unlocked;
       lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
       setSyncState(state, message);
-      setAutosaveReady(true);
+      // `unlocked` is false for `conflict-lock` and for a failed remote load.
+      // Ready means hydration stopped; unlocked means it settled on a copy.
+      setAutosaveReady(true, unlocked);
     };
 
     const hydrate = async () => {
@@ -133,7 +132,7 @@ export function CloudBootstrap() {
 
   useEffect(() => {
     if (!workspaceHydrated) return;
-    if (cloudStatus !== 'signed-in' || !autosaveReady || !autosaveUnlockedRef.current) return;
+    if (cloudStatus !== 'signed-in' || !autosaveReady || !autosaveUnlocked) return;
     let disposed = false;
     let syncTimeout: number | undefined;
     let saving = false;
@@ -177,7 +176,15 @@ export function CloudBootstrap() {
       unsubscribe();
       window.removeEventListener('online', queuePersist);
     };
-  }, [autosaveReady, cloudStatus, exportWorkspaceBackup, setLastSyncAt, setSyncState, workspaceHydrated]);
+  }, [
+    autosaveReady,
+    autosaveUnlocked,
+    cloudStatus,
+    exportWorkspaceBackup,
+    setLastSyncAt,
+    setSyncState,
+    workspaceHydrated,
+  ]);
 
   return null;
 }

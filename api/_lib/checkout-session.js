@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 /*
  * What to do about Checkout Sessions this workspace already has open.
  *
@@ -87,13 +89,20 @@ export const CHECKOUT_LOCK_MS = 2 * 60 * 1000;
  * current minute still let two requests straddling a minute boundary through.
  * Any key derived from time has a boundary somewhere.
  *
+ * The claim records WHO holds it, not just that it is held, and the token comes
+ * back so the release can prove ownership. Without that the release is
+ * unconditional, and an invocation that outlives the two-minute expiry clears a
+ * lock it no longer owns — A stalls past the TTL, B reclaims legitimately, A
+ * finishes and wipes the row, and C enters beside B.
+ *
  * A failed query is treated as NOT claimed. Unknown is not permission to create
  * a second billable session — the same fail-closed rule as the capacity gates.
  *
- * @returns {Promise<boolean>} true only when this request holds the claim.
+ * @returns {Promise<string>} The claim token, or '' when this request does not hold the claim.
  */
 export async function claimCheckoutLock(supabase, workspaceId, now = new Date()) {
   const staleBefore = new Date(now.getTime() - CHECKOUT_LOCK_MS).toISOString();
+  const token = randomUUID();
 
   /*
    * An RPC rather than a conditional UPDATE, because the row may not exist.
@@ -111,28 +120,42 @@ export async function claimCheckoutLock(supabase, workspaceId, now = new Date())
   const { data, error } = await supabase.rpc('xbar_claim_checkout_lock', {
     p_workspace_id: workspaceId,
     p_stale_before: staleBefore,
+    p_token: token,
   });
 
   if (error) {
     console.error('Claiming the checkout lock failed.', error);
-    return false;
+    return '';
   }
 
-  return data === true;
+  return data === true ? token : '';
 }
 
 /**
  * Release the claim so a legitimate retry does not wait out the expiry.
  *
- * Best effort by design: the expiry above is what actually guarantees progress,
- * and a failed release must never turn a completed checkout into an error.
+ * Matched on the token, so this only ever clears a lock THIS request still
+ * holds. An unconditional clear is not a smaller version of the same thing: an
+ * invocation slow enough to outlive the two-minute expiry would wipe the lock a
+ * later request had legitimately taken, letting a third in beside it — two
+ * concurrent session creations, arrived at through the release rather than the
+ * claim.
+ *
+ * Best effort otherwise, by design: the expiry above is what actually
+ * guarantees progress, and a failed release must never turn a completed
+ * checkout into an error.
  */
-export async function releaseCheckoutLock(supabase, workspaceId) {
+export async function releaseCheckoutLock(supabase, workspaceId, token) {
+  // No token means this request never held the claim. Clearing the row here
+  // would be releasing someone else's lock on the strength of having failed.
+  if (!token) return;
+
   try {
     await supabase
       .from('workspace_billing_customers')
-      .update({ checkout_lock_at: null })
-      .eq('workspace_id', workspaceId);
+      .update({ checkout_lock_at: null, checkout_lock_token: null })
+      .eq('workspace_id', workspaceId)
+      .eq('checkout_lock_token', token);
   } catch (error) {
     console.warn('Releasing the checkout lock failed; it will expire on its own.', error);
   }

@@ -65,8 +65,22 @@ begin;
 alter table public.workspace_billing_customers
   add column if not exists checkout_lock_at timestamptz;
 
+-- Who holds the lock, not merely that it is held.
+--
+-- Without this the release is unconditional, and an invocation that outlives
+-- the two-minute expiry clears a lock it no longer owns: request A stalls past
+-- the TTL, B legitimately reclaims, A finishes and wipes the row, and C walks
+-- in beside B. Two requests creating subscription sessions at once is the exact
+-- state the lock exists to prevent, reached through the release rather than the
+-- claim.
+alter table public.workspace_billing_customers
+  add column if not exists checkout_lock_token text;
+
 comment on column public.workspace_billing_customers.checkout_lock_at is
   'When a Checkout Session creation claimed this workspace. Serializes concurrent checkouts; expires after 2 minutes so a dead serverless invocation cannot wedge the workspace.';
+
+comment on column public.workspace_billing_customers.checkout_lock_token is
+  'Which invocation holds the claim. The release matches on this so a request that outlived the expiry cannot clear a lock another request has since taken.';
 
 -- Only rows currently holding a lock are ever scanned by the claim, and there
 -- are very few of those at any moment.
@@ -89,9 +103,16 @@ create index if not exists workspace_billing_customers_checkout_lock_idx
 --
 -- Every other column has a default, so seeding with the id alone is enough; the
 -- checkout flow fills the rest once Stripe has answered.
+-- The two-argument version is dropped rather than replaced. `create or replace`
+-- matches on the argument list, so creating the three-argument function beside
+-- an already-applied two-argument one leaves BOTH callable — and the old one
+-- claims without recording a holder, which is the defect this revision fixes.
+drop function if exists public.xbar_claim_checkout_lock(uuid, timestamptz);
+
 create or replace function public.xbar_claim_checkout_lock(
   p_workspace_id uuid,
-  p_stale_before timestamptz
+  p_stale_before timestamptz,
+  p_token text
 )
 returns boolean
 language plpgsql
@@ -101,10 +122,11 @@ as $$
 declare
   claimed boolean;
 begin
-  insert into public.workspace_billing_customers as billing (workspace_id, checkout_lock_at)
-  values (p_workspace_id, timezone('utc', now()))
+  insert into public.workspace_billing_customers as billing (workspace_id, checkout_lock_at, checkout_lock_token)
+  values (p_workspace_id, timezone('utc', now()), p_token)
   on conflict (workspace_id) do update
-    set checkout_lock_at = timezone('utc', now())
+    set checkout_lock_at = timezone('utc', now()),
+        checkout_lock_token = p_token
     where billing.checkout_lock_at is null
        or billing.checkout_lock_at < p_stale_before
   returning true into claimed;
@@ -115,9 +137,9 @@ $$;
 
 -- Same rule as 20260822: nothing is executable by PUBLIC or anon by default.
 -- Only the API's service role calls this.
-revoke all on function public.xbar_claim_checkout_lock(uuid, timestamptz) from public;
-revoke all on function public.xbar_claim_checkout_lock(uuid, timestamptz) from anon;
-revoke all on function public.xbar_claim_checkout_lock(uuid, timestamptz) from authenticated;
-grant execute on function public.xbar_claim_checkout_lock(uuid, timestamptz) to service_role;
+revoke all on function public.xbar_claim_checkout_lock(uuid, timestamptz, text) from public;
+revoke all on function public.xbar_claim_checkout_lock(uuid, timestamptz, text) from anon;
+revoke all on function public.xbar_claim_checkout_lock(uuid, timestamptz, text) from authenticated;
+grant execute on function public.xbar_claim_checkout_lock(uuid, timestamptz, text) to service_role;
 
 commit;

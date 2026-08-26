@@ -430,7 +430,7 @@ test('the sweep waits for cloud reconciliation, not just the workspace id', asyn
    * persisted workspace A while signed into B swept B's files against A's keys
    * and deleted them permanently, before B's records had loaded.
    */
-  assert.match(helper, /if \(useCloudStore\.getState\(\)\.autosaveReady\) \{/, 'the gate is reconciliation, not init');
+  assert.match(helper, /if \(settled\(useCloudStore\.getState\(\)\)\) \{/, 'the gate is reconciliation, not init');
   assert.ok(
     !/getState\(\)\.initialized/.test(helper) && !/cloud\.initialized/.test(helper),
     'waiting on initialize is the bug, not the fix — the prose may mention it, the code may not read it',
@@ -440,4 +440,57 @@ test('the sweep waits for cloud reconciliation, not just the workspace id', asyn
   // snapshot captured at rehydration.
   assert.match(store, /onWorkspaceSettled\(\(\) => \{\s*const current = useXbarStore\.getState\(\);/);
   assert.match(store, /referencedVaultKeys\(current\.documents, current\.expenseReceipts, current\.salePacketBuilds\)/);
+});
+
+test('readiness alone does not release the sweep — reconciliation must have chosen', async () => {
+  const helper = await readFile('src/lib/vaultOwner.ts', 'utf8');
+  const bootstrap = await readFile('src/components/CloudBootstrap.tsx', 'utf8');
+  const cloudStore = await readFile('src/store/useCloudStore.ts', 'utf8');
+
+  /*
+   * The second road into the same data loss. `autosaveReady` turns true on
+   * EVERY path out of CloudBootstrap — `conflict-lock` and a failed remote load
+   * included — so it means "hydration stopped", not "these records belong to
+   * the signed-in workspace". A browser that last persisted workspace A, signed
+   * into B, whose reconciliation cannot choose between them, reached the sweep
+   * with B's owner id and A's keys and deleted every one of B's device-only
+   * files.
+   */
+  assert.match(
+    helper,
+    /return cloud\.autosaveReady && cloud\.autosaveUnlocked;/,
+    'both flags are required: ready says hydration stopped, unlocked says it settled',
+  );
+
+  // The flag has to be carried through from the reconciliation outcome. The bug
+  // was `setAutosaveReady(true)` with `unlocked` computed and then dropped.
+  assert.match(
+    bootstrap,
+    /setAutosaveReady\(true, unlocked\)/,
+    'the outcome must reach the store, not stop at finish()',
+  );
+  assert.doesNotMatch(
+    bootstrap,
+    /setAutosaveReady\(true, true\)/,
+    'a literal true here re-grants exactly what the conflict-lock path must withhold',
+  );
+
+  /*
+   * Counted rather than spot-checked. Every previous miss in this PR was a
+   * sibling call site left behind, and a two-argument setter is easy to add a
+   * third caller to.
+   */
+  const callSites = bootstrap.match(/setAutosaveReady\(/g) ?? [];
+  assert.equal(callSites.length, 3, 'a new setAutosaveReady call site must be reviewed against this rule');
+
+  // A workspace with no Supabase project has no reconciliation to wait for, so
+  // both flags must default open or the sweep never runs for local-only users.
+  assert.match(cloudStore, /autosaveUnlocked: !isSupabaseConfigured\(\),/);
+
+  // Signing out and deleting the account both clear the pair together.
+  assert.equal(
+    (cloudStore.match(/autosaveUnlocked: false,/g) ?? []).length,
+    2,
+    'sign-out and delete-account must both withdraw the unlock, not just one',
+  );
 });

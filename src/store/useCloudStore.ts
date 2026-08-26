@@ -23,10 +23,24 @@ type CloudStore = {
   syncState: CloudSyncState;
   syncMessage: string;
   autosaveReady: boolean;
+  /*
+   * Whether reconciliation actually SETTLED on a copy, as opposed to merely
+   * finishing.
+   *
+   * `autosaveReady` turns true on every path out of CloudBootstrap, including
+   * `conflict-lock` and a failed remote load — it means "no longer hydrating",
+   * not "the records on screen are this workspace's". Anything that acts on the
+   * store's contents as if they belong to the signed-in workspace has to wait
+   * for this one instead, and the vault sweep is the case where reading the
+   * wrong one deletes a rancher's only copy of a document.
+   */
+  autosaveUnlocked: boolean;
   initialize: () => Promise<(() => void) | void>;
   setLastSyncAt: (value: string) => void;
   setSyncState: (state: CloudSyncState, message?: string) => void;
-  setAutosaveReady: (ready: boolean) => void;
+  // Both arguments are required so a new call site cannot quietly inherit the
+  // permissive half of this pair.
+  setAutosaveReady: (ready: boolean, unlocked: boolean) => void;
   signInWithPassword: (email: string, password: string) => Promise<CloudActionResult>;
   sendMagicLink: (email: string) => Promise<CloudActionResult>;
   signUpWithPassword: (email: string, password: string) => Promise<CloudActionResult>;
@@ -48,6 +62,10 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
   syncState: 'idle',
   syncMessage: '',
   autosaveReady: !isSupabaseConfigured(),
+  // Same rule as `autosaveReady`: with no Supabase project there is no
+  // reconciliation to wait for, and a local-only workspace must not be made to
+  // wait for something that will never happen.
+  autosaveUnlocked: !isSupabaseConfigured(),
   initialize: async () => {
     if (get().initialized) {
       return;
@@ -96,7 +114,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
   },
   setLastSyncAt: (value) => set({ lastSyncAt: value }),
   setSyncState: (state, message = '') => set({ syncState: state, syncMessage: message }),
-  setAutosaveReady: (ready) => set({ autosaveReady: ready }),
+  setAutosaveReady: (ready, unlocked) => set({ autosaveReady: ready, autosaveUnlocked: unlocked }),
   sendMagicLink: async (email) => {
     const client = getSupabaseClient();
     if (!client) {
@@ -279,6 +297,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       syncState: 'idle',
       syncMessage: '',
       autosaveReady: false,
+      autosaveUnlocked: false,
     });
     return { ok: true, message: 'Signed out of cloud sync.' };
   },
@@ -319,6 +338,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       syncState: 'idle',
       syncMessage: '',
       autosaveReady: false,
+      autosaveUnlocked: false,
     });
     return { ok: true, message: 'Your account and data have been deleted.' };
   },

@@ -147,8 +147,9 @@ export default async function handler(req, res) {
    * Stripe holding a customer this deployment never recorded, which is the
    * orphan the write-failure path further down exists to avoid.
    */
-  const claimed = await claimCheckoutLock(supabase, workspaceId);
-  if (!claimed) {
+  // The token, not a boolean: the release has to prove it still owns the lock.
+  const claimToken = await claimCheckoutLock(supabase, workspaceId);
+  if (!claimToken) {
     return sendJson(res, 409, {
       ok: false,
       code: 'billing_unavailable',
@@ -381,7 +382,9 @@ export default async function handler(req, res) {
     });
   } finally {
     // Best effort: the expiry is what guarantees progress, so a failed release
-    // must never turn a completed checkout into an error.
-    await releaseCheckoutLock(supabase, workspaceId);
+    // must never turn a completed checkout into an error. Matched on the token
+    // so an invocation that outlived the expiry cannot clear a lock that a
+    // later request has since taken.
+    await releaseCheckoutLock(supabase, workspaceId, claimToken);
   }
 }

@@ -718,3 +718,39 @@ test('the exported report agrees with the screen about what is for sale', async 
     'the export must make the same distinction the screen does, from the same predicate',
   );
 });
+
+test('the blocked-value figure is not labelled after one of its causes', async () => {
+  const reports = await readFile('src/routes/Reports.tsx', 'utf8');
+  const exporter = await readFile('src/lib/ranchReportExport.ts', 'utf8');
+  const intelligence = await readFile('src/lib/businessIntelligence.ts', 'utf8');
+
+  /*
+   * `valueAtRisk` adds a horse's asking price when `blockers.length` is
+   * non-zero, and the blockers include an active medical review and a transfer
+   * that is merely unmarked — neither is a missing document. Calling the total
+   * "Waiting on documents" sent the reader after paperwork that is not missing,
+   * and the same number is printed for a lender in the PDF.
+   */
+  assert.match(
+    intelligence,
+    /if \(blockers\.length\) \{\s*valueAtRisk \+= askPrice;/,
+    'the total is any-blocker by construction, which is what the label has to match',
+  );
+  assert.match(intelligence, /blockers\.push\('Active medical review/, 'a non-document blocker feeds the same total');
+
+  // Both surfaces, because the misleading copy was in two places and fixing
+  // only the screen leaves it in front of the banker.
+  for (const [name, source] of [
+    ['the Reports card', reports],
+    ['the PDF', exporter],
+  ] as const) {
+    assert.doesNotMatch(
+      source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, ''),
+      /Waiting on documents/,
+      `${name} must not name the total after one of its causes`,
+    );
+  }
+
+  assert.match(reports, /label="Held up"/, 'the card and the hero must use one word for one number');
+  assert.match(exporter, /Held up by blockers: \$\{money\(report\.money\.valueAtRisk\)\}/);
+});

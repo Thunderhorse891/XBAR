@@ -33,18 +33,35 @@ export function vaultOwnerId(): string {
  * persisted workspace A while signed into B swept B's files against A's keys
  * and deleted them, permanently, before B's records had loaded.
  *
- * `autosaveReady` is set once reconciliation has finished, and defaults to true
- * when Supabase is not configured at all, so a local-only workspace does not
- * wait for something that will never happen.
+ * `autosaveReady` alone is not that moment, which was the second half of the
+ * same bug. It turns true on EVERY path out of CloudBootstrap, including
+ * `conflict-lock` and a failed remote load — it means hydration stopped, not
+ * that it settled on a copy. A browser that last persisted workspace A, signed
+ * into workspace B, whose reconciliation cannot choose between them, reaches
+ * `autosaveReady` with B's id beside A's records: exactly the state this
+ * function exists to keep the sweep out of, arrived at by a different road.
+ *
+ * So both are required. `autosaveUnlocked` says reconciliation chose, and both
+ * default to true when Supabase is not configured at all, so a local-only
+ * workspace does not wait for something that will never happen.
+ *
+ * When reconciliation stays locked the callback simply never runs. That is the
+ * right failure: skipping a cleanup leaves unreferenced bytes on the device
+ * until a later session, while running it deletes files that are still someone's
+ * only copy.
  */
+function settled(cloud: { autosaveReady: boolean; autosaveUnlocked: boolean }): boolean {
+  return cloud.autosaveReady && cloud.autosaveUnlocked;
+}
+
 export function onWorkspaceSettled(run: () => void): void {
-  if (useCloudStore.getState().autosaveReady) {
+  if (settled(useCloudStore.getState())) {
     run();
     return;
   }
 
   const unsubscribe = useCloudStore.subscribe((cloud) => {
-    if (!cloud.autosaveReady) return;
+    if (!settled(cloud)) return;
     unsubscribe();
     run();
   });

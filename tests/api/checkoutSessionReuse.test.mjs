@@ -9,6 +9,7 @@ import {
   claimCheckoutLock,
   listOpenCheckoutSessions,
   planCheckoutSession,
+  releaseCheckoutLock,
   splitExpiryBatch,
   resolveExpiryFailure,
 } from '../../api/_lib/checkout-session.js';
@@ -237,22 +238,24 @@ test('a workspace making its FIRST purchase can claim', async () => {
    * seeds the row and claims it in one statement.
    */
   const supabase = fakeSupabase({ claimed: true });
-  assert.equal(await claimCheckoutLock(supabase, 'ws-new'), true);
+  const token = await claimCheckoutLock(supabase, 'ws-new');
+  assert.ok(token, 'a first purchase must be able to claim');
   assert.equal(supabase.calls[0].name, 'xbar_claim_checkout_lock', 'the claim must go through the atomic function');
+  assert.equal(supabase.calls[0].args.p_token, token, 'the token recorded on the row is the one handed back');
 });
 
 test('exactly one racing request may create a session', async () => {
   // Postgres serializes the two statements against the same row: the loser's
   // WHERE no longer matches, so the function returns false.
-  assert.equal(await claimCheckoutLock(fakeSupabase({ claimed: true }), 'ws-1'), true);
-  assert.equal(await claimCheckoutLock(fakeSupabase({ claimed: false }), 'ws-1'), false);
+  assert.ok(await claimCheckoutLock(fakeSupabase({ claimed: true }), 'ws-1'), 'the winner holds a token');
+  assert.equal(await claimCheckoutLock(fakeSupabase({ claimed: false }), 'ws-1'), '', 'the loser holds nothing');
 });
 
 test('a claim that cannot be read is not a claim', async () => {
   // Same fail-closed rule as the capacity gates: a failed query establishes
   // nothing, and guessing "nobody holds it" creates a second billable session.
   const broken = fakeSupabase({ error: { message: 'connection reset' } });
-  assert.equal(await claimCheckoutLock(broken, 'ws-1'), false);
+  assert.equal(await claimCheckoutLock(broken, 'ws-1'), '', 'no token means no claim');
 });
 
 test('a claim left behind by a dead request expires', async () => {
@@ -284,6 +287,11 @@ test('the endpoint claims before it looks at Stripe, and always releases', () =>
 
   const claim = source.indexOf('await claimCheckoutLock(supabase, workspaceId)');
   const list = source.indexOf('listOpenCheckoutSessions(stripe, stripeCustomerId)');
+  assert.match(
+    source,
+    /await releaseCheckoutLock\(supabase, workspaceId, claimToken\)/,
+    'the release must name the claim it owns',
+  );
   assert.ok(claim > -1 && claim < list, 'listing is only safe while holding the claim');
 
   /*
@@ -291,7 +299,10 @@ test('the endpoint claims before it looks at Stripe, and always releases', () =>
    * separately is four chances to add a fifth that does not — and a leaked
    * claim locks the workspace out of buying anything until the expiry.
    */
-  assert.match(source, /\} finally \{\s*\/\/[\s\S]{0,200}await releaseCheckoutLock\(supabase, workspaceId\);/);
+  assert.match(
+    source,
+    /\} finally \{\s*\/\/[\s\S]{0,400}await releaseCheckoutLock\(supabase, workspaceId, claimToken\);/,
+  );
   assert.ok(!source.includes('idempotencyKey'), 'a second mechanism that looks like it serializes must not remain');
 });
 
@@ -442,4 +453,80 @@ test('a deferred expiry stops the purchase, including the reuse path', () => {
   // The loop must walk the bounded batch, not the whole list it came from.
   assert.match(source, /for \(const stale of expiring\)/);
   assert.doesNotMatch(source, /for \(const stale of plan\.expire\)/, 'the unbounded loop is the bug being fixed');
+});
+
+/*
+ * The release was the second way into two concurrent session creations.
+ *
+ * The lock expires after two minutes so a dead serverless invocation cannot
+ * wedge a workspace out of buying anything — but a SLOW one is not dead. A
+ * stalls past the TTL, B legitimately reclaims, A finishes and clears the row
+ * it no longer owns, and C walks in beside B. The claim was doing its job and
+ * the release undid it.
+ */
+
+function fakeUpdateChain(recorder) {
+  return {
+    from(table) {
+      recorder.table = table;
+      return this;
+    },
+    update(values) {
+      recorder.values = values;
+      recorder.filters = [];
+      return this;
+    },
+    // Chains like the real client: every `eq` returns the builder, and only
+    // awaiting it runs the query. A fake that resolves on the first `eq` hides
+    // the second filter — which is the entire subject of this test.
+    eq(column, value) {
+      recorder.filters.push([column, value]);
+      return this;
+    },
+    then(resolve) {
+      return Promise.resolve({ error: null }).then(resolve);
+    },
+  };
+}
+
+test('the release clears only the claim this request still holds', async () => {
+  const recorder = { filters: [] };
+  await releaseCheckoutLock(fakeUpdateChain(recorder), 'ws-1', 'token-a');
+
+  assert.equal(recorder.table, 'workspace_billing_customers');
+  assert.deepEqual(
+    recorder.filters,
+    [
+      ['workspace_id', 'ws-1'],
+      ['checkout_lock_token', 'token-a'],
+    ],
+    'matching the workspace alone clears whichever request holds the lock now, not this one',
+  );
+  assert.deepEqual(
+    recorder.values,
+    { checkout_lock_at: null, checkout_lock_token: null },
+    'the holder must be cleared with the timestamp, or the next release matches a stale token',
+  );
+});
+
+test('a request that never claimed does not release anything', async () => {
+  let touched = false;
+  const supabase = {
+    from() {
+      touched = true;
+      return this;
+    },
+  };
+
+  await releaseCheckoutLock(supabase, 'ws-1', '');
+
+  assert.equal(touched, false, 'clearing the row on the strength of having FAILED to claim frees a rival lock');
+});
+
+test('the claim token is unguessable and per-request', async () => {
+  const first = await claimCheckoutLock(fakeSupabase({ claimed: true }), 'ws-1');
+  const second = await claimCheckoutLock(fakeSupabase({ claimed: true }), 'ws-1');
+
+  assert.notEqual(first, second, 'two invocations sharing a token cannot tell each other apart');
+  assert.match(first, /^[0-9a-f-]{36}$/, 'a token another request could predict is not ownership');
 });

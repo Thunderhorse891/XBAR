@@ -251,7 +251,15 @@ export default function Reports() {
             />
             <MetricCard
               className="ops-metric-card"
-              label="Waiting on documents"
+              /*
+               * Not "Waiting on documents". `assessRevenueAtRisk` adds a horse's
+               * asking price for ANY blocker, and two of them are not documents
+               * at all: an active medical review, and a transfer that is merely
+               * unmarked. Naming the total after one of its causes sent the
+               * reader looking for a missing file that does not exist — and the
+               * same figure goes in front of a banker in the PDF.
+               */
+              label="Held up"
               value={formatCompactCurrency(report.money.valueAtRisk)}
               detail={`${report.risk.items.length} horse${report.risk.items.length === 1 ? '' : 's'} blocked`}
               tone={report.money.valueAtRisk > 0 ? 'amber' : 'slate'}
