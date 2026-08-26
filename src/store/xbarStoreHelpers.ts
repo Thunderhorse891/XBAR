@@ -434,18 +434,34 @@ export function canRestorePersistedState(raw: unknown): boolean {
    *
    * Still only the shapes routes actually dereference WITHOUT a guard, and
    * still not a full runtime schema: a second description of "valid" would
-   * drift from the types. The list is derived from unguarded dereferences in
-   * the routes, so it grows only when a route adds one.
+   * drift from the types. The list is derived by searching the routes for
+   * unguarded dereferences on restored collections, which is how the receipt,
+   * lead, listing and `medicalTimeline` entries were found — the first two
+   * passes added only what a reviewer had named, and each time left siblings
+   * behind.
+   *
+   * Derived state is deliberately absent. `packet.saleSlots` reads like one of
+   * these and is not: `buildHorsePacketCompleteness` constructs it, so it can
+   * never arrive missing from a backup.
    */
-  const NESTED_SHAPES: Record<string, { objects?: string[]; lists?: string[] }> = {
+  const NESTED_SHAPES: Record<string, { objects?: string[]; lists?: string[]; strings?: string[] }> = {
     horses: {
       objects: ['bloodline', 'assignments', 'sale', 'readiness'],
-      lists: ['gallery', 'breedingTimeline', 'documentFacts', 'alerts'],
+      // `horse.medicalTimeline.map` — Medical.tsx:39.
+      lists: ['gallery', 'breedingTimeline', 'medicalTimeline', 'documentFacts', 'alerts'],
+      // `horse.name.toLowerCase` — Breeding.tsx:292.
+      strings: ['name'],
     },
-    // `document.entities.horseName` and four siblings, read unguarded.
+    // `document.entities.horseName` and four siblings — Documents.tsx:724.
     documents: { objects: ['entities'] },
-    // `packet.documentIds.length`, read unguarded on two screens.
+    // `packet.documentIds.length` — SalePacketStudio.tsx:174, Documents.tsx:1210.
     salePacketBuilds: { lists: ['documentIds'] },
+    // `receipt.vendor.trim()` — Expenses.tsx:114.
+    expenseReceipts: { strings: ['vendor'] },
+    // `lead.name.trim()` — BuyerResponseQueue.tsx:142.
+    salesLeads: { strings: ['name'] },
+    // `listing.channels.includes()` — SharedAccess.tsx:33.
+    sharedListings: { lists: ['channels'] },
   };
 
   for (const [collection, shape] of Object.entries(NESTED_SHAPES)) {
@@ -460,6 +476,15 @@ export function canRestorePersistedState(raw: unknown): boolean {
       }
       for (const list of shape.lists ?? []) {
         if (!Array.isArray(record[list])) return false;
+      }
+      /*
+       * A missing PRIMITIVE crashes the same way a missing object does — the
+       * route calls a string method on `undefined`. The empty string is a valid
+       * value (`receipt.vendor.trim() || 'Unspecified vendor'` is written to
+       * expect it), so this checks the type, not the content.
+       */
+      for (const field of shape.strings ?? []) {
+        if (typeof record[field] !== 'string') return false;
       }
     }
   }

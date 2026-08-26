@@ -885,12 +885,47 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   assert.match(helpers, /horses: \{\s*objects: \['bloodline', 'assignments', 'sale', 'readiness'\]/);
 
   /*
+   * Found by searching the routes rather than waiting to be told. The first two
+   * passes added only what a reviewer had named and left siblings behind each
+   * time, so this pins every unguarded dereference on a restored collection.
+   */
+  assert.match(helpers, /expenseReceipts: \{ strings: \['vendor'\] \}/);
+  assert.match(helpers, /salesLeads: \{ strings: \['name'\] \}/);
+  assert.match(helpers, /sharedListings: \{ lists: \['channels'\] \}/);
+  assert.match(helpers, /'medicalTimeline'/, 'horse.medicalTimeline.map was missing from the horse list itself');
+  assert.match(helpers, /strings: \['name'\],/, 'horse.name.toLowerCase is a primitive read, and crashes the same way');
+
+  // A missing primitive fails on the TYPE, not on emptiness: the empty string
+  // is valid and the routes are written to expect it.
+  assert.match(helpers, /if \(typeof record\[field\] !== 'string'\) return false;/);
+
+  /*
    * Tied to the dereferences the guard exists for, so this fails if a route
    * stops reading them — at which point the entry is dead weight — rather than
    * asserting a list against itself.
    */
   assert.match(documents, /document\.entities\.horseName/, 'unguarded, which is why `entities` must be present');
   assert.match(studio, /packet\.documentIds\.length/, 'unguarded, which is why `documentIds` must be an array');
+
+  for (const [route, deref] of [
+    ['src/routes/Expenses.tsx', /receipt\.vendor\.trim\(\)/],
+    ['src/routes/Medical.tsx', /horse\.medicalTimeline\.map\(/],
+    ['src/routes/SharedAccess.tsx', /listing\.channels\.includes\(/],
+    ['src/components/BuyerResponseQueue.tsx', /lead\.name\.trim\(\)/],
+  ] as const) {
+    assert.match(await readFile(route, 'utf8'), deref, `${route} still reads this unguarded`);
+  }
+
+  /*
+   * Derived state must NOT be in the table. `packet.saleSlots` reads like one of
+   * these and is not — `buildHorsePacketCompleteness` constructs it, so it can
+   * never arrive missing from a backup, and guarding it would reject valid
+   * archives.
+   */
+  // Comments stripped: the prose above the table explains WHY `saleSlots` is
+  // excluded, and asserting against prose rather than code is its own trap.
+  const helpersCode = helpers.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  assert.doesNotMatch(helpersCode, /saleSlots/, 'a computed field cannot arrive malformed and must not be validated');
 
   // Still not a full runtime schema: a second description of "valid" drifts
   // from the types, which is the trade the original comment was right about.
