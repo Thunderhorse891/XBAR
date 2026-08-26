@@ -575,6 +575,58 @@ export async function importLocalFiles(
  * usable from a test without constructing a workspace and cannot drift when a
  * new record type starts carrying files.
  */
+/**
+ * Hand this workspace's own files over when it is promoted to a cloud account.
+ *
+ * A signed-out rancher's files are owned by `'local'`. Signing in gives the
+ * browser a new vault owner, and the ownership checks then refuse every one of
+ * those entries — the records still name them, and nothing can open, export or
+ * attach them. The rancher signed in and their documents vanished.
+ *
+ * That is the ONE case where re-tagging is provably safe, and it is worth being
+ * exact about why, because the ambiguous version of this deletes data. Two
+ * conditions together:
+ *
+ *   - the entry is currently `'local'` or untagged, so it cannot be another
+ *     cloud account's; and
+ *   - it is REFERENCED by the records being promoted, which is what makes it
+ *     this workspace's rather than a leftover from some earlier account.
+ *
+ * Records belonging to a previous cloud account carry that account's keys, so
+ * they match nothing here and nothing of theirs moves.
+ *
+ * @returns how many entries changed hands.
+ */
+export async function adoptVaultEntries(
+  referencedKeys: Iterable<string>,
+  fromOwner: string,
+  toOwner: string,
+): Promise<number> {
+  if (!isLocalFileVaultAvailable() || fromOwner === toOwner) return 0;
+
+  const referenced = new Set(referencedKeys);
+  if (referenced.size === 0) return 0;
+
+  let adopted = 0;
+  try {
+    for (const entry of await listLocalFiles()) {
+      if (!referenced.has(entry.key)) continue;
+      if (entry.workspaceId !== undefined && entry.workspaceId !== fromOwner) continue;
+
+      const full = await readLocalFile(entry.key);
+      if (!full) continue;
+      await withStore('readwrite', (store) => store.put({ ...full, workspaceId: toOwner }));
+      adopted += 1;
+    }
+  } catch (error) {
+    // Best effort: a file that did not move is still readable when signed out,
+    // whereas throwing here would fail a sign-in that otherwise succeeded.
+    console.warn('Moving this device\u2019s files to the new workspace failed.', error);
+  }
+
+  return adopted;
+}
+
 export function referencedVaultKeys(...groups: { localFileKey?: string }[][]): string[] {
   const keys = new Set<string>();
   for (const group of groups) {

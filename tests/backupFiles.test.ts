@@ -14,6 +14,7 @@ import {
   readLocalFile,
   storeLocalFile,
   sweepLocalFileVault,
+  adoptVaultEntries,
 } from '../src/lib/localFileVault.js';
 import { resolvePacketAttachments } from '../src/lib/localPacketAttachments.js';
 import { installFakeIndexedDb } from './helpers/fakeIndexedDb.js';
@@ -881,7 +882,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * the vault has already been overwritten with the backup's blobs.
    */
   assert.match(helpers, /salePacketBuilds: \{ lists: \['documentIds'\] \}/, 'packets deref a nested array unguarded');
-  assert.match(helpers, /horses: \{\s*objects: \['bloodline', 'assignments', 'sale', 'readiness'\]/);
+  assert.match(helpers, /objects: \['bloodline', 'assignments', 'sale', 'readiness', 'location'\]/);
 
   /*
    * Found by searching the routes rather than waiting to be told. The first two
@@ -925,6 +926,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     ['src/lib/commandPalette.ts', /for \(const horse of horses\) add\(horse\.owner, horse\.id\);/],
     ['src/lib/commandPalette.ts', /add\(record\.legalOwner, record\.horseId\);/],
     ['src/features/ownership/selectors.ts', /horse\.ownership\.reduce\(/],
+    ['src/routes/Horses.tsx', /horse\.location\.barn/],
   ] as const) {
     assert.match(await readFile(route, 'utf8'), deref, `${route} still reads this unguarded`);
   }
@@ -956,4 +958,60 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   // Still not a full runtime schema: a second description of "valid" drifts
   // from the types, which is the trade the original comment was right about.
   assert.doesNotMatch(helpers, /z\.object\(|yup\.|joi\./, 'the guard must stay a list of crash sites, not a schema');
+});
+
+test('signing in brings this device’s own files along, and nobody else’s', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    /*
+     * A signed-out rancher's files are owned by `'local'`. Signing in gives the
+     * browser a new vault owner, and every ownership check then refuses those
+     * entries — the records still name them and nothing can open them. The
+     * rancher signs in and their documents vanish.
+     */
+    const mine = await storeLocalFile(new Blob(['coggins']), 'coggins.pdf', 'application/pdf', 'local');
+    const alsoMine = await storeLocalFile(new Blob(['bill']), 'bill.pdf', 'application/pdf', 'local');
+    // Local, but nothing in the promoted records points at it.
+    const unreferenced = await storeLocalFile(new Blob(['stray']), 'stray.pdf', 'application/pdf', 'local');
+    // A previous cloud account's file, which must not be swept up.
+    const theirs = await storeLocalFile(new Blob(['theirs']), 'theirs.pdf', 'application/pdf', 'ws-other');
+
+    const adopted = await adoptVaultEntries([mine, alsoMine, theirs], 'local', 'ws-new');
+
+    assert.equal(adopted, 2, 'only the referenced local entries change hands');
+
+    const owners = new Map((await listLocalFiles()).map((entry) => [entry.key, entry.workspaceId]));
+    assert.equal(owners.get(mine), 'ws-new');
+    assert.equal(owners.get(alsoMine), 'ws-new');
+    assert.equal(owners.get(theirs), 'ws-other', 'a previous account keeps its own files even when named');
+    assert.equal(owners.get(unreferenced), 'local', 'nothing unreferenced is claimed on a guess');
+
+    // And the promoted files really are readable as the new owner now.
+    const opened = await openLocalFile(mine, 'ws-new');
+    assert.ok(opened, 'the whole point: the rancher can still open their document after signing in');
+    opened?.release();
+  } finally {
+    restore();
+  }
+});
+
+test('the promotion path adopts, and keeps the records marker in step', async () => {
+  const bootstrap = await readFile('src/components/CloudBootstrap.tsx', 'utf8');
+
+  // Only on the branch where the LOCAL workspace won reconciliation. On
+  // `import-remote` the remote records replace the local ones, and those local
+  // files are genuinely orphaned — adopting there would resurrect them.
+  const pushAt = bootstrap.indexOf("if (decision === 'push-local')");
+  const importAt = bootstrap.indexOf("if (decision === 'import-remote'");
+  const adoptAt = bootstrap.indexOf('await adoptVaultEntries(');
+  assert.ok(adoptAt > pushAt, 'adoption belongs to the promotion branch');
+  assert.ok(importAt < pushAt, 'and the import branch returns before it');
+
+  assert.match(bootstrap, /'local',\s*vaultOwnerId\(\),/, 'from local, to whoever owns the vault now');
+  assert.match(
+    bootstrap,
+    /rememberRecordsOwner\(vaultOwnerId\(\)\);/,
+    'the records belong to the new owner too, or the sweep refuses to run for it',
+  );
+  assert.match(bootstrap, /if \(saved\.ok\) \{/, 'nothing is retagged when the upload failed');
 });

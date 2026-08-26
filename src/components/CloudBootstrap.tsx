@@ -1,6 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
 import { decideCloudReconciliation, serializeWorkspaceBackup } from '@/lib/cloudSyncPolicy';
+import { adoptVaultEntries, referencedVaultKeys } from '@/lib/localFileVault';
+import { rememberRecordsOwner } from '@/lib/recordsOwner';
+import { vaultOwnerId } from '@/lib/vaultOwner';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useWorkspaceHydrated, useXbarStore } from '@/store/useXbarStore';
 
@@ -123,6 +126,42 @@ export function CloudBootstrap() {
         const saved = await saveWorkspaceBackupToCloud(local);
         if (cancelled) return;
         if (saved.ok && saved.updatedAt) setLastSyncAt(saved.updatedAt);
+
+        /*
+         * The device's files come with the records.
+         *
+         * This branch is a promotion: the local workspace won reconciliation
+         * and has just become this account's cloud workspace. Its vault entries
+         * are still owned by `'local'`, and every ownership check now compares
+         * against the new owner — so without this the rancher signs in and
+         * their documents stop opening, exporting and attaching, while the
+         * records still name them.
+         *
+         * Only entries these records REFERENCE, and only ones still `'local'`
+         * or untagged, so a previous account's files cannot be swept up: their
+         * records carry their own keys and match nothing here.
+         */
+        if (saved.ok) {
+          const workspace = local.workspace as {
+            documents?: { localFileKey?: string }[];
+            expenseReceipts?: { localFileKey?: string }[];
+            salePacketBuilds?: { localFileKey?: string }[];
+          };
+          await adoptVaultEntries(
+            referencedVaultKeys(
+              workspace.documents ?? [],
+              workspace.expenseReceipts ?? [],
+              workspace.salePacketBuilds ?? [],
+            ),
+            'local',
+            vaultOwnerId(),
+          );
+          // The records are this workspace's now, or the sweep will refuse to
+          // run for it — the marker and the vault owner have to agree.
+          rememberRecordsOwner(vaultOwnerId());
+          if (cancelled) return;
+        }
+
         finish(saved.ok, saved.ok ? 'idle' : 'error', saved.message);
         return;
       }

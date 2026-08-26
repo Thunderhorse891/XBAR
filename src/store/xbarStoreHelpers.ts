@@ -455,7 +455,8 @@ export function canRestorePersistedState(raw: unknown): boolean {
    */
   const NESTED_SHAPES: Record<string, { objects?: string[]; lists?: string[]; strings?: string[] }> = {
     horses: {
-      objects: ['bloodline', 'assignments', 'sale', 'readiness'],
+      // `horse.location.barn` / `.pasture` — Horses.tsx:121, Breeding.tsx:268.
+      objects: ['bloodline', 'assignments', 'sale', 'readiness', 'location'],
       // `horse.medicalTimeline.map` — Medical.tsx:39.
       // `horse.ownership.reduce` — features/ownership/selectors.ts:13.
       // `horse.documents.includes` — this file, line ~883.
