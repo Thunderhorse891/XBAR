@@ -371,14 +371,34 @@ export function SalePacketWizard({
             : 'Sale packet ready on this device'
           : 'Sale packet recorded',
       message: downloadUrl
-        ? 'Watermarked PDF opened in a new tab. Buyer activity is now tracked in Buyer follow-up.'
+        ? /*
+           * Read off the delivery, exactly as the local branch below does.
+           *
+           * Recording `packetDelivery` on the cloud path was only half the fix:
+           * the summary still announced a tab unconditionally, so a seller
+           * whose popup was blocked got "your browser blocked the new tab"
+           * immediately followed by "opened in a new tab" — and the second one
+           * is the reassuring one. Two toasts, one of them false, about whether
+           * the buyer packet is on screen.
+           *
+           * Two outcomes rather than the local branch's three: this path only
+           * ever sets 'tab' or 'none', because `window.open` cannot report a
+           * download.
+           */
+          `Watermarked PDF ${packetDelivery === 'tab' ? 'opened in a new tab' : 'is ready — use the download button below to open it'}. Buyer activity is now tracked in Buyer follow-up.`
         : localFileKey
           ? // Says what is in it. A count the seller can check against what they
             // selected is the difference between finding a missing Coggins now
             // and the buyer finding it.
             `${localPacket?.attachedFiles ?? 0} of ${docSelection.length} document${docSelection.length === 1 ? '' : 's'} embedded in the packet, saved on this device${packetDelivery === 'tab' ? ' and opened in a new tab' : packetDelivery === 'download' ? ' and downloaded to this device' : ' — open it from Sale packets when you are ready'}.${localPacket?.unattachedDocuments.length ? ` Not included: ${localPacket.unattachedDocuments.map((item) => item.title).join(', ')}.` : ''}`
           : `${build.message} The packet could not be saved on this device, so only the record was kept. Buyer follow-up is tracking this buyer either way.`,
-      tone: packetStored && !localPacket?.unattachedDocuments.length ? 'success' : 'warning',
+      /*
+       * A packet nothing could open is not a success, on either path. Both
+       * branches push their own warning toast when delivery fails, and a
+       * success-toned summary beside it says the opposite.
+       */
+      tone:
+        packetStored && packetDelivery !== 'none' && !localPacket?.unattachedDocuments.length ? 'success' : 'warning',
     });
   };
 

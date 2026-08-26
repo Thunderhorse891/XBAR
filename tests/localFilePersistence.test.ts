@@ -405,6 +405,35 @@ test('the cloud packet never claims a tab the browser refused', async () => {
     'the cloud open must report whether a tab actually opened',
   );
   assert.match(wizard, /Packet ready — tab was blocked/, 'and say where to find the packet when it did not');
+
+  /*
+   * Recording the delivery was only half the fix. The SUMMARY toast still
+   * announced a tab unconditionally, so a seller whose popup was blocked got
+   * "your browser blocked the new tab" and then, one toast later, "opened in a
+   * new tab" — and the second one is the reassuring one. The local branch had
+   * already been taught to read the delivery; this one had not.
+   */
+  const wizardCode = wizard.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  assert.match(
+    wizardCode,
+    /Watermarked PDF \$\{packetDelivery === 'tab' \? 'opened in a new tab' : 'is ready — use the download button below to open it'\}/,
+    'the cloud summary must describe the delivery that actually happened',
+  );
+  assert.doesNotMatch(
+    wizardCode,
+    /'Watermarked PDF opened in a new tab\./,
+    'the unconditional claim must be gone, not merely contradicted elsewhere',
+  );
+
+  /*
+   * And the tone, on both paths: a packet nothing could open is not a success.
+   * Each branch already pushes its own warning toast when delivery fails, and a
+   * success-toned summary sitting beside it says the opposite.
+   */
+  assert.match(
+    wizardCode,
+    /packetStored && packetDelivery !== 'none' && !localPacket\?\.unattachedDocuments\.length \? 'success' : 'warning'/,
+  );
 });
 
 test('an import never grants a restored file script execution', async () => {

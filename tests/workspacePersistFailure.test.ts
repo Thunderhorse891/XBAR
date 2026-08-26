@@ -145,3 +145,136 @@ test('a failed read is distinguishable from an empty workspace', async () => {
     restoreBroken();
   }
 });
+
+/*
+ * A localStorage whose reads throw, which is the failure the fallback path had
+ * no way to report. `getItem` is separated from the `localStorage` getter
+ * deliberately: browsers configured to block site data throw from the GETTER,
+ * so `typeof window.localStorage` throws before any method is reached — and
+ * that path escaped the module's try/catch entirely.
+ */
+function installHostileLocalStorage(where: 'getter' | 'getItem') {
+  const previous = (globalThis as { window?: unknown }).window;
+  const win: Record<string, unknown> = {};
+
+  if (where === 'getter') {
+    Object.defineProperty(win, 'localStorage', {
+      get() {
+        throw new Error('SecurityError: access to storage is not allowed from this context');
+      },
+      configurable: true,
+    });
+  } else {
+    win.localStorage = {
+      getItem: () => {
+        throw new Error('storage read failed');
+      },
+      setItem: () => {},
+      removeItem: () => {},
+    };
+  }
+
+  (globalThis as { window?: unknown }).window = win;
+  return () => {
+    if (previous === undefined) delete (globalThis as { window?: unknown }).window;
+    else (globalThis as { window?: unknown }).window = previous;
+  };
+}
+
+/** A working localStorage holding a workspace IndexedDB does not have. */
+function installLocalStorageWith(entries: Record<string, string>) {
+  const previous = (globalThis as { window?: unknown }).window;
+  const store = new Map(Object.entries(entries));
+  (globalThis as { window?: unknown }).window = {
+    localStorage: {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => store.set(key, value),
+      removeItem: (key: string) => store.delete(key),
+    },
+  };
+  return () => {
+    if (previous === undefined) delete (globalThis as { window?: unknown }).window;
+    else (globalThis as { window?: unknown }).window = previous;
+  };
+}
+
+for (const where of ['getItem', 'getter'] as const) {
+  test(`a fallback read that throws from the ${where} is a failure, not an empty workspace`, async () => {
+    /*
+     * The case the IndexedDB-only flag could not see.
+     *
+     * A workspace that lives ONLY in localStorage is not exotic — it is where
+     * every browser that has ever refused an IndexedDB write ends up, since
+     * `setItem` falls back to localStorage and leaves the primary store empty.
+     * On the next load the IndexedDB read then SUCCEEDS and returns nothing,
+     * which used to clear the failure flag before the fallback was even tried.
+     *
+     * If the fallback read then throws, hydration installs the empty initial
+     * state while `didWorkspaceReadFail()` reports false — and the settled
+     * sweep deletes every local-owned document, receipt and packet in the
+     * vault as unreferenced, permanently, on a start-up that would have
+     * recovered as soon as localStorage came back.
+     */
+    const restoreDb = installFakeIndexedDb();
+    const restoreWindow = installHostileLocalStorage(where);
+
+    try {
+      const value = await workspaceStateStorage.getItem('xbar-live-workspace');
+      assert.equal(value, null, 'a failed read still has nothing to return');
+      assert.equal(
+        didWorkspaceReadFail(),
+        true,
+        'an empty primary read plus a throwing fallback proves nothing about whether a workspace exists',
+      );
+    } finally {
+      restoreWindow();
+      restoreDb();
+    }
+  });
+}
+
+test('a workspace found only in the fallback is returned and is not a failure', async () => {
+  // The other half of the same branch: the fallback answering successfully is
+  // the normal path for these browsers, and must not be reported as a failure.
+  const stored = JSON.stringify({ state: { horses: [{ id: 'h1' }] } });
+  const restoreDb = installFakeIndexedDb();
+  const restoreWindow = installLocalStorageWith({ 'xbar-live-workspace': stored });
+
+  try {
+    const value = await workspaceStateStorage.getItem('xbar-live-workspace');
+    assert.equal(value, stored, 'the fallback workspace must still hydrate');
+    assert.equal(didWorkspaceReadFail(), false, 'a fallback that answered is not a failure');
+  } finally {
+    restoreWindow();
+    restoreDb();
+  }
+});
+
+test('a write does not clear a failure the read recorded', async () => {
+  /*
+   * `setItem` reads the existing value to protect a meaningful workspace from
+   * being overwritten by an empty one, and that read used to set the same flag
+   * hydration had just set. The sweep is deferred until the workspace settles —
+   * after cloud reconciliation — so an ordinary autosave in between could flip
+   * the flag back to false and re-enable exactly the sweep it was meant to stop.
+   */
+  const restoreDb = installFakeIndexedDb({ abortWrites: true });
+  const restoreWindow = installHostileLocalStorage('getItem');
+  try {
+    await workspaceStateStorage.getItem('xbar-live-workspace');
+    assert.equal(didWorkspaceReadFail(), true, 'precondition: the read failed');
+  } finally {
+    restoreWindow();
+    restoreDb();
+  }
+
+  const restoreWorkingDb = installFakeIndexedDb();
+  const restoreWorkingWindow = installLocalStorageWith({});
+  try {
+    await workspaceStateStorage.setItem('xbar-live-workspace', JSON.stringify({ state: { horses: [{ id: 'h1' }] } }));
+    assert.equal(didWorkspaceReadFail(), true, 'only a read may decide whether the workspace was readable');
+  } finally {
+    restoreWorkingWindow();
+    restoreWorkingDb();
+  }
+});

@@ -10,15 +10,30 @@ function hasBrowserStorage() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 }
 
-function readLegacyValue(name: string) {
-  if (!hasBrowserStorage()) {
-    return null;
-  }
-
+/*
+ * Reports whether the read FAILED, not just what it found.
+ *
+ * `null` from this function used to mean both "no legacy value" and "the read
+ * threw", and the caller could not tell them apart — which is the same
+ * conflation `workspaceReadFailure` exists to resolve one storage layer up.
+ *
+ * `hasBrowserStorage` is inside the try because reaching for
+ * `window.localStorage` is itself a throwing operation: browsers configured to
+ * block site data raise SecurityError from the getter, so even `typeof` on it
+ * throws. That escaped this module entirely before.
+ */
+function readLegacyValue(name: string): { value: string | null; failed: boolean } {
   try {
-    return window.localStorage.getItem(name);
-  } catch {
-    return null;
+    if (!hasBrowserStorage()) {
+      // No storage API at all — server-side rendering, a stripped embedder.
+      // That is an absence, not a failure: there is nothing here to have lost.
+      return { value: null, failed: false };
+    }
+
+    return { value: window.localStorage.getItem(name), failed: false };
+  } catch (error) {
+    console.error('Reading the legacy workspace value failed.', error);
+    return { value: null, failed: true };
   }
 }
 
@@ -128,15 +143,27 @@ export function didWorkspaceReadFail(): boolean {
   return workspaceReadFailure;
 }
 
-async function readIndexedValue(name: string) {
+/*
+ * Reports the failure rather than recording it.
+ *
+ * Setting `workspaceReadFailure` here was wrong twice over. A successful but
+ * EMPTY IndexedDB read cleared the flag before the localStorage fallback had
+ * been tried, so a workspace living only in the fallback — the state every
+ * browser that has ever refused an IndexedDB write ends up in — could have its
+ * fallback read throw and still be reported as "nothing stored". And because
+ * `setItem` calls this too, an ordinary write between hydration and the
+ * deferred sweep could clear a failure that hydration had correctly recorded.
+ *
+ * Only `getItem` knows whether the workspace was read, so only `getItem` sets
+ * the flag now.
+ */
+async function readIndexedValue(name: string): Promise<{ value: string | null; failed: boolean }> {
   try {
     const value = await withStore<string | null>('readonly', (store) => store.get(name));
-    workspaceReadFailure = false;
-    return value;
+    return { value, failed: false };
   } catch (error) {
     console.error('Reading the persisted workspace failed.', error);
-    workspaceReadFailure = true;
-    return null;
+    return { value: null, failed: true };
   }
 }
 
@@ -246,24 +273,37 @@ function notifyPersistFailure(name: string) {
 
 export const workspaceStateStorage: StateStorage = {
   async getItem(name) {
-    const indexedValue = await readIndexedValue(name);
-    if (indexedValue) {
-      return indexedValue;
+    const indexed = await readIndexedValue(name);
+    if (indexed.value) {
+      // The workspace was found. Whatever the fallback would have said is moot.
+      workspaceReadFailure = false;
+      return indexed.value;
     }
 
-    const legacyValue = readLegacyValue(name);
-    if (legacyValue) {
-      await writeIndexedValue(name, legacyValue);
+    const legacy = readLegacyValue(name);
+
+    /*
+     * "Absent" requires BOTH stores to have answered.
+     *
+     * This is the whole point of the flag: the sweep deletes vault files the
+     * workspace no longer references, so it must know whether an empty
+     * reference set means "fresh install" or "we could not read it". One store
+     * saying nothing while the other throws proves neither.
+     */
+    workspaceReadFailure = indexed.failed || legacy.failed;
+
+    if (legacy.value) {
+      await writeIndexedValue(name, legacy.value);
       if (name === LEGACY_KEY) {
         removeLegacyValue(name);
       }
     }
 
-    return legacyValue;
+    return legacy.value;
   },
   async setItem(name, value) {
     if (name === LEGACY_KEY) {
-      const existingValue = (await readIndexedValue(name)) ?? readLegacyValue(name);
+      const existingValue = (await readIndexedValue(name)).value ?? readLegacyValue(name).value;
       if (shouldProtectMeaningfulWorkspaceWrite(existingValue, value)) {
         return;
       }
