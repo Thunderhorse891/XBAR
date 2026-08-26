@@ -78,7 +78,7 @@ test('the vault is reconciled against the workspace on rehydration', async () =>
 
   assert.match(
     source,
-    /onRehydrateStorage: \(\) => \(state\) => \{[\s\S]*onWorkspaceSettled\(\(\) => \{[\s\S]{0,400}sweepLocalFileVault\(/,
+    /onRehydrateStorage: \(\) => \(state\) => \{[\s\S]*onWorkspaceSettled\(\(\) => \{[\s\S]*?sweepLocalFileVault\(/,
     'file bytes must be reclaimed when the records that referenced them are gone — but only this workspace\u2019s, since the vault is origin-wide and another account\u2019s files are not orphans',
   );
 });
@@ -438,7 +438,12 @@ test('the sweep waits for cloud reconciliation, not just the workspace id', asyn
 
   // And the records swept against must be the ones that exist THEN, not the
   // snapshot captured at rehydration.
-  assert.match(store, /onWorkspaceSettled\(\(\) => \{\s*const current = useXbarStore\.getState\(\);/);
+  assert.match(
+    store,
+    /onWorkspaceSettled\(\(\) => \{\s*const owner = vaultOwnerId\(\);\s*const recorded = readRecordsOwner\(\);/,
+    'the owner and the records’ owner are both read at sweep time, not captured earlier',
+  );
+  assert.match(store, /const current = useXbarStore\.getState\(\);/);
   assert.match(store, /referencedVaultKeys\(current\.documents, current\.expenseReceipts, current\.salePacketBuilds\)/);
 });
 
@@ -528,4 +533,43 @@ test('readiness alone does not release the sweep — reconciliation must have ch
     2,
     'sign-out and delete-account must both withdraw the unlock, not just one',
   );
+});
+
+test('the sweep refuses when the records on screen belong to another workspace', async () => {
+  const store = await readFile('src/store/useXbarStore.ts', 'utf8');
+  const marker = await readFile('src/lib/recordsOwner.ts', 'utf8');
+
+  /*
+   * Settling says reconciliation finished; it does not say WHOSE records
+   * finished, and nothing in the store could answer that. One persist key holds
+   * one workspace, so importing a cloud backup REPLACES the local-only records
+   * in place — and a later session that cannot produce a sign-in (expired, or
+   * an auth read that failed and is reported as `signed-out`) puts `'local'`
+   * beside another workspace's records. Every `'local'`-owned file is then
+   * unreferenced, and the sweep is what deletes them.
+   */
+  assert.match(
+    store,
+    /if \(recorded \? recorded !== owner : isSupabaseConfigured\(\)\) return;/,
+    'a record set owned by someone else must withhold the sweep',
+  );
+
+  /*
+   * An unrecorded owner is unknown, not `'local'`. Assuming otherwise is only
+   * safe where no cloud workspace could ever have been imported — a deployment
+   * with no Supabase project — which is also the population that most needs the
+   * sweep, since the on-device vault is their only storage.
+   */
+  assert.match(store, /rememberRecordsOwner\(vaultOwnerId\(\)\)/);
+  assert.equal(
+    (store.match(/rememberRecordsOwner\(/g) ?? []).length,
+    2,
+    'the marker must be written wherever the whole record set is replaced — import and setup',
+  );
+
+  // Browser state, not workspace data: carried inside a backup it would travel
+  // to another device and assert something false there.
+  assert.match(marker, /window\.localStorage\.setItem/, 'the marker describes this browser, not the workspace');
+  assert.ok(!/partialize|selectPersistedState/.test(marker), 'it must not ride along in the persisted payload');
+  assert.match(marker, /catch \{/, 'private browsing must read back as unknown, not throw');
 });

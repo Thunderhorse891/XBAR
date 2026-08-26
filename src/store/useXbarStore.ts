@@ -20,6 +20,7 @@ import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { buildPacketCredential } from '@/lib/localSalePacketGenerator';
 import { toPacketDisclosure } from '@/lib/salePacketDisclosure';
 import { onWorkspaceSettled, vaultOwnerId } from '@/lib/vaultOwner';
+import { readRecordsOwner, rememberRecordsOwner } from '@/lib/recordsOwner';
 import { featureGate } from '@/lib/commercialEngine';
 import { ownerPreviewAuthorization, overlayTier } from '@/lib/ownerPreview';
 import { isCurrentPaidPlan } from '@/lib/subscriptionDecision';
@@ -212,6 +213,13 @@ export const useXbarStore = create<XbarStore>()(
           sharedAccess: derived.sharedAccess,
           horses: derived.horses,
         });
+        /*
+         * Setting a workspace up claims the records for whoever is here now.
+         * Without this a browser that has only ever been local carries no
+         * marker, and the sweep withholds itself on a Supabase-configured
+         * deployment forever — blobs from deleted documents never reclaimed.
+         */
+        rememberRecordsOwner(vaultOwnerId());
         return { ok: true, message: 'Workspace profile updated.' };
       },
       applySubscriptionTier: (tier, options = {}) => {
@@ -2545,6 +2553,14 @@ export const useXbarStore = create<XbarStore>()(
         }
         const nextState = restorePersistedState(payload);
         set(nextState);
+        /*
+         * These records now belong to whoever imported them, and only this
+         * marker can say so later. A cloud import REPLACES the local-only
+         * records under the same persist key, so without it a later signed-out
+         * session sees `'local'` as the vault owner beside another workspace's
+         * records and sweeps every local file away.
+         */
+        rememberRecordsOwner(vaultOwnerId());
         return {
           ok: true,
           message: `Imported ${nextState.horses.length} horses, ${nextState.documents.length} documents, and ${nextState.salesLeads.length} leads.`,
@@ -2600,10 +2616,32 @@ export const useXbarStore = create<XbarStore>()(
          * rather than the ones captured at rehydration.
          */
         onWorkspaceSettled(() => {
+          const owner = vaultOwnerId();
+          const recorded = readRecordsOwner();
+
+          /*
+           * Sweep only when the records on screen belong to the vault owner.
+           *
+           * Settling says reconciliation finished; it does not say WHOSE
+           * records finished. One persist key holds one workspace, so importing
+           * a cloud backup replaces the local-only records in place — and a
+           * later session that cannot produce a sign-in (expired, or an auth
+           * read that failed) reports `signed-out`, which puts `'local'` beside
+           * another workspace's records. Every `'local'`-owned file is then
+           * unreferenced, and the sweep is what deletes them.
+           *
+           * An unrecorded owner is unknown, not `'local'`. It is only safe to
+           * assume otherwise where no cloud workspace could ever have been
+           * imported — a deployment with no Supabase project at all — which is
+           * also the population that most needs the sweep, since the on-device
+           * vault is their only storage.
+           */
+          if (recorded ? recorded !== owner : isSupabaseConfigured()) return;
+
           const current = useXbarStore.getState();
           void sweepLocalFileVault(
             referencedVaultKeys(current.documents, current.expenseReceipts, current.salePacketBuilds),
-            vaultOwnerId(),
+            owner,
           );
         });
       },

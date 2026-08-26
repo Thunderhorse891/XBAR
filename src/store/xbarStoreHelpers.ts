@@ -425,14 +425,42 @@ export function canRestorePersistedState(raw: unknown): boolean {
    * the types — the trade the original comment was right about, and the reason
    * this stops at the fields that actually crash.
    */
-  for (const horse of state.horses as unknown[]) {
-    const record = horse as Record<string, unknown>;
-    for (const nested of ['bloodline', 'assignments', 'sale', 'readiness']) {
-      const value = record[nested];
-      if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-    }
-    for (const list of ['gallery', 'breedingTimeline', 'documentFacts', 'alerts']) {
-      if (!Array.isArray(record[list])) return false;
+  /*
+   * Horses are not the only record with deep reads, which is what the previous
+   * version of this comment got wrong. `{ documents: [{ id: 'doc-1' }] }` has
+   * an id, normalizes, installs — and `Documents.tsx:724` immediately reads
+   * `document.entities.horseName`. A packet with only an id reaches
+   * `packet.documentIds.length` on two screens.
+   *
+   * Still only the shapes routes actually dereference WITHOUT a guard, and
+   * still not a full runtime schema: a second description of "valid" would
+   * drift from the types. The list is derived from unguarded dereferences in
+   * the routes, so it grows only when a route adds one.
+   */
+  const NESTED_SHAPES: Record<string, { objects?: string[]; lists?: string[] }> = {
+    horses: {
+      objects: ['bloodline', 'assignments', 'sale', 'readiness'],
+      lists: ['gallery', 'breedingTimeline', 'documentFacts', 'alerts'],
+    },
+    // `document.entities.horseName` and four siblings, read unguarded.
+    documents: { objects: ['entities'] },
+    // `packet.documentIds.length`, read unguarded on two screens.
+    salePacketBuilds: { lists: ['documentIds'] },
+  };
+
+  for (const [collection, shape] of Object.entries(NESTED_SHAPES)) {
+    const entries = state[collection];
+    if (!Array.isArray(entries)) continue;
+
+    for (const entry of entries as unknown[]) {
+      const record = entry as Record<string, unknown>;
+      for (const nested of shape.objects ?? []) {
+        const value = record[nested];
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+      }
+      for (const list of shape.lists ?? []) {
+        if (!Array.isArray(record[list])) return false;
+      }
     }
   }
 

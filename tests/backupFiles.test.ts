@@ -867,3 +867,32 @@ test('a foreign key reaches neither a backup nor a buyer’s packet', async () =
     restore();
   }
 });
+
+test('a record that installs but crashes the route it lands on is refused', async () => {
+  const helpers = await readFile('src/store/xbarStoreHelpers.ts', 'utf8');
+  const documents = await readFile('src/routes/Documents.tsx', 'utf8');
+  const studio = await readFile('src/routes/SalePacketStudio.tsx', 'utf8');
+
+  /*
+   * Passing the id loop is not the same as being usable, and horses were not
+   * the only record with deep reads. `{ documents: [{ id: 'doc-1' }] }` has an
+   * id, normalizes, installs — and the Documents route immediately reads
+   * `document.entities.horseName`, on a screen the rancher just chose, after
+   * the vault has already been overwritten with the backup's blobs.
+   */
+  assert.match(helpers, /documents: \{ objects: \['entities'\] \}/, 'documents deref a nested object unguarded');
+  assert.match(helpers, /salePacketBuilds: \{ lists: \['documentIds'\] \}/, 'packets deref a nested array unguarded');
+  assert.match(helpers, /horses: \{\s*objects: \['bloodline', 'assignments', 'sale', 'readiness'\]/);
+
+  /*
+   * Tied to the dereferences the guard exists for, so this fails if a route
+   * stops reading them — at which point the entry is dead weight — rather than
+   * asserting a list against itself.
+   */
+  assert.match(documents, /document\.entities\.horseName/, 'unguarded, which is why `entities` must be present');
+  assert.match(studio, /packet\.documentIds\.length/, 'unguarded, which is why `documentIds` must be an array');
+
+  // Still not a full runtime schema: a second description of "valid" drifts
+  // from the types, which is the trade the original comment was right about.
+  assert.doesNotMatch(helpers, /z\.object\(|yup\.|joi\./, 'the guard must stay a list of crash sites, not a schema');
+});
