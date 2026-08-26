@@ -902,7 +902,6 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   assert.match(helpers, /roleWorkspaces: \{ lists: \['primaryModules', 'permissions'\] \}/);
   assert.match(helpers, /buyerRoomEvents: \{ strings: \['actor'\] \}/);
   assert.match(helpers, /ranchAssets: \{ strings: \['name', 'category', 'assignedTo'\] \}/);
-  assert.match(helpers, /ownershipRecords: \{ strings: \['legalOwner'\], lists: \['auditTrail'\] \}/);
   assert.match(helpers, /strings: \['name', 'owner', 'segment'\]/);
   assert.match(helpers, /'activity',/);
 
@@ -929,17 +928,21 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   );
 
   /*
-   * `pendingDocuments` is deliberately absent, and for the opposite reason to
-   * `saleSlots`: not derived, but already guarded at its read site
-   * (`record?.pendingDocuments ?? []`). Requiring it would reject archives that
-   * restore perfectly well.
+   * `pendingDocuments` and `transferStatus` were both EXCLUDED here once, on
+   * the grounds that their reads are guarded — `record?.pendingDocuments ?? []`
+   * in the ownership selectors, and `normalizeOwnershipRecord` mapped over the
+   * records in Ownership.tsx. Both true; neither generalises. OwnershipChain
+   * maps the raw store records, and Horses.tsx hands a raw record to
+   * `buildHorsePacketCompleteness`, which tests the record for truthiness and
+   * then reads the field.
+   *
+   * The assertions that pinned those exclusions are gone rather than adjusted.
+   * A test that enforces a wrong decision is worse than no test: it made the
+   * mistake permanent and would have failed anyone who tried to fix it.
    */
-  assert.doesNotMatch(shapeTable, /pendingDocuments/, 'an already-guarded read must not be required');
-  assert.match(
-    await readFile('src/features/ownership/selectors.ts', 'utf8'),
-    /record\?\.pendingDocuments \?\? \[\]/,
-    'which is only safe while the selector keeps guarding it',
-  );
+  assert.match(helpers, /strings: \['legalOwner', 'transferStatus'\]/);
+  assert.match(helpers, /lists: \['auditTrail', 'pendingDocuments'\]/);
+
   assert.match(helpers, /'medicalTimeline'/, 'horse.medicalTimeline.map was missing from the horse list itself');
 
   /*
@@ -1008,16 +1011,28 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   assert.doesNotMatch(shapeTable, /saleSlots/, 'a computed field cannot arrive malformed and must not be validated');
 
   /*
-   * Nor anything the read site normalizes first. `record.transferStatus
-   * .toLowerCase()` reads as unguarded and is not — Ownership.tsx maps
-   * `normalizeOwnershipRecord` over the records before touching them, so
-   * requiring it would reject archives that restore perfectly well.
+   * Derived is the only ground for exclusion. "A read site normalizes it first"
+   * was used as one here twice, for `transferStatus` and `pendingDocuments`,
+   * and both had OTHER read sites that do not normalize — so both are now
+   * required and the assertions pinning their exclusion are gone.
+   *
+   * These pin the unguarded reads that make them required, so the entries fail
+   * as dead weight if a route ever starts guarding.
    */
-  assert.doesNotMatch(shapeTable, /transferStatus/, 'a normalized field must not be required of the raw payload');
   assert.match(
-    await readFile('src/routes/Ownership.tsx', 'utf8'),
-    /ownershipRecords\.map\(normalizeOwnershipRecord\)/,
-    'which is only safe while the route still normalizes',
+    await readFile('src/routes/OwnershipChain.tsx', 'utf8'),
+    /o\.pendingDocuments\.length/,
+    'OwnershipChain maps the RAW store records',
+  );
+  assert.match(
+    await readFile('src/lib/xbarPhaseTwo.ts', 'utf8'),
+    /ownershipRecord\.transferStatus\.toLowerCase\(\)/,
+    'and this guard tests the record for truthiness, then reads the field',
+  );
+  assert.match(
+    await readFile('src/routes/Horses.tsx', 'utf8'),
+    /ownershipRecords\.find\(\(record\) => record\.horseId === horse\.id\)/,
+    'which Horses.tsx feeds with a raw record',
   );
 
   // Still not a full runtime schema: a second description of "valid" drifts

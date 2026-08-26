@@ -440,12 +440,15 @@ export function canRestorePersistedState(raw: unknown): boolean {
    * passes added only what a reviewer had named, and each time left siblings
    * behind.
    *
-   * Derived state is deliberately absent. `packet.saleSlots` reads like one of
-   * these and is not: `buildHorsePacketCompleteness` constructs it, so it can
-   * never arrive missing from a backup. Nor is anything a read site normalizes
-   * first — `record.transferStatus.toLowerCase()` looks unguarded and is not,
-   * because `Ownership.tsx` maps `normalizeOwnershipRecord` over the records
-   * before reading them. Validating either would reject valid archives.
+   * Derived state is deliberately absent, and it is the ONLY thing that is.
+   * `packet.saleSlots` reads like one of these and is not:
+   * `buildHorsePacketCompleteness` constructs it, so it cannot arrive missing
+   * from a backup and requiring it would reject valid archives.
+   *
+   * "A read site normalizes it first" is NOT grounds for exclusion, though it
+   * was used as such here twice. `transferStatus` and `pendingDocuments` were
+   * both left out because one of their read sites guards — and both had other
+   * read sites that do not. One guarded read proves nothing about the rest.
    *
    * A caveat on how this list is built, since it has now grown four times. A
    * text search finds `horse.name.toLowerCase()` but not `add(horse.owner)`,
@@ -486,13 +489,25 @@ export function canRestorePersistedState(raw: unknown): boolean {
     /*
      * `record.legalOwner` → `rawName.trim()` — commandPalette.ts:134.
      * `selectedRecord.auditTrail.length` — Ownership.tsx:787.
+     * `o.pendingDocuments.length` — OwnershipChain.tsx:127.
+     * `ownershipRecord.transferStatus.toLowerCase()` — xbarPhaseTwo.ts:290.
      *
-     * `auditTrail` survives normalization: `normalizeOwnershipRecord` supplies
-     * `proofRequirements`, `auditEvents` and `confidence`, and nothing else.
-     * `pendingDocuments` is NOT here for the opposite reason — its read site
-     * takes `record?.pendingDocuments ?? []`, so it is already guarded.
+     * The last two were excluded here once, on the grounds that their reads are
+     * guarded — `record?.pendingDocuments ?? []` in the ownership selectors, and
+     * `normalizeOwnershipRecord` mapped over the records in Ownership.tsx. Both
+     * are true and neither generalises. OwnershipChain maps the RAW store
+     * records, and Horses.tsx hands a raw record to
+     * `buildHorsePacketCompleteness`, whose guard tests the record for
+     * truthiness and then reads the field.
+     *
+     * One guarded read site says nothing about the others. Nothing belongs in
+     * the excluded set unless EVERY read of it is guarded or the field cannot
+     * arrive from a backup at all.
      */
-    ownershipRecords: { strings: ['legalOwner'], lists: ['auditTrail'] },
+    ownershipRecords: {
+      strings: ['legalOwner', 'transferStatus'],
+      lists: ['auditTrail', 'pendingDocuments'],
+    },
     // `packet.documentIds.length` — SalePacketStudio.tsx:174, Documents.tsx:1210.
     salePacketBuilds: { lists: ['documentIds'] },
     // `receipt.vendor.trim()` — Expenses.tsx:114.
