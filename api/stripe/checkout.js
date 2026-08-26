@@ -6,6 +6,7 @@ import {
   claimCheckoutLock,
   listOpenCheckoutSessions,
   planCheckoutSession,
+  splitExpiryBatch,
   releaseCheckoutLock,
   resolveExpiryFailure,
 } from '../_lib/checkout-session.js';
@@ -219,7 +220,9 @@ export default async function handler(req, res) {
     // Expire before creating. A stale open session for a different tier is
     // completable in whatever tab it was left in, which is the duplicate charge
     // this whole path exists to prevent.
-    for (const stale of plan.expire) {
+    const { batch: expiring, deferred: deferredExpiries } = splitExpiryBatch(plan.expire);
+
+    for (const stale of expiring) {
       try {
         await stripe.checkout.sessions.expire(stale.id);
         continue;
@@ -255,6 +258,25 @@ export default async function handler(req, res) {
           outcome === 'refuse_completed'
             ? 'A checkout for this workspace completed a moment ago. Give it a minute to appear, then check the billing portal before starting another plan.'
             : 'An earlier checkout for this workspace could not be confirmed as closed. Try again shortly rather than risk being billed twice.',
+      });
+    }
+
+    /*
+     * Anything left unexpired keeps this purchase from being safe.
+     *
+     * A deferred session is still completable in whatever tab it was abandoned
+     * in, so creating — or reusing — one beside it is the duplicate charge the
+     * expiry step exists to prevent. Refusing here is retryable rather than a
+     * dead end: every attempt closes another batch, so the backlog shrinks by a
+     * fixed amount each time instead of timing out mid-loop and closing an
+     * unpredictable number.
+     */
+    if (deferredExpiries > 0) {
+      return sendJson(res, 503, {
+        ok: false,
+        code: 'billing_unavailable',
+        retryable: true,
+        message: 'Older unfinished checkouts for this workspace are still being closed. Try again in a moment.',
       });
     }
 

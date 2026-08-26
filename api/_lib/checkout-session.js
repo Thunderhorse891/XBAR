@@ -233,3 +233,36 @@ export async function listOpenCheckoutSessions(stripe, customerId) {
 
   return { sessions, complete: false };
 }
+
+/**
+ * How many stale sessions one invocation will close before deferring the rest.
+ *
+ * Reading every page of open sessions fixed a real duplicate-billing hole and
+ * introduced a smaller one: the plan's expiry list used to be capped at 10 by
+ * the single-page read, and each entry is a serial round trip to Stripe. No
+ * `maxDuration` is configured for this endpoint, so it runs on Vercel's default
+ * of ten to fifteen seconds — enough for roughly twenty expiries at a couple of
+ * hundred milliseconds each, and not enough for two hundred.
+ *
+ * Timing out mid-loop is not a data-loss bug (the claim expires, some sessions
+ * did close, the retry resumes) but it spends the customer's time failing
+ * opaquely. Closing a bounded batch and saying so does the same work visibly.
+ */
+export const CHECKOUT_EXPIRE_BUDGET = 20;
+
+/**
+ * Split the sessions to expire into what this invocation will attempt now and
+ * how many it is leaving for the next one.
+ *
+ * The caller must refuse when anything is deferred. A session left open is
+ * completable in whatever tab it was abandoned in, so creating a new one beside
+ * it is the duplicate charge — the same reason the whole expiry step exists.
+ * Refusing is safe to retry rather than a dead end: each attempt closes another
+ * batch, so the backlog shrinks by `CHECKOUT_EXPIRE_BUDGET` every time.
+ *
+ * @returns {{ batch: object[], deferred: number }}
+ */
+export function splitExpiryBatch(expire, budget = CHECKOUT_EXPIRE_BUDGET) {
+  const all = Array.isArray(expire) ? expire : [];
+  return { batch: all.slice(0, budget), deferred: Math.max(0, all.length - budget) };
+}

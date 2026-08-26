@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
+  CHECKOUT_EXPIRE_BUDGET,
   CHECKOUT_LOCK_MS,
   OPEN_SESSION_PAGE_LIMIT,
   OPEN_SESSION_PAGE_SIZE,
   claimCheckoutLock,
   listOpenCheckoutSessions,
   planCheckoutSession,
+  splitExpiryBatch,
   resolveExpiryFailure,
 } from '../../api/_lib/checkout-session.js';
 
@@ -394,4 +396,50 @@ test('the endpoint refuses a partial list instead of creating beside it', () => 
     /retryable: true/,
     'the customer must be told to try again, not that they are not entitled',
   );
+});
+
+/*
+ * Reading every page fixed a duplicate-billing hole and opened a smaller one.
+ * The expiry list used to be capped at 10 by the single-page read; each entry
+ * is a serial round trip, and this endpoint sets no `maxDuration`, so it runs
+ * on Vercel's ten-to-fifteen-second default. Two hundred expiries do not fit,
+ * and timing out mid-loop closes an unpredictable number of them.
+ */
+
+test('a backlog too large for one invocation is closed in bounded batches', () => {
+  const stale = Array.from({ length: CHECKOUT_EXPIRE_BUDGET + 5 }, (_, index) => session({ id: `cs_${index}` }));
+
+  const { batch, deferred } = splitExpiryBatch(stale);
+
+  assert.equal(batch.length, CHECKOUT_EXPIRE_BUDGET, 'one invocation must not attempt unbounded serial work');
+  assert.equal(deferred, 5, 'what was not attempted has to be counted, not dropped');
+  assert.ok(CHECKOUT_EXPIRE_BUDGET <= 25, 'a budget that cannot finish inside the function timeout is not a budget');
+});
+
+test('a backlog that fits is attempted whole, with nothing deferred', () => {
+  const stale = Array.from({ length: 3 }, (_, index) => session({ id: `cs_${index}` }));
+
+  const { batch, deferred } = splitExpiryBatch(stale);
+
+  assert.equal(batch.length, 3);
+  assert.equal(deferred, 0, 'the ordinary case must not be told to come back later');
+  assert.deepEqual(splitExpiryBatch([]), { batch: [], deferred: 0 });
+  assert.deepEqual(splitExpiryBatch(undefined), { batch: [], deferred: 0 }, 'a missing list is not a crash');
+});
+
+test('a deferred expiry stops the purchase, including the reuse path', () => {
+  const source = readFileSync('api/stripe/checkout.js', 'utf8');
+
+  const refuse = source.indexOf('if (deferredExpiries > 0)');
+  const reuse = source.indexOf('let session = plan.session;');
+  const create = source.indexOf('stripe.checkout.sessions.create(');
+
+  assert.ok(refuse > -1, 'sessions left open must stop the purchase');
+  assert.ok(refuse < reuse, 'a deferred session is completable beside a REUSED one too, not only a new one');
+  assert.ok(refuse < create, 'refusing after creating is not refusing');
+  assert.match(source.slice(refuse, reuse), /retryable: true/, 'the backlog shrinks each attempt, so retrying works');
+
+  // The loop must walk the bounded batch, not the whole list it came from.
+  assert.match(source, /for \(const stale of expiring\)/);
+  assert.doesNotMatch(source, /for \(const stale of plan\.expire\)/, 'the unbounded loop is the bug being fixed');
 });
