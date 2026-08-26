@@ -3,7 +3,10 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   CHECKOUT_LOCK_MS,
+  OPEN_SESSION_PAGE_LIMIT,
+  OPEN_SESSION_PAGE_SIZE,
   claimCheckoutLock,
+  listOpenCheckoutSessions,
   planCheckoutSession,
   resolveExpiryFailure,
 } from '../../api/_lib/checkout-session.js';
@@ -104,7 +107,7 @@ test('no open sessions means an ordinary first purchase', () => {
 test('the endpoint expires stale sessions before it creates another', () => {
   const source = readFileSync('api/stripe/checkout.js', 'utf8');
 
-  const list = source.indexOf('stripe.checkout.sessions.list(');
+  const list = source.indexOf('listOpenCheckoutSessions(stripe, stripeCustomerId)');
   const expire = source.indexOf('stripe.checkout.sessions.expire(');
   const create = source.indexOf('stripe.checkout.sessions.create(');
 
@@ -278,7 +281,7 @@ test('the endpoint claims before it looks at Stripe, and always releases', () =>
   const source = readFileSync('api/stripe/checkout.js', 'utf8');
 
   const claim = source.indexOf('await claimCheckoutLock(supabase, workspaceId)');
-  const list = source.indexOf('stripe.checkout.sessions.list(');
+  const list = source.indexOf('listOpenCheckoutSessions(stripe, stripeCustomerId)');
   assert.ok(claim > -1 && claim < list, 'listing is only safe while holding the claim');
 
   /*
@@ -288,4 +291,107 @@ test('the endpoint claims before it looks at Stripe, and always releases', () =>
    */
   assert.match(source, /\} finally \{\s*\/\/[\s\S]{0,200}await releaseCheckoutLock\(supabase, workspaceId\);/);
   assert.ok(!source.includes('idempotencyKey'), 'a second mechanism that looks like it serializes must not remain');
+});
+
+/*
+ * One `list` call returns the FIRST PAGE of open sessions, not the open
+ * sessions. The endpoint asked for 10 and ignored `has_more`, which held for
+ * the case it was written against — one seller, one stray tab — and failed for
+ * the case that actually produces a pile: repeated attempts under the old flow,
+ * which created a completable session every time and expired none of them.
+ * Session 11 was invisible to the plan and still completable, and completing it
+ * beside this request's session is the second subscription.
+ */
+function fakeStripe(pages) {
+  const calls = [];
+  return {
+    calls,
+    checkout: {
+      sessions: {
+        async list(params) {
+          calls.push(params);
+          return pages[calls.length - 1] ?? { data: [], has_more: false };
+        },
+      },
+    },
+  };
+}
+
+test('a single page of open sessions is read once and reported complete', async () => {
+  const stripe = fakeStripe([{ data: [session({ id: 'cs_1' }), session({ id: 'cs_2' })], has_more: false }]);
+
+  const result = await listOpenCheckoutSessions(stripe, 'cus_1');
+
+  assert.equal(result.complete, true);
+  assert.deepEqual(
+    result.sessions.map((entry) => entry.id),
+    ['cs_1', 'cs_2'],
+  );
+  assert.equal(stripe.calls.length, 1, 'nothing follows a page that says there is no more');
+  assert.equal(stripe.calls[0].status, 'open');
+  assert.equal(stripe.calls[0].customer, 'cus_1');
+  assert.equal(stripe.calls[0].limit, OPEN_SESSION_PAGE_SIZE);
+  assert.equal(OPEN_SESSION_PAGE_SIZE, 100, "Stripe's maximum page size — fewer pages is fewer round trips");
+});
+
+test('sessions beyond the first page are collected, not ignored', async () => {
+  const stripe = fakeStripe([
+    { data: [session({ id: 'cs_1' }), session({ id: 'cs_2' })], has_more: true },
+    { data: [session({ id: 'cs_3' })], has_more: false },
+  ]);
+
+  const result = await listOpenCheckoutSessions(stripe, 'cus_1');
+
+  assert.equal(result.complete, true);
+  assert.deepEqual(
+    result.sessions.map((entry) => entry.id),
+    ['cs_1', 'cs_2', 'cs_3'],
+    'an open session on page two is exactly as completable as one on page one',
+  );
+  assert.equal(stripe.calls[1].starting_after, 'cs_2', 'the next page must continue from the last id, not restart');
+  assert.equal(stripe.calls[0].starting_after, undefined, 'the first page has nothing to continue from');
+});
+
+test('a walk that runs out of pages refuses rather than planning from part of the list', async () => {
+  const stripe = fakeStripe(
+    Array.from({ length: OPEN_SESSION_PAGE_LIMIT + 2 }, (_, page) => ({
+      data: [session({ id: `cs_${page}` })],
+      has_more: true,
+    })),
+  );
+
+  const result = await listOpenCheckoutSessions(stripe, 'cus_1');
+
+  assert.equal(result.complete, false, 'pages left unread cannot be reported as a complete list');
+  assert.equal(
+    stripe.calls.length,
+    OPEN_SESSION_PAGE_LIMIT,
+    'an unbounded loop in a serverless invocation is its own bug',
+  );
+});
+
+test('more pages promised but none delivered is incomplete, not complete', async () => {
+  // `has_more` with an empty page leaves no id to continue from. Calling that
+  // complete would invent the assurance the caller then relies on.
+  const stripe = fakeStripe([{ data: [], has_more: true }]);
+
+  const result = await listOpenCheckoutSessions(stripe, 'cus_1');
+
+  assert.equal(result.complete, false);
+  assert.equal(stripe.calls.length, 1, 'there is no cursor to page with, so retrying the same page is pointless');
+});
+
+test('the endpoint refuses a partial list instead of creating beside it', () => {
+  const source = readFileSync('api/stripe/checkout.js', 'utf8');
+
+  const refuse = source.indexOf('if (!open.complete)');
+  const plan = source.indexOf('planCheckoutSession(openSessions, intent)');
+  assert.ok(refuse > -1, 'a list that could not be finished must stop the purchase');
+  assert.ok(refuse < plan, 'refusing after planning is not refusing');
+
+  assert.match(
+    source.slice(refuse, plan),
+    /retryable: true/,
+    'the customer must be told to try again, not that they are not entitled',
+  );
 });

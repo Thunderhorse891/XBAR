@@ -4,6 +4,7 @@ import { buildSubscriptionProfile, getStripePriceIdByTier } from '../_lib/subscr
 import { checkoutBlockReason } from '../_lib/subscription-status.js';
 import {
   claimCheckoutLock,
+  listOpenCheckoutSessions,
   planCheckoutSession,
   releaseCheckoutLock,
   resolveExpiryFailure,
@@ -184,12 +185,33 @@ export default async function handler(req, res) {
 
     let openSessions = [];
     if (stripeCustomerId) {
-      const existing = await stripe.checkout.sessions.list({
-        customer: stripeCustomerId,
-        status: 'open',
-        limit: 10,
-      });
-      openSessions = existing?.data ?? [];
+      const open = await listOpenCheckoutSessions(stripe, stripeCustomerId);
+
+      /*
+       * A partial list is not evidence that nothing else is completable.
+       *
+       * Planning from the pages that were read would leave every unread session
+       * open in whatever tab it was abandoned in, and completing one of those
+       * after this request's session bills the workspace twice. So refuse, the
+       * same fail-closed rule the capacity gates and the expiry re-read follow.
+       *
+       * Nothing is expired first. Expiring a thousand sessions one call at a
+       * time is not something this invocation can finish, and a customer who
+       * has that many open built them deliberately: the endpoint is rate
+       * limited to ten attempts a minute and Stripe closes an open session
+       * after about a day.
+       */
+      if (!open.complete) {
+        return sendJson(res, 503, {
+          ok: false,
+          code: 'billing_unavailable',
+          retryable: true,
+          message:
+            'This workspace has more unfinished checkouts open than can be checked at once. Finish or abandon them in the billing portal, then try again.',
+        });
+      }
+
+      openSessions = open.sessions;
     }
 
     const plan = planCheckoutSession(openSessions, intent);

@@ -172,3 +172,64 @@ export function resolveExpiryFailure(session) {
   if (status === 'complete') return 'refuse_completed';
   return 'refuse_unverified';
 }
+
+/**
+ * How many sessions to ask Stripe for per page. 100 is Stripe's maximum.
+ */
+export const OPEN_SESSION_PAGE_SIZE = 100;
+
+/**
+ * How many pages to walk before giving up and refusing.
+ *
+ * An unbounded loop inside a serverless invocation is its own hazard, so the
+ * walk is capped — but the cap is set far above anything a real customer can
+ * reach. Open sessions die after about 24 hours and this endpoint is rate
+ * limited to 10 attempts a minute, so 1000 simultaneously-open sessions is not
+ * a busy seller retrying; it is someone who set out to build that pile.
+ */
+export const OPEN_SESSION_PAGE_LIMIT = 10;
+
+/**
+ * Every Checkout Session Stripe currently reports as open for this customer.
+ *
+ * A single `list` call is not "the open sessions", it is the first page of
+ * them. The previous version asked for 10 and ignored `has_more`, which was
+ * fine for the case it was written against — one seller, one stray tab — and
+ * wrong for the case that actually produces a pile: repeated attempts under the
+ * old flow, which created a fresh completable session every time and expired
+ * none of them. Session number 11 stayed invisible to the plan, stayed
+ * completable in whatever tab it was left in, and completing it after this
+ * request's session created the second subscription this whole path exists to
+ * prevent.
+ *
+ * `complete` is false when the walk stopped with pages still unread. The caller
+ * must refuse in that case rather than plan from what it managed to read: a
+ * partial list cannot show that nothing else is completable, and the rule
+ * everywhere in this flow is that unknown is not permission to charge.
+ *
+ * @returns {Promise<{ sessions: object[], complete: boolean }>}
+ */
+export async function listOpenCheckoutSessions(stripe, customerId) {
+  const sessions = [];
+  let startingAfter = '';
+
+  for (let page = 0; page < OPEN_SESSION_PAGE_LIMIT; page += 1) {
+    const params = { customer: customerId, status: 'open', limit: OPEN_SESSION_PAGE_SIZE };
+    if (startingAfter) params.starting_after = startingAfter;
+
+    const response = await stripe.checkout.sessions.list(params);
+    const data = Array.isArray(response?.data) ? response.data : [];
+    sessions.push(...data);
+
+    if (!response?.has_more) return { sessions, complete: true };
+
+    // `has_more` with nothing to page from leaves no cursor to continue with.
+    // Reporting that as complete would be inventing the assurance the caller
+    // is about to rely on.
+    const cursor = data.length > 0 ? String(data[data.length - 1]?.id ?? '') : '';
+    if (!cursor) return { sessions, complete: false };
+    startingAfter = cursor;
+  }
+
+  return { sessions, complete: false };
+}
