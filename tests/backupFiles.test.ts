@@ -907,6 +907,28 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   assert.match(helpers, /'activity',/);
 
   /*
+   * A nested path, because requiring `readiness` to be an OBJECT says nothing
+   * about `readiness.blockers` being an array. `horse.readiness.blockers
+   * .filter()` runs on the first qualifying photo upload — after the media file
+   * is already stored, which is the same too-late ordering as the rest of these.
+   */
+  assert.match(helpers, /'readiness\.blockers',/);
+  assert.match(helpers, /path\.split\('\.'\)\.reduce/, 'the table has to be able to express a path, not just a field');
+
+  /*
+   * All THREE loops must resolve the path, and OVER-REJECTION is the failure to
+   * watch here rather than over-acceptance: a loop still doing `record[list]`
+   * looks up the literal key `'readiness.blockers'`, finds nothing, and refuses
+   * every well-formed horse — turning away a backup that restores perfectly,
+   * which no amount of caution justifies.
+   */
+  assert.equal(
+    (helpers.match(/valueAtPath\(record, /g) ?? []).length,
+    3,
+    'objects, lists and strings must all resolve paths, or a valid archive is rejected',
+  );
+
+  /*
    * `pendingDocuments` is deliberately absent, and for the opposite reason to
    * `saleSlots`: not derived, but already guarded at its read site
    * (`record?.pendingDocuments ?? []`). Requiring it would reject archives that
@@ -932,7 +954,20 @@ test('a record that installs but crashes the route it lands on is refused', asyn
 
   // A missing primitive fails on the TYPE, not on emptiness: the empty string
   // is valid and the routes are written to expect it.
-  assert.match(helpers, /if \(typeof record\[field\] !== 'string'\) return false;/);
+  assert.match(helpers, /if \(typeof valueAtPath\(record, field\) !== 'string'\) return false;/);
+
+  /*
+   * All THREE loops must resolve the path, and OVER-REJECTION is the failure to
+   * watch here rather than over-acceptance: a loop still doing `record[list]`
+   * looks up the literal key `'readiness.blockers'`, finds nothing, and refuses
+   * every well-formed horse — turning away a backup that restores perfectly,
+   * which no amount of caution justifies.
+   */
+  assert.equal(
+    (helpers.match(/valueAtPath\(record, /g) ?? []).length,
+    3,
+    'objects, lists and strings must all resolve paths, or a valid archive is rejected',
+  );
 
   /*
    * Tied to the dereferences the guard exists for, so this fails if a route
@@ -959,6 +994,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     ['src/routes/Sales.tsx', /h\.segment\.toLowerCase\(\)/],
     ['src/routes/AnimalProfile.tsx', /animal\.activity\.length/],
     ['src/routes/Ownership.tsx', /selectedRecord\.auditTrail\.length/],
+    ['src/store/useXbarStore.ts', /horse\.readiness\.blockers\.filter\(/],
   ] as const) {
     assert.match(await readFile(route, 'utf8'), deref, `${route} still reads this unguarded`);
   }

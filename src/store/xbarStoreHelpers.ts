@@ -470,6 +470,9 @@ export function canRestorePersistedState(raw: unknown): boolean {
         'ownership',
         'documents',
         'activity',
+        // `horse.readiness.blockers.filter()` — useXbarStore.ts:1205, on the
+        // first qualifying photo upload, after the media file is stored.
+        'readiness.blockers',
       ],
       // `horse.name.toLowerCase` — Breeding.tsx:292.
       // `horse.owner` → `rawName.trim()` — commandPalette.ts:121.
@@ -515,6 +518,21 @@ export function canRestorePersistedState(raw: unknown): boolean {
     roleWorkspaces: { lists: ['primaryModules', 'permissions'] },
   };
 
+  /*
+   * Entries may name a nested path. `readiness` being an object does not make
+   * `readiness.blockers` an array, and `horse.readiness.blockers.filter(...)`
+   * runs when the first qualifying photo is uploaded — after the media file is
+   * already stored.
+   *
+   * Every path used here passes through a field this table also requires as an
+   * object, so an absent parent is refused before the child is ever read.
+   */
+  const valueAtPath = (record: Record<string, unknown>, path: string): unknown =>
+    path.split('.').reduce<unknown>((value, key) => {
+      if (!value || typeof value !== 'object') return undefined;
+      return (value as Record<string, unknown>)[key];
+    }, record);
+
   for (const [collection, shape] of Object.entries(NESTED_SHAPES)) {
     const entries = state[collection];
     if (!Array.isArray(entries)) continue;
@@ -522,11 +540,11 @@ export function canRestorePersistedState(raw: unknown): boolean {
     for (const entry of entries as unknown[]) {
       const record = entry as Record<string, unknown>;
       for (const nested of shape.objects ?? []) {
-        const value = record[nested];
+        const value = valueAtPath(record, nested);
         if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
       }
       for (const list of shape.lists ?? []) {
-        if (!Array.isArray(record[list])) return false;
+        if (!Array.isArray(valueAtPath(record, list))) return false;
       }
       /*
        * A missing PRIMITIVE crashes the same way a missing object does — the
@@ -535,7 +553,7 @@ export function canRestorePersistedState(raw: unknown): boolean {
        * expect it), so this checks the type, not the content.
        */
       for (const field of shape.strings ?? []) {
-        if (typeof record[field] !== 'string') return false;
+        if (typeof valueAtPath(record, field) !== 'string') return false;
       }
     }
   }
