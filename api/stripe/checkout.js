@@ -2,6 +2,7 @@ import Stripe from 'stripe';
 import { readJsonBody, sendJson } from '../_lib/http.js';
 import { buildSubscriptionProfile, getStripePriceIdByTier } from '../_lib/subscription-plans.js';
 import { checkoutBlockReason } from '../_lib/subscription-status.js';
+import { checkoutIdempotencyKey, planCheckoutSession } from '../_lib/checkout-session.js';
 import { requireWorkspaceAccess } from '../_lib/supabase-admin.js';
 import { applyCors } from '../_lib/cors.js';
 import { checkoutSchema, parseBody } from '../_lib/validation.js';
@@ -142,29 +143,79 @@ export default async function handler(req, res) {
     stripeCustomerId = customer.id;
   }
 
-  const session = await stripe.checkout.sessions.create({
-    mode: 'subscription',
-    customer: stripeCustomerId,
-    line_items: [
-      {
-        price: priceId,
-        quantity: seatCount,
-      },
-    ],
-    success_url: `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}checkout=success`,
-    cancel_url: `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}checkout=cancelled`,
-    metadata: {
-      workspace_id: workspaceId,
-      workspace_tier: tier,
-      owner_user_id: user.id,
-    },
-    subscription_data: {
-      metadata: {
-        workspace_id: workspaceId,
-        workspace_tier: tier,
-      },
-    },
-  });
+  /*
+   * An open Checkout Session is a purchase in flight, and the guard above
+   * cannot see one.
+   *
+   * `stripe_subscription_id` stays empty until the webhook lands after payment,
+   * so the entire window between "seller clicked Subscribe" and "Stripe told us
+   * it completed" looked identical to a workspace that had never tried to buy.
+   * A second tab or a retry inside that window created another completable
+   * session; completing both bills the customer twice.
+   *
+   * Stripe knows what is open, so ask it rather than tracking it in a column.
+   */
+  const intent = { workspaceId, tier, seatCount };
+  let openSessions = [];
+  if (stripeCustomerId) {
+    const existing = await stripe.checkout.sessions.list({
+      customer: stripeCustomerId,
+      status: 'open',
+      limit: 10,
+    });
+    openSessions = existing?.data ?? [];
+  }
+
+  const plan = planCheckoutSession(openSessions, intent);
+
+  // Expire before creating. A stale open session for a different tier is
+  // completable in whatever tab it was left in, which is the duplicate charge
+  // this whole path exists to prevent.
+  for (const stale of plan.expire) {
+    try {
+      await stripe.checkout.sessions.expire(stale.id);
+    } catch (error) {
+      // Already expired or completed between the list and now. Nothing to do,
+      // and failing the purchase over it would be worse than the race.
+      console.warn('Expiring a stale checkout session failed.', error);
+    }
+  }
+
+  const session =
+    plan.action === 'reuse'
+      ? plan.session
+      : await stripe.checkout.sessions.create(
+          {
+            mode: 'subscription',
+            customer: stripeCustomerId,
+            line_items: [
+              {
+                price: priceId,
+                quantity: seatCount,
+              },
+            ],
+            success_url: `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}checkout=success`,
+            cancel_url: `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}checkout=cancelled`,
+            metadata: {
+              workspace_id: workspaceId,
+              workspace_tier: tier,
+              // Recorded so a later request can tell whether an open session is
+              // the SAME purchase. Reusing one for a different seat count would
+              // charge the wrong amount.
+              workspace_seats: String(seatCount),
+              owner_user_id: user.id,
+            },
+            subscription_data: {
+              metadata: {
+                workspace_id: workspaceId,
+                workspace_tier: tier,
+              },
+            },
+          },
+          // Collapses two POSTs that race each other, which listing alone
+          // cannot catch: both can list before either has created anything.
+          { idempotencyKey: checkoutIdempotencyKey(intent) },
+        );
 
   await supabase.from('workspace_billing_customers').upsert({
     workspace_id: workspaceId,
