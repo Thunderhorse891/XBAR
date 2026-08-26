@@ -95,19 +95,30 @@ export const CHECKOUT_LOCK_MS = 2 * 60 * 1000;
 export async function claimCheckoutLock(supabase, workspaceId, now = new Date()) {
   const staleBefore = new Date(now.getTime() - CHECKOUT_LOCK_MS).toISOString();
 
-  const { data, error } = await supabase
-    .from('workspace_billing_customers')
-    .update({ checkout_lock_at: new Date(now).toISOString() })
-    .eq('workspace_id', workspaceId)
-    .or(`checkout_lock_at.is.null,checkout_lock_at.lt.${staleBefore}`)
-    .select('workspace_id');
+  /*
+   * An RPC rather than a conditional UPDATE, because the row may not exist.
+   *
+   * `workspace_billing_customers` has no row until a workspace's first
+   * purchase — the only writers are this flow and the webhook that runs after
+   * payment. A plain `update ... where workspace_id = $1` therefore matches
+   * nothing and reports "someone else holds it", refusing every FIRST checkout:
+   * the one path that has to work.
+   *
+   * `xbar_claim_checkout_lock` is a single `insert ... on conflict do update
+   * ... where ... returning`, so it seeds the row and claims it, or claims an
+   * existing row only when the lock is free or stale — atomically either way.
+   */
+  const { data, error } = await supabase.rpc('xbar_claim_checkout_lock', {
+    p_workspace_id: workspaceId,
+    p_stale_before: staleBefore,
+  });
 
   if (error) {
     console.error('Claiming the checkout lock failed.', error);
     return false;
   }
 
-  return Array.isArray(data) && data.length > 0;
+  return data === true;
 }
 
 /**

@@ -40,6 +40,9 @@
 --
 --   psql "$DATABASE_URL" -f supabase/migrations/20260826_checkout_session_lock.sql
 --
+-- It also creates `xbar_claim_checkout_lock`, executable only by service_role —
+-- the same rule 20260822 applies to every other function.
+--
 -- Order relative to the other pending migrations does not matter; it touches
 -- nothing they touch. Verify with:
 --
@@ -65,10 +68,56 @@ alter table public.workspace_billing_customers
 comment on column public.workspace_billing_customers.checkout_lock_at is
   'When a Checkout Session creation claimed this workspace. Serializes concurrent checkouts; expires after 2 minutes so a dead serverless invocation cannot wedge the workspace.';
 
--- Only rows currently holding a lock are ever scanned by the claim query, and
--- there are very few of those at any moment.
+-- Only rows currently holding a lock are ever scanned by the claim, and there
+-- are very few of those at any moment.
 create index if not exists workspace_billing_customers_checkout_lock_idx
   on public.workspace_billing_customers (checkout_lock_at)
   where checkout_lock_at is not null;
+
+-- Claim the lock, creating the row if this workspace has never bought anything.
+--
+-- A plain conditional UPDATE cannot do this. `workspace_billing_customers` has
+-- no row until the first purchase — the only writers are the checkout flow and
+-- the webhook that runs after payment — so `update ... where workspace_id = $1`
+-- matches nothing and reports "someone else holds it". That refuses every
+-- FIRST checkout, which is the one path that has to work.
+--
+-- `insert ... on conflict do update ... where ... returning` is one statement
+-- and therefore atomic: it either inserts the row (this request claims it) or
+-- updates an existing row only when the lock is free or stale. When the WHERE
+-- fails nothing is returned and the caller is told it did not claim.
+--
+-- Every other column has a default, so seeding with the id alone is enough; the
+-- checkout flow fills the rest once Stripe has answered.
+create or replace function public.xbar_claim_checkout_lock(
+  p_workspace_id uuid,
+  p_stale_before timestamptz
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  claimed boolean;
+begin
+  insert into public.workspace_billing_customers as billing (workspace_id, checkout_lock_at)
+  values (p_workspace_id, timezone('utc', now()))
+  on conflict (workspace_id) do update
+    set checkout_lock_at = timezone('utc', now())
+    where billing.checkout_lock_at is null
+       or billing.checkout_lock_at < p_stale_before
+  returning true into claimed;
+
+  return coalesce(claimed, false);
+end;
+$$;
+
+-- Same rule as 20260822: nothing is executable by PUBLIC or anon by default.
+-- Only the API's service role calls this.
+revoke all on function public.xbar_claim_checkout_lock(uuid, timestamptz) from public;
+revoke all on function public.xbar_claim_checkout_lock(uuid, timestamptz) from anon;
+revoke all on function public.xbar_claim_checkout_lock(uuid, timestamptz) from authenticated;
+grant execute on function public.xbar_claim_checkout_lock(uuid, timestamptz) to service_role;
 
 commit;

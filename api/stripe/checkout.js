@@ -136,40 +136,14 @@ export default async function handler(req, res) {
     });
   }
 
-  let stripeCustomerId = billingCustomer?.stripe_customer_id || '';
-  if (!stripeCustomerId) {
-    const customer = await stripe.customers.create({
-      email: user.email || undefined,
-      metadata: {
-        workspace_id: workspaceId,
-        owner_user_id: user.id,
-      },
-    });
-    stripeCustomerId = customer.id;
-  }
-
   /*
-   * An open Checkout Session is a purchase in flight, and the guard above
-   * cannot see one.
+   * Claim the workspace before touching Stripe at all.
    *
-   * `stripe_subscription_id` stays empty until the webhook lands after payment,
-   * so the entire window between "seller clicked Subscribe" and "Stripe told us
-   * it completed" looked identical to a workspace that had never tried to buy.
-   * A second tab or a retry inside that window created another completable
-   * session; completing both bills the customer twice.
-   *
-   * Stripe knows what is open, so ask it rather than tracking it in a column.
-   */
-  const intent = { workspaceId, tier, seatCount };
-
-  /*
-   * Claim the workspace before looking at Stripe at all.
-   *
-   * Everything below — list, expire, create — is only safe if one request is
-   * doing it at a time. Two requests that both list before either creates each
-   * see no open session and each create one, and completing both bills the
-   * customer twice. No key derived from the request can prevent that; the
-   * database row is the only thing both requests contend for.
+   * Everything after this — creating a customer, listing, expiring, creating a
+   * session — is only safe with one request doing it at a time. It also has to
+   * come before the customer is created: a claim that fails afterwards leaves
+   * Stripe holding a customer this deployment never recorded, which is the
+   * orphan the write-failure path further down exists to avoid.
    */
   const claimed = await claimCheckoutLock(supabase, workspaceId);
   if (!claimed) {
@@ -181,14 +155,33 @@ export default async function handler(req, res) {
     });
   }
 
-  /*
-   * Everything from here to the response happens while holding the claim, and
-   * the claim is released in `finally` rather than before each `return`. Four
-   * exit paths releasing separately is four chances to add a fifth that does
-   * not — and a leaked claim locks the workspace out of buying anything until
-   * the two-minute expiry.
-   */
   try {
+    let stripeCustomerId = billingCustomer?.stripe_customer_id || '';
+    if (!stripeCustomerId) {
+      const customer = await stripe.customers.create({
+        email: user.email || undefined,
+        metadata: {
+          workspace_id: workspaceId,
+          owner_user_id: user.id,
+        },
+      });
+      stripeCustomerId = customer.id;
+    }
+
+    /*
+     * An open Checkout Session is a purchase in flight, and the guard above
+     * cannot see one.
+     *
+     * `stripe_subscription_id` stays empty until the webhook lands after payment,
+     * so the entire window between "seller clicked Subscribe" and "Stripe told us
+     * it completed" looked identical to a workspace that had never tried to buy.
+     * A second tab or a retry inside that window created another completable
+     * session; completing both bills the customer twice.
+     *
+     * Stripe knows what is open, so ask it rather than tracking it in a column.
+     */
+    const intent = { workspaceId, tier, seatCount };
+
     let openSessions = [];
     if (stripeCustomerId) {
       const existing = await stripe.checkout.sessions.list({

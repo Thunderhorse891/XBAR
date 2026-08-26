@@ -212,59 +212,66 @@ test('a session Stripe holds but the database does not is closed, not returned',
  * Postgres serializing two updates to one row has no such boundary.
  */
 
-function fakeSupabase({ rows = [{ workspace_id: 'ws-1' }], error = null } = {}) {
+function fakeSupabase({ claimed = true, error = null } = {}) {
   const calls = [];
-  const builder = {
-    update(values) {
-      calls.push(values);
-      return builder;
-    },
-    eq() {
-      return builder;
-    },
-    or(expression) {
-      calls.push({ or: expression });
-      return builder;
-    },
-    select() {
-      return Promise.resolve({ data: rows, error });
+  return {
+    calls,
+    rpc(name, args) {
+      calls.push({ name, args });
+      return Promise.resolve({ data: error ? null : claimed, error });
     },
   };
-  return { from: () => builder, calls };
 }
 
-test('exactly one racing request may create a session', async () => {
-  const winner = fakeSupabase({ rows: [{ workspace_id: 'ws-1' }] });
-  // Postgres serializes the two updates: the loser's conditional no longer
-  // matches, so it gets no row back.
-  const loser = fakeSupabase({ rows: [] });
+test('a workspace making its FIRST purchase can claim', async () => {
+  /*
+   * `workspace_billing_customers` has no row until the first purchase — the
+   * only writers are this flow and the webhook that runs after payment. A plain
+   * conditional UPDATE matched nothing and reported "someone else holds it",
+   * refusing every first checkout: the one path that has to work. The RPC
+   * seeds the row and claims it in one statement.
+   */
+  const supabase = fakeSupabase({ claimed: true });
+  assert.equal(await claimCheckoutLock(supabase, 'ws-new'), true);
+  assert.equal(supabase.calls[0].name, 'xbar_claim_checkout_lock', 'the claim must go through the atomic function');
+});
 
-  assert.equal(await claimCheckoutLock(winner, 'ws-1'), true);
-  assert.equal(await claimCheckoutLock(loser, 'ws-1'), false);
+test('exactly one racing request may create a session', async () => {
+  // Postgres serializes the two statements against the same row: the loser's
+  // WHERE no longer matches, so the function returns false.
+  assert.equal(await claimCheckoutLock(fakeSupabase({ claimed: true }), 'ws-1'), true);
+  assert.equal(await claimCheckoutLock(fakeSupabase({ claimed: false }), 'ws-1'), false);
 });
 
 test('a claim that cannot be read is not a claim', async () => {
   // Same fail-closed rule as the capacity gates: a failed query establishes
   // nothing, and guessing "nobody holds it" creates a second billable session.
-  const broken = fakeSupabase({ rows: null, error: { message: 'connection reset' } });
+  const broken = fakeSupabase({ error: { message: 'connection reset' } });
   assert.equal(await claimCheckoutLock(broken, 'ws-1'), false);
 });
 
 test('a claim left behind by a dead request expires', async () => {
   const supabase = fakeSupabase();
-  const now = new Date('2026-08-26T12:00:00Z');
-  await claimCheckoutLock(supabase, 'ws-1', now);
-
-  const condition = supabase.calls.find((call) => typeof call.or === 'string').or;
+  await claimCheckoutLock(supabase, 'ws-1', new Date('2026-08-26T12:00:00Z'));
 
   /*
    * The holder is a serverless invocation that can vanish mid-request, so the
    * claim has to expire on its own. A lock only a live process can free is a
    * lock that eventually wedges a workspace out of buying anything.
    */
-  assert.match(condition, /checkout_lock_at\.is\.null/, 'an unclaimed workspace is claimable');
-  assert.match(condition, /checkout_lock_at\.lt\.2026-08-26T11:58:00/, 'and a stale claim is reclaimable');
+  assert.equal(supabase.calls[0].args.p_stale_before, '2026-08-26T11:58:00.000Z');
   assert.equal(CHECKOUT_LOCK_MS, 120000);
+});
+
+test('the claim comes before anything is created in Stripe', () => {
+  const source = readFileSync('api/stripe/checkout.js', 'utf8');
+
+  // A claim that fails after the customer is created leaves Stripe holding a
+  // customer this deployment never recorded — the orphan the write-failure
+  // path further down exists to avoid.
+  const claim = source.indexOf('await claimCheckoutLock(supabase, workspaceId)');
+  const customer = source.indexOf('stripe.customers.create(');
+  assert.ok(claim > -1 && claim < customer, 'nothing may be created in Stripe before the workspace is claimed');
 });
 
 test('the endpoint claims before it looks at Stripe, and always releases', () => {
