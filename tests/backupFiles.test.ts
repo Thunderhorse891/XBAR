@@ -14,6 +14,11 @@ import {
 } from '../src/lib/localFileVault.js';
 import { installFakeIndexedDb } from './helpers/fakeIndexedDb.js';
 
+/** The workspace these tests write as. The vault is origin-wide, so every
+ * entry records an owner and the sweep only deletes what it can prove is its
+ * own — a browser holding two accounts used to lose one of them. */
+const TEST_WORKSPACE = 'ws-test';
+
 /*
  * A workspace backup used to carry the records and not the files.
  *
@@ -28,7 +33,12 @@ test('a file survives a backup and a restore onto an empty device', async () => 
   const restore = installFakeIndexedDb();
   let exported;
   try {
-    const key = await storeLocalFile(new Blob(['NEGATIVE COGGINS 2026'], { type: 'application/pdf' }), 'coggins.pdf');
+    const key = await storeLocalFile(
+      new Blob(['NEGATIVE COGGINS 2026'], { type: 'application/pdf' }),
+      'coggins.pdf',
+      undefined,
+      TEST_WORKSPACE,
+    );
     exported = await exportLocalFiles([key]);
 
     assert.equal(exported.files.length, 1);
@@ -61,8 +71,8 @@ test('a file survives a backup and a restore onto an empty device', async () => 
 test('only the files the workspace still references are carried', async () => {
   const restore = installFakeIndexedDb();
   try {
-    const kept = await storeLocalFile(new Blob(['keep']), 'keep.pdf');
-    await storeLocalFile(new Blob(['orphan']), 'orphan.pdf');
+    const kept = await storeLocalFile(new Blob(['keep']), 'keep.pdf', undefined, TEST_WORKSPACE);
+    await storeLocalFile(new Blob(['orphan']), 'orphan.pdf', undefined, TEST_WORKSPACE);
 
     const { files } = await exportLocalFiles([kept]);
 
@@ -78,8 +88,8 @@ test('only the files the workspace still references are carried', async () => {
 test('a file too large for the budget is named, not dropped', async () => {
   const restore = installFakeIndexedDb();
   try {
-    const small = await storeLocalFile(new Blob(['ab']), 'small.pdf');
-    const large = await storeLocalFile(new Blob(['abcdefghij']), 'large.pdf');
+    const small = await storeLocalFile(new Blob(['ab']), 'small.pdf', undefined, TEST_WORKSPACE);
+    const large = await storeLocalFile(new Blob(['abcdefghij']), 'large.pdf', undefined, TEST_WORKSPACE);
 
     const { files, skipped } = await exportLocalFiles([small, large], 5);
 
@@ -124,7 +134,7 @@ test('a restore does not abandon the remaining files when one entry is corrupt',
 test('a referenced file that is not on this device is named, not dropped', async () => {
   const restore = installFakeIndexedDb();
   try {
-    const present = await storeLocalFile(new Blob(['here']), 'here.pdf');
+    const present = await storeLocalFile(new Blob(['here']), 'here.pdf', undefined, TEST_WORKSPACE);
 
     // A record can name a file this device does not have — most often because
     // the workspace arrived from a cloud snapshot written on another machine.
@@ -202,8 +212,8 @@ test('the backup handlers carry files, and the restore keeps their keys', async 
 test('deleting the account leaves nothing on the device', async () => {
   const restore = installFakeIndexedDb();
   try {
-    await storeLocalFile(new Blob(['registration papers']), 'registration.pdf');
-    await storeLocalFile(new Blob(['a receipt']), 'receipt.pdf');
+    await storeLocalFile(new Blob(['registration papers']), 'registration.pdf', undefined, TEST_WORKSPACE);
+    await storeLocalFile(new Blob(['a receipt']), 'receipt.pdf', undefined, TEST_WORKSPACE);
     assert.equal((await listLocalFiles()).length, 2);
 
     const { cleared } = await clearLocalFileVault();
@@ -258,7 +268,7 @@ test('a browser with no vault at all still names what the backup is missing', as
 test('a refused deletion is reported, not counted as cleared', async () => {
   const restore = installFakeIndexedDb({ refuseDelete: true });
   try {
-    await storeLocalFile(new Blob(['registration papers']), 'registration.pdf');
+    await storeLocalFile(new Blob(['registration papers']), 'registration.pdf', undefined, TEST_WORKSPACE);
 
     const { cleared } = await clearLocalFileVault();
 

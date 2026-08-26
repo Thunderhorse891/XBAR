@@ -12,6 +12,7 @@ import { type LocalSalePacket, buildLocalSalePacket, isBuyerSafeDocumentType } f
 import { resolvePacketAttachments } from '@/lib/localPacketAttachments';
 import { storeLocalFile } from '@/lib/localFileVault';
 import { openStoredFileInTab } from '@/lib/openStoredFile';
+import { vaultOwnerId } from '@/lib/vaultOwner';
 import type { DocumentRecord, SaleCredentialSeal } from '@/types/xbar';
 import { billingPathForTier } from '@/lib/billingRoutes';
 import { openFacebookShareDialog } from '@/lib/facebookSharing';
@@ -259,6 +260,7 @@ export function SalePacketWizard({
           new Blob([localPacket.html], { type: 'text/html' }),
           localPacket.fileName,
           'text/html',
+          vaultOwnerId(),
         );
       } catch (error) {
         console.error('Storing the generated packet on this device failed.', error);

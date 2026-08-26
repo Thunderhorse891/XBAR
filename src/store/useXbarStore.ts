@@ -19,6 +19,7 @@ import { hasHorsePhoto, isHorsePhotoAsset } from '@/lib/animalPassport';
 import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { buildPacketCredential } from '@/lib/localSalePacketGenerator';
 import { toPacketDisclosure } from '@/lib/salePacketDisclosure';
+import { vaultOwnerId } from '@/lib/vaultOwner';
 import { featureGate } from '@/lib/commercialEngine';
 import { ownerPreviewAuthorization, overlayTier } from '@/lib/ownerPreview';
 import { isCurrentPaidPlan } from '@/lib/subscriptionDecision';
@@ -801,7 +802,7 @@ export const useXbarStore = create<XbarStore>()(
               let localFileKey: string | undefined;
               if (!uploadedAsset) {
                 try {
-                  localFileKey = await storeLocalFile(file, file.name, file.type);
+                  localFileKey = await storeLocalFile(file, file.name, file.type, vaultOwnerId());
                 } catch (error) {
                   console.error('On-device file storage failed; this record will carry no file.', error);
                 }
@@ -1278,7 +1279,7 @@ export const useXbarStore = create<XbarStore>()(
           let localFileKey: string | undefined;
           if (input.file && !uploadedAsset) {
             try {
-              localFileKey = await storeLocalFile(input.file, input.file.name, input.file.type);
+              localFileKey = await storeLocalFile(input.file, input.file.name, input.file.type, vaultOwnerId());
             } catch (error) {
               console.error('On-device receipt storage failed; this record will carry no file.', error);
             }
@@ -2584,7 +2585,10 @@ export const useXbarStore = create<XbarStore>()(
          */
         if (didWorkspaceReadFail()) return;
 
-        void sweepLocalFileVault(referencedVaultKeys(state.documents, state.expenseReceipts, state.salePacketBuilds));
+        void sweepLocalFileVault(
+          referencedVaultKeys(state.documents, state.expenseReceipts, state.salePacketBuilds),
+          vaultOwnerId(),
+        );
       },
       partialize: (state) =>
         selectPersistedState({

@@ -106,14 +106,23 @@ export function ownerPreviewAuthorization(sessionEmail: string | null | undefine
  * A local dev preview is the UI only: the API answers according to the real
  * account, so anything touching the cloud is refused.
  *
- * A comped account goes further — `XBAR_COMP_EMAILS` is honoured by
- * `getWorkspaceEntitlements`, so the API grants the tier and feature-level
- * checks pass. But the allowlist is keyed on email and lives in the API, while
- * the database's limit triggers read `workspace_subscription_profiles` and see
- * only the workspace's stored plan. A write that hits a seat, storage, or
- * commercial-resource cap can therefore still be refused at the real tier after
- * the API has allowed it. That is a real boundary, not a rounding error, so the
- * copy below says so rather than promising that every cloud action works.
+ * A comped account MAY go further, and the honest word is "may".
+ *
+ * There are two allowlists, configured separately: `VITE_XBAR_COMP_EMAILS` is
+ * compiled into the bundle and is all this code can see, while
+ * `XBAR_COMP_EMAILS` lives on the server and is the one `getWorkspaceEntitlements`
+ * actually honours. Setting only the client one — which is exactly what an
+ * owner does to get the switcher without granting themselves real entitlements
+ * — used to be labelled "the API grants this tier". It does not. The client
+ * cannot see the server's list, so it must not claim to know its answer.
+ *
+ * And even with both set, the allowlist lives in the API while the database's
+ * limit triggers read `workspace_subscription_profiles` and see only the
+ * workspace's stored plan. A write that hits a seat, storage, or commercial
+ * cap can still be refused at the real tier after the API allowed it.
+ *
+ * So the copy below states the dependency instead of asserting an outcome this
+ * side of the wire cannot verify.
  */
 export type OwnerPreviewReach = 'local-only' | 'cloud-ready' | 'cloud-active';
 
@@ -129,7 +138,11 @@ export function ownerPreviewReach(
 export function ownerPreviewReachLabel(reach: OwnerPreviewReach): string {
   switch (reach) {
     case 'cloud-active':
-      return 'Cloud active';
+      // Not "Cloud active": this side of the wire knows the CLIENT allowlist
+      // matched and nothing more. Whether the API grants the tier depends on a
+      // separate server list the bundle cannot read, so the label states what
+      // is known rather than what would be convenient to assume.
+      return 'Cloud allowlisted';
     case 'cloud-ready':
       return 'Cloud ready';
     default:
@@ -140,9 +153,9 @@ export function ownerPreviewReachLabel(reach: OwnerPreviewReach): string {
 export function ownerPreviewReachDetail(reach: OwnerPreviewReach): string {
   switch (reach) {
     case 'cloud-active':
-      return 'Your account is on the operator allowlist, so the API grants this tier. Database limits still follow the workspace\u2019s real plan, so seat, storage and record caps can refuse a write at the stored tier.';
+      return 'Your email is on the app\u2019s operator allowlist. The API grants this tier only if the same email is also in the server\u2019s XBAR_COMP_EMAILS \u2014 the two lists are set separately, so if the server list is empty, cloud actions are still refused at your real plan. Where the API does grant it, database limits still follow the workspace\u2019s stored plan, so seat, storage and record caps can refuse a write anyway.';
     case 'cloud-ready':
-      return 'Your email is on the operator allowlist. Sign in to a cloud workspace to use this tier for real work.';
+      return 'Your email is on the app\u2019s operator allowlist. Sign in to a cloud workspace to find out whether the server grants this tier too \u2014 that is a separate allowlist.';
     default:
       return 'Preview only. Cloud actions are still authorized against your real account, so they will be refused at this tier.';
   }

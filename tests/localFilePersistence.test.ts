@@ -22,8 +22,8 @@ test('a document the cloud did not take is stored on this device', async () => {
   );
   assert.match(
     source,
-    /if \(!uploadedAsset\) \{\s*try \{\s*localFileKey = await storeLocalFile\(file, file\.name, file\.type\)/,
-    'a document the cloud declined must have its bytes written to the on-device vault',
+    /if \(!uploadedAsset\) \{\s*try \{\s*localFileKey = await storeLocalFile\(file, file\.name, file\.type, vaultOwnerId\(\)\)/,
+    'a document the cloud declined must have its bytes written to the on-device vault, tagged with the workspace that owns it',
   );
   assert.match(
     source,
@@ -78,8 +78,8 @@ test('the vault is reconciled against the workspace on rehydration', async () =>
 
   assert.match(
     source,
-    /onRehydrateStorage: \(\) => \(state\) => \{[\s\S]*sweepLocalFileVault\(\s*referencedVaultKeys\(state\.documents, state\.expenseReceipts, state\.salePacketBuilds\),?\s*\)/,
-    'file bytes must be reclaimed when the records that referenced them are gone',
+    /onRehydrateStorage: \(\) => \(state\) => \{[\s\S]*sweepLocalFileVault\(\s*referencedVaultKeys\(state\.documents, state\.expenseReceipts, state\.salePacketBuilds\),\s*vaultOwnerId\(\),?\s*\)/,
+    'file bytes must be reclaimed when the records that referenced them are gone — but only this workspace\u2019s, since the vault is origin-wide and another account\u2019s files are not orphans',
   );
 });
 

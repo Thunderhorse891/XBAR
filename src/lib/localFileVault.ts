@@ -30,6 +30,22 @@ export interface LocalFileEntry {
   type: string;
   size: number;
   storedAt: string;
+  /**
+   * Which workspace put this file here.
+   *
+   * The vault is one database per browser ORIGIN, but a workspace is not: the
+   * same browser can hold two cloud accounts, or a cloud workspace and a
+   * local-only one. Without an owner recorded, the orphan sweep compared an
+   * origin-wide vault against whichever workspace happened to be hydrated and
+   * permanently deleted the other one's documents, receipts and packets — then,
+   * switching back, restored records whose `localFileKey` pointed at nothing.
+   *
+   * Absent on entries written before this existed. Those are never swept: an
+   * unowned file cannot be proven an orphan rather than someone else's, and
+   * leaking storage is a smaller harm than deleting a rancher's only copy of a
+   * Coggins.
+   */
+  workspaceId?: string;
   blob: Blob;
 }
 
@@ -152,13 +168,27 @@ function createVaultKey(): string {
  * to tell the rancher, and a null that reads like "no file was offered" is
  * exactly how the previous code came to claim a local save it never performed.
  */
-export async function storeLocalFile(file: Blob, name: string, type?: string): Promise<string> {
+/**
+ * Put a file in the vault, tagged with the workspace it belongs to.
+ *
+ * `workspaceId` is required rather than defaulted, and passed rather than read
+ * from a module-level "current workspace": the failure mode of getting it wrong
+ * is deleting someone else's files, so every caller states which workspace it is
+ * writing for. `vaultOwnerId()` is the one place that answers that question.
+ */
+export async function storeLocalFile(
+  file: Blob,
+  name: string,
+  type: string | undefined,
+  workspaceId: string,
+): Promise<string> {
   const entry: LocalFileEntry = {
     key: createVaultKey(),
     name,
     type: type ?? file.type ?? '',
     size: file.size,
     storedAt: new Date().toISOString(),
+    workspaceId,
     blob: file,
   };
 
@@ -492,18 +522,45 @@ export function orphanedVaultKeys(storedKeys: string[], referencedKeys: Iterable
  * as housekeeping, and failing to reclaim space is not a reason to stop the app
  * from starting.
  */
-export async function sweepLocalFileVault(referencedKeys: Iterable<string>): Promise<number> {
+export async function sweepLocalFileVault(referencedKeys: Iterable<string>, workspaceId: string): Promise<number> {
   if (!isLocalFileVaultAvailable()) return 0;
 
   try {
     const stored = await listLocalFiles();
+    const referenced = new Set(referencedKeys);
+
+    /*
+     * Only files this workspace owns are candidates.
+     *
+     * The vault is origin-wide and a workspace is not, so "in the vault but not
+     * referenced here" never meant "orphaned" — for a browser holding two
+     * accounts it meant "belongs to the other one". Sweeping on that reading
+     * deleted workspace A's device-only files the first time workspace B
+     * hydrated, permanently, and left A's records pointing at nothing.
+     */
+    const mine = stored.filter((entry) => entry.workspaceId === workspaceId);
     const orphans = orphanedVaultKeys(
-      stored.map((entry) => entry.key),
-      referencedKeys,
+      mine.map((entry) => entry.key),
+      referenced,
     );
     for (const key of orphans) {
       await deleteLocalFile(key);
     }
+
+    /*
+     * Adopt untagged files this workspace demonstrably uses.
+     *
+     * Entries written before ownership was recorded cannot be swept — unowned
+     * is indistinguishable from someone else's. But one that THIS workspace
+     * references is proven to be ours, so claiming it means it can be cleaned up
+     * later instead of lingering forever.
+     */
+    for (const entry of stored) {
+      if (entry.workspaceId !== undefined || !referenced.has(entry.key)) continue;
+      const full = await readLocalFile(entry.key);
+      if (full) await withStore('readwrite', (store) => store.put({ ...full, workspaceId }));
+    }
+
     return orphans.length;
   } catch {
     return 0;

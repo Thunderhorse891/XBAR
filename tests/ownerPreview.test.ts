@@ -311,8 +311,31 @@ test('the cloud-active copy does not promise writes the database will refuse', (
     /cloud actions run at this tier/,
     'this claimed every cloud write succeeds, which the limit triggers do not honour',
   );
-  assert.match(detail, /API grants this tier/);
-  assert.match(detail, /real plan|stored tier/, 'the database boundary has to be stated, not implied');
+  assert.match(detail, /real plan|stored tier|stored plan/, 'the database boundary has to be stated, not implied');
+});
+
+test('the bar never claims a server grant the bundle cannot see', () => {
+  /*
+   * There are two allowlists. `VITE_XBAR_COMP_EMAILS` is compiled into the
+   * bundle; `XBAR_COMP_EMAILS` lives on the server and is the one the API
+   * actually honours. Setting only the client one is the normal way an owner
+   * gets the tier switcher WITHOUT granting themselves real entitlements — and
+   * in that configuration the old copy flatly asserted "the API grants this
+   * tier", which was false.
+   */
+  const detail = ownerPreviewReachDetail('cloud-active');
+
+  assert.doesNotMatch(
+    detail,
+    /allowlist, so the API grants this tier/,
+    'the client cannot know the server allowlist agrees, so it must not assert it',
+  );
+  assert.match(detail, /only if/, 'the grant has to be stated as conditional');
+  assert.match(detail, /XBAR_COMP_EMAILS/, 'and the condition has to name what to check');
+
+  // The label is read on its own, without the tooltip, so it carries the same
+  // burden: it reports that the client list matched, not that access is live.
+  assert.equal(ownerPreviewReachLabel('cloud-active'), 'Cloud allowlisted');
 });
 
 test('each reach level says something different about what will work', () => {

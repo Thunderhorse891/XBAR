@@ -10,6 +10,10 @@ import { storeLocalFile } from '../src/lib/localFileVault.js';
 import type { DocumentRecord } from '../src/types/xbar.js';
 import { installFakeIndexedDb } from './helpers/fakeIndexedDb.js';
 
+/** The workspace these tests write as: vault entries record an owner so the
+ * sweep can never delete another workspace's files. */
+const TEST_WORKSPACE = 'ws-test';
+
 /*
  * A sale packet that lists documents it does not contain is worse than one that
  * admits it is a summary: the seller sends it believing the Coggins is in
@@ -62,7 +66,7 @@ test('nothing is dropped silently — every selected document is either in or ex
   try {
     const documents = [];
     for (let index = 0; index < 25; index += 1) {
-      const key = await storeLocalFile(new Blob(['x']), `doc-${index}.pdf`);
+      const key = await storeLocalFile(new Blob(['x']), `doc-${index}.pdf`, undefined, TEST_WORKSPACE);
       documents.push(document({ id: `d${index}`, title: `Doc ${index}`, localFileKey: key }));
     }
 
@@ -87,7 +91,7 @@ test('unreadable records do not spend the slots that readable files need', async
     const documents = Array.from({ length: MAX_PACKET_ATTACHMENTS }, (_, index) =>
       document({ id: `stale${index}`, title: `Stale ${index}`, localFileKey: `vault-missing-${index}` }),
     );
-    const key = await storeLocalFile(new Blob(['%PDF-1.4 REAL']), 'real.pdf');
+    const key = await storeLocalFile(new Blob(['%PDF-1.4 REAL']), 'real.pdf', undefined, TEST_WORKSPACE);
     documents.push(document({ id: 'real', title: 'Real', localFileKey: key }));
 
     const { attachments, unattached } = await resolvePacketAttachments(documents);
@@ -109,9 +113,9 @@ test('unreadable records do not spend the slots that readable files need', async
 test('the byte ceiling stops at the file that would cross it, not at the first big one', async () => {
   const restore = installFakeIndexedDb();
   try {
-    const small = await storeLocalFile(new Blob(['a'.repeat(400)]), 'coggins.pdf');
-    const huge = await storeLocalFile(new Blob(['b'.repeat(5_000)]), 'video.mp4');
-    const alsoSmall = await storeLocalFile(new Blob(['c'.repeat(400)]), 'memo.pdf');
+    const small = await storeLocalFile(new Blob(['a'.repeat(400)]), 'coggins.pdf', undefined, TEST_WORKSPACE);
+    const huge = await storeLocalFile(new Blob(['b'.repeat(5_000)]), 'video.mp4', undefined, TEST_WORKSPACE);
+    const alsoSmall = await storeLocalFile(new Blob(['c'.repeat(400)]), 'memo.pdf', undefined, TEST_WORKSPACE);
 
     const { attachments, unattached } = await resolvePacketAttachments(
       [
@@ -149,7 +153,12 @@ test('a file with no recorded size is still eligible', () => {
 test('the resolved attachment carries the bytes, not a reference to them', async () => {
   const restore = installFakeIndexedDb();
   try {
-    const key = await storeLocalFile(new Blob(['%PDF-1.4 COGGINS'], { type: 'application/pdf' }), 'coggins-2026.pdf');
+    const key = await storeLocalFile(
+      new Blob(['%PDF-1.4 COGGINS'], { type: 'application/pdf' }),
+      'coggins-2026.pdf',
+      undefined,
+      TEST_WORKSPACE,
+    );
     const { attachments, unattached } = await resolvePacketAttachments([
       document({ id: 'd1', title: 'Coggins 2026', localFileKey: key, fileName: 'coggins-2026.pdf' }),
     ]);
@@ -193,7 +202,12 @@ test('a file larger than one conversion chunk survives intact', async () => {
     // problem — and a Coggins photographed on a phone clears this easily.
     const original = Buffer.from(Array.from({ length: 0x8000 * 3 + 517 }, (_, index) => index % 256));
 
-    const key = await storeLocalFile(new Blob([original], { type: 'image/jpeg' }), 'coggins-scan.jpg');
+    const key = await storeLocalFile(
+      new Blob([original], { type: 'image/jpeg' }),
+      'coggins-scan.jpg',
+      undefined,
+      TEST_WORKSPACE,
+    );
     const { attachments, unattached } = await resolvePacketAttachments([
       document({ id: 'd1', title: 'Coggins scan', localFileKey: key }),
     ]);
@@ -210,7 +224,7 @@ test('a file larger than one conversion chunk survives intact', async () => {
 test('a file with no recorded type still gets a usable data URL', async () => {
   const restore = installFakeIndexedDb();
   try {
-    const key = await storeLocalFile(new Blob(['scan']), 'scan.bin');
+    const key = await storeLocalFile(new Blob(['scan']), 'scan.bin', undefined, TEST_WORKSPACE);
     const { attachments } = await resolvePacketAttachments([document({ id: 'd1', title: 'Scan', localFileKey: key })]);
 
     // A `data:;base64,` URL with an empty type is not reliably openable, so an
@@ -230,8 +244,8 @@ test('the byte ceiling binds on the bytes the vault holds, not on recorded sizes
     // made the cap advisory: enough size-less records could produce a base64
     // packet of any size at all, which is a tab running out of memory rather
     // than a document.
-    const first = await storeLocalFile(new Blob(['aaaaaa']), 'first.pdf');
-    const second = await storeLocalFile(new Blob(['bbbbbb']), 'second.pdf');
+    const first = await storeLocalFile(new Blob(['aaaaaa']), 'first.pdf', undefined, TEST_WORKSPACE);
+    const second = await storeLocalFile(new Blob(['bbbbbb']), 'second.pdf', undefined, TEST_WORKSPACE);
 
     const plan = planPacketAttachments([
       document({ id: 'd1', title: 'First', localFileKey: first }),
