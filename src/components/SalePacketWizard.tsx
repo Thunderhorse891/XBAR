@@ -261,6 +261,9 @@ export function SalePacketWizard({
           localPacket.fileName,
           'text/html',
           vaultOwnerId(),
+          // XBAR wrote this file, so it may open as a document and run the
+          // verifier the CSP allows. An uploaded .html never gets that.
+          { generated: true },
         );
       } catch (error) {
         console.error('Storing the generated packet on this device failed.', error);
@@ -310,12 +313,20 @@ export function SalePacketWizard({
     // write, so the click is long past counting as user activation and browsers
     // commonly refuse — the summary below used to announce a tab that was never
     // there, directly contradicting the warning the seller had just been shown.
-    let packetTabOpened = false;
+    /*
+     * What actually happened, not what was attempted.
+     *
+     * A file that must not run as a document is downloaded and no tab exists,
+     * so reporting every success as a tab sent the seller looking for a window
+     * that was never opened — the same defect as the blocked-popup case this
+     * variable was introduced for, arriving by a different route.
+     */
+    let packetDelivery: 'tab' | 'download' | 'none' = 'none';
     if (downloadUrl && typeof window !== 'undefined') {
       window.open(downloadUrl, '_blank', 'noopener,noreferrer');
     } else if (localFileKey) {
       const opened = await openStoredFileInTab(build.packet);
-      packetTabOpened = opened.ok;
+      packetDelivery = opened.ok ? opened.delivery : 'none';
       if (!opened.ok) {
         pushToast({ title: 'Packet could not be opened', message: opened.message, tone: 'warning' });
       }
@@ -348,7 +359,7 @@ export function SalePacketWizard({
           ? // Says what is in it. A count the seller can check against what they
             // selected is the difference between finding a missing Coggins now
             // and the buyer finding it.
-            `${localPacket?.attachedFiles ?? 0} of ${docSelection.length} document${docSelection.length === 1 ? '' : 's'} embedded in the packet, saved on this device${packetTabOpened ? ' and opened in a new tab' : ' — open it from Sale packets when you are ready'}.${localPacket?.unattachedDocuments.length ? ` Not included: ${localPacket.unattachedDocuments.map((item) => item.title).join(', ')}.` : ''}`
+            `${localPacket?.attachedFiles ?? 0} of ${docSelection.length} document${docSelection.length === 1 ? '' : 's'} embedded in the packet, saved on this device${packetDelivery === 'tab' ? ' and opened in a new tab' : packetDelivery === 'download' ? ' and downloaded to this device' : ' — open it from Sale packets when you are ready'}.${localPacket?.unattachedDocuments.length ? ` Not included: ${localPacket.unattachedDocuments.map((item) => item.title).join(', ')}.` : ''}`
           : `${build.message} The packet could not be saved on this device, so only the record was kept. Buyer follow-up is tracking this buyer either way.`,
       tone: packetStored && !localPacket?.unattachedDocuments.length ? 'success' : 'warning',
     });

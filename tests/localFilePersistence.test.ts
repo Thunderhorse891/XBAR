@@ -295,11 +295,30 @@ test('the packet summary does not claim a tab that never opened', async () => {
   // seller got "your browser blocked the new tab" immediately followed by
   // "opened in a new tab". This branch runs after attachment resolution and an
   // IndexedDB write, so the block is the common case, not the rare one.
-  assert.match(source, /packetTabOpened = opened\.ok;/, 'the wizard must record whether a tab actually opened');
+  /*
+   * Now three outcomes, not two. A blocked popup was the first way this claim
+   * went wrong; a file delivered as a download rather than a tab is the second,
+   * and a boolean could only ever describe one of them.
+   */
   assert.match(
     source,
-    /packetTabOpened \? ' and opened in a new tab' : ' — open it from Sale packets when you are ready'/,
-    'the summary must describe the packet as saved but not opened when the tab was blocked',
+    /packetDelivery = opened\.ok \? opened\.delivery : 'none';/,
+    'the wizard must record HOW the packet was delivered, not merely that it succeeded',
+  );
+  assert.match(
+    source,
+    /packetDelivery === 'tab' \? ' and opened in a new tab'/,
+    'a tab may only be claimed when one actually opened',
+  );
+  assert.match(
+    source,
+    /packetDelivery === 'download' \? ' and downloaded to this device'/,
+    'a download has to be described as a download',
+  );
+  assert.match(
+    source,
+    /' — open it from Sale packets when you are ready'/,
+    'and a packet that reached neither must say where to find it',
   );
 });
 

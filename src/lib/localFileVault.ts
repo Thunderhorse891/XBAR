@@ -46,6 +46,17 @@ export interface LocalFileEntry {
    * Coggins.
    */
   workspaceId?: string;
+  /**
+   * True when XBAR produced this file, false when a person supplied it.
+   *
+   * Provenance, not file type, is what decides whether something may render as
+   * a document under this origin. A sale packet is `text/html` that this app
+   * wrote, with an inline verifier whose hash the CSP allows on purpose; an
+   * uploaded `.html` or `.svg` is someone else's script. Judging both by their
+   * MIME type meant either packets stopped opening — silently disabling the
+   * verifier the CSP work exists to run — or uploads got to execute.
+   */
+  generated?: boolean;
   blob: Blob;
 }
 
@@ -181,6 +192,7 @@ export async function storeLocalFile(
   name: string,
   type: string | undefined,
   workspaceId: string,
+  options?: { generated?: boolean },
 ): Promise<string> {
   const entry: LocalFileEntry = {
     key: createVaultKey(),
@@ -189,6 +201,7 @@ export async function storeLocalFile(
     size: file.size,
     storedAt: new Date().toISOString(),
     workspaceId,
+    generated: options?.generated ?? false,
     blob: file,
   };
 
@@ -659,7 +672,16 @@ export async function openLocalFile(key: string): Promise<LocalFileHandle | null
   if (!entry) return null;
 
   hookPageUnload();
-  const inlineSafe = isInlineViewableType(entry.type);
+  /*
+   * A file XBAR generated may render; a file a person supplied may not.
+   *
+   * The allowlist below is about untrusted content, and a sale packet is not
+   * untrusted — this app wrote every byte of it, and its inline verifier is the
+   * script whose hash `vercel.json` allows precisely so it runs. Sending it
+   * down the download path made that allowance dead code and told the seller
+   * their packet had opened in a tab that did not exist.
+   */
+  const inlineSafe = entry.generated === true || isInlineViewableType(entry.type);
   const blob = inlineSafe ? entry.blob : new Blob([entry.blob], { type: 'application/octet-stream' });
   const url = URL.createObjectURL(blob);
   outstandingUrls.add(url);

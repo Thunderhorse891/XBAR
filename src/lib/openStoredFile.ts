@@ -22,7 +22,15 @@ import type { StoredFileRef } from '@/lib/storedFiles';
  */
 const OBJECT_URL_LIFETIME_MS = 60_000;
 
-export type OpenStoredFileResult = { ok: true } | { ok: false; message: string };
+/**
+ * How the file actually reached the person.
+ *
+ * Reported rather than assumed: an inert file is downloaded and no tab exists,
+ * so a caller that says "opened in a new tab" for every success is telling the
+ * seller to look at something that is not there. The caller phrases its own
+ * copy from this.
+ */
+export type OpenStoredFileResult = { ok: true; delivery: 'tab' | 'download' } | { ok: false; message: string };
 
 export async function openStoredFileInTab(record: StoredFileRef): Promise<OpenStoredFileResult> {
   // Opened synchronously, before any await: a `window.open` that happens after
@@ -82,14 +90,14 @@ export async function openStoredFileInTab(record: StoredFileRef): Promise<OpenSt
       link.remove();
     }
     scheduleRelease();
-    return { ok: true };
+    return { ok: true, delivery: 'download' };
   }
 
   if (previewWindow) {
     previewWindow.location.href = access.url;
     previewWindow.focus();
     scheduleRelease();
-    return { ok: true };
+    return { ok: true, delivery: 'tab' };
   }
 
   /*
@@ -115,5 +123,5 @@ export async function openStoredFileInTab(record: StoredFileRef): Promise<OpenSt
   }
 
   scheduleRelease();
-  return { ok: true };
+  return { ok: true, delivery: 'tab' };
 }

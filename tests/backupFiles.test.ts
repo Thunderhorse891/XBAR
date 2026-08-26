@@ -8,6 +8,7 @@ import {
   blobToBase64,
   exportLocalFiles,
   importLocalFiles,
+  openLocalFile,
   listLocalFiles,
   readLocalFile,
   storeLocalFile,
@@ -404,4 +405,48 @@ test('a PDF is still viewable, so the guard did not break opening files', async 
   assert.equal(isInlineViewableType('image/svg+xml'), false);
   assert.equal(isInlineViewableType('text/html'), false);
   assert.equal(isInlineViewableType(''), false, 'an unknown type is not assumed safe');
+});
+
+test('a packet XBAR generated may open as a document; an uploaded one may not', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    /*
+     * Provenance decides this, not the MIME type.
+     *
+     * Both files below are `text/html`. One is a sale packet this app wrote,
+     * carrying the inline verifier whose hash `vercel.json` allows on purpose;
+     * the other is a file a person uploaded, which is someone else's script and
+     * must never run under this origin. Judging both by their type meant either
+     * packets stopped opening — silently disabling the verifier the CSP work
+     * exists to run — or uploads got to execute.
+     */
+    const packet = await storeLocalFile(new Blob(['<html>packet</html>']), 'packet.html', 'text/html', 'ws-a', {
+      generated: true,
+    });
+    const upload = await storeLocalFile(new Blob(['<html>hostile</html>']), 'upload.html', 'text/html', 'ws-a');
+
+    const openedPacket = await openLocalFile(packet);
+    const openedUpload = await openLocalFile(upload);
+
+    assert.equal(openedPacket?.inlineSafe, true, 'a generated packet must still open in a tab');
+    assert.equal(openedUpload?.inlineSafe, false, 'an uploaded html file must not run as a document');
+
+    openedPacket?.release();
+    openedUpload?.release();
+  } finally {
+    restore();
+  }
+});
+
+test('the wizard says how the packet was delivered, not how it hoped', async () => {
+  const opener = await readFile('src/lib/openStoredFile.ts', 'utf8');
+  const wizard = await readFile('src/components/SalePacketWizard.tsx', 'utf8');
+
+  // An inert file is downloaded and no tab exists, so reporting every success
+  // as a tab sends the seller looking for a window that was never opened.
+  assert.match(opener, /delivery: 'tab' \| 'download'/, 'the result must carry which happened');
+  assert.match(opener, /return \{ ok: true, delivery: 'download' \};/);
+  assert.match(wizard, /packetDelivery === 'tab'/, 'the copy must branch on the reported mode');
+  assert.match(wizard, /and downloaded to this device/, 'a download has to be described as one');
+  assert.ok(!wizard.includes('packetTabOpened'), 'the boolean that could only say "tab" must be gone');
 });
