@@ -519,49 +519,38 @@ test('deleting an account also removes the untagged files it was using', async (
   }
 });
 
-test('a restored packet still opens with its verifier; a restored upload does not', async () => {
+test('a restored file is never executable, whatever the archive claims', async () => {
   const restore = installFakeIndexedDb();
   try {
     /*
-     * Provenance has to survive a backup, and it has to come from somewhere
-     * trustworthy. `PortableLocalFile` deliberately carries no `generated`
-     * flag: a backup is arbitrary JSON, and trusting one would let a
-     * hand-edited archive mark an uploaded `.html` as XBAR-written and earn it
-     * script execution under this origin on restore.
+     * Executable provenance cannot be derived from anything the archive
+     * controls — and inside an import, everything is archive-controlled.
      *
-     * So the importer decides, from the workspace's own validated sale-packet
-     * records — which is also what keeps a restored packet opening in a tab
-     * with the verifier the CSP hash exists to allow.
+     * Deriving it from the backup's own `salePacketBuilds` looked safe because
+     * those records are normalized first, but normalization only requires a
+     * non-empty id. A crafted backup could therefore point a "packet" record at
+     * an arbitrary HTML entry, have it stored as generated, bypass the
+     * inert-MIME allowlist, and execute attacker script in this origin the
+     * moment it was opened — on any host without the Vercel CSP, which includes
+     * the supported local and static-preview builds.
      */
-    const packet = {
-      key: 'vault-packet',
+    const hostile = {
+      key: 'vault-x',
       name: 'packet.html',
-      type: 'text/html',
-      size: 4,
-      storedAt: '',
-      data: btoa('pkt'),
-    };
-    const upload = {
-      key: 'vault-upload',
-      name: 'evil.html',
       type: 'text/html',
       size: 4,
       storedAt: '',
       data: btoa('evl'),
     };
+    const { restored } = await importLocalFiles([hostile], { workspaceId: 'ws-a' });
+    assert.equal(restored, 1);
 
-    const { restored } = await importLocalFiles([packet, upload], {
-      workspaceId: 'ws-a',
-      generatedKeys: ['vault-packet'],
-    });
-    assert.equal(restored, 2);
+    const entry = await readLocalFile('vault-x');
+    assert.equal(entry?.generated, false, 'no import may mark a file as XBAR-written');
 
-    const openedPacket = await openLocalFile('vault-packet');
-    const openedUpload = await openLocalFile('vault-upload');
-    assert.equal(openedPacket?.inlineSafe, true, 'a restored packet must open, not download');
-    assert.equal(openedUpload?.inlineSafe, false, 'a restored upload must stay inert');
-    openedPacket?.release();
-    openedUpload?.release();
+    const opened = await openLocalFile('vault-x');
+    assert.equal(opened?.inlineSafe, false, 'so it downloads rather than running as a document');
+    opened?.release();
   } finally {
     restore();
   }

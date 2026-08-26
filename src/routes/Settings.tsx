@@ -285,19 +285,25 @@ export default function Settings() {
       // document pointing at nothing. A backup written before this shipped has
       // no `files`, and restores exactly as it always did.
       /*
-       * Provenance comes from the VALIDATED workspace payload, not the archive.
+       * A restored file is NEVER treated as XBAR-generated.
        *
-       * A backup is arbitrary JSON. Trusting a `generated` flag in it would let
-       * a hand-edited archive mark an uploaded `.html` as XBAR-written and earn
-       * it script execution under this origin on restore. The sale-packet
-       * records have already passed `canRestorePersistedState` above, so the
-       * keys they reference are the ones this workspace itself calls packets.
+       * My previous attempt derived provenance from the archive's own
+       * `salePacketBuilds`, calling them validated — but `canRestorePersistedState`
+       * only requires a non-empty id, so a crafted backup could carry a packet
+       * record whose `localFileKey` points at an arbitrary HTML entry. That
+       * entry would be stored `generated: true`, bypass the inert-MIME
+       * allowlist, and execute attacker script in this origin the moment the
+       * "packet" was opened — on any host without the Vercel CSP, which
+       * includes the supported local and static-preview builds.
+       *
+       * Executable provenance cannot be derived from anything the archive
+       * controls, and every route into it here is archive-controlled. So a
+       * restored packet is download-only. It is still complete and still
+       * verifiable: opened from disk it is not same-origin with XBAR, and its
+       * verifier runs there with no CSP to satisfy.
        */
-      const restoredPackets = (workspace as { salePacketBuilds?: { localFileKey?: string }[] }).salePacketBuilds ?? [];
-      const generatedKeys = referencedVaultKeys(restoredPackets);
-
       const { restored, failed } = Array.isArray(payload.files)
-        ? await importLocalFiles(payload.files, { workspaceId: vaultOwnerId(), generatedKeys })
+        ? await importLocalFiles(payload.files, { workspaceId: vaultOwnerId() })
         : { restored: 0, failed: [] as UnbackedUpFile[] };
       const result = importWorkspaceBackup(payload);
 

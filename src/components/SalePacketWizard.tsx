@@ -323,7 +323,23 @@ export function SalePacketWizard({
      */
     let packetDelivery: 'tab' | 'download' | 'none' = 'none';
     if (downloadUrl && typeof window !== 'undefined') {
-      window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+      /*
+       * The cloud path had the same defect the local path was fixed for.
+       *
+       * This runs after `createSalePacketRemote` awaited a network request, so
+       * the click no longer counts as user activation and browsers commonly
+       * refuse the popup. The `null` was discarded and the summary announced a
+       * PDF that had opened in a tab nobody could see — the seller's only clue
+       * that the packet existed at all.
+       */
+      packetDelivery = window.open(downloadUrl, '_blank', 'noopener,noreferrer') ? 'tab' : 'none';
+      if (packetDelivery === 'none') {
+        pushToast({
+          title: 'Packet ready — tab was blocked',
+          message: 'Your browser blocked the new tab. Use the download button below to open the packet.',
+          tone: 'warning',
+        });
+      }
     } else if (localFileKey) {
       const opened = await openStoredFileInTab(build.packet);
       packetDelivery = opened.ok ? opened.delivery : 'none';

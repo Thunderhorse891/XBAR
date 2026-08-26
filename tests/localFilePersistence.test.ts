@@ -404,3 +404,32 @@ test('the vault sweep waits for the cloud workspace identity', async () => {
   assert.match(helper, /if \(useCloudStore\.getState\(\)\.initialized\) \{/, 'and run immediately when it already is');
   assert.match(helper, /unsubscribe\(\);\s*run\(\);/, 'the listener must detach so the sweep runs once');
 });
+
+test('the cloud packet never claims a tab the browser refused', async () => {
+  const wizard = await readFile('src/components/SalePacketWizard.tsx', 'utf8');
+
+  /*
+   * The cloud path had the same defect the local path was fixed for. It runs
+   * after `createSalePacketRemote` awaited a network request, so the click no
+   * longer counts as user activation and the popup is commonly refused — and
+   * the `null` was discarded while the summary announced a PDF in a tab nobody
+   * could see.
+   */
+  assert.match(
+    wizard,
+    /packetDelivery = window\.open\(downloadUrl, '_blank', 'noopener,noreferrer'\) \? 'tab' : 'none';/,
+    'the cloud open must report whether a tab actually opened',
+  );
+  assert.match(wizard, /Packet ready — tab was blocked/, 'and say where to find the packet when it did not');
+});
+
+test('an import never grants a restored file script execution', async () => {
+  const settings = await readFile('src/routes/Settings.tsx', 'utf8');
+  const vault = await readFile('src/lib/localFileVault.ts', 'utf8');
+
+  // Every signal available during an import comes from the archive, so none of
+  // them may grant execution. Deriving it from the backup's own packet records
+  // was the hole: normalization only requires a non-empty id.
+  assert.ok(!settings.includes('generatedKeys'), 'the archive-derived provenance path must be gone');
+  assert.match(vault, /generated: false,/, 'a restored file is download-only');
+});

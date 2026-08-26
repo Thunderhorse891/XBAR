@@ -430,11 +430,8 @@ export async function exportLocalFiles(
  */
 export async function importLocalFiles(
   files: PortableLocalFile[],
-  context: { workspaceId: string; generatedKeys?: Iterable<string> },
+  context: { workspaceId: string },
 ): Promise<{ restored: number; failed: UnbackedUpFile[] }> {
-  // Provenance is decided here, from the importing workspace's own validated
-  // records — never from the archive, which anyone can write.
-  const generatedKeys = new Set(context.generatedKeys ?? []);
   const failed: UnbackedUpFile[] = [];
 
   if (!isLocalFileVaultAvailable()) {
@@ -466,13 +463,21 @@ export async function importLocalFiles(
         // account is deleted — it would simply accumulate forever.
         workspaceId: context.workspaceId,
         /*
-         * A packet is only "generated" if this workspace's own restored records
-         * say so. That keeps a restored packet opening in a tab with its
-         * verifier — the thing the CSP hash exists for — without letting a
-         * hand-edited archive promote an uploaded HTML file to the same
-         * privilege.
+         * Never. A restored file is download-only, whatever the archive says
+         * about it and whatever the archive's own records claim it is.
+         *
+         * Deriving this from the backup's `salePacketBuilds` looked safe
+         * because those records are normalized first — but normalization only
+         * requires a non-empty id, so a crafted backup could point a "packet"
+         * record at an arbitrary HTML entry and have it stored as generated,
+         * bypassing the inert-MIME allowlist and executing in this origin.
+         * Every signal available here comes from the archive, so none of them
+         * can grant script execution.
+         *
+         * The packet is not lost: opened from disk it is not same-origin with
+         * XBAR, and its verifier runs there with no CSP to satisfy.
          */
-        generated: generatedKeys.has(file.key),
+        generated: false,
         blob: new Blob([bytes], { type: file.type || 'application/octet-stream' }),
       };
       await withStore('readwrite', (store) => store.put(entry));
