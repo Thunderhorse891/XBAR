@@ -72,7 +72,7 @@ test('nothing is dropped silently — every selected document is either in or ex
 
     // The count binds on files that actually resolved, so it is asserted where
     // it is now applied.
-    const { attachments, unattached } = await resolvePacketAttachments(documents);
+    const { attachments, unattached } = await resolvePacketAttachments(documents, TEST_WORKSPACE);
 
     assert.equal(attachments.length, MAX_PACKET_ATTACHMENTS);
     assert.equal(attachments.length + unattached.length, documents.length);
@@ -94,7 +94,7 @@ test('unreadable records do not spend the slots that readable files need', async
     const key = await storeLocalFile(new Blob(['%PDF-1.4 REAL']), 'real.pdf', undefined, TEST_WORKSPACE);
     documents.push(document({ id: 'real', title: 'Real', localFileKey: key }));
 
-    const { attachments, unattached } = await resolvePacketAttachments(documents);
+    const { attachments, unattached } = await resolvePacketAttachments(documents, TEST_WORKSPACE);
 
     assert.deepEqual(
       attachments.map((item) => item.fileName),
@@ -125,6 +125,7 @@ test('the byte ceiling stops at the file that would cross it, not at the first b
         // bigger file came before it.
         document({ id: 'also-small', title: 'Memo', type: 'Ownership Memo', localFileKey: alsoSmall }),
       ],
+      TEST_WORKSPACE,
       { maxBytes: 1_000 },
     );
 
@@ -159,9 +160,10 @@ test('the resolved attachment carries the bytes, not a reference to them', async
       undefined,
       TEST_WORKSPACE,
     );
-    const { attachments, unattached } = await resolvePacketAttachments([
-      document({ id: 'd1', title: 'Coggins 2026', localFileKey: key, fileName: 'coggins-2026.pdf' }),
-    ]);
+    const { attachments, unattached } = await resolvePacketAttachments(
+      [document({ id: 'd1', title: 'Coggins 2026', localFileKey: key, fileName: 'coggins-2026.pdf' })],
+      TEST_WORKSPACE,
+    );
 
     assert.deepEqual(unattached, []);
     assert.equal(attachments.length, 1);
@@ -180,9 +182,10 @@ test('the resolved attachment carries the bytes, not a reference to them', async
 test('a key whose bytes are gone is reported, not quietly omitted', async () => {
   const restore = installFakeIndexedDb();
   try {
-    const { attachments, unattached } = await resolvePacketAttachments([
-      document({ id: 'd1', title: 'Coggins 2026', localFileKey: 'vault-cleared' }),
-    ]);
+    const { attachments, unattached } = await resolvePacketAttachments(
+      [document({ id: 'd1', title: 'Coggins 2026', localFileKey: 'vault-cleared' })],
+      TEST_WORKSPACE,
+    );
 
     assert.deepEqual(attachments, []);
     assert.deepEqual(unattached, [
@@ -208,9 +211,10 @@ test('a file larger than one conversion chunk survives intact', async () => {
       undefined,
       TEST_WORKSPACE,
     );
-    const { attachments, unattached } = await resolvePacketAttachments([
-      document({ id: 'd1', title: 'Coggins scan', localFileKey: key }),
-    ]);
+    const { attachments, unattached } = await resolvePacketAttachments(
+      [document({ id: 'd1', title: 'Coggins scan', localFileKey: key })],
+      TEST_WORKSPACE,
+    );
 
     assert.deepEqual(unattached, []);
     const decoded = Buffer.from(attachments[0].dataUrl.split(',')[1], 'base64');
@@ -225,7 +229,10 @@ test('a file with no recorded type still gets a usable data URL', async () => {
   const restore = installFakeIndexedDb();
   try {
     const key = await storeLocalFile(new Blob(['scan']), 'scan.bin', undefined, TEST_WORKSPACE);
-    const { attachments } = await resolvePacketAttachments([document({ id: 'd1', title: 'Scan', localFileKey: key })]);
+    const { attachments } = await resolvePacketAttachments(
+      [document({ id: 'd1', title: 'Scan', localFileKey: key })],
+      TEST_WORKSPACE,
+    );
 
     // A `data:;base64,` URL with an empty type is not reliably openable, so an
     // unknown type falls back to the generic binary one rather than to nothing.
@@ -258,6 +265,7 @@ test('the byte ceiling binds on the bytes the vault holds, not on recorded sizes
         document({ id: 'd1', title: 'First', localFileKey: first }),
         document({ id: 'd2', title: 'Second', localFileKey: second }),
       ],
+      TEST_WORKSPACE,
       { maxBytes: 8 },
     );
 

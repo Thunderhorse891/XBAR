@@ -237,6 +237,7 @@ export function SalePacketWizard({
         docSelection
           .map((id) => documents.find((record) => record.id === id))
           .filter((record): record is DocumentRecord => Boolean(record)),
+        vaultOwnerId(),
       );
 
       localPacket = buildLocalSalePacket({

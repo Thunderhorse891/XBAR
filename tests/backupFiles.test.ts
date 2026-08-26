@@ -15,6 +15,7 @@ import {
   storeLocalFile,
   sweepLocalFileVault,
 } from '../src/lib/localFileVault.js';
+import { resolvePacketAttachments } from '../src/lib/localPacketAttachments.js';
 import { installFakeIndexedDb } from './helpers/fakeIndexedDb.js';
 
 /** The workspace these tests write as. The vault is origin-wide, so every
@@ -58,7 +59,7 @@ test('a file survives a backup and a restore onto an empty device', async () => 
       undefined,
       TEST_WORKSPACE,
     );
-    exported = await exportLocalFiles([key]);
+    exported = await exportLocalFiles([key], TEST_WORKSPACE);
 
     assert.equal(exported.files.length, 1);
     assert.equal(exported.skipped.length, 0);
@@ -93,7 +94,7 @@ test('only the files the workspace still references are carried', async () => {
     const kept = await storeLocalFile(new Blob(['keep']), 'keep.pdf', undefined, TEST_WORKSPACE);
     await storeLocalFile(new Blob(['orphan']), 'orphan.pdf', undefined, TEST_WORKSPACE);
 
-    const { files } = await exportLocalFiles([kept]);
+    const { files } = await exportLocalFiles([kept], TEST_WORKSPACE);
 
     assert.deepEqual(
       files.map((file) => file.name),
@@ -110,7 +111,7 @@ test('a file too large for the budget is named, not dropped', async () => {
     const small = await storeLocalFile(new Blob(['ab']), 'small.pdf', undefined, TEST_WORKSPACE);
     const large = await storeLocalFile(new Blob(['abcdefghij']), 'large.pdf', undefined, TEST_WORKSPACE);
 
-    const { files, skipped } = await exportLocalFiles([small, large], 5);
+    const { files, skipped } = await exportLocalFiles([small, large], TEST_WORKSPACE, 5);
 
     // Smallest first, so a tight budget still carries the most files it can
     // rather than being consumed by the largest one.
@@ -118,7 +119,10 @@ test('a file too large for the budget is named, not dropped', async () => {
       files.map((file) => file.name),
       ['small.pdf'],
     );
-    assert.deepEqual(skipped, [{ name: 'large.pdf', reason: 'too large to fit in the backup file' }]);
+    // The vault KEY rides along with the display name: a restore reconciles
+    // dangling records by key, and recording only the filename lost the reason
+    // for exactly the size and read-failure cases this manifest exists for.
+    assert.deepEqual(skipped, [{ key: large, name: 'large.pdf', reason: 'too large to fit in the backup file' }]);
   } finally {
     restore();
   }
@@ -142,7 +146,9 @@ test('a restore does not abandon the remaining files when one entry is corrupt',
     assert.equal(restored, 1, 'the good file must still be restored');
     // Skipping it quietly leaves a record whose localFileKey resolves to
     // nothing, with no way for the rancher to know which proof did not return.
-    assert.deepEqual(failed, [{ name: 'bad.pdf', reason: 'the file could not be written to this device' }]);
+    assert.deepEqual(failed, [
+      { key: 'vault-bad', name: 'bad.pdf', reason: 'the file could not be written to this device' },
+    ]);
     assert.ok(await readLocalFile('vault-good'));
     assert.equal(await readLocalFile('vault-bad'), null);
   } finally {
@@ -159,13 +165,15 @@ test('a referenced file that is not on this device is named, not dropped', async
     // the workspace arrived from a cloud snapshot written on another machine.
     // Filtering the vault by the wanted keys dropped those silently, so the
     // backup reported success while omitting proof the records still claim.
-    const { files, skipped } = await exportLocalFiles([present, 'vault-elsewhere']);
+    const { files, skipped } = await exportLocalFiles([present, 'vault-elsewhere'], TEST_WORKSPACE);
 
     assert.deepEqual(
       files.map((file) => file.name),
       ['here.pdf'],
     );
-    assert.deepEqual(skipped, [{ name: 'vault-elsewhere', reason: 'the file is not stored on this device' }]);
+    assert.deepEqual(skipped, [
+      { key: 'vault-elsewhere', name: 'vault-elsewhere', reason: 'the file is not stored on this device' },
+    ]);
   } finally {
     restore();
   }
@@ -180,7 +188,9 @@ test('a device that cannot store files reports every one, rather than restoring 
   );
 
   assert.equal(restored, 0);
-  assert.deepEqual(failed, [{ name: 'a.pdf', reason: 'this browser cannot store files on this device' }]);
+  assert.deepEqual(failed, [
+    { key: 'vault-a', name: 'a.pdf', reason: 'this browser cannot store files on this device' },
+  ]);
 });
 
 test('base64 round-trips bytes exactly, across the chunk boundary', async () => {
@@ -263,7 +273,7 @@ test('a vault that cannot be read reports every requested file, not silence', as
   // downloaded a metadata-only backup and called it a success.
   const restore = installFakeIndexedDb({ abortWrites: true });
   try {
-    const { files, skipped } = await exportLocalFiles(['vault-a', 'vault-b']);
+    const { files, skipped } = await exportLocalFiles(['vault-a', 'vault-b'], TEST_WORKSPACE);
 
     assert.deepEqual(files, []);
     assert.deepEqual(skipped.map((entry) => entry.name).sort(), ['vault-a', 'vault-b']);
@@ -279,10 +289,12 @@ test('a vault that cannot be read reports every requested file, not silence', as
 test('a browser with no vault at all still names what the backup is missing', async () => {
   delete (globalThis as { indexedDB?: unknown }).indexedDB;
 
-  const { files, skipped } = await exportLocalFiles(['vault-a']);
+  const { files, skipped } = await exportLocalFiles(['vault-a'], TEST_WORKSPACE);
 
   assert.deepEqual(files, []);
-  assert.deepEqual(skipped, [{ name: 'vault-a', reason: 'this browser cannot store or read files on this device' }]);
+  assert.deepEqual(skipped, [
+    { key: 'vault-a', name: 'vault-a', reason: 'this browser cannot store or read files on this device' },
+  ]);
 });
 
 test('a refused deletion is reported, not counted as cleared', async () => {
@@ -698,10 +710,34 @@ test('a key belonging to another workspace is never treated as this one’s file
   //    actual leak: a key on a record is not permission to read the bytes.
   assert.match(
     vault,
-    /if \(entry\.workspaceId !== undefined && entry\.workspaceId !== workspaceId\) return null;/,
-    'openLocalFile must refuse a blob it can prove belongs to another workspace',
+    /export function mayReadVaultEntry\(entry: \{ workspaceId\?: string \}, workspaceId: string\): boolean \{\s*return entry\.workspaceId === undefined \|\| entry\.workspaceId === workspaceId;/,
+    'one predicate, because this rule was missed at three separate read paths',
   );
+  assert.match(vault, /if \(!mayReadVaultEntry\(entry, workspaceId\)\) return null;/, 'openLocalFile must refuse');
   assert.match(cloud, /openLocalFile\(document\.localFileKey, vaultOwnerId\(\)\)/, 'the caller must say who is asking');
+
+  /*
+   * Every path that turns a key into bytes, counted. Each of the three misses
+   * so far looked exactly like the last one — a reader that resolved a key
+   * without asking who owned it — so the guard is that no such reader is added
+   * without this list changing.
+   */
+  const attachments = await readFile('src/lib/localPacketAttachments.ts', 'utf8');
+  assert.match(
+    attachments,
+    /if \(!mayReadVaultEntry\(entry, workspaceId\)\) \{/,
+    'a packet embeds bytes and hands them to a BUYER — the worst destination a dangling key had',
+  );
+  assert.match(
+    vault,
+    /wanted\.has\(entry\.key\) && mayReadVaultEntry\(entry, workspaceId\)/,
+    'the backup copies bytes somewhere they open freely, so the export must check ownership too',
+  );
+  assert.equal(
+    (vault.match(/mayReadVaultEntry\(/g) ?? []).length + (attachments.match(/mayReadVaultEntry\(/g) ?? []).length,
+    5,
+    'a new vault reader must be reviewed against the ownership rule',
+  );
 
   // 3. Account deletion must not carry away a foreign blob through an imported
   //    reference. `alsoDeleteKeys` is what this workspace REFERENCED, which is
@@ -711,10 +747,7 @@ test('a key belonging to another workspace is never treated as this one’s file
     /const owned = new Set\(alsoDeleteKeys\);/,
     'referenced-is-owned is the assumption that deletes the other account’s documents',
   );
-  assert.match(
-    vault,
-    /if \(entry\.workspaceId === undefined \|\| entry\.workspaceId === workspaceId\) owned\.add\(key\);/,
-  );
+  assert.match(vault, /if \(mayReadVaultEntry\(entry, workspaceId\)\) owned\.add\(key\);/);
 
   /*
    * Untagged entries stay readable and stay adoptable in all three places.
@@ -775,6 +808,61 @@ test('one workspace cannot open or delete another workspace’s stored file', as
 
     const survivors = new Set((await listLocalFiles()).map((entry) => entry.key));
     assert.ok(survivors.has(aKey), 'B deleting its account must not delete A’s document');
+  } finally {
+    restore();
+  }
+});
+
+test('a foreign key reaches neither a backup nor a buyer’s packet', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    const aKey = await storeLocalFile(new Blob(['A registration']), 'reg-a.pdf', 'application/pdf', 'ws-a');
+    const mine = await storeLocalFile(new Blob(['B coggins']), 'coggins-b.pdf', 'application/pdf', 'ws-b');
+
+    /*
+     * B's restored records reference both — the omitted file was never
+     * remapped, so A's key rode along. Two paths then turn that reference into
+     * bytes somewhere they open freely, and neither goes through
+     * `openLocalFile`: the backup writes them into a portable archive, and a
+     * sale packet embeds them and hands the result to a buyer.
+     */
+    const { files, skipped } = await exportLocalFiles([mine, aKey], 'ws-b');
+
+    assert.deepEqual(
+      files.map((file) => file.name),
+      ['coggins-b.pdf'],
+      'another workspace’s document must not be copied into this workspace’s backup',
+    );
+    assert.deepEqual(
+      skipped.map((entry) => entry.key),
+      [aKey],
+      'and it must be named as missing rather than silently dropped',
+    );
+
+    const { attachments, unattached } = await resolvePacketAttachments(
+      [
+        {
+          id: 'd-foreign',
+          title: 'Registration',
+          type: 'Registration',
+          localFileKey: aKey,
+          uploadedBy: 'Ranch Owner',
+          uploadedAt: '2026-06-02',
+          source: 'Upload',
+          state: 'Ready',
+          confidence: 96,
+          duplicateRisk: 'Low',
+          extractedTextPreview: '',
+          summary: '',
+          entities: {},
+        } as never,
+      ],
+      'ws-b',
+    );
+
+    assert.deepEqual(attachments, [], 'a packet must never embed another workspace’s document');
+    assert.equal(unattached.length, 1);
+    assert.match(unattached[0].reason, /belongs to another workspace/);
   } finally {
     restore();
   }

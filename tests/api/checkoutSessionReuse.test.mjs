@@ -11,6 +11,7 @@ import {
   listOpenCheckoutSessions,
   planCheckoutSession,
   releaseCheckoutLock,
+  renewCheckoutLock,
   splitExpiryBatch,
   resolveExpiryFailure,
 } from '../../api/_lib/checkout-session.js';
@@ -626,4 +627,97 @@ test('one paginator serves both listings', () => {
     /stripeSubscriptionBlocksCheckout\(subscription\.status\)/,
     'which statuses block is existing policy, not a second list written beside it',
   );
+});
+
+/*
+ * The lease that stops a dead invocation wedging a workspace also means a SLOW
+ * one is indistinguishable from a dead one. If the Stripe calls above run past
+ * two minutes, a second request legitimately reclaims — and the first would
+ * wake up and create a session on a claim it no longer holds. Checking the
+ * token only at release time was too late: the billable thing already exists.
+ */
+
+function fakeRenewChain(matchedRows) {
+  const recorder = { filters: [] };
+  const chain = {
+    recorder,
+    from(table) {
+      recorder.table = table;
+      return this;
+    },
+    update(values) {
+      recorder.values = values;
+      return this;
+    },
+    eq(column, value) {
+      recorder.filters.push([column, value]);
+      return this;
+    },
+    select(columns) {
+      recorder.selected = columns;
+      return Promise.resolve({ data: matchedRows, error: null });
+    },
+  };
+  return chain;
+}
+
+test('a request that still owns the claim renews it and proceeds', async () => {
+  const chain = fakeRenewChain([{ workspace_id: 'ws-1' }]);
+
+  assert.equal(await renewCheckoutLock(chain, 'ws-1', 'token-a'), true);
+  assert.deepEqual(chain.recorder.filters, [
+    ['workspace_id', 'ws-1'],
+    ['checkout_lock_token', 'token-a'],
+  ]);
+  assert.ok(chain.recorder.values.checkout_lock_at, 'the lease must be pushed back, not merely checked');
+});
+
+test('a request whose claim was taken over may not create a session', async () => {
+  // No row matched: the token is no longer on the row, so a second request
+  // reclaimed the workspace while this one was talking to Stripe.
+  assert.equal(await renewCheckoutLock(fakeRenewChain([]), 'ws-1', 'token-a'), false);
+
+  // Same fail-closed rule as everywhere else here: a failed query proves
+  // nothing, and unknown is not permission to charge.
+  const broken = {
+    from() {
+      return this;
+    },
+    update() {
+      return this;
+    },
+    eq() {
+      return this;
+    },
+    select() {
+      return Promise.resolve({ data: null, error: { message: 'connection reset' } });
+    },
+  };
+  assert.equal(await renewCheckoutLock(broken, 'ws-1', 'token-a'), false);
+
+  let touched = false;
+  await renewCheckoutLock(
+    {
+      from() {
+        touched = true;
+        return this;
+      },
+    },
+    'ws-1',
+    '',
+  );
+  assert.equal(touched, false, 'a request that never claimed has nothing to renew');
+});
+
+test('the fence stands between the Stripe calls and anything billable', () => {
+  const source = readFileSync('api/stripe/checkout.js', 'utf8');
+
+  const expire = source.indexOf('stripe.checkout.sessions.expire(');
+  const fence = source.indexOf('await renewCheckoutLock(supabase, workspaceId, claimToken)');
+  const reuse = source.indexOf('let session = plan.session;');
+  const create = source.indexOf('stripe.checkout.sessions.create(');
+
+  assert.ok(fence > -1, 'ownership must be revalidated before the billable step, not only at release');
+  assert.ok(expire < fence, 'the calls that can outrun the lease come first — fencing before them proves nothing');
+  assert.ok(fence < reuse && fence < create, 'handing back a reused session on a lost claim is the same duplicate');
 });

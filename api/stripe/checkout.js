@@ -9,6 +9,7 @@ import {
   planCheckoutSession,
   splitExpiryBatch,
   releaseCheckoutLock,
+  renewCheckoutLock,
   resolveExpiryFailure,
 } from '../_lib/checkout-session.js';
 import { requireWorkspaceAccess } from '../_lib/supabase-admin.js';
@@ -315,6 +316,27 @@ export default async function handler(req, res) {
         code: 'billing_unavailable',
         retryable: true,
         message: 'Older unfinished checkouts for this workspace are still being closed. Try again in a moment.',
+      });
+    }
+
+    /*
+     * Last check before anything billable: is this claim still ours?
+     *
+     * Everything above talks to Stripe, and the lease is two minutes. An
+     * invocation slow enough to outrun it does not know that — a second request
+     * will have reclaimed the workspace and may already be creating a session,
+     * and this one would create another beside it. Validating the token only on
+     * release was too late, because the session exists by then.
+     *
+     * The renewal is the fence: it proves ownership and buys a fresh lease for
+     * the create and the row write that follow.
+     */
+    if (!(await renewCheckoutLock(supabase, workspaceId, claimToken))) {
+      return sendJson(res, 409, {
+        ok: false,
+        code: 'billing_unavailable',
+        retryable: true,
+        message: 'Another checkout for this workspace started while this one was preparing. Try again in a moment.',
       });
     }
 

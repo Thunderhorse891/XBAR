@@ -316,6 +316,18 @@ export interface PortableLocalFile {
 
 /** A file the backup could not carry, and why — named rather than dropped. */
 export interface UnbackedUpFile {
+  /*
+   * The vault key, which is what reconciliation matches on.
+   *
+   * `name` alone was not enough and failed precisely where this manifest earns
+   * its keep. A record points at a KEY, so the restore looks omissions up by
+   * key — but the size and read-failure cases recorded the display filename,
+   * so the lookup missed and the warning showed a bare `vault-...` with no
+   * reason. The two cases the manifest exists to explain were the two it could
+   * not.
+   */
+  key: string;
+  /** What to call it to a person. Falls back to the key when nothing better is known. */
   name: string;
   reason: string;
 }
@@ -337,8 +349,32 @@ export const MAX_BACKUP_FILE_BYTES = 200 * 1024 * 1024;
  * Ordered smallest first so a budget that cannot fit everything still carries
  * the most files it can, rather than being consumed by one video.
  */
+/**
+ * Whether a workspace may read the bytes behind a vault entry.
+ *
+ * The vault is one IndexedDB database per browser ORIGIN, so possessing a key
+ * has never meant owning the file. A restored record can carry another
+ * workspace's key — a file omitted from an archive is never remapped by
+ * `importLocalFiles` — and every path that resolves a key to bytes is a place
+ * that reference turns into a disclosure.
+ *
+ * One predicate rather than the comparison written out at each site: this rule
+ * has now been missed at three separate read paths, and each miss looked
+ * exactly like the last.
+ *
+ * Untagged entries are readable. They predate ownership being recorded, so
+ * unowned is indistinguishable from mine, and refusing them locks people out of
+ * their own files. This is the mirror of the sweep's rule: the sweep deletes
+ * only what it can prove is its own, this refuses only what it can prove is
+ * someone else's.
+ */
+export function mayReadVaultEntry(entry: { workspaceId?: string }, workspaceId: string): boolean {
+  return entry.workspaceId === undefined || entry.workspaceId === workspaceId;
+}
+
 export async function exportLocalFiles(
   keys: Iterable<string>,
+  workspaceId: string,
   maxBytes = MAX_BACKUP_FILE_BYTES,
 ): Promise<{ files: PortableLocalFile[]; skipped: UnbackedUpFile[] }> {
   const files: PortableLocalFile[] = [];
@@ -357,7 +393,7 @@ export async function exportLocalFiles(
    */
   const allUnreadable = (reason: string) => ({
     files,
-    skipped: [...wanted].map((key) => ({ name: key, reason })),
+    skipped: [...wanted].map((key) => ({ key, name: key, reason })),
   });
 
   if (!isLocalFileVaultAvailable()) {
@@ -366,7 +402,13 @@ export async function exportLocalFiles(
 
   let stored: LocalFileSummary[];
   try {
-    stored = (await listLocalFiles()).filter((entry) => wanted.has(entry.key));
+    /*
+     * By key AND by owner. Filtering on the key alone put another workspace's
+     * document bytes into this workspace's backup file — the same dangling
+     * reference the restore note and `openLocalFile` already refuse, reaching
+     * the one path that copies the bytes somewhere they can be opened freely.
+     */
+    stored = (await listLocalFiles()).filter((entry) => wanted.has(entry.key) && mayReadVaultEntry(entry, workspaceId));
   } catch (error) {
     console.error("Reading this device's files for the backup failed.", error);
     return allUnreadable("this device's file storage could not be read");
@@ -385,21 +427,21 @@ export async function exportLocalFiles(
   const found = new Set(stored.map((entry) => entry.key));
   for (const key of wanted) {
     if (!found.has(key)) {
-      skipped.push({ name: key, reason: 'the file is not stored on this device' });
+      skipped.push({ key, name: key, reason: 'the file is not stored on this device' });
     }
   }
 
   let usedBytes = 0;
   for (const summary of [...stored].sort((a, b) => a.size - b.size)) {
     if (usedBytes + summary.size > maxBytes) {
-      skipped.push({ name: summary.name, reason: 'too large to fit in the backup file' });
+      skipped.push({ key: summary.key, name: summary.name, reason: 'too large to fit in the backup file' });
       continue;
     }
 
     try {
       const entry = await readLocalFile(summary.key);
       if (!entry) {
-        skipped.push({ name: summary.name, reason: 'the stored file is no longer on this device' });
+        skipped.push({ key: summary.key, name: summary.name, reason: 'the stored file is no longer on this device' });
         continue;
       }
       files.push({
@@ -413,7 +455,7 @@ export async function exportLocalFiles(
       usedBytes += entry.size;
     } catch (error) {
       console.error('Reading a file for the backup failed.', error);
-      skipped.push({ name: summary.name, reason: 'the stored file could not be read' });
+      skipped.push({ key: summary.key, name: summary.name, reason: 'the stored file could not be read' });
     }
   }
 
@@ -454,6 +496,7 @@ export async function importLocalFiles(
     return {
       restored: 0,
       failed: files.map((file) => ({
+        key: file?.key || '',
         name: file?.name || file?.key || 'a file',
         reason: 'this browser cannot store files on this device',
       })),
@@ -464,7 +507,9 @@ export async function importLocalFiles(
   let restored = 0;
   for (const file of files) {
     if (!file?.key || typeof file.data !== 'string') {
-      failed.push({ name: file?.name || 'an unnamed entry', reason: 'the backup entry is malformed' });
+      // A malformed entry has no usable key by definition — that is what makes
+      // it malformed — so there is nothing for the restore to reconcile against.
+      failed.push({ key: '', name: file?.name || 'an unnamed entry', reason: 'the backup entry is malformed' });
       continue;
     }
     try {
@@ -512,7 +557,11 @@ export async function importLocalFiles(
       // localFileKey that resolves to nothing, and only this list can tell the
       // rancher which of their proof did not come back.
       console.error('Restoring a backed-up file failed.', error);
-      failed.push({ name: file.name || file.key, reason: 'the file could not be written to this device' });
+      failed.push({
+        key: file.key,
+        name: file.name || file.key,
+        reason: 'the file could not be written to this device',
+      });
     }
   }
 
@@ -589,7 +638,7 @@ export async function clearLocalFileVault(
        * took the other account's document with it. Untagged stays adoptable, as
        * described above; a proven foreign owner is left alone.
        */
-      if (entry.workspaceId === undefined || entry.workspaceId === workspaceId) owned.add(key);
+      if (mayReadVaultEntry(entry, workspaceId)) owned.add(key);
     }
     for (const entry of stored) {
       if (entry.workspaceId === workspaceId) owned.add(entry.key);
@@ -783,7 +832,7 @@ export async function openLocalFile(key: string, workspaceId: string): Promise<L
    * can prove is its own, and this reads everything except what it can prove is
    * someone else's.
    */
-  if (entry.workspaceId !== undefined && entry.workspaceId !== workspaceId) return null;
+  if (!mayReadVaultEntry(entry, workspaceId)) return null;
 
   hookPageUnload();
   /*

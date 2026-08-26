@@ -1,4 +1,4 @@
-import { blobToBase64, readLocalFile } from './localFileVault.js';
+import { blobToBase64, mayReadVaultEntry, readLocalFile } from './localFileVault.js';
 import type { DocumentRecord } from '../types/xbar.js';
 
 /*
@@ -120,6 +120,13 @@ async function toDataUrl(blob: Blob, mimeType: string): Promise<string> {
  */
 export async function resolvePacketAttachments(
   documents: DocumentRecord[],
+  /*
+   * Who is building the packet. Passed in rather than read from the store here:
+   * this module is a pure library over the vault, and reaching into the cloud
+   * store from it would tie every consumer — and the test build — to React
+   * state it has no business knowing about.
+   */
+  workspaceId: string,
   limits?: { maxCount?: number; maxBytes?: number },
 ): Promise<{ attachments: LocalPacketAttachment[]; unattached: UnattachedDocument[] }> {
   const plan = planPacketAttachments(documents);
@@ -149,6 +156,17 @@ export async function resolvePacketAttachments(
       const entry = await readLocalFile(document.localFileKey as string);
       if (!entry) {
         unattached.push({ title: label(document), reason: 'the stored file is no longer on this device' });
+        continue;
+      }
+      /*
+       * `readLocalFile` is the raw accessor and enforces nothing — the owner
+       * check lives in `openLocalFile`, which this path does not use. A packet
+       * built from a record carrying another workspace's key would have
+       * embedded that workspace's document and handed it to a buyer, which is
+       * the worst destination any of these dangling references had.
+       */
+      if (!mayReadVaultEntry(entry, workspaceId)) {
+        unattached.push({ title: label(document), reason: 'the stored file belongs to another workspace' });
         continue;
       }
       if (usedBytes + entry.size > maxBytes) {

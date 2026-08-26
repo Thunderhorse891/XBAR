@@ -117,6 +117,10 @@ export default function Settings() {
           workspace.expenseReceipts ?? [],
           workspace.salePacketBuilds ?? [],
         ),
+        // A restored record can name a file this workspace does not own. The
+        // backup is the one path that COPIES the bytes somewhere they open
+        // freely, so the owner has to reach the read.
+        vaultOwnerId(),
       );
 
       /*
@@ -381,15 +385,26 @@ export default function Settings() {
           const dangling = referenced.filter((key) => !held.has(key));
 
           if (dangling.length) {
-            const reasons = new Map(
+            /*
+             * Keyed by the vault key, because that is what a dangling record
+             * names. `entry.name` is the fallback for archives written before
+             * the key was recorded — those stored the display filename under
+             * `name`, so matching on it keeps their reasons readable.
+             */
+            const omissions = new Map(
               (Array.isArray(payload.omittedFiles) ? payload.omittedFiles : []).map((entry) => [
-                entry.name,
-                entry.reason,
+                entry.key || entry.name,
+                entry,
               ]),
             );
             const named = dangling
               .slice(0, 5)
-              .map((key) => (reasons.has(key) ? `${key} (${reasons.get(key)})` : key))
+              .map((key) => {
+                const omission = omissions.get(key);
+                if (!omission) return key;
+                // The filename is what the person recognises; the key is not.
+                return `${omission.name || key} (${omission.reason})`;
+              })
               .join('; ');
             danglingNote = ` ${dangling.length} record${dangling.length === 1 ? '' : 's'} still point at ${
               dangling.length === 1 ? 'a file' : 'files'

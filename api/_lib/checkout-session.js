@@ -133,6 +133,46 @@ export async function claimCheckoutLock(supabase, workspaceId, now = new Date())
 }
 
 /**
+ * Prove this request still owns the claim, and push the expiry back.
+ *
+ * The two-minute lease exists so a dead invocation cannot wedge a workspace out
+ * of buying anything. The cost of that is a SLOW invocation is indistinguishable
+ * from a dead one: if the Stripe listing and expiry calls run long, a second
+ * request legitimately reclaims, and the first would then wake up and create a
+ * session on a claim it no longer holds. Checking the token only at release
+ * time was too late — by then the billable thing already exists.
+ *
+ * So the token is revalidated immediately before anything billable, in the same
+ * statement that renews the lease. A `false` here means someone else owns the
+ * workspace now and this request must not create or hand back a session.
+ *
+ * This does not make the window zero — nothing short of a transaction spanning
+ * Stripe could — but it moves the exposure from "however long the earlier calls
+ * took" to "one API call inside a freshly renewed two-minute lease".
+ *
+ * @returns {Promise<boolean>} true only when the claim is still this request's.
+ */
+export async function renewCheckoutLock(supabase, workspaceId, token, now = new Date()) {
+  if (!token) return false;
+
+  const { data, error } = await supabase
+    .from('workspace_billing_customers')
+    .update({ checkout_lock_at: now.toISOString() })
+    .eq('workspace_id', workspaceId)
+    .eq('checkout_lock_token', token)
+    .select('workspace_id');
+
+  if (error) {
+    console.error('Renewing the checkout lock failed.', error);
+    return false;
+  }
+
+  // No row matched: the token is no longer on the row, so another request
+  // reclaimed the workspace while this one was talking to Stripe.
+  return Array.isArray(data) && data.length > 0;
+}
+
+/**
  * Release the claim so a legitimate retry does not wait out the expiry.
  *
  * Matched on the token, so this only ever clears a lock THIS request still
