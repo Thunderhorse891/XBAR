@@ -706,3 +706,15 @@ test('a horse the report counts as listed is never labelled unlisted', async () 
     'and it must come from the same predicate the count uses, not a second derivation',
   );
 });
+
+test('the exported report agrees with the screen about what is for sale', async () => {
+  const exporter = await readFile('src/lib/ranchReportExport.ts', 'utf8');
+
+  // This export is what goes to a banker, so a page saying "not listed for
+  // sale" beneath its own listed count is the version that does real damage.
+  assert.match(
+    exporter,
+    /horse\.saleInventory \? 'asking price not set' : 'not listed for sale'/,
+    'the export must make the same distinction the screen does, from the same predicate',
+  );
+});

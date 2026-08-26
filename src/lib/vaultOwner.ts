@@ -21,3 +21,30 @@ import { useCloudStore } from '@/store/useCloudStore';
 export function vaultOwnerId(): string {
   return useCloudStore.getState().workspaceId || 'local';
 }
+
+/**
+ * Run something once the cloud workspace identity is actually known.
+ *
+ * Zustand rehydration can finish before the asynchronous cloud-store
+ * initialization does, and during that window `vaultOwnerId()` answers
+ * `'local'` for a signed-in workspace. That is harmless for a question asked
+ * later on a user action, but the orphan sweep runs exactly then — so on a
+ * signed-in reload it swept as `'local'`, found nothing of its own, and
+ * reclaimed nothing. It is the only production sweep, so deleted documents,
+ * receipts and packets accumulated in IndexedDB reload after reload until the
+ * quota refused new saves.
+ *
+ * Waiting costs one tick and makes the sweep ask about the right workspace.
+ */
+export function onVaultOwnerReady(run: () => void): void {
+  if (useCloudStore.getState().initialized) {
+    run();
+    return;
+  }
+
+  const unsubscribe = useCloudStore.subscribe((cloud) => {
+    if (!cloud.initialized) return;
+    unsubscribe();
+    run();
+  });
+}

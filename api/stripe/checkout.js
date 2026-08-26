@@ -2,7 +2,12 @@ import Stripe from 'stripe';
 import { readJsonBody, sendJson } from '../_lib/http.js';
 import { buildSubscriptionProfile, getStripePriceIdByTier } from '../_lib/subscription-plans.js';
 import { checkoutBlockReason } from '../_lib/subscription-status.js';
-import { checkoutIdempotencyKey, planCheckoutSession, resolveExpiryFailure } from '../_lib/checkout-session.js';
+import {
+  checkoutIdempotencyKey,
+  isIdempotencyConflict,
+  planCheckoutSession,
+  resolveExpiryFailure,
+} from '../_lib/checkout-session.js';
 import { requireWorkspaceAccess } from '../_lib/supabase-admin.js';
 import { applyCors } from '../_lib/cors.js';
 import { checkoutSchema, parseBody } from '../_lib/validation.js';
@@ -210,55 +215,114 @@ export default async function handler(req, res) {
     });
   }
 
-  const session =
-    plan.action === 'reuse'
-      ? plan.session
-      : await stripe.checkout.sessions.create(
-          {
-            mode: 'subscription',
-            customer: stripeCustomerId,
-            line_items: [
-              {
-                price: priceId,
-                quantity: seatCount,
-              },
-            ],
-            success_url: `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}checkout=success`,
-            cancel_url: `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}checkout=cancelled`,
+  let session = plan.session;
+  if (plan.action !== 'reuse') {
+    try {
+      session = await stripe.checkout.sessions.create(
+        {
+          mode: 'subscription',
+          customer: stripeCustomerId,
+          line_items: [
+            {
+              price: priceId,
+              quantity: seatCount,
+            },
+          ],
+          success_url: `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}checkout=success`,
+          cancel_url: `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}checkout=cancelled`,
+          metadata: {
+            workspace_id: workspaceId,
+            workspace_tier: tier,
+            // Recorded so a later request can tell whether an open session is
+            // the SAME purchase. Reusing one for a different seat count would
+            // charge the wrong amount.
+            workspace_seats: String(seatCount),
+            owner_user_id: user.id,
+          },
+          subscription_data: {
             metadata: {
               workspace_id: workspaceId,
               workspace_tier: tier,
-              // Recorded so a later request can tell whether an open session is
-              // the SAME purchase. Reusing one for a different seat count would
-              // charge the wrong amount.
-              workspace_seats: String(seatCount),
-              owner_user_id: user.id,
-            },
-            subscription_data: {
-              metadata: {
-                workspace_id: workspaceId,
-                workspace_tier: tier,
-              },
             },
           },
-          // Collapses two POSTs that race each other, which listing alone
-          // cannot catch: both can list before either has created anything.
-          { idempotencyKey: checkoutIdempotencyKey(intent) },
-        );
+        },
+        // Serializes creation for this workspace, which listing alone cannot
+        // do: two concurrent requests can both list before either creates.
+        { idempotencyKey: checkoutIdempotencyKey(intent) },
+      );
+    } catch (error) {
+      if (!isIdempotencyConflict(error)) throw error;
+      /*
+       * Another checkout for this workspace is being created right now, for a
+       * different plan or seat count. Both requests listed before either
+       * created anything, so neither could see the other — and letting both
+       * through is exactly how a workspace ends up with two completable
+       * sessions and two subscriptions.
+       *
+       * One of them has to wait, and saying so is the honest answer.
+       */
+      return sendJson(res, 409, {
+        ok: false,
+        code: 'billing_unavailable',
+        retryable: true,
+        message: 'Another checkout for this workspace is already being started. Wait a moment and try again.',
+      });
+    }
+  }
 
-  await supabase.from('workspace_billing_customers').upsert({
-    workspace_id: workspaceId,
-    stripe_customer_id: stripeCustomerId,
-    stripe_subscription_id: '',
-    stripe_price_id: priceId,
-    seat_count: seatCount,
-    entitlement_payload: buildSubscriptionProfile({
-      tier,
-      billingStatus: 'incomplete',
-      existingUsage: billingCustomer?.entitlement_payload?.usage || {},
-    }),
-    updated_at: new Date().toISOString(),
-  });
+  /*
+   * Only a NEW session writes the row, and that exclusion is load-bearing.
+   *
+   * A reused session can be completed in another tab between the listing above
+   * and this write. If its webhook lands first it writes the live
+   * `stripe_subscription_id`, and this unconditional `''` then erased it —
+   * replacing a paid entitlement with `incomplete` and, worse, leaving the next
+   * request to find neither a subscription id nor an open session, free to
+   * create a second billable subscription.
+   *
+   * Nothing is lost by skipping it: reuse can only happen when a customer id
+   * was already read from this row, so the row exists, and the webhook writes
+   * the authoritative profile on completion either way.
+   */
+  if (plan.action !== 'reuse') {
+    const { error: billingWriteError } = await supabase.from('workspace_billing_customers').upsert({
+      workspace_id: workspaceId,
+      stripe_customer_id: stripeCustomerId,
+      stripe_subscription_id: '',
+      stripe_price_id: priceId,
+      seat_count: seatCount,
+      entitlement_payload: buildSubscriptionProfile({
+        tier,
+        billingStatus: 'incomplete',
+        existingUsage: billingCustomer?.entitlement_payload?.usage || {},
+      }),
+      updated_at: new Date().toISOString(),
+    });
+
+    if (billingWriteError) {
+      /*
+       * Stripe now holds a customer and an open session that this deployment
+       * has no record of. Returning the URL anyway would leave a billable
+       * orphan: the next request reads a row with no customer id, creates a
+       * second customer, and cannot list or expire this session — the
+       * duplicate-subscription path, reopened by a failed database write.
+       *
+       * So close what was just created before refusing.
+       */
+      console.error('Recording the checkout customer failed.', billingWriteError);
+      try {
+        await stripe.checkout.sessions.expire(session.id);
+      } catch (expireError) {
+        console.error('Closing an unrecorded checkout session failed.', expireError);
+      }
+      return sendJson(res, 503, {
+        ok: false,
+        code: 'billing_unavailable',
+        retryable: true,
+        message: 'Checkout could not be recorded for this workspace. Nothing was charged — try again in a moment.',
+      });
+    }
+  }
 
   return sendJson(res, 200, {
     ok: true,

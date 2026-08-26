@@ -189,7 +189,11 @@ export function ranchReportSections(report: RanchReport) {
             `floor ${money(horse.safeDiscountFloor)}`,
           );
         } else {
-          parts.push('not listed for sale');
+          // Same distinction the screen makes, from the same predicate. This
+          // export is what goes to a banker, so a page saying "not listed for
+          // sale" beneath its own listed count is the version that does real
+          // damage.
+          parts.push(horse.saleInventory ? 'asking price not set' : 'not listed for sale');
         }
         // Single spaces between parts, so the whole summary stays one value and
         // wraps inside the value column instead of being split into columns.

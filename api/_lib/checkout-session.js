@@ -67,21 +67,37 @@ export function planCheckoutSession(openSessions, intent) {
 }
 
 /**
- * A key that collapses duplicate submissions of the same purchase.
+ * A key that serializes checkout creation for one workspace.
  *
- * Listing open sessions closes the "other tab from ten minutes ago" case, but
- * two POSTs racing each other can both list before either has created anything.
- * This makes Stripe itself return one session for that pair.
+ * Keyed on the WORKSPACE, deliberately not on the tier or seat count.
  *
- * Bucketed by the minute on purpose. A key with no time component would make a
- * legitimate retry hours later replay the original session — which by then may
- * have expired, handing the seller a dead link. A minute is long enough to
- * cover a double submit and short enough that a real second attempt gets a real
- * second session.
+ * Including them meant the key only ever de-duplicated identical submissions:
+ * two concurrent requests for different plans got different keys, both listed
+ * before either created anything, and each created an independently completable
+ * `mode: 'subscription'` session. Completing both charges the workspace twice —
+ * the same defect the reuse logic exists to close, arriving through the one
+ * gap listing cannot cover.
+ *
+ * With the workspace alone, a genuine retry of the SAME purchase replays the
+ * original session (identical parameters), while a concurrent DIFFERENT one
+ * collides and Stripe rejects it. The caller turns that rejection into a
+ * retryable refusal, which is the honest answer: another checkout for this
+ * workspace is being created right now, and one of them has to wait.
+ *
+ * Still bucketed by the minute. A key with no time component would replay the
+ * original session hours later, by then possibly expired, handing the seller a
+ * dead link. Listing catches the slow duplicate; this catches the simultaneous
+ * one.
  */
 export function checkoutIdempotencyKey(intent, now = new Date()) {
   const minute = new Date(now).toISOString().slice(0, 16);
-  return `checkout:${intent?.workspaceId ?? ''}:${intent?.tier ?? ''}:${intent?.seatCount ?? ''}:${minute}`;
+  return `checkout:${intent?.workspaceId ?? ''}:${minute}`;
+}
+
+/** Whether Stripe refused because another checkout for this workspace is in flight. */
+export function isIdempotencyConflict(error) {
+  const type = error && typeof error === 'object' ? String(error.type ?? '') : '';
+  return type === 'idempotency_error';
 }
 
 /**

@@ -112,9 +112,17 @@ test('a real second attempt later gets a real second session', () => {
   const later = checkoutIdempotencyKey(intent, new Date('2026-08-26T13:34:56Z'));
   assert.notEqual(first, later);
 
-  // Different purchases never share a key either.
-  assert.notEqual(first, checkoutIdempotencyKey({ ...intent, tier: 'Enterprise' }, new Date('2026-08-26T12:34:56Z')));
-  assert.notEqual(first, checkoutIdempotencyKey({ ...intent, seatCount: 9 }, new Date('2026-08-26T12:34:56Z')));
+  /*
+   * Different TIERS deliberately share a key now — see the serialization test
+   * below. Keying on the intent meant two concurrent requests for different
+   * plans got different keys and both created a completable session. The
+   * workspace is the thing being serialized, so a different workspace is what
+   * must never collide.
+   */
+  assert.notEqual(
+    first,
+    checkoutIdempotencyKey({ ...intent, workspaceId: 'ws-other' }, new Date('2026-08-26T12:34:56Z')),
+  );
 });
 
 test('the endpoint expires stale sessions before it creates another', () => {
@@ -188,4 +196,64 @@ test('the endpoint re-reads a session it failed to expire, and refuses on the an
   assert.match(source, /resolveExpiryFailure\(reread\)/);
   assert.match(source, /if \(outcome === 'proceed'\) continue;/, 'only the harmless race carries on');
   assert.match(source, /code: outcome === 'refuse_completed' \? 'subscription_active' : 'billing_unavailable'/);
+});
+
+test('two concurrent checkouts for different plans cannot both proceed', () => {
+  /*
+   * The gap listing cannot cover. Two requests can both list open sessions
+   * before either has created one, so neither sees the other — and with tier
+   * and seat count in the key they got DIFFERENT keys, so Stripe happily
+   * created two independently completable subscription sessions. Completing
+   * both charges the workspace twice.
+   *
+   * Keyed on the workspace alone, the second collides and Stripe rejects it.
+   */
+  const at = new Date('2026-08-26T12:34:00Z');
+  const professional = { workspaceId: 'ws-1', tier: 'Professional', seatCount: 3 };
+  const enterprise = { workspaceId: 'ws-1', tier: 'Enterprise', seatCount: 9 };
+
+  assert.equal(checkoutIdempotencyKey(professional, at), checkoutIdempotencyKey(enterprise, at));
+
+  // A different workspace is a different purchase and must never be serialized
+  // against this one.
+  assert.notEqual(
+    checkoutIdempotencyKey(professional, at),
+    checkoutIdempotencyKey({ ...professional, workspaceId: 'ws-2' }, at),
+  );
+});
+
+test('a collision is reported as retryable, not swallowed or duplicated', () => {
+  const source = readFileSync('api/stripe/checkout.js', 'utf8');
+
+  assert.match(source, /if \(!isIdempotencyConflict\(error\)\) throw error;/, 'only a collision is handled here');
+  assert.match(source, /Another checkout for this workspace is already being started/);
+  assert.match(source, /retryable: true/);
+});
+
+test('a reused session never overwrites the billing row', () => {
+  const source = readFileSync('api/stripe/checkout.js', 'utf8');
+
+  /*
+   * A reused session can complete in another tab between the listing and this
+   * write. If its webhook lands first it writes the live subscription id, and
+   * an unconditional `''` erased it — replacing a paid entitlement with
+   * `incomplete` and leaving the next request free to create a second
+   * subscription, since it would find neither an id nor an open session.
+   */
+  assert.match(source, /if \(plan\.action !== 'reuse'\) \{\s*const \{ error: billingWriteError \}/);
+});
+
+test('a session Stripe holds but the database does not is closed, not returned', () => {
+  const source = readFileSync('api/stripe/checkout.js', 'utf8');
+
+  /*
+   * Returning the URL after a failed write leaves a billable orphan: the next
+   * request reads a row with no customer id, creates a second customer, and
+   * cannot list or expire this session.
+   */
+  const failure = source.indexOf('if (billingWriteError) {');
+  const expire = source.indexOf('await stripe.checkout.sessions.expire(session.id);');
+  assert.ok(failure > -1, 'the write result must be checked');
+  assert.ok(expire > failure, 'and the orphaned session closed before refusing');
+  assert.match(source, /Checkout could not be recorded for this workspace\. Nothing was charged/);
 });

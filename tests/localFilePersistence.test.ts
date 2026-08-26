@@ -388,3 +388,19 @@ test('the packet attachment cap is enforced against the vault, not against metad
   );
   assert.match(source, /usedBytes \+= entry\.size;/, 'and must accumulate them');
 });
+
+test('the vault sweep waits for the cloud workspace identity', async () => {
+  const store = await readFile('src/store/useXbarStore.ts', 'utf8');
+  const helper = await readFile('src/lib/vaultOwner.ts', 'utf8');
+
+  /*
+   * Rehydration can finish before the cloud store initializes, and in that
+   * window `vaultOwnerId()` answers 'local' for a signed-in workspace. This is
+   * the ONLY production sweep, so it looked for orphans belonging to a
+   * workspace that was not the one loading, found none, and reclaimed nothing —
+   * the vault simply grew on every reload until the quota refused new saves.
+   */
+  assert.match(store, /onVaultOwnerReady\(\(\) => \{\s*void sweepLocalFileVault\(/, 'the sweep must wait');
+  assert.match(helper, /if \(useCloudStore\.getState\(\)\.initialized\) \{/, 'and run immediately when it already is');
+  assert.match(helper, /unsubscribe\(\);\s*run\(\);/, 'the listener must detach so the sweep runs once');
+});

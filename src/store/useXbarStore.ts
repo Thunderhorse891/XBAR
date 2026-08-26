@@ -19,7 +19,7 @@ import { hasHorsePhoto, isHorsePhotoAsset } from '@/lib/animalPassport';
 import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { buildPacketCredential } from '@/lib/localSalePacketGenerator';
 import { toPacketDisclosure } from '@/lib/salePacketDisclosure';
-import { vaultOwnerId } from '@/lib/vaultOwner';
+import { onVaultOwnerReady, vaultOwnerId } from '@/lib/vaultOwner';
 import { featureGate } from '@/lib/commercialEngine';
 import { ownerPreviewAuthorization, overlayTier } from '@/lib/ownerPreview';
 import { isCurrentPaidPlan } from '@/lib/subscriptionDecision';
@@ -2585,10 +2585,22 @@ export const useXbarStore = create<XbarStore>()(
          */
         if (didWorkspaceReadFail()) return;
 
-        void sweepLocalFileVault(
-          referencedVaultKeys(state.documents, state.expenseReceipts, state.salePacketBuilds),
-          vaultOwnerId(),
-        );
+        /*
+         * Deferred until the cloud identity is known.
+         *
+         * Rehydration can finish before the cloud store initializes, and in that
+         * window `vaultOwnerId()` answers 'local' for a signed-in workspace — so
+         * the sweep looked for orphans belonging to a workspace that was not the
+         * one loading, found none, and reclaimed nothing. This is the only
+         * production sweep, so the vault simply grew on every reload until the
+         * quota started refusing new saves.
+         */
+        onVaultOwnerReady(() => {
+          void sweepLocalFileVault(
+            referencedVaultKeys(state.documents, state.expenseReceipts, state.salePacketBuilds),
+            vaultOwnerId(),
+          );
+        });
       },
       partialize: (state) =>
         selectPersistedState({
