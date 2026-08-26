@@ -27,6 +27,7 @@ import {
   referencedVaultKeys,
 } from '@/lib/localFileVault';
 import { vaultOwnerId } from '@/lib/vaultOwner';
+import { promoteLocalVaultFiles } from '@/lib/workspacePromotion';
 import type { UserRole } from '@/types/xbar';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 
@@ -471,11 +472,26 @@ export default function Settings() {
 
   const handlePushCloud = async () => {
     setCloudBusy(true);
-    const result = await saveWorkspaceBackupToCloud(exportWorkspaceBackup());
+    const backup = exportWorkspaceBackup();
+    const result = await saveWorkspaceBackupToCloud(backup);
+
+    /*
+     * The same promotion CloudBootstrap performs, because this is the button
+     * the conflict-lock message sends people to: "Autosave is locked until you
+     * choose Push cloud or Pull cloud in Settings." Pushing the records without
+     * handing over their files leaves the signed-in workspace unable to open a
+     * single one of the documents it just uploaded.
+     */
+    const promoted = result.ok
+      ? await promoteLocalVaultFiles(backup.workspace as Parameters<typeof promoteLocalVaultFiles>[0], vaultOwnerId())
+      : { adopted: 0, failed: [] };
+
     pushToast({
       title: result.ok ? 'Cloud sync complete' : 'Cloud sync failed',
-      message: result.message,
-      tone: result.ok ? 'success' : 'error',
+      message: promoted.failed.length
+        ? `${result.message} ${promoted.failed.length} file${promoted.failed.length === 1 ? '' : 's'} on this device could not be moved to the cloud workspace yet and will be retried.`
+        : result.message,
+      tone: result.ok && !promoted.failed.length ? 'success' : 'error',
     });
     if (result.ok && result.updatedAt) setLastCloudSyncAt(result.updatedAt);
     setCloudBusy(false);

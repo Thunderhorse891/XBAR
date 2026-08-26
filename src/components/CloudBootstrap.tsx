@@ -1,8 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { loadWorkspaceBackupFromCloud, saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
 import { decideCloudReconciliation, serializeWorkspaceBackup } from '@/lib/cloudSyncPolicy';
-import { adoptVaultEntries, referencedVaultKeys } from '@/lib/localFileVault';
-import { rememberRecordsOwner } from '@/lib/recordsOwner';
+import { promoteLocalVaultFiles } from '@/lib/workspacePromotion';
 import { vaultOwnerId } from '@/lib/vaultOwner';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useWorkspaceHydrated, useXbarStore } from '@/store/useXbarStore';
@@ -136,29 +135,9 @@ export function CloudBootstrap() {
          * against the new owner — so without this the rancher signs in and
          * their documents stop opening, exporting and attaching, while the
          * records still name them.
-         *
-         * Only entries these records REFERENCE, and only ones still `'local'`
-         * or untagged, so a previous account's files cannot be swept up: their
-         * records carry their own keys and match nothing here.
          */
         if (saved.ok) {
-          const workspace = local.workspace as {
-            documents?: { localFileKey?: string }[];
-            expenseReceipts?: { localFileKey?: string }[];
-            salePacketBuilds?: { localFileKey?: string }[];
-          };
-          await adoptVaultEntries(
-            referencedVaultKeys(
-              workspace.documents ?? [],
-              workspace.expenseReceipts ?? [],
-              workspace.salePacketBuilds ?? [],
-            ),
-            'local',
-            vaultOwnerId(),
-          );
-          // The records are this workspace's now, or the sweep will refuse to
-          // run for it — the marker and the vault owner have to agree.
-          rememberRecordsOwner(vaultOwnerId());
+          await promoteLocalVaultFiles(local.workspace as Parameters<typeof promoteLocalVaultFiles>[0], vaultOwnerId());
           if (cancelled) return;
         }
 
@@ -168,6 +147,22 @@ export function CloudBootstrap() {
 
       if (decision === 'connected') {
         if (remote.ok && remote.updatedAt) setLastSyncAt(remote.updatedAt);
+
+        /*
+         * Promotion is retried here, and this is the decision a retry lands on.
+         *
+         * Once the push has succeeded the two copies agree, so every later load
+         * decides `connected` rather than `push-local`. Adopting only there
+         * meant a move that half-failed was never attempted again, and the
+         * files left behind stayed refused. Both decisions mean the same thing
+         * about ownership — the local records ARE this workspace's — so both
+         * may hand the files over. `import-remote` does not: its records came
+         * from the cloud, and a `'local'` file they happen to name is another
+         * workspace's, not this one's.
+         */
+        await promoteLocalVaultFiles(local.workspace as Parameters<typeof promoteLocalVaultFiles>[0], vaultOwnerId());
+        if (cancelled) return;
+
         finish(true, 'idle', 'Cloud workspace connected.');
         return;
       }

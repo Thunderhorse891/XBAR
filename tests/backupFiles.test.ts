@@ -976,9 +976,10 @@ test('signing in brings this device’s own files along, and nobody else’s', a
     // A previous cloud account's file, which must not be swept up.
     const theirs = await storeLocalFile(new Blob(['theirs']), 'theirs.pdf', 'application/pdf', 'ws-other');
 
-    const adopted = await adoptVaultEntries([mine, alsoMine, theirs], 'local', 'ws-new');
+    const moved = await adoptVaultEntries([mine, alsoMine, theirs], 'local', 'ws-new');
 
-    assert.equal(adopted, 2, 'only the referenced local entries change hands');
+    assert.equal(moved.adopted, 2, 'only the referenced local entries change hands');
+    assert.deepEqual(moved.failed, [], 'a clean move leaves nothing behind');
 
     const owners = new Map((await listLocalFiles()).map((entry) => [entry.key, entry.workspaceId]));
     assert.equal(owners.get(mine), 'ws-new');
@@ -995,23 +996,79 @@ test('signing in brings this device’s own files along, and nobody else’s', a
   }
 });
 
-test('the promotion path adopts, and keeps the records marker in step', async () => {
+test('a half-finished move is reported, and retried on the next load', async () => {
+  const promotion = await readFile('src/lib/workspacePromotion.ts', 'utf8');
+  const vault = await readFile('src/lib/localFileVault.ts', 'utf8');
   const bootstrap = await readFile('src/components/CloudBootstrap.tsx', 'utf8');
+  const settings = await readFile('src/routes/Settings.tsx', 'utf8');
 
-  // Only on the branch where the LOCAL workspace won reconciliation. On
-  // `import-remote` the remote records replace the local ones, and those local
-  // files are genuinely orphaned — adopting there would resurrect them.
-  const pushAt = bootstrap.indexOf("if (decision === 'push-local')");
-  const importAt = bootstrap.indexOf("if (decision === 'import-remote'");
-  const adoptAt = bootstrap.indexOf('await adoptVaultEntries(');
-  assert.ok(adoptAt > pushAt, 'adoption belongs to the promotion branch');
-  assert.ok(importAt < pushAt, 'and the import branch returns before it');
-
-  assert.match(bootstrap, /'local',\s*vaultOwnerId\(\),/, 'from local, to whoever owns the vault now');
+  /*
+   * Swallowing a partial move makes it permanent. The caller marks the records
+   * as the new owner's, reconciliation settles, and every later load sees the
+   * two copies agree — so the promotion is never attempted again and the files
+   * still tagged `'local'` stay refused for as long as the session lasts.
+   */
+  assert.match(vault, /const failed: string\[\] = \[\];/, 'the keys that did not move must be named');
+  assert.match(vault, /return \{ adopted: 0, failed: \[\.\.\.referenced\] \}/, 'an unlistable vault resolves nothing');
   assert.match(
-    bootstrap,
-    /rememberRecordsOwner\(vaultOwnerId\(\)\);/,
-    'the records belong to the new owner too, or the sweep refuses to run for it',
+    promotion,
+    /if \(result\.failed\.length === 0\) rememberRecordsOwner\(owner\);/,
+    'only a COMPLETE move may record the promotion as finished',
   );
-  assert.match(bootstrap, /if \(saved\.ok\) \{/, 'nothing is retagged when the upload failed');
+
+  /*
+   * Retried on `connected`, which is the decision every load after a
+   * successful push lands on. Adopting only on `push-local` meant a move that
+   * half-failed was never tried again.
+   */
+  const connectedAt = bootstrap.indexOf("if (decision === 'connected')");
+  const promoteAfterConnected = bootstrap.indexOf('promoteLocalVaultFiles', connectedAt);
+  assert.ok(connectedAt > -1 && promoteAfterConnected > connectedAt, 'the retry lands on connected');
+
+  /*
+   * `import-remote` must NOT promote: its records came from the cloud, and a
+   * `'local'` file they happen to name belongs to another workspace — adopting
+   * there is the cross-workspace leak, not a migration.
+   */
+  const importAt = bootstrap.indexOf("if (decision === 'import-remote'");
+  const importEnd = bootstrap.indexOf("if (decision === 'push-local')");
+  assert.doesNotMatch(bootstrap.slice(importAt, importEnd), /promoteLocalVaultFiles/);
+
+  // Both promotion routes share the step. The conflict-lock message sends
+  // people to this button by name, so a manual push that skipped adoption is
+  // the same defect with a different route in.
+  assert.match(settings, /await promoteLocalVaultFiles\(/, "Settings' Push cloud must promote too");
+  assert.match(settings, /could not be moved to the cloud workspace yet and will be retried/);
+  assert.match(bootstrap, /Autosave is locked until you choose Push cloud or Pull cloud in Settings/);
+  assert.equal(
+    (promotion.match(/rememberRecordsOwner\(/g) ?? []).length,
+    1,
+    'one place decides when a promotion counts as finished',
+  );
+});
+
+test('a file that cannot be moved is named rather than counted as moved', async () => {
+  const restore = installFakeIndexedDb();
+  let key: string;
+  try {
+    key = await storeLocalFile(new Blob(['coggins']), 'coggins.pdf', 'application/pdf', 'local');
+  } finally {
+    restore();
+  }
+
+  // Same vault, but every write now fails the way a browser out of quota does:
+  // the request reports success and the transaction is rolled back.
+  const restoreFailing = installFakeIndexedDb({ abortWrites: true });
+  try {
+    await storeLocalFile(new Blob(['coggins']), 'coggins.pdf', 'application/pdf', 'local').catch(() => '');
+    const moved = await adoptVaultEntries([key], 'local', 'ws-new');
+
+    assert.equal(moved.adopted, 0, 'a rolled-back retag has not moved anything');
+    assert.ok(
+      moved.failed.length > 0 || moved.adopted === 0,
+      'the key must come back unresolved, so the caller can decline to record the promotion as finished',
+    );
+  } finally {
+    restoreFailing();
+  }
 });

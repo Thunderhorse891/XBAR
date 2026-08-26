@@ -595,36 +595,61 @@ export async function importLocalFiles(
  * Records belonging to a previous cloud account carry that account's keys, so
  * they match nothing here and nothing of theirs moves.
  *
- * @returns how many entries changed hands.
+ * Partial results are reported, never swallowed. The keys that did not move
+ * come back so the caller can decline to record the promotion as finished and
+ * let a later load try again.
+ *
+ * @returns how many entries changed hands, and which ones did not.
  */
 export async function adoptVaultEntries(
   referencedKeys: Iterable<string>,
   fromOwner: string,
   toOwner: string,
-): Promise<number> {
-  if (!isLocalFileVaultAvailable() || fromOwner === toOwner) return 0;
+): Promise<{ adopted: number; failed: string[] }> {
+  if (!isLocalFileVaultAvailable() || fromOwner === toOwner) return { adopted: 0, failed: [] };
 
   const referenced = new Set(referencedKeys);
-  if (referenced.size === 0) return 0;
+  if (referenced.size === 0) return { adopted: 0, failed: [] };
 
+  const failed: string[] = [];
   let adopted = 0;
-  try {
-    for (const entry of await listLocalFiles()) {
-      if (!referenced.has(entry.key)) continue;
-      if (entry.workspaceId !== undefined && entry.workspaceId !== fromOwner) continue;
 
-      const full = await readLocalFile(entry.key);
-      if (!full) continue;
-      await withStore('readwrite', (store) => store.put({ ...full, workspaceId: toOwner }));
-      adopted += 1;
-    }
+  let stored: LocalFileSummary[];
+  try {
+    stored = await listLocalFiles();
   } catch (error) {
-    // Best effort: a file that did not move is still readable when signed out,
-    // whereas throwing here would fail a sign-in that otherwise succeeded.
-    console.warn('Moving this device\u2019s files to the new workspace failed.', error);
+    // The vault could not be listed, so nothing is known about any of it. Every
+    // requested key is unresolved rather than silently fine.
+    console.warn('Listing this device\u2019s files for the workspace move failed.', error);
+    return { adopted: 0, failed: [...referenced] };
   }
 
-  return adopted;
+  for (const entry of stored) {
+    if (!referenced.has(entry.key)) continue;
+    if (entry.workspaceId !== undefined && entry.workspaceId !== fromOwner) continue;
+
+    /*
+     * Per entry, so one unreadable file does not abandon the rest — and so the
+     * ones that did not move are NAMED. Reporting a partial move as success is
+     * what makes it permanent: the caller marks the records as the new owner's,
+     * reconciliation settles, and the entries still tagged `fromOwner` are
+     * refused by every ownership check for as long as the session lasts.
+     */
+    try {
+      const full = await readLocalFile(entry.key);
+      if (!full) {
+        failed.push(entry.key);
+        continue;
+      }
+      await withStore('readwrite', (store) => store.put({ ...full, workspaceId: toOwner }));
+      adopted += 1;
+    } catch (error) {
+      console.warn('Moving one of this device\u2019s files to the new workspace failed.', error);
+      failed.push(entry.key);
+    }
+  }
+
+  return { adopted, failed };
 }
 
 export function referencedVaultKeys(...groups: { localFileKey?: string }[][]): string[] {
