@@ -442,18 +442,34 @@ export function canRestorePersistedState(raw: unknown): boolean {
    *
    * Derived state is deliberately absent. `packet.saleSlots` reads like one of
    * these and is not: `buildHorsePacketCompleteness` constructs it, so it can
-   * never arrive missing from a backup.
+   * never arrive missing from a backup. Nor is anything a read site normalizes
+   * first — `record.transferStatus.toLowerCase()` looks unguarded and is not,
+   * because `Ownership.tsx` maps `normalizeOwnershipRecord` over the records
+   * before reading them. Validating either would reject valid archives.
+   *
+   * A caveat on how this list is built, since it has now grown four times. A
+   * text search finds `horse.name.toLowerCase()` but not `add(horse.owner)`,
+   * where the dereference happens one call away inside the helper — which is
+   * exactly how `owner` and `legalOwner` survived the previous sweep. Fields
+   * passed into helpers have to be read for, not grepped for.
    */
   const NESTED_SHAPES: Record<string, { objects?: string[]; lists?: string[]; strings?: string[] }> = {
     horses: {
       objects: ['bloodline', 'assignments', 'sale', 'readiness'],
       // `horse.medicalTimeline.map` — Medical.tsx:39.
-      lists: ['gallery', 'breedingTimeline', 'medicalTimeline', 'documentFacts', 'alerts'],
+      // `horse.ownership.reduce` — features/ownership/selectors.ts:13.
+      // `horse.documents.includes` — this file, line ~883.
+      lists: ['gallery', 'breedingTimeline', 'medicalTimeline', 'documentFacts', 'alerts', 'ownership', 'documents'],
       // `horse.name.toLowerCase` — Breeding.tsx:292.
-      strings: ['name'],
+      // `horse.owner` → `rawName.trim()` — commandPalette.ts:121.
+      strings: ['name', 'owner'],
     },
     // `document.entities.horseName` and four siblings — Documents.tsx:724.
-    documents: { objects: ['entities'] },
+    // `document.title.trim()` — useXbarStore.ts:842, beside optional-chained
+    // siblings, which is what makes it easy to miss.
+    documents: { objects: ['entities'], strings: ['title'] },
+    // `record.legalOwner` → `rawName.trim()` — commandPalette.ts:134.
+    ownershipRecords: { strings: ['legalOwner'] },
     // `packet.documentIds.length` — SalePacketStudio.tsx:174, Documents.tsx:1210.
     salePacketBuilds: { lists: ['documentIds'] },
     // `receipt.vendor.trim()` — Expenses.tsx:114.

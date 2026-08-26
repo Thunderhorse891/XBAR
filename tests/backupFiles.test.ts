@@ -880,7 +880,6 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * `document.entities.horseName`, on a screen the rancher just chose, after
    * the vault has already been overwritten with the backup's blobs.
    */
-  assert.match(helpers, /documents: \{ objects: \['entities'\] \}/, 'documents deref a nested object unguarded');
   assert.match(helpers, /salePacketBuilds: \{ lists: \['documentIds'\] \}/, 'packets deref a nested array unguarded');
   assert.match(helpers, /horses: \{\s*objects: \['bloodline', 'assignments', 'sale', 'readiness'\]/);
 
@@ -893,7 +892,17 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   assert.match(helpers, /salesLeads: \{ strings: \['name'\] \}/);
   assert.match(helpers, /sharedListings: \{ lists: \['channels'\] \}/);
   assert.match(helpers, /'medicalTimeline'/, 'horse.medicalTimeline.map was missing from the horse list itself');
-  assert.match(helpers, /strings: \['name'\],/, 'horse.name.toLowerCase is a primitive read, and crashes the same way');
+
+  /*
+   * Found only by reading, not grepping. `add(horse.owner, horse.id)` puts the
+   * dereference one call away inside the helper, so a text search for
+   * `horse.owner.trim()` finds nothing — which is how `owner` and `legalOwner`
+   * survived the previous sweep.
+   */
+  assert.match(helpers, /strings: \['name', 'owner'\]/, 'horse.owner reaches rawName.trim() through a helper');
+  assert.match(helpers, /ownershipRecords: \{ strings: \['legalOwner'\] \}/);
+  assert.match(helpers, /documents: \{ objects: \['entities'\], strings: \['title'\] \}/);
+  assert.match(helpers, /'ownership', 'documents'\]/, 'horse.ownership and horse.documents are read as arrays');
 
   // A missing primitive fails on the TYPE, not on emptiness: the empty string
   // is valid and the routes are written to expect it.
@@ -912,6 +921,10 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     ['src/routes/Medical.tsx', /horse\.medicalTimeline\.map\(/],
     ['src/routes/SharedAccess.tsx', /listing\.channels\.includes\(/],
     ['src/components/BuyerResponseQueue.tsx', /lead\.name\.trim\(\)/],
+    ['src/lib/commandPalette.ts', /const name = rawName\.trim\(\);/],
+    ['src/lib/commandPalette.ts', /for \(const horse of horses\) add\(horse\.owner, horse\.id\);/],
+    ['src/lib/commandPalette.ts', /add\(record\.legalOwner, record\.horseId\);/],
+    ['src/features/ownership/selectors.ts', /horse\.ownership\.reduce\(/],
   ] as const) {
     assert.match(await readFile(route, 'utf8'), deref, `${route} still reads this unguarded`);
   }
@@ -926,6 +939,19 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   // excluded, and asserting against prose rather than code is its own trap.
   const helpersCode = helpers.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
   assert.doesNotMatch(helpersCode, /saleSlots/, 'a computed field cannot arrive malformed and must not be validated');
+
+  /*
+   * Nor anything the read site normalizes first. `record.transferStatus
+   * .toLowerCase()` reads as unguarded and is not — Ownership.tsx maps
+   * `normalizeOwnershipRecord` over the records before touching them, so
+   * requiring it would reject archives that restore perfectly well.
+   */
+  assert.doesNotMatch(helpersCode, /transferStatus/, 'a normalized field must not be required of the raw payload');
+  assert.match(
+    await readFile('src/routes/Ownership.tsx', 'utf8'),
+    /ownershipRecords\.map\(normalizeOwnershipRecord\)/,
+    'which is only safe while the route still normalizes',
+  );
 
   // Still not a full runtime schema: a second description of "valid" drifts
   // from the types, which is the trade the original comment was right about.
