@@ -721,3 +721,46 @@ test('the fence stands between the Stripe calls and anything billable', () => {
   assert.ok(expire < fence, 'the calls that can outrun the lease come first — fencing before them proves nothing');
   assert.ok(fence < reuse && fence < create, 'handing back a reused session on a lost claim is the same duplicate');
 });
+
+test('the billing row is read after the claim, and only once', () => {
+  const source = readFileSync('api/stripe/checkout.js', 'utf8');
+
+  /*
+   * The row carries the STRIPE CUSTOMER ID, and that turned a stale read into a
+   * duplicate charge by a route the subscription check could not see:
+   *
+   *   B reads an empty row and waits behind the lock. A creates customer C1 and
+   *   session S1, writes the row, releases. B claims, still holding its empty
+   *   row, and creates a SECOND customer C2 — so every Stripe question it asks
+   *   is scoped to C2, which has no sessions and no subscriptions. S1 is
+   *   invisible, and B creates S2 beside it.
+   *
+   * Asking Stripe rather than the database did not save it, because the
+   * customer decides who Stripe is asked ABOUT.
+   */
+  const claim = source.indexOf('await claimCheckoutLock(supabase, workspaceId)');
+  const read = source.indexOf('const { data: billingCustomer, error: billingCustomerError } = await supabase');
+  const customer = source.indexOf('stripe.customers.create(');
+  const askStripe = source.indexOf('await findBlockingSubscription(stripe, stripeCustomerId)');
+
+  assert.ok(read > -1, 'the billing row is still needed — for the customer id, not only the subscription');
+  assert.ok(claim < read, 'a row read before the claim can be stale by the time the claim succeeds');
+  assert.ok(read < customer, 'a stale row means a second Stripe customer, and every check scoped to the wrong one');
+  assert.ok(read < askStripe, 'asking Stripe about the wrong customer answers nothing');
+
+  /*
+   * Exactly one read. Keeping the cheap pre-claim gate as well would leave a
+   * stale copy beside a fresh one, and using the wrong one of a similar pair is
+   * the mistake this file keeps making.
+   */
+  assert.equal(
+    (source.match(/error: billingCustomerError/g) ?? []).length,
+    1,
+    'two reads means two variables, and one of them is wrong',
+  );
+  assert.equal(
+    (source.match(/checkoutBlockReason\(billingCustomer\)/g) ?? []).length,
+    1,
+    'the entitlement gate must run on the post-claim row, and only on it',
+  );
+});

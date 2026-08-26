@@ -96,49 +96,6 @@ export default async function handler(req, res) {
   }
 
   const { supabase, user } = access;
-  const { data: billingCustomer, error: billingCustomerError } = await supabase
-    .from('workspace_billing_customers')
-    .select('stripe_customer_id, stripe_subscription_id, entitlement_payload')
-    .eq('workspace_id', workspaceId)
-    .maybeSingle();
-
-  // Fail closed on an unreadable billing row. Everything below decides whether
-  // this workspace already has a subscription Stripe can bill; a failed read
-  // answers nothing, and guessing "no" here charges a customer twice.
-  if (billingCustomerError) {
-    return sendJson(res, 503, {
-      ok: false,
-      code: 'billing_unavailable',
-      retryable: true,
-      message: 'Your billing status could not be verified just now. Try again in a moment.',
-    });
-  }
-
-  /*
-   * Refuse a second subscription when one already exists that Stripe can act on.
-   *
-   * The client hides the buttons for some of these, but that is a courtesy, not
-   * a control: an admin can call this endpoint directly, and an older cached
-   * bundle will. Enforced here because the harm is money — a second Checkout
-   * Session beside a live subscription bills the customer twice and leaves two
-   * webhook streams fighting over one entitlement record.
-   *
-   * Both changes go through the billing portal, which acts on the subscription
-   * that already exists rather than creating another one.
-   */
-  const blockReason = checkoutBlockReason(billingCustomer);
-  if (blockReason) {
-    return sendJson(res, 409, {
-      ok: false,
-      code: blockReason,
-      message:
-        blockReason === 'subscription_active'
-          ? 'This workspace already has an active subscription. Change plans in the billing portal so the existing subscription is updated rather than duplicated.'
-          : blockReason === 'subscription_recoverable'
-            ? 'This workspace already has a subscription that can be reactivated. Update the payment method in the billing portal instead of starting a new plan.'
-            : 'This workspace has a subscription on file whose status could not be confirmed. Check it in the billing portal before starting a new plan.',
-    });
-  }
 
   /*
    * Claim the workspace before touching Stripe at all.
@@ -161,6 +118,72 @@ export default async function handler(req, res) {
   }
 
   try {
+    /*
+     * Read the billing row only now that the workspace is claimed.
+     *
+     * Reading it earlier looked harmless — it only decides whether a
+     * subscription already exists — but it also carries the STRIPE CUSTOMER ID,
+     * and that turned a stale read into a duplicate charge by a route the
+     * subscription check could not see:
+     *
+     *   B reads an empty row, waits behind the lock. A creates customer C1 and
+     *   session S1, writes the row, releases. B claims, still holding its empty
+     *   row, so it creates a SECOND customer C2 — and every Stripe question it
+     *   then asks is scoped to C2, which has no sessions and no subscriptions.
+     *   S1 is invisible to it, and B creates S2 beside it.
+     *
+     * Asking Stripe instead of the database did not help, because the customer
+     * is what decides who Stripe is asked ABOUT. The claim is what makes this
+     * read stable: the previous owner wrote the row before releasing.
+     *
+     * There is exactly one read, deliberately. Keeping the cheap pre-claim gate
+     * as well would leave a stale copy beside a fresh one, and using the wrong
+     * one of a similar pair is the mistake this file keeps making.
+     */
+    const { data: billingCustomer, error: billingCustomerError } = await supabase
+      .from('workspace_billing_customers')
+      .select('stripe_customer_id, stripe_subscription_id, entitlement_payload')
+      .eq('workspace_id', workspaceId)
+      .maybeSingle();
+
+    // Fail closed on an unreadable billing row. Everything below decides whether
+    // this workspace already has a subscription Stripe can bill; a failed read
+    // answers nothing, and guessing "no" here charges a customer twice.
+    if (billingCustomerError) {
+      return sendJson(res, 503, {
+        ok: false,
+        code: 'billing_unavailable',
+        retryable: true,
+        message: 'Your billing status could not be verified just now. Try again in a moment.',
+      });
+    }
+
+    /*
+     * Refuse a second subscription when one already exists that Stripe can act on.
+     *
+     * The client hides the buttons for some of these, but that is a courtesy, not
+     * a control: an admin can call this endpoint directly, and an older cached
+     * bundle will. Enforced here because the harm is money — a second Checkout
+     * Session beside a live subscription bills the customer twice and leaves two
+     * webhook streams fighting over one entitlement record.
+     *
+     * Both changes go through the billing portal, which acts on the subscription
+     * that already exists rather than creating another one.
+     */
+    const blockReason = checkoutBlockReason(billingCustomer);
+    if (blockReason) {
+      return sendJson(res, 409, {
+        ok: false,
+        code: blockReason,
+        message:
+          blockReason === 'subscription_active'
+            ? 'This workspace already has an active subscription. Change plans in the billing portal so the existing subscription is updated rather than duplicated.'
+            : blockReason === 'subscription_recoverable'
+              ? 'This workspace already has a subscription that can be reactivated. Update the payment method in the billing portal instead of starting a new plan.'
+              : 'This workspace has a subscription on file whose status could not be confirmed. Check it in the billing portal before starting a new plan.',
+      });
+    }
+
     let stripeCustomerId = billingCustomer?.stripe_customer_id || '';
     if (!stripeCustomerId) {
       const customer = await stripe.customers.create({
