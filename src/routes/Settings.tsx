@@ -357,7 +357,27 @@ export default function Settings() {
             restoredWorkspace.expenseReceipts ?? [],
             restoredWorkspace.salePacketBuilds ?? [],
           );
-          const held = new Set((await listLocalFiles()).map((entry) => entry.key));
+          /*
+           * Held BY THIS WORKSPACE. The vault is origin-wide, so "the key is in
+           * the vault" was never the question.
+           *
+           * A file omitted from the archive never passes through
+           * `importLocalFiles`, so its key is not remapped and the restored
+           * record keeps the ORIGINAL workspace's key. Counting any vault entry
+           * as held then reported that record as fine while it pointed at
+           * another account's document — the one case where the note most
+           * needed to fire.
+           *
+           * Untagged entries count as held: they predate ownership being
+           * recorded, and calling a person's own legacy file missing is a false
+           * alarm. Only a proven foreign owner is treated as unresolved.
+           */
+          const owner = vaultOwnerId();
+          const held = new Set(
+            (await listLocalFiles())
+              .filter((entry) => entry.workspaceId === undefined || entry.workspaceId === owner)
+              .map((entry) => entry.key),
+          );
           const dangling = referenced.filter((key) => !held.has(key));
 
           if (dangling.length) {

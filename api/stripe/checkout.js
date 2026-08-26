@@ -4,6 +4,7 @@ import { buildSubscriptionProfile, getStripePriceIdByTier } from '../_lib/subscr
 import { checkoutBlockReason } from '../_lib/subscription-status.js';
 import {
   claimCheckoutLock,
+  findBlockingSubscription,
   listOpenCheckoutSessions,
   planCheckoutSession,
   splitExpiryBatch,
@@ -169,6 +170,42 @@ export default async function handler(req, res) {
         },
       });
       stripeCustomerId = customer.id;
+    }
+
+    /*
+     * Ask Stripe whether a subscription already exists, because the billing row
+     * could not have told us.
+     *
+     * `stripe_subscription_id` is written by the webhook. A Checkout Session
+     * that completed between the row read above and the session listing below
+     * is therefore invisible to both: gone from `status: 'open'`, and not yet
+     * recorded. The request would create a second completable subscription, and
+     * its upsert would then erase the first webhook's id when that landed.
+     *
+     * Completing a `mode: 'subscription'` session creates the subscription
+     * immediately, so Stripe can answer even when the webhook has not arrived.
+     * Asked after the claim, so two requests cannot both ask and both proceed.
+     */
+    const existingSubscription = await findBlockingSubscription(stripe, stripeCustomerId);
+
+    if (!existingSubscription.complete) {
+      // A partial list cannot show that no subscription exists. Same rule as
+      // the capacity gates: unknown is not permission to charge.
+      return sendJson(res, 503, {
+        ok: false,
+        code: 'billing_unavailable',
+        retryable: true,
+        message: 'Your billing status could not be verified just now. Try again in a moment.',
+      });
+    }
+
+    if (existingSubscription.subscription) {
+      return sendJson(res, 409, {
+        ok: false,
+        code: 'subscription_active',
+        message:
+          'This workspace already has a subscription with Stripe. Change plans in the billing portal so the existing subscription is updated rather than duplicated.',
+      });
     }
 
     /*

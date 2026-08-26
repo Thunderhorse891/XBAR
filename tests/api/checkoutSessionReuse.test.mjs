@@ -3,9 +3,10 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   CHECKOUT_EXPIRE_BUDGET,
+  findBlockingSubscription,
   CHECKOUT_LOCK_MS,
-  OPEN_SESSION_PAGE_LIMIT,
-  OPEN_SESSION_PAGE_SIZE,
+  STRIPE_PAGE_LIMIT,
+  STRIPE_PAGE_SIZE,
   claimCheckoutLock,
   listOpenCheckoutSessions,
   planCheckoutSession,
@@ -343,8 +344,8 @@ test('a single page of open sessions is read once and reported complete', async 
   assert.equal(stripe.calls.length, 1, 'nothing follows a page that says there is no more');
   assert.equal(stripe.calls[0].status, 'open');
   assert.equal(stripe.calls[0].customer, 'cus_1');
-  assert.equal(stripe.calls[0].limit, OPEN_SESSION_PAGE_SIZE);
-  assert.equal(OPEN_SESSION_PAGE_SIZE, 100, "Stripe's maximum page size — fewer pages is fewer round trips");
+  assert.equal(stripe.calls[0].limit, STRIPE_PAGE_SIZE);
+  assert.equal(STRIPE_PAGE_SIZE, 100, "Stripe's maximum page size — fewer pages is fewer round trips");
 });
 
 test('sessions beyond the first page are collected, not ignored', async () => {
@@ -367,7 +368,7 @@ test('sessions beyond the first page are collected, not ignored', async () => {
 
 test('a walk that runs out of pages refuses rather than planning from part of the list', async () => {
   const stripe = fakeStripe(
-    Array.from({ length: OPEN_SESSION_PAGE_LIMIT + 2 }, (_, page) => ({
+    Array.from({ length: STRIPE_PAGE_LIMIT + 2 }, (_, page) => ({
       data: [session({ id: `cs_${page}` })],
       has_more: true,
     })),
@@ -376,11 +377,7 @@ test('a walk that runs out of pages refuses rather than planning from part of th
   const result = await listOpenCheckoutSessions(stripe, 'cus_1');
 
   assert.equal(result.complete, false, 'pages left unread cannot be reported as a complete list');
-  assert.equal(
-    stripe.calls.length,
-    OPEN_SESSION_PAGE_LIMIT,
-    'an unbounded loop in a serverless invocation is its own bug',
-  );
+  assert.equal(stripe.calls.length, STRIPE_PAGE_LIMIT, 'an unbounded loop in a serverless invocation is its own bug');
 });
 
 test('more pages promised but none delivered is incomplete, not complete', async () => {
@@ -529,4 +526,104 @@ test('the claim token is unguessable and per-request', async () => {
 
   assert.notEqual(first, second, 'two invocations sharing a token cannot tell each other apart');
   assert.match(first, /^[0-9a-f-]{36}$/, 'a token another request could predict is not ownership');
+});
+
+/*
+ * The window the billing row cannot cover.
+ *
+ * `stripe_subscription_id` is written by the webhook, so a Checkout Session
+ * that completed between the row read and the session listing is invisible to
+ * both signals the endpoint had — gone from `status: 'open'`, not yet recorded.
+ * Both said "nothing bought", and the request created a second completable
+ * subscription whose upsert then erased the first webhook's id.
+ */
+
+function fakeSubscriptions(pages) {
+  const calls = [];
+  return {
+    calls,
+    subscriptions: {
+      async list(params) {
+        calls.push(params);
+        return pages[calls.length - 1] ?? { data: [], has_more: false };
+      },
+    },
+  };
+}
+
+test('a subscription Stripe already holds blocks another checkout', async () => {
+  for (const status of ['active', 'trialing', 'past_due', 'unpaid', 'paused', 'incomplete']) {
+    const stripe = fakeSubscriptions([{ data: [{ id: `sub_${status}`, status }], has_more: false }]);
+    const found = await findBlockingSubscription(stripe, 'cus_1');
+
+    assert.equal(found.complete, true);
+    assert.equal(found.subscription?.id, `sub_${status}`, `${status} leaves something Stripe can still bill`);
+  }
+});
+
+test('a subscription that is over does not block a returning customer', async () => {
+  for (const status of ['canceled', 'incomplete_expired']) {
+    const stripe = fakeSubscriptions([{ data: [{ id: 'sub_dead', status }], has_more: false }]);
+    const found = await findBlockingSubscription(stripe, 'cus_1');
+
+    assert.equal(found.subscription, null, `${status} is over — a former customer must be able to come back`);
+  }
+
+  // Terminal ones are filtered rather than trusted out of the query: Stripe's
+  // default omits `canceled` but still returns `incomplete_expired`.
+  const mixed = fakeSubscriptions([
+    {
+      data: [
+        { id: 'sub_dead', status: 'incomplete_expired' },
+        { id: 'sub_live', status: 'active' },
+      ],
+      has_more: false,
+    },
+  ]);
+  assert.equal((await findBlockingSubscription(mixed, 'cus_1')).subscription?.id, 'sub_live');
+});
+
+test('a subscription list that could not be finished is not proof of none', async () => {
+  const stripe = fakeSubscriptions(
+    Array.from({ length: STRIPE_PAGE_LIMIT + 2 }, () => ({
+      data: [{ id: 'sub_x', status: 'canceled' }],
+      has_more: true,
+    })),
+  );
+
+  const found = await findBlockingSubscription(stripe, 'cus_1');
+  assert.equal(found.complete, false, 'pages left unread cannot establish that nothing is billable');
+});
+
+test('the endpoint asks Stripe before it creates, and refuses both answers it cannot use', () => {
+  const source = readFileSync('api/stripe/checkout.js', 'utf8');
+
+  const claim = source.indexOf('await claimCheckoutLock(supabase, workspaceId)');
+  const ask = source.indexOf('await findBlockingSubscription(stripe, stripeCustomerId)');
+  const create = source.indexOf('stripe.checkout.sessions.create(');
+  const reuse = source.indexOf('let session = plan.session;');
+
+  assert.ok(ask > -1, 'the row cannot answer during the webhook window, so Stripe must be asked');
+  assert.ok(claim < ask, 'two requests must not both ask and both proceed');
+  assert.ok(ask < create && ask < reuse, 'asking after creating — or after reusing — is not asking');
+
+  const guard = source.slice(ask, create);
+  assert.match(guard, /if \(!existingSubscription\.complete\)/, 'a truncated list must refuse, not be read as none');
+  assert.match(guard, /if \(existingSubscription\.subscription\)/, 'a live subscription must stop the purchase');
+  assert.match(guard, /code: 'subscription_active'/);
+});
+
+test('one paginator serves both listings', () => {
+  const source = readFileSync('api/_lib/checkout-session.js', 'utf8');
+
+  // Two copies of a pagination loop is how the `has_more` half gets fixed in
+  // one place and left wrong in the other.
+  assert.equal((source.match(/response\?\.has_more/g) ?? []).length, 1, 'the walk must live in exactly one function');
+  assert.match(source, /collectStripePages\(\(params\) =>\s*stripe\.checkout\.sessions\.list/);
+  assert.match(source, /collectStripePages\(\(params\) =>\s*stripe\.subscriptions\.list/);
+  assert.match(
+    source,
+    /stripeSubscriptionBlocksCheckout\(subscription\.status\)/,
+    'which statuses block is existing policy, not a second list written beside it',
+  );
 });

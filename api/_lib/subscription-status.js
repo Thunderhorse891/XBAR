@@ -109,6 +109,33 @@ export function isRecoverableStripeStatus(status) {
 }
 
 /**
+ * True when a subscription with this status forbids starting another checkout.
+ *
+ * Composed from the two predicates that already exist rather than given a list
+ * of its own — a third list beside `ENTITLED_STRIPE_STATUSES` and
+ * `TERMINAL_STRIPE_STATUSES` is a third thing to keep in step, and the two
+ * answers drifting apart is how a workspace ends up billed twice.
+ *
+ * `isRecoverableStripeStatus` deliberately excludes the entitled statuses,
+ * because "recoverable" means the subscription is inactive but still billable.
+ * Here both cases block: an active subscription must be changed in the portal,
+ * and a past-due one can still collect. Only a subscription that is genuinely
+ * over lets a returning customer buy again, and an unrecognized status inherits
+ * the fail-toward-blocking behaviour of the predicate below.
+ *
+ * The empty case is not unknown: no status means no subscription at all, which
+ * is every new workspace, and those must be able to buy.
+ */
+export function stripeSubscriptionBlocksCheckout(status) {
+  const normalized = String(status ?? '')
+    .trim()
+    .toLowerCase();
+
+  if (!normalized) return false;
+  return ENTITLED_STRIPE_STATUSES.includes(normalized) || isRecoverableStripeStatus(normalized);
+}
+
+/**
  * True when a STORED entitlement payload describes a subscription Stripe can
  * still bill.
  *

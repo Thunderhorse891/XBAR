@@ -373,7 +373,7 @@ test('an import checks the restored records against the files actually present',
    * before omissions were recorded at all. The manifest is then used only to
    * say WHY, which reconciliation cannot reconstruct.
    */
-  const reconcileAt = source.indexOf('const held = new Set((await listLocalFiles()).map');
+  const reconcileAt = source.indexOf('const held = new Set(');
   const restoreRecordsAt = source.indexOf('importWorkspaceBackup(payload)');
 
   assert.ok(reconcileAt > -1, 'the import must ask the vault what it actually holds');
@@ -448,8 +448,8 @@ test('a packet XBAR generated may open as a document; an uploaded one may not', 
     });
     const upload = await storeLocalFile(new Blob(['<html>hostile</html>']), 'upload.html', 'text/html', 'ws-a');
 
-    const openedPacket = await openLocalFile(packet);
-    const openedUpload = await openLocalFile(upload);
+    const openedPacket = await openLocalFile(packet, 'ws-a');
+    const openedUpload = await openLocalFile(upload, 'ws-a');
 
     assert.equal(openedPacket?.inlineSafe, true, 'a generated packet must still open in a tab');
     assert.equal(openedUpload?.inlineSafe, false, 'an uploaded html file must not run as a document');
@@ -548,7 +548,7 @@ test('a restored file is never executable, whatever the archive claims', async (
     const entry = await readLocalFile('vault-x');
     assert.equal(entry?.generated, false, 'no import may mark a file as XBAR-written');
 
-    const opened = await openLocalFile('vault-x');
+    const opened = await openLocalFile('vault-x', 'ws-a');
     assert.equal(opened?.inlineSafe, false, 'so it downloads rather than running as a document');
     opened?.release();
   } finally {
@@ -672,4 +672,110 @@ test('restored records follow a re-minted key', async () => {
    */
   assert.match(logic, /\? \(backup as \{ workspace: unknown \}\)\.workspace\s*:\s*backup;/);
   assert.ok(!/return \{ \.\.\.record \};/.test(logic), 'workspaceBackupPayload must not start returning a copy');
+});
+
+test('a key belonging to another workspace is never treated as this one’s file', async () => {
+  const settings = await readFile('src/routes/Settings.tsx', 'utf8');
+  const vault = await readFile('src/lib/localFileVault.ts', 'utf8');
+  const cloud = await readFile('src/lib/cloudWorkspace.ts', 'utf8');
+
+  /*
+   * A file OMITTED from an archive never passes through `importLocalFiles`, so
+   * its key is not remapped and the restored record keeps the original
+   * workspace's key. The vault is origin-wide, so that key still resolves —
+   * which meant workspace B, restoring A's backup in the same browser, held a
+   * live reference to A's document.
+   */
+
+  // 1. The reconciliation note must not call a foreign key "held".
+  assert.match(
+    settings,
+    /\.filter\(\(entry\) => entry\.workspaceId === undefined \|\| entry\.workspaceId === owner\)/,
+    'presence in the origin-wide vault was never the question — ownership is',
+  );
+
+  // 2. The read path must refuse, because the note is a message and this is the
+  //    actual leak: a key on a record is not permission to read the bytes.
+  assert.match(
+    vault,
+    /if \(entry\.workspaceId !== undefined && entry\.workspaceId !== workspaceId\) return null;/,
+    'openLocalFile must refuse a blob it can prove belongs to another workspace',
+  );
+  assert.match(cloud, /openLocalFile\(document\.localFileKey, vaultOwnerId\(\)\)/, 'the caller must say who is asking');
+
+  // 3. Account deletion must not carry away a foreign blob through an imported
+  //    reference. `alsoDeleteKeys` is what this workspace REFERENCED, which is
+  //    not the same as what it owns.
+  assert.doesNotMatch(
+    vault,
+    /const owned = new Set\(alsoDeleteKeys\);/,
+    'referenced-is-owned is the assumption that deletes the other account’s documents',
+  );
+  assert.match(
+    vault,
+    /if \(entry\.workspaceId === undefined \|\| entry\.workspaceId === workspaceId\) owned\.add\(key\);/,
+  );
+
+  /*
+   * Untagged entries stay readable and stay adoptable in all three places.
+   * They predate ownership being recorded, so unowned is indistinguishable from
+   * mine — refusing them locks people out of their own files. The rule is the
+   * mirror of the sweep's: the sweep deletes only what it can prove is its own,
+   * these refuse only what they can prove is someone else's.
+   */
+  for (const [name, source] of [
+    ['the vault', vault],
+    ['the restore note', settings],
+  ] as const) {
+    assert.match(source, /workspaceId === undefined/, `${name} must let a legacy untagged file through`);
+  }
+});
+
+test('one workspace cannot open or delete another workspace’s stored file', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    // A's registration papers, and a legacy file from before ownership existed.
+    const aKey = await storeLocalFile(new Blob(['A registration']), 'reg-a.pdf', 'application/pdf', 'ws-a');
+    const legacyKey = await storeLocalFile(new Blob(['legacy scan']), 'legacy.pdf', 'application/pdf', 'ws-b');
+    await sweepLocalFileVault([], 'ws-nobody');
+
+    // Make the legacy entry untagged, the way a file written before ownership
+    // was recorded actually sits in the vault.
+    const legacy = await readLocalFile(legacyKey);
+    assert.ok(legacy);
+    await importLocalFiles(
+      [
+        {
+          key: legacyKey,
+          name: legacy.name,
+          type: legacy.type,
+          size: legacy.size,
+          storedAt: legacy.storedAt,
+          data: await blobToBase64(legacy.blob),
+        },
+      ],
+      { workspaceId: 'ws-b' },
+    );
+
+    // B holds A's key — exactly what a restore of A's backup leaves behind when
+    // the file itself was omitted from the archive.
+    const leaked = await openLocalFile(aKey, 'ws-b');
+    assert.equal(leaked, null, 'a key on a record is not permission to read another account’s document');
+
+    const mine = await openLocalFile(aKey, 'ws-a');
+    assert.ok(mine, 'the owning workspace must still be able to open its own file');
+    mine?.release();
+
+    /*
+     * Deleting B's account must not take A's file, even though B's restored
+     * record referenced it. `alsoDeleteKeys` is what this workspace REFERENCED,
+     * which is not the same as what it owns.
+     */
+    await clearLocalFileVault('ws-b', [aKey]);
+
+    const survivors = new Set((await listLocalFiles()).map((entry) => entry.key));
+    assert.ok(survivors.has(aKey), 'B deleting its account must not delete A’s document');
+  } finally {
+    restore();
+  }
 });

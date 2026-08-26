@@ -575,8 +575,23 @@ export async function clearLocalFileVault(
      * documents behind after they deleted their account is its own kind of
      * wrong.
      */
-    const owned = new Set(alsoDeleteKeys);
-    for (const entry of await listLocalFiles()) {
+    const stored = await listLocalFiles();
+    const byKey = new Map(stored.map((entry) => [entry.key, entry]));
+
+    const owned = new Set<string>();
+    for (const key of alsoDeleteKeys) {
+      const entry = byKey.get(key);
+      if (!entry) continue;
+      /*
+       * Referenced is not the same as owned, and the difference destroys data.
+       * A restored record can carry another workspace's key — an omitted file
+       * is never remapped — so deleting everything this workspace referenced
+       * took the other account's document with it. Untagged stays adoptable, as
+       * described above; a proven foreign owner is left alone.
+       */
+      if (entry.workspaceId === undefined || entry.workspaceId === workspaceId) owned.add(key);
+    }
+    for (const entry of stored) {
       if (entry.workspaceId === workspaceId) owned.add(entry.key);
     }
 
@@ -748,9 +763,27 @@ export function isInlineViewableType(type: string): boolean {
  * than executing it. The guarantee belongs here, at the one place object URLs
  * are minted, rather than in each of the four screens that open files.
  */
-export async function openLocalFile(key: string): Promise<LocalFileHandle | null> {
+export async function openLocalFile(key: string, workspaceId: string): Promise<LocalFileHandle | null> {
   const entry = await readLocalFile(key);
   if (!entry) return null;
+
+  /*
+   * A key on a record is not permission to read the bytes behind it.
+   *
+   * The vault is origin-wide, and a key can reach a record that does not own
+   * it: restoring workspace A's backup into workspace B copies A's
+   * `localFileKey` onto B's records whenever the file itself was omitted from
+   * the archive, so `importLocalFiles` never remapped it. Opening on the key
+   * alone then handed B a document belonging to A.
+   *
+   * Untagged entries are allowed through. They predate ownership being
+   * recorded, so unowned is indistinguishable from mine — and refusing them
+   * would lock people out of their own files. Only a PROVEN foreign owner is
+   * refused, which is the mirror of the sweep's rule: it deletes only what it
+   * can prove is its own, and this reads everything except what it can prove is
+   * someone else's.
+   */
+  if (entry.workspaceId !== undefined && entry.workspaceId !== workspaceId) return null;
 
   hookPageUnload();
   /*

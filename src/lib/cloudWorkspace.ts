@@ -3,6 +3,7 @@ import { publicShareEventToBuyerRoomEvent, type PublicShareEventRow } from '@/li
 import { createId, todayStamp } from '@/lib/xbarRuntime';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { openLocalFile } from '@/lib/localFileVault';
+import { vaultOwnerId } from '@/lib/vaultOwner';
 import type { Session } from '@supabase/supabase-js';
 import type {
   DocumentRecord,
@@ -1205,7 +1206,7 @@ export async function getDocumentAccessUrl(
   }
 
   if (document.localFileKey) {
-    const handle = await openLocalFile(document.localFileKey);
+    const handle = await openLocalFile(document.localFileKey, vaultOwnerId());
     if (handle) {
       return {
         ok: true,

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { stripeSubscriptionBlocksCheckout } from './subscription-status.js';
 
 /*
  * What to do about Checkout Sessions this workspace already has open.
@@ -199,7 +200,7 @@ export function resolveExpiryFailure(session) {
 /**
  * How many sessions to ask Stripe for per page. 100 is Stripe's maximum.
  */
-export const OPEN_SESSION_PAGE_SIZE = 100;
+export const STRIPE_PAGE_SIZE = 100;
 
 /**
  * How many pages to walk before giving up and refusing.
@@ -210,7 +211,7 @@ export const OPEN_SESSION_PAGE_SIZE = 100;
  * limited to 10 attempts a minute, so 1000 simultaneously-open sessions is not
  * a busy seller retrying; it is someone who set out to build that pile.
  */
-export const OPEN_SESSION_PAGE_LIMIT = 10;
+export const STRIPE_PAGE_LIMIT = 10;
 
 /**
  * Every Checkout Session Stripe currently reports as open for this customer.
@@ -232,29 +233,84 @@ export const OPEN_SESSION_PAGE_LIMIT = 10;
  *
  * @returns {Promise<{ sessions: object[], complete: boolean }>}
  */
-export async function listOpenCheckoutSessions(stripe, customerId) {
-  const sessions = [];
+/**
+ * Walk a Stripe list endpoint to the end, or report that it could not.
+ *
+ * One paginator rather than one per resource. Two copies of this loop is how
+ * every drift in this PR started, and the halves that matter — reading
+ * `has_more`, advancing from the last id, refusing to call a truncated walk
+ * complete — are exactly the ones easy to get subtly different the second time.
+ *
+ * @param {(params: object) => Promise<{ data?: object[], has_more?: boolean }>} fetchPage
+ * @returns {Promise<{ items: object[], complete: boolean }>}
+ */
+export async function collectStripePages(fetchPage) {
+  const items = [];
   let startingAfter = '';
 
-  for (let page = 0; page < OPEN_SESSION_PAGE_LIMIT; page += 1) {
-    const params = { customer: customerId, status: 'open', limit: OPEN_SESSION_PAGE_SIZE };
-    if (startingAfter) params.starting_after = startingAfter;
-
-    const response = await stripe.checkout.sessions.list(params);
+  for (let page = 0; page < STRIPE_PAGE_LIMIT; page += 1) {
+    const response = await fetchPage(
+      startingAfter ? { limit: STRIPE_PAGE_SIZE, starting_after: startingAfter } : { limit: STRIPE_PAGE_SIZE },
+    );
     const data = Array.isArray(response?.data) ? response.data : [];
-    sessions.push(...data);
+    items.push(...data);
 
-    if (!response?.has_more) return { sessions, complete: true };
+    if (!response?.has_more) return { items, complete: true };
 
     // `has_more` with nothing to page from leaves no cursor to continue with.
     // Reporting that as complete would be inventing the assurance the caller
     // is about to rely on.
     const cursor = data.length > 0 ? String(data[data.length - 1]?.id ?? '') : '';
-    if (!cursor) return { sessions, complete: false };
+    if (!cursor) return { items, complete: false };
     startingAfter = cursor;
   }
 
-  return { sessions, complete: false };
+  return { items, complete: false };
+}
+
+export async function listOpenCheckoutSessions(stripe, customerId) {
+  const { items, complete } = await collectStripePages((params) =>
+    stripe.checkout.sessions.list({ customer: customerId, status: 'open', ...params }),
+  );
+  return { sessions: items, complete };
+}
+
+/**
+ * A subscription Stripe already holds for this customer that forbids buying
+ * another one.
+ *
+ * This exists because the billing row cannot answer the question during the
+ * window that matters. `stripe_subscription_id` is written by the webhook, so a
+ * Checkout Session that COMPLETED a moment ago shows up in neither signal the
+ * endpoint had: it is gone from the open-session list, and the row is still
+ * empty. Both said "this workspace has bought nothing", and the request created
+ * a second completable subscription — and its upsert then erased the first
+ * webhook's id when that landed.
+ *
+ * Stripe knows immediately, because completing a `mode: 'subscription'` session
+ * creates the subscription. So the authoritative source is asked directly.
+ *
+ * Which statuses block is NOT decided here. `stripeSubscriptionBlocksCheckout`
+ * is the policy the rest of the flow already uses — everything but `canceled`
+ * and `incomplete_expired` leaves something Stripe can still bill or a plan
+ * that must be changed in the portal — and a second, narrower list written
+ * beside it is how these two answers drift apart.
+ *
+ * @returns {Promise<{ subscription: object|null, complete: boolean }>}
+ */
+export async function findBlockingSubscription(stripe, customerId) {
+  // Stripe's default omits `canceled`; `incomplete_expired` still comes back
+  // and is filtered below rather than trusted from the query.
+  const { items, complete } = await collectStripePages((params) =>
+    stripe.subscriptions.list({ customer: customerId, ...params }),
+  );
+
+  const blocking = items.find(
+    (subscription) =>
+      subscription && typeof subscription === 'object' && stripeSubscriptionBlocksCheckout(subscription.status),
+  );
+
+  return { subscription: blocking ?? null, complete };
 }
 
 /**
