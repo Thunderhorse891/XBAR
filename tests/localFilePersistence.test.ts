@@ -325,12 +325,27 @@ test('the packet summary does not claim a tab that never opened', async () => {
 test('a refused file-vault purge is not reported as a completed deletion', async () => {
   const source = await readFile('src/routes/Settings.tsx', 'utf8');
 
+  /*
+   * The capture has to precede both state-clearing steps. `deleteAccount`
+   * clears the cloud workspace id and `resetWorkspace` erases the records, so
+   * reading either afterwards answered for a workspace that no longer existed:
+   * every cloud deletion purged as 'local' with an empty key list, leaving the
+   * deleted account's files behind and deleting the local-only workspace's
+   * instead.
+   */
+  const capture = source.indexOf('const departingWorkspaceId = vaultOwnerId();');
+  const del = source.indexOf('await deleteAccount(deleteConfirm)');
+  const reset = source.indexOf('resetWorkspace();');
+  assert.ok(capture > -1, 'the departing workspace must be captured');
+  assert.ok(capture < del, 'before the account is deleted');
+  assert.ok(capture < reset, 'and before the workspace is reset');
+
   // Scoped to this workspace now: the vault is origin-wide, so dropping the
   // database would take a second account's documents with it.
   assert.match(
     source,
-    /const \{ cleared \} = await clearLocalFileVault\(\s*vaultOwnerId\(\),/,
-    'the purge result must be read, and the purge must be scoped to this workspace',
+    /const \{ cleared \} = await clearLocalFileVault\(departingWorkspaceId, departingKeys\);/,
+    'the purge result must be read, and scoped to the workspace captured BEFORE deletion cleared it',
   );
   assert.match(
     source,

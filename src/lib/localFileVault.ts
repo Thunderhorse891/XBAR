@@ -300,6 +300,20 @@ export interface PortableLocalFile {
   data: string;
 }
 
+/*
+ * Note what is NOT in `PortableLocalFile`: `generated`, and `workspaceId`.
+ *
+ * Both are deliberate. A backup file is arbitrary attacker-supplied JSON — a
+ * `generated: true` in it would let an uploaded `.html` claim XBAR wrote it and
+ * earn script execution under this origin on restore, which is precisely the
+ * hole the provenance flag exists to close. And an archived `workspaceId` would
+ * let a backup restore files tagged to a workspace that is not the one
+ * importing them.
+ *
+ * So both are decided by the importer from data it trusts: the workspace doing
+ * the restore, and that workspace's own validated sale-packet records.
+ */
+
 /** A file the backup could not carry, and why — named rather than dropped. */
 export interface UnbackedUpFile {
   name: string;
@@ -416,7 +430,11 @@ export async function exportLocalFiles(
  */
 export async function importLocalFiles(
   files: PortableLocalFile[],
+  context: { workspaceId: string; generatedKeys?: Iterable<string> },
 ): Promise<{ restored: number; failed: UnbackedUpFile[] }> {
+  // Provenance is decided here, from the importing workspace's own validated
+  // records — never from the archive, which anyone can write.
+  const generatedKeys = new Set(context.generatedKeys ?? []);
   const failed: UnbackedUpFile[] = [];
 
   if (!isLocalFileVaultAvailable()) {
@@ -443,6 +461,18 @@ export async function importLocalFiles(
         type: file.type || '',
         size: bytes.byteLength,
         storedAt: file.storedAt || new Date().toISOString(),
+        // Tagged to the workspace doing the restore. Without this a restored
+        // file has no owner, so it can never be swept and never purged when the
+        // account is deleted — it would simply accumulate forever.
+        workspaceId: context.workspaceId,
+        /*
+         * A packet is only "generated" if this workspace's own restored records
+         * say so. That keeps a restored packet opening in a tab with its
+         * verifier — the thing the CSP hash exists for — without letting a
+         * hand-edited archive promote an uploaded HTML file to the same
+         * privilege.
+         */
+        generated: generatedKeys.has(file.key),
         blob: new Blob([bytes], { type: file.type || 'application/octet-stream' }),
       };
       await withStore('readwrite', (store) => store.put(entry));

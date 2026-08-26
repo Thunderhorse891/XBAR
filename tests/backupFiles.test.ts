@@ -13,6 +13,7 @@ import {
   listLocalFiles,
   readLocalFile,
   storeLocalFile,
+  sweepLocalFileVault,
 } from '../src/lib/localFileVault.js';
 import { installFakeIndexedDb } from './helpers/fakeIndexedDb.js';
 
@@ -72,7 +73,7 @@ test('a file survives a backup and a restore onto an empty device', async () => 
   try {
     assert.deepEqual(await listLocalFiles(), []);
 
-    const { restored, failed } = await importLocalFiles(exported.files);
+    const { restored, failed } = await importLocalFiles(exported.files, { workspaceId: TEST_WORKSPACE });
     assert.equal(restored, 1);
     assert.deepEqual(failed, []);
 
@@ -136,7 +137,7 @@ test('a restore does not abandon the remaining files when one entry is corrupt',
     };
     const corrupt = { ...good, key: 'vault-bad', name: 'bad.pdf', data: '!!! not base64 !!!' };
 
-    const { restored, failed } = await importLocalFiles([corrupt, good]);
+    const { restored, failed } = await importLocalFiles([corrupt, good], { workspaceId: TEST_WORKSPACE });
 
     assert.equal(restored, 1, 'the good file must still be restored');
     // Skipping it quietly leaves a record whose localFileKey resolves to
@@ -173,9 +174,10 @@ test('a referenced file that is not on this device is named, not dropped', async
 test('a device that cannot store files reports every one, rather than restoring none quietly', async () => {
   delete (globalThis as { indexedDB?: unknown }).indexedDB;
 
-  const { restored, failed } = await importLocalFiles([
-    { key: 'vault-a', name: 'a.pdf', type: '', size: 1, storedAt: '', data: '' },
-  ]);
+  const { restored, failed } = await importLocalFiles(
+    [{ key: 'vault-a', name: 'a.pdf', type: '', size: 1, storedAt: '', data: '' }],
+    { workspaceId: TEST_WORKSPACE },
+  );
 
   assert.equal(restored, 0);
   assert.deepEqual(failed, [{ name: 'a.pdf', reason: 'this browser cannot store files on this device' }]);
@@ -217,7 +219,7 @@ test('the backup handlers carry files, and the restore keeps their keys', async 
    * overwrite blobs belonging to the workspace currently loaded.
    */
   const validateAt = source.indexOf('workspaceBackupPayload(payload)');
-  const restoreFilesAt = source.indexOf('importLocalFiles(payload.files)');
+  const restoreFilesAt = source.indexOf('importLocalFiles(payload.files,');
   const restoreRecordsAt = source.indexOf('importWorkspaceBackup(payload)');
 
   assert.ok(validateAt > -1, 'the payload must be validated before anything is written');
@@ -305,8 +307,8 @@ test('account deletion purges the vault, not just the workspace', async () => {
 
   assert.match(
     source,
-    /await useXbarStore\.persist\.clearStorage\(\);[\s\S]{0,900}await clearLocalFileVault\(\s*vaultOwnerId\(\),/,
-    'the files are in their own database and need their own purge — scoped to this workspace, because the vault is origin-wide and this browser may hold another account',
+    /await useXbarStore\.persist\.clearStorage\(\);[\s\S]{0,900}await clearLocalFileVault\(departingWorkspaceId, departingKeys\);/,
+    'the files are in their own database and need their own purge — scoped to the departing workspace, because the vault is origin-wide and this browser may hold another account',
   );
 });
 
@@ -319,7 +321,7 @@ test('a structurally broken backup is refused before any blob is written', async
   // backup's blobs, under keys the CURRENT workspace still points at.
   const shapeAt = source.indexOf('workspaceBackupPayload(payload)');
   const deepAt = source.indexOf('canRestorePersistedState(workspace)');
-  const filesAt = source.indexOf('importLocalFiles(payload.files)');
+  const filesAt = source.indexOf('importLocalFiles(payload.files,');
 
   assert.ok(deepAt > -1, 'the full normalization must run before anything is written');
   assert.ok(shapeAt < deepAt, 'the cheap check comes first');
@@ -330,14 +332,18 @@ test('a structurally broken backup is refused before any blob is written', async
 test('the full normalization is what decides, so it cannot drift from the import', async () => {
   const source = await readFile('src/store/xbarStoreHelpers.ts', 'utf8');
 
-  // Deliberately runs `restorePersistedState` rather than asserting a deeper
-  // set of shapes: a second description of "valid" would drift from the one the
-  // import actually applies.
-  assert.match(
-    source,
-    /export function canRestorePersistedState\(raw: unknown\): boolean \{\s*try \{\s*restorePersistedState\(raw\);/,
-    'validation must run the real normalization',
-  );
+  // Runs `restorePersistedState` rather than asserting a second set of shapes,
+  // so "valid" cannot drift from what the import actually applies...
+  assert.match(source, /normalized = restorePersistedState\(raw\);/, 'validation must run the real normalization');
+
+  /*
+   * ...but not throwing is not the same as being usable. `{ horses: [{}] }`
+   * normalizes cleanly into a horse with no id and no name; that payload passed
+   * both guards, the vault was overwritten, and the broken state was installed.
+   * An id is what every lookup, key and cascade in the app assumes.
+   */
+  assert.match(source, /const IDENTIFIED_COLLECTIONS = \[/, 'the normalized result must be checked, not just produced');
+  assert.match(source, /typeof id !== 'string' \|\| id\.trim\(\) === ''/, 'a record with no id must be refused');
 });
 
 test('a backup remembers what it could not include', async () => {
@@ -511,4 +517,99 @@ test('deleting an account also removes the untagged files it was using', async (
   } finally {
     restore();
   }
+});
+
+test('a restored packet still opens with its verifier; a restored upload does not', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    /*
+     * Provenance has to survive a backup, and it has to come from somewhere
+     * trustworthy. `PortableLocalFile` deliberately carries no `generated`
+     * flag: a backup is arbitrary JSON, and trusting one would let a
+     * hand-edited archive mark an uploaded `.html` as XBAR-written and earn it
+     * script execution under this origin on restore.
+     *
+     * So the importer decides, from the workspace's own validated sale-packet
+     * records — which is also what keeps a restored packet opening in a tab
+     * with the verifier the CSP hash exists to allow.
+     */
+    const packet = {
+      key: 'vault-packet',
+      name: 'packet.html',
+      type: 'text/html',
+      size: 4,
+      storedAt: '',
+      data: btoa('pkt'),
+    };
+    const upload = {
+      key: 'vault-upload',
+      name: 'evil.html',
+      type: 'text/html',
+      size: 4,
+      storedAt: '',
+      data: btoa('evl'),
+    };
+
+    const { restored } = await importLocalFiles([packet, upload], {
+      workspaceId: 'ws-a',
+      generatedKeys: ['vault-packet'],
+    });
+    assert.equal(restored, 2);
+
+    const openedPacket = await openLocalFile('vault-packet');
+    const openedUpload = await openLocalFile('vault-upload');
+    assert.equal(openedPacket?.inlineSafe, true, 'a restored packet must open, not download');
+    assert.equal(openedUpload?.inlineSafe, false, 'a restored upload must stay inert');
+    openedPacket?.release();
+    openedUpload?.release();
+  } finally {
+    restore();
+  }
+});
+
+test('a restored file belongs to the workspace that restored it', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    // Without an owner a restored file could never be swept and never purged on
+    // account deletion — it would accumulate forever.
+    await importLocalFiles([{ key: 'vault-r', name: 'r.pdf', type: '', size: 1, storedAt: '', data: btoa('r') }], {
+      workspaceId: 'ws-a',
+    });
+
+    const entry = await readLocalFile('vault-r');
+    assert.equal(entry?.workspaceId, 'ws-a');
+    assert.equal(await sweepLocalFileVault([], 'ws-a'), 1, 'and is therefore collectable by its owner');
+  } finally {
+    restore();
+  }
+});
+
+test('the preflight refuses a payload that normalizes into unusable records', async () => {
+  const source = await readFile('src/store/xbarStoreHelpers.ts', 'utf8');
+
+  /*
+   * Asserted at the source rather than by calling it: `xbarStoreHelpers` imports
+   * through `@/` aliases the node test build does not resolve, so this suite
+   * cannot execute it. Named plainly because it is a real limit — these
+   * assertions pin the rule, not the behaviour.
+   *
+   * The rule: `{ horses: [{}] }` normalizes cleanly — the spread copies nothing
+   * and the migration adds `documentFacts: []` — into a horse with no id and no
+   * name. That passed both guards, the vault was overwritten with the archive's
+   * blobs, and the broken state was installed; screens that key or look up by id
+   * then crash on it. Not throwing is not the same as being usable.
+   */
+  assert.match(source, /const IDENTIFIED_COLLECTIONS = \[/, 'the normalized result must be checked, not just produced');
+  assert.match(source, /if \(!Array\.isArray\(entries\)\) return false;/);
+  assert.match(
+    source,
+    /typeof id !== 'string' \|\| id\.trim\(\) === ''/,
+    'a record with a blank or missing id is refused',
+  );
+
+  // The check has to sit between normalization and the return, or it decides
+  // nothing.
+  const normalizeAt = source.indexOf('normalized = restorePersistedState(raw);');
+  const checkAt = source.indexOf('for (const collection of IDENTIFIED_COLLECTIONS)');
+  assert.ok(normalizeAt > -1 && checkAt > normalizeAt, 'the records are validated after they are normalized');
 });

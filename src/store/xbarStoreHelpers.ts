@@ -357,13 +357,61 @@ export function selectPersistedState(state: PersistedXbarState): PersistedXbarSt
  * this cannot drift from what the import actually does. It is pure, so running
  * it twice costs only the work.
  */
+/**
+ * Record collections whose entries the app looks up, keys and cascades by id.
+ *
+ * `workspaceProfile` and `subscription` are deliberately absent — they are
+ * single objects with defaults, not identified collections.
+ */
+const IDENTIFIED_COLLECTIONS = [
+  'horses',
+  'documents',
+  'intakeBatches',
+  'ownershipRecords',
+  'auditEvents',
+  'salePacketBuilds',
+  'buyerRoomEvents',
+  'expenseReceipts',
+  'ranchAssets',
+  'salesLeads',
+  'sharedListings',
+  'workspaceMembers',
+  'workspaceInvitations',
+] as const;
+
 export function canRestorePersistedState(raw: unknown): boolean {
+  let normalized: PersistedXbarState;
   try {
-    restorePersistedState(raw);
-    return true;
+    normalized = restorePersistedState(raw);
   } catch {
     return false;
   }
+
+  /*
+   * Not throwing is not the same as being usable.
+   *
+   * `{ horses: [{}] }` normalizes cleanly — the spread copies nothing and the
+   * migration adds `documentFacts: []` — and produces a horse with no id and no
+   * name. That payload passed both guards, the vault was overwritten with the
+   * archive's blobs, and the broken state was installed; screens that key or
+   * look up by id then crash on it.
+   *
+   * An id is the invariant the whole app rests on: lookups, React keys, and the
+   * cascades that delete a horse's receipts all assume one. Checking it here
+   * costs a pass over the records and refuses BEFORE anything is written.
+   */
+  const state = normalized as unknown as Record<string, unknown>;
+  for (const collection of IDENTIFIED_COLLECTIONS) {
+    const entries = state[collection];
+    if (!Array.isArray(entries)) return false;
+    for (const entry of entries) {
+      if (!entry || typeof entry !== 'object') return false;
+      const id = (entry as { id?: unknown }).id;
+      if (typeof id !== 'string' || id.trim() === '') return false;
+    }
+  }
+
+  return true;
 }
 
 export function restorePersistedState(raw: unknown): PersistedXbarState {

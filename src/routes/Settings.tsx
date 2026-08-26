@@ -172,6 +172,29 @@ export default function Settings() {
 
   const handleDeleteAccount = async () => {
     if (!canConfirmDelete || deleting) return;
+
+    /*
+     * Captured BEFORE anything is cleared, and that ordering is the whole fix.
+     *
+     * `deleteAccount` clears the cloud workspace id and `resetWorkspace` erases
+     * the records, so reading either afterwards answered for a workspace that
+     * no longer existed: every successful cloud deletion purged as `'local'`
+     * with an empty key list. The deleted account's files stayed on the device,
+     * and this browser's LOCAL-only workspace had its files deleted instead —
+     * wrong in both directions at once.
+     */
+    const departingWorkspaceId = vaultOwnerId();
+    const departing = exportWorkspaceBackup().workspace as {
+      documents?: { localFileKey?: string }[];
+      expenseReceipts?: { localFileKey?: string }[];
+      salePacketBuilds?: { localFileKey?: string }[];
+    };
+    const departingKeys = referencedVaultKeys(
+      departing.documents ?? [],
+      departing.expenseReceipts ?? [],
+      departing.salePacketBuilds ?? [],
+    );
+
     setDeleting(true);
     const result = await deleteAccount(deleteConfirm);
     setDeleting(false);
@@ -193,18 +216,11 @@ export default function Settings() {
     // nothing about. Without this, registration papers, receipts and generated
     // packets stayed on the device while the UI reported the account
     // permanently deleted.
-    // Scoped to this workspace, plus whatever its own records pointed at. The
+    // Scoped to the workspace being deleted, plus whatever its own records
+    // pointed at — both captured at the top, while they still existed. The
     // vault is origin-wide: dropping the database would take a second account's
     // documents with it, and this browser may well hold one.
-    const departing = exportWorkspaceBackup().workspace as {
-      documents?: { localFileKey?: string }[];
-      expenseReceipts?: { localFileKey?: string }[];
-      salePacketBuilds?: { localFileKey?: string }[];
-    };
-    const { cleared } = await clearLocalFileVault(
-      vaultOwnerId(),
-      referencedVaultKeys(departing.documents ?? [], departing.expenseReceipts ?? [], departing.salePacketBuilds ?? []),
-    );
+    const { cleared } = await clearLocalFileVault(departingWorkspaceId, departingKeys);
     setDeleteConfirm('');
     // The server side is done either way — the account is gone. But if this
     // browser refused to drop the file database, the proof documents are still
@@ -268,8 +284,20 @@ export default function Settings() {
       // Restored under their ORIGINAL keys — a fresh key would leave every
       // document pointing at nothing. A backup written before this shipped has
       // no `files`, and restores exactly as it always did.
+      /*
+       * Provenance comes from the VALIDATED workspace payload, not the archive.
+       *
+       * A backup is arbitrary JSON. Trusting a `generated` flag in it would let
+       * a hand-edited archive mark an uploaded `.html` as XBAR-written and earn
+       * it script execution under this origin on restore. The sale-packet
+       * records have already passed `canRestorePersistedState` above, so the
+       * keys they reference are the ones this workspace itself calls packets.
+       */
+      const restoredPackets = (workspace as { salePacketBuilds?: { localFileKey?: string }[] }).salePacketBuilds ?? [];
+      const generatedKeys = referencedVaultKeys(restoredPackets);
+
       const { restored, failed } = Array.isArray(payload.files)
-        ? await importLocalFiles(payload.files)
+        ? await importLocalFiles(payload.files, { workspaceId: vaultOwnerId(), generatedKeys })
         : { restored: 0, failed: [] as UnbackedUpFile[] };
       const result = importWorkspaceBackup(payload);
 
