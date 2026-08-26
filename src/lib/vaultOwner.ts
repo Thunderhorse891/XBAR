@@ -12,14 +12,31 @@
 import { useCloudStore } from '@/store/useCloudStore';
 
 /**
- * The cloud workspace id when signed in, and `'local'` otherwise.
+ * Who owns files written from here: the cloud workspace, else the signed-in
+ * account, else the one local-only workspace.
  *
- * `'local'` is a correct owner rather than a placeholder: a browser profile has
- * exactly one local-only workspace, because zustand persists it under a single
- * key. Two local-only workspaces in one profile cannot exist to be confused.
+ * The middle case is the one this function originally missed, and the comment
+ * that used to sit here asserted it away: "a browser profile has exactly one
+ * local-only workspace, so two cannot be confused". True of signed-OUT use, and
+ * false wherever `VITE_SUPABASE_RELATIONAL_SYNC=false`, because
+ * `loadWorkspaceAccessProfile` then returns `workspaceId: null` for every
+ * signed-in account. Two people signing into the same browser both got
+ * `'local'`, which made each of them the other's owner: reads, exports and
+ * packet attachments all pass the ownership check, and the sweep treats the
+ * other account's files as its own orphans and deletes them.
+ *
+ * The account id is namespaced rather than used bare. Workspace ids and user
+ * ids are both uuids, and an unprefixed value would be indistinguishable from a
+ * workspace — a distinction the vault has no other way to make.
  */
 export function vaultOwnerId(): string {
-  return useCloudStore.getState().workspaceId || 'local';
+  const cloud = useCloudStore.getState();
+  if (cloud.workspaceId) return cloud.workspaceId;
+
+  const accountId = cloud.session?.user?.id ?? '';
+  if (accountId) return `account:${accountId}`;
+
+  return 'local';
 }
 
 /**

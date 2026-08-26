@@ -573,3 +573,45 @@ test('the sweep refuses when the records on screen belong to another workspace',
   assert.ok(!/partialize|selectPersistedState/.test(marker), 'it must not ride along in the persisted payload');
   assert.match(marker, /catch \{/, 'private browsing must read back as unknown, not throw');
 });
+
+test('two accounts sharing a browser do not share a vault namespace', async () => {
+  const helper = await readFile('src/lib/vaultOwner.ts', 'utf8');
+  const cloud = await readFile('src/lib/cloudWorkspace.ts', 'utf8');
+
+  /*
+   * `'local'` was treated as proof of a single owner, on the reasoning that a
+   * browser profile holds exactly one local-only workspace. That is true of
+   * signed-OUT use and false the moment relational sync is disabled:
+   * `loadWorkspaceAccessProfile` returns `workspaceId: null` for every
+   * signed-in account, so two people signing into the same browser both owned
+   * `'local'` — each became the other's owner. Reads, exports and packet
+   * attachments all passed the ownership check, and the sweep deleted the other
+   * account's files as its own orphans.
+   */
+  assert.match(
+    cloud,
+    /if \(!isRelationalCloudEnabled\(\)\) \{\s*return \{\s*workspaceId: null,/,
+    'a signed-in account really does arrive with no workspace id — this is what makes the fallback load-bearing',
+  );
+
+  assert.match(
+    helper,
+    /const accountId = cloud\.session\?\.user\?\.id \?\? '';\s*if \(accountId\) return `account:\$\{accountId\}`;/,
+    'a signed-in account with no workspace must own its own namespace, not the local one',
+  );
+
+  // Order matters: a real workspace id still wins, or every relational-sync
+  // deployment would silently renamespace its files onto the account.
+  const workspaceAt = helper.indexOf('if (cloud.workspaceId) return cloud.workspaceId;');
+  const accountAt = helper.indexOf('if (accountId)');
+  const localAt = helper.indexOf("return 'local';");
+  assert.ok(workspaceAt > -1 && workspaceAt < accountAt, 'the workspace is the owner whenever there is one');
+  assert.ok(accountAt < localAt, "'local' is the last resort, not the default for anyone signed in");
+
+  /*
+   * Namespaced, not bare. Workspace ids and user ids are both uuids, so an
+   * unprefixed account id would be indistinguishable from a workspace — a
+   * distinction the vault has no other way to make.
+   */
+  assert.doesNotMatch(helper, /return accountId;/, 'a bare uuid could be read as a workspace id');
+});
