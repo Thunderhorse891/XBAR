@@ -892,6 +892,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   assert.match(helpers, /expenseReceipts: \{ strings: \['vendor'\] \}/);
   assert.match(helpers, /salesLeads: \{ strings: \['name'\] \}/);
   assert.match(helpers, /sharedListings: \{ lists: \['channels'\] \}/);
+  assert.match(helpers, /roleWorkspaces: \{ lists: \['primaryModules', 'permissions'\] \}/);
   assert.match(helpers, /'medicalTimeline'/, 'horse.medicalTimeline.map was missing from the horse list itself');
 
   /*
@@ -927,6 +928,8 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     ['src/lib/commandPalette.ts', /add\(record\.legalOwner, record\.horseId\);/],
     ['src/features/ownership/selectors.ts', /horse\.ownership\.reduce\(/],
     ['src/routes/Horses.tsx', /horse\.location\.barn/],
+    ['src/routes/Settings.tsx', /workspace\.primaryModules\.length/],
+    ['src/routes/Settings.tsx', /workspace\.permissions\.map\(/],
   ] as const) {
     assert.match(await readFile(route, 'utf8'), deref, `${route} still reads this unguarded`);
   }

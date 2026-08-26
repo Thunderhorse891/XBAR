@@ -479,6 +479,13 @@ export function canRestorePersistedState(raw: unknown): boolean {
     salesLeads: { strings: ['name'] },
     // `listing.channels.includes()` — SharedAccess.tsx:33.
     sharedListings: { lists: ['channels'] },
+    /*
+     * `workspace.primaryModules.length` and `workspace.permissions.map()` —
+     * Settings.tsx:1015 and :1019. This collection is covered by neither the id
+     * loop nor normalization, and Settings is already MOUNTED when an import
+     * lands, so the rerender crashes the screen the rancher is standing on.
+     */
+    roleWorkspaces: { lists: ['primaryModules', 'permissions'] },
   };
 
   for (const [collection, shape] of Object.entries(NESTED_SHAPES)) {
