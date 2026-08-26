@@ -19,7 +19,7 @@ import { hasHorsePhoto, isHorsePhotoAsset } from '@/lib/animalPassport';
 import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { buildPacketCredential } from '@/lib/localSalePacketGenerator';
 import { toPacketDisclosure } from '@/lib/salePacketDisclosure';
-import { onVaultOwnerReady, vaultOwnerId } from '@/lib/vaultOwner';
+import { onWorkspaceSettled, vaultOwnerId } from '@/lib/vaultOwner';
 import { featureGate } from '@/lib/commercialEngine';
 import { ownerPreviewAuthorization, overlayTier } from '@/lib/ownerPreview';
 import { isCurrentPaidPlan } from '@/lib/subscriptionDecision';
@@ -2586,18 +2586,23 @@ export const useXbarStore = create<XbarStore>()(
         if (didWorkspaceReadFail()) return;
 
         /*
-         * Deferred until the cloud identity is known.
+         * Deferred until the workspace has SETTLED, and re-read at that moment.
          *
-         * Rehydration can finish before the cloud store initializes, and in that
-         * window `vaultOwnerId()` answers 'local' for a signed-in workspace — so
-         * the sweep looked for orphans belonging to a workspace that was not the
-         * one loading, found none, and reclaimed nothing. This is the only
-         * production sweep, so the vault simply grew on every reload until the
-         * quota started refusing new saves.
+         * Two separate mistakes lived here. Sweeping at rehydration asked
+         * `vaultOwnerId()` before the cloud store had one, so a signed-in reload
+         * swept as 'local' and reclaimed nothing. Waiting only for the id was
+         * worse: the id is published before CloudBootstrap reconciles remote
+         * state, so a browser that last persisted workspace A and reloads signed
+         * into B would sweep B's files against A's keys — deleting them
+         * permanently before B's records loaded.
+         *
+         * So it waits for reconciliation, and reads the records that exist then
+         * rather than the ones captured at rehydration.
          */
-        onVaultOwnerReady(() => {
+        onWorkspaceSettled(() => {
+          const current = useXbarStore.getState();
           void sweepLocalFileVault(
-            referencedVaultKeys(state.documents, state.expenseReceipts, state.salePacketBuilds),
+            referencedVaultKeys(current.documents, current.expenseReceipts, current.salePacketBuilds),
             vaultOwnerId(),
           );
         });

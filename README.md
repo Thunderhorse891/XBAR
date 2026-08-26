@@ -175,6 +175,11 @@ own:
    is correctly still an entitled state.
 3. `20260822_restrict_anon_rpc_surface.sql` — grants. Closes the unauthenticated
    RPC surface left by PostgreSQL's default `EXECUTE` grant to `PUBLIC`.
+4. `20260826_checkout_session_lock.sql` — schema. Adds the column that
+   serializes Checkout Session creation per workspace, so two concurrent
+   requests cannot each create a billable subscription session. Additive and
+   independent of the other three: one nullable column and one partial index,
+   no rewrite, and its order in the sequence does not matter.
 
 Apply them **one at a time**, not with a single `supabase db push`. That command
 applies every pending migration in one go, which would run the data
@@ -209,7 +214,16 @@ psql "$DATABASE_URL" \
 # 3. grants — staging first, then production
 psql "$STAGING_DATABASE_URL" -f supabase/migrations/20260822_restrict_anon_rpc_surface.sql
 node scripts/verify-rpc-surface.mjs "$STAGING_DATABASE_URL"
+
+# 4. checkout lock — additive, safe to apply directly, order does not matter
+psql "$DATABASE_URL" -f supabase/migrations/20260826_checkout_session_lock.sql
 ```
+
+Until (4) is applied, `api/stripe/checkout.js` cannot claim its lock and
+**refuses every checkout** as retryable. That is deliberate — the alternative
+is creating billable sessions without serialization — but it means this
+migration is a prerequisite for managed checkout working at all, not an
+optimization to schedule later.
 
 `xbar.reconcile_exclude` is how you keep a row the migration would otherwise
 downgrade. A populated `stripe_subscription_id` proves the workspace was billed

@@ -78,7 +78,7 @@ test('the vault is reconciled against the workspace on rehydration', async () =>
 
   assert.match(
     source,
-    /onRehydrateStorage: \(\) => \(state\) => \{[\s\S]*sweepLocalFileVault\(\s*referencedVaultKeys\(state\.documents, state\.expenseReceipts, state\.salePacketBuilds\),\s*vaultOwnerId\(\),?\s*\)/,
+    /onRehydrateStorage: \(\) => \(state\) => \{[\s\S]*onWorkspaceSettled\(\(\) => \{[\s\S]{0,400}sweepLocalFileVault\(/,
     'file bytes must be reclaimed when the records that referenced them are gone — but only this workspace\u2019s, since the vault is origin-wide and another account\u2019s files are not orphans',
   );
 });
@@ -389,22 +389,6 @@ test('the packet attachment cap is enforced against the vault, not against metad
   assert.match(source, /usedBytes \+= entry\.size;/, 'and must accumulate them');
 });
 
-test('the vault sweep waits for the cloud workspace identity', async () => {
-  const store = await readFile('src/store/useXbarStore.ts', 'utf8');
-  const helper = await readFile('src/lib/vaultOwner.ts', 'utf8');
-
-  /*
-   * Rehydration can finish before the cloud store initializes, and in that
-   * window `vaultOwnerId()` answers 'local' for a signed-in workspace. This is
-   * the ONLY production sweep, so it looked for orphans belonging to a
-   * workspace that was not the one loading, found none, and reclaimed nothing —
-   * the vault simply grew on every reload until the quota refused new saves.
-   */
-  assert.match(store, /onVaultOwnerReady\(\(\) => \{\s*void sweepLocalFileVault\(/, 'the sweep must wait');
-  assert.match(helper, /if \(useCloudStore\.getState\(\)\.initialized\) \{/, 'and run immediately when it already is');
-  assert.match(helper, /unsubscribe\(\);\s*run\(\);/, 'the listener must detach so the sweep runs once');
-});
-
 test('the cloud packet never claims a tab the browser refused', async () => {
   const wizard = await readFile('src/components/SalePacketWizard.tsx', 'utf8');
 
@@ -432,4 +416,28 @@ test('an import never grants a restored file script execution', async () => {
   // was the hole: normalization only requires a non-empty id.
   assert.ok(!settings.includes('generatedKeys'), 'the archive-derived provenance path must be gone');
   assert.match(vault, /generated: false,/, 'a restored file is download-only');
+});
+
+test('the sweep waits for cloud reconciliation, not just the workspace id', async () => {
+  const store = await readFile('src/store/useXbarStore.ts', 'utf8');
+  const helper = await readFile('src/lib/vaultOwner.ts', 'utf8');
+
+  /*
+   * `initialize` publishes the workspace id early; only afterwards does
+   * CloudBootstrap load the remote backup and reconcile, which can REPLACE
+   * every local record. Sweeping in between sees the new workspace's id beside
+   * the previous workspace's documents — so reloading a browser that last
+   * persisted workspace A while signed into B swept B's files against A's keys
+   * and deleted them permanently, before B's records had loaded.
+   */
+  assert.match(helper, /if \(useCloudStore\.getState\(\)\.autosaveReady\) \{/, 'the gate is reconciliation, not init');
+  assert.ok(
+    !/getState\(\)\.initialized/.test(helper) && !/cloud\.initialized/.test(helper),
+    'waiting on initialize is the bug, not the fix — the prose may mention it, the code may not read it',
+  );
+
+  // And the records swept against must be the ones that exist THEN, not the
+  // snapshot captured at rehydration.
+  assert.match(store, /onWorkspaceSettled\(\(\) => \{\s*const current = useXbarStore\.getState\(\);/);
+  assert.match(store, /referencedVaultKeys\(current\.documents, current\.expenseReceipts, current\.salePacketBuilds\)/);
 });

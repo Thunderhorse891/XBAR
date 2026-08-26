@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { checkoutIdempotencyKey, planCheckoutSession, resolveExpiryFailure } from '../../api/_lib/checkout-session.js';
+import {
+  CHECKOUT_LOCK_MS,
+  claimCheckoutLock,
+  planCheckoutSession,
+  resolveExpiryFailure,
+} from '../../api/_lib/checkout-session.js';
 
 /*
  * An empty `stripe_subscription_id` means no subscription EXISTS. It does not
@@ -96,35 +101,6 @@ test('no open sessions means an ordinary first purchase', () => {
   }
 });
 
-test('two submissions in the same moment collapse to one session', () => {
-  const at = new Date('2026-08-26T12:34:56Z');
-  assert.equal(checkoutIdempotencyKey(intent, at), checkoutIdempotencyKey(intent, new Date('2026-08-26T12:34:02Z')));
-});
-
-test('a real second attempt later gets a real second session', () => {
-  /*
-   * A key with no time component would replay the original session hours later
-   * — by then possibly expired, handing the seller a dead link. Listing open
-   * sessions is what catches the slow duplicate; this only has to catch the
-   * two-POSTs-racing case.
-   */
-  const first = checkoutIdempotencyKey(intent, new Date('2026-08-26T12:34:56Z'));
-  const later = checkoutIdempotencyKey(intent, new Date('2026-08-26T13:34:56Z'));
-  assert.notEqual(first, later);
-
-  /*
-   * Different TIERS deliberately share a key now — see the serialization test
-   * below. Keying on the intent meant two concurrent requests for different
-   * plans got different keys and both created a completable session. The
-   * workspace is the thing being serialized, so a different workspace is what
-   * must never collide.
-   */
-  assert.notEqual(
-    first,
-    checkoutIdempotencyKey({ ...intent, workspaceId: 'ws-other' }, new Date('2026-08-26T12:34:56Z')),
-  );
-});
-
 test('the endpoint expires stale sessions before it creates another', () => {
   const source = readFileSync('api/stripe/checkout.js', 'utf8');
 
@@ -137,7 +113,6 @@ test('the endpoint expires stale sessions before it creates another', () => {
   assert.ok(list < expire, 'it cannot expire what it has not looked up');
   assert.ok(expire < create, 'a stale session left completable beside a new one is the duplicate charge');
 
-  assert.match(source, /idempotencyKey: checkoutIdempotencyKey\(intent\)/, 'a racing duplicate POST must collapse');
   assert.match(source, /workspace_seats: String\(seatCount\)/, 'seats must be recorded for the next comparison');
 });
 
@@ -198,38 +173,6 @@ test('the endpoint re-reads a session it failed to expire, and refuses on the an
   assert.match(source, /code: outcome === 'refuse_completed' \? 'subscription_active' : 'billing_unavailable'/);
 });
 
-test('two concurrent checkouts for different plans cannot both proceed', () => {
-  /*
-   * The gap listing cannot cover. Two requests can both list open sessions
-   * before either has created one, so neither sees the other — and with tier
-   * and seat count in the key they got DIFFERENT keys, so Stripe happily
-   * created two independently completable subscription sessions. Completing
-   * both charges the workspace twice.
-   *
-   * Keyed on the workspace alone, the second collides and Stripe rejects it.
-   */
-  const at = new Date('2026-08-26T12:34:00Z');
-  const professional = { workspaceId: 'ws-1', tier: 'Professional', seatCount: 3 };
-  const enterprise = { workspaceId: 'ws-1', tier: 'Enterprise', seatCount: 9 };
-
-  assert.equal(checkoutIdempotencyKey(professional, at), checkoutIdempotencyKey(enterprise, at));
-
-  // A different workspace is a different purchase and must never be serialized
-  // against this one.
-  assert.notEqual(
-    checkoutIdempotencyKey(professional, at),
-    checkoutIdempotencyKey({ ...professional, workspaceId: 'ws-2' }, at),
-  );
-});
-
-test('a collision is reported as retryable, not swallowed or duplicated', () => {
-  const source = readFileSync('api/stripe/checkout.js', 'utf8');
-
-  assert.match(source, /if \(!isIdempotencyConflict\(error\)\) throw error;/, 'only a collision is handled here');
-  assert.match(source, /Another checkout for this workspace is already being started/);
-  assert.match(source, /retryable: true/);
-});
-
 test('a reused session never overwrites the billing row', () => {
   const source = readFileSync('api/stripe/checkout.js', 'utf8');
 
@@ -256,4 +199,86 @@ test('a session Stripe holds but the database does not is closed, not returned',
   assert.ok(failure > -1, 'the write result must be checked');
   assert.ok(expire > failure, 'and the orphaned session closed before refusing');
   assert.match(source, /Checkout could not be recorded for this workspace\. Nothing was charged/);
+});
+
+/*
+ * Serialization is a database claim now, not a key.
+ *
+ * Every key available to a single request is derived from that request, so it
+ * can only de-duplicate identical submissions or — with a time bucket — leak
+ * across the bucket boundary. Two attempts read as solved and were not:
+ * keying on the intent let two tabs on different plans both create a session,
+ * and keying on workspace+minute let two requests straddling :59 do the same.
+ * Postgres serializing two updates to one row has no such boundary.
+ */
+
+function fakeSupabase({ rows = [{ workspace_id: 'ws-1' }], error = null } = {}) {
+  const calls = [];
+  const builder = {
+    update(values) {
+      calls.push(values);
+      return builder;
+    },
+    eq() {
+      return builder;
+    },
+    or(expression) {
+      calls.push({ or: expression });
+      return builder;
+    },
+    select() {
+      return Promise.resolve({ data: rows, error });
+    },
+  };
+  return { from: () => builder, calls };
+}
+
+test('exactly one racing request may create a session', async () => {
+  const winner = fakeSupabase({ rows: [{ workspace_id: 'ws-1' }] });
+  // Postgres serializes the two updates: the loser's conditional no longer
+  // matches, so it gets no row back.
+  const loser = fakeSupabase({ rows: [] });
+
+  assert.equal(await claimCheckoutLock(winner, 'ws-1'), true);
+  assert.equal(await claimCheckoutLock(loser, 'ws-1'), false);
+});
+
+test('a claim that cannot be read is not a claim', async () => {
+  // Same fail-closed rule as the capacity gates: a failed query establishes
+  // nothing, and guessing "nobody holds it" creates a second billable session.
+  const broken = fakeSupabase({ rows: null, error: { message: 'connection reset' } });
+  assert.equal(await claimCheckoutLock(broken, 'ws-1'), false);
+});
+
+test('a claim left behind by a dead request expires', async () => {
+  const supabase = fakeSupabase();
+  const now = new Date('2026-08-26T12:00:00Z');
+  await claimCheckoutLock(supabase, 'ws-1', now);
+
+  const condition = supabase.calls.find((call) => typeof call.or === 'string').or;
+
+  /*
+   * The holder is a serverless invocation that can vanish mid-request, so the
+   * claim has to expire on its own. A lock only a live process can free is a
+   * lock that eventually wedges a workspace out of buying anything.
+   */
+  assert.match(condition, /checkout_lock_at\.is\.null/, 'an unclaimed workspace is claimable');
+  assert.match(condition, /checkout_lock_at\.lt\.2026-08-26T11:58:00/, 'and a stale claim is reclaimable');
+  assert.equal(CHECKOUT_LOCK_MS, 120000);
+});
+
+test('the endpoint claims before it looks at Stripe, and always releases', () => {
+  const source = readFileSync('api/stripe/checkout.js', 'utf8');
+
+  const claim = source.indexOf('await claimCheckoutLock(supabase, workspaceId)');
+  const list = source.indexOf('stripe.checkout.sessions.list(');
+  assert.ok(claim > -1 && claim < list, 'listing is only safe while holding the claim');
+
+  /*
+   * Released in `finally`, not before each return. Four exit paths releasing
+   * separately is four chances to add a fifth that does not — and a leaked
+   * claim locks the workspace out of buying anything until the expiry.
+   */
+  assert.match(source, /\} finally \{\s*\/\/[\s\S]{0,200}await releaseCheckoutLock\(supabase, workspaceId\);/);
+  assert.ok(!source.includes('idempotencyKey'), 'a second mechanism that looks like it serializes must not remain');
 });

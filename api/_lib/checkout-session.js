@@ -67,31 +67,64 @@ export function planCheckoutSession(openSessions, intent) {
 }
 
 /**
- * A key that serializes checkout creation for one workspace.
+ * How long a checkout claim stays held before another request may take it.
  *
- * Keyed on the WORKSPACE, deliberately not on the tier or seat count.
- *
- * Including them meant the key only ever de-duplicated identical submissions:
- * two concurrent requests for different plans got different keys, both listed
- * before either created anything, and each created an independently completable
- * `mode: 'subscription'` session. Completing both charges the workspace twice —
- * the same defect the reuse logic exists to close, arriving through the one
- * gap listing cannot cover.
- *
- * With the workspace alone, a genuine retry of the SAME purchase replays the
- * original session (identical parameters), while a concurrent DIFFERENT one
- * collides and Stripe rejects it. The caller turns that rejection into a
- * retryable refusal, which is the honest answer: another checkout for this
- * workspace is being created right now, and one of them has to wait.
- *
- * Still bucketed by the minute. A key with no time component would replay the
- * original session hours later, by then possibly expired, handing the seller a
- * dead link. Listing catches the slow duplicate; this catches the simultaneous
- * one.
+ * The holder is a serverless invocation that can vanish mid-request, so the
+ * claim expires on its own rather than requiring release. A lock only a live
+ * process can free is a lock that eventually wedges a workspace out of buying
+ * anything — far worse than the two minutes of waiting this costs in the rare
+ * case where a request really did die holding it.
  */
-export function checkoutIdempotencyKey(intent, now = new Date()) {
-  const minute = new Date(now).toISOString().slice(0, 16);
-  return `checkout:${intent?.workspaceId ?? ''}:${minute}`;
+export const CHECKOUT_LOCK_MS = 2 * 60 * 1000;
+
+/**
+ * Claim the right to create a Checkout Session for this workspace.
+ *
+ * Postgres serializes concurrent updates to the same row, so of N racing
+ * requests exactly one gets a row back. That is the property two earlier
+ * attempts could not provide: a Stripe idempotency key keyed on the intent only
+ * de-duplicated identical submissions, and keying it on the workspace and the
+ * current minute still let two requests straddling a minute boundary through.
+ * Any key derived from time has a boundary somewhere.
+ *
+ * A failed query is treated as NOT claimed. Unknown is not permission to create
+ * a second billable session — the same fail-closed rule as the capacity gates.
+ *
+ * @returns {Promise<boolean>} true only when this request holds the claim.
+ */
+export async function claimCheckoutLock(supabase, workspaceId, now = new Date()) {
+  const staleBefore = new Date(now.getTime() - CHECKOUT_LOCK_MS).toISOString();
+
+  const { data, error } = await supabase
+    .from('workspace_billing_customers')
+    .update({ checkout_lock_at: new Date(now).toISOString() })
+    .eq('workspace_id', workspaceId)
+    .or(`checkout_lock_at.is.null,checkout_lock_at.lt.${staleBefore}`)
+    .select('workspace_id');
+
+  if (error) {
+    console.error('Claiming the checkout lock failed.', error);
+    return false;
+  }
+
+  return Array.isArray(data) && data.length > 0;
+}
+
+/**
+ * Release the claim so a legitimate retry does not wait out the expiry.
+ *
+ * Best effort by design: the expiry above is what actually guarantees progress,
+ * and a failed release must never turn a completed checkout into an error.
+ */
+export async function releaseCheckoutLock(supabase, workspaceId) {
+  try {
+    await supabase
+      .from('workspace_billing_customers')
+      .update({ checkout_lock_at: null })
+      .eq('workspace_id', workspaceId);
+  } catch (error) {
+    console.warn('Releasing the checkout lock failed; it will expire on its own.', error);
+  }
 }
 
 /** Whether Stripe refused because another checkout for this workspace is in flight. */

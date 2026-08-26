@@ -23,27 +23,28 @@ export function vaultOwnerId(): string {
 }
 
 /**
- * Run something once the cloud workspace identity is actually known.
+ * Run something once the workspace on screen is the one that will stay.
  *
- * Zustand rehydration can finish before the asynchronous cloud-store
- * initialization does, and during that window `vaultOwnerId()` answers
- * `'local'` for a signed-in workspace. That is harmless for a question asked
- * later on a user action, but the orphan sweep runs exactly then — so on a
- * signed-in reload it swept as `'local'`, found nothing of its own, and
- * reclaimed nothing. It is the only production sweep, so deleted documents,
- * receipts and packets accumulated in IndexedDB reload after reload until the
- * quota refused new saves.
+ * Waits for `autosaveReady`, not `initialized`, and the difference is a whole
+ * class of data loss. `initialize` publishes the workspace id early; only after
+ * that does CloudBootstrap load the remote backup and reconcile it, which can
+ * REPLACE every local record. A sweep in between sees the new workspace's id
+ * beside the previous workspace's documents — so reloading a browser that last
+ * persisted workspace A while signed into B swept B's files against A's keys
+ * and deleted them, permanently, before B's records had loaded.
  *
- * Waiting costs one tick and makes the sweep ask about the right workspace.
+ * `autosaveReady` is set once reconciliation has finished, and defaults to true
+ * when Supabase is not configured at all, so a local-only workspace does not
+ * wait for something that will never happen.
  */
-export function onVaultOwnerReady(run: () => void): void {
-  if (useCloudStore.getState().initialized) {
+export function onWorkspaceSettled(run: () => void): void {
+  if (useCloudStore.getState().autosaveReady) {
     run();
     return;
   }
 
   const unsubscribe = useCloudStore.subscribe((cloud) => {
-    if (!cloud.initialized) return;
+    if (!cloud.autosaveReady) return;
     unsubscribe();
     run();
   });
