@@ -460,21 +460,48 @@ export function canRestorePersistedState(raw: unknown): boolean {
       // `horse.medicalTimeline.map` — Medical.tsx:39.
       // `horse.ownership.reduce` — features/ownership/selectors.ts:13.
       // `horse.documents.includes` — this file, line ~883.
-      lists: ['gallery', 'breedingTimeline', 'medicalTimeline', 'documentFacts', 'alerts', 'ownership', 'documents'],
+      // `animal.activity.length` — AnimalProfile.tsx:710.
+      lists: [
+        'gallery',
+        'breedingTimeline',
+        'medicalTimeline',
+        'documentFacts',
+        'alerts',
+        'ownership',
+        'documents',
+        'activity',
+      ],
       // `horse.name.toLowerCase` — Breeding.tsx:292.
       // `horse.owner` → `rawName.trim()` — commandPalette.ts:121.
-      strings: ['name', 'owner'],
+      // `h.segment.toLowerCase()` — Sales.tsx:320.
+      strings: ['name', 'owner', 'segment'],
     },
     // `document.entities.horseName` and four siblings — Documents.tsx:724.
     // `document.title.trim()` — useXbarStore.ts:842, beside optional-chained
     // siblings, which is what makes it easy to miss.
     documents: { objects: ['entities'], strings: ['title'] },
-    // `record.legalOwner` → `rawName.trim()` — commandPalette.ts:134.
-    ownershipRecords: { strings: ['legalOwner'] },
+    /*
+     * `record.legalOwner` → `rawName.trim()` — commandPalette.ts:134.
+     * `selectedRecord.auditTrail.length` — Ownership.tsx:787.
+     *
+     * `auditTrail` survives normalization: `normalizeOwnershipRecord` supplies
+     * `proofRequirements`, `auditEvents` and `confidence`, and nothing else.
+     * `pendingDocuments` is NOT here for the opposite reason — its read site
+     * takes `record?.pendingDocuments ?? []`, so it is already guarded.
+     */
+    ownershipRecords: { strings: ['legalOwner'], lists: ['auditTrail'] },
     // `packet.documentIds.length` — SalePacketStudio.tsx:174, Documents.tsx:1210.
     salePacketBuilds: { lists: ['documentIds'] },
     // `receipt.vendor.trim()` — Expenses.tsx:114.
     expenseReceipts: { strings: ['vendor'] },
+    // `event.actor.trim()` — BuyerResponseQueue.tsx:142.
+    buyerRoomEvents: { strings: ['actor'] },
+    /*
+     * `a.name/.category/.assignedTo.toLowerCase()` — RanchAssets.tsx:176-178,
+     * evaluated only once someone types in the inventory search, so the route
+     * renders first and crashes on the keystroke.
+     */
+    ranchAssets: { strings: ['name', 'category', 'assignedTo'] },
     // `lead.name.trim()` — BuyerResponseQueue.tsx:142.
     salesLeads: { strings: ['name'] },
     // `listing.channels.includes()` — SharedAccess.tsx:33.

@@ -871,6 +871,13 @@ test('a foreign key reaches neither a backup nor a buyer’s packet', async () =
 
 test('a record that installs but crashes the route it lands on is refused', async () => {
   const helpers = await readFile('src/store/xbarStoreHelpers.ts', 'utf8');
+  // The table only. Comments stripped so the prose explaining an exclusion
+  // cannot satisfy an assertion about it, and scoped so unrelated code
+  // elsewhere in the file cannot either.
+  const shapeTable = (helpers.match(/const NESTED_SHAPES[\s\S]*?\n {2}\};/) ?? [''])[0]
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/[^\n]*/g, '');
+  assert.ok(shapeTable.length > 0, 'the shape table must be findable, or these assertions prove nothing');
   const documents = await readFile('src/routes/Documents.tsx', 'utf8');
   const studio = await readFile('src/routes/SalePacketStudio.tsx', 'utf8');
 
@@ -893,6 +900,24 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   assert.match(helpers, /salesLeads: \{ strings: \['name'\] \}/);
   assert.match(helpers, /sharedListings: \{ lists: \['channels'\] \}/);
   assert.match(helpers, /roleWorkspaces: \{ lists: \['primaryModules', 'permissions'\] \}/);
+  assert.match(helpers, /buyerRoomEvents: \{ strings: \['actor'\] \}/);
+  assert.match(helpers, /ranchAssets: \{ strings: \['name', 'category', 'assignedTo'\] \}/);
+  assert.match(helpers, /ownershipRecords: \{ strings: \['legalOwner'\], lists: \['auditTrail'\] \}/);
+  assert.match(helpers, /strings: \['name', 'owner', 'segment'\]/);
+  assert.match(helpers, /'activity',/);
+
+  /*
+   * `pendingDocuments` is deliberately absent, and for the opposite reason to
+   * `saleSlots`: not derived, but already guarded at its read site
+   * (`record?.pendingDocuments ?? []`). Requiring it would reject archives that
+   * restore perfectly well.
+   */
+  assert.doesNotMatch(shapeTable, /pendingDocuments/, 'an already-guarded read must not be required');
+  assert.match(
+    await readFile('src/features/ownership/selectors.ts', 'utf8'),
+    /record\?\.pendingDocuments \?\? \[\]/,
+    'which is only safe while the selector keeps guarding it',
+  );
   assert.match(helpers, /'medicalTimeline'/, 'horse.medicalTimeline.map was missing from the horse list itself');
 
   /*
@@ -901,10 +926,9 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * `horse.owner.trim()` finds nothing — which is how `owner` and `legalOwner`
    * survived the previous sweep.
    */
-  assert.match(helpers, /strings: \['name', 'owner'\]/, 'horse.owner reaches rawName.trim() through a helper');
-  assert.match(helpers, /ownershipRecords: \{ strings: \['legalOwner'\] \}/);
+  assert.match(helpers, /'owner', 'segment'\]/, 'horse.owner reaches rawName.trim() through a helper');
   assert.match(helpers, /documents: \{ objects: \['entities'\], strings: \['title'\] \}/);
-  assert.match(helpers, /'ownership', 'documents'\]/, 'horse.ownership and horse.documents are read as arrays');
+  assert.match(helpers, /'ownership',\s*'documents',/, 'horse.ownership and horse.documents are read as arrays');
 
   // A missing primitive fails on the TYPE, not on emptiness: the empty string
   // is valid and the routes are written to expect it.
@@ -930,6 +954,11 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     ['src/routes/Horses.tsx', /horse\.location\.barn/],
     ['src/routes/Settings.tsx', /workspace\.primaryModules\.length/],
     ['src/routes/Settings.tsx', /workspace\.permissions\.map\(/],
+    ['src/components/BuyerResponseQueue.tsx', /event\.actor\.trim\(\)/],
+    ['src/routes/RanchAssets.tsx', /a\.assignedTo\.toLowerCase\(\)/],
+    ['src/routes/Sales.tsx', /h\.segment\.toLowerCase\(\)/],
+    ['src/routes/AnimalProfile.tsx', /animal\.activity\.length/],
+    ['src/routes/Ownership.tsx', /selectedRecord\.auditTrail\.length/],
   ] as const) {
     assert.match(await readFile(route, 'utf8'), deref, `${route} still reads this unguarded`);
   }
@@ -940,10 +969,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * never arrive missing from a backup, and guarding it would reject valid
    * archives.
    */
-  // Comments stripped: the prose above the table explains WHY `saleSlots` is
-  // excluded, and asserting against prose rather than code is its own trap.
-  const helpersCode = helpers.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-  assert.doesNotMatch(helpersCode, /saleSlots/, 'a computed field cannot arrive malformed and must not be validated');
+  assert.doesNotMatch(shapeTable, /saleSlots/, 'a computed field cannot arrive malformed and must not be validated');
 
   /*
    * Nor anything the read site normalizes first. `record.transferStatus
@@ -951,7 +977,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * `normalizeOwnershipRecord` over the records before touching them, so
    * requiring it would reject archives that restore perfectly well.
    */
-  assert.doesNotMatch(helpersCode, /transferStatus/, 'a normalized field must not be required of the raw payload');
+  assert.doesNotMatch(shapeTable, /transferStatus/, 'a normalized field must not be required of the raw payload');
   assert.match(
     await readFile('src/routes/Ownership.tsx', 'utf8'),
     /ownershipRecords\.map\(normalizeOwnershipRecord\)/,
