@@ -878,6 +878,9 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/\/\/[^\n]*/g, '');
   assert.ok(shapeTable.length > 0, 'the shape table must be findable, or these assertions prove nothing');
+  // The whole file, minus prose, for the parts of the guard that live outside
+  // the table itself — the shared item shape above it and the loops below.
+  const helperCode = helpers.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
   const documents = await readFile('src/routes/Documents.tsx', 'utf8');
   const studio = await readFile('src/routes/SalePacketStudio.tsx', 'utf8');
 
@@ -899,7 +902,16 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   assert.match(helpers, /expenseReceipts: \{ strings: \['vendor'\] \}/);
   assert.match(helpers, /salesLeads: \{ strings: \['name'\] \}/);
   assert.match(helpers, /sharedListings: \{ lists: \['channels'\] \}/);
-  assert.match(helpers, /roleWorkspaces: \{ lists: \['primaryModules', 'permissions'\] \}/);
+  /*
+   * `role` and `label` are the scalar half of a collection whose ARRAYS were
+   * already guarded, which is exactly what made the gap easy to miss:
+   * `{ role: {}, primaryModules: [], permissions: [] }` passed, and Settings
+   * renders `{workspace.role}` as a React child on the panel beside them.
+   */
+  assert.match(
+    shapeTable,
+    /roleWorkspaces: \{\s*strings: \['role', 'label'\],\s*lists: \['primaryModules'\],\s*stringItems: \['permissions'\],\s*\}/,
+  );
   assert.match(helpers, /buyerRoomEvents: \{ strings: \['actor'\] \}/);
   assert.match(helpers, /ranchAssets: \{ strings: \['name', 'category', 'assignedTo'\] \}/);
   assert.match(helpers, /strings: \['name', 'owner', 'segment'\]/);
@@ -918,7 +930,40 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * `Array.isArray` and throws the moment Breeding reads `event.id`; a non-null
    * entry with no `title` throws on `event.title.toLowerCase()`.
    */
-  assert.match(helpers, /breedingTimeline: \{ strings: \['id', 'title'\] \}/);
+  assert.match(shapeTable, /breedingTimeline: TIMELINE_EVENT_SHAPE,/);
+
+  /*
+   * `activity` was added to the horse `lists` in the previous pass with no
+   * entry under `itemShapes` at all, so `activity: [null]` satisfied
+   * `Array.isArray` and then threw at AnimalProfile.tsx:713. The container was
+   * guarded and its contents were not — the same half-fix `roleWorkspaces` had.
+   *
+   * All three timeline collections hold TimelineEvent, so they share ONE shape
+   * rather than three partial copies: `medicalTimeline` previously required
+   * only `id` while `breedingTimeline` required `id` and `title`, and neither
+   * required `date`, which `formatDateLabel` dereferences.
+   */
+  assert.match(shapeTable, /medicalTimeline: TIMELINE_EVENT_SHAPE,/);
+  assert.match(shapeTable, /activity: TIMELINE_EVENT_SHAPE,/);
+  assert.match(
+    helperCode,
+    /const TIMELINE_EVENT_SHAPE = \{ strings: \['id', 'date', 'title', 'summary', 'owner', 'category'\] \};/,
+    'every TimelineEvent field that reaches a string method or JSX must be required',
+  );
+
+  /*
+   * Arrays of strings whose ENTRIES reach JSX. `itemShapes` cannot express
+   * this — it requires each entry to be a plain object — so before this loop
+   * existed there was no way to reject `permissions: [{}]` or
+   * `auditTrail: [{}]`, both of which render straight into a list item.
+   */
+  assert.match(helperCode, /for \(const list of shape\.stringItems \?\? \[\]\) \{/);
+  assert.match(
+    helperCode,
+    /for \(const item of items as unknown\[\]\) \{\s*if \(typeof item !== 'string'\) return false;/,
+    'the entries, not the container — the container was already an array in both bugs',
+  );
+
   assert.match(helpers, /gallery: \{ strings: \['status', 'kind'\] \}/);
   assert.match(helpers, /ownership: \{ strings: \['name', 'role'\] \}/);
   assert.match(
@@ -937,8 +982,8 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    */
   assert.equal(
     (helpers.match(/valueAtPath\(record, /g) ?? []).length,
-    4,
-    'objects, lists, strings and item shapes must all resolve paths, or a valid archive is rejected',
+    5,
+    'objects, lists, strings, item shapes and string items must all resolve paths, or a valid archive is rejected',
   );
 
   /*
@@ -955,7 +1000,8 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * mistake permanent and would have failed anyone who tried to fix it.
    */
   assert.match(helpers, /strings: \['legalOwner', 'transferStatus'\]/);
-  assert.match(helpers, /lists: \['auditTrail', 'pendingDocuments'\]/);
+  assert.match(shapeTable, /lists: \['pendingDocuments'\]/);
+  assert.match(shapeTable, /stringItems: \['auditTrail'\]/);
 
   assert.match(helpers, /'medicalTimeline'/, 'horse.medicalTimeline.map was missing from the horse list itself');
 
@@ -1002,6 +1048,25 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     ['src/routes/Breeding.tsx', /event\.title\.toLowerCase\(\)/],
     ['src/lib/xbarPhaseTwo.ts', /asset\.kind === 'Hero' && asset\.status === 'Approved'/],
     ['src/features/ownership/selectors.ts', /stake\.role === 'Legal Owner'/],
+    /*
+     * The "Objects are not valid as a React child" shape: these do not throw
+     * where they are read, they throw where React renders them, which is why
+     * a sweep for `.toLowerCase()` and `.map(` walked straight past them.
+     */
+    ['src/routes/Settings.tsx', /<div className="stack-item__title">\{workspace\.role\}<\/div>/],
+    ['src/routes/Settings.tsx', /<Pill key=\{permission\}>\{permission\}<\/Pill>/],
+    ['src/routes/Ownership.tsx', /<li key=\{entry\}>\{entry\}<\/li>/],
+    ['src/routes/AnimalProfile.tsx', /<div className="xs-tl__title">\{e\.title\}<\/div>/],
+    ['src/routes/AnimalProfile.tsx', /\{e\.summary\} · \{e\.date\}/],
+    ['src/components/InteractionSystem.tsx', /<dd>\{fact\.value\}<\/dd>/],
+    ['src/routes/Expenses.tsx', /uploadedBy: roleWorkspace\.label,/],
+    /*
+     * And the one that throws at the read: `formatDateLabel` calls `.trim()`
+     * on whatever it is handed, so a timeline event whose `date` is an object
+     * takes out Medical and Breeding before React is involved at all.
+     */
+    ['src/routes/Medical.tsx', /value: formatDateLabel\(event\.date\)/],
+    ['src/lib/format.ts', /if \(!value\?\.trim\(\)\) \{/],
   ] as const) {
     assert.match(await readFile(route, 'utf8'), deref, `${route} still reads this unguarded`);
   }

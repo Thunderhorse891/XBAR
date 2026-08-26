@@ -464,6 +464,33 @@ export function canRestorePersistedState(raw: unknown): boolean {
    * fields are dereferenced somewhere, so each entry must at least be a plain
    * object; `strings` adds the fields a route calls a string method on.
    */
+  /*
+   * All three timeline collections — `activity`, `medicalTimeline` and
+   * `breedingTimeline` — hold TimelineEvent, so they share one item shape
+   * rather than each carrying a partial copy that drifts. Every field here is
+   * read without a guard somewhere:
+   *
+   *   id       React key — AnimalProfile.tsx:713; `ev.id === eventId` in
+   *            updateMedicalEvent — useXbarStore.ts:1858.
+   *   date     `formatDateLabel(event.date)` — Medical.tsx:106,
+   *            Breeding.tsx:311 — which calls `value?.trim()` (format.ts:19)
+   *            and throws on anything that is not a string.
+   *   title    `.toLowerCase()` — Medical.tsx:536, Breeding.tsx:293.
+   *   summary  rendered straight into JSX — AnimalProfile.tsx:719.
+   *   owner    drawer fact value, `{fact.value}` — InteractionSystem.tsx:452.
+   *   category drawer eyebrow, `{drawer.eyebrow}` — InteractionSystem.tsx:441.
+   *
+   * The last three are the "Objects are not valid as a React child" shape:
+   * they do not throw where they are read, they throw where React renders them.
+   *
+   * Requiring all six cannot turn away an older archive: TimelineEvent has
+   * carried every one of them as a required field since the first commit of
+   * types/xbar.ts, so no build of this app has ever written a timeline event
+   * without them. Over-rejection is as much a bug as under-rejection, and this
+   * is the check that rules it out.
+   */
+  const TIMELINE_EVENT_SHAPE = { strings: ['id', 'date', 'title', 'summary', 'owner', 'category'] };
+
   const NESTED_SHAPES: Record<
     string,
     {
@@ -471,6 +498,14 @@ export function canRestorePersistedState(raw: unknown): boolean {
       lists?: string[];
       strings?: string[];
       itemShapes?: Record<string, { strings?: string[] }>;
+      /*
+       * Arrays whose entries are strings. `itemShapes` cannot express this —
+       * it requires every entry to be a plain object — and `lists` stops at
+       * the container, so a string array whose ENTRIES reach JSX had no way to
+       * be validated at all. Naming a list here also asserts it is an array,
+       * so it does not need repeating under `lists`.
+       */
+      stringItems?: string[];
     }
   > = {
     horses: {
@@ -498,10 +533,15 @@ export function canRestorePersistedState(raw: unknown): boolean {
       // `h.segment.toLowerCase()` — Sales.tsx:320.
       strings: ['name', 'owner', 'segment'],
       itemShapes: {
-        // `event.title.toLowerCase()` — Breeding.tsx:293; `event.id` — :311.
-        breedingTimeline: { strings: ['id', 'title'] },
-        // `ev.id === eventId` — useXbarStore.ts:1848.
-        medicalTimeline: { strings: ['id'] },
+        breedingTimeline: TIMELINE_EVENT_SHAPE,
+        medicalTimeline: TIMELINE_EVENT_SHAPE,
+        /*
+         * `activity` was added to `lists` without an entry here, which left
+         * `activity: [null]` passing validation and then throwing at
+         * AnimalProfile.tsx:713 — the container was checked, its contents were
+         * not. It is the same TimelineEvent as the two above.
+         */
+        activity: TIMELINE_EVENT_SHAPE,
         // `asset.status` / `asset.kind` — xbarPhaseTwo.ts:241, publicShare.ts:109.
         gallery: { strings: ['status', 'kind'] },
         // `stake.share` / `stake.role` / `stake.name` — ownership/selectors.ts:13-14.
@@ -536,7 +576,11 @@ export function canRestorePersistedState(raw: unknown): boolean {
      */
     ownershipRecords: {
       strings: ['legalOwner', 'transferStatus'],
-      lists: ['auditTrail', 'pendingDocuments'],
+      lists: ['pendingDocuments'],
+      // `auditTrail.map((entry) => <li key={entry}>{entry}</li>)` —
+      // Ownership.tsx:791-792. The entries are rendered, so checking only the
+      // container leaves `auditTrail: [{}]` crashing the record drawer.
+      stringItems: ['auditTrail'],
     },
     // `packet.documentIds.length` — SalePacketStudio.tsx:174, Documents.tsx:1210.
     salePacketBuilds: { lists: ['documentIds'] },
@@ -559,8 +603,27 @@ export function canRestorePersistedState(raw: unknown): boolean {
      * Settings.tsx:1015 and :1019. This collection is covered by neither the id
      * loop nor normalization, and Settings is already MOUNTED when an import
      * lands, so the rerender crashes the screen the rancher is standing on.
+     *
+     * `role` and `label` are the same collection's scalar half, and validating
+     * only the two arrays left them open: `{ role: {}, primaryModules: [],
+     * permissions: [] }` passed, and `role` is rendered directly as a React
+     * child at Settings.tsx:1014 — "Objects are not valid as a React child",
+     * on the panel right beside the arrays this entry already protected.
+     * `label` is read unguarded off the current role workspace at
+     * Expenses.tsx:71 and seeds the receipt intake form.
+     *
+     * `summary` is deliberately absent: nothing reads it. The rule for leaving
+     * a field out is that NO site reads it, never that one read happens to be
+     * guarded.
      */
-    roleWorkspaces: { lists: ['primaryModules', 'permissions'] },
+    roleWorkspaces: {
+      strings: ['role', 'label'],
+      lists: ['primaryModules'],
+      // `permissions.map((permission) => <Pill key={permission}>{permission}</Pill>)`
+      // — Settings.tsx:1019-1021. Same shape as `auditTrail` above: the
+      // container was checked, the entries were not.
+      stringItems: ['permissions'],
+    },
   };
 
   /*
@@ -613,6 +676,18 @@ export function canRestorePersistedState(raw: unknown): boolean {
           for (const field of itemShape.strings ?? []) {
             if (typeof (item as Record<string, unknown>)[field] !== 'string') return false;
           }
+        }
+      }
+      /*
+       * The string arrays. These entries are rendered directly — as a React
+       * child and as that child's own key — so a non-string throws "Objects
+       * are not valid as a React child" during the rerender, not at the read.
+       */
+      for (const list of shape.stringItems ?? []) {
+        const items = valueAtPath(record, list);
+        if (!Array.isArray(items)) return false;
+        for (const item of items as unknown[]) {
+          if (typeof item !== 'string') return false;
         }
       }
     }
