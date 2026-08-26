@@ -18,7 +18,13 @@ export interface FakeOptions {
    * success and is then rolled back.
    */
   abortOnCommit?: boolean;
-  /** Make `deleteDatabase` fail, the way a browser refusing the deletion does. */
+  /**
+   * Make deletion fail, the way a browser refusing it does.
+   *
+   * Covers both shapes: `deleteDatabase`, and deleting an individual entry —
+   * which is what the vault does now that a purge is scoped to one workspace
+   * rather than dropping the origin-wide database.
+   */
   refuseDelete?: boolean;
 }
 
@@ -108,11 +114,19 @@ export function installFakeIndexedDb(options: FakeOptions = {}) {
                   () => data.set(value.key, value),
                 ),
               get: (key: string) => issue(() => data.get(key)),
-              delete: (key: string) =>
-                issue(
+              delete: (key: string) => {
+                if (options.refuseDelete) {
+                  const request: Record<string, unknown> = {};
+                  later(() => {
+                    (transaction.onabort as (() => void) | undefined)?.();
+                  });
+                  return request;
+                }
+                return issue(
                   () => undefined,
                   () => data.delete(key),
-                ),
+                );
+              },
               getAll: () => issue(() => [...data.values()]),
             });
             return transaction;

@@ -23,6 +23,19 @@ import { PACKET_VERIFIER_SCRIPT } from '../src/lib/packetVerifierScript.js';
  * fail with the value to paste.
  */
 
+test('the verifier the packet ships actually parses', () => {
+  /*
+   * Every other test here reads the script as TEXT, and text assertions cannot
+   * tell a working script from a broken one. A stray brace once shipped a
+   * verifier that threw `SyntaxError` before its first statement — the button
+   * did nothing, the seal went unchecked, and the whole suite stayed green.
+   *
+   * `new Function` compiles without executing, which is the question being
+   * asked: does this parse.
+   */
+  assert.doesNotThrow(() => new Function(PACKET_VERIFIER_SCRIPT), 'the packet would ship a script that cannot run');
+});
+
 function cspHash(script: string) {
   return `sha256-${createHash('sha256').update(script, 'utf8').digest('base64')}`;
 }
@@ -77,4 +90,30 @@ test('the packet still embeds the verifier inline', async () => {
   // fetched from a packet opened off a USB stick. The hash is what makes inline
   // work on the deployed site.
   assert.match(generator, /<script>\$\{PACKET_VERIFIER_SCRIPT\}<\/script>/);
+});
+
+test('the readout is the whole sealed record, not a chosen subset', () => {
+  /*
+   * The curated version printed nine facts. So an attacker could edit the
+   * displayed breed, colour, owner entity, compliance deadline, a release
+   * blocker or a document title, leave the payload untouched, and the digest
+   * still matched — while none of those edits appeared in the readout. The
+   * check reported `pass` over a page that lied.
+   *
+   * Walking the payload means the readout IS the sealed record. A field added
+   * to the credential next year shows up without anyone remembering to add it,
+   * which is exactly the drift a hand-picked list guarantees.
+   */
+  assert.match(PACKET_VERIFIER_SCRIPT, /describe\(notes, parsed, ' {2}'\);/, 'the whole payload must be walked');
+  assert.match(PACKET_VERIFIER_SCRIPT, /function describe\(out, value, indent, key\)/);
+
+  // Arrays and nested objects are part of the sealed record too: documents,
+  // attachments, pending documents, blockers and warnings all live in them.
+  assert.match(PACKET_VERIFIER_SCRIPT, /Array\.isArray\(value\)/, 'lists must be rendered, not skipped');
+  assert.match(PACKET_VERIFIER_SCRIPT, /typeof value === 'object'/, 'nested sections must be rendered');
+
+  // The hand-picked reads are gone rather than merely supplemented.
+  for (const curated of ['parsed.identity.microchipId', 'parsed.ownership.transferStatus', 'parsed.care.status']) {
+    assert.ok(!PACKET_VERIFIER_SCRIPT.includes(curated), `${curated} was a curated read and must be gone`);
+  }
 });

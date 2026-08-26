@@ -26,6 +26,7 @@ import {
   listLocalFiles,
   referencedVaultKeys,
 } from '@/lib/localFileVault';
+import { vaultOwnerId } from '@/lib/vaultOwner';
 import type { UserRole } from '@/types/xbar';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 
@@ -192,7 +193,18 @@ export default function Settings() {
     // nothing about. Without this, registration papers, receipts and generated
     // packets stayed on the device while the UI reported the account
     // permanently deleted.
-    const { cleared } = await clearLocalFileVault();
+    // Scoped to this workspace, plus whatever its own records pointed at. The
+    // vault is origin-wide: dropping the database would take a second account's
+    // documents with it, and this browser may well hold one.
+    const departing = exportWorkspaceBackup().workspace as {
+      documents?: { localFileKey?: string }[];
+      expenseReceipts?: { localFileKey?: string }[];
+      salePacketBuilds?: { localFileKey?: string }[];
+    };
+    const { cleared } = await clearLocalFileVault(
+      vaultOwnerId(),
+      referencedVaultKeys(departing.documents ?? [], departing.expenseReceipts ?? [], departing.salePacketBuilds ?? []),
+    );
     setDeleteConfirm('');
     // The server side is done either way — the account is gone. But if this
     // browser refused to drop the file database, the proof documents are still

@@ -152,9 +152,11 @@ test('the packet rehashes its own files rather than trusting the printed seal', 
    * intact. Printing what the digest actually covers is what makes that edit
    * visible to the buyer.
    */
-  assert.match(script, /The facts this seal covers, read out of the sealed record/);
-  assert.match(script, /parsed\.sale\.askPrice/, 'the sealed ask price must be shown, not the one on the page');
-  assert.match(script, /parsed\.ownership\.transferStatus/, 'the sealed transfer status must be shown');
+  assert.match(script, /Every fact this seal covers, read out of the sealed record/);
+  // Every field, walked generically. A curated list let an attacker edit any
+  // fact that was not on it — breed, colour, owner entity, a document title —
+  // while the digest still matched and the check still said pass.
+  assert.match(script, /describe\(notes, parsed, ' {2}'\);/, 'the whole sealed payload must be rendered');
 });
 
 test('the packet no longer claims that reading the seal proves anything', async () => {

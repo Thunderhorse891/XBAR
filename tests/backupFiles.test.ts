@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import {
+  type LocalFileEntry,
   base64ToBytes,
   clearLocalFileVault,
   blobToBase64,
@@ -19,6 +20,22 @@ import { installFakeIndexedDb } from './helpers/fakeIndexedDb.js';
  * entry records an owner and the sweep only deletes what it can prove is its
  * own — a browser holding two accounts used to lose one of them. */
 const TEST_WORKSPACE = 'ws-test';
+
+/** Write straight into the store, bypassing `storeLocalFile`, to reproduce a
+ * pre-namespacing record that carries no `workspaceId`. */
+async function storeLegacyEntry(entry: LocalFileEntry) {
+  const db: IDBDatabase = await new Promise((resolve, reject) => {
+    const request = indexedDB.open('xbar-file-vault');
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction('files', 'readwrite');
+    tx.objectStore('files').put(entry);
+    tx.oncomplete = () => resolve();
+    tx.onabort = () => reject(tx.error);
+  });
+}
 
 /*
  * A workspace backup used to carry the records and not the files.
@@ -217,7 +234,7 @@ test('deleting the account leaves nothing on the device', async () => {
     await storeLocalFile(new Blob(['a receipt']), 'receipt.pdf', undefined, TEST_WORKSPACE);
     assert.equal((await listLocalFiles()).length, 2);
 
-    const { cleared } = await clearLocalFileVault();
+    const { cleared } = await clearLocalFileVault(TEST_WORKSPACE);
     assert.equal(cleared, true);
 
     // `persist.clearStorage()` operates on the workspace database and knows
@@ -234,7 +251,7 @@ test('purging a device with no vault at all is not an error', async () => {
   // Runs after the account is already gone server-side; throwing here would
   // show a deletion error for data that is genuinely deleted. Nothing to clear
   // is a clean outcome, not a failed one.
-  assert.deepEqual(await clearLocalFileVault(), { cleared: true });
+  assert.deepEqual(await clearLocalFileVault(TEST_WORKSPACE), { cleared: true });
 });
 
 test('a vault that cannot be read reports every requested file, not silence', async () => {
@@ -271,7 +288,7 @@ test('a refused deletion is reported, not counted as cleared', async () => {
   try {
     await storeLocalFile(new Blob(['registration papers']), 'registration.pdf', undefined, TEST_WORKSPACE);
 
-    const { cleared } = await clearLocalFileVault();
+    const { cleared } = await clearLocalFileVault(TEST_WORKSPACE);
 
     // The account is gone server-side either way, but the proof documents are
     // still on this machine — "permanently deleted" would be false about the
@@ -288,8 +305,8 @@ test('account deletion purges the vault, not just the workspace', async () => {
 
   assert.match(
     source,
-    /await useXbarStore\.persist\.clearStorage\(\);[\s\S]{0,400}await clearLocalFileVault\(\);/,
-    'the files are in their own database and need their own purge',
+    /await useXbarStore\.persist\.clearStorage\(\);[\s\S]{0,900}await clearLocalFileVault\(\s*vaultOwnerId\(\),/,
+    'the files are in their own database and need their own purge — scoped to this workspace, because the vault is origin-wide and this browser may hold another account',
   );
 });
 
@@ -449,4 +466,49 @@ test('the wizard says how the packet was delivered, not how it hoped', async () 
   assert.match(wizard, /packetDelivery === 'tab'/, 'the copy must branch on the reported mode');
   assert.match(wizard, /and downloaded to this device/, 'a download has to be described as one');
   assert.ok(!wizard.includes('packetTabOpened'), 'the boolean that could only say "tab" must be gone');
+});
+
+test('deleting one account leaves another account files alone', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    /*
+     * The sibling of the sweep bug, in the deletion path.
+     *
+     * `clearLocalFileVault` used to call `deleteDatabase`, which drops the whole
+     * origin-wide vault. Once entries record an owner that is plainly the wrong
+     * tool: deleting one cloud account from a browser that also holds another
+     * took the other account's registration papers, receipts and packets with
+     * it, permanently — and that account only found out when its records came
+     * back pointing at nothing.
+     */
+    const mine = await storeLocalFile(new Blob(['mine']), 'mine.pdf', undefined, 'ws-a');
+    const theirs = await storeLocalFile(new Blob(['theirs']), 'theirs.pdf', undefined, 'ws-b');
+
+    const { cleared } = await clearLocalFileVault('ws-a');
+
+    assert.equal(cleared, true);
+    assert.equal(await readLocalFile(mine), null, 'the deleted account files must go');
+    assert.notEqual(await readLocalFile(theirs), null, 'the other account files must stay');
+  } finally {
+    restore();
+  }
+});
+
+test('deleting an account also removes the untagged files it was using', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    // An untagged file cannot be SWEPT on a guess — it might be someone else's.
+    // But one the departing workspace's own records pointed at is provably its
+    // own, and leaving a rancher's documents on the device after they deleted
+    // their account is its own kind of wrong.
+    const legacy = await storeLocalFile(new Blob(['old']), 'legacy.pdf', undefined, 'ws-a');
+    const entry = await readLocalFile(legacy);
+    assert.ok(entry);
+    await storeLegacyEntry({ ...entry, workspaceId: undefined });
+
+    await clearLocalFileVault('ws-a', [legacy]);
+    assert.equal(await readLocalFile(legacy), null);
+  } finally {
+    restore();
+  }
 });

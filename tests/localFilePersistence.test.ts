@@ -325,7 +325,13 @@ test('the packet summary does not claim a tab that never opened', async () => {
 test('a refused file-vault purge is not reported as a completed deletion', async () => {
   const source = await readFile('src/routes/Settings.tsx', 'utf8');
 
-  assert.match(source, /const \{ cleared \} = await clearLocalFileVault\(\);/, 'the purge result must be read');
+  // Scoped to this workspace now: the vault is origin-wide, so dropping the
+  // database would take a second account's documents with it.
+  assert.match(
+    source,
+    /const \{ cleared \} = await clearLocalFileVault\(\s*vaultOwnerId\(\),/,
+    'the purge result must be read, and the purge must be scoped to this workspace',
+  );
   assert.match(
     source,
     /cleared \? 'Account deleted' : 'Account deleted — files still on this device'/,

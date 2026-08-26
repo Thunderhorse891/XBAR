@@ -70,6 +70,36 @@ export const PACKET_VERIFIER_SCRIPT = `
     for (var i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
     return bytes;
   }
+  function label(key) {
+    return String(key)
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/^./, function (first) {
+        return first.toUpperCase();
+      });
+  }
+  function describe(out, value, indent, key) {
+    if (value === null || value === undefined) {
+      out.push(indent + label(key) + ': none');
+      return;
+    }
+    if (Array.isArray(value)) {
+      if (value.length === 0) {
+        out.push(indent + label(key) + ': none');
+        return;
+      }
+      out.push(indent + label(key) + ':');
+      for (var i = 0; i < value.length; i += 1) describe(out, value[i], indent + '  ', String(i + 1));
+      return;
+    }
+    if (typeof value === 'object') {
+      if (key !== undefined) out.push(indent + label(key) + ':');
+      var keys = Object.keys(value);
+      for (var k = 0; k < keys.length; k += 1)
+        describe(out, value[keys[k]], key === undefined ? indent : indent + '  ', keys[k]);
+      return;
+    }
+    out.push(indent + label(key) + ': ' + String(value));
+  }
   function sealOf(digest) {
     var head = digest.slice(0, 12).toUpperCase();
     return 'SEAL-' + head.slice(0, 4) + '-' + head.slice(4, 8) + '-' + head.slice(8, 12);
@@ -154,23 +184,23 @@ export const PACKET_VERIFIER_SCRIPT = `
            * two lines up.
            */
           if (parsed) {
-            var money = typeof parsed.sale.askPrice === 'number' && parsed.sale.askPrice > 0
-              ? '$' + parsed.sale.askPrice.toLocaleString()
-              : 'no ask price';
             notes.push('');
-            notes.push('The facts this seal covers, read out of the sealed record:');
-            notes.push('  Name: ' + (parsed.identity.name || 'unnamed'));
-            notes.push('  Registration: ' + (parsed.identity.registered
-              ? ((parsed.identity.registry || 'registry') + ' ' + (parsed.identity.registrationNumber || '')).trim()
-              : 'not registered'));
-            notes.push('  Microchip: ' + (parsed.identity.microchipId || 'none recorded'));
-            notes.push('  Ask price: ' + money + ' (' + (parsed.sale.listingState || 'unlisted') + ')');
-            notes.push('  Legal owner: ' + (parsed.ownership.legalOwner || 'unknown'));
-            notes.push('  Transfer status: ' + (parsed.ownership.transferStatus || 'unknown'));
-            notes.push('  Horse status: ' + (parsed.care.status || 'unknown'));
-            notes.push('  Last vet visit: ' + (parsed.care.lastVetVisit || 'none recorded'));
-            notes.push('  Release verdict: ' + (parsed.release.status || 'unknown'));
-            notes.push('  Sealed ' + (parsed.sealedAt || '') + ' by ' + (parsed.sealedBy || 'unknown'));
+            notes.push('Every fact this seal covers, read out of the sealed record:');
+            /*
+             * EVERY field, walked generically — not a hand-picked list.
+             *
+             * The curated version printed nine facts, so an attacker could edit
+             * the displayed breed, colour, owner entity, compliance deadline,
+             * a blocker, or a document title, leave the payload untouched, and
+             * the digest still matched while none of those edits appeared here.
+             * The check said pass over a page that lied.
+             *
+             * Walking the payload means the readout is the sealed record, whole.
+             * A field added to the credential next year shows up without anyone
+             * remembering to add it here, which is exactly the kind of drift a
+             * curated list guarantees.
+             */
+            describe(notes, parsed, '  ');
             notes.push('');
             notes.push('If anything printed on the page above differs from this list, the page was edited and this list is what was sealed.');
           }

@@ -490,24 +490,46 @@ export function referencedVaultKeys(...groups: { localFileKey?: string }[][]): s
  * by the time this runs, and an exception here would leave the user staring at
  * a deletion error for data that is genuinely deleted.
  */
-export async function clearLocalFileVault(): Promise<{ cleared: boolean }> {
+export async function clearLocalFileVault(
+  workspaceId: string,
+  alsoDeleteKeys: Iterable<string> = [],
+): Promise<{ cleared: boolean }> {
   const factory = getIndexedDb();
   // Nothing to clear, which is a clean outcome rather than a failed one.
   if (!factory) return { cleared: true };
 
   try {
-    return await new Promise<{ cleared: boolean }>((resolve) => {
-      const request = factory.deleteDatabase(DATABASE_NAME);
-      request.onsuccess = () => resolve({ cleared: true });
-      // Reported, not resolved as success. A browser that refuses the deletion
-      // leaves registration papers and receipts on the device, and the account
-      // screen was saying "permanently deleted" over the top of them.
-      request.onerror = () => resolve({ cleared: false });
-      // Another tab holding the database open blocks this indefinitely, so it
-      // resolves rather than hanging — but it has not cleared anything.
-      request.onblocked = () => resolve({ cleared: false });
-    });
+    /*
+     * Delete this workspace's files, not the database.
+     *
+     * `deleteDatabase` drops the whole origin-wide vault, and now that entries
+     * record an owner that is plainly the wrong tool: deleting one cloud
+     * account from a browser that also holds another would take the other
+     * account's registration papers, receipts and packets with it, permanently,
+     * and the person would only find out when those records came back pointing
+     * at nothing.
+     *
+     * `alsoDeleteKeys` carries the keys the departing workspace's own records
+     * referenced. That is what covers files stored before ownership was
+     * recorded: an untagged file cannot be swept on a guess, but one this
+     * workspace demonstrably used is provably its own, and leaving a rancher's
+     * documents behind after they deleted their account is its own kind of
+     * wrong.
+     */
+    const owned = new Set(alsoDeleteKeys);
+    for (const entry of await listLocalFiles()) {
+      if (entry.workspaceId === workspaceId) owned.add(entry.key);
+    }
+
+    for (const key of owned) {
+      await deleteLocalFile(key);
+    }
+
+    return { cleared: true };
   } catch (error) {
+    // Reported, not swallowed. A browser that refuses the deletion leaves
+    // registration papers and receipts on the device, and the account screen
+    // was saying "permanently deleted" over the top of them.
     console.error("Clearing this device's files failed.", error);
     return { cleared: false };
   }
