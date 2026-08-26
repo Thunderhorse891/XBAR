@@ -20,6 +20,16 @@ export function CloudBootstrap() {
   const exportWorkspaceBackup = useXbarStore((state) => state.exportWorkspaceBackup);
   const workspaceHydrated = useWorkspaceHydrated();
   const hydrationKeyRef = useRef('');
+  /*
+   * Whether this page load has ever held a session.
+   *
+   * Signing out does NOT swap the workspace records: the store keeps whatever
+   * the cloud workspace had, while `vaultOwnerId()` drops back to `'local'`.
+   * Treating that as settled would sweep the local workspace's files against a
+   * cloud workspace's keys and delete them — the same mismatch the settle gate
+   * exists to prevent, reached from the other side.
+   */
+  const sawSessionRef = useRef(false);
   const lastPersistedSignatureRef = useRef('');
 
   useEffect(() => {
@@ -43,10 +53,35 @@ export function CloudBootstrap() {
     if (cloudStatus !== 'signed-in' || !session?.user.id) {
       hydrationKeyRef.current = '';
       lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
-      setAutosaveReady(false, false);
+
+      /*
+       * A workspace with no session to wait for is already settled.
+       *
+       * Locking unconditionally here was wrong in a slow, quiet way: the vault
+       * sweep waits on these flags, so a browser that is signed out — or has no
+       * Supabase project at all — never reclaimed the blobs left behind by
+       * deleted documents, receipts and packets. Nothing is lost, but IndexedDB
+       * fills, and the first thing a full quota breaks is saving the next file.
+       *
+       * Two states are NOT settled, for different reasons:
+       *
+       *   `loading`  initialization may still produce a session, and the
+       *              records on screen would then be replaced by reconciliation.
+       *   after a sign-out  the store still holds the cloud workspace's records
+       *              while the vault owner has dropped back to `'local'`.
+       *              Sweeping there deletes the local workspace's own files.
+       *
+       * So it settles only when this page load has never had a session, which
+       * is the case where `'local'` really does own what is on screen.
+       */
+      const resolved = cloudStatus === 'signed-out' || cloudStatus === 'unavailable';
+      const settled = resolved && !sawSessionRef.current;
+      setAutosaveReady(settled, settled);
       setSyncState('idle');
       return;
     }
+
+    sawSessionRef.current = true;
 
     const hydrationKey = `${session.user.id}:${workspaceId || 'primary'}`;
     if (hydrationKeyRef.current === hydrationKey) return;

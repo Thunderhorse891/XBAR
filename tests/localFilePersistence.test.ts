@@ -483,6 +483,41 @@ test('readiness alone does not release the sweep — reconciliation must have ch
   const callSites = bootstrap.match(/setAutosaveReady\(/g) ?? [];
   assert.equal(callSites.length, 3, 'a new setAutosaveReady call site must be reviewed against this rule');
 
+  /*
+   * A workspace with no session to wait for is settled, or the sweep never runs
+   * for it. Locking unconditionally when signed out meant a browser that is
+   * signed out — or has no Supabase project at all — never reclaimed the blobs
+   * behind deleted documents, receipts and packets: nothing lost, but IndexedDB
+   * fills, and a full quota stops the next file being saved.
+   */
+  assert.match(
+    bootstrap,
+    /const resolved = cloudStatus === 'signed-out' \|\| cloudStatus === 'unavailable';/,
+    'no Supabase project is as settled as a resolved sign-out — both must sweep',
+  );
+
+  /*
+   * But NOT after a sign-out. Signing out does not swap the workspace records,
+   * so the store still holds the cloud workspace's while `vaultOwnerId()` drops
+   * to `'local'` — sweeping there deletes the local workspace's own files. That
+   * is the settle gate's own failure, reached from the other side.
+   */
+  assert.match(
+    bootstrap,
+    /const settled = resolved && !sawSessionRef\.current;/,
+    'a sign-out is a transition, not a settled local workspace',
+  );
+  assert.match(
+    bootstrap,
+    /sawSessionRef\.current = true;/,
+    'the latch has to be set on the signed-in path or it never latches',
+  );
+  assert.match(
+    bootstrap,
+    /if \(cloudStatus !== 'signed-in' \|\| !autosaveReady \|\| !autosaveUnlocked\) return;/,
+    'settling while signed out must not switch autosave on — that gate still requires a session',
+  );
+
   // A workspace with no Supabase project has no reconciliation to wait for, so
   // both flags must default open or the sweep never runs for local-only users.
   assert.match(cloudStore, /autosaveUnlocked: !isSupabaseConfigured\(\),/);
