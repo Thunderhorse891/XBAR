@@ -83,3 +83,32 @@ export function checkoutIdempotencyKey(intent, now = new Date()) {
   const minute = new Date(now).toISOString().slice(0, 16);
   return `checkout:${intent?.workspaceId ?? ''}:${intent?.tier ?? ''}:${intent?.seatCount ?? ''}:${minute}`;
 }
+
+/**
+ * What to do when expiring a stale session failed.
+ *
+ * Treating every failure as harmless was wrong in one specific and expensive
+ * way. `expire` throws for a session that is already dead — fine — but also for
+ * one that COMPLETED between the list and the call, and that is a purchase that
+ * just succeeded. Shrugging and creating a new session there produces the exact
+ * second subscription this whole path exists to prevent, and the billing row
+ * cannot save us: it was read before any of this and still shows no
+ * subscription, because the webhook has not landed yet.
+ *
+ * So the session is re-read and its real status decides:
+ *
+ *   - `expired`  the race was harmless. Carry on.
+ *   - `complete` a subscription is on its way. Refuse; the webhook will settle
+ *                the entitlement, and the seller must not be charged twice.
+ *   - anything else, including a failed re-read, is unknown — and unknown is
+ *     not permission to charge. Refuse and let them retry.
+ *
+ * @param {object|null|undefined} session The session as re-read from Stripe, or null if that failed.
+ * @returns {'proceed'|'refuse_completed'|'refuse_unverified'}
+ */
+export function resolveExpiryFailure(session) {
+  const status = session && typeof session === 'object' ? String(session.status ?? '') : '';
+  if (status === 'expired') return 'proceed';
+  if (status === 'complete') return 'refuse_completed';
+  return 'refuse_unverified';
+}

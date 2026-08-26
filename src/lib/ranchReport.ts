@@ -55,6 +55,16 @@ export interface HorseEconomicsRow {
   horseId: string;
   horseName: string;
   status: string;
+  /**
+   * Whether this horse is for sale, by the same predicate `listedCount` uses.
+   *
+   * Carried on the row rather than re-derived in the table, because the table
+   * re-derived it as `askPrice > 0` and the two disagreed: a horse in Sale
+   * Prep, Market Ready or Buyer Review with no asking price was counted as
+   * listed by the summary and labelled "Not listed for sale" by the rows
+   * underneath it. One predicate, one answer.
+   */
+  saleInventory: boolean;
   investedToDate: number;
   monthlyBurn: number;
   askPrice: number;
@@ -160,6 +170,7 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
       horseId: horse.id,
       horseName: horse.name,
       status: horse.status,
+      saleInventory: isSaleInventory(horse),
       investedToDate: economics.costToDate,
       monthlyBurn: economics.monthlyBurn,
       askPrice: economics.askPrice,

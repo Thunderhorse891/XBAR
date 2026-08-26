@@ -355,9 +355,13 @@ export default function Reports() {
                       </th>
                       <td className="report-table__num">{formatCurrency(horse.investedToDate)}</td>
                       <td className="report-table__num">{formatCurrency(horse.monthlyBurn)}</td>
-                      {/* A horse with no asking price is not listed. Showing $0
-                      would read as "worth nothing" rather than "not for sale",
-                      and the three derived columns are meaningless without it. */}
+                      {/* Showing $0 would read as "worth nothing" rather than
+                      "no price yet", and the three derived columns are
+                      meaningless without an asking price. But "not listed" is a
+                      different statement from "no price", and this report counts
+                      Sale Prep, Market Ready and Buyer Review as inventory — so
+                      saying "not listed for sale" under a summary that just
+                      counted the horse as listed contradicted itself. */}
                       {horse.askPrice > 0 ? (
                         <>
                           <td className="report-table__num">{formatCurrency(horse.askPrice)}</td>
@@ -371,7 +375,7 @@ export default function Reports() {
                         </>
                       ) : (
                         <td className="report-table__num report-table__muted" colSpan={4}>
-                          Not listed for sale
+                          {horse.saleInventory ? 'Asking price not set' : 'Not listed for sale'}
                         </td>
                       )}
                     </tr>

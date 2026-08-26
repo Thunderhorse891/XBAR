@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { checkoutIdempotencyKey, planCheckoutSession } from '../../api/_lib/checkout-session.js';
+import { checkoutIdempotencyKey, planCheckoutSession, resolveExpiryFailure } from '../../api/_lib/checkout-session.js';
 
 /*
  * An empty `stripe_subscription_id` means no subscription EXISTS. It does not
@@ -133,10 +133,59 @@ test('the endpoint expires stale sessions before it creates another', () => {
   assert.match(source, /workspace_seats: String\(seatCount\)/, 'seats must be recorded for the next comparison');
 });
 
-test('expiring a session that already closed does not fail the purchase', () => {
+test('a session that expired under us does not fail the purchase', () => {
   const source = readFileSync('api/stripe/checkout.js', 'utf8');
 
-  // It can complete or expire between the list and the call. Losing that race
-  // is not a reason to refuse a customer who is trying to pay.
-  assert.match(source, /try \{\s*await stripe\.checkout\.sessions\.expire\(stale\.id\);\s*\} catch/);
+  /*
+   * This test used to say "already closed", which conflated two very different
+   * outcomes. Losing the race to a session that EXPIRED is harmless and must
+   * not refuse a customer trying to pay. Losing it to one that COMPLETED is a
+   * purchase that just succeeded, and carrying on there bills them twice — so
+   * only the first carries on.
+   */
+  assert.match(source, /await stripe\.checkout\.sessions\.expire\(stale\.id\);\s*continue;/);
+  assert.match(source, /if \(outcome === 'proceed'\) continue;/);
+  assert.doesNotMatch(
+    source,
+    /catch \(error\) \{[^}]*\}\s*\}\s*const session =/,
+    'a swallowed expire failure must not lead straight into creating a session',
+  );
+});
+
+test('a session that completed while we were expiring it stops the purchase', () => {
+  /*
+   * `expire` throws for a session that is already dead — harmless — and also
+   * for one that COMPLETED between the list and the call, which is a purchase
+   * that just succeeded. Treating both as harmless created the second
+   * subscription this whole path exists to prevent, and the billing row could
+   * not catch it: that row was read before any of this and still showed no
+   * subscription, because the webhook had not landed yet.
+   */
+  assert.equal(resolveExpiryFailure({ status: 'complete' }), 'refuse_completed');
+});
+
+test('an already-expired session is the harmless race, and carries on', () => {
+  assert.equal(resolveExpiryFailure({ status: 'expired' }), 'proceed');
+});
+
+test('a session we could not confirm closed is not permission to charge', () => {
+  // Same fail-closed rule as everywhere else in this PR: a failed read
+  // establishes nothing, and guessing "it is gone" here bills someone twice.
+  assert.equal(resolveExpiryFailure({ status: 'open' }), 'refuse_unverified');
+  assert.equal(resolveExpiryFailure(null), 'refuse_unverified', 'a failed re-read is unknown, not safe');
+  assert.equal(resolveExpiryFailure(undefined), 'refuse_unverified');
+  assert.equal(resolveExpiryFailure({}), 'refuse_unverified', 'a session with no status is unknown too');
+});
+
+test('the endpoint re-reads a session it failed to expire, and refuses on the answer', () => {
+  const source = readFileSync('api/stripe/checkout.js', 'utf8');
+
+  const retrieve = source.indexOf('stripe.checkout.sessions.retrieve(stale.id)');
+  const create = source.indexOf('stripe.checkout.sessions.create(');
+
+  assert.ok(retrieve > -1, 'a failed expire must be followed by finding out why');
+  assert.ok(retrieve < create, 'and that has to happen before another session is created');
+  assert.match(source, /resolveExpiryFailure\(reread\)/);
+  assert.match(source, /if \(outcome === 'proceed'\) continue;/, 'only the harmless race carries on');
+  assert.match(source, /code: outcome === 'refuse_completed' \? 'subscription_active' : 'billing_unavailable'/);
 });

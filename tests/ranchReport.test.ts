@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import { buildRanchReport, type RanchReportInput } from '../src/lib/ranchReport.js';
@@ -680,4 +681,28 @@ test('a negative or missing cost basis contributes nothing', () => {
 
   assert.equal(report.money.acquisitionCost, 0, 'a negative basis must not reduce what was invested');
   assert.equal(report.money.investedToDate, 100);
+});
+
+test('a horse the report counts as listed is never labelled unlisted', async () => {
+  const source = await readFile('src/routes/Reports.tsx', 'utf8');
+
+  /*
+   * The summary counts Sale Prep, Market Ready and Buyer Review as inventory
+   * (`listedCount` uses `isSaleInventory`), while the table re-derived the same
+   * question as `askPrice > 0`. So a horse in Sale Prep with no asking price was
+   * counted as listed by the summary and labelled "Not listed for sale" by the
+   * row underneath it — the same report contradicting itself.
+   */
+  assert.match(
+    source,
+    /horse\.saleInventory \? 'Asking price not set' : 'Not listed for sale'/,
+    'the row must distinguish "no price yet" from "not for sale"',
+  );
+
+  const report = await readFile('src/lib/ranchReport.ts', 'utf8');
+  assert.match(
+    report,
+    /saleInventory: isSaleInventory\(horse\),/,
+    'and it must come from the same predicate the count uses, not a second derivation',
+  );
 });

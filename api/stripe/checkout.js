@@ -2,7 +2,7 @@ import Stripe from 'stripe';
 import { readJsonBody, sendJson } from '../_lib/http.js';
 import { buildSubscriptionProfile, getStripePriceIdByTier } from '../_lib/subscription-plans.js';
 import { checkoutBlockReason } from '../_lib/subscription-status.js';
-import { checkoutIdempotencyKey, planCheckoutSession } from '../_lib/checkout-session.js';
+import { checkoutIdempotencyKey, planCheckoutSession, resolveExpiryFailure } from '../_lib/checkout-session.js';
 import { requireWorkspaceAccess } from '../_lib/supabase-admin.js';
 import { applyCors } from '../_lib/cors.js';
 import { checkoutSchema, parseBody } from '../_lib/validation.js';
@@ -174,11 +174,40 @@ export default async function handler(req, res) {
   for (const stale of plan.expire) {
     try {
       await stripe.checkout.sessions.expire(stale.id);
+      continue;
     } catch (error) {
-      // Already expired or completed between the list and now. Nothing to do,
-      // and failing the purchase over it would be worse than the race.
       console.warn('Expiring a stale checkout session failed.', error);
     }
+
+    /*
+     * A failed expire is not automatically harmless.
+     *
+     * `expire` throws for a session that is already dead, which is fine — and
+     * also for one that COMPLETED between the list and the call, which is a
+     * purchase that just succeeded. Carrying on there creates the second
+     * subscription this path exists to prevent, and the billing row cannot
+     * catch it: it was read before any of this and still shows none, because
+     * the webhook has not landed yet.
+     */
+    let reread = null;
+    try {
+      reread = await stripe.checkout.sessions.retrieve(stale.id);
+    } catch (error) {
+      console.error('Re-reading a checkout session after a failed expire failed.', error);
+    }
+
+    const outcome = resolveExpiryFailure(reread);
+    if (outcome === 'proceed') continue;
+
+    return sendJson(res, outcome === 'refuse_completed' ? 409 : 503, {
+      ok: false,
+      code: outcome === 'refuse_completed' ? 'subscription_active' : 'billing_unavailable',
+      retryable: outcome !== 'refuse_completed',
+      message:
+        outcome === 'refuse_completed'
+          ? 'A checkout for this workspace completed a moment ago. Give it a minute to appear, then check the billing portal before starting another plan.'
+          : 'An earlier checkout for this workspace could not be confirmed as closed. Try again shortly rather than risk being billed twice.',
+    });
   }
 
   const session =
