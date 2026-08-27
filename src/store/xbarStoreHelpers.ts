@@ -525,7 +525,16 @@ export function canRestorePersistedState(raw: unknown): boolean {
    * without them. Over-rejection is as much a bug as under-rejection, and this
    * is the check that rules it out.
    */
-  const TIMELINE_EVENT_SHAPE = { strings: ['id', 'date', 'title', 'summary', 'owner', 'category'] };
+  /*
+   * `details` is optional and carries the medical/breeding specifics. Medical
+   * reads it with the `in` operator, which throws on a primitive rather than
+   * returning false — the one failure in this table that is not a render and
+   * not a NaN.
+   */
+  const TIMELINE_EVENT_SHAPE = {
+    strings: ['id', 'date', 'title', 'summary', 'owner', 'category'],
+    optionalObjects: ['details'],
+  };
 
   const NESTED_SHAPES: Record<
     string,
@@ -552,6 +561,16 @@ export function canRestorePersistedState(raw: unknown): boolean {
            * broken one.
            */
           optionalStrings?: string[];
+          /*
+           * Fields that must be a plain OBJECT when present.
+           *
+           * `optionalStrings` cannot express this, and the failure is not a
+           * render: `event.details && 'followUpDue' in event.details` at
+           * Medical.tsx:53 throws `TypeError: Cannot use 'in' operator` when
+           * the right operand is a primitive. A string passes every check this
+           * table had, because nothing asked what SHAPE it was.
+           */
+          optionalObjects?: string[];
         }
       >;
       /*
@@ -804,7 +823,10 @@ export function canRestorePersistedState(raw: unknown): boolean {
          * number, and the table had no vocabulary for one inside an array
          * entry. `{o.role} · {o.share}%` renders both at AnimalProfile.tsx:556.
          */
-        ownership: { strings: ['id', 'name', 'role'], numbers: ['share'] },
+        // `{stake.contact ? <small>{stake.contact}</small> : null}` —
+        // Ownership.tsx:884, and `stake.contact.trim()` on a STORED stake at
+        // useXbarStore.ts:2473. Required by OwnershipStake since its first commit.
+        ownership: { strings: ['id', 'name', 'role', 'contact'], numbers: ['share'] },
         /*
          * `fact.id === factId` — useXbarStore.ts:2513 — and `{f.label}` /
          * `{f.value}` rendered straight into JSX at AnimalProfile.tsx:528-529.
@@ -891,6 +913,13 @@ export function canRestorePersistedState(raw: unknown): boolean {
        * grep for "rendered" would have walked straight past.
        */
       optionalStrings: [
+        /*
+         * Not rendered — given `.trim()` at storedFiles.ts:28 and
+         * cloudWorkspace.ts:1201, both through `?.`, which guards absence and
+         * not type. `storagePath`, `localFileKey`, `fileName` and `mimeType`
+         * are only compared or passed through.
+         */
+        'fileUrl',
         'entities.horseName',
         'entities.registrationNumber',
         'entities.registry',
@@ -938,7 +967,16 @@ export function canRestorePersistedState(raw: unknown): boolean {
        * calculation reads only `status`.
        */
       itemShapes: {
-        proofRequirements: { strings: ['id', 'kind', 'label', 'status'] },
+        /*
+         * `requirement.documentTitle ?? 'Linked document'` — Ownership.tsx:417
+         * and :995. `??` catches absence, never type, so a truthy object goes
+         * to JSX as a bare child. The three timestamps beside it are consumed
+         * as optional strings on the same panel.
+         */
+        proofRequirements: {
+          strings: ['id', 'kind', 'label', 'status'],
+          optionalStrings: ['documentTitle', 'linkedAt', 'verifiedAt', 'verifiedBy'],
+        },
         /*
          * `auditEvents` is optional too, and `auditEvents: [null]` threw on
          * `event.id` at Ownership.tsx:749. `normalizeOwnershipRecord` does not
@@ -1011,6 +1049,15 @@ export function canRestorePersistedState(raw: unknown): boolean {
     expenseReceipts: {
       strings: ['id', 'vendor', 'receiptDate', 'title', 'category'],
       numbers: ['amount'],
+      /*
+       * `{receipt.notes || 'No notes added.'}` — Expenses.tsx:718. `||` passes
+       * a truthy object to JSX exactly as `??` does.
+       *
+       * `fileUrl` is not rendered; it is given `.trim()` at storedFiles.ts:28
+       * and cloudWorkspace.ts:1201, both through `?.`, which guards absence and
+       * not type.
+       */
+      optionalStrings: ['notes', 'fileUrl'],
     },
     /*
      * Intake batches had no entry at all — only the shared id check — so
@@ -1119,7 +1166,13 @@ export function canRestorePersistedState(raw: unknown): boolean {
      */
     salesLeads: {
       strings: ['id', 'name', 'channel', 'stage', 'lastTouch'],
-      optionalStrings: ['nextFollowUp'],
+      /*
+       * `lead.notes || ...` becomes the drawer description at Sales.tsx:150,
+       * and `(right.offerUpdatedAt ?? '').localeCompare(...)` at
+       * profitIntelligence.ts:28 and :268 calls a string method on whatever
+       * `??` let through — during report construction, not on a screen.
+       */
+      optionalStrings: ['nextFollowUp', 'notes', 'offerUpdatedAt'],
       optionalNumbers: ['offerAmount', 'counterOfferAmount', 'depositAmount'],
     },
     /*
@@ -1253,6 +1306,14 @@ export function canRestorePersistedState(raw: unknown): boolean {
           for (const field of itemShape.optionalStrings ?? []) {
             const value = (item as Record<string, unknown>)[field];
             if (value !== undefined && value !== null && typeof value !== 'string') return false;
+          }
+          // Absent is fine. Present-but-not-an-object is what `in` throws on,
+          // and an ARRAY is refused too: `'followUpDue' in []` is false rather
+          // than an error, but nothing in this app stores a detail bag as one.
+          for (const field of itemShape.optionalObjects ?? []) {
+            const value = (item as Record<string, unknown>)[field];
+            if (value === undefined || value === null) continue;
+            if (typeof value !== 'object' || Array.isArray(value)) return false;
           }
         }
       }

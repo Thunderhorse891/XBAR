@@ -935,7 +935,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    */
   assert.match(
     shapeTable,
-    /expenseReceipts: \{\s*strings: \['id', 'vendor', 'receiptDate', 'title', 'category'\],\s*numbers: \['amount'\],\s*\}/,
+    /expenseReceipts: \{\s*strings: \['id', 'vendor', 'receiptDate', 'title', 'category'\],\s*numbers: \['amount'\],/,
   );
 
   /*
@@ -970,7 +970,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * it with truthiness, which an object passes.
    */
   assert.match(leadsEntry, /strings: \[[^\]]*'lastTouch'/, 'formatDateLabel throws on an object');
-  assert.match(leadsEntry, /optionalStrings: \['nextFollowUp'\]/, 'optional, so it must not be required');
+  assert.match(leadsEntry, /optionalStrings: \[[^\]]*'nextFollowUp'/, 'optional, so it must not be required');
   /*
    * These three really are compared only, and must stay out — requiring them
    * would refuse archives over values that crash nothing.
@@ -1208,6 +1208,50 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   );
 
   /*
+   * The optional fields nobody had looked at, found by sweeping EVERY field of
+   * every persisted type against the table rather than only the fields I had
+   * previously excluded. The earlier audit answered "are my exclusions right";
+   * this one answers "is anything unconsidered", which is where these were.
+   */
+  assert.match(
+    ownershipEntry,
+    /optionalStrings: \['documentTitle', 'linkedAt', 'verifiedAt', 'verifiedBy'\]/,
+    "requirement.documentTitle ?? 'Linked document' is a bare React child",
+  );
+  assert.match(
+    horsesEntry,
+    /ownership: \{ strings: \[[^\]]*'contact'\]/,
+    'stake.contact is rendered and given .trim() on a stored stake',
+  );
+
+  const receiptsStart = shapeTable.indexOf('expenseReceipts: {');
+  const receiptsEntry = shapeTable.slice(receiptsStart, shapeTable.indexOf('intakeBatches:', receiptsStart));
+  assert.ok(receiptsStart > -1 && receiptsEntry.length > 0, 'the expenseReceipts entry must be findable');
+  assert.match(receiptsEntry, /optionalStrings: \['notes', 'fileUrl'\]/, 'a truthy object reaches JSX through ||');
+
+  for (const field of ['notes', 'offerUpdatedAt']) {
+    assert.match(
+      leadsEntry,
+      new RegExp(`optionalStrings: \\[[^\\]]*'${field}'`),
+      `${field} reaches JSX or a string method through a guard that checks absence only`,
+    );
+  }
+  assert.match(docsEntry, /optionalStrings: \[\s*'fileUrl',/, 'document.fileUrl?.trim() throws on an object');
+
+  /*
+   * The one failure in this table that is neither a render nor a NaN.
+   * `event.details && 'followUpDue' in event.details` — Medical.tsx:53 — throws
+   * `TypeError: Cannot use 'in' operator` when the right operand is a
+   * primitive, so a STRING passed every check the table had.
+   */
+  assert.match(helperCode, /optionalObjects: \['details'\]/, 'the `in` operator throws on a primitive');
+  assert.match(
+    helperCode,
+    /for \(const field of itemShape\.optionalObjects \?\? \[\]\) \{[\s\S]*?if \(value === undefined \|\| value === null\) continue;[\s\S]*?typeof value !== 'object' \|\| Array\.isArray\(value\)/,
+    'optionalObjects must allow absence and refuse a primitive',
+  );
+
+  /*
    * Negative matters as much as non-numeric here, and ONLY here — the CHECK
    * constraint refuses both. The loop must reject a negative...
    */
@@ -1312,7 +1356,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   assert.match(shapeTable, /activity: TIMELINE_EVENT_SHAPE,/);
   assert.match(
     helperCode,
-    /const TIMELINE_EVENT_SHAPE = \{ strings: \['id', 'date', 'title', 'summary', 'owner', 'category'\] \};/,
+    /const TIMELINE_EVENT_SHAPE = \{\s*strings: \['id', 'date', 'title', 'summary', 'owner', 'category'\],/,
     'every TimelineEvent field that reaches a string method or JSX must be required',
   );
 
@@ -1336,7 +1380,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * is a number, and the table had no vocabulary for one inside an array entry.
    * `{o.role} · {o.share}%` renders both.
    */
-  assert.match(shapeTable, /ownership: \{ strings: \['id', 'name', 'role'\], numbers: \['share'\] \}/);
+  assert.match(shapeTable, /ownership: \{ strings: \[[^\]]*'id', 'name', 'role'[^\]]*\], numbers: \['share'\] \}/);
   assert.match(
     helperCode,
     /for \(const field of itemShape\.numbers \?\? \[\]\) \{\s*if \(!Number\.isFinite\(\(item as Record<string, unknown>\)\[field\]\)\) return false;/,
@@ -1418,7 +1462,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * That only works because `itemShapes` skips an absent array — safe because
    * every array that MUST exist is named in `lists` too.
    */
-  assert.match(shapeTable, /proofRequirements: \{ strings: \['id', 'kind', 'label', 'status'\] \}/);
+  assert.match(shapeTable, /proofRequirements: \{\s*strings: \['id', 'kind', 'label', 'status'\],/);
 
   /*
    * `auditEvents` is optional too, and `[null]` threw on `event.id` at
