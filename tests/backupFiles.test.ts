@@ -959,7 +959,15 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     shapeTable,
     /intakeBatches: \{\s*strings: \['id', 'label', 'source', 'receivedAt'\],\s*numbers: \['fileCount', 'processedCount', 'matchedCount', 'needsReviewCount'\],\s*\}/,
   );
-  assert.doesNotMatch(shapeTable, /'state'/, 'a normalized field cannot arrive malformed and must not be validated');
+  /*
+   * Scoped to the intakeBatches ENTRY, not the whole table: `state` is a field
+   * name several collections have, and `sharedListings` legitimately requires
+   * its own. A table-wide search asserted something much broader than intended
+   * and broke the moment an unrelated entry needed the same field name.
+   */
+  const batchEntry = (shapeTable.match(/intakeBatches: \{[\s\S]*?\n {4}\},/) ?? [''])[0];
+  assert.ok(batchEntry.length > 0, 'the intakeBatches entry must be findable');
+  assert.doesNotMatch(batchEntry, /'state'/, 'a normalized field cannot arrive malformed and must not be validated');
   assert.match(helpers, /state: normalizeBatchState\(batch\.state\)/, 'which is what makes that exclusion true');
 
   /*
@@ -973,7 +981,8 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     /for \(const field of shape\.numbers \?\? \[\]\) \{\s*if \(!Number\.isFinite\(valueAtPath\(record, field\)\)\) return false;/,
     'a number field must be finite, not merely typeof number',
   );
-  assert.match(helpers, /sharedListings: \{ lists: \['channels'\] \}/);
+  assert.match(shapeTable, /sharedListings: \{ lists: \['channels'\], strings: \['id', 'state', 'accessMode'\] \}/);
+  assert.doesNotMatch(shapeTable, /'shareToken'/, 'a field only ever compared must not be required');
   /*
    * `role` and `label` are the scalar half of a collection whose ARRAYS were
    * already guarded, which is exactly what made the gap easy to miss:
@@ -997,7 +1006,38 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     /buyerRoomEvents: \{ strings: \['id', 'kind', 'at', 'actor'\], optionalStrings: \['note'\] \}/,
   );
   assert.match(helpers, /ranchAssets: \{ strings: \['name', 'category', 'assignedTo'\] \}/);
-  assert.match(helpers, /strings: \['name', 'owner', 'segment'\]/);
+  /*
+   * `objects` proves the CONTAINER is an object and says nothing about the
+   * scalars inside it, so `bloodline: { sire: '', dam: '', family: {} }`
+   * restored and crashed Breeding at :261. The dotted paths close that, and
+   * `valueAtPath` already resolves them.
+   */
+  for (const nested of [
+    'sex',
+    'bloodline.sire',
+    'bloodline.dam',
+    'bloodline.family',
+    'assignments.trainer',
+    'assignments.ranchManager',
+    'assignments.veterinarian',
+    'assignments.farrier',
+    'location.ranch',
+    'location.barn',
+    'location.pasture',
+    'location.stall',
+    'sale.listingState',
+  ]) {
+    assert.match(shapeTable, new RegExp(`'${nested.replace('.', '\\.')}'`), `${nested} is read without a type check`);
+  }
+
+  /*
+   * `sale.askPrice` and `readiness.score` do not throw on an object — they
+   * yield NaN, which reaches the screen, the CSV and the banker-facing PDF.
+   * `readiness.packetStatus` is deliberately absent: every read is a
+   * comparison or a template string.
+   */
+  assert.match(shapeTable, /numbers: \['sale\.askPrice', 'readiness\.score'\]/);
+  assert.doesNotMatch(shapeTable, /'readiness\.packetStatus'/, 'a compared field crashes nothing');
   assert.match(helpers, /'activity',/);
 
   /*
@@ -1104,6 +1144,22 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * mistake permanent and would have failed anyone who tried to fix it.
    */
   assert.match(helpers, /strings: \['legalOwner', 'transferStatus'\]/);
+
+  /*
+   * `proofRequirements` is OPTIONAL on the record, so it is validated through
+   * `itemShapes` and deliberately not through `lists`: requiring the array
+   * would turn away every record that has none, which is most of them.
+   *
+   * That only works because `itemShapes` skips an absent array — safe because
+   * every array that MUST exist is named in `lists` too.
+   */
+  assert.match(shapeTable, /itemShapes: \{ proofRequirements: \{ strings: \['id', 'kind', 'label', 'status'\] \} \}/);
+  assert.doesNotMatch(shapeTable, /lists: \[[^\]]*'proofRequirements'/, 'an optional array must not be required');
+  assert.match(
+    helperCode,
+    /if \(entries === undefined \|\| entries === null\) continue;\s*if \(!Array\.isArray\(entries\)\) return false;/,
+    'absent is allowed, present-but-not-an-array is not',
+  );
   assert.match(shapeTable, /lists: \['pendingDocuments'\]/);
   assert.match(shapeTable, /stringItems: \['auditTrail'\]/);
 
@@ -1115,7 +1171,19 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * `horse.owner.trim()` finds nothing — which is how `owner` and `legalOwner`
    * survived the previous sweep.
    */
-  assert.match(helpers, /'owner', 'segment'\]/, 'horse.owner reaches rawName.trim() through a helper');
+  /*
+   * Found only by reading, not grepping. `add(horse.owner, horse.id)` puts the
+   * dereference one call away inside the helper, so a text search for
+   * `horse.owner.trim()` finds nothing.
+   *
+   * Asserted on the horses ENTRY rather than on adjacency in a one-line array:
+   * the list is multi-line now that the nested paths joined it, and pinning
+   * two names as neighbours was pinning formatting, not the rule.
+   */
+  const horseEntry = (shapeTable.match(/horses: \{[\s\S]*?\n {4}\},/) ?? [''])[0];
+  assert.ok(horseEntry.length > 0, 'the horses entry must be findable');
+  assert.match(horseEntry, /'owner',/, 'horse.owner reaches rawName.trim() through a helper');
+  assert.match(horseEntry, /'segment',/, 'h.segment.toLowerCase() — Sales.tsx:320');
   assert.match(shapeTable, /documents: \{\s*objects: \['entities'\],\s*strings: \['title'\],/);
 
   /*
@@ -1230,6 +1298,16 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     ['src/routes/FeedInventory.tsx', /b\.receiptDate\.localeCompare\(a\.receiptDate\)/],
     ['src/store/useXbarStore.ts', /receipt\.category\.toLowerCase\(\)/],
     ['src/routes/Documents.tsx', /watermark "\{packet\.watermark\}"/],
+    ['src/routes/Breeding.tsx', /\{horse\.sex\} · \{horse\.bloodline\.family\}/],
+    ['src/routes/Breeding.tsx', /<span>\{horse\.assignments\.ranchManager\}<\/span>/],
+    ['src/routes/Ownership.tsx', /<strong>\{requirement\.label\}<\/strong>/],
+    ['src/routes/SharedAccess.tsx', /\{sharedListing\?\.state \?\? horse\.sale\.listingState\}/],
+    ['src/routes/SharedAccess.tsx', /\{sharedListing\?\.accessMode \?\? 'Private Token'\}/],
+    ['src/routes/Breeding.tsx', /\{horse\.sex\} · \{horse\.bloodline\.family\}/],
+    ['src/routes/Breeding.tsx', /<span>\{horse\.assignments\.ranchManager\}<\/span>/],
+    ['src/routes/Ownership.tsx', /<strong>\{requirement\.label\}<\/strong>/],
+    ['src/routes/SharedAccess.tsx', /\{sharedListing\?\.state \?\? horse\.sale\.listingState\}/],
+    ['src/routes/SharedAccess.tsx', /\{sharedListing\?\.accessMode \?\? 'Private Token'\}/],
     ['src/routes/RanchAssets.tsx', /a\.assignedTo\.toLowerCase\(\)/],
     ['src/routes/Sales.tsx', /h\.segment\.toLowerCase\(\)/],
     ['src/routes/AnimalProfile.tsx', /animal\.activity\.length/],

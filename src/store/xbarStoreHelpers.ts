@@ -575,10 +575,49 @@ export function canRestorePersistedState(raw: unknown): boolean {
         // first qualifying photo upload, after the media file is stored.
         'readiness.blockers',
       ],
-      // `horse.name.toLowerCase` — Breeding.tsx:292.
-      // `horse.owner` → `rawName.trim()` — commandPalette.ts:121.
-      // `h.segment.toLowerCase()` — Sales.tsx:320.
-      strings: ['name', 'owner', 'segment'],
+      /*
+       * `horse.name.toLowerCase` — Breeding.tsx:292.
+       * `horse.owner` → `rawName.trim()` — commandPalette.ts:121.
+       * `h.segment.toLowerCase()` — Sales.tsx:320.
+       * `{horse.sex}` — Breeding.tsx:261, beside the bloodline.
+       *
+       * The dotted paths are the INSIDES of the objects listed above. Naming a
+       * field under `objects` proves only that the container is an object; the
+       * scalars in it went unchecked, so `bloodline: { sire: '', dam: '',
+       * family: {} }` restored and then crashed Breeding at :261, which renders
+       * `{horse.bloodline.family}` directly.
+       *
+       * Every one of these is read across the app rather than at a single site
+       * — `location.barn` alone appears at fifteen — and all have been required
+       * by their interfaces since the first commit of types/xbar.ts.
+       */
+      strings: [
+        'name',
+        'owner',
+        'segment',
+        'sex',
+        'bloodline.sire',
+        'bloodline.dam',
+        'bloodline.family',
+        'assignments.trainer',
+        'assignments.ranchManager',
+        'assignments.veterinarian',
+        'assignments.farrier',
+        'location.ranch',
+        'location.barn',
+        'location.pasture',
+        'location.stall',
+        // `{horse.sale.listingState}` — Sales.tsx:380, SharedAccess.tsx:269.
+        'sale.listingState',
+      ],
+      /*
+       * `sale.askPrice` feeds `listedValue` and every margin figure, and
+       * `readiness.score` is rendered as a readiness percentage. Neither
+       * throws on an object — they yield NaN, which propagates silently into
+       * the screen, the CSV and the banker-facing PDF. `readiness.packetStatus`
+       * is not here: every read of it is a comparison or a template string.
+       */
+      numbers: ['sale.askPrice', 'readiness.score'],
       itemShapes: {
         breedingTimeline: TIMELINE_EVENT_SHAPE,
         medicalTimeline: TIMELINE_EVENT_SHAPE,
@@ -685,6 +724,17 @@ export function canRestorePersistedState(raw: unknown): boolean {
      * arrive from a backup at all.
      */
     ownershipRecords: {
+      /*
+       * `proofRequirements` is optional on the record, so it is NOT in `lists`
+       * — requiring it would turn away every record that has none, which is
+       * most of them. `itemShapes` skips an absent array and checks the entries
+       * of a present one, which is exactly the shape needed here.
+       *
+       * `{requirement.label}` renders at Ownership.tsx:410.
+       * `normalizeOwnershipRecord` does not catch it either: its confidence
+       * calculation reads only `status`.
+       */
+      itemShapes: { proofRequirements: { strings: ['id', 'kind', 'label', 'status'] } },
       strings: ['legalOwner', 'transferStatus'],
       lists: ['pendingDocuments'],
       // `auditTrail.map((entry) => <li key={entry}>{entry}</li>)` —
@@ -783,8 +833,18 @@ export function canRestorePersistedState(raw: unknown): boolean {
      * nothing and could only turn away a valid archive.
      */
     salesLeads: { strings: ['id', 'name', 'channel', 'stage'] },
-    // `listing.channels.includes()` — SharedAccess.tsx:33.
-    sharedListings: { lists: ['channels'] },
+    /*
+     * `listing.channels.includes()` — SharedAccess.tsx:33 — was the container
+     * check, and the two fields rendered beside it went unchecked:
+     * `{sharedListing?.state ?? horse.sale.listingState}` and
+     * `{sharedListing?.accessMode ?? 'Private Token'}` — SharedAccess.tsx:269
+     * and :272. `??` catches null and undefined; an object is truthy and
+     * renders.
+     *
+     * `sharePath`, `shareToken` and the timestamps stay out: every read of them
+     * is a comparison or a pass-through into a payload, never a dereference.
+     */
+    sharedListings: { lists: ['channels'], strings: ['id', 'state', 'accessMode'] },
     /*
      * `workspace.primaryModules.length` and `workspace.permissions.map()` —
      * Settings.tsx:1015 and :1019. This collection is covered by neither the id
@@ -874,6 +934,16 @@ export function canRestorePersistedState(raw: unknown): boolean {
        */
       for (const [list, itemShape] of Object.entries(shape.itemShapes ?? {})) {
         const entries = valueAtPath(record, list);
+        /*
+         * Absent is allowed HERE; requiring the array is `lists`' job.
+         *
+         * That split is what lets an optional collection be validated at all:
+         * `ownershipRecords.proofRequirements` is optional and absent on most
+         * records, so putting it in `lists` would refuse them. Every array that
+         * must exist is named in `lists` as well, so nothing is weakened by
+         * this — a missing `activity` still fails there.
+         */
+        if (entries === undefined || entries === null) continue;
         if (!Array.isArray(entries)) return false;
         for (const item of entries as unknown[]) {
           if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
