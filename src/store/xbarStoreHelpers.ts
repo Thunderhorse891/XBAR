@@ -502,6 +502,12 @@ export function canRestorePersistedState(raw: unknown): boolean {
         {
           strings?: string[];
           /*
+           * Numbers inside an array entry. `{o.share}%` renders exactly as a
+           * string does, so an object throws — and the entry's own comment
+           * named `stake.share` while nothing validated it.
+           */
+          numbers?: string[];
+          /*
            * Fields that must be a string WHEN PRESENT.
            *
            * `strings` cannot express this: it demands presence, and demanding
@@ -636,10 +642,21 @@ export function canRestorePersistedState(raw: unknown): boolean {
          * not. It is the same TimelineEvent as the two above.
          */
         activity: TIMELINE_EVENT_SHAPE,
-        // `asset.status` / `asset.kind` — xbarPhaseTwo.ts:241, publicShare.ts:109.
-        gallery: { strings: ['status', 'kind'] },
-        // `stake.share` / `stake.role` / `stake.name` — ownership/selectors.ts:13-14.
-        ownership: { strings: ['name', 'role'] },
+        /*
+         * `asset.status` / `asset.kind` — xbarPhaseTwo.ts:241,
+         * publicShare.ts:109 — plus `{asset.label}` and `src={asset.url}` at
+         * BuyerProfile.tsx:644-646, which the approved-photo path puts in front
+         * of a buyer. `id` is the React key.
+         */
+        gallery: { strings: ['id', 'label', 'kind', 'url', 'status'] },
+        /*
+         * `stake.share` / `stake.role` / `stake.name` — ownership/selectors.ts:13-14.
+         *
+         * `share` was named in this comment and validated by nothing: it is a
+         * number, and the table had no vocabulary for one inside an array
+         * entry. `{o.role} · {o.share}%` renders both at AnimalProfile.tsx:556.
+         */
+        ownership: { strings: ['id', 'name', 'role'], numbers: ['share'] },
         /*
          * `fact.id === factId` — useXbarStore.ts:2513 — and `{f.label}` /
          * `{f.value}` rendered straight into JSX at AnimalProfile.tsx:528-529.
@@ -677,7 +694,23 @@ export function canRestorePersistedState(raw: unknown): boolean {
     // siblings, which is what makes it easy to miss.
     documents: {
       objects: ['entities'],
-      strings: ['title'],
+      /*
+       * `document.title.trim()` — useXbarStore.ts:842, beside optional-chained
+       * siblings, which is what makes it easy to miss — plus the five scalars
+       * the Documents queue renders directly: `{document.type} ·
+       * {document.source}` at :737, `{document.duplicateRisk}` at :1002,
+       * `formatDateTimeLabel(document.uploadedAt)` at :1042 (which throws
+       * before React is reached), and `{document.summary}` at
+       * BuyerProfile.tsx:625.
+       *
+       * `state` is excluded: `restorePersistedState` runs
+       * `normalizeDocumentState` over every document, so it cannot arrive
+       * malformed — the same ground as the intake batch's own `state`.
+       */
+      strings: ['id', 'title', 'type', 'source', 'duplicateRisk', 'uploadedAt', 'summary', 'uploadedBy'],
+      // `Math.round(document.confidence * 100)` — Documents.tsx:838. An object
+      // yields NaN and renders as "NaN% OCR confidence".
+      numbers: ['confidence'],
       /*
        * Every field of DocumentEntities, because every one of them is read
        * without a type check and all of them are optional.
@@ -842,7 +875,16 @@ export function canRestorePersistedState(raw: unknown): boolean {
      * evaluated only once someone types in the inventory search, so the route
      * renders first and crashes on the keystroke.
      */
-    ranchAssets: { strings: ['name', 'category', 'assignedTo'] },
+    ranchAssets: {
+      /*
+       * The three searchable strings were the whole entry, and Equipment
+       * renders five more: `{e.category} · {e.location}` at :111,
+       * `{e.notes || `${e.status}${…e.nextService…}`}` at :114 — a `||` that
+       * passes any truthy object — and `{e.condition}` at :117, which also
+       * indexes CONDITION_TONE.
+       */
+      strings: ['id', 'name', 'category', 'assignedTo', 'location', 'status', 'condition', 'nextService', 'notes'],
+    },
     /*
      * `lead.name.trim()` — BuyerResponseQueue.tsx:142 — plus `{lead.channel}`
      * and `{lead.stage}` rendered straight into JSX at Sales.tsx:498 and :502.
@@ -975,6 +1017,9 @@ export function canRestorePersistedState(raw: unknown): boolean {
            * Absent is fine, wrong-typed is not. An optional field a backup
            * DOES supply still reaches the same render as a required one.
            */
+          for (const field of itemShape.numbers ?? []) {
+            if (!Number.isFinite((item as Record<string, unknown>)[field])) return false;
+          }
           for (const field of itemShape.optionalStrings ?? []) {
             const value = (item as Record<string, unknown>)[field];
             if (value !== undefined && value !== null && typeof value !== 'string') return false;

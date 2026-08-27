@@ -1005,7 +1005,10 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     shapeTable,
     /buyerRoomEvents: \{ strings: \['id', 'kind', 'at', 'actor'\], optionalStrings: \['note'\] \}/,
   );
-  assert.match(helpers, /ranchAssets: \{ strings: \['name', 'category', 'assignedTo'\] \}/);
+  assert.match(
+    shapeTable,
+    /ranchAssets: \{\s*strings: \['id', 'name', 'category', 'assignedTo', 'location', 'status', 'condition', 'nextService', 'notes'\],\s*\}/,
+  );
   /*
    * `objects` proves the CONTAINER is an object and says nothing about the
    * scalars inside it, so `bloodline: { sire: '', dam: '', family: {} }`
@@ -1093,7 +1096,19 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     'the entries, not the container — the container was already an array in both bugs',
   );
 
-  assert.match(helpers, /gallery: \{ strings: \['status', 'kind'\] \}/);
+  assert.match(shapeTable, /gallery: \{ strings: \['id', 'label', 'kind', 'url', 'status'\] \}/);
+
+  /*
+   * `share` was NAMED in this entry's own comment and validated by nothing: it
+   * is a number, and the table had no vocabulary for one inside an array entry.
+   * `{o.role} · {o.share}%` renders both.
+   */
+  assert.match(shapeTable, /ownership: \{ strings: \['id', 'name', 'role'\], numbers: \['share'\] \}/);
+  assert.match(
+    helperCode,
+    /for \(const field of itemShape\.numbers \?\? \[\]\) \{\s*if \(!Number\.isFinite\(\(item as Record<string, unknown>\)\[field\]\)\) return false;/,
+    'a number inside an array entry must be finite, not merely present',
+  );
 
   /*
    * `documentFacts` checked only `id`, so
@@ -1115,7 +1130,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     /for \(const field of itemShape\.optionalStrings \?\? \[\]\) \{[\s\S]{0,200}?value !== undefined && value !== null && typeof value !== 'string'/,
     'an absent optional field must pass; a wrong-typed one must not',
   );
-  assert.match(helpers, /ownership: \{ strings: \['name', 'role'\] \}/);
+
   assert.match(
     helpers,
     /if \(!item \|\| typeof item !== 'object' \|\| Array\.isArray\(item\)\) return false;/,
@@ -1201,7 +1216,23 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   // `stringItems` asserts the array as well as its contents, so naming
   // `readiness.blockers` under `lists` too would be a redundant second claim.
   assert.doesNotMatch(horseEntry, /lists: \[[^\]]*'readiness\.blockers'/, 'stringItems already asserts the array');
-  assert.match(shapeTable, /documents: \{\s*objects: \['entities'\],\s*strings: \['title'\],/);
+  /*
+   * `title` was the only scalar checked while the Documents queue renders five
+   * more, and `formatDateTimeLabel(document.uploadedAt)` throws before React is
+   * reached. `confidence` is a number: an object yields NaN and renders as
+   * "NaN% OCR confidence".
+   *
+   * `state` is excluded because `restorePersistedState` normalizes it — the
+   * same ground as the intake batch's own `state`.
+   */
+  assert.match(
+    shapeTable,
+    /documents: \{\s*objects: \['entities'\],\s*strings: \['id', 'title', 'type', 'source', 'duplicateRisk', 'uploadedAt', 'summary', 'uploadedBy'\],\s*numbers: \['confidence'\],/,
+  );
+  const documentEntry = (shapeTable.match(/documents: \{[\s\S]*?\n {4}\},/) ?? [''])[0];
+  assert.ok(documentEntry.length > 0, 'the documents entry must be findable');
+  assert.doesNotMatch(documentEntry, /'state'/, 'a normalized field must not be validated');
+  assert.match(helpers, /state: normalizeDocumentState\(document\.state\)/, 'which is what makes that true');
 
   /*
    * The entity VALUES, not just the `entities` container. Two shapes of crash,
@@ -1323,6 +1354,10 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     ['src/routes/AnimalProfile.tsx', /\{animal\.readiness\?\.blockers\?\.\[0\] \?\?/],
     ['src/routes/Ownership.tsx', /<span>\{formatDateTimeLabel\(event\.at\)\}<\/span>/],
     ['src/routes/Ownership.tsx', /<strong>\{event\.actor\}<\/strong>/],
+    ['src/routes/AnimalProfile.tsx', /\{o\.role\} · \{o\.share\}%/],
+    ['src/routes/BuyerProfile.tsx', /<div className="media-tile__label">\{asset\.label\}<\/div>/],
+    ['src/routes/Equipment.tsx', /\{e\.category\} · \{e\.location\}/],
+    ['src/routes/Documents.tsx', /\{document\.type\} · \{document\.source\} ·/],
     ['src/routes/RanchAssets.tsx', /a\.assignedTo\.toLowerCase\(\)/],
     ['src/routes/Sales.tsx', /h\.segment\.toLowerCase\(\)/],
     ['src/routes/AnimalProfile.tsx', /animal\.activity\.length/],
