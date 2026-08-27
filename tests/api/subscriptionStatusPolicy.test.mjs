@@ -13,6 +13,7 @@ import {
   entitledTierForBillingState,
   isKnownBillingState,
   isRecoverableStripeStatus,
+  isStaleBillingEvent,
   resolveWebhookTier,
   RECOVERABLE_STRIPE_STATUSES,
   TERMINAL_STRIPE_STATUSES,
@@ -608,4 +609,117 @@ test('the spent-this-month card does not caption itself with lifetime purchases'
 
   assert.match(card, /value=\{formatCompactCurrency\(report\.money\.investedThisMonth\)\}/);
   assert.ok(!/detail=.*acquisitionCost/.test(card), 'a lifetime acquisition total is not part of this month spend');
+});
+
+test('an event Stripe created before the one already applied is refused', () => {
+  /*
+   * The event-id replay guard stops a REDELIVERY of the same event and nothing
+   * else. Stripe does not guarantee delivery order, and its retry schedule
+   * makes inversion routine: a `customer.subscription.updated` whose first
+   * delivery failed arrives hours later, after the
+   * `customer.subscription.deleted` that superseded it has been processed. It
+   * carries its own id and has genuinely never been applied, so it passed the
+   * guard — and its stale `Active` payload was written straight over the
+   * cancellation, leaving a paid tier nobody was paying for.
+   */
+  const cancellation = Date.parse('2026-08-27T02:00:00Z');
+  const supersededUpdate = Date.parse('2026-08-27T01:00:00Z');
+
+  assert.equal(isStaleBillingEvent(supersededUpdate, cancellation), true, 'the retried older event must not apply');
+  assert.equal(isStaleBillingEvent(cancellation, supersededUpdate), false, 'and a genuinely newer one must');
+});
+
+test('a workspace with no applied event yet still applies its first one', () => {
+  /*
+   * Over-rejection is the failure to watch here. Treating an unknown
+   * last-applied time as "stale" would freeze billing for every workspace whose
+   * history predates the ordering column — the migration deliberately does not
+   * backfill it, because `processed_at` is the delivery clock and ordering by
+   * it is the bug.
+   */
+  const now = Date.parse('2026-08-27T02:00:00Z');
+  for (const noPrevious of [null, undefined, '', NaN, 'not-a-time']) {
+    assert.equal(
+      isStaleBillingEvent(now, noPrevious),
+      false,
+      `an unknown previous time (${String(noPrevious)}) is not stale`,
+    );
+  }
+  // And an unreadable incoming time cannot be used to refuse either.
+  assert.equal(isStaleBillingEvent(undefined, now), false);
+});
+
+test('events sharing a created second both apply', () => {
+  // A plan change emits several events with the same `created`. Dropping the
+  // second would lose a real update, and true redeliveries are already stopped
+  // by the event id, so equality proceeds.
+  const sameSecond = Date.parse('2026-08-27T02:00:00Z');
+  assert.equal(isStaleBillingEvent(sameSecond, sameSecond), false);
+});
+
+test('the webhook orders on Stripe’s clock, not on when it processed the delivery', async () => {
+  const webhook = await readFile(path.join(process.cwd(), 'api/stripe/webhook.js'), 'utf8');
+  const code = webhook.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
+  /*
+   * `processed_at` is when WE handled the delivery, so a stale event handled
+   * late has the LATEST `processed_at` of all — ordering by it ranks the
+   * superseded event first, which is the bug rather than the fix.
+   */
+  assert.match(code, /\.order\('stripe_event_created_at', \{ ascending: false \}\)/);
+  assert.doesNotMatch(code, /\.order\('processed_at'/, 'the delivery clock must never be the ordering key');
+  assert.match(code, /isStaleBillingEvent\(eventCreatedAt, lastAppliedAt\)/);
+  assert.match(code, /stripe_event_created_at: Number\.isFinite/, 'and every applied event must record it');
+
+  /*
+   * Both entry points. `checkout.session.completed` restores an entitlement
+   * just as effectively as a subscription event, so the check lives inside
+   * `syncWorkspaceSubscription` where neither path can miss it.
+   */
+  assert.equal(
+    (code.match(/eventCreatedAt: event\.created \* 1000/g) ?? []).length,
+    2,
+    'both call sites must pass Stripe’s creation time',
+  );
+  const syncStart = code.indexOf('async function syncWorkspaceSubscription');
+  // Searched from the function, not from the top of the file: the first
+  // `isStaleBillingEvent` in the source is the import, which sits above every
+  // function and would satisfy an ordering assertion no matter where the guard
+  // actually ran.
+  const guardAt = code.indexOf('isStaleBillingEvent(eventCreatedAt', syncStart);
+  const firstUpsert = code.indexOf('.upsert(', syncStart);
+  assert.ok(syncStart >= 0 && guardAt > syncStart, 'the guard belongs inside the shared sync, not in one branch');
+  assert.ok(guardAt < firstUpsert, 'and it must run before anything is written');
+
+  // A failed read is not "no previous event": it must throw and leave the
+  // event for Stripe to retry, the same posture the profile read takes.
+  assert.match(code, /Could not read the last applied billing event/);
+});
+
+test('the ordering column has a migration, and it does not backfill', async () => {
+  const sql = await readFile(
+    path.join(process.cwd(), 'supabase/migrations/20260827_subscription_event_ordering.sql'),
+    'utf8',
+  );
+  const statements = sql.replace(/--[^\n]*/g, '');
+
+  assert.match(statements, /add column if not exists stripe_event_created_at timestamptz/);
+  assert.match(statements, /workspace_subscription_events \(workspace_id, stripe_event_created_at desc\)/);
+
+  /*
+   * No backfill, deliberately: there is no honest value for rows written before
+   * the column existed, and `processed_at` is precisely the clock that ordering
+   * by it gets wrong. NULL is truthful, and the handler treats an unknown
+   * last-applied time as "not stale".
+   */
+  assert.doesNotMatch(
+    statements,
+    /update public\.workspace_subscription_events/,
+    'a guessed backfill is worse than null',
+  );
+  assert.doesNotMatch(
+    statements,
+    /stripe_event_created_at\s*=\s*processed_at/,
+    'and the delivery clock is not a stand-in for Stripe’s',
+  );
 });

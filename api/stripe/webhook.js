@@ -1,7 +1,7 @@
 import Stripe from 'stripe';
 import { readRawBody, sendJson } from '../_lib/http.js';
 import { buildSubscriptionProfile, findTierByPriceId } from '../_lib/subscription-plans.js';
-import { resolveWebhookTier } from '../_lib/subscription-status.js';
+import { isStaleBillingEvent, resolveWebhookTier } from '../_lib/subscription-status.js';
 import { getSupabaseAdmin } from '../_lib/supabase-admin.js';
 
 export const config = {
@@ -24,11 +24,54 @@ async function syncWorkspaceSubscription({
   quantity,
   eventId,
   eventType,
+  eventCreatedAt,
   payload,
 }) {
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     throw new Error('Supabase admin credentials are not configured.');
+  }
+
+  /*
+   * Refuse an event Stripe created BEFORE the one already applied.
+   *
+   * The replay guard in the handler matches on `stripe_event_id`, which stops a
+   * redelivery of the same event and nothing else. A different, older event is
+   * exactly what Stripe's retry schedule produces: a
+   * `customer.subscription.updated` whose first delivery failed arrives hours
+   * later, after the `customer.subscription.deleted` that superseded it has
+   * been processed. It has its own id, has genuinely never been applied, and
+   * the unconditional upserts below wrote its stale `Active` payload straight
+   * over the cancellation — leaving a paid tier nobody was paying for until
+   * some later event happened to correct it.
+   *
+   * Checked here rather than in the handler so BOTH entry points are covered:
+   * `checkout.session.completed` restores an entitlement just as effectively as
+   * a subscription event, and a guard on one path is a guard someone adds a
+   * second path around.
+   */
+  const { data: lastEvent, error: lastEventError } = await supabase
+    .from('workspace_subscription_events')
+    .select('stripe_event_created_at')
+    .eq('workspace_id', workspaceId)
+    .not('stripe_event_created_at', 'is', null)
+    .order('stripe_event_created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  /*
+   * A failed read is not "no previous event", and the difference decides
+   * whether a superseded event is allowed to restore a canceled plan. Throwing
+   * writes nothing and leaves the event for Stripe to retry — the same posture
+   * the profile read below takes, for the same reason.
+   */
+  if (lastEventError) {
+    throw new Error(`Could not read the last applied billing event: ${lastEventError.message}`);
+  }
+
+  const lastAppliedAt = lastEvent?.stripe_event_created_at ? Date.parse(lastEvent.stripe_event_created_at) : null;
+  if (isStaleBillingEvent(eventCreatedAt, lastAppliedAt)) {
+    return { applied: false, reason: 'stale' };
   }
 
   const { data: existingProfile, error: existingProfileError } = await supabase
@@ -102,12 +145,21 @@ async function syncWorkspaceSubscription({
     workspace_id: workspaceId,
     stripe_event_id: eventId,
     event_type: eventType,
+    // Stripe's clock, not ours: `processed_at` is when this delivery was
+    // handled, and a stale event handled late has the LATEST `processed_at` of
+    // all — which is exactly why ordering by it ranked the superseded event
+    // first.
+    stripe_event_created_at: Number.isFinite(Number(eventCreatedAt))
+      ? new Date(Number(eventCreatedAt)).toISOString()
+      : null,
     payload,
     processed_at: new Date().toISOString(),
   });
   if (eventError) {
     throw new Error(`Subscription event log failed: ${eventError.message}`);
   }
+
+  return { applied: true };
 }
 
 export default async function handler(req, res) {
@@ -157,6 +209,7 @@ export default async function handler(req, res) {
           quantity: lineItem?.quantity || 1,
           eventId: event.id,
           eventType: event.type,
+          eventCreatedAt: event.created * 1000,
           payload,
         });
       }
@@ -190,6 +243,7 @@ export default async function handler(req, res) {
           quantity: lineItem?.quantity || 1,
           eventId: event.id,
           eventType: event.type,
+          eventCreatedAt: event.created * 1000,
           payload,
         });
       }
