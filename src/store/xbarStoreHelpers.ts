@@ -440,10 +440,32 @@ export function canRestorePersistedState(raw: unknown): boolean {
   for (const collection of IDENTIFIED_COLLECTIONS) {
     const entries = state[collection];
     if (!Array.isArray(entries)) return false;
+    /*
+     * Ids must be UNIQUE, not merely present.
+     *
+     * Every write path treats an id as naming exactly one record, and the
+     * destructive one is `deleteHorse`: it filters `h.id !== horseId`, so two
+     * horses sharing an id both disappear on a delete aimed at one of them —
+     * and the cascade then removes every lead and receipt carrying that
+     * `horseId`, which belonged to the horse nobody asked to delete. The
+     * rancher sees one deletion and loses two horses and their money.
+     *
+     * It also breaks the cloud: `replaceWorkspaceRows` upserts on a conflict
+     * key, and Postgres refuses a statement that would touch the same key twice
+     * in one command, so every autosave fails from then on — the same silent
+     * shape as an out-of-range `size_bytes`.
+     *
+     * PER COLLECTION rather than globally: ids are prefixed by kind, but
+     * nothing guarantees a horse and a document cannot coincide, and refusing
+     * that would turn away an archive nothing is wrong with.
+     */
+    const seen = new Set<string>();
     for (const entry of entries) {
       if (!entry || typeof entry !== 'object') return false;
       const id = (entry as { id?: unknown }).id;
       if (typeof id !== 'string' || id.trim() === '') return false;
+      if (seen.has(id)) return false;
+      seen.add(id);
     }
   }
 

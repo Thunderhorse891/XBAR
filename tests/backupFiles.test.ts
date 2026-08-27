@@ -615,6 +615,34 @@ test('the preflight refuses a payload that normalizes into unusable records', as
   const normalizeAt = source.indexOf('normalized = restorePersistedState(raw);');
   const checkAt = source.indexOf('for (const collection of IDENTIFIED_COLLECTIONS)');
   assert.ok(normalizeAt > -1 && checkAt > normalizeAt, 'the records are validated after they are normalized');
+
+  /*
+   * An id has to name exactly ONE record, and "present" is not "unique".
+   *
+   * Two horses sharing an id both pass a per-entry check, and then `deleteHorse`
+   * filters `h.id !== horseId` — so a delete aimed at one removes both, and the
+   * cascade takes every lead and receipt carrying that `horseId` with them.
+   * The rancher asked to delete one horse and lost two, plus their money.
+   *
+   * It breaks the cloud too: `replaceWorkspaceRows` upserts on a conflict key,
+   * and Postgres refuses a statement touching the same key twice in one
+   * command, so every autosave fails from then on.
+   */
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  const loopAt = code.indexOf('for (const collection of IDENTIFIED_COLLECTIONS)');
+  // Both bounds from the same anchor.
+  const idLoop = code.slice(loopAt, code.indexOf('\n  }', loopAt));
+  assert.ok(loopAt > -1 && idLoop.length > 0, 'the id loop must be findable');
+  assert.match(idLoop, /seen\.has\(id\)\) return false;/, 'a repeated id must be refused');
+  /*
+   * PER COLLECTION. A Set hoisted above the collection loop would refuse an
+   * archive where a horse and a document happen to share an id string — nothing
+   * is wrong with that, and rejecting it loses a good backup.
+   */
+  const setAt = idLoop.indexOf('new Set<string>()');
+  const entryLoopAt = idLoop.indexOf('for (const entry of entries)');
+  assert.ok(setAt > -1, 'ids must be tracked, not just type-checked');
+  assert.ok(setAt < entryLoopAt, 'the set is created per collection, outside the entry loop');
 });
 
 test('an imported key never overwrites another workspace file', async () => {
