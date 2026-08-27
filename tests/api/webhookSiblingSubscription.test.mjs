@@ -17,14 +17,24 @@ import { findEntitlingSibling } from '../../api/stripe/webhook.js';
  * canceled id, and the sibling went on charging. The customer keeps paying and
  * loses access — the worse of the two directions to be wrong in.
  */
-function stripeWith(subscriptions) {
+/*
+ * A fake that PAGES, because the real endpoint does. `pageSize` splits the
+ * subscriptions across pages and reports `has_more` exactly as Stripe would —
+ * a fake that always answers in one page cannot fail when the code forgets to
+ * look past the first.
+ */
+function stripeWith(subscriptions, { pageSize = 100, truncate = false } = {}) {
   const calls = [];
   return {
     calls,
     subscriptions: {
       list: async (params) => {
         calls.push(params);
-        return { data: subscriptions };
+        const after = params.starting_after;
+        const from = after ? subscriptions.findIndex((s) => s.id === after) + 1 : 0;
+        const data = subscriptions.slice(from, from + pageSize);
+        const hasMore = truncate || from + pageSize < subscriptions.length;
+        return { data, has_more: hasMore };
       },
     },
   };
@@ -89,7 +99,37 @@ test('every subscription on the customer is considered, not just the first page'
   const [params] = stripe.calls;
   assert.equal(params.customer, 'cus_1');
   assert.equal(params.status, 'all', 'a canceled-only filter would miss the active sibling entirely');
-  assert.ok(params.limit >= 100, 'a small page could hide the paying subscription behind the dead ones');
+});
+
+/*
+ * The paying sibling on page two.
+ *
+ * The first version of this asked for one page of 100 and ignored `has_more` —
+ * the identical mistake `collectStripePages` was written to fix for open
+ * Checkout Sessions. A customer with a long subscription history would have had
+ * the live subscription sitting past the page boundary and been deactivated
+ * anyway, which is the whole failure this function exists to prevent.
+ */
+test('a sibling beyond the first page is still found', async () => {
+  const history = Array.from({ length: 7 }, (_, i) => ({ id: `sub_old_${i}`, status: 'canceled' }));
+  const stripe = stripeWith([...history, { id: 'sub_live', status: 'active' }], { pageSize: 3 });
+
+  const sibling = await findEntitlingSibling(stripe, 'cus_1', 'sub_old_0');
+  assert.equal(sibling?.id, 'sub_live', 'the walk must continue while has_more is set');
+  assert.ok(stripe.calls.length > 1, 'one call is one page, not the answer');
+  assert.equal(stripe.calls[1].starting_after, 'sub_old_2', 'each page continues from the last id');
+});
+
+/*
+ * A walk that could not finish must NOT read as "no sibling". A partial list
+ * cannot show that nothing else is paying, and the rule this flow already
+ * follows is that unknown is not permission — there, not permission to charge;
+ * here, not permission to cut off access.
+ */
+test('an incomplete walk refuses rather than deactivating', async () => {
+  const stripe = stripeWith([{ id: 'sub_dead', status: 'canceled' }], { truncate: true });
+
+  await assert.rejects(() => findEntitlingSibling(stripe, 'cus_1', 'sub_dead'), /refusing to deactivate/);
 });
 
 /*

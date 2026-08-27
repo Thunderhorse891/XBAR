@@ -33,15 +33,70 @@ export function msUntilNextDay(now: Date): number {
   return Math.max(1, next.getTime() - now.getTime() + 1000);
 }
 
+/** The clock and timer the tracker runs on, injectable so the re-arming is testable. */
+export interface DayKeyClock {
+  now: () => Date;
+  setTimeout: (handler: () => void, ms: number) => number;
+  clearTimeout: (timer: number) => void;
+}
+
+const browserClock: DayKeyClock = {
+  now: () => new Date(),
+  setTimeout: (handler, ms) => window.setTimeout(handler, ms),
+  clearTimeout: (timer) => window.clearTimeout(timer),
+};
+
+/**
+ * Reports the local day key at every midnight until the returned stop is called.
+ *
+ * Each timeout is armed BY THE PREVIOUS CALLBACK, not by an effect re-running
+ * on a changed key. The effect used to depend on `[dayKey]`, which reads as
+ * "re-arm whenever the day changes" and is a chain with one weak link: a firing
+ * that computes the SAME key sets no new state, so React skips the render, the
+ * effect never re-runs, and the one-shot timeout is gone. The hook is then dead
+ * until the route remounts, and every screen built on it silently keeps
+ * yesterday's month, window and expiry answers.
+ *
+ * A same-key firing is not exotic. Move the system clock west — a laptop
+ * carried across a time zone, or an OS correcting itself — and the timer aimed
+ * at the old zone's midnight arrives while the local date is still yesterday.
+ * That is exactly when a report must keep tracking the day, and exactly when
+ * the old shape stopped.
+ *
+ * Re-arming from the callback also keeps the original intent: each timeout is
+ * measured from when it actually fired, so a machine that slept through
+ * midnight corrects on wake rather than drifting.
+ *
+ * Lives outside the hook because the bug is invisible to anything that only
+ * watches the first firing, and the second firing is what has to be asserted.
+ */
+export function trackDayKey(onDayKey: (dayKey: string) => void, clock: DayKeyClock = browserClock): () => void {
+  let timer = 0;
+  let stopped = false;
+
+  const arm = () => {
+    timer = clock.setTimeout(() => {
+      onDayKey(dayKeyFor(clock.now()));
+      // `onDayKey` can be the last thing a screen does before it unmounts, and
+      // a re-arm after the stop would outlive it as a timer nothing can clear.
+      if (!stopped) arm();
+    }, msUntilNextDay(clock.now()));
+  };
+
+  arm();
+
+  return () => {
+    stopped = true;
+    clock.clearTimeout(timer);
+  };
+}
+
 export function useDayKey(): string {
   const [dayKey, setDayKey] = useState(() => dayKeyFor(new Date()));
 
-  useEffect(() => {
-    // Re-armed from each firing rather than set as an interval, so a machine
-    // that slept through midnight corrects on wake instead of drifting.
-    const timer = window.setTimeout(() => setDayKey(dayKeyFor(new Date())), msUntilNextDay(new Date()));
-    return () => window.clearTimeout(timer);
-  }, [dayKey]);
+  // `setDayKey` is stable, so this effect belongs to the mount rather than to
+  // any particular day — which is the whole point of `trackDayKey`.
+  useEffect(() => trackDayKey(setDayKey), []);
 
   return dayKey;
 }

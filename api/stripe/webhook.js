@@ -6,6 +6,7 @@ import {
   isEntitledBillingState,
   resolveWebhookTier,
 } from '../_lib/subscription-status.js';
+import { collectStripePages } from '../_lib/checkout-session.js';
 import { getSupabaseAdmin } from '../_lib/supabase-admin.js';
 
 export const config = {
@@ -36,12 +37,30 @@ const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026
  * Only consulted when the event would DEACTIVATE. On the ordinary path — one
  * subscription, or an event that entitles — nothing here runs and no extra
  * Stripe call is made.
+ *
+ * PAGINATED, through the same `collectStripePages` the checkout flow uses. The
+ * first version asked for one page of 100 and ignored `has_more`, which is the
+ * identical mistake that helper's own comment records being fixed for open
+ * Checkout Sessions — a single `list` call is the first page of the answer, not
+ * the answer. A customer with a long subscription history would have had the
+ * paying sibling sitting on page two and been deactivated anyway.
+ *
+ * An incomplete walk THROWS rather than reporting "no sibling". A partial list
+ * cannot show that nothing else is paying, and the rule this flow already
+ * follows is that unknown is not permission — there, not permission to charge;
+ * here, not permission to cut off access.
  */
 export async function findEntitlingSibling(stripe, customerId, canceledSubscriptionId) {
-  const { data } = await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 100 });
+  const { items, complete } = await collectStripePages((params) =>
+    stripe.subscriptions.list({ customer: customerId, status: 'all', ...params }),
+  );
+
+  if (!complete) {
+    throw new Error(`Could not read every subscription for ${customerId}; refusing to deactivate on a partial list.`);
+  }
 
   return (
-    (data ?? []).find(
+    items.find(
       (candidate) =>
         candidate.id !== canceledSubscriptionId &&
         isEntitledBillingState(billingStateForStripeStatus(candidate.status)),
