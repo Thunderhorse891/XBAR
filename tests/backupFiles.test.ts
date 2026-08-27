@@ -901,7 +901,44 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * time, so this pins every unguarded dereference on a restored collection.
    */
   assert.match(helpers, /expenseReceipts: \{ strings: \['vendor'\] \}/);
-  assert.match(helpers, /salesLeads: \{ strings: \['name'\] \}/);
+  /*
+   * `{lead.channel}` and `{lead.stage}` are rendered straight into JSX, so
+   * validating only `name` let a lead install and crash the Sales route.
+   *
+   * `lastTouch` is deliberately out: it is sorted and passed around as a due
+   * date and never given a string method, so a guard would protect nothing and
+   * could only turn away a valid archive.
+   */
+  assert.match(shapeTable, /salesLeads: \{ strings: \['id', 'name', 'channel', 'stage'\] \}/);
+  assert.doesNotMatch(shapeTable, /'lastTouch'/, 'a guard with no unguarded read behind it is over-rejection');
+
+  /*
+   * Intake batches had no entry at all — only the shared id check — so the
+   * Documents route rendered `{batch.label}` and four counters off a record
+   * nothing had checked.
+   *
+   * `state` is excluded because `restorePersistedState` runs
+   * `normalizeBatchState` over every batch: it cannot arrive malformed, which
+   * is the one ground for exclusion besides "nothing reads it".
+   */
+  assert.match(
+    shapeTable,
+    /intakeBatches: \{\s*strings: \['id', 'label', 'source', 'receivedAt'\],\s*numbers: \['fileCount', 'processedCount', 'matchedCount', 'needsReviewCount'\],\s*\}/,
+  );
+  assert.doesNotMatch(shapeTable, /'state'/, 'a normalized field cannot arrive malformed and must not be validated');
+  assert.match(helpers, /state: normalizeBatchState\(batch\.state\)/, 'which is what makes that exclusion true');
+
+  /*
+   * Numbers reach JSX exactly as strings do — `{batch.fileCount} files` throws
+   * "Objects are not valid as a React child" — a shape `strings` cannot
+   * describe and `objects` would accept. NaN is refused with them: it is a
+   * number by `typeof` and renders as "NaN" on the screen.
+   */
+  assert.match(
+    helperCode,
+    /for \(const field of shape\.numbers \?\? \[\]\) \{\s*if \(!Number\.isFinite\(valueAtPath\(record, field\)\)\) return false;/,
+    'a number field must be finite, not merely typeof number',
+  );
   assert.match(helpers, /sharedListings: \{ lists: \['channels'\] \}/);
   /*
    * `role` and `label` are the scalar half of a collection whose ARRAYS were
@@ -1004,8 +1041,8 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    */
   assert.equal(
     (helpers.match(/valueAtPath\(record, /g) ?? []).length,
-    6,
-    'every loop must resolve paths — objects, lists, strings, item shapes, optional scalars and string items — or a valid archive is rejected',
+    7,
+    'every loop must resolve paths — objects, lists, strings, numbers, item shapes, optional scalars and string items — or a valid archive is rejected',
   );
 
   /*
@@ -1163,6 +1200,13 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     ['src/routes/AnimalProfile.tsx', /<span className="xs-mrow__detail">\{f\.value\}<\/span>/],
     ['src/routes/AnimalProfile.tsx', /\{f\.decision \?\? 'Review'\}/],
     ['src/routes/Expenses.tsx', /uploadedBy: roleWorkspace\.label,/],
+    ['src/routes/Sales.tsx', /\{lead\.channel\} · \{horse\?\.name\}/],
+    ['src/routes/Documents.tsx', /<div className="stack-item__title">\{batch\.label\}<\/div>/],
+    [
+      'src/routes/Documents.tsx',
+      /\{batch\.fileCount\} files · \{batch\.source\} · \{formatDateTimeLabel\(batch\.receivedAt\)\}/,
+    ],
+    ['src/routes/Documents.tsx', /\{batch\.processedCount\}\/\{batch\.fileCount\} logged/],
     /*
      * And the one that throws at the read: `formatDateLabel` calls `.trim()`
      * on whatever it is handed, so a timeline event whose `date` is an object

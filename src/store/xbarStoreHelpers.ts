@@ -530,6 +530,16 @@ export function canRestorePersistedState(raw: unknown): boolean {
        * null and undefined and nothing else.
        */
       optionalStrings?: string[];
+      /*
+       * Fields that must be a finite number.
+       *
+       * `{batch.fileCount} files` renders the value as a React child exactly
+       * the way a string does, so an object throws "Objects are not valid as a
+       * React child" — a shape `strings` cannot describe and `objects` would
+       * accept. NaN and Infinity are refused too: they reach the same JSX and
+       * render as "NaN".
+       */
+      numbers?: string[];
     }
   > = {
     horses: {
@@ -686,6 +696,25 @@ export function canRestorePersistedState(raw: unknown): boolean {
     salePacketBuilds: { lists: ['documentIds'] },
     // `receipt.vendor.trim()` — Expenses.tsx:114.
     expenseReceipts: { strings: ['vendor'] },
+    /*
+     * Intake batches had no entry at all — only the shared id check — so
+     * `{ id: 'batch-1', label: {}, state: 'Queued' }` restored and then crashed
+     * the Documents route, which renders `{batch.label}`, `{batch.source}` and
+     * four counters straight into JSX (Documents.tsx:670-682) and passes
+     * `receivedAt` to `formatDateTimeLabel`, whose `value?.trim()` throws on an
+     * object.
+     *
+     * `state` is deliberately absent: `restorePersistedState` runs
+     * `normalizeBatchState` over every batch, so it cannot arrive malformed —
+     * the one ground for exclusion besides "nothing reads it".
+     *
+     * Every field here has been required by IntakeBatch since the first commit
+     * of types/xbar.ts, so requiring them cannot turn away a real archive.
+     */
+    intakeBatches: {
+      strings: ['id', 'label', 'source', 'receivedAt'],
+      numbers: ['fileCount', 'processedCount', 'matchedCount', 'needsReviewCount'],
+    },
     // `event.actor.trim()` — BuyerResponseQueue.tsx:142.
     buyerRoomEvents: { strings: ['actor'] },
     /*
@@ -694,8 +723,17 @@ export function canRestorePersistedState(raw: unknown): boolean {
      * renders first and crashes on the keystroke.
      */
     ranchAssets: { strings: ['name', 'category', 'assignedTo'] },
-    // `lead.name.trim()` — BuyerResponseQueue.tsx:142.
-    salesLeads: { strings: ['name'] },
+    /*
+     * `lead.name.trim()` — BuyerResponseQueue.tsx:142 — plus `{lead.channel}`
+     * and `{lead.stage}` rendered straight into JSX at Sales.tsx:498 and :502.
+     * Validating only `name` let `{ id: 'lead-1', name: 'Buyer', channel: {} }`
+     * install and then crash the Sales route.
+     *
+     * `lastTouch` is deliberately absent: it is sorted and passed around as a
+     * due date, never given a string method, so requiring it would guard
+     * nothing and could only turn away a valid archive.
+     */
+    salesLeads: { strings: ['id', 'name', 'channel', 'stage'] },
     // `listing.channels.includes()` — SharedAccess.tsx:33.
     sharedListings: { lists: ['channels'] },
     /*
@@ -798,6 +836,13 @@ export function canRestorePersistedState(raw: unknown): boolean {
       for (const field of shape.optionalStrings ?? []) {
         const value = valueAtPath(record, field);
         if (value !== undefined && value !== null && typeof value !== 'string') return false;
+      }
+      /*
+       * Numbers reach JSX the same way strings do. NaN is refused with them:
+       * it is a number by `typeof` and renders as "NaN" on the screen.
+       */
+      for (const field of shape.numbers ?? []) {
+        if (!Number.isFinite(valueAtPath(record, field))) return false;
       }
       for (const list of shape.stringItems ?? []) {
         const items = valueAtPath(record, list);
