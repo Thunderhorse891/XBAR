@@ -23,10 +23,24 @@
  *      and additionally requires a dev build, so a production bundle cannot
  *      honour it even if the variable is set in the deploy environment.
  *
- * What it never does. It never grants server or cloud permission. Every cloud
- * action is authorized by the API against the real account, which has no idea
- * this overlay exists — so a local preview of Enterprise cannot create
- * Enterprise-limit data in a real workspace.
+ * What it never does. It never relaxes a gate on a WRITE. Previewing changes
+ * which screens and features an owner can see; the gates that decide whether a
+ * record may be created — horses, document intakes, sale packets, invitations,
+ * listings, deal rooms — all evaluate the real subscription.
+ *
+ * That boundary is load-bearing, and it used to sit in the wrong place. The
+ * reasoning for letting a preview through a write gate was that "every cloud
+ * action is authorized by the API against the real account", which is not true
+ * of the ordinary configuration: with relational sync off,
+ * `saveWorkspaceBackupToCloud` falls back to a direct `workspace_snapshots`
+ * upsert whose RLS checks row ownership and says nothing about entitlements.
+ * There is no API in that path to refuse anything, so records created under a
+ * previewed tier were persisted to the cloud and read back later.
+ *
+ * Pausing sync during a preview would not have been enough either — the
+ * over-limit records still exist locally and sync as soon as the preview ends.
+ * Granting capacity for real is a server-side entitlement and has to come from
+ * the subscription record, not from an overlay the server has never heard of.
  */
 
 import type { SubscriptionTier } from '../types/xbar.js';

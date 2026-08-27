@@ -188,99 +188,110 @@ test('every sellable tier is previewable, and nothing else is', () => {
 });
 
 /*
- * The preview has to reach the gates that block actions, not only the ones that
- * render screens.
+ * A preview changes what an owner SEES. It must never change what they can
+ * WRITE.
  *
- * RequireSubscriptionFeature reads useEffectiveSubscription, so an authorized
- * owner previewing Enterprise sees the screen. SubscriptionEnforcement wraps the
- * store's own actions and read the raw subscription, so the same owner was
- * refused by a local gate before the request reached the API — while the status
- * bar told them their session was `Cloud active` and the server would in fact
- * have granted the tier.
+ * These gates briefly read the previewed tier, on the reasoning that a preview
+ * "only decides which local gate fires first, because every cloud write is
+ * still authorized by the API against the real account". The ordinary
+ * configuration falsifies that: with relational sync off,
+ * `saveWorkspaceBackupToCloud` falls back to a direct `workspace_snapshots`
+ * upsert whose RLS checks row ownership and nothing about entitlements. There
+ * is no API in that path to refuse anything, so records created under a
+ * previewed tier were persisted to the cloud and read back later — a preview
+ * that promised to be local was not.
+ *
+ * Pausing sync while previewing would not have fixed it either: the over-limit
+ * records still exist locally and sync the moment the preview is switched off.
  *
  * The wiring is React store plumbing and cannot be exercised from this suite,
- * so the invariant is asserted against the source: both gate layers must read
- * the effective subscription, and neither may reach past it to the raw record.
+ * so the invariant is asserted against the source.
  */
-test('both gate layers read the effective subscription, not the raw record', async () => {
+test('the gates that create records read the real plan, not the preview', async () => {
   const enforcement = await readFile(path.join(process.cwd(), 'src/components/SubscriptionEnforcement.tsx'), 'utf8');
+  const hook = await readFile(path.join(process.cwd(), 'src/hooks/useOwnerPreview.ts'), 'utf8');
+  const hookCode = hook.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 
+  /*
+   * Every gate SubscriptionEnforcement wraps creates a persisted record — a
+   * horse, a document intake, a sale packet, an invitation, a listing — so all
+   * of them resolve through the real subscription.
+   */
+  assert.match(enforcement, /enforcedSubscriptionSnapshot\(\)/);
+  assert.doesNotMatch(enforcement, /effectiveSubscriptionSnapshot/, 'the previewed tier must not authorize a write');
   assert.match(
-    enforcement,
-    /effectiveSubscriptionSnapshot\(\)/,
-    'the imperative action gates must use the same effective tier as the rendering gates',
-  );
-  assert.doesNotMatch(
-    enforcement,
-    /current\.subscription/,
-    'reading the raw subscription here re-introduces a local refusal the account does not actually have',
+    hookCode,
+    /export function enforcedSubscriptionSnapshot\(\): SubscriptionProfile \{\s*return useXbarStore\.getState\(\)\.subscription;\s*\}/,
+    'and it must be the raw subscription, with no overlay applied on the way through',
   );
 
-  // Every consumer resolves through one definition, which is what stops them
-  // drifting apart again; separate copies of the authorization rule are how the
-  // rendering gates and the action gates diverged in the first place.
+  /*
+   * The overlay still exists — losing it would defeat the preview entirely —
+   * but only on the READ path the screens use.
+   */
+  assert.match(hookCode, /overlay \? buildSubscriptionForTier\(realSubscription, overlay\) : realSubscription/);
+  assert.match(hookCode, /export function useEffectiveSubscription\(\)/);
+
+  // One definition of the rule, which is what stops the layers drifting apart
+  // again; separate copies are how they diverged in the first place.
   const lib = await readFile(path.join(process.cwd(), 'src/lib/ownerPreview.ts'), 'utf8');
   assert.equal(
     (lib.match(/export function overlayTier\(/g) ?? []).length,
     1,
     'overlayTier should be defined exactly once, in lib/ownerPreview',
   );
-
-  // The three places that decide whether a preview applies: the React hook, the
-  // imperative snapshot the action gates use, and the store's own feature gates.
-  for (const consumer of ['src/hooks/useOwnerPreview.ts', 'src/store/useXbarStore.ts']) {
-    const source = await readFile(path.join(process.cwd(), consumer), 'utf8');
-    assert.match(source, /overlayTier\(/, `${consumer} should resolve previews through the shared overlayTier`);
-    assert.doesNotMatch(
-      source,
-      /function overlayTier\(/,
-      `${consumer} should import overlayTier, not keep its own copy of the rule`,
-    );
-  }
+  assert.match(hook, /overlayTier\(/, 'the read path should resolve previews through the shared overlayTier');
+  assert.doesNotMatch(hook, /function overlayTier\(/, 'and should import it, not keep its own copy of the rule');
 });
 
 /*
- * The store's own feature gates run inside actions and cannot use the hook, so
- * they read the raw subscription and refused an authorized owner's previewed
- * tier before any request reached the API. There were four of them — the
- * reported one plus three more for buyer deal rooms — so the guard is on the
- * call shape rather than on the single site that was named.
+ * The store's own gates run inside actions that create records — buyer deal
+ * rooms, breeding revenue entries — so they are write gates too, and the same
+ * rule applies: the real plan decides, not the preview.
+ *
+ * `gateSubscription` is kept as a named function rather than inlined so this
+ * stays a stated decision rather than reading as an oversight. Outer and inner
+ * gates still agree, which was the point of routing them through one helper;
+ * they now agree on the real plan.
  */
-test('the store evaluates feature gates against the previewed tier', async () => {
+test('the store evaluates its own gates against the real plan', async () => {
   const store = await readFile(path.join(process.cwd(), 'src/store/useXbarStore.ts'), 'utf8');
+  const code = store.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 
-  assert.doesNotMatch(
-    store,
-    /featureGate\(get\(\)\.subscription,/,
-    'a feature gate reading the raw subscription re-introduces a local refusal a comped account does not have',
+  assert.match(
+    code,
+    /function gateSubscription\(subscription: SubscriptionProfile\): SubscriptionProfile \{\s*return subscription;\s*\}/,
+    'the store gate must not overlay a previewed tier onto a write',
   );
+  assert.doesNotMatch(code, /overlayTier\(/, 'and the store must not reach for the overlay at all');
   assert.ok(
-    (store.match(/featureGate\(gateSubscription\(get\(\)\.subscription\),/g) ?? []).length >= 4,
-    'every store feature gate should evaluate the previewed tier',
+    (code.match(/featureGate\(gateSubscription\(get\(\)\.subscription\),/g) ?? []).length >= 4,
+    'every store feature gate should still resolve through the one helper',
   );
 });
 
 /*
- * The preview has to reach the limit checks inside the actions too.
+ * Every inner limit check resolves through ONE helper.
  *
- * Converting the wrapped gates in SubscriptionEnforcement was only half of it:
- * the checks *inside* those store actions still read the raw usage limits, so
- * an allowlisted owner previewing Enterprise passed the outer gate and was then
- * refused by the inner one against their real Starter allowance — "Seat limit
- * reached" on a preview the status bar called cloud-active.
+ * Seven reads across six actions, so the guard is on the shape rather than the
+ * sites: no limit may be read straight off a subscription in passing. That
+ * matters in both directions — scattered reads are how the outer and inner
+ * gates disagreed when the overlay applied, and they are also how the overlay
+ * would creep back into a write gate one call site at a time.
  *
- * There were seven such reads across six actions, so the guard is on the shape
- * rather than the sites: no limit may be read straight off the raw
- * subscription, and every one goes through entitledUsage, which takes counts
- * from the real workspace and limits from the previewed tier.
+ * The limits are the REAL plan's. Overlaying them let a previewed Enterprise
+ * allowance authorize records that a Starter workspace then synced to the
+ * cloud, where the snapshot path checks row ownership and nothing about
+ * entitlements. Counts were always real, so only the limit half was ever in
+ * question, and "23 of 5" still reads correctly.
  */
-test('the store checks limits against the previewed tier, not the raw plan', async () => {
+test('every inner limit check resolves through one helper, on the real plan', async () => {
   const store = await readFile(path.join(process.cwd(), 'src/store/useXbarStore.ts'), 'utf8');
 
   assert.doesNotMatch(
     store,
     /state\.subscription\.usage\.\w*Limit/,
-    'a raw limit read here refuses a preview the outer gate has already allowed',
+    'a limit read in passing is how these drift apart, in either direction',
   );
 
   assert.ok(

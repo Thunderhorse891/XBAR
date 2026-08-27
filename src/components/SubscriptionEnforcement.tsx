@@ -8,7 +8,7 @@ import {
   teamInviteGate,
 } from '@/lib/subscriptionGates';
 import { useWorkspaceHydrated, useXbarStore } from '@/store/useXbarStore';
-import { effectiveSubscriptionSnapshot } from '@/hooks/useOwnerPreview';
+import { enforcedSubscriptionSnapshot } from '@/hooks/useOwnerPreview';
 
 let installed = false;
 
@@ -34,7 +34,7 @@ export function SubscriptionEnforcement() {
         const removingExistingListing = current.sharedListings.some(
           (listing) => listing.horseId === horseId && listing.state !== 'Archived',
         );
-        const blocked = removingExistingListing ? null : sharedListingGate(effectiveSubscriptionSnapshot());
+        const blocked = removingExistingListing ? null : sharedListingGate(enforcedSubscriptionSnapshot());
         return blocked ? { ok: false, message: blocked } : toggleSharedListing(horseId);
       },
       createDocumentIntake: async (input) => {
@@ -43,7 +43,7 @@ export function SubscriptionEnforcement() {
         // One read, two gates: a second call could observe a different tier if
         // the preview changed between them, and refuse for a plan neither gate
         // was actually evaluating.
-        const subscription = effectiveSubscriptionSnapshot();
+        const subscription = enforcedSubscriptionSnapshot();
         const blocked = documentIntakeGate(subscription, activeDocumentCount, input.files.filter(Boolean).length);
         const horseBlocked = input.createHorseFromBatch ? horseCreationGate(subscription, current.horses.length) : null;
         return blocked || horseBlocked
@@ -52,20 +52,20 @@ export function SubscriptionEnforcement() {
       },
       addHorse: (input) => {
         const current = useXbarStore.getState();
-        const blocked = horseCreationGate(effectiveSubscriptionSnapshot(), current.horses.length);
+        const blocked = horseCreationGate(enforcedSubscriptionSnapshot(), current.horses.length);
         return blocked ? { ok: false, message: blocked } : addHorse(input);
       },
       createHorseFromDocument: (documentId) => {
         const current = useXbarStore.getState();
-        const blocked = horseCreationGate(effectiveSubscriptionSnapshot(), current.horses.length);
+        const blocked = horseCreationGate(enforcedSubscriptionSnapshot(), current.horses.length);
         return blocked ? { ok: false, message: blocked } : createHorseFromDocument(documentId);
       },
       createSalePacketBuild: (input) => {
-        const blocked = packetExportGate(effectiveSubscriptionSnapshot());
+        const blocked = packetExportGate(enforcedSubscriptionSnapshot());
         return blocked ? { ok: false, message: blocked } : createSalePacketBuild(input);
       },
       inviteWorkspaceMember: async (email, role) => {
-        const blocked = teamInviteGate(effectiveSubscriptionSnapshot());
+        const blocked = teamInviteGate(enforcedSubscriptionSnapshot());
         return blocked ? { ok: false, message: blocked } : inviteWorkspaceMember(email, role);
       },
     });

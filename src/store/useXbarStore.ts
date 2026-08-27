@@ -22,9 +22,7 @@ import { toPacketDisclosure } from '@/lib/salePacketDisclosure';
 import { onWorkspaceSettled, vaultOwnerId } from '@/lib/vaultOwner';
 import { readRecordsOwner, rememberRecordsOwner } from '@/lib/recordsOwner';
 import { featureGate } from '@/lib/commercialEngine';
-import { ownerPreviewAuthorization, overlayTier } from '@/lib/ownerPreview';
 import { isCurrentPaidPlan } from '@/lib/subscriptionDecision';
-import { useOwnerPreviewStore } from '@/store/useOwnerPreviewStore';
 import { buildOfferDecision } from '@/lib/profitIntelligence';
 import { scheduleBuyerActivityFollowUp } from '@/lib/salesFollowUp';
 import {
@@ -88,41 +86,46 @@ import {
 } from '@/store/xbarStoreHelpers';
 
 /**
- * The subscription this store's feature gates should evaluate.
+ * The subscription a gate INSIDE a store action must evaluate: the real one.
  *
- * These four gates run inside store actions, so they cannot use the React hook
- * and were reading the raw subscription. That refused an authorized owner's
- * previewed tier locally — for a comp-allowlisted account the server actually
- * grants that tier, so the refusal was inventing a restriction the account does
- * not have, and the screen in front of them said the preview was cloud-active.
+ * These gates decide whether a record may be created — a buyer deal room, a
+ * breeding revenue entry, a horse, an invitation, an uploaded asset — so they
+ * are write gates, and an owner preview must not relax them.
  *
- * Resolved through the same `overlayTier` the hook and the action-gate snapshot
- * use, so the three cannot disagree. It stays safe because it only decides
- * which local gate fires first: every cloud write is still authorized by the
- * API against the real account, so a local-only preview is refused there.
+ * They briefly resolved through `overlayTier`, so that a previewed tier
+ * unlocked them the same way it unlocks a screen. The justification was that a
+ * preview "only decides which local gate fires first, because every cloud write
+ * is still authorized by the API against the real account". That is not true of
+ * the ordinary configuration: with relational sync off,
+ * `saveWorkspaceBackupToCloud` falls back to a direct
+ * `workspace_snapshots` upsert whose RLS checks row ownership and nothing about
+ * entitlements. There is no API in that path to refuse anything, so records
+ * created under a previewed tier were persisted to the cloud and read back
+ * later.
+ *
+ * Keeping the outer and inner gates in agreement — the reason these were
+ * converted in the first place — still holds: both now evaluate the real plan,
+ * so an owner previewing Enterprise is refused once, with a message that says
+ * they are previewing, rather than passing one gate and failing the next.
+ *
+ * Named rather than inlined so the intent survives: this is deliberately the
+ * real subscription, not an oversight waiting to be "fixed" back to the
+ * overlay.
  */
+function gateSubscription(subscription: SubscriptionProfile): SubscriptionProfile {
+  return subscription;
+}
+
 /**
- * Usage for a limit check: counts from the real workspace, limits from the tier
- * being previewed.
+ * Usage for a limit check.
  *
- * The wrapped gates in SubscriptionEnforcement were converted to the previewed
- * tier, but the checks *inside* these actions still read the raw limits — so an
- * allowlisted owner previewing Enterprise passed the outer gate and was then
- * refused by the inner one against their real Starter allowance. Only the
- * limits move; horsesUsed, storageUsedGb and the rest stay real, so "23 of 5"
- * still reads correctly.
+ * Counts and limits both come from the real plan. Overlaying the limits here
+ * let a previewed Enterprise allowance authorize records that a Starter
+ * workspace then synced to the cloud; `horsesUsed`, `storageUsedGb` and the
+ * rest were always real, so only the limit half was ever in question.
  */
 function entitledUsage(subscription: SubscriptionProfile): SubscriptionProfile['usage'] {
   return gateSubscription(subscription).usage;
-}
-
-function gateSubscription(subscription: SubscriptionProfile): SubscriptionProfile {
-  const overlay = overlayTier(
-    ownerPreviewAuthorization(useCloudStore.getState().session?.user?.email ?? ''),
-    useOwnerPreviewStore.getState().previewTier,
-    subscription.tier,
-  );
-  return overlay ? buildSubscriptionForTier(subscription, overlay) : subscription;
 }
 
 export const useXbarStore = create<XbarStore>()(
