@@ -158,7 +158,7 @@ reported, never faked.
 
 ### Pending Supabase migrations (not applied)
 
-Three migrations in `supabase/migrations/` are written and reviewed but have
+Five migrations in `supabase/migrations/` are written and reviewed but have
 **not** been run against any project. The order matters, and it is carried by
 the version prefixes rather than by convention — Supabase takes the digits
 before the first underscore as the migration version, so each file needs its
@@ -180,6 +180,11 @@ own:
    requests cannot each create a billable subscription session. Additive and
    independent of the other three: one nullable column and one partial index,
    no rewrite, and its order in the sequence does not matter.
+5. `20260827_subscription_event_ordering.sql` — schema. Adds
+   `stripe_event_created_at` and the `xbar_apply_subscription_event` function
+   that applies a billing event atomically, so a retried event Stripe created
+   earlier cannot overwrite a newer one. Additive: one nullable column, one
+   index, one function, no backfill.
 
 Apply them **one at a time**, not with a single `supabase db push`. That command
 applies every pending migration in one go, which would run the data
@@ -217,13 +222,27 @@ node scripts/verify-rpc-surface.mjs "$STAGING_DATABASE_URL"
 
 # 4. checkout lock — additive, safe to apply directly, order does not matter
 psql "$DATABASE_URL" -f supabase/migrations/20260826_checkout_session_lock.sql
+
+# 5. billing event ordering — additive, safe to apply directly
+psql "$DATABASE_URL" -f supabase/migrations/20260827_subscription_event_ordering.sql
 ```
+
+**(4) and (5) are prerequisites for billing, not optimizations to schedule
+later.** Apply both before Stripe is switched on, and note that they fail in
+opposite directions:
 
 Until (4) is applied, `api/stripe/checkout.js` cannot claim its lock and
 **refuses every checkout** as retryable. That is deliberate — the alternative
-is creating billable sessions without serialization — but it means this
-migration is a prerequisite for managed checkout working at all, not an
-optimization to schedule later.
+is creating billable sessions without serialization — and it fails visibly, on
+the way in.
+
+Until (5) is applied, `api/stripe/webhook.js` cannot call
+`xbar_apply_subscription_event` and **every entitlement webhook fails**. That
+one fails on the way OUT, which is the dangerous order: a customer can complete
+and pay for a Checkout Session and never have the plan activated, because the
+event that would have granted it errors and Stripe eventually stops retrying.
+Applying (5) without (4) is therefore the worse half-deployment of the two —
+prefer both, and if you must stage them, apply (5) first.
 
 `xbar.reconcile_exclude` is how you keep a row the migration would otherwise
 downgrade. A populated `stripe_subscription_id` proves the workspace was billed

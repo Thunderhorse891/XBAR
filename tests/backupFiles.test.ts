@@ -1046,7 +1046,13 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * .filter()` runs on the first qualifying photo upload — after the media file
    * is already stored, which is the same too-late ordering as the rest of these.
    */
-  assert.match(helpers, /'readiness\.blockers',/);
+  /*
+   * The ENTRIES, not just the container. `{animal.readiness?.blockers?.[0] ??
+   * …}` at AnimalProfile.tsx:353 indexes safely and then renders whatever it
+   * found; `??` does not catch an object. `stringItems` asserts the array as
+   * well as its contents, so it is not repeated under `lists`.
+   */
+  assert.match(shapeTable, /stringItems: \['readiness\.blockers'\]/);
 
   /*
    * The entries, not just the container. `breedingTimeline: [null]` satisfies
@@ -1153,7 +1159,15 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * That only works because `itemShapes` skips an absent array — safe because
    * every array that MUST exist is named in `lists` too.
    */
-  assert.match(shapeTable, /itemShapes: \{ proofRequirements: \{ strings: \['id', 'kind', 'label', 'status'\] \} \}/);
+  assert.match(shapeTable, /proofRequirements: \{ strings: \['id', 'kind', 'label', 'status'\] \}/);
+
+  /*
+   * `auditEvents` is optional too, and `[null]` threw on `event.id` at
+   * Ownership.tsx:749 — `normalizeOwnershipRecord` preserves the array
+   * untouched, so nothing downstream catches it.
+   */
+  assert.match(shapeTable, /auditEvents: \{ strings: \['id', 'at', 'actor', 'summary'\] \}/);
+  assert.doesNotMatch(shapeTable, /'entityType'/, 'nothing in this view reads it');
   assert.doesNotMatch(shapeTable, /lists: \[[^\]]*'proofRequirements'/, 'an optional array must not be required');
   assert.match(
     helperCode,
@@ -1184,6 +1198,9 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   assert.ok(horseEntry.length > 0, 'the horses entry must be findable');
   assert.match(horseEntry, /'owner',/, 'horse.owner reaches rawName.trim() through a helper');
   assert.match(horseEntry, /'segment',/, 'h.segment.toLowerCase() — Sales.tsx:320');
+  // `stringItems` asserts the array as well as its contents, so naming
+  // `readiness.blockers` under `lists` too would be a redundant second claim.
+  assert.doesNotMatch(horseEntry, /lists: \[[^\]]*'readiness\.blockers'/, 'stringItems already asserts the array');
   assert.match(shapeTable, /documents: \{\s*objects: \['entities'\],\s*strings: \['title'\],/);
 
   /*
@@ -1303,11 +1320,9 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     ['src/routes/Ownership.tsx', /<strong>\{requirement\.label\}<\/strong>/],
     ['src/routes/SharedAccess.tsx', /\{sharedListing\?\.state \?\? horse\.sale\.listingState\}/],
     ['src/routes/SharedAccess.tsx', /\{sharedListing\?\.accessMode \?\? 'Private Token'\}/],
-    ['src/routes/Breeding.tsx', /\{horse\.sex\} · \{horse\.bloodline\.family\}/],
-    ['src/routes/Breeding.tsx', /<span>\{horse\.assignments\.ranchManager\}<\/span>/],
-    ['src/routes/Ownership.tsx', /<strong>\{requirement\.label\}<\/strong>/],
-    ['src/routes/SharedAccess.tsx', /\{sharedListing\?\.state \?\? horse\.sale\.listingState\}/],
-    ['src/routes/SharedAccess.tsx', /\{sharedListing\?\.accessMode \?\? 'Private Token'\}/],
+    ['src/routes/AnimalProfile.tsx', /\{animal\.readiness\?\.blockers\?\.\[0\] \?\?/],
+    ['src/routes/Ownership.tsx', /<span>\{formatDateTimeLabel\(event\.at\)\}<\/span>/],
+    ['src/routes/Ownership.tsx', /<strong>\{event\.actor\}<\/strong>/],
     ['src/routes/RanchAssets.tsx', /a\.assignedTo\.toLowerCase\(\)/],
     ['src/routes/Sales.tsx', /h\.segment\.toLowerCase\(\)/],
     ['src/routes/AnimalProfile.tsx', /animal\.activity\.length/],
@@ -1683,4 +1698,35 @@ test('a packet download link cannot navigate this app to a script URL', async ()
     assert.doesNotMatch(code, /\{packet\.downloadUrl \? \(/, `${route} must not render the link on truthiness alone`);
     assert.match(source, /import \{ isNavigableFileUrl \}/, `${route} must use the shared predicate`);
   }
+});
+
+test('the migration runbook lists every migration the code requires', async () => {
+  const readme = await readFile('README.md', 'utf8');
+  const webhook = await readFile('api/stripe/webhook.js', 'utf8');
+  const checkout = await readFile('api/_lib/checkout-session.js', 'utf8');
+
+  /*
+   * A runbook that stops short of a migration the code calls is worse than no
+   * runbook: following it exactly produces a deployment that takes a payment
+   * and never grants the plan, because the entitlement webhook errors on a
+   * missing RPC and Stripe eventually stops retrying.
+   *
+   * Driven off the RPC names the API actually calls, so a new one added later
+   * fails here rather than being discovered by a charged customer.
+   */
+  for (const [rpc, migration] of [
+    ['xbar_apply_subscription_event', '20260827_subscription_event_ordering.sql'],
+    ['xbar_claim_checkout_lock', '20260826_checkout_session_lock.sql'],
+  ] as const) {
+    const called = webhook.includes(rpc) || checkout.includes(rpc);
+    assert.ok(called, `${rpc} should still be called by the API, or this pairing is stale`);
+    assert.ok(readme.includes(migration), `the runbook must apply ${migration}, which creates ${rpc}`);
+    const sql = await readFile(`supabase/migrations/${migration}`, 'utf8');
+    assert.match(sql, new RegExp(`function public\\.${rpc}\\(`), `${migration} must be what creates ${rpc}`);
+  }
+
+  // The apply commands, not merely the prose list: a reader following the code
+  // block is the case that goes wrong.
+  assert.match(readme, /psql "\$DATABASE_URL" -f supabase\/migrations\/20260827_subscription_event_ordering\.sql/);
+  assert.match(readme, /Five migrations in `supabase\/migrations\/`/, 'the count must match the list');
 });

@@ -571,9 +571,6 @@ export function canRestorePersistedState(raw: unknown): boolean {
          * cannot happen and could only turn away a valid archive.
          */
         'notes',
-        // `horse.readiness.blockers.filter()` — useXbarStore.ts:1205, on the
-        // first qualifying photo upload, after the media file is stored.
-        'readiness.blockers',
       ],
       /*
        * `horse.name.toLowerCase` — Breeding.tsx:292.
@@ -618,6 +615,17 @@ export function canRestorePersistedState(raw: unknown): boolean {
        * is not here: every read of it is a comparison or a template string.
        */
       numbers: ['sale.askPrice', 'readiness.score'],
+      /*
+       * `horse.readiness.blockers.filter()` — useXbarStore.ts:1205, on the
+       * first qualifying photo upload, after the media file is stored — needs
+       * the container, and `{animal.readiness?.blockers?.[0] ?? …}` at
+       * AnimalProfile.tsx:353 needs the ENTRIES. `?.[0]` indexes safely and
+       * then renders whatever it found; `??` does not catch an object.
+       *
+       * `stringItems` asserts the array as well as its contents, so this is
+       * not repeated under `lists`.
+       */
+      stringItems: ['readiness.blockers'],
       itemShapes: {
         breedingTimeline: TIMELINE_EVENT_SHAPE,
         medicalTimeline: TIMELINE_EVENT_SHAPE,
@@ -734,7 +742,20 @@ export function canRestorePersistedState(raw: unknown): boolean {
        * `normalizeOwnershipRecord` does not catch it either: its confidence
        * calculation reads only `status`.
        */
-      itemShapes: { proofRequirements: { strings: ['id', 'kind', 'label', 'status'] } },
+      itemShapes: {
+        proofRequirements: { strings: ['id', 'kind', 'label', 'status'] },
+        /*
+         * `auditEvents` is optional too, and `auditEvents: [null]` threw on
+         * `event.id` at Ownership.tsx:749. `normalizeOwnershipRecord` does not
+         * help: it preserves the array untouched.
+         *
+         * `formatDateTimeLabel(event.at)` throws before React is reached;
+         * `{event.actor}` and `{event.summary}` render directly. `action`,
+         * `entityType` and `entityId` are not here — nothing in this view
+         * reads them.
+         */
+        auditEvents: { strings: ['id', 'at', 'actor', 'summary'] },
+      },
       strings: ['legalOwner', 'transferStatus'],
       lists: ['pendingDocuments'],
       // `auditTrail.map((entry) => <li key={entry}>{entry}</li>)` —
