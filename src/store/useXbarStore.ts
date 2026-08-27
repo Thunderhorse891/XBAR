@@ -2343,6 +2343,21 @@ export const useXbarStore = create<XbarStore>()(
           offerStatus: 'Submitted',
           shareReady: true,
           notes,
+          /*
+           * Reopening a closed lead clears its outcome.
+           *
+           * This reuses an existing lead matched on the buyer, and that lead
+           * may already be closed. Leaving `outcome: 'Won'` in place while
+           * moving the stage back to `Offer` produces a record that is
+           * simultaneously sold and live, which the ranch report then reads
+           * both ways at once: `soldHorseIds` counts the horse as sold while
+           * the new amount lands in open pipeline.
+           *
+           * A buyer submitting a fresh offer is the deal being live again, so
+           * the outcome no longer describes it. `undefined` rather than a
+           * delete because the patch is applied as `{ ...item, ...patch }`.
+           */
+          outcome: undefined,
         });
         if (!updated.ok) {
           return updated;

@@ -840,3 +840,67 @@ test('a lost lead does not remove a horse from the sale inventory', () => {
   assert.equal(report.listedCount, 1, 'a lost deal leaves the horse on the market');
   assert.equal(report.money.listedValue, 30_000);
 });
+
+test('a won lead never counts as open pipeline, even back in an Offer stage', () => {
+  /*
+   * `captureBuyerRoomOffer` reuses an existing lead matched on the buyer and
+   * moves it to `Offer`. If that lead had already been won and its outcome was
+   * left in place, the report read the same record both ways at once:
+   * `soldHorseIds` counted the horse as sold while the new amount landed in
+   * open pipeline — one animal, two contradictory figures, in the CSV and the
+   * banker-facing PDF as much as on screen.
+   */
+  const horse1 = horse({ id: 'h1', name: 'Sold Horse', sale: sale({ askPrice: 50_000 }) });
+
+  const contradictory = buildRanchReport(
+    input({
+      horses: [horse1],
+      salesLeads: [
+        lead({
+          id: 'l1',
+          horseId: 'h1',
+          outcome: 'Won',
+          stage: 'Offer',
+          offerStatus: 'Submitted',
+          offerAmount: 48_000,
+        }),
+      ],
+    }),
+    NOW,
+  );
+
+  assert.equal(contradictory.money.pipelineValue, 0, 'a closed deal is not money still on the table');
+  assert.equal(contradictory.listedCount, 0, 'and the same record must not read as sold AND live');
+
+  // The live case still counts, or the figure would be uselessly conservative.
+  const live = buildRanchReport(
+    input({
+      horses: [horse1],
+      salesLeads: [lead({ id: 'l1', horseId: 'h1', stage: 'Offer', offerStatus: 'Submitted', offerAmount: 48_000 })],
+    }),
+    NOW,
+  );
+  assert.equal(live.money.pipelineValue, 48_000, 'an open offer is still pipeline');
+});
+
+test('reopening a closed lead clears its outcome', async () => {
+  /*
+   * The report guard above is the banker-facing backstop; this is the reason
+   * the state should not arise in the first place. A buyer submitting a fresh
+   * offer means the deal is live again, so a stale `outcome` no longer
+   * describes it.
+   *
+   * Asserted against the source because the store action needs React plumbing
+   * this suite does not have.
+   */
+  const store = await readFile('src/store/useXbarStore.ts', 'utf8');
+  const code = store.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  const capture = code.slice(code.indexOf('captureBuyerRoomOffer'));
+  // Both bounds measured from the SAME anchor: searching for the closing brace
+  // from the start of the slice finds an earlier one and yields nothing.
+  const updateAt = capture.indexOf('updateSalesLead(');
+  const update = capture.slice(updateAt, capture.indexOf('});', updateAt));
+
+  assert.match(update, /stage: 'Offer',/, 'this is the reopen that used to leave the outcome behind');
+  assert.match(update, /outcome: undefined,/, 'and it must clear it');
+});

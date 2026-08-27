@@ -265,11 +265,26 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
   // screen about the same number is worse than either being wrong alone. A
   // legacy lead with no status is deliberately not in that set, so it still
   // counts through the stage.
+  /*
+   * A recorded outcome of ANY kind means the deal is closed.
+   *
+   * This excluded `Lost` and not `Won`, so a lead that had been won and was
+   * later moved back to `Offer` counted its new amount as open pipeline while
+   * `soldHorseIds` above counted the same horse as sold — the report
+   * contradicting itself about one animal, in the CSV and the banker-facing
+   * PDF as much as on screen.
+   *
+   * `!lead.outcome` rather than naming the two values: "no outcome recorded"
+   * is the condition that actually means live, and it stays correct if a third
+   * outcome is ever added.
+   *
+   * The store no longer produces that state — reopening a closed lead clears
+   * its outcome — but this is the figure a banker reads, so it does not depend
+   * on every writer upstream getting it right.
+   */
   const openOffers = salesLeads.filter(
     (lead) =>
-      OPEN_OFFER_STAGES.has(lead.stage) &&
-      lead.outcome !== 'Lost' &&
-      !NON_LIVE_OFFER_STATUSES.has(lead.offerStatus ?? ''),
+      OPEN_OFFER_STAGES.has(lead.stage) && !lead.outcome && !NON_LIVE_OFFER_STATUSES.has(lead.offerStatus ?? ''),
   );
 
   return {
