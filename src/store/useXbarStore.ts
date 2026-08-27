@@ -2194,6 +2194,10 @@ export const useXbarStore = create<XbarStore>()(
                     disclosure: toPacketDisclosure(horse, packetOwnership, state.workspaceProfile),
                     selectedDocumentIds: input.documentIds,
                     generatedBy: input.createdBy,
+                    // The same watermark stored on the packet record below, so
+                    // the seal recorded here attributes the copy to the buyer
+                    // it was actually issued to.
+                    watermark: input.watermark,
                   }),
                   anchor: 'local' as const,
                 };

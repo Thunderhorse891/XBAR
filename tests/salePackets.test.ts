@@ -33,8 +33,8 @@ test('a buyer watermark fits the page and is still legible on it', async () => {
   assert.doesNotMatch(source, /\.watermark\{[^}]*white-space:nowrap/, 'a bounded mark has to be allowed to wrap');
   assert.match(
     source,
-    /<div class="watermark">\$\{escapeHtml\(watermark\)\}<\/div>/,
-    'the watermark is buyer-supplied text and must be escaped',
+    /<div class="watermark" id="xbar-watermark">\$\{escapeHtml\(watermark\)\}<\/div>/,
+    'the watermark is buyer-supplied text and must be escaped, under a stable id the verifier can find',
   );
 });
 
@@ -43,9 +43,54 @@ test('a packet with no watermark still carries one', async () => {
 
   assert.match(
     source,
-    /const watermark = params\.watermark\?\.trim\(\) \|\| 'XBAR';/,
+    /export function resolvePacketWatermark\(raw\?: string\): string \{\s*return raw\?\.trim\(\) \|\| 'XBAR';/,
     'an unwatermarked packet is the outcome this field exists to prevent',
   );
+});
+
+/*
+ * The stamp and the seal must come from ONE resolution.
+ *
+ * The renderer resolved `params.watermark?.trim() || 'XBAR'` inline. Repeating
+ * that expression at the seal would have looked equivalent and drifted the
+ * first time one side was edited — and a packet whose printed watermark and
+ * sealed watermark disagree is worse than one with neither, because the
+ * verifier would then report tampering on an untouched packet.
+ */
+test('the stamped watermark and the sealed watermark are the same value', async () => {
+  const source = await readFile('src/lib/localSalePacketGenerator.ts', 'utf8');
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
+  // Resolved once, above the seal.
+  const resolveAt = code.indexOf('const watermark = resolvePacketWatermark(params.watermark);');
+  const sealAt = code.indexOf('const credential = buildPacketCredential({');
+  assert.ok(resolveAt > -1, 'the packet must resolve its watermark once');
+  assert.ok(sealAt > resolveAt, 'and do it before sealing, or the seal cannot use it');
+
+  // Both bounds measured from the same anchor.
+  const seal = code.slice(sealAt, code.indexOf('});', sealAt));
+  assert.match(seal, /\n\s*watermark,\n/, 'the resolved value must be what is sealed');
+
+  assert.doesNotMatch(
+    code,
+    /params\.watermark\?\.trim\(\) \|\| 'XBAR'/,
+    'a second inline resolution is how the stamp and the seal drift apart',
+  );
+});
+
+/*
+ * Sealing it is only half the fix. The verifier rehashes the PAYLOAD, so an
+ * edit to the watermark on the page leaves the digest matching — the check
+ * would say pass over a packet re-attributed to someone else.
+ */
+test('the verifier compares the stamp on the page with the one in the record', async () => {
+  const verifier = await readFile('src/lib/packetVerifierScript.ts', 'utf8');
+  const code = verifier.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
+  assert.match(code, /getElementById\('xbar-watermark'\)/, 'the rendered stamp has to be read');
+  assert.match(code, /shown !== parsed\.watermark/, 'and compared against the sealed record');
+  // Removing it entirely must not read as agreement.
+  assert.match(code, /if \(!stamp\) \{/, 'a deleted watermark is a tampered packet, not a missing check');
 });
 
 test('a document type buyers may not see is never offered, selected, or embedded', async () => {

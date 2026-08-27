@@ -670,20 +670,26 @@ export function canRestorePersistedState(raw: unknown): boolean {
          *   color         `{animal.color}` — AnimalProfile.tsx:315.
          *   lastVetVisit  `formatDateLabel(horse.lastVetVisit)` — Medical.tsx:94
          *                 and :257, which throws before React is reached.
+         *   barnName      `{row.horse.barnName ? <small>{row.horse.barnName}</small>
+         *                 : null}` — Ownership.tsx:586. I excluded this field
+         *                 twice as having "no unguarded read at all", which was
+         *                 wrong both times: a truthy object passes the ternary
+         *                 and lands in JSX as a bare child.
          *   medicalNotes  `{horse.medicalTimeline[0]?.title ?? horse.medicalNotes}`
          *                 — Medical.tsx:251, a bare React child. `?.[0]` is safe
          *                 and `??` catches nothing, so on a horse with an empty
          *                 timeline — the common case — an object goes straight
          *                 to the renderer.
          *
-         * Deliberately absent, each checked: `barnName`, `markings`,
-         * `microchipId` and `tags` have no unguarded read at all;
+         * Deliberately absent, each checked: `markings`, `microchipId` and
+         * `tags` have no unguarded read at all;
          * `registrationNumber`, `aqhaNumber`, `foaledOn` and `ownerEntity`
          * appear only inside template strings, which stringify rather than
          * throw; `profileImage` reaches an `img src`, where an object renders
          * as a broken image rather than crashing.
          */
         'summary',
+        'barnName',
         'status',
         'breed',
         'registry',
@@ -719,7 +725,21 @@ export function canRestorePersistedState(raw: unknown): boolean {
       // and :397 and Horses.tsx:664, and seeds the deal room's ask at
       // buyerDealRoom.ts:145. `||` steps past a zero ask straight onto this
       // field, so it is read precisely when the guarded one is empty.
-      numbers: ['age', 'insuredValue', 'sale.askPrice', 'readiness.score'],
+      //
+      // `sale.watchlistCount` and `sale.buyerConfidence` are rendered as bare
+      // React children — `{horse.sale.watchlistCount} watchers` at
+      // SharedAccess.tsx:277 and Sales.tsx:396, and both at AnimalProfile.tsx:701
+      // and :703, where `?? 0` catches absence and not type. `sale.inquiryCount`
+      // is NOT here: `syncDerivedValues` recomputes it from the lead list on
+      // every restore, so requiring it would guard a value the app rebuilds.
+      numbers: [
+        'age',
+        'insuredValue',
+        'sale.askPrice',
+        'sale.buyerConfidence',
+        'sale.watchlistCount',
+        'readiness.score',
+      ],
       /*
        * The optional money on a horse. Each is read through a guard that
        * catches absence and not type:

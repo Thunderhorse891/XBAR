@@ -1038,6 +1038,10 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     // From a proactive sweep of every HorseRecord field, rather than another
     // round of review — this class had been arriving one collection at a time.
     'summary',
+    // `{row.horse.barnName ? <small>{row.horse.barnName}</small> : null}` —
+    // Ownership.tsx:586. Excluded twice as having no unguarded read; a truthy
+    // object passes the ternary and lands in JSX as a bare child.
+    'barnName',
     'status',
     'breed',
     'registry',
@@ -1070,7 +1074,17 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * `readiness.packetStatus` is deliberately absent: every read is a comparison
    * or a template string.
    */
-  for (const field of ['age', 'insuredValue', 'sale.askPrice', 'readiness.score']) {
+  for (const field of [
+    'age',
+    'insuredValue',
+    'sale.askPrice',
+    // Bare React children: `{horse.sale.watchlistCount} watchers` at
+    // SharedAccess.tsx:277, and both of these at AnimalProfile.tsx:701 and :703
+    // where `?? 0` catches absence and not type.
+    'sale.buyerConfidence',
+    'sale.watchlistCount',
+    'readiness.score',
+  ]) {
     assert.match(
       horsesEntry,
       new RegExp(`numbers: \\[[^\\]]*'${field.replace('.', '\\.')}'`),
@@ -1206,6 +1220,17 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     'the fallback must be the Starter seed, so a corrupt value can only shrink a limit',
   );
 
+  /*
+   * `sale.inquiryCount` is the sale metric that must NOT be required:
+   * `syncDerivedValues` recounts it from the lead list on every restore, so a
+   * guard would turn away an archive over a value the app rebuilds regardless.
+   */
+  assert.doesNotMatch(horsesEntry, /'sale\.inquiryCount'/, 'a derived field must not be required');
+  assert.match(
+    helpers,
+    /inquiryCount: leadCount,/,
+    'and that exclusion is only true while the derived sync actually rebuilds it',
+  );
   assert.doesNotMatch(shapeTable, /'readiness\.packetStatus'/, 'a compared field crashes nothing');
   assert.match(helpers, /'activity',/);
 
@@ -1394,13 +1419,18 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   // `readiness.blockers` under `lists` too would be a redundant second claim.
   assert.doesNotMatch(horseEntry, /lists: \[[^\]]*'readiness\.blockers'/, 'stringItems already asserts the array');
   /*
-   * Checked and deliberately excluded. `barnName`, `markings`, `microchipId`
-   * and `tags` have no unguarded read at all; `registrationNumber`,
-   * `aqhaNumber`, `foaledOn` and `ownerEntity` appear only inside template
-   * strings, which stringify rather than throw; `profileImage` reaches an
-   * `img src`, where an object renders as a broken image.
+   * Checked and deliberately excluded. `markings`, `microchipId` and `tags`
+   * have no unguarded read at all; `registrationNumber`, `aqhaNumber`,
+   * `foaledOn` and `ownerEntity` appear only inside template strings, which
+   * stringify rather than throw; `profileImage` reaches an `img src`, where an
+   * object renders as a broken image.
+   *
+   * `barnName` WAS on this list, twice, and did not belong: Ownership.tsx:586
+   * renders it as a bare React child behind a truthiness check. The lesson is
+   * about this list rather than that field — an exclusion is a claim about
+   * EVERY read site, and it is only as good as the grep behind it.
    */
-  for (const excluded of ['barnName', 'markings', 'microchipId', 'tags', 'aqhaNumber', 'profileImage']) {
+  for (const excluded of ['markings', 'microchipId', 'tags', 'aqhaNumber', 'profileImage']) {
     assert.doesNotMatch(horseEntry, new RegExp(`'${excluded}'`), `${excluded} has no unguarded read behind it`);
   }
   /*

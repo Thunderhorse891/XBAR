@@ -169,6 +169,29 @@ export const PACKET_VERIFIER_SCRIPT = `
           });
 
           notes.push(found.length ? 'Files rehashed from this packet: ' + found.length : 'No embedded files to rehash.');
+
+          /*
+           * The watermark on the page, against the one in the record.
+           *
+           * The generic readout below already PRINTS the sealed watermark, so a
+           * careful reader could spot a mismatch. This says it outright,
+           * because the watermark is the one sealed fact a buyer cannot check
+           * against anything else: an ask price or a transfer status can be
+           * queried with the seller, but "whose copy is this" has no second
+           * source. It is also the fact a leaker has the clearest motive to
+           * edit, and editing it is silent — the payload is untouched, so the
+           * digest still matches.
+           */
+          var stamp = document.getElementById('xbar-watermark');
+          if (parsed && typeof parsed.watermark === 'string') {
+            var shown = stamp ? (stamp.textContent || '').trim() : '';
+            if (!stamp) {
+              problems.push('The buyer watermark has been removed from this packet. It was sealed as "' + parsed.watermark + '".');
+            } else if (shown !== parsed.watermark) {
+              problems.push('This packet is stamped "' + shown + '" but was sealed for "' + parsed.watermark + '".');
+            }
+          }
+
           btn.disabled = false;
 
           /*

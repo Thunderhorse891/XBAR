@@ -48,7 +48,14 @@ import { sha256 } from './sha256.js';
  * Both land under one version because no v3 packet exists outside this branch;
  * two different payload shapes must never share a version number.
  */
-export const SALE_CREDENTIAL_VERSION = 3 as const;
+/*
+ * 4: the buyer watermark joined the sealed payload.
+ *
+ * Bumped rather than added quietly. The payload's shape is what a buyer hashes
+ * by hand, and a reader comparing two packets sealed weeks apart should be able
+ * to tell from the version alone that the covered facts differ.
+ */
+export const SALE_CREDENTIAL_VERSION = 4 as const;
 
 /** Every buyer-facing metadata field of one included document. File bytes are
  * generated server-side; these fields are what the packet renders, so covering
@@ -154,6 +161,21 @@ export interface SaleCredentialInput {
   release: CredentialRelease;
   /** Human labels of the ownership proofs that were VERIFIED at seal time. */
   verifiedProofs: string[];
+  /**
+   * The buyer-specific watermark stamped across the packet — REQUIRED.
+   *
+   * This is the packet's only means of tracing a leaked copy back to the buyer
+   * it was issued to, and it was outside the seal: a recipient could edit the
+   * watermark out of the HTML, or swap in someone else's name, and the verifier
+   * still reported a matching seal. Sealing it makes the attribution as
+   * tamper-evident as the facts beside it.
+   *
+   * Required rather than optional so a caller cannot silently seal a packet
+   * with no attribution — which is the one outcome the field exists to prevent.
+   * Callers pass the RESOLVED value (`resolvePacketWatermark`), never the raw
+   * input, so the seal and the printed page cannot describe different buyers.
+   */
+  watermark: string;
   sealedAt: string; // ISO
   sealedBy: string;
 }
@@ -216,6 +238,7 @@ export function buildCredentialPayload(input: SaleCredentialInput): string {
   const payload: Json = {
     version: SALE_CREDENTIAL_VERSION,
     passportId: input.passportId,
+    watermark: input.watermark,
     identity: {
       name: input.identity.name,
       barnName: input.identity.barnName,
@@ -289,6 +312,10 @@ function buildManifest(input: SaleCredentialInput): string[] {
     input.verifiedProofs.length
       ? `Verified proofs: ${[...input.verifiedProofs].sort().join(', ')}`
       : 'Verified proofs: none verified at seal time',
+    // Displayed beside the seal so the buyer can read who this copy was issued
+    // to out of the SEALED record, rather than off the watermark on the page —
+    // which is the copy an altered packet would have changed.
+    `Issued to (watermark): ${input.watermark}`,
   ];
 }
 

@@ -36,6 +36,7 @@ function input(overrides: Partial<SaleCredentialInput> = {}): SaleCredentialInpu
     // Most packets embed nothing; the cases that do override this.
     attachments: [],
     passportId: 'XB-7Q2K-9F3M',
+    watermark: 'Jordan Reyes · 2026-02-14',
     identity: {
       name: 'Docs Smokin Gun',
       barnName: 'Smoke',
@@ -275,4 +276,57 @@ test('the manifest says whether files were sealed by content', () => {
 test('a packet with no embedded files still seals and verifies', () => {
   const sealed = buildSaleCredential(input());
   assert.equal(verifySaleCredential(sealed.payload, sealed.digest).valid, true);
+});
+
+/*
+ * The watermark is the packet's only means of tracing a leaked copy back to the
+ * buyer it was issued to, and it was OUTSIDE the seal. A recipient could edit
+ * it out of the HTML, or swap in someone else's name, and the verifier still
+ * reported a matching seal — while the packet says the seal fingerprints every
+ * buyer-facing fact in it.
+ */
+test('the buyer watermark is sealed, so re-attributing a copy breaks the digest', () => {
+  const issued = buildSaleCredential(input({ watermark: 'Jordan Reyes · 2026-02-14' }));
+  const reattributed = buildSaleCredential(input({ watermark: 'Alex Mercer · 2026-02-14' }));
+
+  assert.notEqual(issued.digest, reattributed.digest, 'a different buyer must be a different seal');
+  assert.notEqual(issued.sealCode, reattributed.sealCode);
+  // And the payload actually carries it, so the bundled verifier can compare
+  // the stamp on the page against the record rather than only rehashing.
+  assert.equal(JSON.parse(issued.payload).watermark, 'Jordan Reyes · 2026-02-14');
+});
+
+test('removing the watermark is as detectable as changing it', () => {
+  const issued = buildSaleCredential(input({ watermark: 'Jordan Reyes · 2026-02-14' }));
+  const stripped = buildSaleCredential(input({ watermark: 'XBAR' }));
+
+  assert.notEqual(issued.digest, stripped.digest, 'falling back to the default must not be silent');
+});
+
+/*
+ * The manifest is what the buyer reads beside the seal, so the attribution has
+ * to appear THERE too — read out of the sealed record rather than off the
+ * watermark on the page, which is the copy an altered packet would have changed.
+ */
+test('the seal tells the buyer which copy this is', () => {
+  const credential = buildSaleCredential(input({ watermark: 'Jordan Reyes · 2026-02-14' }));
+
+  assert.ok(
+    credential.manifest.some((line) => line.includes('Jordan Reyes · 2026-02-14')),
+    'the sealed facts must name the buyer this copy was issued to',
+  );
+});
+
+/*
+ * Two packets identical but for the watermark must still agree on everything
+ * else. Sealing the attribution must not disturb the facts around it — a change
+ * to the payload shape that reordered or dropped a field would show here.
+ */
+test('sealing the watermark leaves the rest of the payload alone', () => {
+  const a = JSON.parse(buildSaleCredential(input({ watermark: 'A' })).payload);
+  const b = JSON.parse(buildSaleCredential(input({ watermark: 'B' })).payload);
+
+  delete a.watermark;
+  delete b.watermark;
+  assert.deepEqual(a, b, 'only the attribution may differ');
 });
