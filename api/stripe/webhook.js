@@ -1,7 +1,11 @@
 import Stripe from 'stripe';
 import { readRawBody, sendJson } from '../_lib/http.js';
 import { buildSubscriptionProfile, findTierByPriceId } from '../_lib/subscription-plans.js';
-import { resolveWebhookTier } from '../_lib/subscription-status.js';
+import {
+  billingStateForStripeStatus,
+  isEntitledBillingState,
+  resolveWebhookTier,
+} from '../_lib/subscription-status.js';
 import { getSupabaseAdmin } from '../_lib/supabase-admin.js';
 
 export const config = {
@@ -13,6 +17,37 @@ export const config = {
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY || '';
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026-02-25.clover' }) : null;
+
+/*
+ * The subscription that still entitles this CUSTOMER, if any other one does.
+ *
+ * The workspace billing row is per-workspace; Stripe subscriptions are per
+ * customer, and a customer can have more than one. The checkout lock added in
+ * this change exists precisely because the previous flow could create a second
+ * Checkout Session for the same workspace — so duplicates are not hypothetical,
+ * they are the state this branch was written without.
+ *
+ * With two subscriptions, cancelling either one used to deactivate the whole
+ * workspace: the deleted payload was trusted as the final word, the row was
+ * overwritten with `Inactive` and the canceled subscription's id, and the
+ * sibling went on charging. The customer keeps paying and loses access, which
+ * is the worst direction of the two.
+ *
+ * Only consulted when the event would DEACTIVATE. On the ordinary path — one
+ * subscription, or an event that entitles — nothing here runs and no extra
+ * Stripe call is made.
+ */
+export async function findEntitlingSibling(stripe, customerId, canceledSubscriptionId) {
+  const { data } = await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 100 });
+
+  return (
+    (data ?? []).find(
+      (candidate) =>
+        candidate.id !== canceledSubscriptionId &&
+        isEntitledBillingState(billingStateForStripeStatus(candidate.status)),
+    ) ?? null
+  );
+}
 
 async function syncWorkspaceSubscription({
   workspaceId,
@@ -226,12 +261,31 @@ export default async function handler(req, res) {
         if (event.type === 'customer.subscription.updated' && payload.id) {
           effective = await stripe.subscriptions.retrieve(payload.id);
         }
+
+        /*
+         * A workspace is not deactivated while another subscription still pays
+         * for it. See `findEntitlingSibling`.
+         *
+         * Deliberately NOT wrapped in a try: a list call that fails leaves the
+         * question unanswered, and answering it wrongly deactivates a paying
+         * customer. Throwing writes nothing and leaves the event for Stripe to
+         * retry — the same choice the profile read above makes, for the same
+         * reason.
+         */
+        if (customerId && !isEntitledBillingState(billingStateForStripeStatus(effective.status))) {
+          const sibling = await findEntitlingSibling(stripe, customerId, payload.id);
+          if (sibling) effective = sibling;
+        }
+
         const effectiveLineItem = effective.items?.data?.[0] ?? lineItem;
 
         await syncWorkspaceSubscription({
           workspaceId: resolvedWorkspaceId,
           customerId,
-          subscriptionId: payload.id,
+          // The subscription the row DESCRIBES, which is the sibling when one
+          // was adopted above — writing the canceled id there would point the
+          // workspace's billing record at a subscription that no longer exists.
+          subscriptionId: effective.id || payload.id,
           priceId: effectiveLineItem?.price?.id || '',
           status: effective.status,
           currentPeriodEnd: effective.current_period_end,
