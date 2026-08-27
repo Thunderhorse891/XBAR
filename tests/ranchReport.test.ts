@@ -699,12 +699,34 @@ test('a horse the report counts as listed is never labelled unlisted', async () 
     'the row must distinguish "no price yet" from "not for sale"',
   );
 
-  const report = await readFile('src/lib/ranchReport.ts', 'utf8');
-  assert.match(
-    report,
-    /saleInventory: isSaleInventory\(horse\),/,
-    'and it must come from the same predicate the count uses, not a second derivation',
+  /*
+   * The count and the rows must agree — asserted on the OUTPUT rather than on
+   * the expression, which is what this used to match. A textual pin broke the
+   * moment the predicate legitimately gained a term (won leads leaving the
+   * inventory) and said nothing about whether the two had actually diverged;
+   * this fails only when they really do contradict each other.
+   */
+  const mixed = buildRanchReport(
+    input({
+      horses: [
+        horse({ id: 'h1', name: 'Priced', sale: sale({ askPrice: 30_000 }) }),
+        // In Sale Prep with no asking price: inventory, and the case the
+        // second derivation (`askPrice > 0`) used to get wrong.
+        horse({ id: 'h2', name: 'No Price Yet', status: 'Sale Prep' }),
+        horse({ id: 'h3', name: 'Sold', sale: sale({ askPrice: 20_000 }) }),
+        horse({ id: 'h4', name: 'Not For Sale' }),
+      ],
+      salesLeads: [lead({ id: 'l1', horseId: 'h3', outcome: 'Won', stage: 'Closed', offerAmount: 19_000 })],
+    }),
+    NOW,
   );
+
+  assert.equal(
+    mixed.listedCount,
+    mixed.horses.filter((row) => row.saleInventory).length,
+    'the summary count and the rows underneath it must never contradict each other',
+  );
+  assert.equal(mixed.listedCount, 2, 'the priced horse and the Sale Prep one, not the sold or unlisted ones');
 });
 
 test('the exported report agrees with the screen about what is for sale', async () => {
@@ -753,4 +775,68 @@ test('the blocked-value figure is not labelled after one of its causes', async (
 
   assert.match(reports, /label="Held up"/, 'the card and the hero must use one word for one number');
   assert.match(exporter, /Held up by blockers: \$\{money\(report\.money\.valueAtRisk\)\}/);
+});
+
+test('a horse sold on a won lead leaves the sale inventory', () => {
+  /*
+   * Closing a lead as Won leaves the horse's `askPrice` and `listingState`
+   * untouched — the Sales editor changes the lead, not the horse — so the old
+   * asking price kept appearing under "Listed" long after the money came in,
+   * while buildRanchFinancials already counted the same animal as sold. The
+   * Money screen and the banker-facing report disagreed about one horse.
+   */
+  const sold = horse({ id: 'h1', name: 'Sold Horse', sale: sale({ askPrice: 50_000, listingState: 'Market Ready' }) });
+  const listed = horse({
+    id: 'h2',
+    name: 'Still Listed',
+    sale: sale({ askPrice: 30_000, listingState: 'Market Ready' }),
+  });
+
+  const before = buildRanchReport(input({ horses: [sold, listed] }), NOW);
+  assert.equal(before.listedCount, 2, 'precondition: both horses are sale inventory while no lead is won');
+
+  const after = buildRanchReport(
+    input({
+      horses: [sold, listed],
+      salesLeads: [lead({ id: 'l1', horseId: 'h1', outcome: 'Won', stage: 'Closed', offerAmount: 48_000 })],
+    }),
+    NOW,
+  );
+
+  assert.equal(after.listedCount, 1, 'a sold horse is not listed inventory');
+  assert.equal(after.horseCount, 2, 'but it is still part of the herd — only the sale figures change');
+
+  const soldRow = after.horses.find((row) => row.horseId === 'h1');
+  const listedRow = after.horses.find((row) => row.horseId === 'h2');
+  assert.equal(soldRow?.saleInventory, false, 'the row must not claim the horse is still for sale');
+  assert.equal(listedRow?.saleInventory, true, 'and the unsold one must be untouched');
+
+  /*
+   * The listed value is the number a banker reads as "what is still on the
+   * shelf". Carrying a sold horse's asking price in it overstates the
+   * operation's position by the whole sale price.
+   */
+  assert.ok(
+    after.money.listedValue < before.money.listedValue,
+    'the sold horse must drop out of listed value, not merely out of the count',
+  );
+  assert.equal(after.money.listedValue, 30_000, 'leaving exactly the horse that is still for sale');
+});
+
+test('a lost lead does not remove a horse from the sale inventory', () => {
+  // The counter-case, because the stage moves independently of the outcome: a
+  // lead can sit in 'Closed' having been LOST, and that horse is still for
+  // sale. Filtering on the stage rather than the outcome would quietly write
+  // off every animal whose deal fell through.
+  const listed = horse({ id: 'h1', name: 'Deal Fell Through', sale: sale({ askPrice: 30_000 }) });
+  const report = buildRanchReport(
+    input({
+      horses: [listed],
+      salesLeads: [lead({ id: 'l1', horseId: 'h1', outcome: 'Lost', stage: 'Closed' })],
+    }),
+    NOW,
+  );
+
+  assert.equal(report.listedCount, 1, 'a lost deal leaves the horse on the market');
+  assert.equal(report.money.listedValue, 30_000);
 });

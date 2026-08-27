@@ -520,6 +520,16 @@ export function canRestorePersistedState(raw: unknown): boolean {
        * so it does not need repeating under `lists`.
        */
       stringItems?: string[];
+      /*
+       * Scalars that must be a string WHEN PRESENT, named by path.
+       *
+       * `strings` demands presence, and demanding an optional field turns away
+       * every archive that legitimately omits it — over-rejection, which loses
+       * a good backup rather than a broken one. Every DocumentEntities field is
+       * optional and almost all of them are read with `?.trim()`, which guards
+       * null and undefined and nothing else.
+       */
+      optionalStrings?: string[];
     }
   > = {
     horses: {
@@ -538,6 +548,19 @@ export function canRestorePersistedState(raw: unknown): boolean {
         'ownership',
         'documents',
         'activity',
+        /*
+         * `[nextNote, ...horse.notes]` — useXbarStore.ts:1591. Spreading
+         * `undefined` throws, and normalization backfills only
+         * `documentFacts`, so a backup that simply omits `notes` restores
+         * cleanly and then fails the first time someone adds a note.
+         *
+         * The CONTAINER only, deliberately: no `itemShapes` entry, because
+         * nothing ever reads an existing note. That spread is the single read
+         * of this array in the codebase — no route renders a note, nothing
+         * iterates them — so validating the entries would guard a crash that
+         * cannot happen and could only turn away a valid archive.
+         */
+        'notes',
         // `horse.readiness.blockers.filter()` — useXbarStore.ts:1205, on the
         // first qualifying photo upload, after the media file is stored.
         'readiness.blockers',
@@ -581,14 +604,58 @@ export function canRestorePersistedState(raw: unknown): boolean {
            */
           optionalStrings: ['decision'],
         },
-        // `horse.alerts.some(...)` reads fields off each alert — xbarPhaseTwo.ts:253.
-        alerts: {},
+        /*
+         * `{a.title}` and `{a.summary} · {a.module}` are rendered on the Tasks
+         * tab — AnimalProfile.tsx:631-634 — and `a.id` is the React key. An
+         * entry that was merely a plain object satisfied this before, so
+         * `alerts: [{ title: {}, summary: '', module: '', severity: 'low' }]`
+         * installed and then crashed the tab. All five have been required by
+         * HorseAlert since the first commit of types/xbar.ts.
+         */
+        alerts: { strings: ['id', 'title', 'summary', 'severity', 'module'] },
       },
     },
     // `document.entities.horseName` and four siblings — Documents.tsx:724.
     // `document.title.trim()` — useXbarStore.ts:842, beside optional-chained
     // siblings, which is what makes it easy to miss.
-    documents: { objects: ['entities'], strings: ['title'] },
+    documents: {
+      objects: ['entities'],
+      strings: ['title'],
+      /*
+       * Every field of DocumentEntities, because every one of them is read
+       * without a type check and all of them are optional.
+       *
+       * Two shapes of crash, both after the archive and its files are
+       * installed. Documents.tsx:723-729 builds `entityRows` and filters on
+       * `Boolean(row.value)` — `{}` is truthy — then renders `{row.value}`:
+       * "Objects are not valid as a React child". And `entities.registry
+       * ?.trim()` in xbarStoreLogic.ts:319-354 and its ten siblings throw a
+       * TypeError, because optional chaining stops at null and undefined and
+       * says nothing about an object.
+       *
+       * The whole interface rather than only the five Documents.tsx displays:
+       * `sex`, `breed`, `color`, `foaledOn`, `sire`, `dam` and their
+       * registrations all reach `.trim()` through the enrichment path, which a
+       * grep for "rendered" would have walked straight past.
+       */
+      optionalStrings: [
+        'entities.horseName',
+        'entities.registrationNumber',
+        'entities.registry',
+        'entities.sex',
+        'entities.color',
+        'entities.breed',
+        'entities.foaledOn',
+        'entities.sire',
+        'entities.sireRegistration',
+        'entities.dam',
+        'entities.damRegistration',
+        'entities.ownerName',
+        'entities.examDate',
+        'entities.veterinarian',
+        'entities.transferStatus',
+      ],
+    },
     /*
      * `record.legalOwner` → `rawName.trim()` — commandPalette.ts:134.
      * `selectedRecord.auditTrail.length` — Ownership.tsx:787.
@@ -724,6 +791,14 @@ export function canRestorePersistedState(raw: unknown): boolean {
        * child and as that child's own key — so a non-string throws "Objects
        * are not valid as a React child" during the rerender, not at the read.
        */
+      /*
+       * Optional scalars on the record itself, resolved by path so a field
+       * nested inside a validated object can be named.
+       */
+      for (const field of shape.optionalStrings ?? []) {
+        const value = valueAtPath(record, field);
+        if (value !== undefined && value !== null && typeof value !== 'string') return false;
+      }
       for (const list of shape.stringItems ?? []) {
         const items = valueAtPath(record, list);
         if (!Array.isArray(items)) return false;

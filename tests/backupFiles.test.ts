@@ -17,6 +17,7 @@ import {
   adoptVaultEntries,
 } from '../src/lib/localFileVault.js';
 import { resolvePacketAttachments } from '../src/lib/localPacketAttachments.js';
+import { promoteLocalVaultFiles } from '../src/lib/workspacePromotion.js';
 import { installFakeIndexedDb } from './helpers/fakeIndexedDb.js';
 
 /** The workspace these tests write as. The vault is origin-wide, so every
@@ -1003,8 +1004,8 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    */
   assert.equal(
     (helpers.match(/valueAtPath\(record, /g) ?? []).length,
-    5,
-    'objects, lists, strings, item shapes and string items must all resolve paths, or a valid archive is rejected',
+    6,
+    'every loop must resolve paths — objects, lists, strings, item shapes, optional scalars and string items — or a valid archive is rejected',
   );
 
   /*
@@ -1033,7 +1034,85 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * survived the previous sweep.
    */
   assert.match(helpers, /'owner', 'segment'\]/, 'horse.owner reaches rawName.trim() through a helper');
-  assert.match(helpers, /documents: \{ objects: \['entities'\], strings: \['title'\] \}/);
+  assert.match(shapeTable, /documents: \{\s*objects: \['entities'\],\s*strings: \['title'\],/);
+
+  /*
+   * The entity VALUES, not just the `entities` container. Two shapes of crash,
+   * both after the archive and its files are installed: Documents.tsx builds
+   * `entityRows`, filters on `Boolean(row.value)` — `{}` is truthy — and
+   * renders `{row.value}`; and `entities.registry?.trim()` and its ten
+   * siblings throw a TypeError, because optional chaining stops at null and
+   * undefined and says nothing about an object.
+   *
+   * Every field of the interface, because every one is optional and nearly all
+   * of them reach `.trim()` through the enrichment path — `sex`, `breed`,
+   * `sire` and the rest are never rendered, so a sweep for displayed fields
+   * walks straight past them.
+   */
+  for (const field of [
+    'horseName',
+    'registrationNumber',
+    'registry',
+    'sex',
+    'color',
+    'breed',
+    'foaledOn',
+    'sire',
+    'sireRegistration',
+    'dam',
+    'damRegistration',
+    'ownerName',
+    'examDate',
+    'veterinarian',
+    'transferStatus',
+  ]) {
+    assert.match(shapeTable, new RegExp(`'entities\\.${field}'`), `entities.${field} is read without a type check`);
+  }
+  const entityFields = Object.keys(
+    (
+      (await readFile('src/types/xbar.ts', 'utf8')).match(/export interface DocumentEntities \{([\s\S]*?)\n\}/)?.[1] ??
+      ''
+    )
+      .split('\n')
+      .reduce<Record<string, true>>((all, line) => {
+        const name = line.match(/^\s*(\w+)\??:/)?.[1];
+        if (name) all[name] = true;
+        return all;
+      }, {}),
+  );
+  assert.ok(entityFields.length > 0, 'the interface must be findable, or the next assertion proves nothing');
+  for (const field of entityFields) {
+    // Driven off the TYPE, so a field added later fails here instead of
+    // silently becoming a new way to crash the Documents queue.
+    assert.match(shapeTable, new RegExp(`'entities\\.${field}'`), `DocumentEntities.${field} is unvalidated`);
+  }
+  assert.match(
+    helperCode,
+    /for \(const field of shape\.optionalStrings \?\? \[\]\) \{\s*const value = valueAtPath\(record, field\);/,
+    'optional record scalars must resolve a path, so a field nested in a validated object can be named',
+  );
+
+  /*
+   * `alerts` accepted any plain object, so
+   * `alerts: [{ title: {}, summary: '', module: '', severity: 'low' }]`
+   * installed and then crashed the Tasks tab, which renders `{a.title}` and
+   * `{a.summary} · {a.module}`.
+   */
+  assert.match(shapeTable, /alerts: \{ strings: \['id', 'title', 'summary', 'severity', 'module'\] \}/);
+
+  /*
+   * `notes` was missing from the required arrays entirely. Normalization
+   * backfills only `documentFacts`, so a backup that omits it restores cleanly
+   * and throws on `[nextNote, ...horse.notes]` the first time someone adds a
+   * note.
+   *
+   * The CONTAINER only: no `itemShapes` entry, because that spread is the only
+   * read of this array anywhere — nothing renders or iterates an existing note
+   * — so validating the entries would guard a crash that cannot happen and
+   * could only turn away a valid archive.
+   */
+  assert.match(shapeTable, /'notes',/);
+  assert.doesNotMatch(shapeTable, /notes: \{/, 'a guard with no read behind it is over-rejection waiting to happen');
   assert.match(helpers, /'ownership',\s*'documents',/, 'horse.ownership and horse.documents are read as arrays');
 
   // A missing primitive fails on the TYPE, not on emptiness: the empty string
@@ -1273,4 +1352,89 @@ test('a new workspace claims its records on the path first-run actually takes', 
     'and the update path still must, since either can be the first workspace this browser owns',
   );
   assert.equal(markers.length, 3, 'creation, update, and the backup import — a new one needs reviewing');
+});
+
+/*
+ * A localStorage the records-owner marker can actually be read from, since
+ * `readRecordsOwner` is what now decides whether a promotion may take files.
+ */
+function installRecordsOwner(value: string | null) {
+  const previous = (globalThis as { window?: unknown }).window;
+  const store = new Map<string, string>();
+  if (value !== null) store.set('xbar-records-owner', value);
+  (globalThis as { window?: unknown }).window = {
+    localStorage: {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, next: string) => store.set(key, next),
+      removeItem: (key: string) => store.delete(key),
+    },
+  };
+  return {
+    read: () => store.get('xbar-records-owner') ?? null,
+    restore: () => {
+      if (previous === undefined) delete (globalThis as { window?: unknown }).window;
+      else (globalThis as { window?: unknown }).window = previous;
+    },
+  };
+}
+
+/** Store one `'local'` file and hand back the workspace shape that names it. */
+async function localWorkspaceWithFile() {
+  const key = await storeLocalFile(new Blob(['coggins']), 'coggins.pdf', 'application/pdf', 'local');
+  return { key, workspace: { documents: [{ localFileKey: key }] } };
+}
+
+async function ownerOf(key: string) {
+  const files = await listLocalFiles();
+  return files.find((file) => file.key === key)?.workspaceId ?? null;
+}
+
+for (const [label, marker] of [
+  ['never recorded', null],
+  ['recorded as local', 'local'],
+] as const) {
+  test(`a promotion takes this device's files when the records are its own (${label})`, async () => {
+    const restoreDb = installFakeIndexedDb();
+    const marker$ = installRecordsOwner(marker);
+    try {
+      const { key, workspace } = await localWorkspaceWithFile();
+      const result = await promoteLocalVaultFiles(workspace, 'ws-new');
+
+      assert.equal(result.adopted, 1, 'the rancher signing in must keep their own documents');
+      assert.deepEqual(result.failed, []);
+      assert.equal(await ownerOf(key), 'ws-new');
+      assert.equal(marker$.read(), 'ws-new', 'a complete move records who the records now belong to');
+    } finally {
+      marker$.restore();
+      restoreDb();
+    }
+  });
+}
+
+test('a promotion does not take files the records merely reference', async () => {
+  /*
+   * Import a backup while signed in and the records become the signed-in
+   * workspace's, while any file the archive omitted is still on this device
+   * tagged `'local'` and still named by those records — `importWorkspaceBackup`
+   * warns about exactly those references. Adopting on a key match alone hands
+   * the local ranch's documents to the signed-in workspace, which can then open
+   * and export them while the ranch they belong to cannot reach them at all.
+   *
+   * The marker is what separates a promotion from an import: it names a
+   * workspace these records ALREADY belong to, so they were never local.
+   */
+  const restoreDb = installFakeIndexedDb();
+  const marker$ = installRecordsOwner('ws-imported');
+  try {
+    const { key, workspace } = await localWorkspaceWithFile();
+    const result = await promoteLocalVaultFiles(workspace, 'ws-imported');
+
+    assert.equal(result.adopted, 0, 'a key collision is not proof of ownership');
+    assert.deepEqual(result.failed, [], 'and declining is not a failure to move');
+    assert.equal(await ownerOf(key), 'local', 'the file stays with the ranch it belongs to');
+    assert.equal(marker$.read(), 'ws-imported', 'and the marker is not rewritten by a promotion that did not happen');
+  } finally {
+    marker$.restore();
+    restoreDb();
+  }
 });

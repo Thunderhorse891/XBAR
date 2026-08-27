@@ -161,7 +161,37 @@ function trailingMonthlyBurn(receipts: ExpenseReceipt[], now: Date): number {
 export function buildRanchReport(input: RanchReportInput, now: Date = new Date()): RanchReport {
   const { horses, documents, expenseReceipts, salesLeads, ownershipRecords } = input;
 
-  const risk = assessRevenueAtRisk(horses, ownershipRecords, documents, now);
+  /*
+   * A horse with a Won lead has been SOLD, and the sale fields do not say so.
+   *
+   * Closing a lead as Won leaves the horse's `askPrice` and `listingState`
+   * exactly as they were — the Sales editor changes the lead, not the horse —
+   * so `isSaleInventory` still returns true and the old asking price kept
+   * appearing under "Listed", "Ready to close" and "Held up" long after the
+   * money came in. buildRanchFinancials already treats the same horse as
+   * `'sold'`, so the Money screen and this report disagreed about the same
+   * animal, in the UI, the CSV and the banker-facing PDF alike.
+   *
+   * `depositsHeld` below already carries this exact correction for the same
+   * reason: a stale field left behind by a completed sale.
+   *
+   * Won, not Closed: the STAGE moves independently of the outcome, and a lead
+   * can sit in Closed having been lost. Only an outcome of Won means the animal
+   * left the herd.
+   */
+  const soldHorseIds = new Set(
+    salesLeads.filter((lead) => lead.outcome === 'Won' && lead.horseId).map((lead) => lead.horseId),
+  );
+  const isSold = (horse: HorseRecord) => soldHorseIds.has(horse.id);
+  /*
+   * Sold horses are excluded from the RISK assessment, not from the report.
+   * They keep their economics row below — what the operation put into them is
+   * still real money and still belongs in the totals — but revenue that has
+   * already been collected is not revenue at risk, and its blockers are moot.
+   */
+  const saleInventoryHorses = horses.filter((horse) => !isSold(horse));
+
+  const risk = assessRevenueAtRisk(saleInventoryHorses, ownershipRecords, documents, now);
   const blockersByHorse = new Map(risk.items.map((item) => [item.horseId, item.blockers]));
 
   const horseRows: HorseEconomicsRow[] = horses.map((horse) => {
@@ -170,7 +200,7 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
       horseId: horse.id,
       horseName: horse.name,
       status: horse.status,
-      saleInventory: isSaleInventory(horse),
+      saleInventory: isSaleInventory(horse) && !isSold(horse),
       investedToDate: economics.costToDate,
       monthlyBurn: economics.monthlyBurn,
       askPrice: economics.askPrice,
@@ -254,7 +284,7 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
     // `askPrice > 0` here counted fewer horses than the blockers list directly
     // below reported on — a horse in Sale Prep with no price yet is sale
     // inventory, and the report disagreed with itself about that.
-    listedCount: horses.filter(isSaleInventory).length,
+    listedCount: saleInventoryHorses.filter(isSaleInventory).length,
     documentsToReview: documents.filter(
       (document) => document.state === 'Needs Review' || document.state === 'Queued' || document.state === 'Matched',
     ).length,
