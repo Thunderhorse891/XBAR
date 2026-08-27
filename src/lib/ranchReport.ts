@@ -131,8 +131,28 @@ function sameMonth(value: string, now: Date): boolean {
   return monthKeyOf(value) === monthKeyForDate(now);
 }
 
+/*
+ * Every money total in this report goes through here, so this is where a value
+ * that is not a number has to stop.
+ *
+ * `+` on a string CONCATENATES. Two captured offers of "1000" and "2000" made
+ * the pipeline figure 10002000 rather than 3000 — off by a factor of three
+ * thousand, on the page handed to a banker, with nothing on screen to suggest
+ * anything was wrong. An object contributes NaN, which at least shows.
+ *
+ * Every writer of these fields is now type-checked (the restore shape table
+ * refuses a non-finite amount, and `captureBuyerRoomOffer` and
+ * `buildBuyerRoomEvent` both gate on `Number.isFinite`), so this is a backstop
+ * rather than the fix. It is worth having anyway: a figure someone borrows
+ * against should not depend on every upstream writer having been careful.
+ *
+ * A value that cannot be trusted contributes NOTHING rather than being coerced.
+ * Coercing "1000" to 1000 would guess at what corrupt data meant; dropping it
+ * understates the total, and for a pipeline figure understating is the safe
+ * direction to be wrong in.
+ */
 function sum(values: number[]): number {
-  return values.reduce((total, value) => total + value, 0);
+  return values.reduce((total, value) => (Number.isFinite(value) ? total + value : total), 0);
 }
 
 /**

@@ -1007,13 +1007,22 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * first: `formatDateLabel(event.at)` throws a TypeError before React is
    * involved, and `{event.note || ...}` renders a truthy object into JSX.
    *
-   * `horseId` and `amount` stay out — the first is only compared, and the
-   * second renders as "NaN" rather than throwing.
+   * `horseId` stays out — it is only compared. `amount` does NOT: see below.
    */
-  assert.match(
-    shapeTable,
-    /buyerRoomEvents: \{ strings: \['id', 'kind', 'at', 'actor'\], optionalStrings: \['note'\] \}/,
-  );
+  const eventsStart = shapeTable.indexOf('buyerRoomEvents: {');
+  const eventsEntry = shapeTable.slice(eventsStart, shapeTable.indexOf('ranchAssets:', eventsStart));
+  assert.ok(eventsStart > -1 && eventsEntry.length > 0, 'the buyerRoomEvents entry must be findable');
+  assert.match(eventsEntry, /strings: \['id', 'kind', 'at', 'actor'\]/);
+  assert.match(eventsEntry, /optionalStrings: \['note'\]/);
+  /*
+   * `amount` was excluded on the reasoning that a non-number only renders as
+   * NaN, which was checked against ONE of its two readers. `captureBuyerRoomOffer`
+   * gates on `event.amount && event.amount > 0` — a string passes by coercion —
+   * and writes it into `SalesLead.offerAmount`, where the report SUMS it, so a
+   * second captured offer concatenates rather than adds.
+   */
+  assert.match(eventsEntry, /optionalNumbers: \['amount'\]/, 'a string amount reaches the pipeline total');
+  assert.doesNotMatch(eventsEntry, /'horseId'/, 'a compared field crashes nothing');
   assert.match(
     shapeTable,
     /ranchAssets: \{\s*strings: \['id', 'name', 'category', 'assignedTo', 'location', 'status', 'condition', 'nextService', 'notes'\],\s*\}/,
@@ -1110,6 +1119,49 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     helperCode,
     /for \(const field of shape\.optionalNumbers \?\? \[\]\) \{[\s\S]*?if \(value === undefined \|\| value === null\) continue;[\s\S]*?Number\.isFinite\(value\)/,
     'optionalNumbers must allow absence and refuse a wrong type',
+  );
+
+  /*
+   * The subscription is not in this table at all — it is a single object, not a
+   * collection — and its usage counters were merged with `?? fallback`, which
+   * hands an object through. Four of the thirteen were not in that merge at
+   * all. `{subscription.usage.seatsUsed}/{subscription.usage.seatLimit}` at
+   * Settings.tsx:787 renders both as bare React children, and Settings is
+   * MOUNTED while an import lands.
+   *
+   * So this one is NORMALIZED rather than refused: three counters are recomputed
+   * by syncDerivedValues moments later, and turning away a whole backup over a
+   * value the app rebuilds anyway is over-rejection.
+   */
+  assert.match(
+    helperCode,
+    /usage: normalizeSubscriptionUsage\(\{/,
+    'the restored usage counters must go through the normalizer',
+  );
+  assert.match(
+    helperCode,
+    /function normalizeSubscriptionUsage[\s\S]*?Number\.isFinite\(value\) \? \(value as number\) : defaults\[key\]/,
+    'a non-finite counter must fall back to the seed rather than reaching the screen',
+  );
+  /*
+   * Driven off the seed's own keys rather than a written-out list, so a counter
+   * added later is covered without anyone remembering. A list is what left
+   * `seatLimit` out in the first place.
+   */
+  assert.match(
+    helperCode,
+    /function normalizeSubscriptionUsage[\s\S]*?Object\.keys\(defaults\)/,
+    'the normalizer must iterate the shape, not a list that will be wrong again',
+  );
+  /*
+   * And the fallback must be the SEED, which is Starter — the smallest of the
+   * limits. Falling back to anything larger would let a corrupt backup WIDEN an
+   * entitlement, which is the one direction this must never go.
+   */
+  assert.match(
+    helperCode,
+    /function normalizeSubscriptionUsage[\s\S]*?const defaults = initialState\.subscription\.usage;/,
+    'the fallback must be the Starter seed, so a corrupt value can only shrink a limit',
   );
 
   assert.doesNotMatch(shapeTable, /'readiness\.packetStatus'/, 'a compared field crashes nothing');

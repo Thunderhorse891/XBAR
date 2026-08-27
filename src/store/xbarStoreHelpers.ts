@@ -139,6 +139,42 @@ export function syncDerivedValues(
   };
 }
 
+/*
+ * Every subscription usage counter, forced to a finite number.
+ *
+ * These were merged with `?? fallback`, which catches null and undefined and
+ * hands a truthy object straight through — and four of the thirteen counters
+ * were not mentioned in that merge at all, arriving through the spread
+ * untouched. `seatLimit` is one of them, and Settings.tsx:787 renders
+ * `{subscription.usage.seatsUsed}/{subscription.usage.seatLimit}` as bare React
+ * children. Settings is MOUNTED while an import lands, so the rerender crashes
+ * the screen the rancher is standing on, after the archive has been installed.
+ *
+ * `clampSubscriptionToEntitlement` does not save this: it returns the profile
+ * UNCHANGED when the billing state is entitled, which is precisely the case
+ * where a paid workspace keeps its own limits.
+ *
+ * Normalized rather than refused. Three of these are recomputed by
+ * `syncDerivedValues` moments later and two more are recounted here, so
+ * turning away a whole backup over a counter the app rebuilds anyway would be
+ * over-rejection. The fallback is the SEED, which is the Starter tier and
+ * therefore the smallest of the limits — a corrupt value can only ever shrink
+ * an entitlement, never widen one.
+ *
+ * Driven off the shape of the seed rather than a written-out list of field
+ * names, so a counter added later is covered without anyone remembering to add
+ * it here.
+ */
+function normalizeSubscriptionUsage(usage: Partial<SubscriptionProfile['usage']>): SubscriptionProfile['usage'] {
+  const defaults = initialState.subscription.usage;
+  const normalized = { ...defaults };
+  for (const key of Object.keys(defaults) as (keyof SubscriptionProfile['usage'])[]) {
+    const value = usage[key];
+    normalized[key] = Number.isFinite(value) ? (value as number) : defaults[key];
+  }
+  return normalized;
+}
+
 export function normalizeDocumentState(value: unknown): DocumentRecord['state'] {
   if (
     value === 'Queued' ||
@@ -957,7 +993,24 @@ export function canRestorePersistedState(raw: unknown): boolean {
      * is wrong on screen but not a crash, and the table has no vocabulary for
      * an optional number.
      */
-    buyerRoomEvents: { strings: ['id', 'kind', 'at', 'actor'], optionalStrings: ['note'] },
+    /*
+     * `amount` was excluded on the reasoning that a non-number only renders as
+     * NaN. That was checked against ONE of its two readers. buyerDealRoom.ts:77
+     * does filter on `typeof event.amount === 'number'` — but
+     * `captureBuyerRoomOffer` (useXbarStore.ts:2311) gates on
+     * `event.amount && event.amount > 0`, which a STRING passes by coercion,
+     * and then writes it verbatim into `SalesLead.offerAmount`. From there the
+     * report's `sum` concatenates instead of adding, so two captured offers of
+     * "1000" and "2000" become 10002000 in the pipeline figure and in the
+     * banker's export.
+     *
+     * `horseId` stays out: every read of it is a comparison.
+     */
+    buyerRoomEvents: {
+      strings: ['id', 'kind', 'at', 'actor'],
+      optionalStrings: ['note'],
+      optionalNumbers: ['amount'],
+    },
     /*
      * `a.name/.category/.assignedTo.toLowerCase()` — RanchAssets.tsx:176-178,
      * evaluated only once someone types in the inventory search, so the route
@@ -1235,7 +1288,7 @@ export function restorePersistedState(raw: unknown): PersistedXbarState {
             (state.subscription as SubscriptionProfile).sharedAccessEnabled ??
             (state.subscription as SubscriptionProfile & { ownerPortalEnabled?: boolean }).ownerPortalEnabled ??
             initialState.subscription.sharedAccessEnabled,
-          usage: {
+          usage: normalizeSubscriptionUsage({
             ...(state.subscription as SubscriptionProfile).usage,
             horsesUsed: usage.horsesUsed ?? horses.length,
             horseLimit: usage.horseLimit ?? initialState.subscription.usage.horseLimit,
@@ -1251,7 +1304,7 @@ export function restorePersistedState(raw: unknown): PersistedXbarState {
               usage.sharedAccessSeatLimit ??
               usage.portalSeatLimit ??
               initialState.subscription.usage.sharedAccessSeatLimit,
-          },
+          }),
         }
       : initialState.subscription;
 

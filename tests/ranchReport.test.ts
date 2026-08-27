@@ -930,6 +930,73 @@ test('a won lead never counts as open pipeline, even back in an Offer stage', ()
   assert.equal(live.money.pipelineValue, 48_000, 'an open offer is still pipeline');
 });
 
+/*
+ * A string in a money field concatenates rather than adds.
+ *
+ * `captureBuyerRoomOffer` gated on `event.amount && event.amount > 0`, which
+ * the STRING "1000" satisfies by coercion, and wrote it straight into
+ * `SalesLead.offerAmount`. `sum` then reduced with `+`, so two such offers made
+ * the pipeline figure 10002000 instead of 3000 — wrong by a factor of three
+ * thousand, on the page handed to a banker, with nothing on screen to say so.
+ *
+ * This is the reporting backstop. The writers are guarded separately.
+ */
+test('a money field that is not a number cannot inflate a banker-facing total', () => {
+  const leads = [
+    lead({ id: 'l1', horseId: 'h1', stage: 'Offer', offerAmount: '1000' as never }),
+    lead({ id: 'l2', horseId: 'h1', stage: 'Offer', offerAmount: '2000' as never }),
+  ];
+  const report = buildRanchReport(
+    input({
+      horses: [horse({ id: 'h1', name: 'Docs Best Chex' })],
+      salesLeads: leads,
+      expenseReceipts: [receipt({ id: 'r1', amount: 100 })],
+    }),
+    NOW,
+  );
+
+  assert.ok(Number.isFinite(report.money.pipelineValue), 'the figure must stay a number');
+  assert.notEqual(report.money.pipelineValue, 10002000, 'concatenation is the bug this exists to stop');
+  assert.equal(report.money.pipelineValue, 0, 'a value the report cannot trust contributes nothing');
+});
+
+/*
+ * And a real offer beside an untrusted one still counts. Dropping every value
+ * once one is bad would be the over-correction: it would empty the pipeline
+ * figure rather than merely refusing the part it cannot read.
+ */
+test('an untrusted amount does not take the trustworthy ones down with it', () => {
+  const report = buildRanchReport(
+    input({
+      horses: [horse({ id: 'h1', name: 'Docs Best Chex' })],
+      salesLeads: [
+        lead({ id: 'l1', horseId: 'h1', stage: 'Offer', offerAmount: '1000' as never }),
+        lead({ id: 'l2', horseId: 'h1', stage: 'Offer', offerAmount: 4_000 }),
+      ],
+      expenseReceipts: [receipt({ id: 'r1', amount: 100 })],
+    }),
+    NOW,
+  );
+
+  assert.equal(report.money.pipelineValue, 4_000, 'the good offer survives');
+});
+
+/*
+ * The root cause, at the writer. Asserted against the source because the store
+ * action needs React plumbing this suite does not have.
+ */
+test('a buyer-room offer is captured only when its amount is really a number', async () => {
+  const store = await readFile('src/store/useXbarStore.ts', 'utf8');
+  const code = store.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  // Both bounds measured from the SAME anchor.
+  const start = code.indexOf('captureBuyerRoomOffer');
+  const capture = code.slice(start, code.indexOf('captureBuyerRoomFollowUp', start));
+  assert.ok(capture.length > 0, 'the capture action must be findable');
+
+  assert.match(capture, /Number\.isFinite\(event\.amount\)/, 'truthiness lets the string "1000" through');
+  assert.doesNotMatch(capture, /offerAmount: event\.amount,/, 'the unchecked value must not be what reaches the lead');
+});
+
 test('reopening a closed lead clears its outcome', async () => {
   /*
    * The report guard above is the banker-facing backstop; this is the reason

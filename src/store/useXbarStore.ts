@@ -2308,7 +2308,23 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const event = get().buyerRoomEvents.find((item) => item.id === eventId);
-        if (!event || event.kind !== 'offer' || !(event.amount && event.amount > 0)) {
+        /*
+         * `Number.isFinite`, not truthiness. `event.amount && event.amount > 0`
+         * is satisfied by the STRING "1000", which was then written verbatim
+         * into `offerAmount` below — and the report sums offers, so a second
+         * captured string concatenates rather than adds and the pipeline figure
+         * on the banker's export becomes millions.
+         *
+         * `buildBuyerRoomEvent` already coerces with `Number.isFinite` when it
+         * makes an event, so this agrees with the writer rather than trusting
+         * it: the amount reaching a money total should not depend on every
+         * upstream producer having been careful.
+         */
+        const offerAmount =
+          typeof event?.amount === 'number' && Number.isFinite(event.amount) && event.amount > 0
+            ? event.amount
+            : undefined;
+        if (!event || event.kind !== 'offer' || offerAmount === undefined) {
           return { ok: false, message: 'Buyer offer event not found.' };
         }
 
@@ -2339,7 +2355,7 @@ export const useXbarStore = create<XbarStore>()(
         const updated = get().updateSalesLead(lead.id, {
           stage: 'Offer',
           lastTouch: todayStamp(),
-          offerAmount: event.amount,
+          offerAmount,
           offerStatus: 'Submitted',
           shareReady: true,
           notes,
@@ -2366,7 +2382,7 @@ export const useXbarStore = create<XbarStore>()(
         return {
           ok: true,
           id: lead.id,
-          message: `${event.actor}'s ${event.amount.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })} offer is now in the Sales margin workflow.`,
+          message: `${event.actor}'s ${offerAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })} offer is now in the Sales margin workflow.`,
         };
       },
       captureBuyerRoomFollowUp: (eventId) => {
