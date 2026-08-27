@@ -1042,8 +1042,53 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     /for \(const field of shape\.numbers \?\? \[\]\) \{\s*if \(!Number\.isFinite\(valueAtPath\(record, field\)\)\) return false;/,
     'a number field must be finite, not merely typeof number',
   );
-  assert.match(shapeTable, /sharedListings: \{ lists: \['channels'\], strings: \['id', 'state', 'accessMode'\] \}/);
-  assert.doesNotMatch(shapeTable, /'shareToken'/, 'a field only ever compared must not be required');
+  const listingsStart = shapeTable.indexOf('sharedListings: {');
+  const listingsEntry = shapeTable.slice(listingsStart, shapeTable.indexOf('workspaceMembers:', listingsStart));
+  assert.ok(listingsStart > -1 && listingsEntry.length > 0, 'the sharedListings entry must be findable');
+
+  /*
+   * "A pass-through into a payload, never a dereference" is what kept these
+   * out, and it is wrong for the same reason it was wrong about
+   * `documents.fileSizeBytes`: the payload is not free-form.
+   * `saveWorkspaceBackupToRelationalCloud` forwards them into TYPED, NOT NULL
+   * columns, and `token_issued_at` is a `timestamptz` fed by
+   * `listing.tokenIssuedAt || updatedAt` — `||` passes a truthy object, the
+   * database refuses it, and every autosave fails from then on. A column is a
+   * reader.
+   *
+   * `updatedAt` reaches a column only from the SINGLE-listing upsert at
+   * cloudWorkspace.ts:1418; the bulk path sends the caller's own timestamp
+   * there. Found by extending the sweep, not by review.
+   */
+  for (const field of [
+    'id',
+    'state',
+    'accessMode',
+    'horseId',
+    'sharePath',
+    'shareToken',
+    'tokenIssuedAt',
+    'updatedAt',
+  ]) {
+    assert.match(
+      listingsEntry,
+      new RegExp(`strings: \\[[^\\]]*'${field}'`),
+      `${field} is forwarded to a typed shared_listings column`,
+    );
+  }
+  /*
+   * `channels` lands in a `text[]`, so the ENTRIES must be strings — `lists`
+   * stops at the container. `stringItems` asserts both, which is why it is not
+   * repeated under `lists`.
+   */
+  assert.match(listingsEntry, /stringItems: \['channels'\]/, 'a text[] column refuses a non-string entry');
+  assert.doesNotMatch(listingsEntry, /lists: \[/, 'stringItems already asserts the array');
+  /*
+   * The optional timestamps stay out: they reach only the `payload` jsonb
+   * column, which really does accept anything, and no route dereferences them.
+   */
+  assert.doesNotMatch(listingsEntry, /'lastSharedAt'/, 'jsonb accepts anything, so this guards nothing');
+  assert.doesNotMatch(listingsEntry, /'createdAt'/, 'createdAt reaches no column — the default fills it');
   /*
    * `role` and `label` are the scalar half of a collection whose ARRAYS were
    * already guarded, which is exactly what made the gap easy to miss:

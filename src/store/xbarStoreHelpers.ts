@@ -1205,10 +1205,46 @@ export function canRestorePersistedState(raw: unknown): boolean {
      * and :272. `??` catches null and undefined; an object is truthy and
      * renders.
      *
-     * `sharePath`, `shareToken` and the timestamps stay out: every read of them
-     * is a comparison or a pass-through into a payload, never a dereference.
+     * "A pass-through into a payload, never a dereference" was the reasoning
+     * that kept `sharePath`, `shareToken` and the timestamps out, and it is
+     * wrong for the same reason it was wrong about `documents.fileSizeBytes`:
+     * the payload is not free-form. `saveWorkspaceBackupToRelationalCloud`
+     * (cloudWorkspace.ts:831-843) forwards four of these into TYPED, NOT NULL
+     * columns on `shared_listings`:
+     *
+     *   horseId        -> horse_id        text
+     *   sharePath      -> share_path      text
+     *   shareToken     -> share_token     text
+     *   tokenIssuedAt  -> token_issued_at timestamptz
+     *
+     * And a FIFTH from the single-listing upsert at cloudWorkspace.ts:1418,
+     * which the bulk path does not share — it sends `listing.updatedAt` where
+     * the bulk one sends the caller's own timestamp:
+     *
+     *   updatedAt      -> updated_at      timestamptz
+     *
+     * Found by extending the sweep to treat a column write as a read, rather
+     * than by being told. `createdAt` is genuinely absent from both: it reaches
+     * only `payload`, and the column carries a default.
+     *
+     * The last is the strictest and the one that shows the shape of the bug:
+     * `listing.tokenIssuedAt || updatedAt` passes a truthy object straight
+     * through, Postgres refuses it, and EVERY autosave fails from then on —
+     * silently, with the workspace looking healthy. A column is a reader.
+     *
+     * `channels` moves from `lists` to `stringItems` for the same reason: it
+     * lands in a `text[]`, so the ENTRIES have to be strings and not merely the
+     * container an array. `stringItems` asserts both, which is why it is not
+     * repeated under `lists`.
+     *
+     * The optional timestamps (`lastSharedAt`, `releaseConfirmedAt`, …) stay
+     * out: they reach only the `payload` jsonb column, which really does accept
+     * anything, and no route dereferences them.
      */
-    sharedListings: { lists: ['channels'], strings: ['id', 'state', 'accessMode'] },
+    sharedListings: {
+      stringItems: ['channels'],
+      strings: ['id', 'state', 'accessMode', 'horseId', 'sharePath', 'shareToken', 'tokenIssuedAt', 'updatedAt'],
+    },
     /*
      * `workspace.primaryModules.length` and `workspace.permissions.map()` —
      * Settings.tsx:1015 and :1019. This collection is covered by neither the id
