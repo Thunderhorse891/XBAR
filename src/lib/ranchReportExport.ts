@@ -18,10 +18,26 @@ import type { RanchReport } from './ranchReport.js';
 /*
  * Characters that make a spreadsheet treat a cell as a formula rather than as
  * text. Quoting does not help: Excel, LibreOffice and Sheets all parse a
- * leading `=`, `+`, `-` or `@` inside a quoted field, and a tab or carriage
- * return can carry the leading character past a naive check.
+ * leading `=`, `+`, `-` or `@` inside a quoted field.
+ *
+ * The leading run of whitespace and control characters is SKIPPED rather than
+ * enumerated. The first version of this guard listed tab and carriage return
+ * and missed line feed — which a hand-edited backup carries straight into a
+ * horse name or an expense category, and which several spreadsheets step over
+ * before parsing the cell. Vertical tab, form feed, NUL and the Unicode spaces
+ * were missing for the same reason. A list of carrier characters is a list
+ * that will be wrong again; skipping the run is not.
+ *
+ * The formula character must still be the first thing that is not a carrier,
+ * so a name is only prefixed when it would actually be evaluated. `Docs Best`
+ * and ` Sunny` are untouched.
  */
-const FORMULA_LEAD = /^[\t\r=+\-@]/;
+// `no-control-regex` is disabled deliberately. The rule exists to catch a
+// control character that arrived in a pattern by accident; here the control
+// characters ARE the finding — they are what carries a formula past a check
+// that only looks at position zero.
+// eslint-disable-next-line no-control-regex
+const FORMULA_LEAD = /^[\s\u0000-\u001f]*[=+\-@]/;
 
 /**
  * Escape one CSV field.

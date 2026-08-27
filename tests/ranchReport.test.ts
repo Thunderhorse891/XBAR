@@ -539,9 +539,30 @@ test('per-horse monthly burn uses the same window as the herd figure', () => {
  * leading `=`, `+`, `-` or `@` as a formula. This report is explicitly built to
  * be exported and passed on, and it carries user-entered and imported horse
  * names, so a crafted name is a live payload on the recipient's machine.
+ *
+ * The carriers matter as much as the formula character. Whitespace and control
+ * characters ahead of it are stepped over by the spreadsheet but defeat a check
+ * that only looks at position zero, so each one below is a real bypass of the
+ * first version of this guard rather than a variation on the same case.
  */
 test('names that look like formulas are neutralized in the spreadsheet', () => {
-  const payloads = ['=HYPERLINK("http://evil.test","click")', '+1+1', '-2+3', '@SUM(A1:A9)', '\t=1+1'];
+  const payloads = [
+    '=HYPERLINK("http://evil.test","click")',
+    '+1+1',
+    '-2+3',
+    '@SUM(A1:A9)',
+    // Carried past position zero. A hand-edited backup preserves every one of
+    // these inside a horse name, and the spreadsheet skips them before parsing.
+    '\t=1+1',
+    '\r=1+1',
+    '\n=1+1',
+    '\r\n@SUM(A1:A9)',
+    '\v+1+1',
+    '\f-2+3',
+    ' =1+1',
+    '   =1+1',
+    '\n \t=1+1',
+  ];
 
   const report = buildRanchReport(
     input({
@@ -560,6 +581,32 @@ test('names that look like formulas are neutralized in the spreadsheet', () => {
     assert.ok(csv.includes(`"'${escaped}`), `"${payload}" must be neutralized`);
     // And never opening a cell unguarded.
     assert.ok(!csv.includes(`,"${escaped}`), `"${payload}" must not start a cell unguarded`);
+  }
+});
+
+/*
+ * The other direction: skipping the leading run must not make the guard greedy.
+ *
+ * Prefixing anything that merely starts with whitespace would put an apostrophe
+ * in front of ordinary names — the same corruption of a banker-facing file,
+ * arrived at from the opposite side. The formula character has to be the first
+ * thing that is not a carrier.
+ */
+test('leading whitespace alone does not make a name into escaped text', () => {
+  const benign = [' Sunny Doc', '\tDocs Best Chex', '\n Sunny Doc', 'Doc = Best'];
+
+  const report = buildRanchReport(
+    input({
+      horses: benign.map((name, index) => horse({ id: `h${index}`, name })),
+      expenseReceipts: [receipt({ id: 'r1', amount: 100 })],
+    }),
+    NOW,
+  );
+  const csv = ranchReportToCsv(report);
+
+  for (const name of benign) {
+    assert.ok(csv.includes(`"${name}"`), `"${name}" must survive unchanged`);
+    assert.ok(!csv.includes(`"'${name}`), `"${name}" must not be prefixed`);
   }
 });
 
