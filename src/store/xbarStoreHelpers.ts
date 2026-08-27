@@ -573,6 +573,17 @@ export function canRestorePersistedState(raw: unknown): boolean {
        */
       optionalNumbers?: string[];
       /*
+       * Scalars that must be a finite number AND NOT NEGATIVE when present.
+       *
+       * Separate from `optionalNumbers` because the constraint comes from the
+       * SCHEMA rather than from taste: `documents.size_bytes` is a bigint with
+       * a `documents_size_bytes_nonneg` CHECK (20260724), so a negative value
+       * is refused by the database exactly as a non-number is. Everything in
+       * `optionalNumbers` is clamped or merely displayed, and refusing a whole
+       * backup over a negative there would be over-rejection.
+       */
+      optionalNonNegativeNumbers?: string[];
+      /*
        * Scalars that must be a string WHEN PRESENT, named by path.
        *
        * `strings` demands presence, and demanding an optional field turns away
@@ -828,6 +839,20 @@ export function canRestorePersistedState(raw: unknown): boolean {
       // `Math.round(document.confidence * 100)` — Documents.tsx:838. An object
       // yields NaN and renders as "NaN% OCR confidence".
       numbers: ['confidence'],
+      /*
+       * `fileSizeBytes` was excluded last round because nothing RENDERS it and
+       * the packet budgeter deliberately ignores it in favour of real bytes.
+       * Both of those are true and neither is the reader that matters:
+       * `saveWorkspaceBackupToRelationalCloud` forwards it as
+       * `size_bytes: document.fileSizeBytes ?? 0` (cloudWorkspace.ts:736) into
+       * a bigint column with a non-negative CHECK.
+       *
+       * A row the database refuses does not fail once. It fails every autosave
+       * from then on, so the workspace restores looking healthy and then
+       * quietly stops reaching the cloud — the worst shape of failure here,
+       * because nothing on screen says so.
+       */
+      optionalNonNegativeNumbers: ['fileSizeBytes'],
       /*
        * Every field of DocumentEntities, because every one of them is read
        * without a type check and all of them are optional.
@@ -1219,6 +1244,17 @@ export function canRestorePersistedState(raw: unknown): boolean {
         const value = valueAtPath(record, field);
         if (value === undefined || value === null) continue;
         if (!Number.isFinite(value)) return false;
+      }
+      /*
+       * Absent is fine; a non-number or a negative is not. Both are rejected by
+       * the bigint CHECK on the way to the cloud, and a row the database
+       * refuses fails EVERY autosave from then on — the workspace installs and
+       * then silently stops syncing.
+       */
+      for (const field of shape.optionalNonNegativeNumbers ?? []) {
+        const value = valueAtPath(record, field);
+        if (value === undefined || value === null) continue;
+        if (!Number.isFinite(value) || (value as number) < 0) return false;
       }
       for (const list of shape.stringItems ?? []) {
         const items = valueAtPath(record, list);

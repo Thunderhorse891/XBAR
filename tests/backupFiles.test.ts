@@ -1138,6 +1138,48 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     /usage: normalizeSubscriptionUsage\(\{/,
     'the restored usage counters must go through the normalizer',
   );
+
+  /*
+   * `fileSizeBytes` was excluded because nothing renders it and the packet
+   * budgeter ignores it. Both true, and neither is the reader that matters:
+   * `saveWorkspaceBackupToRelationalCloud` forwards it into `documents.size_bytes`,
+   * a bigint with a non-negative CHECK. A row the database refuses fails EVERY
+   * autosave from then on, so the workspace restores looking healthy and then
+   * quietly stops reaching the cloud.
+   */
+  const docsStart = shapeTable.indexOf('documents: {');
+  const docsEntry = shapeTable.slice(docsStart, shapeTable.indexOf('ownershipRecords:', docsStart));
+  assert.ok(docsStart > -1 && docsEntry.length > 0, 'the documents entry must be findable');
+  assert.match(docsEntry, /optionalNonNegativeNumbers: \['fileSizeBytes'\]/);
+  /*
+   * Negative matters as much as non-numeric here, and ONLY here — the CHECK
+   * constraint refuses both. The loop must reject a negative...
+   */
+  assert.match(
+    helperCode,
+    /for \(const field of shape\.optionalNonNegativeNumbers \?\? \[\]\) \{[\s\S]*?!Number\.isFinite\(value\) \|\| \(value as number\) < 0/,
+    'the bigint CHECK refuses a negative exactly as it refuses a non-number',
+  );
+  /*
+   * ...and still allow absence, or every document that was never sized —
+   * metadata-only rows, which cloudWorkspace.ts sends as 0 — would be refused.
+   */
+  assert.match(
+    helperCode,
+    /for \(const field of shape\.optionalNonNegativeNumbers \?\? \[\]\) \{[\s\S]*?if \(value === undefined \|\| value === null\) continue;/,
+    'an unsized document must still restore',
+  );
+  /*
+   * And the constraint stays scoped to the field the schema constrains.
+   * Requiring non-negativity of every optional number would refuse a backup
+   * over values that are merely clamped or displayed.
+   */
+  assert.doesNotMatch(
+    shapeTable,
+    /optionalNumbers: \[[^\]]*'fileSizeBytes'/,
+    'the weaker category would let a negative through to the CHECK',
+  );
+
   assert.match(
     helperCode,
     /function normalizeSubscriptionUsage[\s\S]*?Number\.isFinite\(value\) \? \(value as number\) : defaults\[key\]/,
@@ -1271,8 +1313,8 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    */
   assert.equal(
     (helpers.match(/valueAtPath\(record, /g) ?? []).length,
-    8,
-    'every loop must resolve paths — objects, lists, strings, numbers, optional numbers, item shapes, optional scalars and string items — or a valid archive is rejected',
+    9,
+    'every loop must resolve paths — objects, lists, strings, numbers, optional numbers, non-negative numbers, item shapes, optional scalars and string items — or a valid archive is rejected',
   );
 
   /*

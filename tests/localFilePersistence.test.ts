@@ -476,6 +476,43 @@ test('the sweep waits for cloud reconciliation, not just the workspace id', asyn
   assert.match(store, /referencedVaultKeys\(current\.documents, current\.expenseReceipts, current\.salePacketBuilds\)/);
 });
 
+/*
+ * A promotion that only half-moved the files must not report success.
+ *
+ * `promoteLocalVaultFiles` returns the keys it could not retag, and its return
+ * value was DISCARDED at both call sites. `vaultOwnerId()` has already moved to
+ * the cloud owner by then, so every entry still tagged `'local'` is refused by
+ * file opening, backup export and packet attachment — while the screen said the
+ * reconciliation was clean, until the rancher happened to reload and the
+ * `connected` retry picked it up.
+ */
+test('a half-finished vault promotion is reported rather than reported as idle', async () => {
+  const bootstrap = await readFile('src/components/CloudBootstrap.tsx', 'utf8');
+  const code = bootstrap.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
+  // Both call sites must keep the result. A bare `await promoteLocalVaultFiles(`
+  // is the bug: the failed keys go nowhere.
+  assert.doesNotMatch(code, /\n\s*await promoteLocalVaultFiles\(/, 'the failed keys must be captured, not discarded');
+  assert.match(code, /promoted\.failed/, 'and actually read');
+
+  /*
+   * Error, but NOT locked. Those are separate arguments to `finish` for a
+   * reason: the RECORDS pushed successfully, and withholding their autosave
+   * because a file blob failed to retag would turn a partial file problem into
+   * a total sync outage — the over-correction to avoid here.
+   */
+  assert.match(
+    code,
+    /finish\(\s*true,\s*promoted\.failed\.length === 0 \? 'idle' : 'error',/,
+    'a partial promotion is surfaced without locking autosave on the records',
+  );
+  assert.doesNotMatch(
+    code,
+    /finish\(true, 'idle', 'Cloud workspace connected\.'\)/,
+    'the unconditional success message is what hid this',
+  );
+});
+
 test('readiness alone does not release the sweep — reconciliation must have chosen', async () => {
   const helper = await readFile('src/lib/vaultOwner.ts', 'utf8');
   const bootstrap = await readFile('src/components/CloudBootstrap.tsx', 'utf8');

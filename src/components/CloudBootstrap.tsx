@@ -91,6 +91,30 @@ export function CloudBootstrap() {
     setAutosaveReady(false, false);
     let cancelled = false;
 
+    /*
+     * A promotion that only half-moved the files must say so.
+     *
+     * `promoteLocalVaultFiles` returns the keys it could not retag — an
+     * IndexedDB write can fail mid-move — and deliberately leaves the
+     * records-owner marker unwritten so the `connected` branch retries on the
+     * next load. But its return value was DISCARDED, so this reported a clean
+     * reconciliation: `vaultOwnerId()` has already moved to the cloud owner, so
+     * every entry still tagged `'local'` is refused by file opening, backup
+     * export and packet attachment, while the screen said everything was fine
+     * until the rancher happened to reload.
+     *
+     * Reported as an error, but NOT locked. Those are separate arguments to
+     * `finish` for a reason: the RECORDS pushed successfully, and withholding
+     * their autosave because a file blob failed to be retagged would turn a
+     * partial file problem into a total sync outage. The rancher is told which
+     * part did not move and that it will be retried; their ranch work keeps
+     * saving in the meantime.
+     */
+    const promotionMessage = (failed: string[], ok: string) =>
+      failed.length === 0
+        ? ok
+        : `${failed.length} of this device's files could not be moved to the cloud workspace and cannot be opened yet. They are retried automatically the next time this ranch loads.`;
+
     const finish = (unlocked: boolean, state: 'idle' | 'error', message: string) => {
       if (cancelled) return;
       lastPersistedSignatureRef.current = serializeWorkspaceBackup(exportWorkspaceBackup());
@@ -136,12 +160,21 @@ export function CloudBootstrap() {
          * their documents stop opening, exporting and attaching, while the
          * records still name them.
          */
+        let promotionFailed: string[] = [];
         if (saved.ok) {
-          await promoteLocalVaultFiles(local.workspace as Parameters<typeof promoteLocalVaultFiles>[0], vaultOwnerId());
+          const promoted = await promoteLocalVaultFiles(
+            local.workspace as Parameters<typeof promoteLocalVaultFiles>[0],
+            vaultOwnerId(),
+          );
           if (cancelled) return;
+          promotionFailed = promoted.failed;
         }
 
-        finish(saved.ok, saved.ok ? 'idle' : 'error', saved.message);
+        finish(
+          saved.ok,
+          saved.ok && promotionFailed.length === 0 ? 'idle' : 'error',
+          saved.ok ? promotionMessage(promotionFailed, saved.message) : saved.message,
+        );
         return;
       }
 
@@ -160,10 +193,17 @@ export function CloudBootstrap() {
          * from the cloud, and a `'local'` file they happen to name is another
          * workspace's, not this one's.
          */
-        await promoteLocalVaultFiles(local.workspace as Parameters<typeof promoteLocalVaultFiles>[0], vaultOwnerId());
+        const promoted = await promoteLocalVaultFiles(
+          local.workspace as Parameters<typeof promoteLocalVaultFiles>[0],
+          vaultOwnerId(),
+        );
         if (cancelled) return;
 
-        finish(true, 'idle', 'Cloud workspace connected.');
+        finish(
+          true,
+          promoted.failed.length === 0 ? 'idle' : 'error',
+          promotionMessage(promoted.failed, 'Cloud workspace connected.'),
+        );
         return;
       }
 
