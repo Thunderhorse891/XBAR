@@ -715,8 +715,23 @@ export function canRestorePersistedState(raw: unknown): boolean {
       strings: ['id', 'label', 'source', 'receivedAt'],
       numbers: ['fileCount', 'processedCount', 'matchedCount', 'needsReviewCount'],
     },
-    // `event.actor.trim()` — BuyerResponseQueue.tsx:142.
-    buyerRoomEvents: { strings: ['actor'] },
+    /*
+     * `event.actor.trim()` — BuyerResponseQueue.tsx:142 — was the only field
+     * checked, and it is not the one that crashes first.
+     * `formatDateLabel(event.at)` at :163 reaches `value?.trim()` and throws a
+     * TypeError on an object before React is involved at all, and `{event.note
+     * || ...}` at :169 renders a truthy object straight into JSX.
+     *
+     * `note` is optional and genuinely absent on most events, so it is checked
+     * only when present.
+     *
+     * `horseId` is deliberately absent: it is compared, never dereferenced, so
+     * an object there matches nothing and crashes nothing. `amount` likewise —
+     * `formatCompactCurrency` renders it as "NaN" rather than throwing, which
+     * is wrong on screen but not a crash, and the table has no vocabulary for
+     * an optional number.
+     */
+    buyerRoomEvents: { strings: ['id', 'kind', 'at', 'actor'], optionalStrings: ['note'] },
     /*
      * `a.name/.category/.assignedTo.toLowerCase()` — RanchAssets.tsx:176-178,
      * evaluated only once someone types in the inventory search, so the route

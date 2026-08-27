@@ -2,6 +2,7 @@ import { apiConfig, isRelationalCloudEnabled, isSnapshotFallbackEnabled, supabas
 import { publicShareEventToBuyerRoomEvent, type PublicShareEventRow } from '@/lib/buyerDealRoom';
 import { createId, todayStamp } from '@/lib/xbarRuntime';
 import { getSupabaseClient } from '@/lib/supabaseClient';
+import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 import { openLocalFile } from '@/lib/localFileVault';
 import { vaultOwnerId } from '@/lib/vaultOwner';
 import type { Session } from '@supabase/supabase-js';
@@ -1199,6 +1200,22 @@ export async function getDocumentAccessUrl(
 > {
   const directFileUrl = document.fileUrl?.trim();
   if (directFileUrl) {
+    /*
+     * The scheme is checked HERE, at the point the string leaves the record.
+     *
+     * `fileUrl` is workspace data, and workspace data can arrive in an imported
+     * backup. `openStoredFile` assigns this to a same-origin `about:blank`, so
+     * a `javascript:` URL in a backup runs with this app's origin and reads the
+     * vault. Refusing at the source means every caller is covered, including
+     * ones added later that never think about it.
+     */
+    if (!isNavigableFileUrl(directFileUrl)) {
+      return {
+        ok: false,
+        message: 'This document points at an address this app will not open. Re-upload the file to fix the record.',
+      } as const;
+    }
+
     return {
       ok: true,
       url: directFileUrl,

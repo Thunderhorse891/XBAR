@@ -197,14 +197,45 @@ export default async function handler(req, res) {
       }
 
       if (resolvedWorkspaceId) {
+        /*
+         * An `updated` event is not trusted for the STATUS. It is a trigger to
+         * go and look.
+         *
+         * Timestamps cannot break a tie, and ties happen: a plan change and the
+         * cancellation that follows it can share an `event.created` second, and
+         * `event.created` has no sub-second component to separate them. If the
+         * cancellation is delivered first and the superseded update arrives
+         * afterwards, a strictly-older comparison lets the update through and
+         * it restores `Active`. The advisory lock serializes the writes; it
+         * cannot tell which of two identical timestamps came first, because
+         * nothing in the data says.
+         *
+         * So the ordering guard stops what it can — anything strictly older —
+         * and the authority for what the subscription IS comes from Stripe at
+         * the moment of handling. A retried update then writes the current
+         * truth rather than its own stale snapshot, whatever order it arrives
+         * in.
+         *
+         * `deleted` keeps its payload. A deleted subscription cannot become
+         * active again under the same id, so the event is already the final
+         * word for it, and retrieving one that Stripe has finished purging
+         * would fail and strand a cancellation unapplied — the one direction
+         * that must never be lost.
+         */
+        let effective = payload;
+        if (event.type === 'customer.subscription.updated' && payload.id) {
+          effective = await stripe.subscriptions.retrieve(payload.id);
+        }
+        const effectiveLineItem = effective.items?.data?.[0] ?? lineItem;
+
         await syncWorkspaceSubscription({
           workspaceId: resolvedWorkspaceId,
           customerId,
           subscriptionId: payload.id,
-          priceId: lineItem?.price?.id || '',
-          status: payload.status,
-          currentPeriodEnd: payload.current_period_end,
-          quantity: lineItem?.quantity || 1,
+          priceId: effectiveLineItem?.price?.id || '',
+          status: effective.status,
+          currentPeriodEnd: effective.current_period_end,
+          quantity: effectiveLineItem?.quantity || 1,
           eventId: event.id,
           eventType: event.type,
           eventCreatedAt: event.created * 1000,

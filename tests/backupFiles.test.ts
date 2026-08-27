@@ -950,7 +950,18 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     shapeTable,
     /roleWorkspaces: \{\s*strings: \['role', 'label'\],\s*lists: \['primaryModules'\],\s*stringItems: \['permissions'\],\s*\}/,
   );
-  assert.match(helpers, /buyerRoomEvents: \{ strings: \['actor'\] \}/);
+  /*
+   * `actor` was the only field checked and it is not the one that crashes
+   * first: `formatDateLabel(event.at)` throws a TypeError before React is
+   * involved, and `{event.note || ...}` renders a truthy object into JSX.
+   *
+   * `horseId` and `amount` stay out — the first is only compared, and the
+   * second renders as "NaN" rather than throwing.
+   */
+  assert.match(
+    shapeTable,
+    /buyerRoomEvents: \{ strings: \['id', 'kind', 'at', 'actor'\], optionalStrings: \['note'\] \}/,
+  );
   assert.match(helpers, /ranchAssets: \{ strings: \['name', 'category', 'assignedTo'\] \}/);
   assert.match(helpers, /strings: \['name', 'owner', 'segment'\]/);
   assert.match(helpers, /'activity',/);
@@ -1177,6 +1188,8 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     ['src/routes/Settings.tsx', /workspace\.primaryModules\.length/],
     ['src/routes/Settings.tsx', /workspace\.permissions\.map\(/],
     ['src/components/BuyerResponseQueue.tsx', /event\.actor\.trim\(\)/],
+    ['src/components/BuyerResponseQueue.tsx', /\{event\.actor\} · \{formatDateLabel\(event\.at\)\}/],
+    ['src/components/BuyerResponseQueue.tsx', /\{event\.note \|\|/],
     ['src/routes/RanchAssets.tsx', /a\.assignedTo\.toLowerCase\(\)/],
     ['src/routes/Sales.tsx', /h\.segment\.toLowerCase\(\)/],
     ['src/routes/AnimalProfile.tsx', /animal\.activity\.length/],
@@ -1481,4 +1494,55 @@ test('a promotion does not take files the records merely reference', async () =>
     marker$.restore();
     restoreDb();
   }
+});
+
+test('an imported document cannot navigate this app to a script URL', async () => {
+  const cloud = await readFile('src/lib/cloudWorkspace.ts', 'utf8');
+  const opener = await readFile('src/lib/openStoredFile.ts', 'utf8');
+  const cloudCode = cloud.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  const openerCode = opener.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
+  /*
+   * Refused at the source, so every caller is covered — including ones added
+   * later that never think about it. `fileUrl` is workspace data and workspace
+   * data arrives in imported backups.
+   */
+  const directBranch = cloudCode.slice(
+    cloudCode.indexOf('const directFileUrl'),
+    cloudCode.indexOf('if (document.localFileKey)'),
+  );
+  assert.match(directBranch, /if \(!isNavigableFileUrl\(directFileUrl\)\)/, 'a direct fileUrl must be scheme-checked');
+  assert.doesNotMatch(
+    directBranch.slice(0, directBranch.indexOf('isNavigableFileUrl')),
+    /return \{\s*ok: true/,
+    'and checked BEFORE it is handed back, not after',
+  );
+
+  /*
+   * And again at the sinks, because this file is where a string stops being a
+   * string: a same-origin `location.href`, an `<a download>`, and
+   * `window.open`. The assignment targets an `about:blank` this app opened, so
+   * it inherits this origin.
+   */
+  const guardAt = openerCode.indexOf('isNavigableFileUrl(access.url)');
+  const navigateAt = openerCode.indexOf('previewWindow.location.href = access.url');
+  assert.ok(guardAt >= 0, 'the opener must check the resolved url too');
+  assert.ok(navigateAt > guardAt, 'and must check it before navigating');
+  assert.match(openerCode, /previewWindow\.location\.href = access\.url/, 'which is the sink this protects');
+
+  /*
+   * One predicate, two call sites. Two copies of a security rule is how one of
+   * them ends up laxer than the other.
+   */
+  // Comments stripped: the rationale in that file NAMES the broken check it
+  // exists to avoid, and would satisfy the assertion against it.
+  const lib = (await readFile('src/lib/navigableFileUrl.ts', 'utf8'))
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/[^\n]*/g, '');
+  assert.match(lib, /new URL\(url, base\)\.protocol/, 'parsed, never pattern-matched');
+  assert.doesNotMatch(
+    lib,
+    /startsWith\('javascript:'\)|\.includes\('javascript'\)/,
+    'a string test misses JaVaScRiPt:, leading whitespace and embedded tabs, all of which execute',
+  );
 });

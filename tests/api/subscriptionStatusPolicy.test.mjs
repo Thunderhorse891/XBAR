@@ -745,3 +745,48 @@ test('the ordering column has a migration, and it does not backfill', async () =
     'and the delivery clock is not a stand-in for Stripe’s',
   );
 });
+
+test('an update event is a trigger to look, not the authority on status', async () => {
+  const webhook = await readFile(path.join(process.cwd(), 'api/stripe/webhook.js'), 'utf8');
+  const code = webhook.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
+  /*
+   * Timestamps cannot break a tie, and ties happen: a plan change and the
+   * cancellation that follows it can share an `event.created` second, and
+   * `event.created` carries no sub-second component to separate them. If the
+   * cancellation is delivered first and the superseded update arrives after,
+   * the strictly-older comparison lets the update through and it restores
+   * `Active`. The advisory lock serializes the writes; it cannot say which of
+   * two identical timestamps came first, because nothing in the data does.
+   *
+   * So the status is re-read from Stripe when the event is handled, and a
+   * retried update writes the current truth rather than its own snapshot.
+   */
+  const branch = code.slice(code.indexOf("if (event.type === 'customer.subscription.updated'"));
+  assert.match(
+    branch,
+    /if \(event\.type === 'customer\.subscription\.updated' && payload\.id\) \{\s*effective = await stripe\.subscriptions\.retrieve\(payload\.id\);/,
+    'an updated event must resolve the subscription rather than trust its payload',
+  );
+  assert.match(branch, /status: effective\.status,/, 'and the resolved status is what gets written');
+  assert.doesNotMatch(branch, /status: payload\.status,/, 'never the event snapshot');
+
+  /*
+   * `deleted` keeps its payload, deliberately. A deleted subscription cannot
+   * become active again under the same id, so the event is already final for
+   * it — and retrieving one Stripe has finished purging would fail and strand
+   * a cancellation unapplied, which is the one direction that must never be
+   * lost.
+   */
+  assert.doesNotMatch(
+    branch,
+    /customer\.subscription\.deleted'\s*&&\s*payload\.id\) \{\s*effective = await stripe/,
+    'a cancellation must not depend on a retrieve that can fail',
+  );
+  assert.match(branch, /let effective = payload;/, 'which is what the default preserves');
+
+  // The price and seat count come from the same resolved object, or the tier
+  // would be read off a snapshot the status no longer agrees with.
+  assert.match(branch, /const effectiveLineItem = effective\.items\?\.data\?\.\[0\] \?\? lineItem;/);
+  assert.match(branch, /priceId: effectiveLineItem\?\.price\?\.id \|\| '',/);
+});

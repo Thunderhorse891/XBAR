@@ -1,4 +1,5 @@
 import { getDocumentAccessUrl } from '@/lib/cloudWorkspace';
+import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 import type { StoredFileRef } from '@/lib/storedFiles';
 
 /*
@@ -62,6 +63,25 @@ export async function openStoredFileInTab(record: StoredFileRef): Promise<OpenSt
   if (!access.ok) {
     previewWindow?.close();
     return { ok: false, message: access.message };
+  }
+
+  /*
+   * Checked again here, deliberately.
+   *
+   * `getDocumentAccessUrl` refuses a bad scheme at the source, which covers
+   * every caller. This second check covers this FILE: the three sinks below —
+   * a same-origin `location.href`, an `<a download>`, and `window.open` — are
+   * where a URL stops being a string and starts being navigation, and the
+   * assignment on line ~97 targets an `about:blank` this app opened, so it
+   * inherits this origin.
+   *
+   * Two checks of one predicate, not two predicates: the rule lives in
+   * `isNavigableFileUrl` and neither copy can drift from the other.
+   */
+  if (!isNavigableFileUrl(access.url)) {
+    previewWindow?.close();
+    access.release?.();
+    return { ok: false, message: 'This file points at an address this app will not open.' };
   }
 
   const release = access.release;
