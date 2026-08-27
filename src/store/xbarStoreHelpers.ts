@@ -692,10 +692,44 @@ export function canRestorePersistedState(raw: unknown): boolean {
       // container leaves `auditTrail: [{}]` crashing the record drawer.
       stringItems: ['auditTrail'],
     },
-    // `packet.documentIds.length` — SalePacketStudio.tsx:174, Documents.tsx:1210.
-    salePacketBuilds: { lists: ['documentIds'] },
-    // `receipt.vendor.trim()` — Expenses.tsx:114.
-    expenseReceipts: { strings: ['vendor'] },
+    /*
+     * `packet.documentIds.length` — SalePacketStudio.tsx:174, Documents.tsx:1210
+     * — was the only thing checked, and the line that renders that count also
+     * renders three more fields beside it: `{packet.watermark}`,
+     * `formatDateTimeLabel(packet.createdAt)` — which reaches `value?.trim()`
+     * and throws before React is involved — and `{packet.createdBy}`.
+     *
+     * `fileName` is optional and rendered as `{packet.fileName ?? 'Sale
+     * packet'}`; `??` catches null and undefined, never an object.
+     *
+     * `status` stays out: every read of it is an equality comparison in a
+     * ternary, so an object falls to the else branch and crashes nothing.
+     */
+    salePacketBuilds: {
+      lists: ['documentIds'],
+      strings: ['id', 'watermark', 'createdAt', 'createdBy'],
+      optionalStrings: ['fileName', 'downloadUrl'],
+    },
+    /*
+     * `receipt.vendor.trim()` — Expenses.tsx:114 — was the only field checked,
+     * and it is not the only one dereferenced:
+     *
+     *   receiptDate  `(receipt.receiptDate ?? '').slice(0, 7)` — Expenses.tsx:101,
+     *                building the spend summary, and `??` does not catch an
+     *                object. `b.receiptDate.localeCompare(...)` —
+     *                FeedInventory.tsx:27 — has no guard at all.
+     *   category     `receipt.category.toLowerCase()` — useXbarStore.ts:1326.
+     *   title        rendered — Expenses.tsx:714.
+     *   amount       summed into every money total. It does not throw; it
+     *                yields NaN, which propagates silently into the invested
+     *                figures, the CSV and the banker-facing PDF. A number that
+     *                quietly corrupts the accounts is worse than one that
+     *                crashes.
+     */
+    expenseReceipts: {
+      strings: ['id', 'vendor', 'receiptDate', 'title', 'category'],
+      numbers: ['amount'],
+    },
     /*
      * Intake batches had no entry at all — only the shared id check — so
      * `{ id: 'batch-1', label: {}, state: 'Queued' }` restored and then crashed
@@ -769,6 +803,23 @@ export function canRestorePersistedState(raw: unknown): boolean {
      * a field out is that NO site reads it, never that one read happens to be
      * guarded.
      */
+    /*
+     * `roleLabel(member.role)` returns the role itself for anything but Owner,
+     * straight into JSX — Settings.tsx:869. `{member.email}` renders at :867,
+     * and `formatDateLabel(member.joinedAt)` at :870 throws on an object.
+     *
+     * Settings is MOUNTED while an import lands, so this crashes the screen the
+     * rancher is standing on rather than one they might navigate to.
+     *
+     * `status` and `source` stay out: both are only ever compared.
+     */
+    workspaceMembers: { strings: ['id', 'email', 'role', 'joinedAt'] },
+    /*
+     * The same three, one panel down: `{invite.email}` at Settings.tsx:920,
+     * `roleLabel(invite.role)` and `formatDateLabel(invite.invitedAt)` at :922.
+     * `invitedBy` is stored and never read, so it is not required.
+     */
+    workspaceInvitations: { strings: ['id', 'email', 'role', 'invitedAt'] },
     roleWorkspaces: {
       strings: ['role', 'label'],
       lists: ['primaryModules'],

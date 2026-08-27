@@ -892,7 +892,16 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * `document.entities.horseName`, on a screen the rancher just chose, after
    * the vault has already been overwritten with the backup's blobs.
    */
-  assert.match(helpers, /salePacketBuilds: \{ lists: \['documentIds'\] \}/, 'packets deref a nested array unguarded');
+  /*
+   * The line that renders `documentIds.length` renders three more fields beside
+   * it, and `formatDateTimeLabel(packet.createdAt)` throws before React is
+   * involved. `status` stays out — every read of it is an equality comparison,
+   * so an object falls to the else branch and crashes nothing.
+   */
+  assert.match(
+    shapeTable,
+    /salePacketBuilds: \{\s*lists: \['documentIds'\],\s*strings: \['id', 'watermark', 'createdAt', 'createdBy'\],\s*optionalStrings: \['fileName', 'downloadUrl'\],\s*\}/,
+  );
   assert.match(helpers, /objects: \['bloodline', 'assignments', 'sale', 'readiness', 'location'\]/);
 
   /*
@@ -900,7 +909,32 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * passes added only what a reviewer had named and left siblings behind each
    * time, so this pins every unguarded dereference on a restored collection.
    */
-  assert.match(helpers, /expenseReceipts: \{ strings: \['vendor'\] \}/);
+  /*
+   * `vendor` was not the only field dereferenced. `receiptDate` reaches
+   * `.slice(0, 7)` behind a `??` that does not catch an object, and
+   * `.localeCompare` with no guard at all; `category` reaches `.toLowerCase()`.
+   *
+   * `amount` is in `numbers` because it does not throw — it yields NaN, which
+   * propagates silently into every money total, the CSV and the banker-facing
+   * PDF. A figure that quietly corrupts the accounts is worse than one that
+   * crashes the screen.
+   */
+  assert.match(
+    shapeTable,
+    /expenseReceipts: \{\s*strings: \['id', 'vendor', 'receiptDate', 'title', 'category'\],\s*numbers: \['amount'\],\s*\}/,
+  );
+
+  /*
+   * Settings is MOUNTED while an import lands, so a malformed member or invite
+   * crashes the screen the rancher is standing on. `roleLabel` returns the role
+   * itself for anything but Owner, straight into JSX.
+   *
+   * `status` and `source` stay out of both — only ever compared — and
+   * `invitedBy` is stored and never read.
+   */
+  assert.match(shapeTable, /workspaceMembers: \{ strings: \['id', 'email', 'role', 'joinedAt'\] \}/);
+  assert.match(shapeTable, /workspaceInvitations: \{ strings: \['id', 'email', 'role', 'invitedAt'\] \}/);
+  assert.doesNotMatch(shapeTable, /'invitedBy'/, 'a field nothing reads must not be required');
   /*
    * `{lead.channel}` and `{lead.stage}` are rendered straight into JSX, so
    * validating only `name` let a lead install and crash the Sales route.
@@ -1190,6 +1224,12 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     ['src/components/BuyerResponseQueue.tsx', /event\.actor\.trim\(\)/],
     ['src/components/BuyerResponseQueue.tsx', /\{event\.actor\} · \{formatDateLabel\(event\.at\)\}/],
     ['src/components/BuyerResponseQueue.tsx', /\{event\.note \|\|/],
+    ['src/routes/Settings.tsx', /\{roleLabel\(member\.role\)\} ·\{' '\}/],
+    ['src/routes/Settings.tsx', /Sent \{formatDateLabel\(invite\.invitedAt\)\}/],
+    ['src/routes/Expenses.tsx', /const key = \(receipt\.receiptDate \?\? ''\)\.slice\(0, 7\);/],
+    ['src/routes/FeedInventory.tsx', /b\.receiptDate\.localeCompare\(a\.receiptDate\)/],
+    ['src/store/useXbarStore.ts', /receipt\.category\.toLowerCase\(\)/],
+    ['src/routes/Documents.tsx', /watermark "\{packet\.watermark\}"/],
     ['src/routes/RanchAssets.tsx', /a\.assignedTo\.toLowerCase\(\)/],
     ['src/routes/Sales.tsx', /h\.segment\.toLowerCase\(\)/],
     ['src/routes/AnimalProfile.tsx', /animal\.activity\.length/],
@@ -1545,4 +1585,24 @@ test('an imported document cannot navigate this app to a script URL', async () =
     /startsWith\('javascript:'\)|\.includes\('javascript'\)/,
     'a string test misses JaVaScRiPt:, leading whitespace and embedded tabs, all of which execute',
   );
+});
+
+test('a packet download link cannot navigate this app to a script URL', async () => {
+  /*
+   * The same sink as an imported document's `fileUrl`, one record type over: a
+   * sale packet's `downloadUrl` also arrives in backups, and it is rendered as
+   * an `href`. The `download` attribute does not save you — browsers ignore it
+   * for a `javascript:` URL and navigate instead.
+   *
+   * Requiring it to be a string is not enough, which is why this is a render
+   * guard and not just a shape-table entry: `"javascript:…"` is a perfectly
+   * good string.
+   */
+  for (const route of ['src/routes/Documents.tsx', 'src/routes/SalePacketStudio.tsx']) {
+    const source = await readFile(route, 'utf8');
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    assert.match(code, /\{isNavigableFileUrl\(packet\.downloadUrl\) \? \(/, `${route} must scheme-check the href`);
+    assert.doesNotMatch(code, /\{packet\.downloadUrl \? \(/, `${route} must not render the link on truthiness alone`);
+    assert.match(source, /import \{ isNavigableFileUrl \}/, `${route} must use the shared predicate`);
+  }
 });

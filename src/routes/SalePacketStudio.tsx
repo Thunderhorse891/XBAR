@@ -7,6 +7,7 @@ import { useXbarStore } from '@/store/useXbarStore';
 import { useUiStore } from '@/store/useUiStore';
 import { openStoredFileInTab } from '@/lib/openStoredFile';
 import type { DocumentType, SalePacketBuild } from '@/types/xbar';
+import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 
 const REQUIRED = [
   { id: 'coggins', label: 'Coggins (negative)' },
@@ -180,7 +181,9 @@ export default function SalePacketStudio() {
                   <StatusChip tone={packet.status === 'shared' ? 'info' : 'success'}>
                     {packet.status === 'shared' ? 'Shared' : 'Generated'}
                   </StatusChip>
-                  {packet.downloadUrl ? (
+                  {/* Scheme-checked: an imported packet's downloadUrl is untrusted, and
+                      `download` does not stop a browser running a `javascript:` href. */}
+                  {isNavigableFileUrl(packet.downloadUrl) ? (
                     <a className="xs-btn xs-btn--sm" href={packet.downloadUrl} download={packet.fileName}>
                       Download
                     </a>

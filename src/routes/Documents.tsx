@@ -19,6 +19,7 @@ import { buildHorseEnrichmentFromEntities, normalizeOwnershipRecord } from '@/st
 import type { DocumentRecord, DocumentSource, SalePacketBuild } from '@/types/xbar';
 import { documentSources } from '@/features/documents/constants';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
+import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 import {
   PIPELINE_STAGES,
   buildProofLinks,
@@ -1212,7 +1213,9 @@ export default function Documents() {
                           </div>
                         </div>
                         <div className="inline-actions" style={{ alignItems: 'center' }}>
-                          {packet.downloadUrl ? (
+                          {/* Scheme-checked: a packet record can arrive in an imported backup, and
+                              a `javascript:` href navigates this origin when the link is clicked. */}
+                          {isNavigableFileUrl(packet.downloadUrl) ? (
                             <a
                               className="button button--ghost button--compact"
                               href={packet.downloadUrl}
