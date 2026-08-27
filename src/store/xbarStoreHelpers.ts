@@ -527,6 +527,16 @@ export function canRestorePersistedState(raw: unknown): boolean {
        */
       stringItems?: string[];
       /*
+       * Scalars that must be a FINITE NUMBER WHEN PRESENT, named by path.
+       *
+       * `numbers` cannot express this: `Number.isFinite(undefined)` is false,
+       * so naming an optional field there refuses every archive that simply
+       * omits it. `costBasis` is absent on every horse `createHorseRecord`
+       * makes, so requiring it would have turned away ordinary backups —
+       * over-rejection, which loses good data instead of bad.
+       */
+      optionalNumbers?: string[];
+      /*
        * Scalars that must be a string WHEN PRESENT, named by path.
        *
        * `strings` demands presence, and demanding an optional field turns away
@@ -613,6 +623,11 @@ export function canRestorePersistedState(raw: unknown): boolean {
          *   color         `{animal.color}` — AnimalProfile.tsx:315.
          *   lastVetVisit  `formatDateLabel(horse.lastVetVisit)` — Medical.tsx:94
          *                 and :257, which throws before React is reached.
+         *   medicalNotes  `{horse.medicalTimeline[0]?.title ?? horse.medicalNotes}`
+         *                 — Medical.tsx:251, a bare React child. `?.[0]` is safe
+         *                 and `??` catches nothing, so on a horse with an empty
+         *                 timeline — the common case — an object goes straight
+         *                 to the renderer.
          *
          * Deliberately absent, each checked: `barnName`, `markings`,
          * `microchipId` and `tags` have no unguarded read at all;
@@ -627,6 +642,7 @@ export function canRestorePersistedState(raw: unknown): boolean {
         'registry',
         'color',
         'lastVetVisit',
+        'medicalNotes',
         'bloodline.sire',
         'bloodline.dam',
         'bloodline.family',
@@ -650,7 +666,42 @@ export function canRestorePersistedState(raw: unknown): boolean {
        */
       // `{animal.age} yrs` — AnimalProfile.tsx:217, rendered as a React child
       // exactly as a string is.
-      numbers: ['age', 'sale.askPrice', 'readiness.score'],
+      //
+      // `insuredValue` is the fallback ask price — `horse.sale.askPrice ||
+      // horse.insuredValue` reaches `formatCompactCurrency` at Sales.tsx:134
+      // and :397 and Horses.tsx:664, and seeds the deal room's ask at
+      // buyerDealRoom.ts:145. `||` steps past a zero ask straight onto this
+      // field, so it is read precisely when the guarded one is empty.
+      numbers: ['age', 'insuredValue', 'sale.askPrice', 'readiness.score'],
+      /*
+       * The optional money on a horse. Each is read through a guard that
+       * catches absence and not type:
+       *
+       *   costBasis                    `Math.max(0, horse.costBasis ?? 0)` —
+       *                                ranchReport.ts:246, businessIntelligence.ts:214
+       *                                and profitIntelligence.ts:21. `Math.max`
+       *                                of an object is NaN, and from there it is
+       *                                acquisition cost, invested-to-date, every
+       *                                per-horse margin, and the CSV and PDF the
+       *                                banker reads.
+       *   breedingEconomics.*          spread over defaults at breedingRevenue.ts:12,
+       *                                so a supplied field overrides the zero and
+       *                                `economics.studFee * economics.bookedMares`
+       *                                and the ROI below it all go NaN. All five
+       *                                are required by BreedingEconomics, but the
+       *                                PARENT is optional, so they are optional here.
+       *
+       * `breedingEconomics` itself is deliberately not under `objects`: it is
+       * absent on most horses and requiring it would refuse them.
+       */
+      optionalNumbers: [
+        'costBasis',
+        'breedingEconomics.studFee',
+        'breedingEconomics.bookedMares',
+        'breedingEconomics.breedingCosts',
+        'breedingEconomics.mareProductionValue',
+        'breedingEconomics.foalProjectedValue',
+      ],
       /*
        * `horse.readiness.blockers.filter()` — useXbarStore.ts:1205, on the
        * first qualifying photo upload, after the media file is stored — needs
@@ -932,7 +983,26 @@ export function canRestorePersistedState(raw: unknown): boolean {
      * due date, never given a string method, so requiring it would guard
      * nothing and could only turn away a valid archive.
      */
-    salesLeads: { strings: ['id', 'name', 'channel', 'stage'] },
+    /*
+     * The offer money on a lead, all optional and all reaching the report:
+     *
+     *   counterOfferAmount / offerAmount  `lead.counterOfferAmount ||
+     *     lead.offerAmount || 0` — ranchReport.ts:325, summed into
+     *     `pipelineValue`, the "Open offers" figure. `||` hands a truthy
+     *     object to `sum`.
+     *   depositAmount  `lead.depositAmount ?? 0` — ranchReport.ts:339, summed
+     *     into `depositsHeld`.
+     *
+     * Also `salePrice` at profitIntelligence.ts:29, which is the accepted
+     * offer and therefore every realized margin.
+     *
+     * `outcome`, `offerStatus`, `depositStatus`, `lastTouch` and
+     * `nextFollowUp` stay out: every read of them is a comparison.
+     */
+    salesLeads: {
+      strings: ['id', 'name', 'channel', 'stage'],
+      optionalNumbers: ['offerAmount', 'counterOfferAmount', 'depositAmount'],
+    },
     /*
      * `listing.channels.includes()` — SharedAccess.tsx:33 — was the container
      * check, and the two fields rendered beside it went unchecked:
@@ -996,8 +1066,12 @@ export function canRestorePersistedState(raw: unknown): boolean {
    * runs when the first qualifying photo is uploaded — after the media file is
    * already stored.
    *
-   * Every path used here passes through a field this table also requires as an
-   * object, so an absent parent is refused before the child is ever read.
+   * Most paths here pass through a field this table also requires as an object,
+   * so an absent parent is refused before the child is ever read. The
+   * `optionalNumbers` paths under `breedingEconomics` are the exception — that
+   * parent is optional and must stay absent-able — which is why this walk
+   * returns `undefined` for a missing or non-object link rather than throwing.
+   * `optionalNumbers` then treats that `undefined` as "not supplied".
    */
   const valueAtPath = (record: Record<string, unknown>, path: string): unknown =>
     path.split('.').reduce<unknown>((value, key) => {
@@ -1082,6 +1156,16 @@ export function canRestorePersistedState(raw: unknown): boolean {
        */
       for (const field of shape.numbers ?? []) {
         if (!Number.isFinite(valueAtPath(record, field))) return false;
+      }
+      /*
+       * Absent is fine — the readers backfill it. Wrong-typed is not: `?? 0`
+       * and `|| 0` are the usual guards on these fields and neither catches an
+       * object, so it reaches the arithmetic and turns a money total into NaN.
+       */
+      for (const field of shape.optionalNumbers ?? []) {
+        const value = valueAtPath(record, field);
+        if (value === undefined || value === null) continue;
+        if (!Number.isFinite(value)) return false;
       }
       for (const list of shape.stringItems ?? []) {
         const items = valueAtPath(record, list);

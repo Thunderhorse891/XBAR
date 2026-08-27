@@ -879,6 +879,15 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/\/\/[^\n]*/g, '');
   assert.ok(shapeTable.length > 0, 'the shape table must be findable, or these assertions prove nothing');
+  // One collection's entry, so a negative assertion about horses cannot be
+  // satisfied — or broken — by an unrelated collection that legitimately uses
+  // the same field name. Both bounds are measured from the same start.
+  const horsesStart = shapeTable.indexOf('horses: {');
+  const horsesEntry = shapeTable.slice(horsesStart, shapeTable.indexOf('documents: {', horsesStart));
+  assert.ok(horsesStart > -1 && horsesEntry.length > 0, 'the horses entry must be findable');
+  const leadsStart = shapeTable.indexOf('salesLeads: {');
+  const leadsEntry = shapeTable.slice(leadsStart, shapeTable.indexOf('sharedListings:', leadsStart));
+  assert.ok(leadsStart > -1 && leadsEntry.length > 0, 'the salesLeads entry must be findable');
   // The whole file, minus prose, for the parts of the guard that live outside
   // the table itself — the shared item shape above it and the loops below.
   const helperCode = helpers.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
@@ -943,7 +952,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * date and never given a string method, so a guard would protect nothing and
    * could only turn away a valid archive.
    */
-  assert.match(shapeTable, /salesLeads: \{ strings: \['id', 'name', 'channel', 'stage'\] \}/);
+  assert.match(leadsEntry, /strings: \['id', 'name', 'channel', 'stage'\]/);
   assert.doesNotMatch(shapeTable, /'lastTouch'/, 'a guard with no unguarded read behind it is over-rejection');
 
   /*
@@ -1025,6 +1034,9 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     'registry',
     'color',
     'lastVetVisit',
+    // `{horse.medicalTimeline[0]?.title ?? horse.medicalNotes}` — Medical.tsx:251.
+    // A bare React child on every horse whose timeline is empty.
+    'medicalNotes',
     'bloodline.sire',
     'bloodline.dam',
     'bloodline.family',
@@ -1042,12 +1054,63 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   }
 
   /*
-   * `sale.askPrice` and `readiness.score` do not throw on an object — they
-   * yield NaN, which reaches the screen, the CSV and the banker-facing PDF.
-   * `readiness.packetStatus` is deliberately absent: every read is a
-   * comparison or a template string.
+   * `sale.askPrice`, `insuredValue` and `readiness.score` do not throw on an
+   * object — they yield NaN, which reaches the screen, the CSV and the
+   * banker-facing PDF. `insuredValue` is the fallback ask: `horse.sale.askPrice
+   * || horse.insuredValue` is read precisely when the guarded field is empty.
+   * `readiness.packetStatus` is deliberately absent: every read is a comparison
+   * or a template string.
    */
-  assert.match(shapeTable, /numbers: \['age', 'sale\.askPrice', 'readiness\.score'\]/);
+  for (const field of ['age', 'insuredValue', 'sale.askPrice', 'readiness.score']) {
+    assert.match(
+      horsesEntry,
+      new RegExp(`numbers: \\[[^\\]]*'${field.replace('.', '\\.')}'`),
+      `${field} reaches money or the screen without a finite check`,
+    );
+  }
+
+  /*
+   * The OPTIONAL money. `numbers` cannot hold these: `Number.isFinite(undefined)`
+   * is false, so naming an optional field there refuses every archive that
+   * simply omits it — and `createHorseRecord` omits `costBasis` on every horse
+   * it makes, so that would have been most of them.
+   *
+   * `?? 0` and `|| 0` are the guards actually written on these fields, and
+   * neither catches an object. `Math.max(0, {})` is NaN, and from there it is
+   * acquisition cost, invested-to-date, every margin, and the banker's CSV.
+   */
+  for (const field of ['costBasis', 'breedingEconomics.studFee', 'breedingEconomics.foalProjectedValue']) {
+    assert.match(
+      horsesEntry,
+      new RegExp(`'${field.replace('.', '\\.')}'`),
+      `${field} turns a money total into NaN when a backup supplies an object`,
+    );
+  }
+  /*
+   * And NOT as a required number — that is the over-rejection direction, which
+   * loses a valid backup rather than a broken one.
+   */
+  assert.doesNotMatch(
+    horsesEntry,
+    /numbers: \[[^\]]*'costBasis'/,
+    'an optional field required outright refuses every archive that omits it',
+  );
+  /*
+   * `lead.counterOfferAmount || lead.offerAmount || 0` is summed into
+   * `pipelineValue` — the "Open offers" figure — at ranchReport.ts:325, and
+   * `lead.depositAmount ?? 0` into `depositsHeld` at :339.
+   */
+  assert.match(leadsEntry, /optionalNumbers: \['offerAmount', 'counterOfferAmount', 'depositAmount'\]/);
+  /*
+   * The loop that makes the whole category mean anything, and the `continue`
+   * that keeps it from becoming a required check. Without that line every one
+   * of the fields above would reject an ordinary backup.
+   */
+  assert.match(
+    helperCode,
+    /for \(const field of shape\.optionalNumbers \?\? \[\]\) \{[\s\S]*?if \(value === undefined \|\| value === null\) continue;[\s\S]*?Number\.isFinite\(value\)/,
+    'optionalNumbers must allow absence and refuse a wrong type',
+  );
 
   assert.doesNotMatch(shapeTable, /'readiness\.packetStatus'/, 'a compared field crashes nothing');
   assert.match(helpers, /'activity',/);
@@ -1148,7 +1211,7 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   assert.match(helpers, /path\.split\('\.'\)\.reduce/, 'the table has to be able to express a path, not just a field');
 
   /*
-   * All THREE loops must resolve the path, and OVER-REJECTION is the failure to
+   * EVERY loop must resolve the path, and OVER-REJECTION is the failure to
    * watch here rather than over-acceptance: a loop still doing `record[list]`
    * looks up the literal key `'readiness.blockers'`, finds nothing, and refuses
    * every well-formed horse — turning away a backup that restores perfectly,
@@ -1156,8 +1219,8 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    */
   assert.equal(
     (helpers.match(/valueAtPath\(record, /g) ?? []).length,
-    7,
-    'every loop must resolve paths — objects, lists, strings, numbers, item shapes, optional scalars and string items — or a valid archive is rejected',
+    8,
+    'every loop must resolve paths — objects, lists, strings, numbers, optional numbers, item shapes, optional scalars and string items — or a valid archive is rejected',
   );
 
   /*
@@ -1798,4 +1861,21 @@ test('the migration runbook lists every migration the code requires', async () =
   // block is the case that goes wrong.
   assert.match(readme, /psql "\$DATABASE_URL" -f supabase\/migrations\/20260827_subscription_event_ordering\.sql/);
   assert.match(readme, /Five migrations in `supabase\/migrations\/`/, 'the count must match the list');
+
+  /*
+   * The migration that REVOKES is the one an operator can silently skip. The
+   * runbook was headed "staging first, then production" and then only ever ran
+   * it against `$STAGING_DATABASE_URL` before moving on — so following it
+   * exactly left PRODUCTION on the default unauthenticated EXECUTE grants,
+   * legacy listing resolver included, which is the whole of what that migration
+   * exists to remove.
+   */
+  const security = 'supabase/migrations/20260822_restrict_anon_rpc_surface.sql';
+  const stagingApply = readme.indexOf(`psql "$STAGING_DATABASE_URL" -f ${security}`);
+  const productionApply = readme.indexOf(`psql "$DATABASE_URL" -f ${security}`);
+  assert.ok(productionApply > -1, 'the runbook must apply the anon-RPC restriction to production, not only to staging');
+  // Still staging first: running a revoke straight at production is the other
+  // way to get this wrong, and this migration can break every signed-in read.
+  assert.ok(stagingApply > -1, 'a revoking migration must be proved somewhere disposable first');
+  assert.ok(stagingApply < productionApply, 'staging has to come first, or the rehearsal proves nothing');
 });

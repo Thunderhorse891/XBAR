@@ -216,9 +216,20 @@ psql "$DATABASE_URL" \
   -c "reset xbar.reconcile_exclude" \
   -c "reset xbar.reconcile_terminal"
 
-# 3. grants — staging first, then production
+# 3a. grants — STAGING FIRST. This one revokes; a missing grant is a broken
+#     read for every signed-in user, so it is proved somewhere disposable.
 psql "$STAGING_DATABASE_URL" -f supabase/migrations/20260822_restrict_anon_rpc_surface.sql
 node scripts/verify-rpc-surface.mjs "$STAGING_DATABASE_URL"
+# 3b. Then exercise staging by hand — steps 3 and 4 of the HOW TO APPLY block
+#     inside that migration. The verifier proves the anon surface shrank; only
+#     loading a workspace and running a document upload proves nothing that
+#     should still work broke.
+# 3c. ONLY THEN production, ideally in a low-traffic window. Skipping this line
+#     leaves production on the default unauthenticated EXECUTE grants — every
+#     SECURITY DEFINER function, the unmaintained legacy listing resolver
+#     included — which is the whole of what this migration exists to close.
+psql "$DATABASE_URL" -f supabase/migrations/20260822_restrict_anon_rpc_surface.sql
+node scripts/verify-rpc-surface.mjs "$DATABASE_URL"
 
 # 4. checkout lock — additive, safe to apply directly, order does not matter
 psql "$DATABASE_URL" -f supabase/migrations/20260826_checkout_session_lock.sql
