@@ -959,6 +959,10 @@ export function canRestorePersistedState(raw: unknown): boolean {
        * payload and never dereferenced.
        */
       strings: ['id', 'legalOwner', 'transferStatus', 'complianceDeadline'],
+      // `<strong>{selectedRecord.confidence}%</strong>` — Ownership.tsx:680, a
+      // bare React child. The comparisons beside it at :684 are what made this
+      // look compared-only.
+      numbers: ['confidence'],
       lists: ['pendingDocuments'],
       // `auditTrail.map((entry) => <li key={entry}>{entry}</li>)` —
       // Ownership.tsx:791-792. The entries are rendered, so checking only the
@@ -980,7 +984,12 @@ export function canRestorePersistedState(raw: unknown): boolean {
      */
     salePacketBuilds: {
       lists: ['documentIds'],
-      strings: ['id', 'watermark', 'createdAt', 'createdBy'],
+      /*
+       * `status` was excluded as "compared only", which was true of the line I
+       * read — the Pill tone above it — and false of the line under it:
+       * `{packet.status}` is a bare React child at Documents.tsx:1242.
+       */
+      strings: ['id', 'watermark', 'createdAt', 'createdBy', 'status'],
       optionalStrings: ['fileName', 'downloadUrl'],
     },
     /*
@@ -1094,11 +1103,23 @@ export function canRestorePersistedState(raw: unknown): boolean {
      * Also `salePrice` at profitIntelligence.ts:29, which is the accepted
      * offer and therefore every realized margin.
      *
-     * `outcome`, `offerStatus`, `depositStatus`, `lastTouch` and
-     * `nextFollowUp` stay out: every read of them is a comparison.
+     * `lastTouch` and `nextFollowUp` were excluded on the claim that every read
+     * of them is a comparison. Neither is:
+     *
+     *   lastTouch     `formatDateLabel(lead.lastTouch)` — Sales.tsx:154 and
+     *                 :508. That parser calls `value?.trim()`, so an object
+     *                 throws before React is reached. Also rendered bare at
+     *                 BuyerDealRoom.tsx:171 and :185.
+     *   nextFollowUp  `lead.nextFollowUp ? formatDateLabel(lead.nextFollowUp)`
+     *                 — Sales.tsx:155. The truthiness check passes an object
+     *                 straight through. Bare at BuyerDealRoom.tsx:385.
+     *
+     * `outcome`, `offerStatus` and `depositStatus` do stay out — those really
+     * are only compared.
      */
     salesLeads: {
-      strings: ['id', 'name', 'channel', 'stage'],
+      strings: ['id', 'name', 'channel', 'stage', 'lastTouch'],
+      optionalStrings: ['nextFollowUp'],
       optionalNumbers: ['offerAmount', 'counterOfferAmount', 'depositAmount'],
     },
     /*

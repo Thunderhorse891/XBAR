@@ -904,12 +904,17 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   /*
    * The line that renders `documentIds.length` renders three more fields beside
    * it, and `formatDateTimeLabel(packet.createdAt)` throws before React is
-   * involved. `status` stays out — every read of it is an equality comparison,
-   * so an object falls to the else branch and crashes nothing.
+   * involved.
+   *
+   * `status` was excluded here as "every read is an equality comparison". That
+   * was true of the read I looked at — the Pill tone at Documents.tsx:1241 —
+   * and false of the one on the next line, where `{packet.status}` is a bare
+   * React child. Reading one call site and generalising is the mistake this
+   * table keeps catching me in.
    */
   assert.match(
     shapeTable,
-    /salePacketBuilds: \{\s*lists: \['documentIds'\],\s*strings: \['id', 'watermark', 'createdAt', 'createdBy'\],\s*optionalStrings: \['fileName', 'downloadUrl'\],\s*\}/,
+    /salePacketBuilds: \{\s*lists: \['documentIds'\],\s*strings: \['id', 'watermark', 'createdAt', 'createdBy', 'status'\],\s*optionalStrings: \['fileName', 'downloadUrl'\],\s*\}/,
   );
   assert.match(helpers, /objects: \['bloodline', 'assignments', 'sale', 'readiness', 'location'\]/);
 
@@ -952,8 +957,27 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * date and never given a string method, so a guard would protect nothing and
    * could only turn away a valid archive.
    */
-  assert.match(leadsEntry, /strings: \['id', 'name', 'channel', 'stage'\]/);
-  assert.doesNotMatch(shapeTable, /'lastTouch'/, 'a guard with no unguarded read behind it is over-rejection');
+  for (const field of ['id', 'name', 'channel', 'stage']) {
+    assert.match(leadsEntry, new RegExp(`strings: \\[[^\\]]*'${field}'`), `${field} is rendered into JSX`);
+  }
+  /*
+   * `lastTouch` was on the same wrong footing: excluded as "sorted and passed
+   * around as a due date, never given a string method", when
+   * `formatDateLabel(lead.lastTouch)` at Sales.tsx:154 and :508 calls
+   * `value?.trim()` inside its parser, and BuyerDealRoom renders it bare.
+   *
+   * `nextFollowUp` is the optional half of the same pair — Sales.tsx:155 guards
+   * it with truthiness, which an object passes.
+   */
+  assert.match(leadsEntry, /strings: \[[^\]]*'lastTouch'/, 'formatDateLabel throws on an object');
+  assert.match(leadsEntry, /optionalStrings: \['nextFollowUp'\]/, 'optional, so it must not be required');
+  /*
+   * These three really are compared only, and must stay out — requiring them
+   * would refuse archives over values that crash nothing.
+   */
+  for (const compared of ['outcome', 'offerStatus', 'depositStatus']) {
+    assert.doesNotMatch(leadsEntry, new RegExp(`'${compared}'`), `${compared} is compared, not rendered`);
+  }
 
   /*
    * Intake batches had no entry at all — only the shared id check — so the
@@ -1165,6 +1189,24 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   const docsEntry = shapeTable.slice(docsStart, shapeTable.indexOf('ownershipRecords:', docsStart));
   assert.ok(docsStart > -1 && docsEntry.length > 0, 'the documents entry must be findable');
   assert.match(docsEntry, /optionalNonNegativeNumbers: \['fileSizeBytes'\]/);
+
+  /*
+   * Found by auditing the whole exclusion list rather than by being told, after
+   * the fourth finding in a row named a field I had excluded.
+   *
+   * `<strong>{selectedRecord.confidence}%</strong>` — Ownership.tsx:680, a bare
+   * React child on an OwnershipRecord. The three comparisons beside it at :684
+   * are what made this look compared-only; the render is one line above them.
+   */
+  const ownershipStart = shapeTable.indexOf('ownershipRecords: {');
+  const ownershipEntry = shapeTable.slice(ownershipStart, shapeTable.indexOf('salePacketBuilds:', ownershipStart));
+  assert.ok(ownershipStart > -1 && ownershipEntry.length > 0, 'the ownershipRecords entry must be findable');
+  assert.match(
+    ownershipEntry,
+    /numbers: \['confidence'\]/,
+    'a number renders as a React child exactly as a string does',
+  );
+
   /*
    * Negative matters as much as non-numeric here, and ONLY here — the CHECK
    * constraint refuses both. The loop must reject a negative...
