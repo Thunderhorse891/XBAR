@@ -1017,6 +1017,14 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    */
   for (const nested of [
     'sex',
+    // From a proactive sweep of every HorseRecord field, rather than another
+    // round of review — this class had been arriving one collection at a time.
+    'summary',
+    'status',
+    'breed',
+    'registry',
+    'color',
+    'lastVetVisit',
     'bloodline.sire',
     'bloodline.dam',
     'bloodline.family',
@@ -1039,7 +1047,8 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * `readiness.packetStatus` is deliberately absent: every read is a
    * comparison or a template string.
    */
-  assert.match(shapeTable, /numbers: \['sale\.askPrice', 'readiness\.score'\]/);
+  assert.match(shapeTable, /numbers: \['age', 'sale\.askPrice', 'readiness\.score'\]/);
+
   assert.doesNotMatch(shapeTable, /'readiness\.packetStatus'/, 'a compared field crashes nothing');
   assert.match(helpers, /'activity',/);
 
@@ -1164,7 +1173,18 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * A test that enforces a wrong decision is worse than no test: it made the
    * mistake permanent and would have failed anyone who tried to fix it.
    */
-  assert.match(helpers, /strings: \['legalOwner', 'transferStatus'\]/);
+  /*
+   * `complianceDeadline` reaches `formatDateLabel(row.deadline)` through
+   * `record?.complianceDeadline ?? ''` — a `??` that passes an object and a
+   * truthiness check that passes it too. `confidence` stays out: carried into
+   * the public-share payload, never dereferenced.
+   */
+  assert.match(shapeTable, /strings: \['id', 'legalOwner', 'transferStatus', 'complianceDeadline'\]/);
+  assert.match(
+    await readFile('src/routes/Ownership.tsx', 'utf8'),
+    /Due \{formatDateLabel\(row\.deadline\)\}/,
+    'which is the read that makes complianceDeadline required',
+  );
 
   /*
    * `proofRequirements` is OPTIONAL on the record, so it is validated through
@@ -1216,6 +1236,16 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   // `stringItems` asserts the array as well as its contents, so naming
   // `readiness.blockers` under `lists` too would be a redundant second claim.
   assert.doesNotMatch(horseEntry, /lists: \[[^\]]*'readiness\.blockers'/, 'stringItems already asserts the array');
+  /*
+   * Checked and deliberately excluded. `barnName`, `markings`, `microchipId`
+   * and `tags` have no unguarded read at all; `registrationNumber`,
+   * `aqhaNumber`, `foaledOn` and `ownerEntity` appear only inside template
+   * strings, which stringify rather than throw; `profileImage` reaches an
+   * `img src`, where an object renders as a broken image.
+   */
+  for (const excluded of ['barnName', 'markings', 'microchipId', 'tags', 'aqhaNumber', 'profileImage']) {
+    assert.doesNotMatch(horseEntry, new RegExp(`'${excluded}'`), `${excluded} has no unguarded read behind it`);
+  }
   /*
    * `title` was the only scalar checked while the Documents queue renders five
    * more, and `formatDateTimeLabel(document.uploadedAt)` throws before React is
@@ -1358,6 +1388,10 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     ['src/routes/BuyerProfile.tsx', /<div className="media-tile__label">\{asset\.label\}<\/div>/],
     ['src/routes/Equipment.tsx', /\{e\.category\} · \{e\.location\}/],
     ['src/routes/Documents.tsx', /\{document\.type\} · \{document\.source\} ·/],
+    ['src/routes/Sales.tsx', /<p className="horse-card__summary">\{horse\.summary\}<\/p>/],
+    ['src/routes/AnimalProfile.tsx', /\{animal\.breed \|\| 'Horse'\} · \{animal\.sex\} · \{animal\.age\} yrs/],
+    ['src/routes/Medical.tsx', /value: formatDateLabel\(horse\.lastVetVisit\)/],
+    ['src/routes/Horses.tsx', /\{horse\.registry\} · \{horse\.sex\} · \{horse\.location\.barn\}/],
     ['src/routes/RanchAssets.tsx', /a\.assignedTo\.toLowerCase\(\)/],
     ['src/routes/Sales.tsx', /h\.segment\.toLowerCase\(\)/],
     ['src/routes/AnimalProfile.tsx', /animal\.activity\.length/],

@@ -599,6 +599,34 @@ export function canRestorePersistedState(raw: unknown): boolean {
         'owner',
         'segment',
         'sex',
+        /*
+         * Found by a proactive sweep of every field on HorseRecord rather than
+         * by another round of review, since this class of finding had been
+         * arriving one collection at a time.
+         *
+         *   summary       `{horse.summary}` — Sales.tsx:390.
+         *   status        `{animal.status}` — AnimalProfile.tsx:230, and the
+         *                 same at Pastures.tsx:134 and Reports.tsx:362.
+         *   breed         `{animal.breed || 'Horse'}` — AnimalProfile.tsx:217.
+         *                 `||` passes a truthy object straight to JSX.
+         *   registry      `{horse.registry} · …` — Horses.tsx:651.
+         *   color         `{animal.color}` — AnimalProfile.tsx:315.
+         *   lastVetVisit  `formatDateLabel(horse.lastVetVisit)` — Medical.tsx:94
+         *                 and :257, which throws before React is reached.
+         *
+         * Deliberately absent, each checked: `barnName`, `markings`,
+         * `microchipId` and `tags` have no unguarded read at all;
+         * `registrationNumber`, `aqhaNumber`, `foaledOn` and `ownerEntity`
+         * appear only inside template strings, which stringify rather than
+         * throw; `profileImage` reaches an `img src`, where an object renders
+         * as a broken image rather than crashing.
+         */
+        'summary',
+        'status',
+        'breed',
+        'registry',
+        'color',
+        'lastVetVisit',
         'bloodline.sire',
         'bloodline.dam',
         'bloodline.family',
@@ -620,7 +648,9 @@ export function canRestorePersistedState(raw: unknown): boolean {
        * the screen, the CSV and the banker-facing PDF. `readiness.packetStatus`
        * is not here: every read of it is a comparison or a template string.
        */
-      numbers: ['sale.askPrice', 'readiness.score'],
+      // `{animal.age} yrs` — AnimalProfile.tsx:217, rendered as a React child
+      // exactly as a string is.
+      numbers: ['age', 'sale.askPrice', 'readiness.score'],
       /*
        * `horse.readiness.blockers.filter()` — useXbarStore.ts:1205, on the
        * first qualifying photo upload, after the media file is stored — needs
@@ -789,7 +819,14 @@ export function canRestorePersistedState(raw: unknown): boolean {
          */
         auditEvents: { strings: ['id', 'at', 'actor', 'summary'] },
       },
-      strings: ['legalOwner', 'transferStatus'],
+      /*
+       * `complianceDeadline` reaches `formatDateLabel(row.deadline)` at
+       * Ownership.tsx:600 through `record?.complianceDeadline ?? ''` — a `??`
+       * that passes an object, and a truthiness check that an object also
+       * passes. `confidence` stays out: it is carried into the public-share
+       * payload and never dereferenced.
+       */
+      strings: ['id', 'legalOwner', 'transferStatus', 'complianceDeadline'],
       lists: ['pendingDocuments'],
       // `auditTrail.map((entry) => <li key={entry}>{entry}</li>)` —
       // Ownership.tsx:791-792. The entries are rendered, so checking only the
