@@ -6,8 +6,39 @@ const LEGACY_KEY = 'xbar-live-workspace';
 
 export const workspaceStorageDriverLabel = 'IndexedDB primary, localStorage fallback';
 
-function hasBrowserStorage() {
-  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+/*
+ * Whether localStorage can be reached — reported as a VALUE, never as a throw.
+ *
+ * Reaching for `window.localStorage` is itself a throwing operation: a browser
+ * configured to block site data raises SecurityError from the GETTER, so even
+ * `typeof` on it throws before any method is named.
+ *
+ * This used to be a plain boolean that could throw, which left every caller
+ * responsible for remembering to be inside a try. Two of the three were not,
+ * and the one that mattered was the write path: with IndexedDB already
+ * refusing, a blocked getter threw straight out of `writeLegacyValue`, out of
+ * `setItem`, and PAST `notifyPersistFailure` — so the rancher was never told
+ * their edits existed only in memory, and lost them on the next reload.
+ * `removeLegacyValue` had the same hole.
+ *
+ * Guarding those two call sites would have left the trap set for the third. A
+ * function that cannot throw cannot be called wrongly.
+ *
+ * Three states rather than two, because "absent" and "blocked" are different
+ * answers and `readLegacyValue` is built on telling them apart: no storage API
+ * is an absence with nothing to have lost, while a blocked one is a read that
+ * FAILED.
+ */
+type BrowserStorageAccess = 'available' | 'absent' | 'blocked';
+
+function browserStorageAccess(): BrowserStorageAccess {
+  if (typeof window === 'undefined') return 'absent';
+
+  try {
+    return typeof window.localStorage === 'undefined' ? 'absent' : 'available';
+  } catch {
+    return 'blocked';
+  }
 }
 
 /*
@@ -17,19 +48,26 @@ function hasBrowserStorage() {
  * threw", and the caller could not tell them apart — which is the same
  * conflation `workspaceReadFailure` exists to resolve one storage layer up.
  *
- * `hasBrowserStorage` is inside the try because reaching for
- * `window.localStorage` is itself a throwing operation: browsers configured to
- * block site data raise SecurityError from the getter, so even `typeof` on it
- * throws. That escaped this module entirely before.
+ * The blocked-storage case is now answered by `browserStorageAccess` above
+ * rather than by a try around the availability check here. Same outcome for
+ * this function, and it closes the same hole in the write and remove paths,
+ * which never had the try.
  */
 function readLegacyValue(name: string): { value: string | null; failed: boolean } {
-  try {
-    if (!hasBrowserStorage()) {
-      // No storage API at all — server-side rendering, a stripped embedder.
-      // That is an absence, not a failure: there is nothing here to have lost.
-      return { value: null, failed: false };
-    }
+  const access = browserStorageAccess();
 
+  // No storage API at all — server-side rendering, a stripped embedder. That is
+  // an absence, not a failure: there is nothing here to have lost.
+  if (access === 'absent') return { value: null, failed: false };
+
+  // Blocked is the opposite: storage exists and we were refused, so what it
+  // holds is unknown rather than empty.
+  if (access === 'blocked') {
+    console.error('Reading the legacy workspace value failed.', 'localStorage access is blocked.');
+    return { value: null, failed: true };
+  }
+
+  try {
     return { value: window.localStorage.getItem(name), failed: false };
   } catch (error) {
     console.error('Reading the legacy workspace value failed.', error);
@@ -38,7 +76,10 @@ function readLegacyValue(name: string): { value: string | null; failed: boolean 
 }
 
 function writeLegacyValue(name: string, value: string): boolean {
-  if (!hasBrowserStorage()) {
+  // Blocked and absent both mean "not written", which is what the caller acts
+  // on — and it has to be a RETURN rather than a throw, because the caller's
+  // next move is to tell the rancher.
+  if (browserStorageAccess() !== 'available') {
     return false;
   }
 
@@ -55,7 +96,7 @@ function writeLegacyValue(name: string, value: string): boolean {
 }
 
 function removeLegacyValue(name: string) {
-  if (!hasBrowserStorage()) {
+  if (browserStorageAccess() !== 'available') {
     return;
   }
 

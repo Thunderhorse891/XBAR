@@ -233,6 +233,53 @@ for (const where of ['getItem', 'getter'] as const) {
   });
 }
 
+/*
+ * The write half of the same hole, and the one that actually loses work.
+ *
+ * `setItem` falls back to localStorage when IndexedDB refuses, and reports the
+ * failure only when that fallback returns false. The availability check sat
+ * OUTSIDE the try, so a browser blocking site data threw from the
+ * `window.localStorage` getter, straight out of `writeLegacyValue`, out of
+ * `setItem`, and past `notifyPersistFailure` — the rancher was never told their
+ * edits existed only in memory, and lost them on the next reload.
+ *
+ * The read path had been fixed for exactly this and the write path had not,
+ * which is why the accessor now cannot throw at all.
+ */
+test('a blocked storage getter is reported as a persist failure, not thrown', async () => {
+  const restoreDb = installFakeIndexedDb({ abortWrites: true });
+  const restoreWindow = installHostileLocalStorage('getter');
+  const failures: string[] = [];
+  const unsubscribe = onWorkspacePersistFailure((failure) => failures.push(failure.name));
+
+  try {
+    // Must not reject. A throw here is the bug: it skips the notification below.
+    await workspaceStateStorage.setItem('xbar-live-workspace', JSON.stringify({ state: { horses: [] } }));
+    assert.deepEqual(failures, ['xbar-live-workspace'], 'both stores refused, so the rancher must be told');
+  } finally {
+    unsubscribe();
+    restoreWindow();
+    restoreDb();
+  }
+});
+
+/*
+ * And removal, which had the same unguarded check. Nothing to report here — the
+ * value is already gone from the primary store — but it must not throw out of
+ * `removeItem` either.
+ */
+test('a blocked storage getter does not throw out of removeItem', async () => {
+  const restoreDb = installFakeIndexedDb();
+  const restoreWindow = installHostileLocalStorage('getter');
+
+  try {
+    await workspaceStateStorage.removeItem('xbar-live-workspace');
+  } finally {
+    restoreWindow();
+    restoreDb();
+  }
+});
+
 test('a workspace found only in the fallback is returned and is not a failure', async () => {
   // The other half of the same branch: the fallback answering successfully is
   // the normal path for these browsers, and must not be reported as a failure.
