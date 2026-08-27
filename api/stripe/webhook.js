@@ -1,7 +1,7 @@
 import Stripe from 'stripe';
 import { readRawBody, sendJson } from '../_lib/http.js';
 import { buildSubscriptionProfile, findTierByPriceId } from '../_lib/subscription-plans.js';
-import { isStaleBillingEvent, resolveWebhookTier } from '../_lib/subscription-status.js';
+import { resolveWebhookTier } from '../_lib/subscription-status.js';
 import { getSupabaseAdmin } from '../_lib/supabase-admin.js';
 
 export const config = {
@@ -33,47 +33,17 @@ async function syncWorkspaceSubscription({
   }
 
   /*
-   * Refuse an event Stripe created BEFORE the one already applied.
+   * The tier decision stays here: `resolveWebhookTier` needs the
+   * STRIPE_PRICE_ID_* mapping, which lives in this deployment's environment
+   * rather than in the database.
    *
-   * The replay guard in the handler matches on `stripe_event_id`, which stops a
-   * redelivery of the same event and nothing else. A different, older event is
-   * exactly what Stripe's retry schedule produces: a
-   * `customer.subscription.updated` whose first delivery failed arrives hours
-   * later, after the `customer.subscription.deleted` that superseded it has
-   * been processed. It has its own id, has genuinely never been applied, and
-   * the unconditional upserts below wrote its stale `Active` payload straight
-   * over the cancellation — leaving a paid tier nobody was paying for until
-   * some later event happened to correct it.
-   *
-   * Checked here rather than in the handler so BOTH entry points are covered:
-   * `checkout.session.completed` restores an entitlement just as effectively as
-   * a subscription event, and a guard on one path is a guard someone adds a
-   * second path around.
+   * Its `storedTier` read happens before the lock the RPC takes, which is
+   * deliberate and not a second race. The stored tier is a fallback used ONLY
+   * when the price id is unrecognized, and only for a non-entitling status — an
+   * entitling status with an unknown price refuses outright. So that path never
+   * grants access; it carries an existing tier label forward while the billing
+   * state marks it inactive.
    */
-  const { data: lastEvent, error: lastEventError } = await supabase
-    .from('workspace_subscription_events')
-    .select('stripe_event_created_at')
-    .eq('workspace_id', workspaceId)
-    .not('stripe_event_created_at', 'is', null)
-    .order('stripe_event_created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  /*
-   * A failed read is not "no previous event", and the difference decides
-   * whether a superseded event is allowed to restore a canceled plan. Throwing
-   * writes nothing and leaves the event for Stripe to retry — the same posture
-   * the profile read below takes, for the same reason.
-   */
-  if (lastEventError) {
-    throw new Error(`Could not read the last applied billing event: ${lastEventError.message}`);
-  }
-
-  const lastAppliedAt = lastEvent?.stripe_event_created_at ? Date.parse(lastEvent.stripe_event_created_at) : null;
-  if (isStaleBillingEvent(eventCreatedAt, lastAppliedAt)) {
-    return { applied: false, reason: 'stale' };
-  }
-
   const { data: existingProfile, error: existingProfileError } = await supabase
     .from('workspace_subscription_profiles')
     .select('tier, payload')
@@ -83,7 +53,7 @@ async function syncWorkspaceSubscription({
   // A failed read is not the same as "no row", and the difference is
   // destructive. resolveWebhookTier falls back to the baseline when there is no
   // stored tier, which is right for a workspace that has never subscribed — but
-  // if this SELECT merely errored while the upserts below succeed, a canceled
+  // if this SELECT merely errored while the write below succeeds, a canceled
   // Professional or Enterprise subscription would be rewritten as Starter,
   // losing the purchased tier and its rate permanently rather than being marked
   // inactive. Throwing writes nothing and leaves the event for Stripe to retry.
@@ -116,50 +86,44 @@ async function syncWorkspaceSubscription({
     existingUsage,
   });
 
-  const { error: profileError } = await supabase.from('workspace_subscription_profiles').upsert({
-    workspace_id: workspaceId,
-    tier,
-    billing_state: nextProfile.billingState,
-    monthly_rate: nextProfile.monthlyRate,
-    payload: nextProfile,
-    updated_at: new Date().toISOString(),
+  /*
+   * One call, because the ordering check and the three writes have to be
+   * atomic.
+   *
+   * They were a SELECT for the newest applied event followed by three separate
+   * upserts. That is a read-modify-write with no serialization, and Stripe
+   * delivers concurrently: an older `updated` being retried and the `deleted`
+   * that superseded it can both read the same previous timestamp, both decide
+   * they are newest, and the older one write `Active` over the cancellation.
+   * Both are then logged as processed, so no retry ever corrects it.
+   *
+   * `xbar_apply_subscription_event` takes an advisory lock on the workspace for
+   * the length of its transaction, so the second caller sees the first one's
+   * row and refuses. It returns false when it declined as stale — which is a
+   * success for the delivery: the event has been superseded and Stripe should
+   * stop retrying it.
+   */
+  const { data: applied, error: applyError } = await supabase.rpc('xbar_apply_subscription_event', {
+    p_workspace_id: workspaceId,
+    p_event_id: eventId,
+    p_event_type: eventType,
+    p_event_created_at: Number.isFinite(Number(eventCreatedAt)) ? new Date(Number(eventCreatedAt)).toISOString() : null,
+    p_payload: payload,
+    p_tier: tier,
+    p_billing_state: nextProfile.billingState,
+    p_monthly_rate: nextProfile.monthlyRate,
+    p_profile: nextProfile,
+    p_customer_id: customerId || '',
+    p_subscription_id: subscriptionId || '',
+    p_price_id: priceId || '',
+    p_seat_count: Number(quantity || 1),
   });
-  if (profileError) {
-    throw new Error(`Subscription profile sync failed: ${profileError.message}`);
+
+  if (applyError) {
+    throw new Error(`Subscription entitlement sync failed: ${applyError.message}`);
   }
 
-  const { error: customerError } = await supabase.from('workspace_billing_customers').upsert({
-    workspace_id: workspaceId,
-    stripe_customer_id: customerId || '',
-    stripe_subscription_id: subscriptionId || '',
-    stripe_price_id: priceId || '',
-    seat_count: Number(quantity || 1),
-    entitlement_payload: nextProfile,
-    updated_at: new Date().toISOString(),
-  });
-  if (customerError) {
-    throw new Error(`Billing customer sync failed: ${customerError.message}`);
-  }
-
-  const { error: eventError } = await supabase.from('workspace_subscription_events').upsert({
-    workspace_id: workspaceId,
-    stripe_event_id: eventId,
-    event_type: eventType,
-    // Stripe's clock, not ours: `processed_at` is when this delivery was
-    // handled, and a stale event handled late has the LATEST `processed_at` of
-    // all — which is exactly why ordering by it ranked the superseded event
-    // first.
-    stripe_event_created_at: Number.isFinite(Number(eventCreatedAt))
-      ? new Date(Number(eventCreatedAt)).toISOString()
-      : null,
-    payload,
-    processed_at: new Date().toISOString(),
-  });
-  if (eventError) {
-    throw new Error(`Subscription event log failed: ${eventError.message}`);
-  }
-
-  return { applied: true };
+  return { applied: applied === true };
 }
 
 export default async function handler(req, res) {

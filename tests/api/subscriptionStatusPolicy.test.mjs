@@ -13,7 +13,6 @@ import {
   entitledTierForBillingState,
   isKnownBillingState,
   isRecoverableStripeStatus,
-  isStaleBillingEvent,
   resolveWebhookTier,
   RECOVERABLE_STRIPE_STATUSES,
   TERMINAL_STRIPE_STATUSES,
@@ -611,89 +610,112 @@ test('the spent-this-month card does not caption itself with lifetime purchases'
   assert.ok(!/detail=.*acquisitionCost/.test(card), 'a lifetime acquisition total is not part of this month spend');
 });
 
-test('an event Stripe created before the one already applied is refused', () => {
-  /*
-   * The event-id replay guard stops a REDELIVERY of the same event and nothing
-   * else. Stripe does not guarantee delivery order, and its retry schedule
-   * makes inversion routine: a `customer.subscription.updated` whose first
-   * delivery failed arrives hours later, after the
-   * `customer.subscription.deleted` that superseded it has been processed. It
-   * carries its own id and has genuinely never been applied, so it passed the
-   * guard — and its stale `Active` payload was written straight over the
-   * cancellation, leaving a paid tier nobody was paying for.
-   */
-  const cancellation = Date.parse('2026-08-27T02:00:00Z');
-  const supersededUpdate = Date.parse('2026-08-27T01:00:00Z');
-
-  assert.equal(isStaleBillingEvent(supersededUpdate, cancellation), true, 'the retried older event must not apply');
-  assert.equal(isStaleBillingEvent(cancellation, supersededUpdate), false, 'and a genuinely newer one must');
-});
-
-test('a workspace with no applied event yet still applies its first one', () => {
-  /*
-   * Over-rejection is the failure to watch here. Treating an unknown
-   * last-applied time as "stale" would freeze billing for every workspace whose
-   * history predates the ordering column — the migration deliberately does not
-   * backfill it, because `processed_at` is the delivery clock and ordering by
-   * it is the bug.
-   */
-  const now = Date.parse('2026-08-27T02:00:00Z');
-  for (const noPrevious of [null, undefined, '', NaN, 'not-a-time']) {
-    assert.equal(
-      isStaleBillingEvent(now, noPrevious),
-      false,
-      `an unknown previous time (${String(noPrevious)}) is not stale`,
-    );
-  }
-  // And an unreadable incoming time cannot be used to refuse either.
-  assert.equal(isStaleBillingEvent(undefined, now), false);
-});
-
-test('events sharing a created second both apply', () => {
-  // A plan change emits several events with the same `created`. Dropping the
-  // second would lose a real update, and true redeliveries are already stopped
-  // by the event id, so equality proceeds.
-  const sameSecond = Date.parse('2026-08-27T02:00:00Z');
-  assert.equal(isStaleBillingEvent(sameSecond, sameSecond), false);
-});
-
-test('the webhook orders on Stripe’s clock, not on when it processed the delivery', async () => {
+/*
+ * The ordering rule lives in SQL, and in only one place.
+ *
+ * It was first written as a JavaScript predicate called before three separate
+ * upserts. That is a read-modify-write with no serialization, and Stripe
+ * delivers concurrently: an older `updated` being retried and the `deleted`
+ * that superseded it can both read the same previous timestamp, both decide
+ * they are newest, and the older one write `Active` over the cancellation —
+ * after which both are logged as processed and no retry ever corrects it.
+ *
+ * Making the write atomic forces the comparison into the same transaction as
+ * the writes, so the predicate moved into `xbar_apply_subscription_event`. The
+ * JavaScript copy was deleted rather than kept as a fast path: it would have
+ * been a second implementation of one invariant, free to drift from the one
+ * that actually decides, and it added a round trip rather than saving one.
+ */
+test('the entitlement write is atomic, not a read followed by upserts', async () => {
   const webhook = await readFile(path.join(process.cwd(), 'api/stripe/webhook.js'), 'utf8');
   const code = webhook.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 
-  /*
-   * `processed_at` is when WE handled the delivery, so a stale event handled
-   * late has the LATEST `processed_at` of all — ordering by it ranks the
-   * superseded event first, which is the bug rather than the fix.
-   */
-  assert.match(code, /\.order\('stripe_event_created_at', \{ ascending: false \}\)/);
-  assert.doesNotMatch(code, /\.order\('processed_at'/, 'the delivery clock must never be the ordering key');
-  assert.match(code, /isStaleBillingEvent\(eventCreatedAt, lastAppliedAt\)/);
-  assert.match(code, /stripe_event_created_at: Number\.isFinite/, 'and every applied event must record it');
+  assert.match(code, /supabase\.rpc\('xbar_apply_subscription_event', \{/);
+  assert.doesNotMatch(
+    code,
+    /from\('workspace_subscription_profiles'\)\s*\.upsert/,
+    'the entitlement upserts must happen inside the locked function, not beside it',
+  );
+  assert.doesNotMatch(code, /from\('workspace_billing_customers'\)\s*\.upsert/);
+  assert.doesNotMatch(code, /from\('workspace_subscription_events'\)\s*\.upsert/);
+  assert.doesNotMatch(
+    code,
+    /order\('stripe_event_created_at'/,
+    'and the ordering read must not survive outside the lock, where it proves nothing',
+  );
 
   /*
-   * Both entry points. `checkout.session.completed` restores an entitlement
-   * just as effectively as a subscription event, so the check lives inside
-   * `syncWorkspaceSubscription` where neither path can miss it.
+   * One implementation of the rule. A JavaScript copy could only drift from the
+   * one that actually decides.
    */
+  const policy = await readFile(path.join(process.cwd(), 'api/_lib/subscription-status.js'), 'utf8');
+  assert.doesNotMatch(policy, /isStaleBillingEvent/, 'the duplicate predicate must be gone');
+
+  /*
+   * The tier decision stays in JavaScript because it needs the
+   * STRIPE_PRICE_ID_* mapping, which is environment rather than schema — so the
+   * resolved tier and profile are passed in.
+   */
+  assert.match(code, /p_tier: tier,/);
+  assert.match(code, /p_profile: nextProfile,/);
+  assert.match(code, /resolveWebhookTier\(\{/);
+
+  // Both entry points still route through the shared sync.
   assert.equal(
     (code.match(/eventCreatedAt: event\.created \* 1000/g) ?? []).length,
     2,
     'both call sites must pass Stripe’s creation time',
   );
-  const syncStart = code.indexOf('async function syncWorkspaceSubscription');
-  // Searched from the function, not from the top of the file: the first
-  // `isStaleBillingEvent` in the source is the import, which sits above every
-  // function and would satisfy an ordering assertion no matter where the guard
-  // actually ran.
-  const guardAt = code.indexOf('isStaleBillingEvent(eventCreatedAt', syncStart);
-  const firstUpsert = code.indexOf('.upsert(', syncStart);
-  assert.ok(syncStart >= 0 && guardAt > syncStart, 'the guard belongs inside the shared sync, not in one branch');
-  assert.ok(guardAt < firstUpsert, 'and it must run before anything is written');
+});
 
-  // A failed read is not "no previous event": it must throw and leave the
-  // event for Stripe to retry, the same posture the profile read takes.
-  assert.match(code, /Could not read the last applied billing event/);
+test('the apply function serializes per workspace and compares Stripe’s clock', async () => {
+  const sql = await readFile(
+    path.join(process.cwd(), 'supabase/migrations/20260827_subscription_event_ordering.sql'),
+    'utf8',
+  );
+  const statements = sql.replace(/--[^\n]*/g, '');
+
+  /*
+   * An advisory lock rather than `select ... for update`: there is no row to
+   * lock on a workspace whose first billing event this is, which is exactly
+   * when `workspace_billing_customers` is empty.
+   */
+  assert.match(statements, /perform pg_advisory_xact_lock\(hashtextextended\(p_workspace_id::text, 0\)\)/);
+
+  const fn = statements.slice(statements.indexOf('create or replace function public.xbar_apply_subscription_event'));
+  const lockAt = fn.indexOf('pg_advisory_xact_lock');
+  const readAt = fn.indexOf('select max(stripe_event_created_at)');
+  const firstWrite = fn.indexOf('insert into public.workspace_subscription_profiles');
+  assert.ok(lockAt >= 0 && readAt > lockAt, 'the comparison must happen under the lock, or it races');
+  assert.ok(firstWrite > readAt, 'and the writes must follow it inside the same transaction');
+
+  /*
+   * STRICTLY older, and null-tolerant on both sides. Several events share a
+   * `created` second — a plan change emits more than one — so refusing an equal
+   * timestamp would drop a real update, and a workspace whose first event this
+   * is must still be able to apply it.
+   */
+  assert.match(statements, /p_event_created_at < last_applied/);
+  assert.doesNotMatch(statements, /p_event_created_at <= last_applied/, 'equal timestamps must both apply');
+  assert.match(statements, /last_applied is not null\s*and p_event_created_at is not null/);
+
+  /*
+   * The checkout lock lives on `workspace_billing_customers` too. A webhook
+   * landing mid-checkout must not clear it, or a second Checkout Session can be
+   * created for the same workspace.
+   */
+  const customerUpsert = statements.slice(
+    statements.indexOf('insert into public.workspace_billing_customers'),
+    statements.indexOf('insert into public.workspace_subscription_events'),
+  );
+  assert.doesNotMatch(customerUpsert, /checkout_lock/, 'the webhook must not touch the checkout lock columns');
+
+  // Same rule as 20260822: entitlement writes are service_role only.
+  assert.match(
+    statements,
+    /grant execute on function public\.xbar_apply_subscription_event\([\s\S]*?\) to service_role/,
+  );
+  assert.match(statements, /revoke all on function public\.xbar_apply_subscription_event\([\s\S]*?\) from anon/);
 });
 
 test('the ordering column has a migration, and it does not backfill', async () => {

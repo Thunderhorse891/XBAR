@@ -295,37 +295,3 @@ export function resolveWebhookTier({ status, mappedTier, storedTier }) {
 
   return { ok: true, tier: storedTier || BASELINE_TIER, billingState };
 }
-
-/**
- * Whether a Stripe event is older than the last one already applied.
- *
- * Stripe does not guarantee delivery order, and its retry schedule makes
- * inversion routine rather than exotic: a `customer.subscription.updated` whose
- * first delivery failed can arrive hours later, after the
- * `customer.subscription.deleted` that superseded it has already been
- * processed. The event-id replay guard does not catch this — the late event has
- * its own id and has genuinely never been applied — so the handler wrote its
- * stale `Active` payload straight over the cancellation and the workspace kept
- * a paid tier nobody was paying for, indefinitely, until some later event
- * happened to correct it.
- *
- * Compared as instants rather than by event type, because there is no ordering
- * among types either: an `updated` that downgrades a plan can be overtaken by
- * an earlier `updated` that upgraded it, and neither is a cancellation.
- *
- * STRICTLY older. Two events can share a `created` second — a plan change emits
- * several — and dropping the second one would lose a real update. Equal
- * timestamps proceed; true redeliveries are already stopped by the event id.
- *
- * An unknown last-applied time is NOT treated as stale: a workspace whose first
- * event this is must be able to apply it.
- *
- * @param {unknown} eventCreatedAt   this event's `created`, as ms since epoch
- * @param {unknown} lastAppliedAt    the newest already-applied event, as ms
- */
-export function isStaleBillingEvent(eventCreatedAt, lastAppliedAt) {
-  const incoming = Number(eventCreatedAt);
-  const applied = Number(lastAppliedAt);
-  if (!Number.isFinite(incoming) || !Number.isFinite(applied)) return false;
-  return incoming < applied;
-}

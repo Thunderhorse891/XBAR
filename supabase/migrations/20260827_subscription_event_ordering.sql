@@ -61,6 +61,144 @@ comment on column public.workspace_subscription_events.stripe_event_created_at i
 create index if not exists workspace_subscription_events_workspace_created_idx
   on public.workspace_subscription_events (workspace_id, stripe_event_created_at desc);
 
+-- Apply one billing event, atomically.
+--
+-- WHY A FUNCTION AND NOT A READ FOLLOWED BY THREE UPSERTS
+-- ------------------------------------------------------
+-- The ordering comparison was first written in the handler: read the newest
+-- applied timestamp, compare, then write. That is a read-modify-write with no
+-- serialization, and Stripe delivers concurrently.
+--
+-- Two deliveries for one workspace — an older `updated` being retried and the
+-- `deleted` that superseded it — can both read the same previous timestamp and
+-- both decide they are newest. The cancellation writes first; the older update
+-- then writes `Active` over it. Both are logged as processed, so no retry ever
+-- corrects it and the workspace holds a paid tier nobody is paying for. The
+-- guard closed the sequential case and left the concurrent one open.
+--
+-- So the comparison and the writes happen inside one function, under an
+-- advisory lock held for the transaction. Concurrent calls for the same
+-- workspace serialize; whichever runs second sees the first one's row and
+-- refuses. Different workspaces do not contend: the lock key is derived from
+-- the workspace id.
+--
+-- `pg_advisory_xact_lock` rather than `select ... for update`: there is no row
+-- to lock on a workspace whose first billing event this is, which is exactly
+-- when `workspace_billing_customers` is empty.
+--
+-- WHAT STAYS IN JAVASCRIPT
+-- -----------------------
+-- The tier decision. `resolveWebhookTier` needs the STRIPE_PRICE_ID_* mapping,
+-- which lives in the deployment's environment rather than in the database, so
+-- the resolved tier and the built profile are passed in.
+--
+-- That decision reads the stored tier before the lock is taken, and it is worth
+-- being precise about why that is not a second race. The stored tier is used
+-- ONLY as a fallback when the price id is unrecognized, and only for a
+-- non-entitling status — an entitling status with an unknown price refuses
+-- outright. So the fallback path never grants access; it carries an existing
+-- tier label forward while the billing state marks it inactive. A stale read
+-- there can at worst attach a slightly outdated label to a workspace that is
+-- being deactivated either way.
+create or replace function public.xbar_apply_subscription_event(
+  p_workspace_id uuid,
+  p_event_id text,
+  p_event_type text,
+  p_event_created_at timestamptz,
+  p_payload jsonb,
+  p_tier text,
+  p_billing_state text,
+  p_monthly_rate double precision,
+  p_profile jsonb,
+  p_customer_id text,
+  p_subscription_id text,
+  p_price_id text,
+  p_seat_count integer
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  last_applied timestamptz;
+begin
+  -- Held until this transaction ends, so the comparison below and the writes
+  -- after it cannot be interleaved with another delivery for this workspace.
+  perform pg_advisory_xact_lock(hashtextextended(p_workspace_id::text, 0));
+
+  select max(stripe_event_created_at)
+    into last_applied
+    from public.workspace_subscription_events
+   where workspace_id = p_workspace_id;
+
+  -- STRICTLY older. Several events can share a `created` second — a plan change
+  -- emits more than one — and refusing an equal timestamp would drop a real
+  -- update. Redeliveries of the SAME event are stopped by stripe_event_id.
+  --
+  -- A null on either side is not staleness: a workspace whose first event this
+  -- is, or whose history predates this column, must still be able to apply it.
+  if last_applied is not null
+     and p_event_created_at is not null
+     and p_event_created_at < last_applied then
+    return false;
+  end if;
+
+  insert into public.workspace_subscription_profiles
+    (workspace_id, tier, billing_state, monthly_rate, payload, updated_at)
+  values (p_workspace_id, p_tier, p_billing_state, p_monthly_rate, p_profile, now())
+  on conflict (workspace_id) do update
+    set tier = excluded.tier,
+        billing_state = excluded.billing_state,
+        monthly_rate = excluded.monthly_rate,
+        payload = excluded.payload,
+        updated_at = excluded.updated_at;
+
+  -- Only the billing columns are assigned. `checkout_lock_at` and
+  -- `checkout_lock_token` live on this table too, and a webhook landing while a
+  -- checkout holds the lock must not clear it — that lock is what stops a
+  -- second Checkout Session being created for the same workspace.
+  insert into public.workspace_billing_customers
+    (workspace_id, stripe_customer_id, stripe_subscription_id, stripe_price_id,
+     seat_count, entitlement_payload, updated_at)
+  values (p_workspace_id, coalesce(p_customer_id, ''), coalesce(p_subscription_id, ''),
+          coalesce(p_price_id, ''), coalesce(p_seat_count, 1), p_profile, now())
+  on conflict (workspace_id) do update
+    set stripe_customer_id = excluded.stripe_customer_id,
+        stripe_subscription_id = excluded.stripe_subscription_id,
+        stripe_price_id = excluded.stripe_price_id,
+        seat_count = excluded.seat_count,
+        entitlement_payload = excluded.entitlement_payload,
+        updated_at = excluded.updated_at;
+
+  insert into public.workspace_subscription_events
+    (workspace_id, stripe_event_id, event_type, stripe_event_created_at, payload, processed_at)
+  values (p_workspace_id, p_event_id, p_event_type, p_event_created_at, p_payload, now())
+  on conflict (stripe_event_id) do update
+    set event_type = excluded.event_type,
+        stripe_event_created_at = excluded.stripe_event_created_at,
+        payload = excluded.payload,
+        processed_at = excluded.processed_at;
+
+  return true;
+end;
+$$;
+
+-- Same rule as 20260822: nothing is executable by PUBLIC or anon by default.
+-- Only the API's service role calls this, and it writes entitlements.
+revoke all on function public.xbar_apply_subscription_event(
+  uuid, text, text, timestamptz, jsonb, text, text, double precision, jsonb, text, text, text, integer
+) from public;
+revoke all on function public.xbar_apply_subscription_event(
+  uuid, text, text, timestamptz, jsonb, text, text, double precision, jsonb, text, text, text, integer
+) from anon;
+revoke all on function public.xbar_apply_subscription_event(
+  uuid, text, text, timestamptz, jsonb, text, text, double precision, jsonb, text, text, text, integer
+) from authenticated;
+grant execute on function public.xbar_apply_subscription_event(
+  uuid, text, text, timestamptz, jsonb, text, text, double precision, jsonb, text, text, text, integer
+) to service_role;
+
 commit;
 
 -- HOW TO APPLY THIS
