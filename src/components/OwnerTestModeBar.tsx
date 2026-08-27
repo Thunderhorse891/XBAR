@@ -23,7 +23,29 @@ export function OwnerTestModeBar() {
   const setPreviewTier = useOwnerPreviewStore((state) => state.setPreviewTier);
   const clearPreview = useOwnerPreviewStore((state) => state.clearPreview);
 
-  if (!authorization.authorized) return null;
+  if (!authorization.authorized) {
+    /*
+     * Silent for everyone else, explicit for the operator.
+     *
+     * A build with no allowlist and no local flag has no owner preview to
+     * speak of, and saying so on a customer's screen would be noise. A build
+     * the operator configured is the opposite case: rendering nothing here is
+     * what made this undiagnosable — an unset variable, a variable set on the
+     * wrong Vercel scope, and a paused Supabase project with no sign-in all
+     * looked identical, which is to say they all looked like nothing at all.
+     */
+    if (!authorization.configured) return null;
+
+    return (
+      <aside className="owner-test-bar owner-test-bar--unavailable" aria-label="Owner test mode">
+        <div className="owner-test-bar__status">
+          <span className="owner-test-bar__badge">Owner test mode</span>
+          <span className="owner-test-bar__reach">Unavailable</span>
+        </div>
+        <p className="owner-test-bar__detail">{authorization.reason}</p>
+      </aside>
+    );
+  }
 
   const reachLabel = ownerPreviewReachLabel(reach);
 

@@ -4,7 +4,12 @@
  * Deliberately loud and deliberately fixed to the viewport. This element exists
  * so an operator cannot mistake a previewed tier for their real plan, which
  * means it has to stay visible while they scroll through the screens they are
- * inspecting. It only ever renders for an authorized owner.
+ * inspecting.
+ *
+ * It renders for an authorized owner, and — muted — for a build that was
+ * CONFIGURED for owner preview but cannot use it, so an operator can tell an
+ * unset variable from a missing sign-in. A build with neither an allowlist nor
+ * the local flag renders nothing at all.
  */
 
 .owner-test-bar {
@@ -23,6 +28,20 @@
   color: #3d2f08;
   font-family: var(--font-ui, inherit);
   font-size: 12px;
+}
+
+/*
+ * Configured but not usable. Muted on purpose: this says why the switcher is
+ * not here, which is useful, but it is not a preview and must not read like
+ * one. The previewing state below is the loud one.
+ */
+.owner-test-bar--unavailable {
+  border-color: rgba(120, 84, 8, 0.22);
+  background: #fdfaf1;
+}
+
+.owner-test-bar--unavailable .owner-test-bar__badge {
+  background: #8a7a52;
 }
 
 /* Previewing is the state worth noticing, so it gets the stronger treatment. */

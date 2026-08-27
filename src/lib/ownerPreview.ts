@@ -51,7 +51,19 @@ export const PREVIEWABLE_TIERS: readonly SubscriptionTier[] = ['Starter', 'Profe
 
 /** Where the authorization to preview came from, or why there is none. */
 export type OwnerPreviewAuthorization =
-  { authorized: true; source: 'comp-allowlist' | 'local-dev-flag' } | { authorized: false; reason: string };
+  | { authorized: true; source: 'comp-allowlist' | 'local-dev-flag' }
+  /*
+   * `configured` says whether THIS BUILD was set up for owner preview at all —
+   * an allowlist compiled in, or the local flag set.
+   *
+   * It exists so the refusal can be shown to the operator without being shown
+   * to a customer. On a build with neither, owner preview is not a thing that
+   * exists and saying anything about it would be noise on someone else's
+   * screen. On a build the operator configured themselves, silence is the
+   * problem: the bar rendered nothing, and there was no way to tell a missing
+   * env var from a missing session.
+   */
+  | { authorized: false; reason: string; configured: boolean };
 
 export type OwnerPreviewEnvironment = {
   /** Signed-in email, or empty when there is no session. */
@@ -79,9 +91,47 @@ export function resolveOwnerPreviewAuthorization(env: OwnerPreviewEnvironment): 
     return { authorized: true, source: 'comp-allowlist' };
   }
 
+  const configured = env.compEmails.length > 0 || env.localFlagEnabled;
+
+  /*
+   * An allowlist with nobody signed in is the case that used to lie.
+   *
+   * It fell through to the local-flag branch and reported "Owner test mode is
+   * off. It is enabled per build, not from the app." — which is exactly
+   * backwards when the build DOES carry an allowlist. The operator reads that,
+   * concludes the environment variable did not take, and goes back to Vercel to
+   * set a variable that was already set. The missing piece is a session: the
+   * allowlist matches an EMAIL, and there is no email until someone signs in.
+   *
+   * Worth being concrete, because it is not obvious: a paused Supabase project
+   * means no sign-in at all, so this branch is where an owner lands with every
+   * variable correctly configured.
+   */
+  if (env.compEmails.length > 0 && !env.sessionEmail) {
+    return {
+      authorized: false,
+      configured,
+      reason:
+        'Owner test mode is configured for this build but nobody is signed in. ' +
+        'The allowlist matches a signed-in email, so sign in with the allowlisted account.',
+    };
+  }
+
+  // The signed-in account simply is not the operator's. Their own address is
+  // safe to show them; the allowlist itself is not, since it would hand every
+  // visitor the operator's email.
+  if (env.compEmails.length > 0 && env.sessionEmail) {
+    return {
+      authorized: false,
+      configured,
+      reason: `Signed in as ${env.sessionEmail}, which is not on this build's owner allowlist.`,
+    };
+  }
+
   if (!env.localFlagEnabled) {
     return {
       authorized: false,
+      configured,
       reason: 'Owner test mode is off. It is enabled per build, not from the app.',
     };
   }
@@ -93,6 +143,7 @@ export function resolveOwnerPreviewAuthorization(env: OwnerPreviewEnvironment): 
   if (env.isProdBuild || !env.isDevBuild) {
     return {
       authorized: false,
+      configured,
       reason: 'Owner test mode is disabled in production builds.',
     };
   }

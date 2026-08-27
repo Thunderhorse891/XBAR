@@ -56,6 +56,65 @@ test('a signed-in customer who is not on the allowlist is not authorized', () =>
   assert.equal(result.authorized, false);
 });
 
+/*
+ * The refusal that used to lie.
+ *
+ * An allowlist compiled in with nobody signed in fell through to the local-flag
+ * branch and reported "Owner test mode is off. It is enabled per build, not
+ * from the app." — exactly backwards when the build DOES carry an allowlist.
+ * The operator reads that, concludes the environment variable did not take, and
+ * goes back to set a variable that was already set. The missing piece is a
+ * session, and a paused Supabase project is a way to have every variable right
+ * and still have no session at all.
+ */
+test('a configured build with no session says so, rather than blaming the build', () => {
+  const result = resolveOwnerPreviewAuthorization({
+    ...anonymousProduction,
+    sessionEmail: '',
+    compEmails: ['owner@xbar.test'],
+  });
+
+  assert.equal(result.authorized, false);
+  assert.equal(result.authorized === false && result.configured, true, 'the operator must be told');
+  const reason = result.authorized === false ? result.reason : '';
+  assert.match(reason, /nobody is signed in/, 'the missing piece is the session');
+  assert.doesNotMatch(reason, /Owner test mode is off/, 'the build is not off — that was the misleading answer');
+});
+
+test('a signed-in non-owner is told it is their account, not the build', () => {
+  const result = resolveOwnerPreviewAuthorization({
+    ...anonymousProduction,
+    sessionEmail: 'customer@example.com',
+    compEmails: ['owner@xbar.test'],
+  });
+
+  const reason = result.authorized === false ? result.reason : '';
+  assert.match(reason, /customer@example\.com/, 'their own address is safe to show them');
+  /*
+   * The allowlist itself is NOT. Echoing it would hand the operator's email to
+   * every visitor of a deployed build — a disclosure the diagnostic is not
+   * worth.
+   */
+  assert.doesNotMatch(reason, /owner@xbar\.test/, "the operator's address must not be echoed to a visitor");
+});
+
+/*
+ * And a build nobody configured stays silent. `configured` is what the bar uses
+ * to decide whether to render the refusal at all: an ordinary customer's screen
+ * must not carry a message about a feature that does not exist in their build.
+ */
+test('a build with no allowlist and no flag reports nothing to show', () => {
+  const result = resolveOwnerPreviewAuthorization({
+    ...anonymousProduction,
+    sessionEmail: 'customer@example.com',
+    compEmails: [],
+    localFlagEnabled: false,
+  });
+
+  assert.equal(result.authorized, false);
+  assert.equal(result.authorized === false && result.configured, false, 'nothing to explain on a stock build');
+});
+
 test('the comp allowlist authorizes, and is case and whitespace tolerant', () => {
   for (const email of ['owner@xbar.test', 'OWNER@XBAR.TEST', '  Owner@Xbar.Test  ']) {
     const result = resolveOwnerPreviewAuthorization({
@@ -144,7 +203,7 @@ test('reach separates a local preview from a server-backed one', () => {
   assert.equal(ownerPreviewReach(comped, false), 'cloud-ready');
   assert.equal(ownerPreviewReach(comped, true), 'cloud-active');
 
-  assert.equal(ownerPreviewReach({ authorized: false, reason: 'off' }, true), 'local-only');
+  assert.equal(ownerPreviewReach({ authorized: false, reason: 'off', configured: false }, true), 'local-only');
 });
 
 test('reach labels are distinct so the indicator cannot be misread', () => {
