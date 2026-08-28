@@ -63,6 +63,12 @@ test('a day that is not 24 hours long still lands on the boundary', () => {
  * effect never re-ran, and the one-shot timeout was gone for good.
  */
 
+/** Mirrors MAX_CHECK_INTERVAL_MS in the hook. */
+const BOUND = 10 * 60 * 1000;
+
+/** What the tracker should wait: the nearer of the boundary and the bound. */
+const expectedWait = (from: Date) => Math.min(msUntilNextDay(from), BOUND);
+
 interface ArmedTimer {
   at: number;
   delay: number;
@@ -73,6 +79,7 @@ function fakeClock(start: Date) {
   let nowMs = start.getTime();
   let nextId = 1;
   const armed = new Map<number, ArmedTimer>();
+  const wakeHandlers = new Set<() => void>();
 
   const clock: DayKeyClock = {
     now: () => new Date(nowMs),
@@ -84,6 +91,10 @@ function fakeClock(start: Date) {
     clearTimeout: (timer) => {
       armed.delete(timer);
     },
+    subscribeToWake: (handler) => {
+      wakeHandlers.add(handler);
+      return () => wakeHandlers.delete(handler);
+    },
   };
 
   const only = (): ArmedTimer => {
@@ -91,9 +102,18 @@ function fakeClock(start: Date) {
     return [...armed.values()][0];
   };
 
+  const fireDue = () => {
+    const id = [...armed.keys()][0];
+    const timer = armed.get(id)!;
+    armed.delete(id);
+    nowMs = timer.at;
+    timer.handler();
+  };
+
   return {
     clock,
     armedCount: () => armed.size,
+    wakeHandlerCount: () => wakeHandlers.size,
     /** The single pending timeout, asserting there is exactly one. */
     only,
     /** Runs the pending timeout. `landsAt` overrides where the clock actually is. */
@@ -104,15 +124,64 @@ function fakeClock(start: Date) {
       nowMs = landsAt ? landsAt.getTime() : timer.at;
       timer.handler();
     },
+    /** Runs every timeout that comes due on the way to `target`. */
+    advanceTo: (target: Date) => {
+      for (let guard = 0; guard < 10_000; guard += 1) {
+        const timer = only();
+        if (timer.at > target.getTime()) break;
+        fireDue();
+      }
+      nowMs = Math.max(nowMs, target.getTime());
+    },
+    /** The tab is shown again, or the window refocused. */
+    wake: () => {
+      for (const handler of [...wakeHandlers]) handler();
+    },
+    setNow: (at: Date) => {
+      nowMs = at.getTime();
+    },
   };
 }
 
+test('the boundary still wins whenever it is nearer than the bounded check', () => {
+  // The bound must never make a normal midnight arrive later than it used to.
+  const clock = fakeClock(new Date(2026, 7, 24, 23, 59, 30));
+  trackDayKey(() => {}, clock.clock);
+
+  assert.equal(clock.only().delay, 31_000, 'half a minute from midnight, the timer still aims at midnight');
+});
+
+test('no single wait runs longer than the bounded check', () => {
+  // Noon is twelve hours from the boundary. A timeout that long is only
+  // correct while the clock underneath it holds still.
+  const clock = fakeClock(new Date(2026, 7, 24, 12, 0, 0));
+  trackDayKey(() => {}, clock.clock);
+
+  assert.equal(clock.only().delay, BOUND);
+});
+
+test('a zone change that moves the local date FORWARD is noticed at the next bounded check', () => {
+  // The opposite of the westward case below, and the one re-arming cannot fix:
+  // the local calendar date rolls over BEFORE the armed timer, which is still
+  // aimed at the old zone's midnight. The callback has not run yet, so there is
+  // nothing to re-arm from — only a wait short enough to come back and look.
+  const clock = fakeClock(new Date(2026, 7, 24, 12, 0, 0));
+  const seen: string[] = [];
+  trackDayKey((key) => seen.push(key), clock.clock);
+
+  // The clock jumps east past midnight while the timer is pending.
+  const jumped = new Date(2026, 7, 25, 0, 5, 0);
+  clock.fire(jumped);
+
+  assert.deepEqual(seen, ['2026-08-25'], 'the new day is reported without waiting for the old aim');
+  assert.equal(clock.armedCount(), 1);
+  assert.equal(clock.only().delay, expectedWait(jumped));
+});
+
 test('a firing that computes the same day still re-arms the timer', () => {
-  // The exact shape of the regression: the machine's clock moves west — a
-  // laptop carried into another zone, or an OS correcting itself — so the
-  // timeout aimed at the old midnight lands while the local date is still
-  // yesterday. Under the old `[dayKey]` effect this was the last timer ever
-  // armed, and every screen keyed on the day quietly froze.
+  // The westward case: the timeout aimed at the old midnight lands while the
+  // local date is still yesterday. Under the old `[dayKey]` effect this was the
+  // last timer ever armed, and every screen keyed on the day quietly froze.
   const clock = fakeClock(new Date(2026, 7, 24, 23, 59, 30));
   const seen: string[] = [];
   trackDayKey((key) => seen.push(key), clock.clock);
@@ -124,30 +193,32 @@ test('a firing that computes the same day still re-arms the timer', () => {
   assert.equal(clock.armedCount(), 1, 'the timer must be re-armed even though the key did not change');
   assert.equal(
     clock.only().delay,
-    msUntilNextDay(landed),
+    expectedWait(landed),
     'the next wait is measured from where the clock really is, not from the old aim',
   );
 });
 
 test('the tracker keeps reporting across consecutive days', () => {
   // The pessimistic direction: re-arming must not stop after one boundary, and
-  // must not fire more often than the day changes.
+  // must not report a day that has not arrived.
   const clock = fakeClock(new Date(2026, 7, 24, 12, 0, 0));
   const seen: string[] = [];
   trackDayKey((key) => seen.push(key), clock.clock);
 
-  clock.fire();
-  clock.fire();
-  clock.fire();
+  clock.advanceTo(new Date(2026, 7, 27, 12, 0, 0));
 
-  assert.deepEqual(seen, ['2026-08-25', '2026-08-26', '2026-08-27']);
+  assert.deepEqual(
+    [...new Set(seen)],
+    ['2026-08-24', '2026-08-25', '2026-08-26', '2026-08-27'],
+    'every day in the span is reported, in order, and no day that has not arrived is',
+  );
   assert.equal(clock.armedCount(), 1, 'exactly one timer stays armed — re-arming must not accumulate');
 });
 
 test('a machine that slept through midnight measures the next wait from when it woke', () => {
-  // Not a same-key firing: the day did change. This pins that the re-arm reads
-  // the clock rather than adding a fixed day to the old aim, so a suspended
-  // laptop does not drift a little further from the boundary every night.
+  // This pins that the re-arm reads the clock rather than adding a fixed day to
+  // the old aim, so a suspended laptop does not drift a little further from the
+  // boundary every night.
   const clock = fakeClock(new Date(2026, 7, 24, 23, 59, 30));
   const seen: string[] = [];
   trackDayKey((key) => seen.push(key), clock.clock);
@@ -156,16 +227,69 @@ test('a machine that slept through midnight measures the next wait from when it 
   clock.fire(wokeLate);
 
   assert.deepEqual(seen, ['2026-08-25']);
-  assert.equal(clock.only().delay, msUntilNextDay(wokeLate));
+  assert.equal(clock.only().delay, expectedWait(wokeLate));
 });
 
-test('stopping clears the armed timer', () => {
+test('showing the tab again reports the day immediately rather than at the next check', () => {
+  // A zone change almost always arrives with a sleep or a switch away from the
+  // tab, so the bounded check is the guarantee and this is what makes it feel
+  // instant.
+  const clock = fakeClock(new Date(2026, 7, 24, 23, 50, 0));
+  const seen: string[] = [];
+  trackDayKey((key) => seen.push(key), clock.clock);
+
+  clock.setNow(new Date(2026, 7, 25, 0, 2, 0));
+  clock.wake();
+
+  assert.deepEqual(seen, ['2026-08-25']);
+});
+
+test('a wake re-aims the pending timer instead of leaving a stale one beside it', () => {
   const clock = fakeClock(new Date(2026, 7, 24, 12, 0, 0));
-  const stop = trackDayKey(() => {}, clock.clock);
+  trackDayKey(() => {}, clock.clock);
+
+  const jumped = new Date(2026, 7, 25, 0, 2, 0);
+  clock.setNow(jumped);
+  clock.wake();
+
+  assert.equal(clock.armedCount(), 1, 'the timer measured against the old clock must be replaced, not joined');
+  assert.equal(clock.only().delay, expectedWait(jumped));
+});
+
+test('a clock with no wake support still tracks the day', () => {
+  // `subscribeToWake` is optional: the bounded check is what guarantees
+  // correctness, and a caller may supply a bare clock.
+  const base = fakeClock(new Date(2026, 7, 24, 23, 59, 30));
+  const bare: DayKeyClock = {
+    now: base.clock.now,
+    setTimeout: base.clock.setTimeout,
+    clearTimeout: base.clock.clearTimeout,
+  };
+  const seen: string[] = [];
+  const stop = trackDayKey((key) => seen.push(key), bare);
+
+  base.fire();
+
+  assert.deepEqual(seen, ['2026-08-25']);
+  assert.equal(base.armedCount(), 1);
+  stop();
+  assert.equal(base.armedCount(), 0);
+});
+
+test('stopping clears the armed timer and unsubscribes', () => {
+  const clock = fakeClock(new Date(2026, 7, 24, 12, 0, 0));
+  const seen: string[] = [];
+  const stop = trackDayKey((key) => seen.push(key), clock.clock);
 
   assert.equal(clock.armedCount(), 1, 'the first timer is armed on the spot, not on the first firing');
+  assert.equal(clock.wakeHandlerCount(), 1);
+
   stop();
+
   assert.equal(clock.armedCount(), 0);
+  assert.equal(clock.wakeHandlerCount(), 0, 'a listener left behind would outlive the screen that owns it');
+  clock.wake();
+  assert.deepEqual(seen, [], 'and must report nothing after the stop');
 });
 
 test('stopping from inside the callback does not leave a timer behind', () => {

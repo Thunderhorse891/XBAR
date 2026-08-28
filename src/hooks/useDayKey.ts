@@ -38,13 +38,54 @@ export interface DayKeyClock {
   now: () => Date;
   setTimeout: (handler: () => void, ms: number) => number;
   clearTimeout: (timer: number) => void;
+  /**
+   * Fires when the app may have missed a boundary while it was not looking —
+   * a hidden tab shown again, a window refocused. Optional so a caller can
+   * supply a bare clock; the bounded check below is what guarantees
+   * correctness, and this only makes the common case immediate.
+   */
+  subscribeToWake?: (handler: () => void) => () => void;
 }
 
 const browserClock: DayKeyClock = {
   now: () => new Date(),
   setTimeout: (handler, ms) => window.setTimeout(handler, ms),
   clearTimeout: (timer) => window.clearTimeout(timer),
+  subscribeToWake: (handler) => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') handler();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', handler);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', handler);
+    };
+  },
 };
+
+/*
+ * No single wait runs longer than this, however far away midnight is.
+ *
+ * A timeout aimed at the boundary is only correct while the clock underneath
+ * it holds still. Move the zone EAST — the same laptop flying the other way,
+ * the same OS correcting itself the other direction — and the local calendar
+ * date rolls over BEFORE the armed timer, which is still aimed at the old
+ * zone's midnight. Nothing recomputes in between, so a report keeps yesterday's
+ * monthly totals, trailing windows and expiry verdicts for as many hours as the
+ * zone moved.
+ *
+ * Re-arming from the callback does not help here: the callback has not run yet.
+ * That fix was for a timer that fired too EARLY; this is a timer that fires too
+ * LATE, and no amount of re-arming reaches back before the first firing.
+ *
+ * So the boundary aim stays — it is what makes a screen open all day wake
+ * essentially once — and this only bounds how wrong it can be when the clock
+ * moves under it. The steady-state cost is one date comparison every ten
+ * minutes, and a firing that computes the same key sets no state, so React
+ * bails out and nothing re-renders.
+ */
+const MAX_CHECK_INTERVAL_MS = 10 * 60 * 1000;
 
 /**
  * Reports the local day key at every midnight until the returned stop is called.
@@ -75,19 +116,36 @@ export function trackDayKey(onDayKey: (dayKey: string) => void, clock: DayKeyClo
   let stopped = false;
 
   const arm = () => {
+    // The nearer of the two: the boundary still wins whenever it is closer, so
+    // the bound never makes the hook notice a normal midnight any later.
+    const wait = Math.min(msUntilNextDay(clock.now()), MAX_CHECK_INTERVAL_MS);
     timer = clock.setTimeout(() => {
       onDayKey(dayKeyFor(clock.now()));
       // `onDayKey` can be the last thing a screen does before it unmounts, and
       // a re-arm after the stop would outlive it as a timer nothing can clear.
       if (!stopped) arm();
-    }, msUntilNextDay(clock.now()));
+    }, wait);
   };
 
   arm();
 
+  /*
+   * A zone change almost always arrives with a sleep or a switch away from the
+   * tab, so this turns "wrong for up to ten minutes" into "right by the time
+   * you have looked at it". It re-aims rather than adding a second timer: the
+   * pending one was measured against a clock that has since moved.
+   */
+  const unsubscribe = clock.subscribeToWake?.(() => {
+    if (stopped) return;
+    onDayKey(dayKeyFor(clock.now()));
+    clock.clearTimeout(timer);
+    arm();
+  });
+
   return () => {
     stopped = true;
     clock.clearTimeout(timer);
+    unsubscribe?.();
   };
 }
 
