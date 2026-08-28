@@ -1023,11 +1023,42 @@ export function canRestorePersistedState(raw: unknown): boolean {
       // bare React child. The comparisons beside it at :684 are what made this
       // look compared-only.
       numbers: ['confidence'],
-      lists: ['pendingDocuments'],
-      // `auditTrail.map((entry) => <li key={entry}>{entry}</li>)` —
-      // Ownership.tsx:791-792. The entries are rendered, so checking only the
-      // container leaves `auditTrail: [{}]` crashing the record drawer.
-      stringItems: ['auditTrail'],
+      /*
+       * `auditTrail.map((entry) => <li key={entry}>{entry}</li>)` —
+       * Ownership.tsx:791-792. The entries are rendered, so checking only the
+       * container leaves `auditTrail: [{}]` crashing the record drawer.
+       *
+       * `pendingDocuments` sat under `lists` beside it, checked as a container
+       * and never as contents — the same miss, on the same record, one line
+       * apart. Its entries are read as strings in six places, and the two that
+       * matter are the ones a buyer sees:
+       *
+       *   localSalePacketGenerator.ts:323  `.join(', ') || ''` fills the
+       *       "Pending documents" row of the buyer sale packet, so `[{}]`
+       *       prints `[object Object]` where the outstanding legal releases
+       *       for a horse are supposed to be listed.
+       *   saleCredential.ts:266  `[...pendingDocuments].sort()` seals them
+       *       into the signed credential, so the malformed entry is not just
+       *       displayed but hashed into the packet's proof of integrity and
+       *       issued.
+       *
+       *   documentTemplateLibrary.ts:387  `.join(', ')` into a generated
+       *       document; ownership/selectors.ts:127 `.join(' ')` into the
+       *       search index; dashboardOps.ts:145 and saleTrustEngine.ts:27 copy
+       *       them into reason and blocker lists that render.
+       *
+       * `.join` does not throw on an object, and none of the guards above it
+       * catch one: `record?.pendingDocuments ?? []` tests absence, and
+       * `Array.from(new Set(pending))` at ownership/selectors.ts:35 dedupes by
+       * identity, so two identical malformed entries both survive. Nothing
+       * fails loudly — the packet is generated, sealed and sent.
+       *
+       * `string[]` since the first commit of types/xbar.ts, so requiring the
+       * contents cannot turn away an archive any build of this app wrote.
+       * `stringItems` asserts the array as well as its entries, which is why
+       * it is not repeated under `lists`.
+       */
+      stringItems: ['auditTrail', 'pendingDocuments'],
     },
     /*
      * `packet.documentIds.length` — SalePacketStudio.tsx:174, Documents.tsx:1210

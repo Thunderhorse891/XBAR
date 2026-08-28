@@ -1550,8 +1550,40 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     /if \(entries === undefined \|\| entries === null\) continue;\s*if \(!Array\.isArray\(entries\)\) return false;/,
     'absent is allowed, present-but-not-an-array is not',
   );
-  assert.match(shapeTable, /lists: \['pendingDocuments'\]/);
-  assert.match(shapeTable, /stringItems: \['auditTrail'\]/);
+  /*
+   * `pendingDocuments` was under `lists` — the container asserted, the entries
+   * not — one line from `auditTrail`, which carries the comment explaining
+   * exactly that mistake. The lesson was applied to one array of this record
+   * and not to the other.
+   *
+   * Asserted per field rather than on the array's contents, so appending a
+   * third string array here does not fail these.
+   */
+  assert.match(shapeTable, /stringItems: \[[^\]]*'pendingDocuments'/);
+  assert.match(shapeTable, /stringItems: \[[^\]]*'auditTrail'/);
+  assert.doesNotMatch(
+    shapeTable,
+    /lists: \[[^\]]*'pendingDocuments'/,
+    '`stringItems` asserts the array as well as its entries, so requiring it again under `lists` is redundant',
+  );
+
+  /*
+   * The two reads that make the entries — not just the container — a buyer's
+   * problem. Both take the array without ever proving it holds strings, and
+   * neither `.join` nor `.sort` throws on an object: the packet is generated,
+   * sealed and sent with `[object Object]` standing in for the outstanding
+   * legal releases on a horse.
+   */
+  assert.match(
+    await readFile('src/lib/localSalePacketGenerator.ts', 'utf8'),
+    /pendingDocuments\.join\(', '\)/,
+    'which is the read that prints them into the buyer sale packet',
+  );
+  assert.match(
+    await readFile('src/lib/saleCredential.ts', 'utf8'),
+    /\[\.\.\.input\.ownership\.pendingDocuments\]\.sort\(\)/,
+    'and the read that hashes them into the credential the buyer verifies against',
+  );
 
   assert.match(helpers, /'medicalTimeline'/, 'horse.medicalTimeline.map was missing from the horse list itself');
 
