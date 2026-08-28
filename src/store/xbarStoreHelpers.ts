@@ -755,18 +755,37 @@ export function canRestorePersistedState(raw: unknown): boolean {
          *                 `.trim()` and the action throws instead of creating
          *                 or matching the horse.
          *
-         * Deliberately absent, each re-checked after the exclusion above
-         * proved wrong: `markings`, `microchipId` and `tags` have no unguarded
-         * read at all — `filled()` (animalPassport.ts:109) tests `typeof` before
-         * calling anything, and `tags` has no reader in the app;
-         * `aqhaNumber`, `foaledOn` and `ownerEntity` really do appear only
-         * inside template strings and `.join(' ')`, which stringify rather than
-         * throw; `profileImage` reaches an `img src`, where an object renders
-         * as a broken image rather than crashing.
+         *   aqhaNumber    `{horse.aqhaNumber || horse.registrationNumber ||
+         *                 'Pending'}` — Horses.tsx:683, and the same expression
+         *                 as a drawer fact value at :189, which renders through
+         *                 `{fact.value}` (InteractionSystem.tsx:452). `||`
+         *                 selects the FIRST truthy operand, so an object wins
+         *                 the expression outright and reaches React as a bare
+         *                 child. Excluded twice — once as "template strings
+         *                 only", then again on a re-check that read the
+         *                 template-literal site at AnimalProfile.tsx:323 and
+         *                 stopped there.
+         *   readiness.packetStatus
+         *                 `{animal.readiness?.packetStatus ?? 'Review'}` —
+         *                 AnimalProfile.tsx:670, inside a StatusChip. Excluded
+         *                 as "every read is a comparison or a template string",
+         *                 which describes Breeding.tsx:100 and Sales.tsx:61 and
+         *                 not this one.
+         *
+         * Deliberately absent, and this time checked by looking for what
+         * actually breaks — a value reaching JSX as a bare child — rather than
+         * for a string method: `markings`, `microchipId`, `tags` and
+         * `profileImage` have no such read at all (`filled()`,
+         * animalPassport.ts:109, tests `typeof` before calling anything, `tags`
+         * has no reader in the app, and `profileImage` reaches an `img src`,
+         * where an object renders as a broken image); `foaledOn` and
+         * `ownerEntity` appear only inside template strings —
+         * AnimalProfile.tsx:319 and :341 — which stringify rather than throw.
          */
         'summary',
         'barnName',
         'registrationNumber',
+        'aqhaNumber',
         'status',
         'breed',
         'registry',
@@ -786,13 +805,17 @@ export function canRestorePersistedState(raw: unknown): boolean {
         'location.stall',
         // `{horse.sale.listingState}` — Sales.tsx:380, SharedAccess.tsx:269.
         'sale.listingState',
+        // `{animal.readiness?.packetStatus ?? 'Review'}` — AnimalProfile.tsx:670.
+        'readiness.packetStatus',
       ],
       /*
        * `sale.askPrice` feeds `listedValue` and every margin figure, and
        * `readiness.score` is rendered as a readiness percentage. Neither
        * throws on an object — they yield NaN, which propagates silently into
        * the screen, the CSV and the banker-facing PDF. `readiness.packetStatus`
-       * is not here: every read of it is a comparison or a template string.
+       * is not here because it is not a number — it is required above, as a
+       * string, after "every read of it is a comparison or a template string"
+       * turned out to describe every read but the one that renders it.
        */
       // `{animal.age} yrs` — AnimalProfile.tsx:217, rendered as a React child
       // exactly as a string is.

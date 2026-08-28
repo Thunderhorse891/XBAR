@@ -1147,6 +1147,13 @@ test('a record that installs but crashes the route it lands on is refused', asyn
      * document carrying a registration number.
      */
     'registrationNumber',
+    /*
+     * `{horse.aqhaNumber || horse.registrationNumber || 'Pending'}` —
+     * Horses.tsx:683, and the same expression as a drawer fact value at :189.
+     * `||` selects the first truthy operand, so an object wins outright and
+     * reaches React as a bare child.
+     */
+    'aqhaNumber',
     'status',
     'breed',
     'registry',
@@ -1167,6 +1174,9 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     'location.pasture',
     'location.stall',
     'sale.listingState',
+    // `{animal.readiness?.packetStatus ?? 'Review'}` — AnimalProfile.tsx:670.
+    // `??` catches absence, never type.
+    'readiness.packetStatus',
   ]) {
     assert.match(shapeTable, new RegExp(`'${nested.replace('.', '\\.')}'`), `${nested} is read without a type check`);
   }
@@ -1182,15 +1192,22 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   );
 
   /*
-   * The other six the same comment excluded, re-checked after one of them
-   * turned out to be wrong. Over-rejection is as much a bug as
-   * under-rejection: `markings`, `microchipId` and `tags` reach only
-   * `filled()`, which tests `typeof` before calling anything; `aqhaNumber`,
-   * `foaledOn` and `ownerEntity` reach only template strings and `.join(' ')`;
-   * `profileImage` reaches an `img src`. Requiring any of them would turn away
+   * The fields that remain excluded. `aqhaNumber` WAS asserted here, and did
+   * not belong: `{horse.aqhaNumber || horse.registrationNumber || 'Pending'}`
+   * at Horses.tsx:683 renders it as a bare React child. That assertion was
+   * deleted rather than adjusted, on the same principle as the `barnName` and
+   * `pendingDocuments` ones before it — a test that enforces a wrong decision
+   * is worse than no test, because it makes the mistake permanent and fails
+   * whoever tries to fix it.
+   *
+   * These five were re-checked by searching for what actually breaks — a value
+   * reaching JSX as a bare child — rather than for a string method, which is
+   * the search that missed `aqhaNumber` twice. `markings`, `microchipId`,
+   * `tags` and `profileImage` have no such read; `foaledOn` and `ownerEntity`
+   * appear only inside template strings. Requiring any of them would turn away
    * a backup that restores perfectly.
    */
-  for (const excluded of ['markings', 'microchipId', 'aqhaNumber', 'foaledOn', 'ownerEntity', 'profileImage']) {
+  for (const excluded of ['markings', 'microchipId', 'foaledOn', 'ownerEntity', 'profileImage']) {
     assert.doesNotMatch(
       shapeTable,
       new RegExp(`^\\s*'${excluded}',$`, 'm'),
@@ -1202,6 +1219,25 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     /function filled\(value: unknown\): boolean \{\s*if \(typeof value === 'string'\)/,
     'which is why the fields that only reach `filled` stay out',
   );
+
+  /*
+   * The two reads that overturned an exclusion apiece, pinned at their source.
+   * Both are the same shape and neither involves a string method: a guard that
+   * tests for absence — `||`, `??` — hands a truthy object straight to React.
+   */
+  {
+    const horsesRoute = await readFile('src/routes/Horses.tsx', 'utf8');
+    assert.match(
+      horsesRoute,
+      /\{horse\.aqhaNumber \|\| horse\.registrationNumber \|\| 'Pending'\}/,
+      'a bare React child, not a template string',
+    );
+    assert.match(
+      await readFile('src/routes/AnimalProfile.tsx', 'utf8'),
+      /\{animal\.readiness\?\.packetStatus \?\? 'Review'\}/,
+      'the one read of packetStatus that is neither a comparison nor a template string',
+    );
+  }
 
   /*
    * `sale.askPrice`, `insuredValue` and `readiness.score` do not throw on an
@@ -1479,7 +1515,15 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     /inquiryCount: leadCount,/,
     'and that exclusion is only true while the derived sync actually rebuilds it',
   );
-  assert.doesNotMatch(shapeTable, /'readiness\.packetStatus'/, 'a compared field crashes nothing');
+  /*
+   * `readiness.packetStatus` was asserted here as excluded, with the same
+   * reason its table comment gave: "a compared field crashes nothing". That is
+   * true of Breeding.tsx:62, Sales.tsx:61 and Horses.tsx:139, and false of
+   * AnimalProfile.tsx:670, which renders it inside a StatusChip through a `??`
+   * that catches absence and never type. Deleted rather than adjusted: it
+   * enforced a wrong decision and would have failed anyone who tried to fix it.
+   * The field is now required with the other horse strings above.
+   */
   assert.match(helpers, /'activity',/);
 
   /*
@@ -1704,17 +1748,25 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   assert.doesNotMatch(horseEntry, /lists: \[[^\]]*'readiness\.blockers'/, 'stringItems already asserts the array');
   /*
    * Checked and deliberately excluded. `markings`, `microchipId` and `tags`
-   * have no unguarded read at all; `registrationNumber`, `aqhaNumber`,
-   * `foaledOn` and `ownerEntity` appear only inside template strings, which
-   * stringify rather than throw; `profileImage` reaches an `img src`, where an
-   * object renders as a broken image.
+   * have no unguarded read at all; `foaledOn` and `ownerEntity` appear only
+   * inside template strings, which stringify rather than throw; `profileImage`
+   * reaches an `img src`, where an object renders as a broken image.
    *
    * `barnName` WAS on this list, twice, and did not belong: Ownership.tsx:586
-   * renders it as a bare React child behind a truthiness check. The lesson is
-   * about this list rather than that field — an exclusion is a claim about
-   * EVERY read site, and it is only as good as the grep behind it.
+   * renders it as a bare React child behind a truthiness check. So were
+   * `registrationNumber` and `aqhaNumber`, and the second of those was pinned
+   * as excluded in THREE separate places in this file — which is the real cost
+   * of a wrong exclusion: it gets copied, and each copy reads like
+   * corroboration.
+   *
+   * The lesson is about this list rather than any one field. An exclusion is a
+   * claim about EVERY read site, and it is only as good as the search behind
+   * it — and the search has to be for what actually breaks. Grepping for
+   * string methods missed `aqhaNumber` twice, because the read that breaks is
+   * `{horse.aqhaNumber || … }`: no method call at all, just a truthy object
+   * winning an `||` and landing in JSX.
    */
-  for (const excluded of ['markings', 'microchipId', 'tags', 'aqhaNumber', 'profileImage']) {
+  for (const excluded of ['markings', 'microchipId', 'tags', 'profileImage']) {
     assert.doesNotMatch(horseEntry, new RegExp(`'${excluded}'`), `${excluded} has no unguarded read behind it`);
   }
   /*
