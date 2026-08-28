@@ -66,6 +66,8 @@ export default function Settings() {
   const lastCloudSyncAt = useCloudStore((state) => state.lastSyncAt);
   const cloudSyncState = useCloudStore((state) => state.syncState);
   const setLastCloudSyncAt = useCloudStore((state) => state.setLastSyncAt);
+  const setCloudSyncState = useCloudStore((state) => state.setSyncState);
+  const unlockAutosaveAfterManualSync = useCloudStore((state) => state.unlockAutosaveAfterManualSync);
   const sendMagicLink = useCloudStore((state) => state.sendMagicLink);
   const signInWithFacebook = useCloudStore((state) => state.signInWithFacebook);
   const signOutCloud = useCloudStore((state) => state.signOut);
@@ -494,6 +496,23 @@ export default function Settings() {
       tone: result.ok && !promoted.failed.length ? 'success' : 'error',
     });
     if (result.ok && result.updatedAt) setLastCloudSyncAt(result.updatedAt);
+    /*
+     * Choosing a copy is what `conflict-lock` was waiting for, and nothing else
+     * clears it: reconciliation runs once per hydration and its effect is keyed
+     * on the workspace and the session, neither of which changes when this
+     * button is pressed. Without this the rancher is told the sync completed,
+     * every later edit is skipped by autosave, and the cloud silently stops
+     * receiving work until the tab is reloaded.
+     *
+     * Unlocked on `result.ok` even when some files could not be promoted — the
+     * same condition that already advances the sync timestamp. The records are
+     * in the cloud and the conflict is settled; the files retry on their own,
+     * and staying locked over a retry is the failure this fixes.
+     */
+    if (result.ok) {
+      unlockAutosaveAfterManualSync();
+      setCloudSyncState('idle', 'Cloud workspace ready.');
+    }
     setCloudBusy(false);
   };
 
@@ -512,6 +531,12 @@ export default function Settings() {
       tone: result.ok ? 'success' : 'error',
     });
     if (result.ok && remote.updatedAt) setLastCloudSyncAt(remote.updatedAt);
+    // The other half of the same choice: taking the cloud copy settles the
+    // conflict exactly as pushing the local one does.
+    if (result.ok) {
+      unlockAutosaveAfterManualSync();
+      setCloudSyncState('idle', 'Cloud workspace ready.');
+    }
     setCloudBusy(false);
   };
 

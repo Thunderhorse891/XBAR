@@ -41,6 +41,23 @@ type CloudStore = {
   // Both arguments are required so a new call site cannot quietly inherit the
   // permissive half of this pair.
   setAutosaveReady: (ready: boolean, unlocked: boolean) => void;
+  /*
+   * The rancher resolved a `conflict-lock` by hand, choosing a copy with Push
+   * cloud or Pull cloud in Settings.
+   *
+   * Reconciliation is the only other thing that unlocks autosave, and it runs
+   * once per hydration: its effect is keyed on the workspace and the session,
+   * neither of which changes when someone presses a button in Settings. So
+   * without this, resolving the conflict left autosave locked until a reload —
+   * while the toast said the sync had completed.
+   *
+   * A named transition rather than a second argument to `setAutosaveReady`,
+   * for the reason given above it: a call site that can pass `ready` is a call
+   * site that can promote a half-hydrated workspace. This one cannot. It
+   * refuses while hydration is still running, because `finish` is authoritative
+   * about which copy won and would overwrite this a moment later anyway.
+   */
+  unlockAutosaveAfterManualSync: () => void;
   signInWithPassword: (email: string, password: string) => Promise<CloudActionResult>;
   sendMagicLink: (email: string) => Promise<CloudActionResult>;
   signUpWithPassword: (email: string, password: string) => Promise<CloudActionResult>;
@@ -115,6 +132,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
   setLastSyncAt: (value) => set({ lastSyncAt: value }),
   setSyncState: (state, message = '') => set({ syncState: state, syncMessage: message }),
   setAutosaveReady: (ready, unlocked) => set({ autosaveReady: ready, autosaveUnlocked: unlocked }),
+  unlockAutosaveAfterManualSync: () => set((state) => (state.autosaveReady ? { autosaveUnlocked: true } : state)),
   sendMagicLink: async (email) => {
     const client = getSupabaseClient();
     if (!client) {
