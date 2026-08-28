@@ -743,15 +743,30 @@ export function canRestorePersistedState(raw: unknown): boolean {
          *                 timeline — the common case — an object goes straight
          *                 to the renderer.
          *
-         * Deliberately absent, each checked: `markings`, `microchipId` and
-         * `tags` have no unguarded read at all;
-         * `registrationNumber`, `aqhaNumber`, `foaledOn` and `ownerEntity`
-         * appear only inside template strings, which stringify rather than
+         *   registrationNumber
+         *                 `norm(horse.registrationNumber)` — useXbarStore.ts:1033,
+         *                 where `norm` is `(value ?? '').trim()...`. This field
+         *                 was excluded on the grounds that it "appears only
+         *                 inside template strings", which was true of every
+         *                 site I looked at and false of the one I did not: the
+         *                 duplicate check that runs on "Create horse" for a
+         *                 document carrying a registration number. `?? ''`
+         *                 catches absence, never type, so the object reaches
+         *                 `.trim()` and the action throws instead of creating
+         *                 or matching the horse.
+         *
+         * Deliberately absent, each re-checked after the exclusion above
+         * proved wrong: `markings`, `microchipId` and `tags` have no unguarded
+         * read at all — `filled()` (animalPassport.ts:109) tests `typeof` before
+         * calling anything, and `tags` has no reader in the app;
+         * `aqhaNumber`, `foaledOn` and `ownerEntity` really do appear only
+         * inside template strings and `.join(' ')`, which stringify rather than
          * throw; `profileImage` reaches an `img src`, where an object renders
          * as a broken image rather than crashing.
          */
         'summary',
         'barnName',
+        'registrationNumber',
         'status',
         'breed',
         'registry',

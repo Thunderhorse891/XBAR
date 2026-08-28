@@ -1139,6 +1139,14 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     // Ownership.tsx:586. Excluded twice as having no unguarded read; a truthy
     // object passes the ternary and lands in JSX as a bare child.
     'barnName',
+    /*
+     * `norm(horse.registrationNumber)` — useXbarStore.ts:1033, where `norm` is
+     * `(value ?? '').trim()...`. Excluded on the grounds that it "appears only
+     * inside template strings", which was true of every site checked and false
+     * of the one that was not: the duplicate check on "Create horse" for a
+     * document carrying a registration number.
+     */
+    'registrationNumber',
     'status',
     'breed',
     'registry',
@@ -1162,6 +1170,38 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   ]) {
     assert.match(shapeTable, new RegExp(`'${nested.replace('.', '\\.')}'`), `${nested} is read without a type check`);
   }
+
+  /*
+   * The read that makes `registrationNumber` required, pinned at its source so
+   * this cannot be re-excluded by reading the template-string sites alone.
+   */
+  assert.match(
+    await readFile('src/store/useXbarStore.ts', 'utf8'),
+    /norm\(horse\.registrationNumber\)/,
+    "the duplicate check dereferences it through a `?? ''` that catches absence, not type",
+  );
+
+  /*
+   * The other six the same comment excluded, re-checked after one of them
+   * turned out to be wrong. Over-rejection is as much a bug as
+   * under-rejection: `markings`, `microchipId` and `tags` reach only
+   * `filled()`, which tests `typeof` before calling anything; `aqhaNumber`,
+   * `foaledOn` and `ownerEntity` reach only template strings and `.join(' ')`;
+   * `profileImage` reaches an `img src`. Requiring any of them would turn away
+   * a backup that restores perfectly.
+   */
+  for (const excluded of ['markings', 'microchipId', 'aqhaNumber', 'foaledOn', 'ownerEntity', 'profileImage']) {
+    assert.doesNotMatch(
+      shapeTable,
+      new RegExp(`^\\s*'${excluded}',$`, 'm'),
+      `${excluded} has no unguarded read — requiring it would refuse a valid archive`,
+    );
+  }
+  assert.match(
+    await readFile('src/lib/animalPassport.ts', 'utf8'),
+    /function filled\(value: unknown\): boolean \{\s*if \(typeof value === 'string'\)/,
+    'which is why the fields that only reach `filled` stay out',
+  );
 
   /*
    * `sale.askPrice`, `insuredValue` and `readiness.score` do not throw on an
