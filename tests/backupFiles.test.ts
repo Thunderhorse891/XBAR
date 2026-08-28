@@ -1325,6 +1325,55 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   );
 
   /*
+   * Naming the bag proves the bag is an object and nothing about what is in
+   * it. `details: { followUpDue: ['2026-09-05'] }` passes `optionalObjects`
+   * honestly — it really is an object — and the array then coerces through
+   * BOTH comparisons at Medical.tsx:56-57, because JS turns a single-element
+   * array into that element. The event lands in `dueSoonFollowUps` and throws
+   * only when the list renders.
+   */
+  assert.match(
+    helperCode,
+    /optionalStrings: \['details\.followUpDue'\]/,
+    'the field inside the bag whose type survives every check between the backup and the crash',
+  );
+  assert.doesNotMatch(
+    helperCode,
+    /strings: \[[^\]]*'details\.followUpDue'/,
+    'most medical events schedule no follow-up, so requiring it would refuse almost every real archive',
+  );
+
+  /*
+   * The assertion this fix actually rests on. The item loops read `item[field]`
+   * directly until now, so a dotted name would have looked up a literal
+   * `'details.followUpDue'` key, found undefined, and passed every payload —
+   * a guard that cannot fail, which is worse than no guard because it reads
+   * like protection. They must resolve paths the way the record-level loops
+   * do.
+   */
+  assert.equal(
+    (helperCode.match(/valueAtPath\(itemRecord, /g) ?? []).length,
+    4,
+    'every itemShape loop must resolve paths, or a nested field is silently unchecked',
+  );
+  assert.doesNotMatch(
+    helperCode,
+    /\(item as Record<string, unknown>\)\[field\]/,
+    'direct property access in an item loop cannot see through a dotted path',
+  );
+
+  /*
+   * The reader chain that makes it a crash rather than a bad label: the array
+   * reaches `formatDateLabel`, which reaches `.trim()`.
+   */
+  assert.match(
+    await readFile('src/routes/Medical.tsx', 'utf8'),
+    /formatDateLabel\(event\.followUpDue\)/,
+    'which is the read that throws on anything that is not a string',
+  );
+  assert.match(await readFile('src/lib/format.ts', 'utf8'), /if \(!value\?\.trim\(\)\) \{/);
+
+  /*
    * Negative matters as much as non-numeric here, and ONLY here — the CHECK
    * constraint refuses both. The loop must reject a negative...
    */
@@ -1456,7 +1505,11 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   assert.match(shapeTable, /ownership: \{ strings: \[[^\]]*'id', 'name', 'role'[^\]]*\], numbers: \['share'\] \}/);
   assert.match(
     helperCode,
-    /for \(const field of itemShape\.numbers \?\? \[\]\) \{\s*if \(!Number\.isFinite\(\(item as Record<string, unknown>\)\[field\]\)\) return false;/,
+    /for \(const field of itemShape\.numbers \?\? \[\]\) \{\s*if \(!Number\.isFinite\([\s\S]*?\) return false;/,
+    // Pins the RULE — a non-finite number is refused — and not how the value is
+    // fetched. It named the property access verbatim, so making the item loops
+    // resolve paths broke an assertion whose own message was still satisfied.
+    // How the value is read is asserted separately, by the `valueAtPath` count.
     'a number inside an array entry must be finite, not merely present',
   );
 

@@ -553,8 +553,29 @@ export function canRestorePersistedState(raw: unknown): boolean {
    * returning false — the one failure in this table that is not a render and
    * not a NaN.
    */
+  /*
+   * `details.followUpDue` is the one field INSIDE that bag whose type escapes
+   * the object check, and it escapes by coercion rather than by being ignored.
+   * `details: { followUpDue: ['2026-09-05'] }` survives `optionalObjects`,
+   * because the bag really is an object. Medical then compares the array
+   * against two date strings — Medical.tsx:56-57 — and JS coerces a
+   * single-element array to that element, so the comparisons behave exactly as
+   * if it were the string and the event lands in `dueSoonFollowUps`. Rendering
+   * that list calls `formatDateLabel(event.followUpDue)` at Medical.tsx:203,
+   * which reaches `value?.trim()` (format.ts:19) and throws on an array. The
+   * type survives every check between the backup and the crash.
+   *
+   * Optional, not required: most medical events schedule no follow-up, so
+   * requiring it would turn away almost every real archive.
+   *
+   * The other fields in the two detail bags stay out because nothing reads
+   * them unguarded — `practitioner`, `medication`, `dosage` and `documentId`
+   * have no readers at all; `recordType` and `result` reach comparisons and
+   * template literals, which coerce rather than throw.
+   */
   const TIMELINE_EVENT_SHAPE = {
     strings: ['id', 'date', 'title', 'summary', 'owner', 'category'],
+    optionalStrings: ['details.followUpDue'],
     optionalObjects: ['details'],
   };
 
@@ -1382,25 +1403,34 @@ export function canRestorePersistedState(raw: unknown): boolean {
         if (!Array.isArray(entries)) return false;
         for (const item of entries as unknown[]) {
           if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+          /*
+           * Resolved by path, exactly as the record-level loops are. Naming
+           * `details` under `optionalObjects` proves the BAG is an object and
+           * says nothing about what is in it, and these loops used to read
+           * `item[field]` directly — so a dotted name would have looked up a
+           * literal `'details.followUpDue'` key, found undefined, and passed
+           * everything. A guard that cannot fail is worse than none.
+           */
+          const itemRecord = item as Record<string, unknown>;
           for (const field of itemShape.strings ?? []) {
-            if (typeof (item as Record<string, unknown>)[field] !== 'string') return false;
+            if (typeof valueAtPath(itemRecord, field) !== 'string') return false;
           }
           /*
            * Absent is fine, wrong-typed is not. An optional field a backup
            * DOES supply still reaches the same render as a required one.
            */
           for (const field of itemShape.numbers ?? []) {
-            if (!Number.isFinite((item as Record<string, unknown>)[field])) return false;
+            if (!Number.isFinite(valueAtPath(itemRecord, field))) return false;
           }
           for (const field of itemShape.optionalStrings ?? []) {
-            const value = (item as Record<string, unknown>)[field];
+            const value = valueAtPath(itemRecord, field);
             if (value !== undefined && value !== null && typeof value !== 'string') return false;
           }
           // Absent is fine. Present-but-not-an-object is what `in` throws on,
           // and an ARRAY is refused too: `'followUpDue' in []` is false rather
           // than an error, but nothing in this app stores a detail bag as one.
           for (const field of itemShape.optionalObjects ?? []) {
-            const value = (item as Record<string, unknown>)[field];
+            const value = valueAtPath(itemRecord, field);
             if (value === undefined || value === null) continue;
             if (typeof value !== 'object' || Array.isArray(value)) return false;
           }
