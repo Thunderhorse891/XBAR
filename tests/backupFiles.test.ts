@@ -1369,14 +1369,24 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   );
   assert.match(
     horsesEntry,
-    /ownership: \{ strings: \[[^\]]*'contact'\]/,
+    /ownership: \{ strings: \[[^\]]*'contact'/,
     'stake.contact is rendered and given .trim() on a stored stake',
   );
 
   const receiptsStart = shapeTable.indexOf('expenseReceipts: {');
   const receiptsEntry = shapeTable.slice(receiptsStart, shapeTable.indexOf('intakeBatches:', receiptsStart));
   assert.ok(receiptsStart > -1 && receiptsEntry.length > 0, 'the expenseReceipts entry must be findable');
-  assert.match(receiptsEntry, /optionalStrings: \['notes', 'fileUrl'\]/, 'a truthy object reaches JSX through ||');
+  // Per field, not as a whole array: pinning the closing bracket makes an
+  // unrelated addition fail a test whose message stays true.
+  assert.match(receiptsEntry, /optionalStrings: \[[^\]]*'notes'/, 'a truthy object reaches JSX through ||');
+  assert.match(receiptsEntry, /optionalStrings: \[[^\]]*'fileUrl'/, 'fileUrl is given .trim() through a `?.`');
+  /*
+   * Not rendered at all — required because `expense_receipts.horse_id` is
+   * `text not null` and the write supplies `?? ''`, which fills in an absent
+   * value and passes a present object straight through to a column that
+   * refuses the row.
+   */
+  assert.match(receiptsEntry, /optionalStrings: \[[^\]]*'horseId'/, 'a typed column is a reader');
 
   for (const field of ['notes', 'offerUpdatedAt']) {
     assert.match(
@@ -1386,6 +1396,41 @@ test('a record that installs but crashes the route it lands on is refused', asyn
     );
   }
   assert.match(docsEntry, /optionalStrings: \[\s*'fileUrl',/, 'document.fileUrl?.trim() throws on an object');
+
+  /*
+   * The database-column class, which no amount of reading the ROUTES can find.
+   *
+   * `horseId` is a foreign key: nothing renders it and every screen read is an
+   * equality comparison, which is why it sat outside four shapes. What reads it
+   * is `replaceWorkspaceRows`, which maps it into a `text not null` column on
+   * `documents`, `expense_receipts`, `ownership_records` and `sales_leads`.
+   * Postgres refuses an object, the bulk write for the whole collection fails,
+   * the relational copy of the workspace goes stale, and the legacy snapshot
+   * fallback still reports success — so nothing on screen says anything is
+   * wrong.
+   *
+   * "Only compared, never dereferenced" is a claim about the app, and it stops
+   * being sufficient the moment the value leaves the app.
+   */
+  assert.match(docsEntry, /optionalStrings: \[[^\]]*'horseId'/, 'documents.horse_id is text not null');
+  assert.match(leadsEntry, /strings: \[[^\]]*'horseId'/, 'sales_leads.horse_id is text not null');
+  {
+    const cloud = await readFile('src/lib/cloudWorkspace.ts', 'utf8');
+    for (const write of [
+      /horse_id: document\.horseId \?\? '',/,
+      /horse_id: receipt\.horseId \?\? '',/,
+      /horse_id: record\.horseId,/,
+      /horse_id: lead\.horseId,/,
+    ]) {
+      assert.match(cloud, write, 'the write that puts a restored horseId in front of a typed column');
+    }
+    const schema = await readFile('supabase/production-schema.sql', 'utf8');
+    assert.match(
+      schema,
+      /horse_id text not null default ''/,
+      'and the column declaration that makes an object fatal rather than cosmetic',
+    );
+  }
 
   /*
    * The one failure in this table that is neither a render nor a NaN.
@@ -1657,7 +1702,24 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * truthiness check that passes it too. `confidence` stays out: carried into
    * the public-share payload, never dereferenced.
    */
-  assert.match(shapeTable, /strings: \['id', 'legalOwner', 'transferStatus', 'complianceDeadline'\]/);
+  // Per field: `horseId` joined this list for a reader outside the app, and an
+  // assertion on the whole array fails on an addition it has no opinion about.
+  for (const field of ['id', 'legalOwner', 'transferStatus', 'complianceDeadline']) {
+    assert.match(ownershipEntry, new RegExp(`strings: \\[[^\\]]*'${field}'`), `${field} is read without a type check`);
+  }
+  /*
+   * Not rendered anywhere — every screen read is an equality comparison. It is
+   * required because `ownership_records.horse_id` is `text not null`, so an
+   * object makes Postgres refuse the row, the bulk write for the collection
+   * fails, and the relational copy goes stale while the snapshot fallback
+   * still reports success.
+   *
+   * Scoped to THIS entry, not the whole table: four collections now name
+   * `horseId`, so a table-wide match is satisfied by any one of them and says
+   * nothing about this one. Written against `shapeTable` first, and the revert
+   * experiment came back green — which is what caught it.
+   */
+  assert.match(ownershipEntry, /strings: \[[^\]]*'horseId'/, 'a typed column is a reader');
   assert.match(
     await readFile('src/routes/Ownership.tsx', 'utf8'),
     /Due \{formatDateLabel\(row\.deadline\)\}/,

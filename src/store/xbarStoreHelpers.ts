@@ -1001,6 +1001,13 @@ export function canRestorePersistedState(raw: unknown): boolean {
          * are only compared or passed through.
          */
         'fileUrl',
+        /*
+         * Not rendered either, and required by the same reader as the leads and
+         * ownership entries: `documents.horse_id` is `text not null`, and the
+         * write supplies `?? ''`, which fills in an absent value and passes a
+         * present object straight through to a column that refuses it.
+         */
+        'horseId',
         'entities.horseName',
         'entities.registrationNumber',
         'entities.registry',
@@ -1077,7 +1084,21 @@ export function canRestorePersistedState(raw: unknown): boolean {
        * passes. `confidence` stays out: it is carried into the public-share
        * payload and never dereferenced.
        */
-      strings: ['id', 'legalOwner', 'transferStatus', 'complianceDeadline'],
+      /*
+       * `horseId` is not rendered anywhere — it is a foreign key, and every
+       * screen read of it is an equality comparison. It is required here
+       * because the DATABASE reads it: `replaceWorkspaceRows` maps it into
+       * `ownership_records.horse_id`, declared `text not null`, so an object makes Postgres
+       * refuse the row. That failure is the quiet kind — the bulk write for the
+       * whole collection fails, the relational copy of the workspace goes
+       * stale, and the only thing that still succeeds is the legacy snapshot
+       * fallback, so nothing on screen says anything is wrong.
+       *
+       * A typed column is a reader. "Only compared, never dereferenced" is a
+       * claim about the app, and it stops being sufficient the moment the value
+       * leaves the app.
+       */
+      strings: ['id', 'legalOwner', 'transferStatus', 'complianceDeadline', 'horseId'],
       // `<strong>{selectedRecord.confidence}%</strong>` — Ownership.tsx:680, a
       // bare React child. The comparisons beside it at :684 are what made this
       // look compared-only.
@@ -1169,7 +1190,24 @@ export function canRestorePersistedState(raw: unknown): boolean {
        * and cloudWorkspace.ts:1201, both through `?.`, which guards absence and
        * not type.
        */
-      optionalStrings: ['notes', 'fileUrl'],
+      /*
+       * `horseId` is not rendered anywhere — it is a foreign key, and every
+       * screen read of it is an equality comparison. It is checked here
+       * because the DATABASE reads it: `replaceWorkspaceRows` maps it into
+       * `expense_receipts.horse_id`, declared `text not null`, so an object makes Postgres
+       * refuse the row. Optional, because the interface has always allowed a
+       * receipt with no horse and the write supplies `?? ''` for it — a guard
+       * that fills in an absent value and passes a present object straight
+       * through. That failure is the quiet kind — the bulk write for the
+       * whole collection fails, the relational copy of the workspace goes
+       * stale, and the only thing that still succeeds is the legacy snapshot
+       * fallback, so nothing on screen says anything is wrong.
+       *
+       * A typed column is a reader. "Only compared, never dereferenced" is a
+       * claim about the app, and it stops being sufficient the moment the value
+       * leaves the app.
+       */
+      optionalStrings: ['notes', 'fileUrl', 'horseId'],
     },
     /*
      * Intake batches had no entry at all — only the shared id check — so
@@ -1277,7 +1315,21 @@ export function canRestorePersistedState(raw: unknown): boolean {
      * are only compared.
      */
     salesLeads: {
-      strings: ['id', 'name', 'channel', 'stage', 'lastTouch'],
+      /*
+       * `horseId` is not rendered anywhere — it is a foreign key, and every
+       * screen read of it is an equality comparison. It is required here
+       * because the DATABASE reads it: `replaceWorkspaceRows` maps it into
+       * `sales_leads.horse_id`, declared `text not null`, so an object makes Postgres
+       * refuse the row. That failure is the quiet kind — the bulk write for the
+       * whole collection fails, the relational copy of the workspace goes
+       * stale, and the only thing that still succeeds is the legacy snapshot
+       * fallback, so nothing on screen says anything is wrong.
+       *
+       * A typed column is a reader. "Only compared, never dereferenced" is a
+       * claim about the app, and it stops being sufficient the moment the value
+       * leaves the app.
+       */
+      strings: ['id', 'name', 'channel', 'stage', 'lastTouch', 'horseId'],
       /*
        * `lead.notes || ...` becomes the drawer description at Sales.tsx:150,
        * and `(right.offerUpdatedAt ?? '').localeCompare(...)` at
