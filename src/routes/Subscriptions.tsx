@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { canUsePaymentLinkFallback, startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency } from '@/lib/format';
@@ -33,7 +33,7 @@ function formatLimit(value: number, noun: string) {
 
 export default function Subscriptions() {
   const navigate = useNavigate();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const requestedValue = params.get('plan');
   const requestedTier = tiers.find((tier) => tier === requestedValue);
   const subscription = useXbarStore((state) => state.subscription);
@@ -58,7 +58,9 @@ export default function Subscriptions() {
   // workspace has purchasedTier === tier, and there the upgrade recommendation
   // is exactly what the screen should lead with.
   const lapsedTier = isEntitledBillingState(subscription.billingState) ? undefined : subscription.purchasedTier;
-  const decisionTier = requestedTier ?? lapsedTier ?? recommendedTier(subscription.tier);
+  const defaultDecisionTier = requestedTier ?? lapsedTier ?? recommendedTier(subscription.tier);
+  const [selectedTier, setSelectedTier] = useState<SubscriptionTier>(defaultDecisionTier);
+  const decisionTier = selectedTier;
   const decisionConfig = subscriptionPlans[decisionTier];
   const decisionProfile = revenuePlanMatrix[decisionTier];
   const hasManagedIdentity = Boolean(session?.access_token && workspaceId);
@@ -117,7 +119,19 @@ export default function Subscriptions() {
     void trackRuntimeEvent({ workspaceId, severity, ...productEvent(eventName, payload) });
   };
 
+  useEffect(() => {
+    setSelectedTier(defaultDecisionTier);
+  }, [defaultDecisionTier]);
+
+  const selectTier = (tier: SubscriptionTier) => {
+    setSelectedTier(tier);
+    const nextParams = new URLSearchParams(params);
+    nextParams.set('plan', tier);
+    setParams(nextParams, { replace: true });
+  };
+
   const beginCheckout = async (tier: SubscriptionTier) => {
+    selectTier(tier);
     setCheckoutTier(tier);
     emit(productEventNames.checkoutStarted, {
       tier,
@@ -213,6 +227,11 @@ export default function Subscriptions() {
       subscriptionRecoverable,
       subscriptionActive,
     });
+    const chooseTier = () => {
+      selectTier(tier);
+      if (paidCurrent || setupCurrent || !readiness.ready) return;
+      void beginCheckout(tier);
+    };
 
     return (
       <article
@@ -245,20 +264,25 @@ export default function Subscriptions() {
           ))}
         </ul>
         {paidCurrent || setupCurrent ? (
-          <button type="button" disabled>
-            {paidCurrent ? 'Current plan' : 'Current setup'}
+          <button
+            type="button"
+            disabled={checkoutTier !== null}
+            title={`View ${paidCurrent ? 'current plan' : 'Starter setup'} details`}
+            onClick={chooseTier}
+          >
+            {paidCurrent ? 'View current plan' : 'View Starter setup'}
           </button>
         ) : (
           <button
             type="button"
-            disabled={!readiness.ready}
-            title={readiness.reason}
-            onClick={() => void beginCheckout(tier)}
+            disabled={checkoutTier !== null}
+            title={readiness.ready ? readiness.reason : `View ${tier} details. ${readiness.reason}`}
+            onClick={chooseTier}
           >
             {busy
               ? 'Opening checkout...'
-              : readiness.mode === 'manual'
-                ? 'Billing not configured yet'
+              : !readiness.ready
+                ? `View ${tier}`
                 : readiness.mode === 'recover'
                   ? 'Payment needs attention'
                   : `Choose ${tier}`}

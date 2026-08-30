@@ -56,6 +56,16 @@ test('billing tiers remain reachable before workspace setup', () => {
   assert.match(source, /<RequireWorkspaceSetup>\s*<Outlet \/>/, 'operational routes stay protected by setup');
 });
 
+test('billing cards can select tiers even when checkout is not configured', () => {
+  const source = readRepoFile('src/routes/Subscriptions.tsx');
+
+  assert.match(source, /const \[selectedTier, setSelectedTier\] = useState<SubscriptionTier>/);
+  assert.match(source, /const selectTier = \(tier: SubscriptionTier\) =>/);
+  assert.match(source, /!readiness\.ready\s*\?\s*`View \$\{tier\}`/);
+  assert.match(source, /disabled={checkoutTier !== null}/);
+  assert.doesNotMatch(source, /disabled={!readiness\.ready}/);
+});
+
 test('upgrade links use canonical billing path instead of legacy billing routes', () => {
   const checkedFiles = [
     'src/components/RequireSubscriptionFeature.tsx',
