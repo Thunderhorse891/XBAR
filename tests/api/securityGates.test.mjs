@@ -50,8 +50,56 @@ function invoke(handler, { method = 'POST', body, headers = {}, url = '/api/test
   });
 }
 
+const runtimeEnvKeys = [
+  'SUPABASE_URL',
+  'VITE_SUPABASE_URL',
+  'SUPABASE_SERVICE_ROLE_KEY',
+  'STRIPE_SECRET_KEY',
+  'STRIPE_WEBHOOK_SECRET',
+  'STRIPE_PRICE_ID_STARTER',
+  'STRIPE_PRICE_ID_PROFESSIONAL',
+  'STRIPE_PRICE_ID_RANCH_OPS',
+  'STRIPE_PRICE_ID_ENTERPRISE',
+  'MANAGED_BILLING_ENABLED',
+  'VITE_MANAGED_BILLING_ENABLED',
+  'VITE_STRIPE_PAYMENT_LINK_STARTER',
+  'VITE_STRIPE_PAYMENT_LINK_PROFESSIONAL',
+  'VITE_STRIPE_PAYMENT_LINK_RANCH_OPS',
+  'VITE_STRIPE_PAYMENT_LINK_ENTERPRISE',
+  'RESEND_API_KEY',
+  'SENDGRID_API_KEY',
+  'CRON_SECRET',
+];
+
+async function withRuntimeEnv(values, action) {
+  const keys = new Set([...runtimeEnvKeys, ...Object.keys(values)]);
+  const previous = new Map();
+
+  for (const key of keys) {
+    previous.set(key, process.env[key]);
+    const value = values[key];
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+
+  try {
+    return await action();
+  } finally {
+    for (const [key, value] of previous.entries()) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+}
+
 test('health endpoint answers GET with liveness and subsystem booleans', async () => {
-  const response = await invoke(healthHandler, { method: 'GET' });
+  const response = await withRuntimeEnv({}, () => invoke(healthHandler, { method: 'GET' }));
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.ok, true);
   assert.equal(response.body.status, 'healthy');
@@ -60,6 +108,53 @@ test('health endpoint answers GET with liveness and subsystem booleans', async (
     Object.values(response.body.subsystems).every((v) => v === false),
     true,
   );
+});
+
+test('health endpoint fails readiness when billing is only partly configured', async () => {
+  const response = await withRuntimeEnv(
+    {
+      STRIPE_SECRET_KEY: 'sk_test_configured',
+      STRIPE_WEBHOOK_SECRET: 'whsec_configured',
+    },
+    () => invoke(healthHandler, { method: 'GET' }),
+  );
+
+  assert.equal(response.statusCode, 503);
+  assert.equal(response.body.ok, false);
+  assert.equal(response.body.status, 'unhealthy');
+  assert.equal(response.body.checks.billingReady, false);
+  assert.equal(response.body.subsystems.stripeBilling, true);
+  assert.equal(response.body.subsystems.stripeWebhook, true);
+  assert.match(response.body.reasons.join(' '), /Supabase admin credentials/);
+  assert.match(response.body.reasons.join(' '), /STRIPE_PRICE_ID/);
+  assert.match(response.body.reasons.join(' '), /MANAGED_BILLING_ENABLED/);
+  assert.match(response.body.reasons.join(' '), /VITE_MANAGED_BILLING_ENABLED/);
+});
+
+test('health endpoint reports ready when managed billing can sync entitlements', async () => {
+  const response = await withRuntimeEnv(
+    {
+      SUPABASE_URL: 'https://example.supabase.co',
+      SUPABASE_SERVICE_ROLE_KEY: 'service-role-test',
+      STRIPE_SECRET_KEY: 'sk_test_configured',
+      STRIPE_WEBHOOK_SECRET: 'whsec_configured',
+      STRIPE_PRICE_ID_STARTER: 'price_starter',
+      STRIPE_PRICE_ID_PROFESSIONAL: 'price_professional',
+      STRIPE_PRICE_ID_RANCH_OPS: 'price_ranch_ops',
+      STRIPE_PRICE_ID_ENTERPRISE: 'price_enterprise',
+      MANAGED_BILLING_ENABLED: 'true',
+      VITE_MANAGED_BILLING_ENABLED: 'true',
+    },
+    () => invoke(healthHandler, { method: 'GET' }),
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.ok, true);
+  assert.equal(response.body.checks.billingReady, true);
+  assert.equal(response.body.subsystems.supabaseAdmin, true);
+  assert.equal(response.body.subsystems.stripePriceIds, true);
+  assert.equal(response.body.subsystems.managedBilling, true);
+  assert.equal('reasons' in response.body, false);
 });
 
 test('health endpoint rejects mutating methods', async () => {

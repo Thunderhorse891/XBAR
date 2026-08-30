@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter, HashRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import { RequireCloudAuth } from './components/RequireCloudAuth';
 import { RequireSharedListings } from './components/RequireSubscriptionFeature';
@@ -195,61 +195,67 @@ export default function App() {
               path="/"
               element={
                 <RequireCloudAuth>
-                  <RequireWorkspaceSetup>
-                    <MainLayout />
-                  </RequireWorkspaceSetup>
+                  <MainLayout />
                 </RequireCloudAuth>
               }
             >
-              <Route index element={<Dashboard />} />
-              <Route path="getting-started" element={<GettingStarted />} />
-              <Route path="today" element={<TodayWork />} />
-              <Route path="herd-groups" element={<HerdGroups />} />
-              <Route path="pastures" element={<Pastures />} />
-              <Route path="feed" element={<FeedInventory />} />
-              <Route path="documents-vault" element={<Navigate to="/documents" replace />} />
-              <Route path="sales-pipeline" element={<Navigate to="/sales" replace />} />
-              <Route path="buyer-deal-room" element={<Navigate to="/buyers" replace />} />
-              <Route path="buyer-follow-up" element={<Navigate to="/buyers" replace />} />
-              <Route path="buyers" element={<BuyerDealRoom />} />
-              <Route path="buyers/:leadId" element={<BuyerDealRoom />} />
-              <Route path="sale-packets" element={<SalePacketStudio />} />
-              <Route path="sale-packet-studio" element={<Navigate to="/sale-packets" replace />} />
-              <Route path="reports" element={<Reports />} />
-              <Route path="financials" element={<Financials />} />
-              <Route path="animals" element={<Navigate to="/horses" replace />} />
-              <Route path="animals/:id" element={<LegacyHorseRedirect />} />
-              <Route path="health-care" element={<HealthCare />} />
-              <Route path="ownership-chain" element={<OwnershipChain />} />
-              <Route path="equipment" element={<EquipmentPage />} />
-              <Route path="breeding-foaling" element={<BreedingFoaling />} />
               <Route path="plans" element={<Navigate to={billingPath} replace />} />
-              <Route path="horses" element={<Horses />} />
-              <Route path="horses/:id" element={<AnimalProfile />} />
-              <Route path="documents" element={<Documents />} />
-              <Route path="document-library" element={<Navigate to="/documents" replace />} />
-              <Route path="weather" element={<Weather />} />
-              <Route path="ownership" element={<Ownership />} />
-              <Route path="medical" element={<Medical />} />
-              <Route path="breeding" element={<Breeding />} />
-              <Route path="sales" element={<Sales />} />
-              <Route path="follow-ups" element={<FollowUpsRedirect />} />
-              <Route path="expenses" element={<Expenses />} />
-              <Route path="reminders" element={<Reminders />} />
-              <Route path="assets" element={<RanchAssets />} />
-              <Route path="assets-equipment" element={<Navigate to="/assets" replace />} />
               <Route path="billing" element={<Subscriptions />} />
               <Route path="subscriptions" element={<Navigate to={billingPath} replace />} />
               <Route
-                path="shared-access"
                 element={
-                  <RequireSharedListings>
-                    <SharedAccess />
-                  </RequireSharedListings>
+                  <RequireWorkspaceSetup>
+                    <Outlet />
+                  </RequireWorkspaceSetup>
                 }
-              />
-              <Route path="settings" element={<Settings />} />
-              <Route path="*" element={<NotFound />} />
+              >
+                <Route index element={<Dashboard />} />
+                <Route path="getting-started" element={<GettingStarted />} />
+                <Route path="today" element={<TodayWork />} />
+                <Route path="herd-groups" element={<HerdGroups />} />
+                <Route path="pastures" element={<Pastures />} />
+                <Route path="feed" element={<FeedInventory />} />
+                <Route path="documents-vault" element={<Navigate to="/documents" replace />} />
+                <Route path="sales-pipeline" element={<Navigate to="/sales" replace />} />
+                <Route path="buyer-deal-room" element={<Navigate to="/buyers" replace />} />
+                <Route path="buyer-follow-up" element={<Navigate to="/buyers" replace />} />
+                <Route path="buyers" element={<BuyerDealRoom />} />
+                <Route path="buyers/:leadId" element={<BuyerDealRoom />} />
+                <Route path="sale-packets" element={<SalePacketStudio />} />
+                <Route path="sale-packet-studio" element={<Navigate to="/sale-packets" replace />} />
+                <Route path="reports" element={<Reports />} />
+                <Route path="financials" element={<Financials />} />
+                <Route path="animals" element={<Navigate to="/horses" replace />} />
+                <Route path="animals/:id" element={<LegacyHorseRedirect />} />
+                <Route path="health-care" element={<HealthCare />} />
+                <Route path="ownership-chain" element={<OwnershipChain />} />
+                <Route path="equipment" element={<EquipmentPage />} />
+                <Route path="breeding-foaling" element={<BreedingFoaling />} />
+                <Route path="horses" element={<Horses />} />
+                <Route path="horses/:id" element={<AnimalProfile />} />
+                <Route path="documents" element={<Documents />} />
+                <Route path="document-library" element={<Navigate to="/documents" replace />} />
+                <Route path="weather" element={<Weather />} />
+                <Route path="ownership" element={<Ownership />} />
+                <Route path="medical" element={<Medical />} />
+                <Route path="breeding" element={<Breeding />} />
+                <Route path="sales" element={<Sales />} />
+                <Route path="follow-ups" element={<FollowUpsRedirect />} />
+                <Route path="expenses" element={<Expenses />} />
+                <Route path="reminders" element={<Reminders />} />
+                <Route path="assets" element={<RanchAssets />} />
+                <Route path="assets-equipment" element={<Navigate to="/assets" replace />} />
+                <Route
+                  path="shared-access"
+                  element={
+                    <RequireSharedListings>
+                      <SharedAccess />
+                    </RequireSharedListings>
+                  }
+                />
+                <Route path="settings" element={<Settings />} />
+                <Route path="*" element={<NotFound />} />
+              </Route>
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

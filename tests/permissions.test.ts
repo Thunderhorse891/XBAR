@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { getCapabilityDeniedMessage, hasRoleCapability } from '../src/lib/permissions.js';
 
@@ -15,4 +16,11 @@ test('owner remains read-only for sensitive workflows', () => {
 
 test('denied message is stable for ownership controls', () => {
   assert.equal(getCapabilityDeniedMessage('manageOwnership'), 'This role cannot change ownership data.');
+});
+
+test('first workspace setup keeps the creator in the billing-capable admin role', () => {
+  const source = readFileSync('src/store/useXbarStore.ts', 'utf8');
+
+  assert.match(source, /createdInitialAdmin = seedState\.workspaceMembers\.length === 0/);
+  assert.match(source, /currentRole: createdInitialAdmin \? 'Admin' : current\.currentRole/);
 });

@@ -43,6 +43,19 @@ test('billing screen does not imply payment when checkout is not configured', ()
   assert.equal(source.includes('Contact support/manual billing required'), false);
 });
 
+test('billing tiers remain reachable before workspace setup', () => {
+  const source = readRepoFile('src/App.tsx');
+  const appShell = source.indexOf('path="/"');
+  const setupGate = source.indexOf('<RequireWorkspaceSetup>', appShell);
+
+  assert.ok(appShell >= 0, 'the authenticated app shell route must exist');
+  assert.ok(setupGate > appShell, 'workspace setup should guard the operational routes inside the shell');
+  assert.ok(source.indexOf('path="billing"', appShell) < setupGate, '/billing must show plan tiers before setup');
+  assert.ok(source.indexOf('path="plans"', appShell) < setupGate, '/plans must redirect before setup');
+  assert.ok(source.indexOf('path="subscriptions"', appShell) < setupGate, '/subscriptions must redirect before setup');
+  assert.match(source, /<RequireWorkspaceSetup>\s*<Outlet \/>/, 'operational routes stay protected by setup');
+});
+
 test('upgrade links use canonical billing path instead of legacy billing routes', () => {
   const checkedFiles = [
     'src/components/RequireSubscriptionFeature.tsx',

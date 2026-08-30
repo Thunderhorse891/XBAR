@@ -150,9 +150,10 @@ export const useXbarStore = create<XbarStore>()(
         });
         const resetLegacyDemo = looksLikeLegacyDemoWorkspace(selectPersistedState(current));
         const seedState = resetLegacyDemo ? createEmptyWorkspaceState() : selectPersistedState(current);
-        const workspaceMembers = seedState.workspaceMembers.length
-          ? seedState.workspaceMembers
-          : [createInitialWorkspaceMember(nextProfile)];
+        const createdInitialAdmin = seedState.workspaceMembers.length === 0;
+        const workspaceMembers = createdInitialAdmin
+          ? [createInitialWorkspaceMember(nextProfile)]
+          : seedState.workspaceMembers;
         const derived = syncDerivedValues({
           horses: seedState.horses,
           salesLeads: seedState.salesLeads,
@@ -165,6 +166,7 @@ export const useXbarStore = create<XbarStore>()(
 
         set({
           ...seedState,
+          currentRole: createdInitialAdmin ? 'Admin' : current.currentRole,
           subscription: derived.subscription,
           sharedAccess: derived.sharedAccess,
           horses: derived.horses,
