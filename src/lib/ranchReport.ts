@@ -151,6 +151,22 @@ function sameMonth(value: string, now: Date): boolean {
  * understates the total, and for a pipeline figure understating is the safe
  * direction to be wrong in.
  */
+/*
+ * Money that can legitimately be added to a total.
+ *
+ * `|| 0` and `?? 0` catch a missing amount and pass a NEGATIVE one straight
+ * through, and these two figures are the only readers of the lead amounts that
+ * sum them raw — `profitIntelligence` already treats a non-positive offer as an
+ * unrecorded sale price rather than a number. The Sales screen stored
+ * `Number(value)` on a bare truthiness test, so `-500` was a value a rancher
+ * could type and save; that door is shut now, but a workspace that went through
+ * it already exists, and the fix for a wrong figure is not to reject the
+ * rancher's whole backup on the way in.
+ */
+function positiveMoney(value: number | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
+}
+
 function sum(values: number[]): number {
   return values.reduce((total, value) => (Number.isFinite(value) ? total + value : total), 0);
 }
@@ -362,7 +378,9 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
       // The counter when there is one, like buildRanchFinancials: once a buyer
       // has countered, the counter is what is actually on the table, and
       // reporting the original ask would overstate the pipeline.
-      pipelineValue: sum(openOffers.map((lead) => lead.counterOfferAmount || lead.offerAmount || 0)),
+      pipelineValue: sum(
+        openOffers.map((lead) => positiveMoney(lead.counterOfferAmount) || positiveMoney(lead.offerAmount)),
+      ),
       // Money the operation is holding that is not yet its own.
       //
       // A deposit on a deal closed as Won has been applied to the sale — the
@@ -376,7 +394,7 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
       depositsHeld: sum(
         salesLeads
           .filter((lead) => lead.depositStatus === 'Paid' && lead.outcome !== 'Won')
-          .map((lead) => lead.depositAmount ?? 0),
+          .map((lead) => positiveMoney(lead.depositAmount)),
       ),
     },
     readiness,

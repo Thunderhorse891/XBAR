@@ -2592,3 +2592,42 @@ test('the restore preflight refuses a receipt amount that is not positive', asyn
     );
   }
 });
+
+test('a restored registration flag must be a boolean, because a seal asserts it', async () => {
+  const source = await readFile('src/store/xbarStoreHelpers.ts', 'utf8');
+
+  /*
+   * `Boolean(horse.registered)` is the reader, and it is not a guard: it
+   * answers `true` for `"false"` and for `{}`. That answer does not stop at the
+   * screen — it becomes `identity.registered` in the sale credential, which is
+   * hashed and signed, so a damaged flag does not degrade the packet, it makes
+   * the packet CERTIFY that a horse is registered when nothing says it is.
+   */
+  const horsesStart = source.indexOf('horses: {');
+  const horsesShape = source.slice(horsesStart, source.indexOf('documents: {', horsesStart));
+  assert.ok(horsesShape.length > 0, 'the horses entry must be findable');
+  assert.match(horsesShape, /optionalBooleans: \['registered'\]/, 'the registration flag must be type-checked');
+
+  const loopAt = source.indexOf('for (const field of shape.optionalBooleans ?? [])');
+  assert.ok(loopAt > -1, 'the preflight must actually read optionalBooleans');
+  const loop = source.slice(loopAt, source.indexOf('}', source.indexOf('return false;', loopAt)));
+  assert.match(loop, /typeof value !== 'boolean'/, 'anything that is not a boolean must be refused');
+
+  /*
+   * Optional, and that is the over-rejection direction. Absent is safe —
+   * `Boolean(undefined)` is `false`, so a packet on an archive that omits the
+   * flag claims nothing — while demanding it would turn away a backup that
+   * restores perfectly.
+   */
+  assert.match(loop, /value === undefined \|\| value === null/, 'an omitted flag must not reject the archive');
+
+  /*
+   * And the list stays short. The other flags decide whether a button is
+   * enabled; being wrong about one costs a click, not a false statement about
+   * the animal, so requiring them would be caution paid for with good backups.
+   */
+  assert.equal((source.match(/optionalBooleans: \[/g) ?? []).length, 1);
+  for (const field of ['socialReady', 'savedListing', 'shareReady']) {
+    assert.doesNotMatch(source, new RegExp(`optionalBooleans: \\[[^\\]]*'${field}'`), `${field} does not belong here`);
+  }
+});

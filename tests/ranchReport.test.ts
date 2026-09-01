@@ -1091,3 +1091,45 @@ test('a deposit on a sold horse’s losing sibling is still held', () => {
   assert.equal(report.money.pipelineValue, 0, 'the sibling offer is not pipeline');
   assert.equal(report.money.depositsHeld, 2500, 'but its deposit is still on the books');
 });
+
+test('a negative lead amount cannot understate the money figures', () => {
+  /*
+   * `|| 0` and `?? 0` catch a missing amount and pass a negative one straight
+   * through, and these two figures were the only readers that summed the lead
+   * amounts raw. The Sales screen stored `Number(value)` on a bare truthiness
+   * test, so `-500` was a figure a rancher could type and save — and it then
+   * subtracted from the money in play on the report handed to a banker.
+   */
+  const report = buildRanchReport(
+    input({
+      horses: [horse({ id: 'h1', name: 'Docs Best' }), horse({ id: 'h2', name: 'Peppy Rey' })],
+      salesLeads: [
+        lead({ id: 'l1', horseId: 'h1', stage: 'Offer', offerAmount: -10000 }),
+        lead({ id: 'l2', horseId: 'h2', stage: 'Offer', offerAmount: 15000 }),
+        lead({ id: 'l3', horseId: 'h2', stage: 'Offer', depositStatus: 'Paid', depositAmount: -2500 }),
+      ],
+    }),
+    NOW,
+  );
+
+  assert.equal(report.money.pipelineValue, 15000, 'a negative offer must not subtract from the pipeline');
+  assert.equal(report.money.depositsHeld, 0, 'nor a negative deposit from what is held');
+});
+
+test('clamping a negative offer does not discard the real one beside it', () => {
+  /*
+   * The over-rejection direction. A counteroffer supersedes the offer, so a
+   * damaged counteroffer must fall back to the offer rather than zeroing the
+   * lead — otherwise one bad field silently removes a live deal from the
+   * pipeline, which is the same understatement from the other side.
+   */
+  const report = buildRanchReport(
+    input({
+      horses: [horse({ id: 'h1', name: 'Docs Best' })],
+      salesLeads: [lead({ id: 'l1', horseId: 'h1', stage: 'Offer', offerAmount: 20000, counterOfferAmount: -1 })],
+    }),
+    NOW,
+  );
+
+  assert.equal(report.money.pipelineValue, 20000, 'the real offer still counts');
+});

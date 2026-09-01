@@ -643,8 +643,30 @@ export function canRestorePersistedState(raw: unknown): boolean {
        * is refused by the database exactly as a non-number is. Everything in
        * `optionalNumbers` is clamped or merely displayed, and refusing a whole
        * backup over a negative there would be over-rejection.
+       *
+       * That claim was not true when it was written. `pipelineValue` and
+       * `depositsHeld` summed the lead amounts raw through `|| 0` and `?? 0`,
+       * neither of which catches a negative — and the Sales screen stored
+       * `Number(value)` on a bare truthiness test, so `-500` was a figure a
+       * rancher could type and save. Both are fixed at the sites that own them:
+       * the screen refuses it now, and `ranchReport` clamps. The choice not to
+       * reject the archive stands, and it is the reason those fixes belong
+       * there rather than here — a workspace that already went through the old
+       * screen exists, and losing all of it is not a proportionate answer to
+       * one wrong figure.
        */
       optionalNonNegativeNumbers?: string[];
+      /*
+       * Scalars that must be a BOOLEAN when present.
+       *
+       * `Boolean(x)` is the usual reader for a flag, and it is not a guard: it
+       * turns `"false"`, `{}` and `[]` into `true`. Optional rather than
+       * required because absence is safe — `Boolean(undefined)` is `false`,
+       * which is the conservative answer for every flag here — while refusing
+       * an archive that merely omits one would be the over-rejection this
+       * table keeps having to avoid.
+       */
+      optionalBooleans?: string[];
       /*
        * Scalars that must be a string WHEN PRESENT, named by path.
        *
@@ -851,6 +873,24 @@ export function canRestorePersistedState(raw: unknown): boolean {
         'sale.watchlistCount',
         'readiness.score',
       ],
+      /*
+       * `registered` is the one flag on a horse that a SEAL asserts.
+       *
+       * `Boolean(horse.registered)` at salePacketDisclosure.ts:134 answers
+       * `true` for `"false"` and for `{}`, and that answer does not stop at the
+       * screen: it becomes `identity.registered` in the sale credential
+       * (saleCredential.ts:251, :300), which is hashed and signed. A damaged
+       * flag therefore does not degrade the packet — it makes the packet
+       * CERTIFY to a buyer that a horse is registered when nothing says it is,
+       * and the certificate is what gives that claim its weight.
+       * publicShare.ts:101 passes the raw value into a share payload without
+       * even a `Boolean()` around it.
+       *
+       * The other flags on a horse stay out deliberately. `sale.socialReady`
+       * and the lead flags decide whether a button is enabled; being wrong
+       * about one costs a click, not a false statement about the animal.
+       */
+      optionalBooleans: ['registered'],
       /*
        * The optional money on a horse. Each is read through a guard that
        * catches absence and not type:
@@ -1608,6 +1648,16 @@ export function canRestorePersistedState(raw: unknown): boolean {
         const value = valueAtPath(record, field);
         if (value === undefined || value === null) continue;
         if (!Number.isFinite(value) || (value as number) < 0) return false;
+      }
+      /*
+       * Absent is fine; present-but-not-a-boolean is not. `Boolean(x)` is what
+       * reads these, and it answers `true` for every non-empty string and every
+       * object — so a damaged flag does not fail, it ASSERTS.
+       */
+      for (const field of shape.optionalBooleans ?? []) {
+        const value = valueAtPath(record, field);
+        if (value === undefined || value === null) continue;
+        if (typeof value !== 'boolean') return false;
       }
       for (const list of shape.stringItems ?? []) {
         const items = valueAtPath(record, list);
