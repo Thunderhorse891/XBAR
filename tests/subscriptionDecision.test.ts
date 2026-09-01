@@ -637,3 +637,80 @@ test('the billing screen asks both questions, not just recoverability', async ()
   // every plan card below it was disabled.
   assert.equal((source.match(/subscriptionActive,/g) ?? []).length, 3);
 });
+
+test('a malformed recovery flag withholds checkout instead of falling through', () => {
+  /*
+   * The flag is written by the server and carried through a backup untouched:
+   * `restorePersistedState` spreads the stored subscription and normalizes
+   * `billingState`, `tier`, `purchasedTier` and `usage`, and the restore
+   * preflight does not inspect the subscription at all.
+   *
+   * So a hand-edited or corrupted backup can present `"false"` or `{}` here.
+   * The billing state cannot answer for it either, because paused and unpaid
+   * subscriptions — the ones Stripe can still collect on — are stored as
+   * 'Inactive', not 'Past Due'. Falling through returned false and offered a
+   * payment link to a workspace that is already being billed.
+   */
+  for (const malformed of ['false', 'true', '', {}, [], 0, 1, Number.NaN]) {
+    assert.equal(
+      isSubscriptionRecoverable({
+        billingState: 'Inactive',
+        subscriptionRecoverable: malformed,
+      } as unknown as SubscriptionProfile),
+      true,
+      `a ${typeof malformed} recovery flag must withhold checkout, not fall through`,
+    );
+  }
+
+  // And the refusal actually reaches the button: `recover` is the mode that
+  // stops a second subscription being created beside a live one.
+  const readiness = getCheckoutReadiness({
+    billingEnabled: true,
+    canManageBilling: true,
+    hasManagedIdentity: false,
+    hasPaymentLink: true,
+    checkoutInProgress: false,
+    subscriptionRecoverable: isSubscriptionRecoverable({
+      billingState: 'Inactive',
+      subscriptionRecoverable: 'false',
+    } as unknown as SubscriptionProfile),
+  });
+  assert.equal(readiness.ready, false);
+  assert.equal(readiness.mode, 'recover');
+  assert.match(readiness.reason, /bill you twice/);
+});
+
+test('an ABSENT recovery flag still falls back to the billing state', () => {
+  /*
+   * The over-correction guard, and the reason absent and malformed are treated
+   * differently. Legacy rows carry no flag at all, and every one of them that
+   * was `past_due` or `unpaid` was stored as 'Past Due'. Reading absent as
+   * "recoverable" would withhold checkout from that entire population — a
+   * safety guard that stops people paying is worse than the harm it prevents.
+   */
+  assert.equal(isSubscriptionRecoverable({ billingState: 'Past Due' } as SubscriptionProfile), true);
+  assert.equal(isSubscriptionRecoverable({ billingState: 'Inactive' } as SubscriptionProfile), false);
+  assert.equal(
+    isSubscriptionRecoverable({ billingState: 'Inactive', subscriptionRecoverable: undefined } as SubscriptionProfile),
+    false,
+    'undefined is absent, not malformed',
+  );
+  assert.equal(
+    isSubscriptionRecoverable({
+      billingState: 'Inactive',
+      subscriptionRecoverable: null,
+    } as unknown as SubscriptionProfile),
+    false,
+    'null is how JSON round-trips an absent optional field',
+  );
+
+  // An explicit boolean is still obeyed in both directions.
+  assert.equal(
+    isSubscriptionRecoverable({ billingState: 'Past Due', subscriptionRecoverable: false } as SubscriptionProfile),
+    false,
+  );
+  assert.equal(
+    isSubscriptionRecoverable({ billingState: 'Inactive', subscriptionRecoverable: true } as SubscriptionProfile),
+    true,
+  );
+});

@@ -157,6 +157,29 @@ export function isSubscriptionRecoverable(subscription: SubscriptionProfile): bo
   if (typeof subscription.subscriptionRecoverable === 'boolean') {
     return subscription.subscriptionRecoverable;
   }
+  /*
+   * ABSENT and MALFORMED are different questions, and only one of them has a
+   * safe fallback.
+   *
+   * Absent is the legacy population described above: no flag was ever written,
+   * and the billing state answers for them. Present-but-not-a-boolean is a
+   * value that was written and is now unreadable — a hand-edited or corrupted
+   * backup carrying `"false"` or `{}` — and the billing state cannot answer for
+   * it, because a paused or unpaid subscription is stored as 'Inactive' rather
+   * than 'Past Due'. Falling through to that test returned false and offered a
+   * payment link to a workspace Stripe is still billing.
+   *
+   * The client is the only gate on that path. A managed checkout is refused
+   * again by `checkoutBlockReason`, which already answers `subscription_
+   * unverified` for exactly this shape — but a hosted payment link is a
+   * redirect straight to Stripe, so nothing downstream gets a second opinion.
+   *
+   * Unknown therefore resolves the way every other billing unknown in this
+   * codebase resolves: toward not charging anyone twice.
+   */
+  if (subscription.subscriptionRecoverable !== undefined && subscription.subscriptionRecoverable !== null) {
+    return true;
+  }
   return subscription.billingState === 'Past Due';
 }
 
