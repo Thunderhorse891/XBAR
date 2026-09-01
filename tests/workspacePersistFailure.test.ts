@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { didWorkspaceReadFail, onWorkspacePersistFailure, workspaceStateStorage } from '../src/lib/workspaceStorage.js';
+import {
+  didWorkspaceReadFail,
+  onWorkspacePersistFailure,
+  shouldDeferUnhydratedWorkspaceWrite,
+  workspaceStateStorage,
+} from '../src/lib/workspaceStorage.js';
 import { installFakeIndexedDb } from './helpers/fakeIndexedDb.js';
 
 /*
@@ -324,4 +329,144 @@ test('a write does not clear a failure the read recorded', async () => {
     restoreWorkingWindow();
     restoreWorkingDb();
   }
+});
+
+/*
+ * The workspace could be overwritten by a session that never read it.
+ *
+ * `shouldProtectMeaningfulWorkspaceWrite` guards the meaningful-to-empty
+ * transition, and that is only the first move. After a failed hydration the
+ * empty initial state is correctly refused — but the session carries on, and
+ * one added horse makes the in-memory state "meaningful" in its own right. The
+ * guard stops firing, and a one-horse state lands on top of a complete
+ * workspace it was never derived from.
+ */
+
+const COMPLETE_WORKSPACE = JSON.stringify({
+  state: {
+    horses: [{ id: 'h1' }, { id: 'h2' }],
+    documents: [{ id: 'd1' }],
+    workspaceProfile: { ranchName: 'Blue River Ranch', setupCompleteAt: '2026-06-27 09:00' },
+  },
+});
+
+/** What the rancher has after adding one horse to a workspace that never loaded. */
+const PARTIAL_WORKSPACE = JSON.stringify({ state: { horses: [{ id: 'h3' }] } });
+
+test('a write from a state that never hydrated cannot replace the stored workspace', async () => {
+  let readsFail = false;
+  const restoreDb = installFakeIndexedDb({ failReads: () => readsFail });
+  const restoreWindow = installLocalStorageWith({});
+  const failures: string[] = [];
+  const unsubscribe = onWorkspacePersistFailure((failure) => failures.push(failure.name));
+
+  try {
+    await workspaceStateStorage.setItem('xbar-live-workspace', COMPLETE_WORKSPACE);
+    assert.equal(
+      await workspaceStateStorage.getItem('xbar-live-workspace'),
+      COMPLETE_WORKSPACE,
+      'precondition: a real workspace is on the device',
+    );
+    assert.equal(didWorkspaceReadFail(), false, 'precondition: that read succeeded');
+
+    // Hydration cannot read it, so zustand hydrates the empty initial state.
+    readsFail = true;
+    assert.equal(await workspaceStateStorage.getItem('xbar-live-workspace'), null);
+    assert.equal(didWorkspaceReadFail(), true, 'precondition: hydration failed');
+
+    // Storage recovers and the rancher adds a horse. This is the write that
+    // used to destroy everything: the guard above sees a meaningful next value
+    // and stands down.
+    readsFail = false;
+    await workspaceStateStorage.setItem('xbar-live-workspace', PARTIAL_WORKSPACE);
+
+    assert.equal(
+      await workspaceStateStorage.getItem('xbar-live-workspace'),
+      COMPLETE_WORKSPACE,
+      'the stored workspace must survive a write from a state that never read it',
+    );
+    assert.deepEqual(failures, ['xbar-live-workspace'], 'and the app must stop claiming the work is saved');
+  } finally {
+    unsubscribe();
+    restoreWindow();
+    restoreDb();
+  }
+});
+
+test('a write is withheld while the reread cannot prove what is on the device', async () => {
+  /*
+   * The worse shape of the same accident: storage never recovers, so the write
+   * path still works while the read path does not. Without the guard the
+   * partial state is written over the complete one and the reread that would
+   * have objected is the very thing that is broken. Absence of evidence is not
+   * evidence of absence — the recurring lesson in this module.
+   */
+  let readsFail = false;
+  const restoreDb = installFakeIndexedDb({ failReads: () => readsFail });
+  const restoreWindow = installLocalStorageWith({});
+
+  try {
+    await workspaceStateStorage.setItem('xbar-live-workspace', COMPLETE_WORKSPACE);
+
+    readsFail = true;
+    await workspaceStateStorage.getItem('xbar-live-workspace');
+    assert.equal(didWorkspaceReadFail(), true, 'precondition: hydration failed');
+
+    await workspaceStateStorage.setItem('xbar-live-workspace', PARTIAL_WORKSPACE);
+
+    readsFail = false;
+    assert.equal(
+      await workspaceStateStorage.getItem('xbar-live-workspace'),
+      COMPLETE_WORKSPACE,
+      'a write must not proceed on a reread that could not answer',
+    );
+  } finally {
+    restoreWindow();
+    restoreDb();
+  }
+});
+
+test('a first-time workspace still saves after a read failure with nothing stored', async () => {
+  /*
+   * The over-rejection direction, and the reason this guard is narrower than
+   * "refuse every write while hydration is unresolved". A read can fail on a
+   * device with nothing stored — a fresh install in a private window is the
+   * ordinary case — and refusing there would throw away a first-time user's
+   * entire session to protect records that do not exist.
+   */
+  let readsFail = true;
+  const restoreDb = installFakeIndexedDb({ failReads: () => readsFail });
+  const restoreWindow = installLocalStorageWith({});
+  const failures: string[] = [];
+  const unsubscribe = onWorkspacePersistFailure((failure) => failures.push(failure.name));
+
+  try {
+    assert.equal(await workspaceStateStorage.getItem('xbar-live-workspace'), null);
+    assert.equal(didWorkspaceReadFail(), true, 'precondition: the read failed');
+
+    readsFail = false;
+    await workspaceStateStorage.setItem('xbar-live-workspace', PARTIAL_WORKSPACE);
+
+    assert.equal(
+      await workspaceStateStorage.getItem('xbar-live-workspace'),
+      PARTIAL_WORKSPACE,
+      'a first session must still save when there was nothing to lose',
+    );
+    assert.deepEqual(failures, [], 'and it must not be told its work was refused');
+  } finally {
+    unsubscribe();
+    restoreWindow();
+    restoreDb();
+  }
+});
+
+test('an ordinary session is untouched by the unhydrated-write guard', () => {
+  // The flag is what gates this. With hydration resolved, nothing changes —
+  // including the meaningful-to-empty protection, which still owns that case.
+  assert.equal(shouldDeferUnhydratedWorkspaceWrite(false, COMPLETE_WORKSPACE, false), false);
+  assert.equal(shouldDeferUnhydratedWorkspaceWrite(false, null, true), false);
+
+  assert.equal(shouldDeferUnhydratedWorkspaceWrite(true, COMPLETE_WORKSPACE, false), true);
+  assert.equal(shouldDeferUnhydratedWorkspaceWrite(true, null, true), true);
+  assert.equal(shouldDeferUnhydratedWorkspaceWrite(true, null, false), false);
 });

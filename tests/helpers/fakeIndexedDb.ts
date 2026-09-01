@@ -7,6 +7,18 @@
  */
 type StoredRecord = { key: string; [field: string]: unknown };
 
+/*
+ * A store holds either in-line records or out-of-line values.
+ *
+ * `put(value)` uses a key that lives on the record — the file vault's shape —
+ * while `put(value, key)` passes the key separately, which is what the
+ * workspace persister does with a plain JSON string. Modelling only the first
+ * meant every workspace write landed under `undefined` and read back as
+ * absent, so no test in this repo could observe a write REPLACING stored data.
+ * That is the whole shape of a data-loss bug, and it was inexpressible.
+ */
+type StoredEntry = StoredRecord | string;
+
 export interface FakeOptions {
   /** Abort the transaction outright, before the request itself succeeds. */
   abortWrites?: boolean;
@@ -26,6 +38,14 @@ export interface FakeOptions {
    * rather than dropping the origin-wide database.
    */
   refuseDelete?: boolean;
+  /**
+   * Make reads fail, the way a browser that cannot open its store does.
+   *
+   * A predicate rather than a flag because the interesting case is storage
+   * that fails during hydration and then RECOVERS: a read failure is only
+   * dangerous once the workspace it could not see is readable again.
+   */
+  failReads?: () => boolean;
 }
 
 /**
@@ -39,11 +59,11 @@ export interface FakeOptions {
  * leaving them applied.
  */
 export function installFakeIndexedDb(options: FakeOptions = {}) {
-  const stores = new Map<string, Map<string, StoredRecord>>();
+  const stores = new Map<string, Map<string, StoredEntry>>();
   const later = (run: () => void) => setTimeout(run, 0);
 
   const makeStore = (name: string) => {
-    const data = stores.get(name) ?? new Map<string, StoredRecord>();
+    const data = stores.get(name) ?? new Map<string, StoredEntry>();
     stores.set(name, data);
     return data;
   };
@@ -108,12 +128,27 @@ export function installFakeIndexedDb(options: FakeOptions = {}) {
             };
 
             transaction.objectStore = () => ({
-              put: (value: StoredRecord) =>
+              // The second argument is IndexedDB's out-of-line key. Ignoring it
+              // is what made workspace writes vanish under `undefined`.
+              put: (value: StoredEntry, key?: string) =>
                 issue(
                   () => undefined,
-                  () => data.set(value.key, value),
+                  () => data.set(key ?? (value as StoredRecord).key, value),
                 ),
-              get: (key: string) => issue(() => data.get(key)),
+              get: (key: string) => {
+                if (options.failReads?.()) {
+                  const request: Record<string, unknown> = {
+                    result: undefined,
+                    error: new Error('IndexedDB read failed.'),
+                  };
+                  later(() => {
+                    settled = true;
+                    (request.onerror as (() => void) | undefined)?.();
+                  });
+                  return request;
+                }
+                return issue(() => data.get(key));
+              },
               delete: (key: string) => {
                 if (options.refuseDelete) {
                   const request: Record<string, unknown> = {};

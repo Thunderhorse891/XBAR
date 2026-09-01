@@ -271,6 +271,48 @@ export function shouldProtectMeaningfulWorkspaceWrite(existingValue: string | nu
 }
 
 /*
+ * Whether a write must be withheld because hydration never read the workspace.
+ *
+ * `shouldProtectMeaningfulWorkspaceWrite` guards the meaningful-to-EMPTY
+ * transition, which is only the first move of the accident. When both stores
+ * fail during `getItem`, zustand hydrates the empty initial state; the guard
+ * above then correctly refuses to persist that emptiness. But the session
+ * continues, and the moment the rancher adds a single horse the in-memory
+ * state becomes "meaningful" in its own right — so the guard stops firing and
+ * that one-horse state is written over a complete workspace it was never
+ * derived from. The protection expired at exactly the wrong moment.
+ *
+ * The missing question is not what the write CONTAINS, it is what the write is
+ * DESCENDED FROM. A state that was never hydrated describes no stored
+ * workspace, however full it later becomes.
+ *
+ * Deliberately narrower than refusing every write while hydration is
+ * unresolved. A read can fail on a device with nothing stored — a fresh
+ * install in a private window is the ordinary case — and refusing there would
+ * mean a first-time user's whole session never saves in order to protect
+ * records that do not exist. So a write is withheld only when there is
+ * something real to lose:
+ *
+ * - the reread failed too, so we cannot prove there is nothing there. Absence
+ *   of evidence is the case this whole module keeps having to relearn.
+ * - the reread succeeded and found a meaningful workspace, which this state
+ *   demonstrably did not come from.
+ *
+ * A withheld write is reported through `notifyPersistFailure`, not swallowed.
+ * The work stays in memory and usable; the app simply stops claiming it is
+ * saved, which is the same bargain the quota-failure path makes.
+ */
+export function shouldDeferUnhydratedWorkspaceWrite(
+  hydrationReadFailed: boolean,
+  existingValue: string | null,
+  existingReadFailed: boolean,
+) {
+  if (!hydrationReadFailed) return false;
+  if (existingReadFailed) return true;
+  return hasMeaningfulPersistedWorkspace(existingValue);
+}
+
+/*
  * Telling someone when the workspace could not be saved.
  *
  * zustand's persist middleware discards whatever `setItem` returns, so a
@@ -344,7 +386,22 @@ export const workspaceStateStorage: StateStorage = {
   },
   async setItem(name, value) {
     if (name === LEGACY_KEY) {
-      const existingValue = (await readIndexedValue(name)).value ?? readLegacyValue(name).value;
+      const indexed = await readIndexedValue(name);
+      const legacy = indexed.value === null ? readLegacyValue(name) : null;
+      const existingValue = indexed.value ?? legacy?.value ?? null;
+      /*
+       * The same rule `getItem` uses: "absent" requires BOTH stores to have
+       * answered. One store finding nothing while the other throws proves
+       * neither, and here that difference decides whether a workspace is
+       * overwritten.
+       */
+      const existingReadFailed = indexed.value !== null ? false : indexed.failed || (legacy?.failed ?? false);
+
+      if (shouldDeferUnhydratedWorkspaceWrite(workspaceReadFailure, existingValue, existingReadFailed)) {
+        // Withheld, not failed silently — the app must stop looking saved.
+        notifyPersistFailure(name);
+        return;
+      }
       if (shouldProtectMeaningfulWorkspaceWrite(existingValue, value)) {
         return;
       }
