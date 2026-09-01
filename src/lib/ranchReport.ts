@@ -304,7 +304,27 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
    */
   const openOffers = salesLeads.filter(
     (lead) =>
-      OPEN_OFFER_STAGES.has(lead.stage) && !lead.outcome && !NON_LIVE_OFFER_STATUSES.has(lead.offerStatus ?? ''),
+      OPEN_OFFER_STAGES.has(lead.stage) &&
+      !lead.outcome &&
+      !NON_LIVE_OFFER_STATUSES.has(lead.offerStatus ?? '') &&
+      /*
+       * The horse, not just the lead.
+       *
+       * A horse can carry several leads, and winning one does not close the
+       * others — `updateSalesLead` patches only `item.id === leadId`. So a
+       * sibling still sitting in Offer has no outcome of its own and passed
+       * every test above, while `soldHorseIds` counted the same animal as sold.
+       * The report contradicted itself about one horse again, by a second
+       * route: the animal is gone, and its asking price was still being
+       * reported as money in play.
+       *
+       * `depositsHeld` deliberately does NOT get this correction, and the
+       * difference is the point. Pipeline value is money expected to COME IN,
+       * which a horse that has already left the herd cannot produce. A deposit
+       * is money already sitting in the ranch's account, and the losing buyer's
+       * deposit is genuinely still held until it is refunded or forfeited.
+       */
+      !(lead.horseId && soldHorseIds.has(lead.horseId)),
   );
 
   return {

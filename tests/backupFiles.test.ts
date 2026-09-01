@@ -1089,9 +1089,30 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * PDF. A figure that quietly corrupts the accounts is worse than one that
    * crashes the screen.
    */
-  assert.match(
-    shapeTable,
-    /expenseReceipts: \{\s*strings: \['id', 'vendor', 'receiptDate', 'title', 'category'\],\s*numbers: \['amount'\],/,
+  assert.match(shapeTable, /expenseReceipts: \{\s*strings: \['id', 'vendor', 'receiptDate', 'title', 'category'\],/);
+
+  /*
+   * And `amount` must be POSITIVE, not merely finite.
+   *
+   * `validateExpenseReceiptInput` refuses an amount that is not greater than
+   * zero, so no receipt this app created holds one — but the preflight asked
+   * only `Number.isFinite`, and `-10000` passes that. It is the NaN case again
+   * and quieter: NaN at least renders as "NaN" somewhere, while a negative
+   * amount is an ordinary number summed straight into category totals,
+   * recorded spend, invested-to-date and per-horse economics, none of which
+   * clamp it. Costs come out understated and margins overstated, on screen, in
+   * the CSV and in the banker-facing PDF, with nothing looking wrong.
+   */
+  const receiptsShape = shapeTable.slice(
+    shapeTable.indexOf('expenseReceipts: {'),
+    shapeTable.indexOf('intakeBatches: {'),
+  );
+  assert.ok(receiptsShape.length > 0, 'the expenseReceipts entry must be findable');
+  assert.match(receiptsShape, /positiveNumbers: \['amount'\]/, 'the amount must be required to be positive');
+  assert.doesNotMatch(
+    receiptsShape,
+    /\bnumbers: \[[^\]]*'amount'/,
+    'and must not also sit in the merely-finite list, which would make the stricter check unreachable',
   );
 
   /*
@@ -1805,11 +1826,16 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * every well-formed horse — turning away a backup that restores perfectly,
    * which no amount of caution justifies.
    */
-  assert.equal(
-    (helpers.match(/valueAtPath\(record, /g) ?? []).length,
-    9,
-    'every loop must resolve paths — objects, lists, strings, numbers, optional numbers, non-negative numbers, item shapes, optional scalars and string items — or a valid archive is rejected',
-  );
+  const shapeLoops = helpers.match(/for \(const \w+ of shape\.\w+ \?\? \[\]\) \{[\s\S]*?\n {6}\}/g) ?? [];
+  assert.ok(shapeLoops.length >= 9, `expected the guard loops, found ${shapeLoops.length}`);
+  for (const loop of shapeLoops) {
+    const [signature] = loop.split('\n');
+    assert.match(
+      loop,
+      /valueAtPath\(record, /,
+      `${signature.trim()} must resolve the path — a dotted name read as a literal key finds nothing and rejects every well-formed record`,
+    );
+  }
 
   /*
    * `pendingDocuments` and `transferStatus` were both EXCLUDED here once, on
@@ -2528,4 +2554,41 @@ test('the migration runbook lists every migration the code requires', async () =
   // way to get this wrong, and this migration can break every signed-in read.
   assert.ok(stagingApply > -1, 'a revoking migration must be proved somewhere disposable first');
   assert.ok(stagingApply < productionApply, 'staging has to come first, or the rehearsal proves nothing');
+});
+
+test('the restore preflight refuses a receipt amount that is not positive', async () => {
+  const source = await readFile('src/store/xbarStoreHelpers.ts', 'utf8');
+
+  /*
+   * The declaration is not the guard. `positiveNumbers` in the shape table
+   * does nothing until the preflight loops over it, and a list nothing reads
+   * is the most convincing kind of dead check — it reviews as a fix.
+   */
+  const loopAt = source.indexOf('for (const field of shape.positiveNumbers ?? [])');
+  assert.ok(loopAt > -1, 'the preflight must actually read positiveNumbers');
+
+  const loop = source.slice(loopAt, source.indexOf('}', source.indexOf('return false;', loopAt)));
+  assert.match(loop, /value <= 0/, 'zero and negative amounts must both be refused');
+  assert.match(loop, /typeof value !== 'number'/, 'and a non-number must not slip through the comparison');
+  assert.match(loop, /!Number\.isFinite\(value\)/, 'and NaN must still be refused, since NaN <= 0 is false');
+
+  /*
+   * The over-rejection direction. Every other `numbers` field has zero as a
+   * real value — a foal's age, an uninsured horse, a horse in Sale Prep with
+   * no price yet, an intake batch with nothing processed — and no validator
+   * forbids it. Requiring positives there would turn away ordinary archives,
+   * so `positiveNumbers` must stay a short, deliberate list.
+   */
+  assert.equal(
+    (source.match(/positiveNumbers: \[/g) ?? []).length,
+    1,
+    'only the field the app itself refuses to record as non-positive belongs here',
+  );
+  for (const field of ['age', 'insuredValue', 'sale.askPrice', 'readiness.score', 'fileCount', 'confidence']) {
+    assert.doesNotMatch(
+      source,
+      new RegExp(`positiveNumbers: \\[[^\\]]*'${field.replace('.', '\\.')}'`),
+      `${field} legitimately holds zero and must not be required to be positive`,
+    );
+  }
 });

@@ -665,6 +665,17 @@ export function canRestorePersistedState(raw: unknown): boolean {
        * render as "NaN".
        */
       numbers?: string[];
+      /*
+       * Numbers that must be greater than zero, not merely finite.
+       *
+       * `numbers` asks whether a value is a usable number, which is the right
+       * question for a count, a score or a price — zero and, for some of them,
+       * a negative are legitimate values a real archive contains. It is the
+       * wrong question for a figure the app itself refuses to record as
+       * anything but positive, because then a value outside that range was
+       * never written by this app and cannot be honoured by it either.
+       */
+      positiveNumbers?: string[];
     }
   > = {
     horses: {
@@ -1181,7 +1192,29 @@ export function canRestorePersistedState(raw: unknown): boolean {
      */
     expenseReceipts: {
       strings: ['id', 'vendor', 'receiptDate', 'title', 'category'],
-      numbers: ['amount'],
+      /*
+       * Positive, not merely finite, and this is the one field in the table
+       * where that distinction matters.
+       *
+       * `validateExpenseReceiptInput` refuses an amount that is not greater
+       * than zero, so no receipt this app created can hold one — but the
+       * preflight asked only `Number.isFinite`, and `-10000` passes that. It is
+       * the same failure as the NaN case described above and quieter: NaN at
+       * least renders as "NaN" somewhere, while a negative amount is a
+       * perfectly ordinary number that is summed into category totals,
+       * recorded spend, invested-to-date and per-horse economics. Twelve call
+       * sites across ranchReport, businessIntelligence and profitIntelligence
+       * add `receipt.amount` raw, none of them clamping. The result is
+       * understated costs and overstated margins on screen, in the CSV and in
+       * the banker-facing PDF, with nothing anywhere looking wrong.
+       *
+       * The other `numbers` fields stay as they are on purpose. `age`,
+       * `insuredValue`, `sale.askPrice`, `readiness.score` and the intake
+       * counts all have zero as a real value — a foal, an uninsured horse, a
+       * horse in Sale Prep with no price yet — and no validator forbids it.
+       * Requiring positives there would turn away ordinary archives.
+       */
+      positiveNumbers: ['amount'],
       /*
        * `{receipt.notes || 'No notes added.'}` — Expenses.tsx:718. `||` passes
        * a truthy object to JSX exactly as `??` does.
@@ -1545,6 +1578,15 @@ export function canRestorePersistedState(raw: unknown): boolean {
        */
       for (const field of shape.numbers ?? []) {
         if (!Number.isFinite(valueAtPath(record, field))) return false;
+      }
+      /*
+       * Finite is not enough for a figure the app refuses to record as
+       * anything but positive. `-10000` is a perfectly ordinary number, so it
+       * passes the check above and is then summed straight into the accounts.
+       */
+      for (const field of shape.positiveNumbers ?? []) {
+        const value = valueAtPath(record, field);
+        if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return false;
       }
       /*
        * Absent is fine — the readers backfill it. Wrong-typed is not: `?? 0`

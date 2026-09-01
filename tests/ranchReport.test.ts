@@ -1018,3 +1018,76 @@ test('reopening a closed lead clears its outcome', async () => {
   assert.match(update, /stage: 'Offer',/, 'this is the reopen that used to leave the outcome behind');
   assert.match(update, /outcome: undefined,/, 'and it must clear it');
 });
+
+test('an offer on a horse that has already sold is not money still in play', () => {
+  /*
+   * A horse can carry several leads, and winning one does not close the
+   * others: `updateSalesLead` patches only the lead whose id it was given. So
+   * the sibling still sitting in Offer has no outcome of its own, passes every
+   * liveness test, and was counted in `pipelineValue` — while `soldHorseIds`
+   * counted the same animal as sold. The report contradicted itself about one
+   * horse, and it is the banker-facing PDF that says it.
+   */
+  const report = buildRanchReport(
+    input({
+      horses: [horse({ id: 'h1', name: 'Docs Best' }), horse({ id: 'h2', name: 'Peppy Rey' })],
+      salesLeads: [
+        lead({ id: 'l1', horseId: 'h1', stage: 'Closed', outcome: 'Won', offerAmount: 30000 }),
+        // The sibling. Live by its own fields, on an animal that has left.
+        lead({ id: 'l2', horseId: 'h1', stage: 'Offer', offerAmount: 28000 }),
+        // A genuinely open offer on a horse nobody has bought.
+        lead({ id: 'l3', horseId: 'h2', stage: 'Offer', offerAmount: 15000 }),
+      ],
+    }),
+    NOW,
+  );
+
+  assert.equal(report.money.pipelineValue, 15000, 'only the unsold horse’s offer is still in play');
+});
+
+test('the sold-horse exclusion does not swallow ordinary open offers', () => {
+  /*
+   * The over-rejection direction, and the one that would quietly understate
+   * what the ranch has coming in. A lead with no horse attached cannot be on a
+   * sold animal, and a horse whose only lead was LOST has not sold at all.
+   */
+  const report = buildRanchReport(
+    input({
+      horses: [horse({ id: 'h1', name: 'Docs Best' }), horse({ id: 'h2', name: 'Peppy Rey' })],
+      salesLeads: [
+        // Lost, not Won — the horse is still in the herd and still for sale.
+        lead({ id: 'l1', horseId: 'h1', stage: 'Closed', outcome: 'Lost', offerAmount: 9000 }),
+        lead({ id: 'l2', horseId: 'h1', stage: 'Offer', offerAmount: 12000 }),
+        // No horse attached: a general enquiry, unaffected by any sale.
+        lead({ id: 'l3', horseId: undefined, stage: 'Offer', offerAmount: 5000 }),
+        lead({ id: 'l4', horseId: 'h2', stage: 'Offer', offerAmount: 15000 }),
+      ],
+    }),
+    NOW,
+  );
+
+  assert.equal(report.money.pipelineValue, 32000, 'a lost sibling and an unattached lead stay in the pipeline');
+});
+
+test('a deposit on a sold horse’s losing sibling is still held', () => {
+  /*
+   * Deliberately NOT given the same correction, and the difference is the
+   * point. Pipeline value is money expected to COME IN, which a horse that has
+   * left the herd cannot produce. A deposit is money already sitting in the
+   * ranch's account, and the losing buyer's is genuinely still held until it is
+   * refunded or forfeited.
+   */
+  const report = buildRanchReport(
+    input({
+      horses: [horse({ id: 'h1', name: 'Docs Best' })],
+      salesLeads: [
+        lead({ id: 'l1', horseId: 'h1', stage: 'Closed', outcome: 'Won', offerAmount: 30000 }),
+        lead({ id: 'l2', horseId: 'h1', stage: 'Offer', depositStatus: 'Paid', depositAmount: 2500 }),
+      ],
+    }),
+    NOW,
+  );
+
+  assert.equal(report.money.pipelineValue, 0, 'the sibling offer is not pipeline');
+  assert.equal(report.money.depositsHeld, 2500, 'but its deposit is still on the books');
+});
