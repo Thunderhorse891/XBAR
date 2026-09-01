@@ -66,6 +66,15 @@ export function getCheckoutReadiness(params: {
    * path — the most common way anyone would have hit it.
    */
   subscriptionActive?: boolean;
+  /**
+   * Whether a Stripe billing portal is configured for this deployment.
+   *
+   * Only the wording depends on it, never the decision. A workspace with a
+   * live subscription is refused checkout whether or not a portal exists —
+   * but telling someone to "change plans in the billing portal" when the
+   * deployment has no portal sends them looking for a door that is not there.
+   */
+  hasBillingPortal?: boolean;
 }): CheckoutReadiness {
   if (!params.canManageBilling)
     return { ready: false, mode: 'checkout', reason: 'Ask a workspace owner to change plans.' };
@@ -83,8 +92,9 @@ export function getCheckoutReadiness(params: {
     return {
       ready: false,
       mode: 'manual',
-      reason:
-        'This workspace already has an active subscription. Change plans in the billing portal so the existing one is updated rather than duplicated.',
+      reason: params.hasBillingPortal
+        ? 'This workspace already has an active subscription. Change plans in the billing portal so the existing one is updated rather than duplicated.'
+        : 'This workspace already has an active subscription. Changing it has to happen in Stripe, because a new checkout here would bill you a second time alongside it.',
     };
   }
   if (params.subscriptionRecoverable) {
@@ -111,6 +121,41 @@ export function getCheckoutReadiness(params: {
   if (!params.hasManagedIdentity)
     return { ready: false, mode: 'checkout', reason: 'Sign in to this workspace before choosing a paid plan.' };
   return { ready: true, mode: 'checkout', reason: 'Your plan changes only after secure checkout is complete.' };
+}
+
+/**
+ * Where a workspace that already has a subscription is actually sent.
+ *
+ * `getCheckoutReadiness` refuses checkout for these workspaces, and refusing
+ * was the whole of the answer: the primary action rendered disabled, the plan
+ * cards returned without navigating, and `stripeConfig.billingPortalUrl` was
+ * read from the environment and consumed by nothing. So the copy told a paying
+ * customer to change their plan in the billing portal while the app offered no
+ * way to reach one — every upgrade, downgrade, payment recovery and
+ * cancellation was a dead end.
+ *
+ * A refusal owes the customer somewhere to go. This is that somewhere, and it
+ * is a separate question from readiness on purpose: readiness answers whether
+ * a NEW subscription may be created, which stays false here. Routing to the
+ * portal cannot create a second subscription — Stripe's portal operates on the
+ * one that already exists, which is exactly why it is the safe destination.
+ *
+ * Returns null when there is nothing to manage, when no portal is configured
+ * (a link to nowhere is worse than a disabled button), or when the viewer may
+ * not manage billing anyway.
+ */
+export function getBillingPortalAction(params: {
+  portalUrl: string;
+  canManageBilling: boolean;
+  subscriptionActive?: boolean;
+  subscriptionRecoverable?: boolean;
+}): { url: string; label: string } | null {
+  if (!params.canManageBilling) return null;
+  const url = params.portalUrl.trim();
+  if (!url) return null;
+  if (params.subscriptionActive) return { url, label: 'Manage your subscription' };
+  if (params.subscriptionRecoverable) return { url, label: 'Settle your payment' };
+  return null;
 }
 
 export function recommendedTier(currentTier: SubscriptionTier, requestedTier?: SubscriptionTier) {

@@ -7,6 +7,7 @@ import { productEvent, productEventNames } from '@/lib/productEvents';
 import { revenuePlanMatrix } from '@/lib/revenuePlanMatrix';
 import { trackRuntimeEvent } from '@/lib/runtimeEvents';
 import {
+  getBillingPortalAction,
   getCheckoutReadiness,
   isCurrentPaidPlan,
   isEntitledBillingState,
@@ -89,6 +90,22 @@ export default function Subscriptions() {
   // entirely. api/stripe/checkout.js refuses these server-side; this stops the
   // screen offering a button that would be refused.
   const subscriptionActive = hasActivePaidPlan(subscription);
+  /*
+   * Where a workspace that already has a subscription is sent instead.
+   *
+   * Refusing checkout is right and is not enough on its own: without this the
+   * primary action rendered disabled, the plan cards did nothing, and the copy
+   * pointed at a billing portal the app never linked to. See
+   * `getBillingPortalAction` for why routing here cannot duplicate a
+   * subscription the way checkout would.
+   */
+  const hasBillingPortal = Boolean(stripeConfig.billingPortalUrl.trim());
+  const billingPortalAction = getBillingPortalAction({
+    portalUrl: stripeConfig.billingPortalUrl,
+    canManageBilling,
+    subscriptionActive,
+    subscriptionRecoverable,
+  });
   const continuePath = workspaceReady ? '/' : '/setup';
   const checkoutReadinessLabel = selectedCheckoutConfigured
     ? 'Secure checkout opens next.'
@@ -104,6 +121,7 @@ export default function Subscriptions() {
     // checkout while every plan card below it was disabled and clicking the CTA
     // was refused — all three have to answer the same question.
     subscriptionActive,
+    hasBillingPortal,
   });
   // Entitlement, not price. The stored rate is the price of the plan that was
   // bought and survives a cancellation, so using it as the "this is your
@@ -122,6 +140,12 @@ export default function Subscriptions() {
   useEffect(() => {
     setSelectedTier(defaultDecisionTier);
   }, [defaultDecisionTier]);
+
+  const openBillingPortal = () => {
+    if (!billingPortalAction) return;
+    emit(productEventNames.checkoutRedirected, { tier: subscription.tier, method: 'billing_portal' });
+    window.location.assign(billingPortalAction.url);
+  };
 
   const selectTier = (tier: SubscriptionTier) => {
     setSelectedTier(tier);
@@ -147,6 +171,7 @@ export default function Subscriptions() {
       checkoutInProgress: false,
       subscriptionRecoverable,
       subscriptionActive,
+      hasBillingPortal,
     });
     if (!readiness.ready) {
       emit(productEventNames.checkoutFailed, { tier, reason: readiness.reason }, 'warning');
@@ -242,10 +267,18 @@ export default function Subscriptions() {
       checkoutInProgress: checkoutTier !== null,
       subscriptionRecoverable,
       subscriptionActive,
+      hasBillingPortal,
     });
     const chooseTier = () => {
       selectTier(tier);
-      if (paidCurrent || setupCurrent || !readiness.ready) return;
+      if (paidCurrent || setupCurrent) return;
+      if (!readiness.ready) {
+        // A subscription already exists, so this cannot open checkout — but it
+        // can open the place where that subscription is actually changed.
+        // Returning silently is what left every upgrade with nowhere to go.
+        if (billingPortalAction) openBillingPortal();
+        return;
+      }
       void beginCheckout(tier);
     };
 
@@ -432,21 +465,32 @@ export default function Subscriptions() {
             )}
           </div>
 
-          <button
-            className="checkout-primary-action"
-            type="button"
-            disabled={!selectedReadiness.ready || selectedPaidCurrent}
-            title={selectedPaidCurrent ? 'This plan is already active.' : selectedReadiness.reason}
-            onClick={() => void beginCheckout(decisionTier)}
-          >
-            {checkoutTier === decisionTier
-              ? 'Opening checkout...'
-              : selectedPaidCurrent
-                ? 'Current plan'
-                : selectedReadiness.mode === 'manual'
-                  ? 'Billing not configured yet'
-                  : 'Continue to secure checkout'}
-          </button>
+          {billingPortalAction ? (
+            <button
+              className="checkout-primary-action"
+              type="button"
+              title={selectedReadiness.reason}
+              onClick={openBillingPortal}
+            >
+              {billingPortalAction.label}
+            </button>
+          ) : (
+            <button
+              className="checkout-primary-action"
+              type="button"
+              disabled={!selectedReadiness.ready || selectedPaidCurrent}
+              title={selectedPaidCurrent ? 'This plan is already active.' : selectedReadiness.reason}
+              onClick={() => void beginCheckout(decisionTier)}
+            >
+              {checkoutTier === decisionTier
+                ? 'Opening checkout...'
+                : selectedPaidCurrent
+                  ? 'Current plan'
+                  : selectedReadiness.mode === 'manual'
+                    ? 'Billing not configured yet'
+                    : 'Continue to secure checkout'}
+            </button>
+          )}
           <button className="checkout-secondary-action" type="button" onClick={startTrial}>
             Continue with Starter setup
           </button>

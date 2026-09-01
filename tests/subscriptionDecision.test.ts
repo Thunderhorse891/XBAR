@@ -3,6 +3,7 @@ import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
+  getBillingPortalAction,
   getCheckoutReadiness,
   clampSubscriptionToEntitlement,
   isSubscriptionRecoverable,
@@ -609,7 +610,11 @@ test('a paying workspace is not offered a second subscription', () => {
   });
 
   assert.equal(readiness.ready, false);
-  assert.match(readiness.reason, /billing portal/);
+  // The rule this test owns is the refusal and that it says why. Which
+  // destination the copy names depends on whether a portal is configured, and
+  // that question belongs to 'the copy promises a billing portal only when one
+  // exists' — asserting the portal wording here pinned one deployment's text.
+  assert.match(readiness.reason, /already has an active subscription/);
 });
 
 test('a workspace with no plan is still allowed to buy one', () => {
@@ -631,11 +636,24 @@ test('the billing screen asks both questions, not just recoverability', async ()
   const source = await readFile('src/routes/Subscriptions.tsx', 'utf8');
 
   assert.match(source, /const subscriptionActive = hasActivePaidPlan\(subscription\);/);
-  // All THREE call sites — the selected-plan readiness, the per-plan card, and
-  // the click handler. Missing any one leaves a control that promises checkout
-  // and is then refused: with only two, the prominent CTA stayed enabled while
-  // every plan card below it was disabled.
-  assert.equal((source.match(/subscriptionActive,/g) ?? []).length, 3);
+
+  /*
+   * All THREE readiness call sites — the selected-plan readiness, the per-plan
+   * card, and the click handler. Missing any one leaves a control that promises
+   * checkout and is then refused: with only two, the prominent CTA stayed
+   * enabled while every plan card below it was disabled.
+   *
+   * Scoped to the call sites rather than counting the bare identifier across
+   * the file. The count broke the moment anything else legitimately read the
+   * flag, which says nothing about whether the three gates agree.
+   */
+  const readinessCalls = source.split('getCheckoutReadiness({').slice(1);
+  assert.equal(readinessCalls.length, 3, 'the screen must ask readiness in exactly three places');
+  for (const call of readinessCalls) {
+    const args = call.slice(0, call.indexOf('});'));
+    assert.match(args, /\bsubscriptionActive,/, 'every readiness call site must ask about an active subscription');
+    assert.match(args, /\bsubscriptionRecoverable,/, 'and about a recoverable one');
+  }
 });
 
 test('a malformed recovery flag withholds checkout instead of falling through', () => {
@@ -712,5 +730,119 @@ test('an ABSENT recovery flag still falls back to the billing state', () => {
   assert.equal(
     isSubscriptionRecoverable({ billingState: 'Inactive', subscriptionRecoverable: true } as SubscriptionProfile),
     true,
+  );
+});
+
+/*
+ * A refusal owes the customer somewhere to go.
+ *
+ * Checkout is correctly blocked for a workspace that already has a
+ * subscription — a second `mode: 'subscription'` session would bill them twice.
+ * But refusing was the whole of the answer: the primary action rendered
+ * disabled, the plan cards returned without navigating, and
+ * `stripeConfig.billingPortalUrl` was read from the environment and consumed by
+ * nothing. Every upgrade, downgrade, payment recovery and cancellation was a
+ * dead end, while the copy told them to use a billing portal the app never
+ * linked to.
+ */
+
+test('a workspace with a subscription is routed to the billing portal', () => {
+  const portal = 'https://billing.stripe.com/p/session/test';
+
+  assert.deepEqual(getBillingPortalAction({ portalUrl: portal, canManageBilling: true, subscriptionActive: true }), {
+    url: portal,
+    label: 'Manage your subscription',
+  });
+  assert.deepEqual(
+    getBillingPortalAction({ portalUrl: portal, canManageBilling: true, subscriptionRecoverable: true }),
+    { url: portal, label: 'Settle your payment' },
+  );
+
+  // Whitespace is not a configured portal.
+  assert.equal(getBillingPortalAction({ portalUrl: '   ', canManageBilling: true, subscriptionActive: true }), null);
+});
+
+test('the portal is offered only when there is a subscription and a place to send it', () => {
+  const portal = 'https://billing.stripe.com/p/session/test';
+
+  // The over-rejection direction is not the risk here; the risk is offering a
+  // door that opens on nothing. No portal configured means the disabled button
+  // and its honest reason stay, because a link to nowhere is worse.
+  assert.equal(getBillingPortalAction({ portalUrl: '', canManageBilling: true, subscriptionActive: true }), null);
+
+  // Nothing to manage: a workspace that has never subscribed must still be
+  // sent to checkout, not to a portal that would show it an empty account.
+  assert.equal(getBillingPortalAction({ portalUrl: portal, canManageBilling: true }), null);
+  assert.equal(
+    getBillingPortalAction({
+      portalUrl: portal,
+      canManageBilling: true,
+      subscriptionActive: false,
+      subscriptionRecoverable: false,
+    }),
+    null,
+  );
+
+  // A member who may not manage billing is not handed the owner's portal.
+  assert.equal(getBillingPortalAction({ portalUrl: portal, canManageBilling: false, subscriptionActive: true }), null);
+});
+
+test('the portal never makes a second subscription purchasable', () => {
+  /*
+   * The invariant this change must not touch. Routing to the portal is safe
+   * precisely because Stripe's portal acts on the subscription that already
+   * exists; readiness still answers a different question — whether a NEW one
+   * may be created — and it must stay false in both states.
+   */
+  const base = {
+    billingEnabled: true,
+    canManageBilling: true,
+    hasManagedIdentity: true,
+    hasPaymentLink: true,
+    checkoutInProgress: false,
+    hasBillingPortal: true,
+  };
+
+  assert.equal(getCheckoutReadiness({ ...base, subscriptionActive: true }).ready, false);
+  assert.equal(getCheckoutReadiness({ ...base, subscriptionRecoverable: true }).ready, false);
+});
+
+test('the copy promises a billing portal only when one exists', () => {
+  const base = {
+    billingEnabled: true,
+    canManageBilling: true,
+    hasManagedIdentity: true,
+    hasPaymentLink: true,
+    checkoutInProgress: false,
+    subscriptionActive: true,
+  };
+
+  // Telling someone to change plans in a portal this deployment does not have
+  // sends them looking for a door that is not there.
+  assert.match(getCheckoutReadiness({ ...base, hasBillingPortal: true }).reason, /billing portal/);
+  assert.doesNotMatch(getCheckoutReadiness({ ...base, hasBillingPortal: false }).reason, /billing portal/);
+
+  // Either way the refusal itself is unchanged and still says why.
+  for (const hasBillingPortal of [true, false]) {
+    const readiness = getCheckoutReadiness({ ...base, hasBillingPortal });
+    assert.equal(readiness.ready, false);
+    assert.match(readiness.reason, /already has an active subscription/);
+  }
+});
+
+test('the billing screen routes a blocked plan card to the portal', async () => {
+  const screen = await readFile(path.join(process.cwd(), 'src/routes/Subscriptions.tsx'), 'utf8');
+
+  // The defect was a silent `return`. Wiring is React plumbing the node suite
+  // cannot reach, so this pins the property that a blocked card does something.
+  assert.match(
+    screen,
+    /if \(!readiness\.ready\) \{[\s\S]*?if \(billingPortalAction\) openBillingPortal\(\);/,
+    'a plan card that cannot open checkout must offer the portal instead of returning silently',
+  );
+  assert.match(
+    screen,
+    /billingPortalAction \? \([\s\S]*?onClick=\{openBillingPortal\}/,
+    'the primary action must become the portal rather than a disabled button',
   );
 });
