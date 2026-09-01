@@ -9,6 +9,7 @@ import {
   blobToBase64,
   exportLocalFiles,
   importLocalFiles,
+  isInlineViewableType,
   openLocalFile,
   listLocalFiles,
   readLocalFile,
@@ -244,6 +245,42 @@ test('a duplicated key does not stop the rest of the restore', async () => {
     assert.equal(restored, 1, 'an ambiguous key must not cost the rancher every other document');
     assert.ok(await readLocalFile('vault-fine'));
     assert.equal(failed.length, 2);
+  } finally {
+    restore();
+  }
+});
+
+test('non-string metadata is coerced so the restored file still opens', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    /*
+     * `||` catches an absent value and passes a truthy object through, so
+     * `type: {}` was stored verbatim and later reached `isInlineViewableType`,
+     * whose `.trim()` throws. The bytes were on the device and the document
+     * would not open — after an import that reported success.
+     */
+    const hostile = {
+      key: 'vault-meta',
+      name: {} as unknown as string,
+      type: {} as unknown as string,
+      size: 4,
+      storedAt: [] as unknown as string,
+      data: await blobToBase64(new Blob(['good'])),
+    };
+
+    const { restored, failed } = await importLocalFiles([hostile], { workspaceId: TEST_WORKSPACE });
+
+    assert.equal(restored, 1, 'the bytes are fine — the file must not be discarded over a bad label');
+    assert.deepEqual(failed, []);
+
+    const stored = await readLocalFile('vault-meta');
+    assert.ok(stored);
+    assert.equal(typeof stored?.name, 'string');
+    assert.equal(typeof stored?.type, 'string');
+    assert.equal(typeof stored?.storedAt, 'string');
+    // The read that used to throw.
+    assert.doesNotThrow(() => isInlineViewableType(stored!.type));
+    assert.equal(isInlineViewableType(stored!.type), false, 'an unknown type must download rather than inline');
   } finally {
     restore();
   }

@@ -535,6 +535,22 @@ export async function importLocalFiles(
   const conflictingKeys = new Set([...bytesByKey].filter(([, contents]) => contents.size > 1).map(([key]) => key));
   const takenKeys = new Set<string>();
 
+  /*
+   * Metadata is coerced, not trusted.
+   *
+   * These fields are typed `string`, and a hand-edited archive is under no
+   * obligation to honour that. `||` catches an absent value and passes a truthy
+   * object straight through, so `type: {}` was stored verbatim and reached
+   * `isInlineViewableType`, whose `.trim()` throws — the bytes were on the
+   * device and the document would not open, after an import that reported
+   * success.
+   *
+   * Coerced rather than refused: a wrong name or MIME type costs a label and,
+   * at worst, an inline preview that becomes a download. Discarding the file
+   * over it would lose a document that restored perfectly well.
+   */
+  const asText = (value: unknown, fallback: string) => (typeof value === 'string' && value.trim() ? value : fallback);
+
   let restored = 0;
   for (const file of files) {
     if (!file?.key || typeof file.data !== 'string') {
@@ -546,7 +562,7 @@ export async function importLocalFiles(
     if (conflictingKeys.has(file.key)) {
       failed.push({
         key: file.key,
-        name: file.name || file.key,
+        name: asText(file.name, file.key),
         reason:
           'the backup holds more than one different file under this key, so which one the records meant cannot be established',
       });
@@ -568,10 +584,10 @@ export async function importLocalFiles(
       const bytes = base64ToBytes(file.data);
       const entry: LocalFileEntry = {
         key,
-        name: file.name || 'restored-file',
-        type: file.type || '',
+        name: asText(file.name, 'restored-file'),
+        type: asText(file.type, ''),
         size: bytes.byteLength,
-        storedAt: file.storedAt || new Date().toISOString(),
+        storedAt: asText(file.storedAt, new Date().toISOString()),
         // Tagged to the workspace doing the restore. Without this a restored
         // file has no owner, so it can never be swept and never purged when the
         // account is deleted — it would simply accumulate forever.
@@ -592,7 +608,7 @@ export async function importLocalFiles(
          * XBAR, and its verifier runs there with no CSP to satisfy.
          */
         generated: false,
-        blob: new Blob([bytes], { type: file.type || 'application/octet-stream' }),
+        blob: new Blob([bytes], { type: asText(file.type, 'application/octet-stream') }),
       };
       await withStore('readwrite', (store) => store.put(entry));
       // Marked only after the write landed, so a failed entry does not make a
@@ -607,7 +623,7 @@ export async function importLocalFiles(
       console.error('Restoring a backed-up file failed.', error);
       failed.push({
         key: file.key,
-        name: file.name || file.key,
+        name: asText(file.name, file.key),
         reason: 'the file could not be written to this device',
       });
     }

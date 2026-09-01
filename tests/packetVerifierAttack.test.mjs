@@ -74,8 +74,18 @@ async function verify({ payload, sealedDigest, links }) {
 
   assert.ok(click, 'the verifier must register a click handler');
   click();
-  // Let the promise chain inside the handler settle.
-  for (let i = 0; i < 50; i += 1) await new Promise((resolve) => setImmediate(resolve));
+
+  /*
+   * Wait for the verdict, not for a fixed number of ticks. `crypto.subtle`
+   * resolves off the main thread, so a tick count that is enough on an idle
+   * machine is not enough under a full `npm test` run — which is exactly how
+   * this first failed.
+   */
+  const deadline = Date.now() + 10_000;
+  while (!out.getAttribute('data-state') && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+  assert.ok(out.getAttribute('data-state'), `the verifier never reported a verdict: ${out.textContent}`);
   return { state: out.getAttribute('data-state'), text: out.textContent };
 }
 
