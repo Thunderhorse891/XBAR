@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { billingPath, billingPathForTier, legacyBillingPaths } from '../src/lib/billingRoutes.js';
+import { NO_MANAGED_IDENTITY, canUsePaymentLinkFallback, checkoutRouteFor } from '../src/lib/billingApi.js';
 
 const repoRoot = process.cwd();
 
@@ -147,4 +148,57 @@ test('a local-only workspace can still buy a plan', async () => {
     /if \(!params\.workspaceId \|\| !params\.accessToken\) \{\s*return \{\s*ok: false,[^}]*?code: NO_MANAGED_IDENTITY,/,
     'the no-identity path must carry the one code that permits a fallback',
   );
+});
+
+test('hosted-link-only billing reaches its payment link without calling the disabled endpoint', () => {
+  /*
+   * The documented link-only configuration: VITE_STRIPE_PAYMENT_LINK_* set,
+   * managed billing off. api/stripe/checkout.js answers 503 before it reads a
+   * billing row, so that refusal carries no code, so `canUsePaymentLinkFallback`
+   * declines to follow it — and the only checkout route the deployment has was
+   * suppressed. Every purchase ended in an error toast while `/api/health`
+   * reported the billing configuration healthy, which for link-only billing it
+   * is. The route has to be chosen from configuration, before the request.
+   */
+  assert.equal(
+    checkoutRouteFor({ managedBillingEnabled: false, paymentLink: 'https://buy.stripe.com/test_link' }),
+    'payment_link',
+  );
+});
+
+test('the billing screen decides the route before it calls the endpoint', async () => {
+  const screen = await readFile('src/routes/Subscriptions.tsx', 'utf8');
+
+  // Order is the property, not the presence of a call: deciding the route
+  // AFTER the endpoint answered would be the fallback again, and the fallback
+  // is what suppresses the link in this configuration.
+  const routeAt = screen.indexOf('checkoutRouteFor({');
+  const managedAt = screen.indexOf('await startManagedCheckout(');
+  assert.ok(routeAt >= 0, 'the screen must choose a checkout route from configuration');
+  assert.ok(managedAt >= 0, 'the screen must still call the managed endpoint');
+  assert.ok(routeAt < managedAt, 'the route must be chosen before the managed endpoint is called');
+});
+
+test('the hosted-only bypass reads the managed-billing flag, not a failure code', () => {
+  /*
+   * The over-rejection direction. This bypass must never widen into the
+   * duplicate-charge path the allowlist closed: with managed billing ON the
+   * endpoint is always called, even though a payment link is configured, so an
+   * uncoded failure still stops at the error toast rather than reaching an
+   * unguarded `mode: 'subscription'` link.
+   */
+  assert.equal(
+    checkoutRouteFor({ managedBillingEnabled: true, paymentLink: 'https://buy.stripe.com/test_link' }),
+    'managed',
+  );
+
+  // No link configured is not a hosted-only deployment; it is an unconfigured
+  // one. Calling the endpoint is what produces the honest refusal message.
+  assert.equal(checkoutRouteFor({ managedBillingEnabled: false, paymentLink: '' }), 'managed');
+  assert.equal(checkoutRouteFor({ managedBillingEnabled: true, paymentLink: '' }), 'managed');
+
+  // And the allowlist itself is untouched by any of this.
+  assert.equal(canUsePaymentLinkFallback(undefined), false);
+  assert.equal(canUsePaymentLinkFallback('billing_unavailable'), false);
+  assert.equal(canUsePaymentLinkFallback(NO_MANAGED_IDENTITY), true);
 });

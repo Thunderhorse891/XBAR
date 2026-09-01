@@ -1,5 +1,5 @@
-import { apiConfig } from '@/lib/platformConfig';
-import type { SubscriptionTier } from '@/types/xbar';
+import { apiConfig } from './platformConfig.js';
+import type { SubscriptionTier } from '../types/xbar.js';
 
 type CheckoutResult =
   | {
@@ -42,6 +42,36 @@ export const NO_MANAGED_IDENTITY = 'no_managed_identity';
  */
 export function canUsePaymentLinkFallback(code?: string): boolean {
   return code === NO_MANAGED_IDENTITY;
+}
+
+/**
+ * Which checkout route a purchase takes before any request is made.
+ *
+ * 'payment_link' here is NOT the fallback below — it is the primary and only
+ * route a hosted-link-only deployment has. The two are decided by different
+ * facts and must not be collapsed: this one reads configuration BEFORE the
+ * endpoint is called, the fallback reads a refusal code AFTER it answered.
+ *
+ * When managed billing is off, api/stripe/checkout.js returns 503 before it
+ * reads a billing row — before the access check, before the duplicate-
+ * subscription lookup — and that refusal carries no code because nothing was
+ * found. The allowlist then correctly declines to follow it, which suppressed
+ * the configured payment link and left every purchase in that deployment
+ * ending in an error.
+ *
+ * Skipping the request gives up no protection: the guard it would have run is
+ * unreachable in this mode by construction. A workspace that already has a
+ * subscription is refused earlier, by `getCheckoutReadiness`.
+ *
+ * The condition is the managed-billing flag, never a failure code. With
+ * managed billing on, the endpoint is always called and the strict allowlist
+ * still governs the fallback, so an uncoded failure still blocks the link.
+ */
+export function checkoutRouteFor(params: {
+  managedBillingEnabled: boolean;
+  paymentLink: string;
+}): 'managed' | 'payment_link' {
+  return !params.managedBillingEnabled && params.paymentLink ? 'payment_link' : 'managed';
 }
 
 function buildApiUrl(path: string) {

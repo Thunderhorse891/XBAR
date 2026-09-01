@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { canUsePaymentLinkFallback, startManagedCheckout } from '@/lib/billingApi';
+import { canUsePaymentLinkFallback, checkoutRouteFor, startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency } from '@/lib/format';
 import { getStripePaymentLink, stripeConfig } from '@/lib/platformConfig';
 import { productEvent, productEventNames } from '@/lib/productEvents';
@@ -161,6 +161,22 @@ export default function Subscriptions() {
         tone: 'warning',
       });
       setCheckoutTier(null);
+      return;
+    }
+
+    /*
+     * A hosted-link-only deployment never calls the managed endpoint at all.
+     *
+     * Not a fallback — the primary route. With managed billing off the
+     * endpoint refuses with no code before reading any billing row, and the
+     * allowlist below then rightly declines to follow it, which suppressed the
+     * one checkout route such a deployment has. See `checkoutRouteFor` for why
+     * skipping the request costs no protection.
+     */
+    const hostedOnlyLink = getStripePaymentLink(tier);
+    if (checkoutRouteFor({ managedBillingEnabled: billingEnabled, paymentLink: hostedOnlyLink }) === 'payment_link') {
+      emit(productEventNames.checkoutRedirected, { tier, method: 'payment_link' });
+      window.location.assign(hostedOnlyLink);
       return;
     }
 
