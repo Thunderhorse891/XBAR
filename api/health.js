@@ -48,15 +48,32 @@ export default function handler(req, res) {
     email: Boolean(process.env.RESEND_API_KEY || process.env.SENDGRID_API_KEY),
     remindersCron: Boolean(process.env.CRON_SECRET),
   };
-  const billingTouched =
+  /*
+   * Two billing shapes are complete, and only one of them needs the server.
+   *
+   * Hosted payment links are a whole configuration on their own: the client
+   * redirects to a Stripe-hosted page, and nothing on this deployment has to
+   * hold a secret key, receive a webhook, or know a price ID. It is how a
+   * workspace with no cloud session buys a plan.
+   *
+   * So the managed-billing requirements below are triggered by the MANAGED
+   * signals only. Including `paymentLinks` here made a link-only deployment
+   * fail its own readiness probe — and README.md points uptime monitors and
+   * load balancers at this endpoint, so a working deployment would have been
+   * pulled out of service for using a configuration the app supports.
+   *
+   * A half-configured managed stack is still unhealthy, which is the case this
+   * check exists for: those pieces are useless apart, and the failure they
+   * produce otherwise is a checkout that dies mid-flow.
+   */
+  const managedBillingTouched =
     subsystems.managedBilling ||
     subsystems.clientManagedBilling ||
     subsystems.stripeBilling ||
     subsystems.stripeWebhook ||
-    subsystems.stripePriceIds ||
-    subsystems.paymentLinks;
+    subsystems.stripePriceIds;
   const billingReady =
-    !billingTouched ||
+    !managedBillingTouched ||
     (subsystems.supabaseAdmin &&
       subsystems.stripeBilling &&
       subsystems.stripeWebhook &&
@@ -64,23 +81,37 @@ export default function handler(req, res) {
       subsystems.managedBilling &&
       subsystems.clientManagedBilling);
   const reasons = [];
+  const warnings = [];
 
-  if (billingTouched && !subsystems.supabaseAdmin) {
+  /*
+   * Healthy, but worth saying out loud rather than leaving an operator to infer
+   * it from a subsystem boolean: without a webhook nothing tells this
+   * deployment that a link payment succeeded, so entitlements after a hosted
+   * checkout are granted by hand. That is a deliberate operating mode, not a
+   * fault, which is why it is a warning and not a 503.
+   */
+  if (subsystems.paymentLinks && !managedBillingTouched) {
+    warnings.push(
+      'Billing runs on hosted Stripe payment links only. Checkout works, but no webhook confirms payment, so entitlements must be granted manually.',
+    );
+  }
+
+  if (managedBillingTouched && !subsystems.supabaseAdmin) {
     reasons.push('Supabase admin credentials are required before billing can create or sync entitlements.');
   }
-  if (billingTouched && !subsystems.stripeBilling) {
+  if (managedBillingTouched && !subsystems.stripeBilling) {
     reasons.push('STRIPE_SECRET_KEY is required before paid checkout can create sessions.');
   }
-  if (billingTouched && !subsystems.stripeWebhook) {
+  if (managedBillingTouched && !subsystems.stripeWebhook) {
     reasons.push('STRIPE_WEBHOOK_SECRET is required before Stripe can confirm paid entitlements.');
   }
-  if (billingTouched && !subsystems.stripePriceIds) {
+  if (managedBillingTouched && !subsystems.stripePriceIds) {
     reasons.push('All STRIPE_PRICE_ID_* values are required before every tier can be purchased and synced.');
   }
-  if (billingTouched && !subsystems.managedBilling) {
+  if (managedBillingTouched && !subsystems.managedBilling) {
     reasons.push('MANAGED_BILLING_ENABLED must be true before the server will create checkout sessions.');
   }
-  if (billingTouched && !subsystems.clientManagedBilling) {
+  if (managedBillingTouched && !subsystems.clientManagedBilling) {
     reasons.push('VITE_MANAGED_BILLING_ENABLED must be true before the app will offer managed checkout.');
   }
 
@@ -96,5 +127,6 @@ export default function handler(req, res) {
       billingReady,
     },
     ...(reasons.length ? { reasons } : {}),
+    ...(warnings.length ? { warnings } : {}),
   });
 }

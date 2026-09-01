@@ -157,6 +157,66 @@ test('health endpoint reports ready when managed billing can sync entitlements',
   assert.equal('reasons' in response.body, false);
 });
 
+test('health endpoint stays healthy on hosted payment links alone', async () => {
+  /*
+   * Hosted links are a complete configuration: the client redirects to a
+   * Stripe-hosted page and this deployment holds no secret, receives no
+   * webhook and knows no price ID. Requiring the managed stack of it returned
+   * 503 for a deployment whose checkout works — and README.md points uptime
+   * monitors and load balancers at this endpoint, so the probe would have
+   * pulled a working deployment out of service.
+   */
+  const response = await withRuntimeEnv(
+    {
+      VITE_STRIPE_PAYMENT_LINK_STARTER: 'https://buy.stripe.com/test_starter',
+      VITE_STRIPE_PAYMENT_LINK_PROFESSIONAL: 'https://buy.stripe.com/test_professional',
+      VITE_STRIPE_PAYMENT_LINK_RANCH_OPS: 'https://buy.stripe.com/test_ranch_ops',
+      VITE_STRIPE_PAYMENT_LINK_ENTERPRISE: 'https://buy.stripe.com/test_enterprise',
+    },
+    () => invoke(healthHandler, { method: 'GET' }),
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.ok, true);
+  assert.equal(response.body.status, 'healthy');
+  assert.equal(response.body.checks.billingReady, true);
+  assert.equal(response.body.subsystems.paymentLinks, true);
+  assert.equal('reasons' in response.body, false, 'a complete configuration must not be given remediation steps');
+
+  /*
+   * Healthy, but not silently: without a webhook nothing tells this deployment
+   * that a link payment succeeded, so entitlements are granted by hand. Said
+   * out loud rather than left for an operator to infer from a boolean.
+   */
+  assert.match(response.body.warnings.join(' '), /payment links only/i);
+  assert.match(response.body.warnings.join(' '), /manually/i);
+});
+
+test('a half-configured managed stack is still unhealthy, with or without links', async () => {
+  // The over-correction guard. Loosening the trigger must not excuse a managed
+  // stack that is partly wired, which is the failure this probe exists for —
+  // those pieces are useless apart and produce a checkout that dies mid-flow.
+  for (const withLinks of [false, true]) {
+    const response = await withRuntimeEnv(
+      {
+        STRIPE_SECRET_KEY: 'sk_test_configured',
+        MANAGED_BILLING_ENABLED: 'true',
+        ...(withLinks ? { VITE_STRIPE_PAYMENT_LINK_STARTER: 'https://buy.stripe.com/test_starter' } : {}),
+      },
+      () => invoke(healthHandler, { method: 'GET' }),
+    );
+
+    assert.equal(response.statusCode, 503, `partial managed billing must fail readiness (links: ${withLinks})`);
+    assert.equal(response.body.checks.billingReady, false);
+    assert.match(response.body.reasons.join(' '), /STRIPE_WEBHOOK_SECRET/);
+    assert.equal(
+      'warnings' in response.body,
+      false,
+      'the link-only warning must not appear once the managed stack is in play',
+    );
+  }
+});
+
 test('health endpoint rejects mutating methods', async () => {
   const response = await invoke(healthHandler, { method: 'POST', body: {} });
   assert.equal(response.statusCode, 405);
