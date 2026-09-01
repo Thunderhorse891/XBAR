@@ -135,12 +135,39 @@ export const PACKET_VERIFIER_SCRIPT = `
         return Promise.all(
           links.map(function (link) {
             var href = link.getAttribute('href') || '';
-            return hash(bytesOf(href.slice(href.indexOf(',') + 1))).then(function (digest) {
-              return {
-                id: link.getAttribute('data-xbar-file'),
-                fileName: link.getAttribute('download') || '',
-                digest: digest,
-              };
+            var fileName = link.getAttribute('download') || '';
+            var id = link.getAttribute('data-xbar-file');
+            /*
+             * The link has to BE the bytes, not merely end with them.
+             *
+             * This used to hash everything after the first comma, whatever the
+             * link was. An altered packet pointing a link at
+             * 'https://attacker.example/file,<the original base64>' therefore
+             * hashed the original suffix and matched the seal, so the verifier
+             * said PASS while clicking the link fetched unsealed content from
+             * somewhere else entirely. That is the one failure this whole file
+             * exists to make impossible: a packet that lies and proves it.
+             *
+             * A base64 data: URL carries its bytes inline, so what is hashed is
+             * necessarily what the buyer receives. Anything else cannot be
+             * verified at all, and unverifiable is reported as a problem rather
+             * than skipped — silence here reads as a pass.
+             */
+            var marker = ';base64,';
+            var at = href.slice(0, 5).toLowerCase() === 'data:' ? href.indexOf(marker) : -1;
+            if (at < 0) {
+              return Promise.resolve({ id: id, fileName: fileName, digest: null, embedded: false });
+            }
+            var bytes;
+            try {
+              bytes = bytesOf(href.slice(at + marker.length));
+            } catch (error) {
+              // Undecodable base64 is the same answer: these are not bytes this
+              // packet can vouch for.
+              return Promise.resolve({ id: id, fileName: fileName, digest: null, embedded: false });
+            }
+            return hash(bytes).then(function (digest) {
+              return { id: id, fileName: fileName, digest: digest, embedded: true };
             });
           }),
         ).then(function (found) {
@@ -151,6 +178,14 @@ export const PACKET_VERIFIER_SCRIPT = `
                 match = expected[i];
                 break;
               }
+            }
+            if (file.embedded === false) {
+              problems.push(
+                'The file "' +
+                  file.fileName +
+                  '" is not embedded in this packet — its link points somewhere else, so these are not the bytes that were sealed.',
+              );
+              return;
             }
             if (!match) {
               problems.push('The file "' + file.fileName + '" is not in the sealed record at all.');

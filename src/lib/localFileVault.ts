@@ -504,12 +504,57 @@ export async function importLocalFiles(
     };
   }
 
+  /*
+   * Repeated keys are settled BEFORE anything is written, because by the time
+   * the loop reaches the second one it cannot tell there was a first.
+   *
+   * The collision guard below asks whether an existing entry belongs to another
+   * workspace. The first copy of a repeated key is written and tagged to the
+   * IMPORTER, so the second copy finds an entry that is already ours, takes the
+   * no-remap path, and overwrites it. Both were reported restored, and every
+   * record pointing at that key opened whichever bytes happened to land last —
+   * a Coggins or a bill of sale silently replaced by another file.
+   *
+   * A repeat with identical bytes is not ambiguous: whichever won, the file is
+   * the same, so it restores once rather than being thrown away. Refusing it
+   * would lose a document that could be recovered, which is the same harm from
+   * the other side.
+   *
+   * A repeat with DIFFERENT bytes has no right answer available here. Nothing
+   * in the archive says which one the records meant, so every copy is refused
+   * and named — guessing would install one legal document in place of another
+   * and report success.
+   */
+  const bytesByKey = new Map<string, Set<string>>();
+  for (const file of files) {
+    if (!file?.key || typeof file.data !== 'string') continue;
+    const seen = bytesByKey.get(file.key);
+    if (seen) seen.add(file.data);
+    else bytesByKey.set(file.key, new Set([file.data]));
+  }
+  const conflictingKeys = new Set([...bytesByKey].filter(([, contents]) => contents.size > 1).map(([key]) => key));
+  const takenKeys = new Set<string>();
+
   let restored = 0;
   for (const file of files) {
     if (!file?.key || typeof file.data !== 'string') {
       // A malformed entry has no usable key by definition — that is what makes
       // it malformed — so there is nothing for the restore to reconcile against.
       failed.push({ key: '', name: file?.name || 'an unnamed entry', reason: 'the backup entry is malformed' });
+      continue;
+    }
+    if (conflictingKeys.has(file.key)) {
+      failed.push({
+        key: file.key,
+        name: file.name || file.key,
+        reason:
+          'the backup holds more than one different file under this key, so which one the records meant cannot be established',
+      });
+      continue;
+    }
+    if (takenKeys.has(file.key)) {
+      // An exact repeat of one already restored. The same bytes under the same
+      // key, so there is nothing to choose between them and nothing to report.
       continue;
     }
     try {
@@ -550,6 +595,9 @@ export async function importLocalFiles(
         blob: new Blob([bytes], { type: file.type || 'application/octet-stream' }),
       };
       await withStore('readwrite', (store) => store.put(entry));
+      // Marked only after the write landed, so a failed entry does not make a
+      // later identical repeat look like a duplicate of something restored.
+      takenKeys.add(file.key);
       restored += 1;
     } catch (error) {
       // One unreadable entry must not abandon the rest of the restore — but it

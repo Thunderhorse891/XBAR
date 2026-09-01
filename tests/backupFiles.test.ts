@@ -158,6 +158,97 @@ test('a restore does not abandon the remaining files when one entry is corrupt',
   }
 });
 
+test('two different files under one key are both refused, not silently merged', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    /*
+     * The collision guard asks whether an existing entry belongs to another
+     * workspace. The first copy of a repeated key is written and tagged to the
+     * IMPORTER, so the second copy finds an entry that is already ours, takes
+     * the no-remap path, and overwrites it. Both were counted restored, and
+     * every record pointing at that key opened whichever landed last — one
+     * legal document silently replaced by another.
+     */
+    const first = {
+      key: 'vault-dupe',
+      name: 'coggins.pdf',
+      type: 'application/pdf',
+      size: 8,
+      storedAt: '2026-08-24T00:00:00.000Z',
+      data: await blobToBase64(new Blob(['coggins!'])),
+    };
+    const second = { ...first, name: 'other.pdf', data: await blobToBase64(new Blob(['replaced'])) };
+
+    const { restored, failed } = await importLocalFiles([first, second], { workspaceId: TEST_WORKSPACE });
+
+    assert.equal(restored, 0, 'neither copy may be installed when the archive cannot say which is genuine');
+    assert.equal(await readLocalFile('vault-dupe'), null, 'nothing may be written for an ambiguous key');
+    assert.equal(failed.length, 2, 'both copies must be named, not just the loser');
+    for (const entry of failed) {
+      assert.equal(entry.key, 'vault-dupe');
+      assert.match(entry.reason, /more than one different file under this key/);
+    }
+  } finally {
+    restore();
+  }
+});
+
+test('an exact repeat of the same file restores once instead of being thrown away', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    /*
+     * The over-correction guard. Identical bytes under one key are not
+     * ambiguous — whichever won, the file is the same — so refusing them would
+     * lose a document that could be recovered, which is the same harm as
+     * overwriting it, arrived at from the other side.
+     */
+    const file = {
+      key: 'vault-same',
+      name: 'coggins.pdf',
+      type: 'application/pdf',
+      size: 8,
+      storedAt: '2026-08-24T00:00:00.000Z',
+      data: await blobToBase64(new Blob(['coggins!'])),
+    };
+
+    const { restored, failed } = await importLocalFiles([file, { ...file }], { workspaceId: TEST_WORKSPACE });
+
+    assert.equal(restored, 1, 'the same file twice is one file, not two and not none');
+    assert.deepEqual(failed, []);
+    const stored = await readLocalFile('vault-same');
+    assert.ok(stored, 'the file must actually be on the device');
+    assert.equal(stored?.name, 'coggins.pdf');
+  } finally {
+    restore();
+  }
+});
+
+test('a duplicated key does not stop the rest of the restore', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    const conflict = {
+      key: 'vault-dupe',
+      name: 'a.pdf',
+      type: 'application/pdf',
+      size: 1,
+      storedAt: '2026-08-24T00:00:00.000Z',
+      data: await blobToBase64(new Blob(['a'])),
+    };
+    const other = { ...conflict, name: 'b.pdf', data: await blobToBase64(new Blob(['b'])) };
+    const innocent = { ...conflict, key: 'vault-fine', name: 'fine.pdf', data: await blobToBase64(new Blob(['fine'])) };
+
+    const { restored, failed } = await importLocalFiles([conflict, other, innocent], {
+      workspaceId: TEST_WORKSPACE,
+    });
+
+    assert.equal(restored, 1, 'an ambiguous key must not cost the rancher every other document');
+    assert.ok(await readLocalFile('vault-fine'));
+    assert.equal(failed.length, 2);
+  } finally {
+    restore();
+  }
+});
+
 test('a referenced file that is not on this device is named, not dropped', async () => {
   const restore = installFakeIndexedDb();
   try {
