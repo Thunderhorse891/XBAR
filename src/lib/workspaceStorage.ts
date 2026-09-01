@@ -366,14 +366,23 @@ export const workspaceStateStorage: StateStorage = {
     const legacy = readLegacyValue(name);
 
     /*
-     * "Absent" requires BOTH stores to have answered.
+     * A value from EITHER store resolves hydration.
      *
-     * This is the whole point of the flag: the sweep deletes vault files the
-     * workspace no longer references, so it must know whether an empty
-     * reference set means "fresh install" or "we could not read it". One store
-     * saying nothing while the other throws proves neither.
+     * The `indexed.value` branch above already says so; leaving the fallback
+     * out of it was an asymmetry, not a decision. A browser that has ever
+     * refused an IndexedDB write lives in the fallback, and there the workspace
+     * loaded completely while this flag still called hydration unresolved — so
+     * the unhydrated-write guard refused every edit that followed. Those
+     * ranchers could open their records and never change one: each day's work
+     * stayed in memory and vanished on reload.
+     *
+     * With no value, "absent" requires BOTH stores to have answered. That is
+     * the flag's original job: the vault sweep deletes blobs the workspace no
+     * longer references, so it must know whether an empty reference set means
+     * "fresh install" or "we could not read it". One store saying nothing while
+     * the other throws proves neither, and deleting is not reversible.
      */
-    workspaceReadFailure = indexed.failed || legacy.failed;
+    workspaceReadFailure = legacy.value ? false : indexed.failed || legacy.failed;
 
     if (legacy.value) {
       await writeIndexedValue(name, legacy.value);
@@ -390,12 +399,21 @@ export const workspaceStateStorage: StateStorage = {
       const legacy = indexed.value === null ? readLegacyValue(name) : null;
       const existingValue = indexed.value ?? legacy?.value ?? null;
       /*
-       * The same rule `getItem` uses: "absent" requires BOTH stores to have
-       * answered. One store finding nothing while the other throws proves
-       * neither, and here that difference decides whether a workspace is
-       * overwritten.
+       * Deliberately a stricter bar than the flag above, and the difference is
+       * not an oversight — the two answer different questions.
+       *
+       * `workspaceReadFailure` guards an irreversible delete, so ANY doubt has
+       * to count. This guards a write, and refusing a write is not free: the
+       * refusal lasts the whole session, so demanding the same certainty
+       * bricked a browser whose IndexedDB is permanently unreadable. Its
+       * fallback answers cleanly every time, hydration is willing to run on
+       * that answer, and yet no edit could ever be saved.
+       *
+       * So a write is blocked on uncertainty only when NO store could answer.
+       * A working store reporting "nothing here" is an answer, and the write
+       * lands there — it cannot destroy what we just successfully read.
        */
-      const existingReadFailed = indexed.value !== null ? false : indexed.failed || (legacy?.failed ?? false);
+      const existingReadFailed = indexed.value !== null ? false : indexed.failed && (legacy?.failed ?? false);
 
       if (shouldDeferUnhydratedWorkspaceWrite(workspaceReadFailure, existingValue, existingReadFailed)) {
         // Withheld, not failed silently — the app must stop looking saved.

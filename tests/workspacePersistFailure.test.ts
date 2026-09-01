@@ -393,34 +393,106 @@ test('a write from a state that never hydrated cannot replace the stored workspa
   }
 });
 
-test('a write is withheld while the reread cannot prove what is on the device', async () => {
+test('a write is withheld while NO store can say what is on the device', async () => {
   /*
    * The worse shape of the same accident: storage never recovers, so the write
    * path still works while the read path does not. Without the guard the
-   * partial state is written over the complete one and the reread that would
-   * have objected is the very thing that is broken. Absence of evidence is not
-   * evidence of absence — the recurring lesson in this module.
+   * partial state is written over the complete one, and the reread that would
+   * have objected is the very thing that is broken.
+   *
+   * Both stores have to be unreadable for that to be the situation. A working
+   * fallback saying "nothing here" is an answer, and blocking on it is what
+   * bricked every edit in a browser whose IndexedDB is permanently unreadable —
+   * see the fallback test below.
    */
   let readsFail = false;
   const restoreDb = installFakeIndexedDb({ failReads: () => readsFail });
-  const restoreWindow = installLocalStorageWith({});
-
+  const restoreSeedWindow = installLocalStorageWith({});
   try {
     await workspaceStateStorage.setItem('xbar-live-workspace', COMPLETE_WORKSPACE);
+  } finally {
+    restoreSeedWindow();
+  }
 
-    readsFail = true;
+  readsFail = true;
+  const restoreWindow = installHostileLocalStorage('getItem');
+  try {
     await workspaceStateStorage.getItem('xbar-live-workspace');
-    assert.equal(didWorkspaceReadFail(), true, 'precondition: hydration failed');
+    assert.equal(didWorkspaceReadFail(), true, 'precondition: neither store could answer');
 
     await workspaceStateStorage.setItem('xbar-live-workspace', PARTIAL_WORKSPACE);
+  } finally {
+    restoreWindow();
+  }
 
-    readsFail = false;
+  readsFail = false;
+  const restoreReadWindow = installLocalStorageWith({});
+  try {
     assert.equal(
       await workspaceStateStorage.getItem('xbar-live-workspace'),
       COMPLETE_WORKSPACE,
-      'a write must not proceed on a reread that could not answer',
+      'a write must not proceed when nothing could say what it would replace',
     );
   } finally {
+    restoreReadWindow();
+    restoreDb();
+  }
+});
+
+test('a fallback-only browser can still save its edits', async () => {
+  /*
+   * The regression this guard introduced, and the reason the bar for blocking a
+   * write is stricter than the bar for the vault sweep.
+   *
+   * A browser that has ever refused an IndexedDB write lives in the
+   * localStorage fallback. Hydration there loads the workspace COMPLETELY — it
+   * just loads it from the other store — but the read-failure flag counted the
+   * IndexedDB failure anyway, so every edit that followed was refused. The
+   * rancher could open every record and change none: the day's work stayed in
+   * memory and vanished on reload.
+   */
+  const restoreDb = installFakeIndexedDb({ failReads: () => true });
+  const restoreWindow = installLocalStorageWith({ 'xbar-live-workspace': COMPLETE_WORKSPACE });
+  const failures: string[] = [];
+  const unsubscribe = onWorkspacePersistFailure((failure) => failures.push(failure.name));
+
+  try {
+    assert.equal(
+      await workspaceStateStorage.getItem('xbar-live-workspace'),
+      COMPLETE_WORKSPACE,
+      'precondition: the fallback hydrated the workspace completely',
+    );
+    assert.equal(didWorkspaceReadFail(), false, 'a value from either store resolves hydration');
+
+    await workspaceStateStorage.setItem('xbar-live-workspace', PARTIAL_WORKSPACE);
+    assert.deepEqual(failures, [], 'a fallback-only browser must not be told its work was refused');
+  } finally {
+    unsubscribe();
+    restoreWindow();
+    restoreDb();
+  }
+});
+
+test('a first session saves even where one store is permanently unreadable', async () => {
+  /*
+   * The other half of the same brick. Nothing is stored, IndexedDB never
+   * becomes readable, and the fallback answers "nothing here" every time.
+   * Hydration is willing to run on that answer, so the write path must be too —
+   * otherwise a first-time user on that browser loses every session forever.
+   */
+  const restoreDb = installFakeIndexedDb({ failReads: () => true });
+  const restoreWindow = installLocalStorageWith({});
+  const failures: string[] = [];
+  const unsubscribe = onWorkspacePersistFailure((failure) => failures.push(failure.name));
+
+  try {
+    assert.equal(await workspaceStateStorage.getItem('xbar-live-workspace'), null);
+    assert.equal(didWorkspaceReadFail(), true, 'precondition: a store failed and nothing was found');
+
+    await workspaceStateStorage.setItem('xbar-live-workspace', PARTIAL_WORKSPACE);
+    assert.deepEqual(failures, [], 'a working store reporting empty is an answer, not uncertainty');
+  } finally {
+    unsubscribe();
     restoreWindow();
     restoreDb();
   }
