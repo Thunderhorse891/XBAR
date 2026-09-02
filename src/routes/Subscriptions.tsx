@@ -174,6 +174,50 @@ export default function Subscriptions() {
     setPendingPurchase(null);
   };
 
+  /*
+   * THE only way this screen follows a payment link.
+   *
+   * There are two routes to one — the hosted-only primary route, and the
+   * `no_managed_identity` fallback — and they are the same act with the same
+   * consequence: a static link that cannot associate its subscription with a
+   * workspace, in a deployment with no webhook to confirm it. Guarding one and
+   * not the other is exactly the mistake that shipped, so there is no second
+   * `assign` to forget: both go through here.
+   */
+  const followPaymentLink = (tier: SubscriptionTier, link: string, managedFailure?: string) => {
+    /*
+     * Nothing here knows whether the last payment went through — that is what
+     * the missing webhook was for. It does know one was started, and that is
+     * enough to stop offering the same purchase again.
+     */
+    if (purchaseAwaitingActivation && pendingPurchase) {
+      emit(productEventNames.checkoutFailed, { tier, reason: 'hosted_purchase_pending' }, 'warning');
+      pushToast({
+        title: 'A purchase is already waiting to be activated',
+        message: pendingHostedPurchaseNotice(pendingPurchase),
+        tone: 'warning',
+      });
+      setCheckoutTier(null);
+      return;
+    }
+
+    const started = { tier, startedAt: new Date().toISOString() };
+    try {
+      window.localStorage.setItem(PENDING_HOSTED_PURCHASE_KEY, JSON.stringify(started));
+    } catch {
+      // The redirect still happens: a storage failure must not stop someone
+      // buying. It only costs the second-charge guard on this device.
+    }
+    setPendingPurchase(started);
+
+    if (managedFailure) {
+      emit(productEventNames.checkoutRedirected, { tier, method: 'payment_link', managedFailure }, 'warning');
+    } else {
+      emit(productEventNames.checkoutRedirected, { tier, method: 'payment_link' });
+    }
+    window.location.assign(link);
+  };
+
   const openBillingPortal = () => {
     if (!billingPortalAction) return;
     emit(productEventNames.checkoutRedirected, { tier: subscription.tier, method: 'billing_portal' });
@@ -233,32 +277,7 @@ export default function Subscriptions() {
      */
     const hostedOnlyLink = getStripePaymentLink(tier);
     if (checkoutRouteFor({ managedBillingEnabled: billingEnabled, paymentLink: hostedOnlyLink }) === 'payment_link') {
-      /*
-       * Nothing here knows whether the last payment went through — that is
-       * what the missing webhook was for. It does know one was started, and
-       * that is enough to stop offering the same purchase again.
-       */
-      if (purchaseAwaitingActivation && pendingPurchase) {
-        emit(productEventNames.checkoutFailed, { tier, reason: 'hosted_purchase_pending' }, 'warning');
-        pushToast({
-          title: 'A purchase is already waiting to be activated',
-          message: pendingHostedPurchaseNotice(pendingPurchase),
-          tone: 'warning',
-        });
-        setCheckoutTier(null);
-        return;
-      }
-
-      const started = { tier, startedAt: new Date().toISOString() };
-      try {
-        window.localStorage.setItem(PENDING_HOSTED_PURCHASE_KEY, JSON.stringify(started));
-      } catch {
-        // The redirect still happens: a storage failure must not stop someone
-        // buying. It only costs the second-charge guard on this device.
-      }
-      setPendingPurchase(started);
-      emit(productEventNames.checkoutRedirected, { tier, method: 'payment_link' });
-      window.location.assign(hostedOnlyLink);
+      followPaymentLink(tier, hostedOnlyLink);
       return;
     }
 
@@ -287,12 +306,15 @@ export default function Subscriptions() {
      */
     const fallback = canUsePaymentLinkFallback(managed.code) ? getStripePaymentLink(tier) : '';
     if (fallback) {
-      emit(
-        productEventNames.checkoutRedirected,
-        { tier, method: 'payment_link', managedFailure: managed.message },
-        'warning',
-      );
-      window.location.assign(fallback);
+      /*
+       * The same guard as the hosted-only route, because this is the same act.
+       * A static link cannot tell Stripe which workspace it belongs to, and
+       * there is no webhook to confirm it either way — so returning to this
+       * page after paying left checkout enabled and bought a second
+       * subscription. It shipped guarded on one branch and not the other,
+       * which is why both now go through `followPaymentLink`.
+       */
+      followPaymentLink(tier, fallback, managed.message);
       return;
     }
 

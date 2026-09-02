@@ -930,22 +930,60 @@ test('the notice says what is true here, not that the plan is active', () => {
   assert.doesNotMatch(notice, /active|activated successfully/i, 'nothing here knows the payment landed');
 });
 
-test('the billing screen records the purchase and refuses a repeat', async () => {
+test('the pending marker stops applying once the workspace is entitled', async () => {
   const screen = await readFile(path.join(process.cwd(), 'src/routes/Subscriptions.tsx'), 'utf8');
 
-  const hostedAt = screen.indexOf("=== 'payment_link'");
-  assert.ok(hostedAt > -1, 'the hosted route must be findable');
-  const hostedBranch = screen.slice(hostedAt, screen.indexOf('const managed = await startManagedCheckout', hostedAt));
+  /*
+   * The ordering — refuse before redirecting, record before leaving the page —
+   * moved into `followPaymentLink` when the fallback route was found to be
+   * unguarded, and is asserted at its new home below. What stays here is what
+   * that helper cannot own: when the marker stops mattering, and how a customer
+   * gets out of one they know is wrong.
+   */
+  assert.match(
+    screen,
+    /isPendingHostedPurchase\([\s\S]{0,60}\) && !subscriptionActive/,
+    'an entitled workspace has been reconciled, so the marker must stop applying',
+  );
+  assert.match(
+    screen,
+    /I did not complete that purchase/,
+    'and nothing here can tell an abandoned checkout from an unconfirmed one, so the customer must be able to say',
+  );
+});
 
-  // Refuse BEFORE redirecting, or the guard is decoration.
-  const refuseAt = hostedBranch.indexOf('purchaseAwaitingActivation');
-  const writeAt = hostedBranch.indexOf('localStorage.setItem');
-  const redirectAt = hostedBranch.indexOf('window.location.assign');
-  assert.ok(refuseAt > -1 && writeAt > refuseAt, 'the repeat check must come before the marker is written');
-  assert.ok(writeAt < redirectAt, 'and the marker must be written before the redirect leaves the page');
+test('every payment-link redirect goes through the pending-purchase guard', async () => {
+  const screen = await readFile(path.join(process.cwd(), 'src/routes/Subscriptions.tsx'), 'utf8');
 
-  // An entitled workspace has been reconciled, so the marker stops applying.
-  assert.match(screen, /isPendingHostedPurchase\([\s\S]{0,60}\) && !subscriptionActive/);
-  // And the customer is given a way out of a marker they know is wrong.
-  assert.match(screen, /I did not complete that purchase/);
+  /*
+   * There are two routes to a payment link — the hosted-only primary route and
+   * the `no_managed_identity` fallback — and they are the same act with the
+   * same consequence: a static link that cannot associate its subscription
+   * with a workspace, in a deployment with no webhook to confirm it. The guard
+   * shipped on one branch and not the other, so this pins the shape that makes
+   * that impossible rather than the two call sites.
+   */
+  const helperAt = screen.indexOf('const followPaymentLink = (');
+  assert.ok(helperAt > -1, 'the single payment-link redirect must be findable');
+  const helper = screen.slice(helperAt, screen.indexOf('const openBillingPortal', helperAt));
+  assert.match(helper, /purchaseAwaitingActivation && pendingPurchase/, 'it must refuse a repeat');
+  assert.match(helper, /localStorage\.setItem\(PENDING_HOSTED_PURCHASE_KEY/, 'and record the new one');
+  assert.match(helper, /window\.location\.assign\(link\)/, 'before leaving the page');
+
+  /*
+   * And nothing else may follow a link. Three redirects exist — the guarded
+   * payment link, the billing portal, and a managed checkout session, neither
+   * of which is a static link — so a FOURTH is the thing to catch: it is how a
+   * new route would skip this guard, exactly as the fallback did.
+   */
+  const assigned = [...screen.matchAll(/window\.location\.assign\(([^)]+)\)/g)].map(([, expression]) => expression);
+  assert.deepEqual(
+    assigned.sort(),
+    ['billingPortalAction.url', 'link', 'managed.url'],
+    'a new redirect must be routed through followPaymentLink, not added beside it',
+  );
+
+  // Both call sites must actually use the helper rather than reimplementing it.
+  assert.match(screen, /followPaymentLink\(tier, hostedOnlyLink\);/, 'the hosted-only route');
+  assert.match(screen, /followPaymentLink\(tier, fallback, managed\.message\);/, 'and the no-identity fallback');
 });
