@@ -139,6 +139,36 @@ test('the digest pinned in the verifier is the stylesheet the generator emits', 
     PACKET_VERIFIER_SCRIPT.includes(`var STYLE_SHA256 = '${digest}';`),
     `the verifier pins a stale stylesheet digest. Set STYLE_SHA256 in src/lib/packetVerifierScript.ts to '${digest}'.`,
   );
+
+  /*
+   * And the byte count beside it. The digest needs `crypto.subtle`, which a
+   * packet opened from disk often lacks — and that is exactly where an altered
+   * stylesheet can hide the verify button so the digest never runs at all.
+   * Counting bytes needs nothing and happens while the script arms.
+   */
+  assert.ok(
+    PACKET_VERIFIER_SCRIPT.includes(`var STYLE_BYTES = ${declared[1].length};`),
+    `the verifier pins a stale stylesheet length. Set STYLE_BYTES in src/lib/packetVerifierScript.ts to ${declared[1].length}.`,
+  );
+});
+
+test('the presentation sweep does not wait for a click', () => {
+  /*
+   * CSS can hide or disable the verify button, so a sweep that only runs on
+   * the click never runs on the packet that needs it. Geometry stays on the
+   * click — at arming the page is still being parsed and an unlaid-out box
+   * reports zero, which would accuse every honest packet.
+   */
+  assert.match(
+    PACKET_VERIFIER_SCRIPT,
+    /var arming = armingProblems\(\)\.concat\(presentationProblems\(false\)\);/,
+    'the layout-independent checks must run while the script arms',
+  );
+  assert.match(
+    PACKET_VERIFIER_SCRIPT,
+    /var presentation = armingProblems\(\)\.concat\(presentationProblems\(true\)\);/,
+    'and the geometry only once the page has settled',
+  );
 });
 
 test('the stylesheet is the same bytes in every packet', async () => {
@@ -169,7 +199,9 @@ test('the presentation sweep runs before the crypto gate', () => {
    * stylesheets needs no crypto, so it must happen first or it never happens
    * where the attack is easiest.
    */
-  const sweepAt = PACKET_VERIFIER_SCRIPT.indexOf('var presentation = armingProblems().concat(presentationProblems());');
+  const sweepAt = PACKET_VERIFIER_SCRIPT.indexOf(
+    'var presentation = armingProblems().concat(presentationProblems(true));',
+  );
   const cryptoAt = PACKET_VERIFIER_SCRIPT.indexOf('if (!window.crypto || !crypto.subtle');
   assert.ok(sweepAt > -1, 'the presentation sweep must run on click');
   assert.ok(cryptoAt > sweepAt, 'and it must run before the crypto gate returns');
@@ -247,7 +279,7 @@ test('the packet carries no inline event handlers for the verifier to trip on', 
    * Arming, not clicking. A check inside the click handler cannot catch what
    * stops the click handler running, which is the whole of this attack.
    */
-  const armAt = PACKET_VERIFIER_SCRIPT.indexOf('var arming = armingProblems();');
+  const armAt = PACKET_VERIFIER_SCRIPT.indexOf('var arming = armingProblems().concat(presentationProblems(false));');
   // lastIndexOf: the missing-element guard registers an earlier listener of
   // its own, and matching that one would assert nothing about this order.
   const listenAt = PACKET_VERIFIER_SCRIPT.lastIndexOf("btn.addEventListener('click'");

@@ -55,12 +55,36 @@ export const PACKET_VERIFIER_SCRIPT = `
    * channel left is a dialog.
    */
   if (!btn || !out || !record) {
+    /*
+     * Said NOW, not on a click. Attaching the warning to the button was the
+     * mistake: a packet missing only the button entered this guard, skipped
+     * the nested check, and returned in silence with a forged verdict still on
+     * screen. The element that may be absent cannot be the thing that reports
+     * its own absence.
+     */
+    var missingNotice =
+      'This packet is missing the part of itself that reports the result, so it cannot be checked here. Use the by-hand steps in the packet instead.';
+    try {
+      window.alert(missingNotice);
+    } catch (error) {
+      // A browser that refuses dialogs still gets whatever is printed below.
+    }
+    try {
+      if (out) {
+        out.setAttribute('data-state', 'fail');
+        out.textContent = 'ALTERED. ' + missingNotice;
+      }
+    } catch (error) {
+      // There may be nowhere to print, which is why the dialog came first.
+    }
     try {
       if (btn) {
         btn.addEventListener('click', function () {
-          window.alert(
-            'This packet is missing the part of itself that reports the result, so it cannot be checked here. Use the by-hand steps in the packet instead.',
-          );
+          try {
+            window.alert(missingNotice);
+          } catch (inner) {
+            // Nothing further is possible.
+          }
         });
       }
     } catch (error) {
@@ -142,6 +166,16 @@ export const PACKET_VERIFIER_SCRIPT = `
    * packetVerifierCsp test fails if it drifts from what the generator writes.
    */
   var STYLE_SHA256 = '6392de31e04b9d6a1c2862856b988871fe60454f5a519247e050a2d12f516ea3';
+  /*
+   * The same stylesheet measured without crypto.
+   *
+   * The digest is the real check and it needs crypto.subtle, which a packet
+   * opened from disk often does not have — and that is exactly where an
+   * altered stylesheet can hide the verify button so the digest never runs at
+   * all. Counting bytes catches every edit that changes the length, needs
+   * nothing, and runs while the script arms.
+   */
+  var STYLE_BYTES = 3740;
 
   /*
    * Said out loud, because the in-page verdict is exactly what is in doubt.
@@ -151,7 +185,18 @@ export const PACKET_VERIFIER_SCRIPT = `
    * an ordinary ALTERED verdict is still printed in the box, because in that
    * case the box can be believed.
    */
+  var saidAlready = '';
+
   function warnAloud(list) {
+    /*
+     * Said once. The sweep runs at arming and again on the click, so without
+     * this the same alteration produces the same dialog twice — and a warning
+     * a buyer has to dismiss repeatedly is one they learn to dismiss. A list
+     * that has GROWN still speaks, because that is new information.
+     */
+    var joined = list.join(NL);
+    if (joined === saidAlready) return;
+    saidAlready = joined;
     try {
       window.alert(
         'This packet controls how this check is displayed.' +
@@ -218,7 +263,7 @@ export const PACKET_VERIFIER_SCRIPT = `
     return String(value === null || value === undefined ? '' : value).replace(/^ +| +$/g, '');
   }
 
-  function outputProblems() {
+  function outputProblems(withGeometry) {
     var found = [];
 
     var node = out;
@@ -256,7 +301,19 @@ export const PACKET_VERIFIER_SCRIPT = `
       }
     }
 
-    var box = typeof out.getBoundingClientRect === 'function' ? out.getBoundingClientRect() : null;
+    /*
+     * Measured only on the click, deliberately.
+     *
+     * Everything else here reads the document; this reads the LAYOUT, and
+     * layout is not guaranteed to be meaningful while the page is still
+     * parsing — a box that has not been laid out reports zero. Accusing an
+     * honest packet of hiding its own verdict is the failure that teaches a
+     * buyer to ignore the warning, so the geometry waits for the click, by
+     * which time the page has certainly settled. The checks that can answer
+     * from the document alone do not wait.
+     */
+    var box =
+      withGeometry && typeof out.getBoundingClientRect === 'function' ? out.getBoundingClientRect() : null;
     if (box && !box.width && !box.height) {
       found.push('The result box on this packet takes up no space on the page, so the verdict below is not visible.');
     }
@@ -285,8 +342,8 @@ export const PACKET_VERIFIER_SCRIPT = `
     return found;
   }
 
-  function presentationProblems() {
-    var found = outputProblems();
+  function presentationProblems(withGeometry) {
+    var found = outputProblems(withGeometry);
     var sheets = document.querySelectorAll('style');
     if (sheets.length !== 1) {
       found.push(
@@ -302,6 +359,9 @@ export const PACKET_VERIFIER_SCRIPT = `
           inline.length +
           ' element(s) carrying a style attribute. A sealed packet contains none, so they were added after it was sealed.',
       );
+    }
+    if (styleText().length !== STYLE_BYTES) {
+      found.push('The stylesheet in this packet is not the size it was sealed at, so it is not the one that was sealed.');
     }
     return found;
   }
@@ -404,7 +464,15 @@ export const PACKET_VERIFIER_SCRIPT = `
     return found;
   }
 
-  var arming = armingProblems();
+  /*
+   * The presentation sweep runs HERE too, not only on the click.
+   *
+   * An altered stylesheet can hide or disable the verify button, and a check
+   * that waits to be clicked never runs on a packet nobody can click. So
+   * everything that does not depend on layout is answered while the script
+   * arms; the geometry is asked on the click, when the page has settled.
+   */
+  var arming = armingProblems().concat(presentationProblems(false));
   if (arming.length) {
     warnAloud(arming);
     show(
@@ -418,7 +486,7 @@ export const PACKET_VERIFIER_SCRIPT = `
   }
 
   btn.addEventListener('click', function () {
-    var presentation = armingProblems().concat(presentationProblems());
+    var presentation = armingProblems().concat(presentationProblems(true));
     if (presentation.length) {
       warnAloud(presentation);
       show(

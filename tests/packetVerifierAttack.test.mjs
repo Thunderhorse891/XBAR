@@ -57,7 +57,14 @@ function element(attrs = {}, tagName = 'A') {
    * output box, which is the rule that does not depend on naming a hiding
    * mechanism — a stub that always reported a size could not express it.
    */
-  node.getBoundingClientRect = () => (node._collapsed ? { width: 0, height: 0 } : { width: 320, height: 24 });
+  /*
+   * Zero until the page settles, which is the environment the arming sweep has
+   * to survive: an unlaid-out box reports no size, and a check that read the
+   * layout that early would accuse every honest packet. A stub that always
+   * reported a size could not express that at all.
+   */
+  node.getBoundingClientRect = () =>
+    node._collapsed || !node._laidOut ? { width: 0, height: 0 } : { width: 320, height: 24 };
   // Removable, so the verifier's best-effort neutralization is observable
   // rather than merely attempted into a stub that ignores it.
   node.parentNode = {
@@ -214,6 +221,17 @@ async function verify({
   assert.ok(click, 'the verifier must register a click handler');
 
   /*
+   * What the buyer was told BEFORE touching anything. An altered stylesheet
+   * can hide or disable the button, so a warning that waits for a click never
+   * arrives on the packet that needs it most — and a harness that only looks
+   * at the total cannot tell the two apart.
+   */
+  const armingAlerts = alerts.slice();
+
+  // The page has settled by the time anyone can press the button.
+  for (const node of [out, btn, record, stamp, ...sealedChain, ...outAncestors]) node._laidOut = true;
+
+  /*
    * An inline handler that stops immediate propagation really does prevent
    * this listener from running — it was registered first, as the button was
    * parsed. Calling the listener anyway would make every check below look like
@@ -225,7 +243,7 @@ async function verify({
 
   // A packet with no result box has nowhere to print, so the dialog is the
   // whole verdict and there is no data-state to wait for.
-  if (omitOut) return { state: null, text: '', alerts };
+  if (omitOut) return { state: null, text: '', alerts, armingAlerts };
 
   /*
    * Wait for the verdict, not for a fixed number of ticks. `crypto.subtle`
@@ -238,7 +256,7 @@ async function verify({
     await new Promise((resolve) => setTimeout(resolve, 1));
   }
   assert.ok(out.getAttribute('data-state'), `the verifier never reported a verdict: ${out.textContent}`);
-  return { state: out.getAttribute('data-state'), text: out.textContent, alerts };
+  return { state: out.getAttribute('data-state'), text: out.textContent, alerts, armingAlerts };
 }
 
 /** A packet whose single attachment really is embedded, sealed correctly. */
@@ -474,7 +492,7 @@ test('the packet stylesheet edited in place is caught', async () => {
     stylesheets: [PACKET_STYLESHEET + FORGERY],
   });
   assert.equal(result.state, 'fail', result.text);
-  assert.match(result.text, /stylesheet in this packet is not the one that was sealed/);
+  assert.match(result.text, /stylesheet in this packet is not the size it was sealed at/);
   assert.equal(result.alerts.length, 1, 'and said out loud');
 });
 
@@ -576,8 +594,8 @@ test('a packet with its result box removed does not fail silently', async () => 
    * verifier cannot afford.
    */
   const result = await verify({ ...honest(), omitOut: true });
-  assert.equal(result.alerts.length, 1, 'the dialog is the only channel left');
-  assert.match(result.alerts[0], /missing the part of itself that reports the result/);
+  assert.equal(result.armingAlerts.length, 1, 'and said before any click, since the button may be gone too');
+  assert.match(result.armingAlerts[0], /missing the part of itself that reports the result/);
 });
 
 test('an untouched packet is not accused of hiding its own verdict', async () => {
@@ -727,5 +745,52 @@ test('an http-equiv that is not a refresh is left alone', async () => {
   // would be a rule about markup rather than about leaving the page.
   const equiv = element({ 'http-equiv': 'content-type', content: 'text/html' }, 'META');
   const result = await verify({ ...honest(), metas: [equiv] });
+  assert.equal(result.state, 'pass', result.text);
+});
+
+/*
+ * A packet nobody can click.
+ *
+ * The presentation sweep used to wait for the button, and CSS can hide or
+ * disable that button — so on the packet most in need of the check, the check
+ * never ran and the dialog never fired. What runs at arming is now everything
+ * that does not depend on layout.
+ */
+test('an altered stylesheet is reported before the buyer clicks anything', async () => {
+  const result = await verify({
+    ...honest(),
+    stylesheets: [PACKET_STYLESHEET.replace('.packet{position:relative', '.packet{display:none;position:relative')],
+  });
+  assert.equal(result.armingAlerts.length, 1, 'a hidden button must not be able to suppress the warning');
+  assert.match(result.armingAlerts[0], /controls how this check is displayed/);
+  assert.equal(result.state, 'fail', result.text);
+});
+
+test('an added stylesheet is reported before the buyer clicks anything', async () => {
+  const result = await verify({ ...honest(), stylesheets: [PACKET_STYLESHEET, '.verify__btn{display:none}'] });
+  assert.equal(result.armingAlerts.length, 1, 'counting stylesheets needs neither a click nor crypto');
+  assert.match(result.state, /fail/);
+});
+
+test('a stylesheet edited without changing its length is still caught', async () => {
+  /*
+   * The byte count is the layer that works without crypto.subtle; the digest
+   * is the one that catches an edit sized to slip past it. Swapping two
+   * characters keeps the length identical, so only the digest sees this.
+   */
+  const sameLength = PACKET_STYLESHEET.replace('color:#15202b', 'color:#15202c');
+  assert.equal(sameLength.length, PACKET_STYLESHEET.length, 'the fixture must actually preserve the length');
+  assert.notEqual(sameLength, PACKET_STYLESHEET, 'and must actually differ');
+
+  const result = await verify({ ...honest(), stylesheets: [sameLength] });
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /not the one that was sealed/);
+});
+
+test('an honest packet is not warned about at arming', async () => {
+  // The over-correction guard for all of the above: a dialog on load for every
+  // sealed packet would be worse than the attack it is meant to report.
+  const result = await verify(honest());
+  assert.deepEqual(result.armingAlerts, [], 'a sealed packet must open silently');
   assert.equal(result.state, 'pass', result.text);
 });
