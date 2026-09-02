@@ -1068,10 +1068,20 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * React child. Reading one call site and generalising is the mistake this
    * table keeps catching me in.
    */
-  assert.match(
-    shapeTable,
-    /salePacketBuilds: \{\s*lists: \['documentIds'\],\s*strings: \['id', 'watermark', 'createdAt', 'createdBy', 'status'\],\s*optionalStrings: \['fileName', 'downloadUrl'\],\s*\}/,
-  );
+  /*
+   * Per-field, not a whole-entry match. Pinning the exact arrays made the
+   * assertion fail on a correct ADDITION — `localFileKey` — which says nothing
+   * about whether the fields it owns are still guarded.
+   */
+  const packetsStart = shapeTable.indexOf('salePacketBuilds: {');
+  const packetsEntry = shapeTable.slice(packetsStart, shapeTable.indexOf('expenseReceipts: {', packetsStart));
+  assert.match(packetsEntry, /lists: \['documentIds'\]/);
+  for (const field of ['id', 'watermark', 'createdAt', 'createdBy', 'status']) {
+    assert.match(packetsEntry, new RegExp(`'${field}'`), `${field} must stay a required string`);
+  }
+  for (const field of ['fileName', 'downloadUrl']) {
+    assert.match(packetsEntry, new RegExp(`'${field}'`), `${field} must stay checked when present`);
+  }
   assert.match(helpers, /objects: \['bloodline', 'assignments', 'sale', 'readiness', 'location'\]/);
 
   /*
@@ -2687,4 +2697,72 @@ test('a restored owner entity must be a string, because document intake normaliz
   for (const sibling of ['name', 'registrationNumber', 'aqhaNumber', 'barnName', 'owner']) {
     assert.match(horsesShape, new RegExp(`^\\s*'${sibling}',$`, 'm'), `${sibling} must stay required`);
   }
+});
+
+test('a restored vault key must be a string, or the file it names is unreachable', async () => {
+  const shapeTable = await readFile('src/store/xbarStoreHelpers.ts', 'utf8');
+  const storedFiles = await readFile('src/lib/storedFiles.ts', 'utf8');
+  const vault = await readFile('src/lib/localFileVault.ts', 'utf8');
+
+  /*
+   * `localFileKey` was excluded as "only compared or passed through", and that
+   * was wrong in the way this table keeps being wrong: passed through TO WHERE.
+   * `storedFileLocation` routes on truthiness, so an object sends the record
+   * down the on-device path, and `openLocalFile` hands it to IndexedDB, whose
+   * key space is typed and refuses an object. The import reports success, the
+   * record says the file is on this device, and it can never be opened.
+   */
+  assert.match(storedFiles, /if \(record\.localFileKey\) return 'device';/, 'truthiness is what routes the record');
+  assert.match(vault, /export async function openLocalFile\(key: string/, 'and the key goes straight to the vault');
+
+  /*
+   * The boundary is the NEXT collection in the table, not any later one. Using
+   * `intakeBatches` for `documents` spanned three other entries that also
+   * carry this field, so dropping it from `documents` still matched.
+   */
+  for (const [collection, next] of [
+    ['documents: {', 'ownershipRecords: {'],
+    ['salePacketBuilds: {', 'expenseReceipts: {'],
+    ['expenseReceipts: {', 'intakeBatches: {'],
+  ]) {
+    const start = shapeTable.indexOf(collection);
+    assert.ok(start > -1, `${collection} must be findable`);
+    /*
+     * Comments stripped first. The prose beside this field names it, so a bare
+     * search matched the explanation of the fix rather than the fix — dropping
+     * the field from `documents` passed until this line existed.
+     */
+    const entry = shapeTable
+      .slice(start, shapeTable.indexOf(next, start))
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*$/gm, '');
+    assert.match(
+      entry,
+      /'localFileKey'/,
+      `${collection.replace(': {', '')} carries a vault key and must require it to be a string`,
+    );
+  }
+
+  /*
+   * Optional, not required — the over-rejection direction. Most records have no
+   * local file at all, and demanding the field would refuse nearly every real
+   * archive. Absence is also harmless: `storedFileLocation` falls through to
+   * the cloud or link branch, which is the honest answer.
+   */
+  const documentsStart = shapeTable.indexOf('documents: {');
+  const documentsEntry = shapeTable.slice(documentsStart, shapeTable.indexOf('ownershipRecords: {', documentsStart));
+  const requiredStrings = documentsEntry
+    .slice(documentsEntry.indexOf('strings: ['), documentsEntry.indexOf('optionalStrings: ['))
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*$/gm, '');
+  assert.doesNotMatch(requiredStrings, /'localFileKey'/, 'a record with no local file must still restore');
+
+  /*
+   * And `storagePath` stays out, checked rather than assumed: no
+   * `replaceWorkspaceRows` mapper writes it, so it reaches no typed column, and
+   * its one reader is a remote `createSignedUrl` call that returns a handled
+   * error rather than refusing the value outright.
+   */
+  const cloud = await readFile('src/lib/cloudWorkspace.ts', 'utf8');
+  assert.doesNotMatch(cloud, /storage_path:/, 'if storagePath ever reaches a column, it needs the same guard');
 });

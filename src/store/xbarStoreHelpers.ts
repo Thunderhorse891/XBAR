@@ -1074,10 +1074,31 @@ export function canRestorePersistedState(raw: unknown): boolean {
         /*
          * Not rendered — given `.trim()` at storedFiles.ts:28 and
          * cloudWorkspace.ts:1201, both through `?.`, which guards absence and
-         * not type. `storagePath`, `localFileKey`, `fileName` and `mimeType`
-         * are only compared or passed through.
+         * not type.
          */
         'fileUrl',
+        /*
+         * `localFileKey` was excluded as "only compared or passed through",
+         * and that was wrong in the way this table keeps being wrong: passed
+         * through TO WHERE. `storedFileLocation` routes on truthiness —
+         * `if (record.localFileKey) return 'device'` at storedFiles.ts:29 — so
+         * an object sends the record down the on-device path, and
+         * `openLocalFile` hands it to IndexedDB's `store.get(key)`, whose key
+         * space is typed and refuses an object.
+         *
+         * The result is the shape this file cares about most: the import
+         * reports success, the record tells the rancher the file is on this
+         * device, and it can never be opened. A Coggins that is present,
+         * labelled and unreachable.
+         *
+         * `storagePath` is deliberately NOT added beside it, checked rather
+         * than assumed: nothing maps it into a column — it appears in no
+         * `replaceWorkspaceRows` mapper — and its one reader is
+         * `createSignedUrl`, a remote call that returns a handled error rather
+         * than a typed sink that refuses the value. `fileName` and `mimeType`
+         * are already coerced in the vault.
+         */
+        'localFileKey',
         /*
          * Not rendered either, and required by the same reader as the leads and
          * ownership entries: `documents.horse_id` is `text not null`, and the
@@ -1238,7 +1259,9 @@ export function canRestorePersistedState(raw: unknown): boolean {
        * `{packet.status}` is a bare React child at Documents.tsx:1242.
        */
       strings: ['id', 'watermark', 'createdAt', 'createdBy', 'status'],
-      optionalStrings: ['fileName', 'downloadUrl'],
+      // Same reader, same refusal — a packet whose bytes are on the device is
+      // reached through this key and nothing else.
+      optionalStrings: ['fileName', 'downloadUrl', 'localFileKey'],
     },
     /*
      * `receipt.vendor.trim()` — Expenses.tsx:114 — was the only field checked,
@@ -1306,7 +1329,9 @@ export function canRestorePersistedState(raw: unknown): boolean {
        * claim about the app, and it stops being sufficient the moment the value
        * leaves the app.
        */
-      optionalStrings: ['notes', 'fileUrl', 'horseId'],
+      // `localFileKey` for the same reason as documents: truthy routes the
+      // receipt to the device path, and IndexedDB refuses an object key.
+      optionalStrings: ['notes', 'fileUrl', 'horseId', 'localFileKey'],
     },
     /*
      * Intake batches had no entry at all — only the shared id check — so
