@@ -30,8 +30,8 @@ assert.ok(script.includes('xbar-verify-btn'), 'the verifier script must be extra
 const sha256Hex = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const b64 = (text) => Buffer.from(text, 'utf8').toString('base64');
 
-function element(attrs = {}) {
-  const node = { _attrs: { ...attrs }, textContent: '' };
+function element(attrs = {}, tagName = 'A') {
+  const node = { _attrs: { ...attrs }, textContent: '', tagName };
   node.getAttribute = (name) => (name in node._attrs ? node._attrs[name] : null);
   node.setAttribute = (name, value) => {
     node._attrs[name] = value;
@@ -40,7 +40,7 @@ function element(attrs = {}) {
 }
 
 /** Runs the real verifier over one packet and returns what the buyer is shown. */
-async function verify({ payload, sealedDigest, links }) {
+async function verify({ payload, sealedDigest, links, extras = [] }) {
   const out = element({ 'data-digest': sealedDigest });
   const record = element();
   record.textContent = payload;
@@ -53,19 +53,31 @@ async function verify({ payload, sealedDigest, links }) {
     click = handler;
   };
 
+  // The packet always contains the verifier's own script tag. Without it here,
+  // every honest packet would trip the "exactly one script" rule — the stub has
+  // to model the page as it actually ships.
+  const ownScript = element({}, 'SCRIPT');
+  extras = [ownScript, ...extras];
+
   const document = {
     getElementById: (id) =>
       ({ 'xbar-verify-btn': btn, 'xbar-verify-out': out, 'xbar-credential-payload': record, 'xbar-watermark': stamp })[
         id
       ] ?? null,
     /*
-     * Honours the selector, because the attack this file exists to catch is a
-     * link the selector was NOT written to see. A stub that returns the same
-     * list whatever it is asked cannot express that, and would have passed the
-     * unmarked-link forgery exactly as the shipped verifier did.
+     * Honours the selector, because the attacks this file exists to catch are
+     * exactly the things a selector was NOT written to see: a link without the
+     * marker attribute, and an element that is not a link at all. A stub that
+     * returns the same list whatever it is asked cannot express either, and
+     * would have passed both forgeries exactly as the shipped verifier did.
      */
-    querySelectorAll: (selector) =>
-      selector === 'a' ? links : links.filter((link) => link.getAttribute('data-xbar-file') !== null),
+    querySelectorAll: (selector) => {
+      const wanted = selector.split(',').map((part) => part.trim().toUpperCase());
+      if (selector === 'a[data-xbar-file]') {
+        return links.filter((link) => link.getAttribute('data-xbar-file') !== null);
+      }
+      return [...links, ...extras].filter((node) => wanted.includes(node.tagName));
+    },
   };
 
   // The script feature-detects through `window`, which is the browser it runs
@@ -215,4 +227,83 @@ test('the sealed links are still checked on their own terms', async () => {
   assert.equal(result.state, 'fail', result.text);
   assert.match(result.text, /is not the one that was sealed/);
   assert.doesNotMatch(result.text, /not part of the sealed record/);
+});
+
+test('an added image is reported ALTERED, even though nothing was clicked', async () => {
+  /*
+   * A link at least requires the buyer to click it. An `img` or `iframe` SHOWS
+   * unsealed content on sight, and the anchor sweep never looked at one. This
+   * matters most exactly where the packet is most likely to be read — a file
+   * opened from disk, where the deployment's CSP does not apply at all.
+   */
+  const packet = honestPacket((base64) => `data:application/pdf;base64,${base64}`);
+  packet.extras = [element({ src: 'https://attacker.example/fake-coggins.png' }, 'IMG')];
+
+  const result = await verify(packet);
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /added img element/);
+  assert.match(result.text, /attacker\.example\/fake-coggins\.png/);
+});
+
+test('an added iframe is reported too, by the same rule', async () => {
+  const packet = honestPacket((base64) => `data:application/pdf;base64,${base64}`);
+  packet.extras = [element({ src: 'https://attacker.example/vet-record' }, 'IFRAME')];
+
+  const result = await verify(packet);
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /added iframe element/);
+});
+
+test('a second script is reported, because it could rewrite this verdict', async () => {
+  /*
+   * The checker cannot prove its own innocence — the packet says so in its
+   * by-hand instructions. It can still say what it sees, and a packet carrying
+   * more than the one script it ships with is not the packet that was sealed.
+   */
+  const packet = honestPacket((base64) => `data:application/pdf;base64,${base64}`);
+  packet.extras = [element({}, 'SCRIPT')];
+
+  const result = await verify(packet);
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /contains 2 scripts/);
+});
+
+test('an honest packet embeds nothing, so the sweep must stay silent on it', async () => {
+  /*
+   * The over-rejection direction, and the one that would destroy the feature:
+   * a verifier that calls every real packet altered teaches buyers to ignore
+   * it. An honest packet has exactly one script and no embedded resources at
+   * all — asserted here against the same script the generator ships.
+   */
+  const result = await verify(honestPacket((base64) => `data:application/pdf;base64,${base64}`));
+  assert.equal(result.state, 'pass', result.text);
+  assert.doesNotMatch(result.text, /added .* element/);
+  assert.doesNotMatch(result.text, /scripts/);
+});
+
+test('the generator really does embed nothing, which is what makes the rule safe', async () => {
+  /*
+   * The rule "any embedded resource is an alteration" is a fact about this
+   * format, not a guess — but only while it stays true. If the packet template
+   * ever grows a logo or an inline SVG, every real packet starts reporting
+   * ALTERED, so this fails first and points here.
+   */
+  const generator = await readFile('src/lib/localSalePacketGenerator.ts', 'utf8');
+  const template = generator.slice(
+    generator.indexOf('const html = `'),
+    generator.indexOf('`;', generator.indexOf('const html = `')),
+  );
+
+  for (const tag of ['img', 'iframe', 'embed', 'object', 'video', 'audio', 'source', 'link', 'svg', 'form']) {
+    assert.doesNotMatch(
+      template,
+      new RegExp(`<${tag}\\b`),
+      `the packet template now emits <${tag}>, so the verifier's embedded-resource rule must be revisited`,
+    );
+  }
+  assert.equal(
+    (template.match(/<script\b/g) ?? []).length,
+    1,
+    'the packet ships exactly one script, which is what the count rule relies on',
+  );
 });

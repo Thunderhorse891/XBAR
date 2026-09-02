@@ -226,6 +226,50 @@ export const PACKET_VERIFIER_SCRIPT = `
             problems.push('The file "' + match.fileName + '" was sealed but is missing from this packet.');
           });
 
+          /*
+           * A link is not the only way to put unsealed content in front of a
+           * buyer. An added img or iframe SHOWS it without anything being
+           * clicked, and the anchor sweep above never sees one.
+           *
+           * This matters most where the packet is most likely to be read: a
+           * file opened from disk, where the deployment's CSP does not apply
+           * and an added element loads from anywhere.
+           *
+           * A sealed packet embeds nothing but its own attachments — the
+           * generator emits no img, iframe, embed, object, video, audio,
+           * source, link or svg at all, which is what makes "any of these is an
+           * alteration" a fact about this format rather than a guess. The
+           * packetVerifierCsp test fails if the generator ever grows one.
+           */
+          var EMBEDS =
+            'img,iframe,embed,object,video,audio,source,track,link,base,svg,frame,frameset,applet,portal,form';
+          [].slice.call(document.querySelectorAll(EMBEDS)).forEach(function (node) {
+            var from =
+              node.getAttribute('src') || node.getAttribute('href') || node.getAttribute('data') || '';
+            problems.push(
+              'This packet contains an added ' +
+                String(node.tagName || 'element').toLowerCase() +
+                ' element' +
+                (from ? ' loading "' + from + '"' : '') +
+                ', which the seal does not cover. A sealed packet embeds nothing but its own attachments, so this was put here after it was sealed. Do not trust what it shows you.',
+            );
+          });
+
+          /*
+           * Exactly one script: the checker being run. More than one means
+           * something else is running in this page — which could rewrite what
+           * is printed below. It cannot prove its own innocence, and says so;
+           * the by-hand instructions in the packet are the answer to that.
+           */
+          var scripts = [].slice.call(document.querySelectorAll('script'));
+          if (scripts.length > 1) {
+            problems.push(
+              'This packet contains ' +
+                scripts.length +
+                ' scripts. A sealed packet contains exactly one, the checker you just ran, so the rest were added after sealing. Verify this packet by hand using the instructions above.',
+            );
+          }
+
           unmarked.forEach(function (link) {
             var label = (link.textContent || '').trim() || link.getAttribute('href') || 'an unnamed link';
             problems.push(
