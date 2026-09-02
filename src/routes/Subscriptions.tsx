@@ -3,10 +3,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { canUsePaymentLinkFallback, checkoutRouteFor, startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency } from '@/lib/format';
 import {
-  pendingHostedPurchaseKey,
+  clearPendingHostedPurchase,
   isPendingHostedPurchase,
-  parsePendingHostedPurchase,
+  pendingHostedPurchaseKey,
   pendingHostedPurchaseNotice,
+  readPendingHostedPurchase,
+  writePendingHostedPurchase,
 } from '@/lib/pendingHostedPurchase';
 import { getStripePaymentLink, stripeConfig } from '@/lib/platformConfig';
 import { productEvent, productEventNames } from '@/lib/productEvents';
@@ -155,23 +157,30 @@ export default function Subscriptions() {
    * page that still says Starter with the buttons still enabled, does the
    * obvious thing, and is charged twice. See `pendingHostedPurchase`.
    */
-  const [pendingPurchase, setPendingPurchase] = useState(() => {
-    try {
-      return parsePendingHostedPurchase(window.localStorage.getItem(pendingHostedPurchaseKey(workspaceId)));
-    } catch {
-      // Private windows and blocked storage throw on access. Losing the guard
-      // is bad; refusing to render the billing screen is worse.
-      return null;
-    }
-  });
+  const [pendingPurchase, setPendingPurchase] = useState(() => readPendingHostedPurchase(workspaceId));
+
+  /*
+   * Another tab may have started the purchase.
+   *
+   * This state is a cache, and it was read once. Two billing tabs open at the
+   * same time both began with nothing pending, so after the first redirected
+   * the second still showed an enabled button. The redirect itself re-reads
+   * storage — that is the guard — and this keeps what the customer is LOOKING
+   * at honest, so they are not invited to click something that will be refused.
+   */
+  useEffect(() => {
+    const syncFromStorage = (event: StorageEvent) => {
+      // A null key means the whole store was cleared, which is also our answer.
+      if (event.key && event.key !== pendingHostedPurchaseKey(workspaceId)) return;
+      setPendingPurchase(readPendingHostedPurchase(workspaceId));
+    };
+    window.addEventListener('storage', syncFromStorage);
+    return () => window.removeEventListener('storage', syncFromStorage);
+  }, [workspaceId]);
   const purchaseAwaitingActivation =
     isPendingHostedPurchase(pendingPurchase, new Date(), workspaceId) && !subscriptionActive;
   const forgetPendingPurchase = () => {
-    try {
-      window.localStorage.removeItem(pendingHostedPurchaseKey(workspaceId));
-    } catch {
-      // Nothing to do — the state below is what the screen reads.
-    }
+    clearPendingHostedPurchase(workspaceId);
     setPendingPurchase(null);
   };
 
@@ -191,11 +200,22 @@ export default function Subscriptions() {
      * the missing webhook was for. It does know one was started, and that is
      * enough to stop offering the same purchase again.
      */
-    if (purchaseAwaitingActivation && pendingPurchase) {
+    /*
+     * Read from STORAGE, not from this tab's cached state.
+     *
+     * The state above is a snapshot taken when the screen loaded, and a second
+     * billing tab opened before either purchase began holds a snapshot saying
+     * nothing is pending. Deciding from it let that tab open a second static
+     * checkout after the first had already redirected. Storage is the only
+     * thing both tabs share, so it is what the decision is made from.
+     */
+    const alreadyPending = readPendingHostedPurchase(workspaceId);
+    if (!subscriptionActive && isPendingHostedPurchase(alreadyPending, new Date(), workspaceId) && alreadyPending) {
+      setPendingPurchase(alreadyPending);
       emit(productEventNames.checkoutFailed, { tier, reason: 'hosted_purchase_pending' }, 'warning');
       pushToast({
         title: 'A purchase is already waiting to be activated',
-        message: pendingHostedPurchaseNotice(pendingPurchase),
+        message: pendingHostedPurchaseNotice(alreadyPending),
         tone: 'warning',
       });
       setCheckoutTier(null);
@@ -203,12 +223,7 @@ export default function Subscriptions() {
     }
 
     const started = { tier, startedAt: new Date().toISOString(), workspaceId };
-    try {
-      window.localStorage.setItem(pendingHostedPurchaseKey(workspaceId), JSON.stringify(started));
-    } catch {
-      // The redirect still happens: a storage failure must not stop someone
-      // buying. It only costs the second-charge guard on this device.
-    }
+    writePendingHostedPurchase(started);
     setPendingPurchase(started);
 
     if (managedFailure) {

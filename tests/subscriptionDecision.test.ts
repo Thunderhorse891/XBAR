@@ -1011,8 +1011,28 @@ test('every payment-link redirect goes through the pending-purchase guard', asyn
   const helperAt = screen.indexOf('const followPaymentLink = (');
   assert.ok(helperAt > -1, 'the single payment-link redirect must be findable');
   const helper = screen.slice(helperAt, screen.indexOf('const openBillingPortal', helperAt));
-  assert.match(helper, /purchaseAwaitingActivation && pendingPurchase/, 'it must refuse a repeat');
-  assert.match(helper, /localStorage\.setItem\(pendingHostedPurchaseKey\(workspaceId\)/, 'and record the new one');
+  assert.match(
+    helper,
+    /isPendingHostedPurchase\(alreadyPending, new Date\(\), workspaceId\)/,
+    'it must refuse a repeat',
+  );
+  assert.match(helper, /writePendingHostedPurchase\(started\)/, 'and record the new one');
+
+  /*
+   * Decided from STORAGE, not from this tab's cached state. The state is a
+   * snapshot taken when the screen loaded, and a second billing tab opened
+   * before either purchase began holds a snapshot saying nothing is pending —
+   * so it opened a second static checkout after the first had redirected.
+   * Storage is the only thing both tabs share.
+   */
+  assert.match(
+    helper,
+    /const alreadyPending = readPendingHostedPurchase\(workspaceId\);/,
+    'the redirect must re-read storage rather than trusting the cached marker',
+  );
+  const readAt = helper.indexOf('readPendingHostedPurchase(workspaceId)');
+  const decideAt = helper.indexOf('isPendingHostedPurchase(alreadyPending');
+  assert.ok(readAt > -1 && decideAt > readAt, 'and it must decide on what it just read');
   /*
    * Stamped with the workspace that started it, not a placeholder. A marker
    * written under the local scope while a cloud workspace is open never matches
@@ -1047,4 +1067,45 @@ test('every payment-link redirect goes through the pending-purchase guard', asyn
   // Both call sites must actually use the helper rather than reimplementing it.
   assert.match(screen, /followPaymentLink\(tier, hostedOnlyLink\);/, 'the hosted-only route');
   assert.match(screen, /followPaymentLink\(tier, fallback, managed\.message\);/, 'and the no-identity fallback');
+});
+
+test('a second billing tab learns about the first tab’s purchase', async () => {
+  const screen = await readFile(path.join(process.cwd(), 'src/routes/Subscriptions.tsx'), 'utf8');
+
+  /*
+   * The redirect re-reads storage, which is what stops the second charge. This
+   * is the other half: without it, tab B keeps showing an enabled buy button
+   * and an out-of-date notice, inviting a click that will be refused. A guard
+   * that only fires at the last moment is correct and still bad manners.
+   */
+  assert.match(screen, /window\.addEventListener\('storage', syncFromStorage\)/, 'other tabs must be heard');
+  assert.match(screen, /window\.removeEventListener\('storage', syncFromStorage\)/, 'and the listener cleaned up');
+
+  const effectAt = screen.indexOf('const syncFromStorage = (event: StorageEvent)');
+  assert.ok(effectAt > -1, 'the storage handler must be findable');
+  const handler = screen.slice(effectAt, screen.indexOf('window.addEventListener', effectAt));
+
+  assert.match(
+    handler,
+    /event\.key && event\.key !== pendingHostedPurchaseKey\(workspaceId\)/,
+    'another workspace’s marker must not disturb this screen, but a cleared store (null key) must',
+  );
+  assert.match(handler, /setPendingPurchase\(readPendingHostedPurchase\(workspaceId\)\)/, 'and the state must refresh');
+});
+
+test('all pending-marker storage access goes through one module', async () => {
+  const screen = await readFile(path.join(process.cwd(), 'src/routes/Subscriptions.tsx'), 'utf8');
+
+  /*
+   * The same choke-point rule that fixed the two payment-link redirects. The
+   * screen reached into localStorage in three places, and the read that mattered
+   * was the one that never happened. Keeping every access in
+   * `pendingHostedPurchase` means a new call site cannot quietly skip the
+   * parse, the workspace scope, or the try/catch.
+   */
+  assert.doesNotMatch(
+    screen,
+    /window\.localStorage\.(get|set|remove)Item\(/,
+    'the billing screen must not touch localStorage directly',
+  );
 });

@@ -115,3 +115,41 @@ export function isPendingHostedPurchase(
 export function pendingHostedPurchaseNotice(pending: PendingHostedPurchase): string {
   return `You started a ${pending.tier} purchase on ${pending.startedAt.slice(0, 10)}. This workspace activates paid plans by hand, so access turns on once someone confirms the payment — buying again would charge you a second time.`;
 }
+
+/*
+ * All storage access for the marker lives here, and there is a reason beyond
+ * tidiness: the screen cached the parsed marker in component state and read it
+ * once. Two billing tabs open at the same time therefore both started with
+ * `null`, and after the first redirected the second still believed nothing was
+ * pending — so it opened a second static checkout and the customer was charged
+ * twice. The guard has to be answered from STORAGE at the moment of the
+ * redirect, not from whatever the tab remembered when it loaded.
+ *
+ * Every accessor swallows its own failure. Private windows and blocked storage
+ * throw on access, and losing the guard is bad while refusing to render the
+ * billing screen — or refusing to sell — is worse.
+ */
+export function readPendingHostedPurchase(workspaceId: string): PendingHostedPurchase | null {
+  try {
+    return parsePendingHostedPurchase(window.localStorage.getItem(pendingHostedPurchaseKey(workspaceId)));
+  } catch {
+    return null;
+  }
+}
+
+export function writePendingHostedPurchase(pending: PendingHostedPurchase): void {
+  try {
+    window.localStorage.setItem(pendingHostedPurchaseKey(pending.workspaceId), JSON.stringify(pending));
+  } catch {
+    // The redirect still happens: a storage failure must not stop someone
+    // buying. It only costs the second-charge guard on this device.
+  }
+}
+
+export function clearPendingHostedPurchase(workspaceId: string): void {
+  try {
+    window.localStorage.removeItem(pendingHostedPurchaseKey(workspaceId));
+  } catch {
+    // Nothing to do — the caller's own state is what the screen reads.
+  }
+}
