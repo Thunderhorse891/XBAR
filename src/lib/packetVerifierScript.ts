@@ -192,8 +192,47 @@ export const PACKET_VERIFIER_SCRIPT = `
    * which is the mistake the CSS-only sweep already made once. A box occupying
    * no space is not showing anyone anything, whatever was done to it.
    */
+  /*
+   * The box has to be the SEALED box, not merely a box.
+   *
+   * Measuring the rectangle was supposed to be the rule that did not name a
+   * mechanism. It was not: the sealed stylesheet contains a rule that conceals
+   * things, and an altered packet only has to point at it. Change the class to
+   * watermark and the verdict renders at six percent alpha, rotated, fixed,
+   * behind the content — with a perfectly ordinary rectangle, no stylesheet
+   * touched, no inline style, no hidden attribute. So the class and the chain
+   * of elements above it are pinned to what the generator emits, and the
+   * packetVerifierCsp test derives that chain from the generator so the two
+   * cannot drift.
+   */
+  var SEALED_OUT_CHAIN = [
+    ['DIV', 'verify__out'],
+    ['DIV', 'verify'],
+    ['SECTION', 'seal'],
+    ['DIV', 'content'],
+    ['DIV', 'packet'],
+  ];
+
+  function classOf(node) {
+    var value = node && node.getAttribute ? node.getAttribute('class') : null;
+    return String(value === null || value === undefined ? '' : value).replace(/^ +| +$/g, '');
+  }
+
   function outputProblems() {
     var found = [];
+
+    var node = out;
+    for (var level = 0; level < SEALED_OUT_CHAIN.length; level += 1) {
+      var wantTag = SEALED_OUT_CHAIN[level][0];
+      var wantClass = SEALED_OUT_CHAIN[level][1];
+      if (!node || String(node.tagName || '').toUpperCase() !== wantTag || classOf(node) !== wantClass) {
+        found.push(
+          'The result box on this packet is not where the seal put it, or is no longer styled as itself. Its appearance is under the control of whoever changed it, so nothing printed in it can be trusted.',
+        );
+        break;
+      }
+      node = node.parentElement;
+    }
 
     var named = document.querySelectorAll('#xbar-verify-out');
     if (named.length !== 1) {
@@ -217,10 +256,29 @@ export const PACKET_VERIFIER_SCRIPT = `
       }
     }
 
-    if (typeof out.getBoundingClientRect === 'function') {
-      var box = out.getBoundingClientRect();
-      if (box && !box.width && !box.height) {
-        found.push('The result box on this packet takes up no space on the page, so the verdict below is not visible.');
+    var box = typeof out.getBoundingClientRect === 'function' ? out.getBoundingClientRect() : null;
+    if (box && !box.width && !box.height) {
+      found.push('The result box on this packet takes up no space on the page, so the verdict below is not visible.');
+    }
+
+    /*
+     * And nothing may be painted over it. A forged PASS cannot be detected by
+     * its text, but one COVERING the real verdict can be, and that is the
+     * arrangement that actually deceives a reader.
+     */
+    if (box && box.width && box.height && typeof document.elementFromPoint === 'function') {
+      var top = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      var reachesOut = false;
+      for (var over = top; over; over = over.parentElement) {
+        if (over === out) {
+          reachesOut = true;
+          break;
+        }
+      }
+      // A null result means the box is simply off screen, which is not an
+      // alteration — only something drawn IN FRONT of it is.
+      if (top && !reachesOut) {
+        found.push('Something on this packet is drawn on top of the result box, so what you are reading there may not be what this check produced.');
       }
     }
 

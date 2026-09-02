@@ -70,13 +70,25 @@ async function verify({
   outAncestors = [],
   decoyOutputs = 0,
   omitOut = false,
+  coveredBy = null,
+  offScreen = false,
 }) {
-  const out = element({ 'data-digest': sealedDigest, ...outAttrs }, 'DIV');
+  const out = element({ class: 'verify__out', 'data-digest': sealedDigest, ...outAttrs }, 'DIV');
   out._collapsed = outCollapsed;
-  // Hiding an ANCESTOR is the same attack one level up, and the verifier walks
-  // the chain rather than checking the box alone.
+  /*
+   * The chain the generator actually emits. The verifier pins it, because
+   * pointing the result box at the sealed watermark class conceals the verdict
+   * with an ordinary rectangle and no CSS of its own — a stub with no
+   * ancestors could not tell that apart from an honest packet.
+   */
+  const sealedChain = [
+    element({ class: 'verify' }, 'DIV'),
+    element({ class: 'seal' }, 'SECTION'),
+    element({ class: 'content' }, 'DIV'),
+    element({ class: 'packet' }, 'DIV'),
+  ];
   let ancestorTail = out;
-  for (const ancestor of outAncestors) {
+  for (const ancestor of [...outAncestors, ...sealedChain]) {
     ancestorTail.parentElement = ancestor;
     ancestorTail = ancestor;
   }
@@ -111,6 +123,11 @@ async function verify({
   const alerts = [];
 
   const document = {
+    // Nothing painted over the box unless a test puts it there.
+    // Off screen is a NULL hit, which is not the same as a covered box —
+    // `coveredBy: undefined` silently took the parameter default and tested
+    // neither, so the distinction needs its own flag.
+    elementFromPoint: () => (offScreen ? null : (coveredBy ?? out)),
     getElementById: (id) =>
       ({
         'xbar-verify-btn': btn,
@@ -531,4 +548,64 @@ test('an untouched packet is not accused of hiding its own verdict', async () =>
   const result = await verify(honest());
   assert.equal(result.state, 'pass', result.text);
   assert.deepEqual(result.alerts, [], 'an honest packet must raise no dialog');
+});
+
+/*
+ * Hiding the verdict by pointing it at the SEALED stylesheet.
+ *
+ * Measuring the rectangle was meant to be the rule that named no mechanism. It
+ * was not: the sealed stylesheet already contains a rule that conceals things,
+ * and an altered packet only has to point at it. `class="watermark"` renders
+ * the verdict at six percent alpha, rotated, fixed, behind the content — with
+ * a perfectly ordinary rectangle, no stylesheet touched, no inline style, no
+ * hidden attribute and no duplicate id.
+ */
+test('a result box reclassed to the sealed watermark is caught', async () => {
+  const result = await verify({ ...honest(), outAttrs: { class: 'watermark' } });
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /not where the seal put it, or is no longer styled as itself/);
+  assert.equal(result.alerts.length, 1, 'and said out loud, since the page decides what is visible');
+});
+
+test('any class swap on the result box is caught, not just the watermark', async () => {
+  // The rule is the sealed class, not a list of dangerous ones. An ADDED class
+  // is the same attack as a swapped one: `verify__out watermark` conceals just
+  // as well while still carrying the sealed name.
+  for (const swapped of ['verify__out watermark', 'verify__out extra', 'seal', '']) {
+    const result = await verify({ ...honest(), outAttrs: { class: swapped } });
+    assert.equal(result.state, 'fail', `class ${JSON.stringify(swapped)} must not pass`);
+  }
+
+  // Surrounding whitespace is not a forgery — HTML renders it identically, and
+  // accusing an honest packet over it is the other way to be wrong.
+  const padded = await verify({ ...honest(), outAttrs: { class: '  verify__out  ' } });
+  assert.equal(padded.state, 'pass', padded.text);
+});
+
+test('reclassing an ancestor of the result box is caught too', async () => {
+  // Concealing the wrapper conceals the box inside it just as thoroughly.
+  const wrapper = element({ class: 'watermark' }, 'DIV');
+  const result = await verify({ ...honest(), outAncestors: [wrapper] });
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /not where the seal put it/);
+});
+
+test('something drawn on top of the result box is caught', async () => {
+  /*
+   * A forged PASS cannot be detected by its text. One COVERING the real
+   * verdict can be, and that is the arrangement that actually deceives.
+   */
+  const overlay = element({ class: 'forged' }, 'DIV');
+  const result = await verify({ ...honest(), coveredBy: overlay });
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /drawn on top of the result box/);
+  assert.equal(result.alerts.length, 1);
+});
+
+test('a result box scrolled out of view is not called an alteration', async () => {
+  // elementFromPoint returns null off screen. Treating that as tampering would
+  // accuse an honest packet the reader simply had not scrolled to yet.
+  const result = await verify({ ...honest(), offScreen: true });
+  assert.equal(result.state, 'pass', result.text);
+  assert.deepEqual(result.alerts, [], 'an honest packet below the fold must raise no dialog');
 });

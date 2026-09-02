@@ -174,3 +174,57 @@ test('the presentation sweep runs before the crypto gate', () => {
   assert.ok(sweepAt > -1, 'the presentation sweep must run on click');
   assert.ok(cryptoAt > sweepAt, 'and it must run before the crypto gate returns');
 });
+
+test('the ancestry the verifier pins is the one the generator emits', async () => {
+  /*
+   * Derived, not transcribed. The verifier refuses to print a verdict unless
+   * the result box sits where the seal put it, which is what stops an altered
+   * packet pointing the box at the sealed `watermark` rule — six percent
+   * alpha, rotated, behind the content, and a perfectly ordinary rectangle. A
+   * hand-copied chain would rot the first time the packet's markup moved, and
+   * rot silently: every honest packet would start failing, or the pin would
+   * quietly stop matching anything.
+   */
+  const generator = await readFile('src/lib/localSalePacketGenerator.ts', 'utf8');
+  const html = generator.slice(generator.indexOf('const html = `'));
+  const target = html.indexOf('id="xbar-verify-out"');
+  assert.ok(target > -1, 'the result box must be findable in the generator');
+
+  // Walk the markup before the box, tracking which elements are still open.
+  const open: [string, string][] = [];
+  const tag = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)([^>]*)>/g;
+  const voids = new Set(['meta', 'br', 'hr', 'img', 'input', 'link', 'source', 'track']);
+  let match: RegExpExecArray | null;
+  while ((match = tag.exec(html)) && match.index < target) {
+    const [, closing, name, attrs] = match;
+    if (closing) {
+      for (let i = open.length - 1; i >= 0; i -= 1) {
+        if (open[i]![0] === name.toUpperCase()) {
+          open.splice(i, 1);
+          break;
+        }
+      }
+      continue;
+    }
+    if (voids.has(name.toLowerCase()) || attrs.trim().endsWith('/')) continue;
+    open.push([name.toUpperCase(), /class="([^"]*)"/.exec(attrs)?.[1] ?? '']);
+  }
+
+  /*
+   * `target` sits inside the box's own opening tag, so the box is already the
+   * innermost element still open. Reversing gives exactly the order the
+   * verifier walks: the box, then outward.
+   */
+  assert.equal(open.at(-1)?.[1], 'verify__out', 'the innermost open element must be the result box itself');
+  const chain = open
+    .slice()
+    .reverse()
+    .slice(0, 5)
+    .map(([name, cls]) => `['${name}', '${cls}']`)
+    .join(',\n    ');
+
+  assert.ok(
+    PACKET_VERIFIER_SCRIPT.includes(`var SEALED_OUT_CHAIN = [\n    ${chain},\n  ];`),
+    `the verifier pins a stale ancestry. Set SEALED_OUT_CHAIN in src/lib/packetVerifierScript.ts to:\n  var SEALED_OUT_CHAIN = [\n    ${chain},\n  ];`,
+  );
+});
