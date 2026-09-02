@@ -80,6 +80,7 @@ async function syncWorkspaceSubscription({
   eventType,
   eventCreatedAt,
   payload,
+  entitlementFromSibling = false,
 }) {
   const supabase = getSupabaseAdmin();
   if (!supabase) {
@@ -171,6 +172,18 @@ async function syncWorkspaceSubscription({
     p_subscription_id: subscriptionId || '',
     p_price_id: priceId || '',
     p_seat_count: Number(quantity || 1),
+    /*
+     * Whether this write's entitlement came from a SIBLING rather than from
+     * the subscription this event is about.
+     *
+     * Only those writes carry a snapshot that can already be stale — the
+     * sibling list is read before the advisory lock. An event about its own
+     * subscription is not speculative, and the tie rule must not refuse one:
+     * a re-subscription's `checkout.session.completed` can share a `created`
+     * second with the cancellation it replaces, and refusing it would leave a
+     * customer who has just paid with nothing.
+     */
+    p_from_sibling: entitlementFromSibling === true,
   });
 
   if (applyError) {
@@ -291,9 +304,16 @@ export default async function handler(req, res) {
          * retry — the same choice the profile read above makes, for the same
          * reason.
          */
+        let entitlementFromSibling = false;
         if (customerId && !isEntitledBillingState(billingStateForStripeStatus(effective.status))) {
           const sibling = await findEntitlingSibling(stripe, customerId, payload.id);
-          if (sibling) effective = sibling;
+          if (sibling) {
+            effective = sibling;
+            // Recorded, not merely used: this is the one write whose
+            // entitlement comes from a list read before the lock, so it is the
+            // one the tie rule has to be able to tell apart from a real event.
+            entitlementFromSibling = true;
+          }
         }
 
         const effectiveLineItem = effective.items?.data?.[0] ?? lineItem;
@@ -313,6 +333,7 @@ export default async function handler(req, res) {
           eventType: event.type,
           eventCreatedAt: event.created * 1000,
           payload,
+          entitlementFromSibling,
         });
       }
     }

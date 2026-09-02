@@ -811,6 +811,20 @@ test('a tied event may remove entitlement but never restore it', async () => {
 
   const tieRule = fn.slice(tieAt, fn.indexOf('insert into public.workspace_subscription_profiles', tieAt));
   assert.match(tieRule, /p_billing_state in \('Active', 'Manual Billing'\)/, 'only an ENTITLING tie is questioned');
+
+  /*
+   * And only a SPECULATIVE one. Refusing every tied entitling event was the
+   * first attempt and it was wrong: a genuine re-subscription's
+   * `checkout.session.completed` can share a `created` second with the
+   * cancellation it replaces, and refusing it leaves a customer who has just
+   * paid with nothing. The defence — that a later event would grant it — was
+   * false: webhook.js handles only checkout completion and subscription
+   * update/deletion, so there is no invoice handler to rescue it.
+   *
+   * `p_from_sibling` marks the one write whose entitlement comes from a list
+   * read before the lock, which is the only one that can be stale.
+   */
+  assert.match(tieRule, /p_from_sibling/, 'only a sibling-adopted entitlement may lose a tie');
   assert.match(
     tieRule,
     /current_state not in \('Active', 'Manual Billing'\)/,
@@ -867,4 +881,57 @@ test('the entitling states in the tie rule match the entitlement policy', async 
       `${state} does not entitle — naming it here would protect the wrong side of the tie`,
     );
   }
+});
+
+test('a tied re-subscription is not treated as a stale sibling snapshot', async () => {
+  const webhook = await readFile('api/stripe/webhook.js', 'utf8');
+
+  /*
+   * The flag has to be set where the staleness comes from — the sibling
+   * adoption — and nowhere else, or it stops distinguishing anything.
+   */
+  const adoptAt = webhook.indexOf('const sibling = await findEntitlingSibling(');
+  assert.ok(adoptAt > -1, 'the sibling adoption must be findable');
+  const adoption = webhook.slice(adoptAt, webhook.indexOf('const effectiveLineItem', adoptAt));
+  assert.match(adoption, /entitlementFromSibling = true;/, 'adopting a sibling is what marks the write speculative');
+
+  assert.match(webhook, /p_from_sibling: entitlementFromSibling === true,/, 'and it must reach the database');
+  assert.match(
+    webhook,
+    /entitlementFromSibling = false,/,
+    'a caller that does not adopt a sibling must default to a non-speculative write',
+  );
+
+  /*
+   * checkout.session.completed is the re-subscription path, and it must not
+   * pass the flag at all — it is an event about its own subscription.
+   */
+  const checkoutAt = webhook.indexOf("event.type === 'checkout.session.completed'");
+  const checkoutBranch = webhook.slice(
+    checkoutAt,
+    webhook.indexOf("event.type === 'customer.subscription.updated'", checkoutAt),
+  );
+  assert.doesNotMatch(
+    checkoutBranch,
+    /entitlementFromSibling/,
+    'a completed checkout is never a sibling snapshot, so it must never lose a tie',
+  );
+});
+
+test('the webhook really has no invoice handler, which is why the first rule was wrong', async () => {
+  /*
+   * The claim that a refused re-subscription would be rescued by a later
+   * invoice event was checked only after it had been made, and it was false.
+   * Pinned here so the reasoning cannot be quietly restored: if an invoice
+   * handler is ever added, that changes what a refusal costs and this rule
+   * deserves a second look.
+   */
+  const webhook = await readFile('api/stripe/webhook.js', 'utf8');
+  const handled = [...webhook.matchAll(/event\.type === '([^']+)'/g)].map(([, type]) => type);
+
+  assert.deepEqual(
+    [...new Set(handled)].sort(),
+    ['checkout.session.completed', 'customer.subscription.deleted', 'customer.subscription.updated'],
+    'these are the only events that can grant entitlement, so a refusal here has no other rescue',
+  );
 });

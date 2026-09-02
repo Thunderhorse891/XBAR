@@ -184,10 +184,13 @@ own:
    `stripe_event_created_at` and the `xbar_apply_subscription_event` function
    that applies a billing event atomically, so a retried event Stripe created
    earlier cannot overwrite a newer one. Events sharing a `created` second are
-   admitted — a plan change emits several — except that a tied event may
-   remove entitlement and never restore it, which is what stops one of two
+   admitted — a plan change emits several — except that a tied entitlement
+   adopted from a SIBLING subscription loses, which is what stops one of two
    simultaneously canceled subscriptions writing back a stale `Active`
-   snapshot of the other. Additive: one nullable column, one index, one
+   snapshot of the other. Only that write is speculative: the sibling list is
+   read before the lock. An event about its own subscription still wins a tie,
+   so a re-subscription completed in the same second as a cancellation is not
+   thrown away. Additive: one nullable column, one index, one
    function, no backfill.
 
 Apply them **one at a time**, not with a single `supabase db push`. That command

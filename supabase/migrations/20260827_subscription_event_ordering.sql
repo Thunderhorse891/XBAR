@@ -113,7 +113,12 @@ create or replace function public.xbar_apply_subscription_event(
   p_customer_id text,
   p_subscription_id text,
   p_price_id text,
-  p_seat_count integer
+  p_seat_count integer,
+  -- Whether this write's entitlement came from a SIBLING subscription rather
+  -- than from the one this event is about. Only those carry a snapshot read
+  -- before the lock, so only those can be stale. Defaulted so a caller that
+  -- predates it still applies events, treating them as non-speculative.
+  p_from_sibling boolean default false
 )
 returns boolean
 language plpgsql
@@ -145,7 +150,7 @@ begin
     return false;
   end if;
 
-  -- ON A TIE, LOSING ACCESS WINS.
+  -- ON A TIE, A SPECULATIVE ENTITLEMENT LOSES.
   --
   -- Admitting equal timestamps is right for the plan-change case above and
   -- leaves one shape unresolved. When two subscriptions on the same customer
@@ -158,18 +163,26 @@ begin
   -- cancellations were then recorded, no later event necessarily arrives to
   -- put it right: the workspace keeps paid access indefinitely.
   --
-  -- So a tied event may not RESTORE entitlement, only remove it. The
-  -- asymmetry is deliberate and follows the harm. If this delays a genuine
-  -- re-subscribe that happens to share a second with a cancellation, Stripe's
-  -- next event for the new subscription — an invoice payment, the following
-  -- `updated` — grants it, because the new subscription keeps emitting. The
-  -- reverse has no such correction, which is what makes the two cases
-  -- unequal rather than symmetrical.
+  -- `p_from_sibling` is what separates that write from a real one, and the
+  -- distinction is the whole rule. Refusing EVERY tied entitling event was the
+  -- first attempt and it was wrong: a genuine re-subscription's
+  -- `checkout.session.completed` can share a second with the cancellation it
+  -- replaces, and refusing it leaves a customer who has just paid with
+  -- nothing. That was defended on the grounds that a later event would grant
+  -- it — which is false. api/stripe/webhook.js handles only
+  -- `checkout.session.completed` and `customer.subscription.updated`/
+  -- `.deleted`; there are no invoice handlers, and Stripe promises no prompt
+  -- follow-up `updated`. Access could have stayed withheld until the next
+  -- lifecycle change, possibly a month away.
+  --
+  -- So only the speculative write yields. An event about its own subscription
+  -- is admitted on a tie exactly as before.
   --
   -- Strictly newer events are unaffected: this only reads on an exact tie.
   if last_applied is not null
      and p_event_created_at is not null
      and p_event_created_at = last_applied
+     and p_from_sibling
      and p_billing_state in ('Active', 'Manual Billing') then
     select billing_state
       into current_state
@@ -224,16 +237,16 @@ $$;
 -- Same rule as 20260822: nothing is executable by PUBLIC or anon by default.
 -- Only the API's service role calls this, and it writes entitlements.
 revoke all on function public.xbar_apply_subscription_event(
-  uuid, text, text, timestamptz, jsonb, text, text, double precision, jsonb, text, text, text, integer
+  uuid, text, text, timestamptz, jsonb, text, text, double precision, jsonb, text, text, text, integer, boolean
 ) from public;
 revoke all on function public.xbar_apply_subscription_event(
-  uuid, text, text, timestamptz, jsonb, text, text, double precision, jsonb, text, text, text, integer
+  uuid, text, text, timestamptz, jsonb, text, text, double precision, jsonb, text, text, text, integer, boolean
 ) from anon;
 revoke all on function public.xbar_apply_subscription_event(
-  uuid, text, text, timestamptz, jsonb, text, text, double precision, jsonb, text, text, text, integer
+  uuid, text, text, timestamptz, jsonb, text, text, double precision, jsonb, text, text, text, integer, boolean
 ) from authenticated;
 grant execute on function public.xbar_apply_subscription_event(
-  uuid, text, text, timestamptz, jsonb, text, text, double precision, jsonb, text, text, text, integer
+  uuid, text, text, timestamptz, jsonb, text, text, double precision, jsonb, text, text, text, integer, boolean
 ) to service_role;
 
 commit;
