@@ -1,6 +1,11 @@
 import type { DocumentRecord, ExpenseReceipt, HorseRecord, OwnershipRecord } from '../types/xbar.js';
 import { normalizeOwnershipRecord } from '../store/xbarStoreLogic.js';
 import { monthKeyForDate, monthKeyOf, trailingMonthKeys } from './receiptMonths.js';
+import {
+  CURRENT_COGGINS_DAYS,
+  hasCurrentReadyDocument,
+  hasResolvedDocumentMissingCurrentDate,
+} from './documentCurrency.js';
 
 /*
  * Business intelligence over the structured records: prices the operational
@@ -25,16 +30,23 @@ export interface RevenueRiskAssessment {
   items: RevenueRiskItem[];
 }
 
-const COGGINS_VALID_DAYS = 365;
-
-function hasCurrentCoggins(horseId: string, documents: DocumentRecord[], now: Date): boolean {
-  return documents.some((document) => {
-    if (document.horseId !== horseId || document.type !== 'Coggins') return false;
-    if (document.state === 'Archived') return false;
-    const uploaded = Date.parse(document.uploadedAt);
-    if (Number.isNaN(uploaded)) return false;
-    return (now.getTime() - uploaded) / 86_400_000 <= COGGINS_VALID_DAYS;
-  });
+/*
+ * The SAME question the sale-packet gate asks, answered by the same code.
+ *
+ * This used to accept any Coggins that was not Archived and measure the
+ * twelve months from `uploadedAt`. Both halves were wrong in the same
+ * direction. `uploadedAt` is when the file arrived and says nothing about when
+ * the blood was drawn, so a year-old Coggins uploaded this morning read as
+ * current; and a document still sitting in Queued or Needs Review counted as
+ * proof of something nobody had checked.
+ *
+ * The packet gate already required a Ready document with a current
+ * `entities.examDate`, so the two disagreed about the same horse: the gate
+ * held it back while this priced its full ask as ready to close — into the
+ * Reports screen, a CSV and a PDF. Both now call `documentCurrency`.
+ */
+function cogginsFor(horseId: string, documents: DocumentRecord[]): DocumentRecord[] {
+  return documents.filter((document) => document.horseId === horseId && document.type === 'Coggins');
 }
 
 // A horse counts as sale inventory when it carries an asking price or is in
@@ -99,11 +111,30 @@ export function assessRevenueAtRisk(
       }
     }
 
-    if (!hasCurrentCoggins(horse.id, documents, now)) {
-      blockers.push('No current Coggins on file (12-month window)');
-      if (!actionLabel) {
-        actionLabel = `Upload Coggins for ${horse.name}`;
-        actionRoute = `/documents?upload=1&horse=${horse.id}`;
+    const cogginsDocs = cogginsFor(horse.id, documents);
+    if (!hasCurrentReadyDocument(cogginsDocs, CURRENT_COGGINS_DAYS, now)) {
+      /*
+       * Which of the three it is decides what the rancher has to DO, and
+       * telling someone to upload a Coggins they already uploaded is how a
+       * report gets ignored. Nothing on file is an upload; something on file
+       * that cannot be relied on is a correction.
+       */
+      if (!cogginsDocs.length) {
+        blockers.push('No Coggins on file');
+        if (!actionLabel) {
+          actionLabel = `Upload Coggins for ${horse.name}`;
+          actionRoute = `/documents?upload=1&horse=${horse.id}`;
+        }
+      } else {
+        blockers.push(
+          hasResolvedDocumentMissingCurrentDate(cogginsDocs, CURRENT_COGGINS_DAYS, now)
+            ? 'Coggins on file has no current exam date (12-month window)'
+            : 'Coggins on file has not been reviewed yet',
+        );
+        if (!actionLabel) {
+          actionLabel = `Review Coggins for ${horse.name}`;
+          actionRoute = `/documents?horse=${horse.id}`;
+        }
       }
     }
 
