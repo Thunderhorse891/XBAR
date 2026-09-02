@@ -363,6 +363,48 @@ export default async function handler(req, res) {
       });
     }
 
+    /*
+     * Ask about subscriptions a SECOND time, because the two questions above
+     * were asked of different things at different moments.
+     *
+     * The subscription query runs first so a completion cannot hide between
+     * the billing row and it. But a session completed on Stripe's hosted page
+     * AFTER that query and BEFORE the session listing is invisible to both: by
+     * the time the listing runs it is no longer `status: 'open'`, and the
+     * subscription it created was not there when the earlier query ran. The
+     * plan then reaches the create with nothing having seen it.
+     *
+     * The checkout claim cannot help here. It serializes requests to THIS
+     * endpoint, and finishing a checkout on Stripe's own page never touches
+     * it. Neither can the billing row, read before any of this and still empty
+     * until the webhook lands.
+     *
+     * So the pair is closed by re-asking, inside the lease the renewal just
+     * bought and immediately before anything billable. This does not make the
+     * purchase atomic with Stripe — a completion landing after this query is
+     * beyond anything an endpoint can observe — but it removes the wide window
+     * between two list calls, which is the one an ordinary retry falls into.
+     */
+    const lateSubscription = await findBlockingSubscription(stripe, stripeCustomerId);
+
+    if (!lateSubscription.complete) {
+      return sendJson(res, 503, {
+        ok: false,
+        code: 'billing_unavailable',
+        retryable: true,
+        message: 'Your billing status could not be verified just now. Try again in a moment.',
+      });
+    }
+
+    if (lateSubscription.subscription) {
+      return sendJson(res, 409, {
+        ok: false,
+        code: 'subscription_active',
+        message:
+          'A checkout for this workspace completed a moment ago. Give it a minute to appear, then check the billing portal before starting another plan.',
+      });
+    }
+
     let session = plan.session;
     if (plan.action !== 'reuse') {
       /*

@@ -813,3 +813,77 @@ test('the lock stores an absolute instant, not a session-zone wall clock', () =>
   assert.match(api, /const staleBefore = new Date\(now\.getTime\(\) - CHECKOUT_LOCK_MS\)\.toISOString\(\);/);
   assert.match(api, /\.update\(\{ checkout_lock_at: now\.toISOString\(\) \}\)/);
 });
+
+/*
+ * The gap BETWEEN the two Stripe questions.
+ *
+ * Subscriptions are asked about first so a completion cannot hide between the
+ * billing row and that query. But a session completed on Stripe's hosted page
+ * after that query and before the open-session listing is invisible to both:
+ * by the time the listing runs it is no longer `status: 'open'`, and the
+ * subscription it created was not there when the earlier query ran. Nothing in
+ * the request had seen it, and the plan reached the create.
+ *
+ * The checkout claim cannot close this. It serializes requests to the
+ * endpoint, and finishing a checkout on Stripe's own page never touches it.
+ */
+test('a subscription that appears between the two Stripe questions is seen by the second', async () => {
+  const stripe = fakeSubscriptions([
+    // The first question, before the customer finished in the other tab.
+    { data: [], has_more: false },
+    // The second, after. Same helper, same customer, different answer.
+    { data: [{ id: 'sub_late', status: 'active' }], has_more: false },
+  ]);
+
+  const early = await findBlockingSubscription(stripe, 'cus_1');
+  assert.equal(early.subscription, null, 'nothing existed when the request started');
+  assert.equal(early.complete, true);
+
+  const late = await findBlockingSubscription(stripe, 'cus_1');
+  assert.equal(late.subscription?.id, 'sub_late', 'the completed purchase must be visible to the re-ask');
+  assert.equal(late.complete, true);
+});
+
+test('the checkout asks about subscriptions again before anything billable', async () => {
+  /*
+   * A source-order assertion, and deliberately so: reaching the Stripe calls in
+   * this handler needs live Stripe and Supabase credentials, which this suite
+   * runs without on purpose. What can be pinned without them is the ORDER,
+   * which is the whole of the fix — the same question asked before the session
+   * listing and again after it, inside the lease the renewal just bought.
+   */
+  const source = readFileSync('api/stripe/checkout.js', 'utf8');
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
+  const asks = [...code.matchAll(/findBlockingSubscription\(stripe, stripeCustomerId\)/g)].map((m) => m.index ?? -1);
+  assert.equal(asks.length, 2, 'one question cannot cover two moments');
+
+  const listing = code.indexOf('listOpenCheckoutSessions(stripe, stripeCustomerId)');
+  const renewal = code.indexOf('renewCheckoutLock(supabase, workspaceId, claimToken)');
+  const create = code.indexOf('stripe.checkout.sessions.create(');
+  assert.ok(listing > -1 && renewal > -1 && create > -1, 'the surrounding steps must be findable');
+
+  assert.ok(asks[0] < listing, 'the first ask must precede the session listing');
+  assert.ok(asks[1] > listing, 'the second must follow it — that is the window being closed');
+  assert.ok(asks[1] > renewal, 'and sit inside the renewed lease');
+  assert.ok(asks[1] < create, 'and happen before anything billable exists');
+
+  /*
+   * Both outcomes handled. A partial list is not evidence that no subscription
+   * exists — the same fail-closed rule the first ask and the capacity gates
+   * follow — and finding one must refuse rather than warn.
+   */
+  const guard = code.slice(asks[1], create);
+  assert.match(guard, /if \(!lateSubscription\.complete\)/, 'an incomplete list must refuse, not proceed');
+  assert.match(guard, /code: 'billing_unavailable'/);
+  assert.match(guard, /if \(lateSubscription\.subscription\)/, 'and a found subscription must stop the purchase');
+  assert.match(guard, /code: 'subscription_active'/);
+
+  /*
+   * And ONLY those two. A guard that refuses on anything else turns a
+   * duplicate-charge fix into a workspace that cannot buy at all, which is the
+   * other way to be wrong here and the harder one to notice — every test above
+   * still passes while nobody can subscribe.
+   */
+  assert.equal([...guard.matchAll(/\breturn sendJson\(/g)].length, 2, 'the re-ask must add no other refusal');
+});
