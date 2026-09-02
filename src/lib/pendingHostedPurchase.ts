@@ -153,3 +153,90 @@ export function clearPendingHostedPurchase(workspaceId: string): void {
     // Nothing to do — the caller's own state is what the screen reads.
   }
 }
+
+/*
+ * A claim, not a check followed by a write.
+ *
+ * Reading the marker and then writing it is not one act. Two billing tabs
+ * whose customer clicks Buy in both at nearly the same moment can each finish
+ * the read before either has written: both see nothing pending, both write,
+ * and both redirect to a static payment link that can be completed on its own.
+ * The storage event cannot close that window, because it only fires AFTER a
+ * write — by which time the other tab has already read and decided.
+ *
+ * Web Locks is the one cross-tab mutual exclusion a browser offers without a
+ * server. The read and the write both happen inside it, so the second tab
+ * cannot look until the first has finished writing, and then sees the marker.
+ *
+ * The lock is released when this tab navigates away, which is correct: what
+ * the next tab must see is the written marker, and that outlives the lock.
+ */
+interface PendingPurchaseLockManager {
+  request<T>(name: string, run: () => Promise<T>): Promise<T>;
+}
+
+export const PENDING_HOSTED_PURCHASE_LOCK = 'xbar-pending-hosted-purchase-claim';
+
+function pendingPurchaseLockManager(): PendingPurchaseLockManager | null {
+  try {
+    const locks = (navigator as Navigator & { locks?: PendingPurchaseLockManager }).locks;
+    return locks && typeof locks.request === 'function' ? locks : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Runs `body` under the cross-tab claim lock, or plainly where there is none.
+ *
+ * A non-secure context, an older browser and a test runner all lack
+ * `navigator.locks`. Degrading to the unlocked read-then-write is exactly the
+ * behaviour that shipped before this existed, so it costs nothing that was
+ * there — whereas refusing to sell because a browser has no lock would be the
+ * worse of the two failures, the same direction every default here takes.
+ */
+export async function withPendingPurchaseLock<T>(body: () => T): Promise<T> {
+  const locks = pendingPurchaseLockManager();
+  if (!locks) return body();
+  let entered = false;
+  try {
+    return await locks.request(PENDING_HOSTED_PURCHASE_LOCK, () => {
+      entered = true;
+      return Promise.resolve(body());
+    });
+  } catch (error) {
+    /*
+     * Only the lock manager's own refusal falls back. Once the critical
+     * section has started, a failure inside it is that failure: running it
+     * again could write a second marker for a single click.
+     */
+    if (entered) throw error;
+    return body();
+  }
+}
+
+export type PendingHostedPurchaseClaim =
+  { claimed: true; pending: PendingHostedPurchase } | { claimed: false; blockedBy: PendingHostedPurchase };
+
+/**
+ * Claims the right to start one hosted purchase for a workspace.
+ *
+ * `enforceGuard` is false once a subscription is already active — that
+ * customer is managing a plan they hold rather than being sold a second one,
+ * and the duplicate-charge guard is not theirs to trip over. The write still
+ * happens inside the lock either way, so the two paths cannot interleave.
+ */
+export function claimPendingHostedPurchase(
+  pending: PendingHostedPurchase,
+  now: Date,
+  enforceGuard: boolean,
+): Promise<PendingHostedPurchaseClaim> {
+  return withPendingPurchaseLock<PendingHostedPurchaseClaim>(() => {
+    const existing = readPendingHostedPurchase(pending.workspaceId);
+    if (enforceGuard && existing && isPendingHostedPurchase(existing, now, pending.workspaceId)) {
+      return { claimed: false, blockedBy: existing };
+    }
+    writePendingHostedPurchase(pending);
+    return { claimed: true, pending };
+  });
+}

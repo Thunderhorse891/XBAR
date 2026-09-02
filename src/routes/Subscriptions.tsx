@@ -3,12 +3,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { canUsePaymentLinkFallback, checkoutRouteFor, startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency } from '@/lib/format';
 import {
+  claimPendingHostedPurchase,
   clearPendingHostedPurchase,
   isPendingHostedPurchase,
   pendingHostedPurchaseKey,
   pendingHostedPurchaseNotice,
   readPendingHostedPurchase,
-  writePendingHostedPurchase,
 } from '@/lib/pendingHostedPurchase';
 import { getStripePaymentLink, stripeConfig } from '@/lib/platformConfig';
 import { productEvent, productEventNames } from '@/lib/productEvents';
@@ -194,37 +194,40 @@ export default function Subscriptions() {
    * not the other is exactly the mistake that shipped, so there is no second
    * `assign` to forget: both go through here.
    */
-  const followPaymentLink = (tier: SubscriptionTier, link: string, managedFailure?: string) => {
+  const followPaymentLink = async (tier: SubscriptionTier, link: string, managedFailure?: string) => {
     /*
      * Nothing here knows whether the last payment went through — that is what
      * the missing webhook was for. It does know one was started, and that is
      * enough to stop offering the same purchase again.
      */
     /*
-     * Read from STORAGE, not from this tab's cached state.
+     * CLAIM the purchase; do not read and then write.
      *
-     * The state above is a snapshot taken when the screen loaded, and a second
-     * billing tab opened before either purchase began holds a snapshot saying
-     * nothing is pending. Deciding from it let that tab open a second static
-     * checkout after the first had already redirected. Storage is the only
-     * thing both tabs share, so it is what the decision is made from.
+     * Reading storage instead of this tab's cached state fixed the tab that
+     * decided from a stale snapshot, but it left a narrower window open: two
+     * tabs clicking at the same moment can both finish the read before either
+     * writes, and a check-then-set that both sides pass guards nothing. The
+     * claim does the read and the write inside one cross-tab lock, so the
+     * second tab looks only after the first has finished writing.
      */
-    const alreadyPending = readPendingHostedPurchase(workspaceId);
-    if (!subscriptionActive && isPendingHostedPurchase(alreadyPending, new Date(), workspaceId) && alreadyPending) {
-      setPendingPurchase(alreadyPending);
+    const claim = await claimPendingHostedPurchase(
+      { tier, startedAt: new Date().toISOString(), workspaceId },
+      new Date(),
+      !subscriptionActive,
+    );
+    if (!claim.claimed) {
+      setPendingPurchase(claim.blockedBy);
       emit(productEventNames.checkoutFailed, { tier, reason: 'hosted_purchase_pending' }, 'warning');
       pushToast({
         title: 'A purchase is already waiting to be activated',
-        message: pendingHostedPurchaseNotice(alreadyPending),
+        message: pendingHostedPurchaseNotice(claim.blockedBy),
         tone: 'warning',
       });
       setCheckoutTier(null);
       return;
     }
 
-    const started = { tier, startedAt: new Date().toISOString(), workspaceId };
-    writePendingHostedPurchase(started);
-    setPendingPurchase(started);
+    setPendingPurchase(claim.pending);
 
     if (managedFailure) {
       emit(productEventNames.checkoutRedirected, { tier, method: 'payment_link', managedFailure }, 'warning');
@@ -293,7 +296,7 @@ export default function Subscriptions() {
      */
     const hostedOnlyLink = getStripePaymentLink(tier);
     if (checkoutRouteFor({ managedBillingEnabled: billingEnabled, paymentLink: hostedOnlyLink }) === 'payment_link') {
-      followPaymentLink(tier, hostedOnlyLink);
+      await followPaymentLink(tier, hostedOnlyLink);
       return;
     }
 
@@ -330,7 +333,7 @@ export default function Subscriptions() {
        * subscription. It shipped guarded on one branch and not the other,
        * which is why both now go through `followPaymentLink`.
        */
-      followPaymentLink(tier, fallback, managed.message);
+      await followPaymentLink(tier, fallback, managed.message);
       return;
     }
 

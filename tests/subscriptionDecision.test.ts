@@ -17,11 +17,14 @@ import {
 import type { SubscriptionProfile, SubscriptionTier } from '../src/types/xbar.js';
 import { subscriptionPlans } from '../src/lib/subscriptionPlans.js';
 import {
+  claimPendingHostedPurchase,
   isPendingHostedPurchase,
   parsePendingHostedPurchase,
   pendingHostedPurchaseKey,
   pendingHostedPurchaseNotice,
+  withPendingPurchaseLock,
 } from '../src/lib/pendingHostedPurchase.js';
+import type { PendingHostedPurchase } from '../src/lib/pendingHostedPurchase.js';
 
 test('hosted payment links keep checkout available when managed billing is paused', () => {
   const result = getCheckoutReadiness({
@@ -1008,42 +1011,34 @@ test('every payment-link redirect goes through the pending-purchase guard', asyn
    * shipped on one branch and not the other, so this pins the shape that makes
    * that impossible rather than the two call sites.
    */
-  const helperAt = screen.indexOf('const followPaymentLink = (');
+  const helperAt = screen.indexOf('const followPaymentLink = async (');
   assert.ok(helperAt > -1, 'the single payment-link redirect must be findable');
   const helper = screen.slice(helperAt, screen.indexOf('const openBillingPortal', helperAt));
-  assert.match(
-    helper,
-    /isPendingHostedPurchase\(alreadyPending, new Date\(\), workspaceId\)/,
-    'it must refuse a repeat',
-  );
-  assert.match(helper, /writePendingHostedPurchase\(started\)/, 'and record the new one');
 
   /*
-   * Decided from STORAGE, not from this tab's cached state. The state is a
-   * snapshot taken when the screen loaded, and a second billing tab opened
-   * before either purchase began holds a snapshot saying nothing is pending —
-   * so it opened a second static checkout after the first had redirected.
-   * Storage is the only thing both tabs share.
+   * One CLAIM, not a read followed by a write. Re-reading storage instead of a
+   * cached snapshot fixed the tab that decided from stale state, but two tabs
+   * clicking at once can both finish a read before either writes, and a
+   * check-then-set they both pass guards nothing. The claim puts the read and
+   * the write inside one cross-tab lock; splitting them again reopens the
+   * window, and the marker's workspace stamp is carried into it here — a
+   * marker written under the local scope while a cloud workspace is open never
+   * matches on read, which loses the guard with the suite still green.
    */
   assert.match(
     helper,
-    /const alreadyPending = readPendingHostedPurchase\(workspaceId\);/,
-    'the redirect must re-read storage rather than trusting the cached marker',
+    /const claim = await claimPendingHostedPurchase\(\s*\{ tier, startedAt: new Date\(\)\.toISOString\(\), workspaceId \},\s*new Date\(\),\s*!subscriptionActive,\s*\);/,
+    'the redirect must claim the purchase under the lock, stamped with its workspace',
   );
-  const readAt = helper.indexOf('readPendingHostedPurchase(workspaceId)');
-  const decideAt = helper.indexOf('isPendingHostedPurchase(alreadyPending');
-  assert.ok(readAt > -1 && decideAt > readAt, 'and it must decide on what it just read');
-  /*
-   * Stamped with the workspace that started it, not a placeholder. A marker
-   * written under the local scope while a cloud workspace is open never matches
-   * on read, so the guard is silently lost — a green suite with no protection,
-   * which is worse than an obvious break.
-   */
-  assert.match(
+  assert.match(helper, /if \(!claim\.claimed\)/, 'and refuse when the claim is refused');
+  assert.doesNotMatch(
     helper,
-    /const started = \{ tier, startedAt: new Date\(\)\.toISOString\(\), workspaceId \};/,
-    'the marker must carry the workspace that started it',
+    /readPendingHostedPurchase|writePendingHostedPurchase/,
+    'reading or writing the marker beside the claim is the check-then-set that was removed',
   );
+  const claimAt = helper.indexOf('claimPendingHostedPurchase(');
+  const assignAt = helper.indexOf('window.location.assign(link)');
+  assert.ok(claimAt > -1 && assignAt > claimAt, 'and it must claim before it leaves the page');
   assert.match(
     screen,
     /isPendingHostedPurchase\(pendingPurchase, new Date\(\), workspaceId\)/,
@@ -1065,8 +1060,8 @@ test('every payment-link redirect goes through the pending-purchase guard', asyn
   );
 
   // Both call sites must actually use the helper rather than reimplementing it.
-  assert.match(screen, /followPaymentLink\(tier, hostedOnlyLink\);/, 'the hosted-only route');
-  assert.match(screen, /followPaymentLink\(tier, fallback, managed\.message\);/, 'and the no-identity fallback');
+  assert.match(screen, /await followPaymentLink\(tier, hostedOnlyLink\);/, 'the hosted-only route');
+  assert.match(screen, /await followPaymentLink\(tier, fallback, managed\.message\);/, 'and the no-identity fallback');
 });
 
 test('a second billing tab learns about the first tab’s purchase', async () => {
@@ -1108,4 +1103,236 @@ test('all pending-marker storage access goes through one module', async () => {
     /window\.localStorage\.(get|set|remove)Item\(/,
     'the billing screen must not touch localStorage directly',
   );
+});
+
+/*
+ * The claim lock.
+ *
+ * Reading storage rather than a cached snapshot fixed the tab that decided
+ * from stale state, but a check-then-set both tabs pass is still not a claim:
+ * two tabs can finish the read before either writes, and both then redirect to
+ * an independently completable payment link.
+ *
+ * A single JavaScript thread cannot reproduce true parallelism, so these tests
+ * do not pretend to race. They pin the structural property that makes the race
+ * impossible instead: the read and the write both happen INSIDE the lock, and
+ * two claimants' critical sections never interleave.
+ */
+interface ClaimHarness {
+  events: string[];
+  store: Map<string, string>;
+  restore: () => void;
+}
+
+function installClaimHarness(locks?: unknown, log?: string[]): ClaimHarness {
+  // One log for the lock and for storage, so what is asserted is the ORDER of
+  // storage access against the lock rather than each merely being present.
+  const events: string[] = log ?? [];
+  const store = new Map<string, string>();
+  const globals = globalThis as { window?: unknown; navigator?: unknown };
+  const previousWindow = globals.window;
+  const previousNavigator = globals.navigator;
+  const previousDescriptor = Object.getOwnPropertyDescriptor(globals, 'navigator');
+
+  globals.window = {
+    localStorage: {
+      getItem: (key: string) => {
+        events.push('read');
+        return store.has(key) ? (store.get(key) as string) : null;
+      },
+      setItem: (key: string, value: string) => {
+        events.push('write');
+        store.set(key, value);
+      },
+      removeItem: (key: string) => {
+        events.push('remove');
+        store.delete(key);
+      },
+    },
+  };
+  // `navigator` is a getter-only global in Node, so a plain assignment throws.
+  Object.defineProperty(globals, 'navigator', { value: { locks }, configurable: true, writable: true });
+
+  return {
+    events,
+    store,
+    restore: () => {
+      if (previousWindow === undefined) delete globals.window;
+      else globals.window = previousWindow;
+      if (previousDescriptor) Object.defineProperty(globals, 'navigator', previousDescriptor);
+      else if (previousNavigator === undefined) delete globals.navigator;
+    },
+  };
+}
+
+const claimFor = (workspaceId: string, tier = 'Pro'): PendingHostedPurchase => ({
+  tier: tier as SubscriptionTier,
+  startedAt: '2026-09-02T04:00:00.000Z',
+  workspaceId,
+});
+
+test('the read and the write both happen inside the claim lock', async () => {
+  /*
+   * The whole finding in one assertion. A read taken before the lock, or a
+   * write left after it, restores exactly the window two tabs slipped through
+   * — and either shows up here as a reordered log.
+   */
+  const events: string[] = [];
+  const locks = {
+    request: async <T>(name: string, run: () => Promise<T>): Promise<T> => {
+      events.push(`acquire:${name}`);
+      try {
+        return await run();
+      } finally {
+        events.push('release');
+      }
+    },
+  };
+  const harness = installClaimHarness(locks, events);
+  try {
+    const result = await claimPendingHostedPurchase(claimFor('ws-a'), new Date('2026-09-02T04:00:01.000Z'), true);
+    assert.equal(result.claimed, true, 'an unclaimed workspace must be claimable');
+    assert.deepEqual(
+      events,
+      ['acquire:xbar-pending-hosted-purchase-claim', 'read', 'write', 'release'],
+      'the read and the write must both sit inside the lock',
+    );
+  } finally {
+    harness.restore();
+  }
+});
+
+test('two claimants never interleave their read and write', async () => {
+  /*
+   * A lock manager that actually queues, and two claims started before either
+   * has run. Without the lock there are no acquire events at all and the two
+   * critical sections appear back to back — which is the log this rejects.
+   */
+  const events: string[] = [];
+  let chain: Promise<unknown> = Promise.resolve();
+  const locks = {
+    request: <T>(_name: string, run: () => Promise<T>): Promise<T> => {
+      const next = chain.then(async () => {
+        events.push('acquire');
+        try {
+          return await run();
+        } finally {
+          events.push('release');
+        }
+      });
+      chain = next.catch(() => undefined);
+      return next as Promise<T>;
+    },
+  };
+  const harness = installClaimHarness(locks, events);
+  try {
+    const now = new Date('2026-09-02T04:00:01.000Z');
+    const [first, second] = await Promise.all([
+      claimPendingHostedPurchase(claimFor('ws-a', 'Pro'), now, true),
+      claimPendingHostedPurchase(claimFor('ws-a', 'Ranch'), now, true),
+    ]);
+
+    assert.deepEqual(
+      events,
+      ['acquire', 'read', 'write', 'release', 'acquire', 'read', 'release'],
+      'the second claimant must not read until the first has written and released',
+    );
+    const claims = [first, second];
+    assert.equal(claims.filter((claim) => claim.claimed).length, 1, 'exactly one claimant may proceed');
+    const refused = claims.find((claim) => !claim.claimed);
+    assert.ok(refused && !refused.claimed, 'the other must be refused');
+    assert.equal(refused.blockedBy.tier, 'Pro', 'and told about the purchase that actually won');
+  } finally {
+    harness.restore();
+  }
+});
+
+test('a browser with no lock manager can still buy', async () => {
+  /*
+   * Non-secure contexts and older browsers have no `navigator.locks`. Losing
+   * the lock costs the narrow two-tab window; refusing to sell would cost the
+   * sale, which is the worse of the two and the direction every default in
+   * this module leans.
+   */
+  const harness = installClaimHarness(undefined);
+  try {
+    const result = await claimPendingHostedPurchase(claimFor('ws-a'), new Date('2026-09-02T04:00:01.000Z'), true);
+    assert.equal(result.claimed, true, 'the purchase must still go through');
+    assert.deepEqual(harness.events, ['read', 'write'], 'and the body must run exactly once');
+    assert.equal(harness.store.size, 1, 'the marker is still written');
+  } finally {
+    harness.restore();
+  }
+});
+
+test('a lock manager that refuses does not stop the sale', async () => {
+  const harness = installClaimHarness({
+    request: () => Promise.reject(new Error('LockManager unavailable')),
+  });
+  try {
+    const result = await claimPendingHostedPurchase(claimFor('ws-a'), new Date('2026-09-02T04:00:01.000Z'), true);
+    assert.equal(result.claimed, true, 'a refused lock must fall back, not block checkout');
+    assert.deepEqual(harness.events, ['read', 'write'], 'and the body must run exactly once');
+  } finally {
+    harness.restore();
+  }
+});
+
+test('a failure inside the claim is not retried', async () => {
+  /*
+   * The fallback exists for a lock manager that refuses to grant the lock. A
+   * critical section that started and then threw is a different thing: running
+   * it again could write a second marker — or, in a future body, take a second
+   * action — for one click.
+   */
+  const harness = installClaimHarness({
+    request: async <T>(_name: string, run: () => Promise<T>): Promise<T> => run(),
+  });
+  try {
+    let runs = 0;
+    await assert.rejects(
+      withPendingPurchaseLock(() => {
+        runs += 1;
+        throw new Error('storage exploded');
+      }),
+      /storage exploded/,
+    );
+    assert.equal(runs, 1, 'a body that has already started must not be run a second time');
+  } finally {
+    harness.restore();
+  }
+});
+
+test('an active subscriber is not blocked by their own pending marker', async () => {
+  /*
+   * `enforceGuard` is false once a plan is active: that customer is managing a
+   * subscription they hold, not being sold a duplicate. The write still
+   * happens inside the lock, so the two paths cannot interleave either.
+   */
+  const harness = installClaimHarness(undefined);
+  try {
+    const now = new Date('2026-09-02T04:00:01.000Z');
+    await claimPendingHostedPurchase(claimFor('ws-a', 'Pro'), now, true);
+    const second = await claimPendingHostedPurchase(claimFor('ws-a', 'Ranch'), now, false);
+    assert.equal(second.claimed, true, 'an active subscriber must not be held by the guard');
+
+    const third = await claimPendingHostedPurchase(claimFor('ws-a', 'Ranch'), now, true);
+    assert.equal(third.claimed, false, 'while a buyer still is');
+  } finally {
+    harness.restore();
+  }
+});
+
+test('the billing screen claims the purchase rather than reading and writing it', async () => {
+  const screen = await readFile(path.join(process.cwd(), 'src/routes/Subscriptions.tsx'), 'utf8');
+
+  assert.match(screen, /const claim = await claimPendingHostedPurchase\(/, 'the redirect must claim');
+  assert.doesNotMatch(
+    screen,
+    /writePendingHostedPurchase/,
+    'writing the marker outside the claim reopens the check-then-set window',
+  );
+
+  const assigned = [...screen.matchAll(/await followPaymentLink\(/g)];
+  assert.equal(assigned.length, 2, 'both payment-link routes must await the claim before redirecting');
 });
