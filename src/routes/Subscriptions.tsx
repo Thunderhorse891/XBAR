@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { canUsePaymentLinkFallback, checkoutRouteFor, startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency } from '@/lib/format';
+import {
+  PENDING_HOSTED_PURCHASE_KEY,
+  isPendingHostedPurchase,
+  parsePendingHostedPurchase,
+  pendingHostedPurchaseNotice,
+} from '@/lib/pendingHostedPurchase';
 import { getStripePaymentLink, stripeConfig } from '@/lib/platformConfig';
 import { productEvent, productEventNames } from '@/lib/productEvents';
 import { revenuePlanMatrix } from '@/lib/revenuePlanMatrix';
@@ -141,6 +147,33 @@ export default function Subscriptions() {
     setSelectedTier(defaultDecisionTier);
   }, [defaultDecisionTier]);
 
+  /*
+   * A hosted purchase this deployment cannot confirm.
+   *
+   * With managed billing off there is no webhook, so completing a payment link
+   * changes nothing the app can see. The customer comes back from Stripe to a
+   * page that still says Starter with the buttons still enabled, does the
+   * obvious thing, and is charged twice. See `pendingHostedPurchase`.
+   */
+  const [pendingPurchase, setPendingPurchase] = useState(() => {
+    try {
+      return parsePendingHostedPurchase(window.localStorage.getItem(PENDING_HOSTED_PURCHASE_KEY));
+    } catch {
+      // Private windows and blocked storage throw on access. Losing the guard
+      // is bad; refusing to render the billing screen is worse.
+      return null;
+    }
+  });
+  const purchaseAwaitingActivation = isPendingHostedPurchase(pendingPurchase, new Date()) && !subscriptionActive;
+  const forgetPendingPurchase = () => {
+    try {
+      window.localStorage.removeItem(PENDING_HOSTED_PURCHASE_KEY);
+    } catch {
+      // Nothing to do — the state below is what the screen reads.
+    }
+    setPendingPurchase(null);
+  };
+
   const openBillingPortal = () => {
     if (!billingPortalAction) return;
     emit(productEventNames.checkoutRedirected, { tier: subscription.tier, method: 'billing_portal' });
@@ -200,6 +233,30 @@ export default function Subscriptions() {
      */
     const hostedOnlyLink = getStripePaymentLink(tier);
     if (checkoutRouteFor({ managedBillingEnabled: billingEnabled, paymentLink: hostedOnlyLink }) === 'payment_link') {
+      /*
+       * Nothing here knows whether the last payment went through — that is
+       * what the missing webhook was for. It does know one was started, and
+       * that is enough to stop offering the same purchase again.
+       */
+      if (purchaseAwaitingActivation && pendingPurchase) {
+        emit(productEventNames.checkoutFailed, { tier, reason: 'hosted_purchase_pending' }, 'warning');
+        pushToast({
+          title: 'A purchase is already waiting to be activated',
+          message: pendingHostedPurchaseNotice(pendingPurchase),
+          tone: 'warning',
+        });
+        setCheckoutTier(null);
+        return;
+      }
+
+      const started = { tier, startedAt: new Date().toISOString() };
+      try {
+        window.localStorage.setItem(PENDING_HOSTED_PURCHASE_KEY, JSON.stringify(started));
+      } catch {
+        // The redirect still happens: a storage failure must not stop someone
+        // buying. It only costs the second-charge guard on this device.
+      }
+      setPendingPurchase(started);
       emit(productEventNames.checkoutRedirected, { tier, method: 'payment_link' });
       window.location.assign(hostedOnlyLink);
       return;
@@ -494,11 +551,27 @@ export default function Subscriptions() {
           <button className="checkout-secondary-action" type="button" onClick={startTrial}>
             Continue with Starter setup
           </button>
-          <p className="checkout-note">
-            {selectedPaidCurrent
-              ? 'This paid plan is already active.'
-              : selectedReadiness.reason || checkoutReadinessLabel}
-          </p>
+          {/*
+            Said plainly, because the alternative is a customer staring at a
+            page that still says Starter and concluding the payment failed. The
+            way out is offered in the same breath: nothing here can tell an
+            abandoned checkout from an unconfirmed one, so the person who knows
+            gets to say.
+          */}
+          {purchaseAwaitingActivation && pendingPurchase ? (
+            <p className="checkout-note">
+              {pendingHostedPurchaseNotice(pendingPurchase)}{' '}
+              <button type="button" className="checkout-inline-action" onClick={forgetPendingPurchase}>
+                I did not complete that purchase
+              </button>
+            </p>
+          ) : (
+            <p className="checkout-note">
+              {selectedPaidCurrent
+                ? 'This paid plan is already active.'
+                : selectedReadiness.reason || checkoutReadinessLabel}
+            </p>
+          )}
         </aside>
       </div>
     </section>

@@ -16,6 +16,11 @@ import {
 } from '../src/lib/subscriptionDecision.js';
 import type { SubscriptionProfile, SubscriptionTier } from '../src/types/xbar.js';
 import { subscriptionPlans } from '../src/lib/subscriptionPlans.js';
+import {
+  isPendingHostedPurchase,
+  parsePendingHostedPurchase,
+  pendingHostedPurchaseNotice,
+} from '../src/lib/pendingHostedPurchase.js';
 
 test('hosted payment links keep checkout available when managed billing is paused', () => {
   const result = getCheckoutReadiness({
@@ -845,4 +850,102 @@ test('the billing screen routes a blocked plan card to the portal', async () => 
     /billingPortalAction \? \([\s\S]*?onClick=\{openBillingPortal\}/,
     'the primary action must become the portal rather than a disabled button',
   );
+});
+
+/*
+ * A hosted purchase this deployment cannot confirm.
+ *
+ * With managed billing off there is no webhook, so completing a payment link
+ * changes nothing the app can see. The customer returns from Stripe to a page
+ * that still says Starter with the buttons still enabled, does the obvious
+ * thing, and Stripe sells them a second subscription.
+ */
+
+test('a started hosted purchase holds checkout closed', () => {
+  const startedAt = new Date('2026-09-02T03:00:00Z');
+  const pending = { tier: 'Professional' as const, startedAt: startedAt.toISOString() };
+
+  assert.equal(isPendingHostedPurchase(pending, new Date('2026-09-02T03:05:00Z')), true);
+  // Still pending most of a day later: a manual grant can wait for someone's
+  // morning, and a second charge in the meantime is the thing being prevented.
+  assert.equal(isPendingHostedPurchase(pending, new Date('2026-09-02T23:00:00Z')), true);
+});
+
+test('a started purchase does not lock the customer out forever', () => {
+  /*
+   * The over-rejection direction, and the one that costs a sale. Nothing here
+   * can tell an ABANDONED checkout from an unconfirmed one, so the marker has
+   * to expire — and the screen also offers an explicit way out, because the
+   * person who knows they did not pay should not wait a day to say so.
+   */
+  const pending = { tier: 'Professional' as const, startedAt: '2026-09-01T03:00:00Z' };
+  assert.equal(isPendingHostedPurchase(pending, new Date('2026-09-02T04:00:00Z')), false);
+  assert.equal(isPendingHostedPurchase(null, new Date()), false);
+});
+
+test('a damaged pending marker must not stop someone paying', () => {
+  /*
+   * A stored value that blocks checkout is the worse of the two failures
+   * available here: a missing guard risks a double charge the customer can get
+   * refunded, while a stuck guard means they cannot buy at all.
+   */
+  assert.equal(parsePendingHostedPurchase(null), null);
+  assert.equal(parsePendingHostedPurchase('not json'), null);
+  assert.equal(parsePendingHostedPurchase('{}'), null);
+  assert.equal(parsePendingHostedPurchase(JSON.stringify({ tier: {}, startedAt: 'x' })), null);
+  assert.equal(parsePendingHostedPurchase(JSON.stringify({ tier: 'Professional' })), null);
+  assert.equal(parsePendingHostedPurchase(JSON.stringify({ tier: 'Professional', startedAt: 'nonsense' })), null);
+  /*
+   * A NUMBER is the case the type test earns its keep on, and the reason
+   * `Date.parse` cannot stand alone: `Date.parse(2026)` is a valid timestamp,
+   * so a numeric `startedAt` would sail through and then throw on the
+   * `.slice(0, 10)` that builds the notice — crashing the billing screen
+   * rather than merely losing the guard.
+   */
+  assert.equal(parsePendingHostedPurchase(JSON.stringify({ tier: 'Professional', startedAt: 2026 })), null);
+  assert.equal(parsePendingHostedPurchase(JSON.stringify({ tier: 2026, startedAt: '2026-09-02T03:00:00Z' })), null);
+  assert.deepEqual(
+    parsePendingHostedPurchase(JSON.stringify({ tier: 'Professional', startedAt: '2026-09-02T03:00:00Z' })),
+    {
+      tier: 'Professional',
+      startedAt: '2026-09-02T03:00:00Z',
+    },
+  );
+});
+
+test('a clock that moved backwards still counts as pending', () => {
+  // A future timestamp is a clock change, not a purchase from tomorrow.
+  // Reading it as pending is the answer that does not charge twice.
+  const pending = { tier: 'Ranch Ops' as const, startedAt: '2026-09-03T03:00:00Z' };
+  assert.equal(isPendingHostedPurchase(pending, new Date('2026-09-02T03:00:00Z')), true);
+});
+
+test('the notice says what is true here, not that the plan is active', () => {
+  const notice = pendingHostedPurchaseNotice({ tier: 'Ranch Ops', startedAt: '2026-09-02T03:00:00Z' });
+
+  assert.match(notice, /Ranch Ops/);
+  assert.match(notice, /2026-09-02/);
+  assert.match(notice, /by hand/, 'the customer must be told why nothing has changed yet');
+  assert.match(notice, /charge you a second time/, 'and why they should not simply buy again');
+  assert.doesNotMatch(notice, /active|activated successfully/i, 'nothing here knows the payment landed');
+});
+
+test('the billing screen records the purchase and refuses a repeat', async () => {
+  const screen = await readFile(path.join(process.cwd(), 'src/routes/Subscriptions.tsx'), 'utf8');
+
+  const hostedAt = screen.indexOf("=== 'payment_link'");
+  assert.ok(hostedAt > -1, 'the hosted route must be findable');
+  const hostedBranch = screen.slice(hostedAt, screen.indexOf('const managed = await startManagedCheckout', hostedAt));
+
+  // Refuse BEFORE redirecting, or the guard is decoration.
+  const refuseAt = hostedBranch.indexOf('purchaseAwaitingActivation');
+  const writeAt = hostedBranch.indexOf('localStorage.setItem');
+  const redirectAt = hostedBranch.indexOf('window.location.assign');
+  assert.ok(refuseAt > -1 && writeAt > refuseAt, 'the repeat check must come before the marker is written');
+  assert.ok(writeAt < redirectAt, 'and the marker must be written before the redirect leaves the page');
+
+  // An entitled workspace has been reconciled, so the marker stops applying.
+  assert.match(screen, /isPendingHostedPurchase\([\s\S]{0,60}\) && !subscriptionActive/);
+  // And the customer is given a way out of a marker they know is wrong.
+  assert.match(screen, /I did not complete that purchase/);
 });
