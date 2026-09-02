@@ -117,3 +117,60 @@ test('the readout is the whole sealed record, not a chosen subset', () => {
     assert.ok(!PACKET_VERIFIER_SCRIPT.includes(curated), `${curated} was a curated read and must be gone`);
   }
 });
+
+/*
+ * Sealing the stylesheet.
+ *
+ * Every other sweep in the verifier asks whether the sealed CONTENT changed.
+ * None asked whether the packet can still show the answer honestly, and CSS
+ * alone is enough to lie about it: hide the output element, draw a PASS with a
+ * pseudo-element, and an altered packet reads as verified while the script
+ * runs correctly and reports ALTERED into an invisible box. A style element is
+ * not an embedded resource and does not raise the script count, so neither of
+ * those sweeps sees it — added or edited in place.
+ */
+test('the digest pinned in the verifier is the stylesheet the generator emits', async () => {
+  const generator = await readFile('src/lib/localSalePacketGenerator.ts', 'utf8');
+  const declared = /export const PACKET_STYLESHEET = `([\s\S]*?)`;/.exec(generator);
+  assert.ok(declared, 'the stylesheet must be a single constant the verifier can pin');
+
+  const digest = createHash('sha256').update(declared[1], 'utf8').digest('hex');
+  assert.ok(
+    PACKET_VERIFIER_SCRIPT.includes(`var STYLE_SHA256 = '${digest}';`),
+    `the verifier pins a stale stylesheet digest. Set STYLE_SHA256 in src/lib/packetVerifierScript.ts to '${digest}'.`,
+  );
+});
+
+test('the stylesheet is the same bytes in every packet', async () => {
+  const generator = await readFile('src/lib/localSalePacketGenerator.ts', 'utf8');
+  const declared = /export const PACKET_STYLESHEET = `([\s\S]*?)`;/.exec(generator);
+  assert.ok(declared, 'the stylesheet constant must be findable');
+
+  /*
+   * It used to interpolate the watermark font size, which made the CSS
+   * per-packet and so unsealable by a fixed digest. The two sizes are two
+   * classes now. Anything interpolated back in silently un-seals it.
+   */
+  assert.ok(!declared[1].includes('${'), 'a per-packet stylesheet cannot be pinned by digest');
+
+  // And the packet must carry exactly one, with no element styling itself —
+  // which is what makes the verifier's count rule a fact about this format
+  // rather than a guess.
+  const html = generator.slice(generator.indexOf('const html = `'));
+  assert.equal(html.split('<style>').length - 1, 1, 'a sealed packet has exactly one stylesheet');
+  assert.match(html, /<style>\$\{PACKET_STYLESHEET\}<\/style>/, 'and it is the pinned one');
+  assert.ok(!/ style="/.test(html), 'no element may carry its own style attribute');
+});
+
+test('the presentation sweep runs before the crypto gate', () => {
+  /*
+   * A file opened from disk often has no `crypto.subtle`, and that path returns
+   * early — into the same output box an added stylesheet can hide. Counting
+   * stylesheets needs no crypto, so it must happen first or it never happens
+   * where the attack is easiest.
+   */
+  const sweepAt = PACKET_VERIFIER_SCRIPT.indexOf('var presentation = presentationProblems();');
+  const cryptoAt = PACKET_VERIFIER_SCRIPT.indexOf('if (!window.crypto || !crypto.subtle');
+  assert.ok(sweepAt > -1, 'the presentation sweep must run on click');
+  assert.ok(cryptoAt > sweepAt, 'and it must run before the crypto gate returns');
+});

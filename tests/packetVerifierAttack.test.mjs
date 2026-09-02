@@ -27,6 +27,17 @@ assert.ok(start > -1, 'the verifier constant must be findable');
 const script = source.slice(start + marker.length, source.lastIndexOf('`'));
 assert.ok(script.includes('xbar-verify-btn'), 'the verifier script must be extractable from its module');
 
+/*
+ * The packet's real stylesheet, read from the generator rather than retyped.
+ *
+ * The verifier pins its digest, so a copy that drifts by one byte would make
+ * every test here fail for the wrong reason — and, worse, a test fixture with
+ * its own CSS could not tell a sealed stylesheet from an altered one.
+ */
+const generatorSource = await readFile(new URL('../src/lib/localSalePacketGenerator.ts', import.meta.url), 'utf8');
+const PACKET_STYLESHEET = /export const PACKET_STYLESHEET = `([\s\S]*?)`;/.exec(generatorSource)?.[1];
+assert.ok(PACKET_STYLESHEET, 'the packet stylesheet must be extractable from the generator');
+
 const sha256Hex = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const b64 = (text) => Buffer.from(text, 'utf8').toString('base64');
 
@@ -40,7 +51,15 @@ function element(attrs = {}, tagName = 'A') {
 }
 
 /** Runs the real verifier over one packet and returns what the buyer is shown. */
-async function verify({ payload, sealedDigest, links, extras = [] }) {
+async function verify({
+  payload,
+  sealedDigest,
+  links,
+  extras = [],
+  stylesheets,
+  inlineStyled = [],
+  noSubtleCrypto = false,
+}) {
   const out = element({ 'data-digest': sealedDigest });
   const record = element();
   record.textContent = payload;
@@ -57,7 +76,20 @@ async function verify({ payload, sealedDigest, links, extras = [] }) {
   // every honest packet would trip the "exactly one script" rule — the stub has
   // to model the page as it actually ships.
   const ownScript = element({}, 'SCRIPT');
-  extras = [ownScript, ...extras];
+  /*
+   * And its single stylesheet, whose bytes the verifier pins by digest. A stub
+   * with no style element would report "0 stylesheets" for every packet,
+   * turning the honest case into a failure and hiding the two alterations this
+   * rule exists to catch.
+   */
+  const sheets = (stylesheets ?? [PACKET_STYLESHEET]).map((css) => {
+    const node = element({}, 'STYLE');
+    node.textContent = css;
+    return node;
+  });
+  extras = [ownScript, ...sheets, ...extras];
+
+  const alerts = [];
 
   const document = {
     getElementById: (id) =>
@@ -76,13 +108,26 @@ async function verify({ payload, sealedDigest, links, extras = [] }) {
       if (selector === 'a[data-xbar-file]') {
         return links.filter((link) => link.getAttribute('data-xbar-file') !== null);
       }
-      return [...links, ...extras].filter((node) => wanted.includes(node.tagName));
+      /*
+       * An attribute selector is not a tag name. Falling through to the
+       * tag-name branch would match nothing for '[style]', so every element
+       * styling itself would pass — the stub reading exactly like coverage
+       * while covering nothing.
+       */
+      if (selector === '[style]') {
+        return [...links, ...extras, ...inlineStyled].filter((node) => node.getAttribute('style') !== null);
+      }
+      return [...links, ...extras, ...inlineStyled].filter((node) => wanted.includes(node.tagName));
     },
   };
 
   // The script feature-detects through `window`, which is the browser it runs
   // in; Node has the same primitives on globalThis.
-  const windowStub = { crypto: globalThis.crypto, TextEncoder };
+  const windowStub = {
+    crypto: noSubtleCrypto ? undefined : globalThis.crypto,
+    TextEncoder,
+    alert: (text) => alerts.push(text),
+  };
   new Function('document', 'window', 'crypto', 'TextEncoder', 'atob', script)(
     document,
     windowStub,
@@ -105,7 +150,7 @@ async function verify({ payload, sealedDigest, links, extras = [] }) {
     await new Promise((resolve) => setTimeout(resolve, 1));
   }
   assert.ok(out.getAttribute('data-state'), `the verifier never reported a verdict: ${out.textContent}`);
-  return { state: out.getAttribute('data-state'), text: out.textContent };
+  return { state: out.getAttribute('data-state'), text: out.textContent, alerts };
 }
 
 /** A packet whose single attachment really is embedded, sealed correctly. */
@@ -306,4 +351,77 @@ test('the generator really does embed nothing, which is what makes the rule safe
     1,
     'the packet ships exactly one script, which is what the count rule relies on',
   );
+});
+
+/*
+ * Forging the VERDICT rather than the content.
+ *
+ * Every attack above alters what the seal covers. This one leaves the payload
+ * and the attachments exactly as sealed — so the verifier genuinely reaches
+ * its pass branch — and changes only how the answer is displayed: hide
+ * `#xbar-verify-out`, draw a PASS with a pseudo-element. A style element is
+ * not an embedded resource and does not raise the script count, so before this
+ * neither sweep saw it, added or edited in place.
+ */
+const FORGERY = '#xbar-verify-out{display:none}.verify::after{content:"PASS"}';
+
+test('a stylesheet added to the packet is caught', async () => {
+  const result = await verify({
+    ...honestPacket((base64) => `data:application/pdf;base64,${base64}`),
+    stylesheets: [PACKET_STYLESHEET, FORGERY],
+  });
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /2 stylesheets/);
+  assert.equal(result.alerts.length, 1, 'and it must be said out loud, since the page decides what is visible');
+  assert.match(result.alerts[0], /controls how this check is displayed/);
+});
+
+test('the packet stylesheet edited in place is caught', async () => {
+  /*
+   * The count stays at one and every other sweep is satisfied, which is why
+   * counting alone was not enough: the digest is what sees this.
+   */
+  const result = await verify({
+    ...honestPacket((base64) => `data:application/pdf;base64,${base64}`),
+    stylesheets: [PACKET_STYLESHEET + FORGERY],
+  });
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /stylesheet in this packet is not the one that was sealed/);
+  assert.equal(result.alerts.length, 1, 'and said out loud');
+});
+
+test('an element styling itself is caught', async () => {
+  const hidden = element({ style: 'display:none' }, 'DIV');
+  const result = await verify({
+    ...honestPacket((base64) => `data:application/pdf;base64,${base64}`),
+    inlineStyled: [hidden],
+  });
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /carrying a style attribute/);
+  assert.equal(result.alerts.length, 1, 'and said out loud');
+});
+
+test('an added stylesheet is caught in the browser that cannot hash', async () => {
+  /*
+   * The case the attack is easiest in. A packet opened from disk often has no
+   * `crypto.subtle`, and that path returns early — into the very box an added
+   * stylesheet hides. Counting stylesheets needs no crypto, so it has to
+   * happen before that gate rather than after it.
+   */
+  const result = await verify({
+    ...honestPacket((base64) => `data:application/pdf;base64,${base64}`),
+    stylesheets: [PACKET_STYLESHEET, FORGERY],
+    noSubtleCrypto: true,
+  });
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /2 stylesheets/);
+  assert.equal(result.alerts.length, 1, 'the dialog is the only channel left here');
+});
+
+test('an untouched packet is not accused of styling itself', async () => {
+  // The over-correction guard for all four above. A verifier that alerts on
+  // every honest packet trains the buyer to click through the one that matters.
+  const result = await verify(honestPacket((base64) => `data:application/pdf;base64,${base64}`));
+  assert.equal(result.state, 'pass', result.text);
+  assert.deepEqual(result.alerts, [], 'an honest packet must raise no dialog');
 });

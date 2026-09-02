@@ -105,7 +105,94 @@ export const PACKET_VERIFIER_SCRIPT = `
     return 'SEAL-' + head.slice(0, 4) + '-' + head.slice(4, 8) + '-' + head.slice(8, 12);
   }
 
+  /*
+   * The page controls how this check is DISPLAYED, so the page has to be
+   * checked too.
+   *
+   * Every sweep above asks whether the sealed content changed. None of them
+   * asked whether the packet can still show the answer honestly, and CSS alone
+   * is enough to lie about it: hide the output element and draw a PASS with a
+   * pseudo-element, and an altered packet reads as verified while this script
+   * runs correctly and reports ALTERED into an invisible box. A style element
+   * is not an embedded resource and does not raise the script count, so
+   * neither of those sweeps sees it.
+   *
+   * A sealed packet has exactly one stylesheet, whose bytes are fixed for
+   * every packet the generator emits, and no element carries a style attribute
+   * of its own. STYLE_SHA256 is the digest of that stylesheet; the
+   * packetVerifierCsp test fails if it drifts from what the generator writes.
+   */
+  var STYLE_SHA256 = '6392de31e04b9d6a1c2862856b988871fe60454f5a519247e050a2d12f516ea3';
+
+  /*
+   * Said out loud, because the in-page verdict is exactly what is in doubt.
+   *
+   * A dialog is the one channel the page cannot restyle away. It is reserved
+   * for the case where the packet has taken control of its own appearance —
+   * an ordinary ALTERED verdict is still printed in the box, because in that
+   * case the box can be believed.
+   */
+  function warnAloud(list) {
+    try {
+      window.alert(
+        'This packet controls how this check is displayed.' +
+          NL + NL +
+          list.join(NL) +
+          NL + NL +
+          'Nothing shown on the page can be trusted, including the result printed below it. Use the by-hand steps in the packet instead.',
+      );
+    } catch (error) {
+      // A browser that refuses dialogs still gets the printed verdict below.
+    }
+  }
+
+  function styleText() {
+    var sheets = [].slice.call(document.querySelectorAll('style'));
+    var text = '';
+    for (var i = 0; i < sheets.length; i += 1) text += sheets[i].textContent || '';
+    return text;
+  }
+
+  /*
+   * Checked before crypto.subtle is, because a file opened from disk often has
+   * no crypto.subtle at all — and that path returns early, into the same box
+   * an added stylesheet can hide. Counting elements needs no crypto.
+   */
+  function presentationProblems() {
+    var found = [];
+    var sheets = document.querySelectorAll('style');
+    if (sheets.length !== 1) {
+      found.push(
+        'This packet contains ' +
+          sheets.length +
+          ' stylesheets. A sealed packet contains exactly one, so the rest were added after it was sealed.',
+      );
+    }
+    var inline = document.querySelectorAll('[style]');
+    if (inline.length) {
+      found.push(
+        'This packet contains ' +
+          inline.length +
+          ' element(s) carrying a style attribute. A sealed packet contains none, so they were added after it was sealed.',
+      );
+    }
+    return found;
+  }
+
   btn.addEventListener('click', function () {
+    var presentation = presentationProblems();
+    if (presentation.length) {
+      warnAloud(presentation);
+      show(
+        'fail',
+        'ALTERED. This packet controls how this check is displayed.' +
+          NL + NL +
+          presentation.join(NL) +
+          NL + NL +
+          'Do not trust anything this page shows you, including this line. Use the by-hand steps below instead.',
+      );
+      return;
+    }
     if (!window.crypto || !crypto.subtle || !window.TextEncoder) {
       show('fail', 'This browser will not recompute hashes for a local file. Use the by-hand steps below instead.');
       return;
@@ -117,8 +204,24 @@ export const PACKET_VERIFIER_SCRIPT = `
     var notes = [];
     var payload = record.textContent || '';
 
-    hash(new TextEncoder().encode(payload))
+    var styleAltered = false;
+
+    hash(new TextEncoder().encode(styleText()))
+      .then(function (styleDigest) {
+        /*
+         * Counting stylesheets catches one that was ADDED. This catches the
+         * one that was edited in place, which keeps the count at one and
+         * leaves every other sweep on this page satisfied.
+         */
+        if (styleDigest !== STYLE_SHA256) styleAltered = true;
+        return hash(new TextEncoder().encode(payload));
+      })
       .then(function (digest) {
+        if (styleAltered) {
+          var altered = ['The stylesheet in this packet is not the one that was sealed.'];
+          warnAloud(altered);
+          problems.push(altered[0] + ' It decides what you see, so the verdict printed here cannot be trusted either.');
+        }
         notes.push('Recomputed SHA-256: ' + digest);
         notes.push('Recomputed seal code: ' + sealOf(digest));
         if (digest !== sealed) problems.push('The sealed record does not match the seal printed on this packet.');

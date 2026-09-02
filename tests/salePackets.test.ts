@@ -21,11 +21,19 @@ test('buyer revoke persists a buyer event, not only telemetry', async () => {
 test('a buyer watermark fits the page and is still legible on it', async () => {
   const source = await readFile('src/lib/localSalePacketGenerator.ts', 'utf8');
 
+  /*
+   * The same two sizes, now chosen by class rather than interpolated into the
+   * stylesheet. Interpolation made the CSS per-packet, and a per-packet
+   * stylesheet cannot be sealed by a fixed digest — which left CSS free to
+   * hide the verifier's verdict and draw a forged PASS over it.
+   */
   assert.match(
     source,
-    /const watermarkSize = watermark\.length <= 8 \? '78px' : 'clamp\(32px, 5vw, 54px\)'/,
+    /const watermarkClass = watermark\.length <= 8 \? 'watermark--tight' : 'watermark--wide'/,
     'a long buyer watermark must step down in size rather than run off the page',
   );
+  assert.match(source, /\.watermark--tight\{font-size:78px\}/, 'the short mark keeps its size');
+  assert.match(source, /\.watermark--wide\{font-size:clamp\(32px,5vw,54px\)\}/, 'and the long one steps down');
   // Shrinking to fit was the tempting fix and the wrong one: at 6% opacity a
   // 20px mark is invisible on paper, so a long mark wraps inside a bounded
   // width instead.
@@ -33,7 +41,7 @@ test('a buyer watermark fits the page and is still legible on it', async () => {
   assert.doesNotMatch(source, /\.watermark\{[^}]*white-space:nowrap/, 'a bounded mark has to be allowed to wrap');
   assert.match(
     source,
-    /<div class="watermark" id="xbar-watermark">\$\{escapeHtml\(watermark\)\}<\/div>/,
+    /<div class="watermark \$\{watermarkClass\}" id="xbar-watermark">\$\{escapeHtml\(watermark\)\}<\/div>/,
     'the watermark is buyer-supplied text and must be escaped, under a stable id the verifier can find',
   );
 });
