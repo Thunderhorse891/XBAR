@@ -122,6 +122,7 @@ set search_path = public
 as $$
 declare
   last_applied timestamptz;
+  current_state text;
 begin
   -- Held until this transaction ends, so the comparison below and the writes
   -- after it cannot be interleaved with another delivery for this workspace.
@@ -142,6 +143,42 @@ begin
      and p_event_created_at is not null
      and p_event_created_at < last_applied then
     return false;
+  end if;
+
+  -- ON A TIE, LOSING ACCESS WINS.
+  --
+  -- Admitting equal timestamps is right for the plan-change case above and
+  -- leaves one shape unresolved. When two subscriptions on the same customer
+  -- are canceled in the same `created` second, the handler for each one asks
+  -- Stripe whether a sibling still pays for the workspace — and that list is
+  -- read BEFORE this lock is taken, so it can already be out of date. The
+  -- first cancellation therefore carries an `Active` snapshot of a sibling
+  -- that is itself being canceled. If the sibling's own `Inactive` lands
+  -- first, the tie let the stale `Active` overwrite it, and because both
+  -- cancellations were then recorded, no later event necessarily arrives to
+  -- put it right: the workspace keeps paid access indefinitely.
+  --
+  -- So a tied event may not RESTORE entitlement, only remove it. The
+  -- asymmetry is deliberate and follows the harm. If this delays a genuine
+  -- re-subscribe that happens to share a second with a cancellation, Stripe's
+  -- next event for the new subscription — an invoice payment, the following
+  -- `updated` — grants it, because the new subscription keeps emitting. The
+  -- reverse has no such correction, which is what makes the two cases
+  -- unequal rather than symmetrical.
+  --
+  -- Strictly newer events are unaffected: this only reads on an exact tie.
+  if last_applied is not null
+     and p_event_created_at is not null
+     and p_event_created_at = last_applied
+     and p_billing_state in ('Active', 'Manual Billing') then
+    select billing_state
+      into current_state
+      from public.workspace_subscription_profiles
+     where workspace_id = p_workspace_id;
+
+    if current_state is not null and current_state not in ('Active', 'Manual Billing') then
+      return false;
+    end if;
   end if;
 
   insert into public.workspace_subscription_profiles

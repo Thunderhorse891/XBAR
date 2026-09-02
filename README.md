@@ -183,8 +183,12 @@ own:
 5. `20260827_subscription_event_ordering.sql` — schema. Adds
    `stripe_event_created_at` and the `xbar_apply_subscription_event` function
    that applies a billing event atomically, so a retried event Stripe created
-   earlier cannot overwrite a newer one. Additive: one nullable column, one
-   index, one function, no backfill.
+   earlier cannot overwrite a newer one. Events sharing a `created` second are
+   admitted — a plan change emits several — except that a tied event may
+   remove entitlement and never restore it, which is what stops one of two
+   simultaneously canceled subscriptions writing back a stale `Active`
+   snapshot of the other. Additive: one nullable column, one index, one
+   function, no backfill.
 
 Apply them **one at a time**, not with a single `supabase db push`. That command
 applies every pending migration in one go, which would run the data

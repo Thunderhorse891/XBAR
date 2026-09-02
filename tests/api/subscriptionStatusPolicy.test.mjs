@@ -790,3 +790,81 @@ test('an update event is a trigger to look, not the authority on status', async 
   assert.match(branch, /const effectiveLineItem = effective\.items\?\.data\?\.\[0\] \?\? lineItem;/);
   assert.match(branch, /priceId: effectiveLineItem\?\.price\?\.id \|\| '',/);
 });
+
+test('a tied event may remove entitlement but never restore it', async () => {
+  const statements = await readFile('supabase/migrations/20260827_subscription_event_ordering.sql', 'utf8');
+  const fn = statements.slice(statements.indexOf('create or replace function public.xbar_apply_subscription_event'));
+
+  /*
+   * Admitting equal timestamps is right for a plan change, and it left one
+   * shape unresolved. Two subscriptions on the same customer canceled in the
+   * same `created` second: each handler asks Stripe whether a sibling still
+   * pays, and that list is read BEFORE the advisory lock, so it can already be
+   * stale. The first cancellation carries an `Active` snapshot of a sibling
+   * that is itself being canceled — and if the sibling's own `Inactive` landed
+   * first, the tie let the stale `Active` overwrite it. Both cancellations were
+   * then recorded, so no later event necessarily corrects it and the workspace
+   * keeps paid access indefinitely.
+   */
+  const tieAt = fn.indexOf('p_event_created_at = last_applied');
+  assert.ok(tieAt > -1, 'a tie must be recognised, not merely admitted');
+
+  const tieRule = fn.slice(tieAt, fn.indexOf('insert into public.workspace_subscription_profiles', tieAt));
+  assert.match(tieRule, /p_billing_state in \('Active', 'Manual Billing'\)/, 'only an ENTITLING tie is questioned');
+  assert.match(
+    tieRule,
+    /current_state not in \('Active', 'Manual Billing'\)/,
+    'and only when the state it would overwrite is non-entitling',
+  );
+  assert.match(tieRule, /return false;/, 'such a write must be refused');
+
+  /*
+   * The read has to be under the lock, or the check races exactly as the bug
+   * it fixes does.
+   */
+  assert.ok(fn.indexOf('pg_advisory_xact_lock') < tieAt, 'the tie check must happen under the lock');
+
+  /*
+   * The over-rejection direction, and it is the one that would cost a paying
+   * customer. A tie must still ADMIT a deactivation, and a strictly-newer
+   * entitling event must be unaffected — the rule reads only on an exact tie,
+   * so it cannot become a blanket refusal of activations.
+   */
+  assert.doesNotMatch(tieRule, /p_event_created_at >= last_applied/, 'newer events must not be caught by this');
+  assert.doesNotMatch(tieRule, /p_billing_state not in/, 'a tied deactivation must still apply');
+  assert.match(statements, /p_event_created_at < last_applied/, 'the strictly-older rule stays');
+  assert.doesNotMatch(statements, /p_event_created_at <= last_applied/, 'ties are still admitted in general');
+});
+
+test('the entitling states in the tie rule match the entitlement policy', async () => {
+  /*
+   * Two copies of "which states pay" is how `Inactive` became a hole in the
+   * SQL limit helpers earlier on this PR. Derive the list rather than restate
+   * it, so adding a billing state to the policy fails here.
+   */
+  const statements = await readFile('supabase/migrations/20260827_subscription_event_ordering.sql', 'utf8');
+  const entitling = BILLING_STATES.filter(
+    (state) => entitledTierForBillingState('Enterprise', state) !== BASELINE_TIER,
+  );
+  const withheld = BILLING_STATES.filter((state) => entitledTierForBillingState('Enterprise', state) === BASELINE_TIER);
+  assert.ok(entitling.length > 0 && withheld.length > 0, 'precondition: both sides of the policy are populated');
+
+  const tieAt = statements.indexOf('p_event_created_at = last_applied');
+  const tieRule = statements.slice(
+    tieAt,
+    statements.indexOf('insert into public.workspace_subscription_profiles', tieAt),
+  );
+
+  for (const state of entitling) {
+    assert.ok(
+      tieRule.includes(`'${state}'`),
+      `${state} entitles a workspace, so the tie rule must count it as entitling on both sides of its test`,
+    );
+  }
+  for (const state of withheld) {
+    assert.ok(
+      !tieRule.includes(`'${state}'`),
+      `${state} does not entitle — naming it here would protect the wrong side of the tie`,
+    );
+  }
+});
