@@ -811,12 +811,38 @@ export function canRestorePersistedState(raw: unknown): boolean {
          * `profileImage` have no such read at all (`filled()`,
          * animalPassport.ts:109, tests `typeof` before calling anything, `tags`
          * has no reader in the app, and `profileImage` reaches an `img src`,
-         * where an object renders as a broken image); `foaledOn` and
-         * `ownerEntity` appear only inside template strings —
-         * AnimalProfile.tsx:319 and :341 — which stringify rather than throw.
+         * where an object renders as a broken image); `foaledOn` appears only
+         * inside a template string — AnimalProfile.tsx:319 — which stringifies
+         * rather than throws.
+         *
+         * `ownerEntity` was excluded here on that same reasoning and the
+         * reasoning was wrong — not about the template string at
+         * AnimalProfile.tsx:341, which does stringify, but because a template
+         * string was never the only reader. Document intake reaches it twice,
+         * and both paths end at `normalizeToken`, which calls `.toLowerCase()`:
+         *
+         *   xbarRuntime.ts:350  `buildKnownOwners` collects
+         *                       `[horse.owner, horse.ownerEntity]`. `{}`
+         *                       survives `.filter(Boolean)` and reaches
+         *                       `includesNormalized`.
+         *   xbarRuntime.ts:435  `searchChecks` passes it straight in with no
+         *                       filter at all, so ABSENCE throws here as surely
+         *                       as a wrong type does — which is why this is a
+         *                       required string and not an optional one.
+         *
+         * Both run inside `buildDocumentRecord`, and useXbarStore.ts:802
+         * uploads the file to the cloud BEFORE :809 builds the record. So the
+         * throw does not merely fail an intake: it strands an uploaded asset
+         * that no document row will ever reference, on every attempt.
+         *
+         * The other five fields in that `searchChecks` array — `name`,
+         * `registrationNumber`, `aqhaNumber`, `barnName`, `owner` — are all
+         * already required here. Same array, same call, and this was the one
+         * that was missed.
          */
         'summary',
         'barnName',
+        'ownerEntity',
         'registrationNumber',
         'aqhaNumber',
         'status',

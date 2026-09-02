@@ -1349,14 +1349,25 @@ test('a record that installs but crashes the route it lands on is refused', asyn
    * is worse than no test, because it makes the mistake permanent and fails
    * whoever tries to fix it.
    *
-   * These five were re-checked by searching for what actually breaks — a value
-   * reaching JSX as a bare child — rather than for a string method, which is
-   * the search that missed `aqhaNumber` twice. `markings`, `microchipId`,
-   * `tags` and `profileImage` have no such read; `foaledOn` and `ownerEntity`
-   * appear only inside template strings. Requiring any of them would turn away
-   * a backup that restores perfectly.
+   * `ownerEntity` has since gone the same way, and it is the clearest case yet
+   * of the trap this comment describes. It was excluded because it "appears
+   * only inside template strings", and the JSX sweep that re-checked these
+   * five could not have found the reader that matters: document intake reaches
+   * it through `buildKnownOwners` (xbarRuntime.ts:350) and `searchChecks`
+   * (:435), both ending at `normalizeToken().toLowerCase()`. Nothing about
+   * that is a bare React child, so a sweep looking for one was always going to
+   * miss it — and the assertion below then held the mistake in place. Deleted
+   * rather than adjusted, for the third time on this PR.
+   *
+   * The remaining four were re-checked by searching for what actually breaks —
+   * a value reaching JSX as a bare child — rather than for a string method,
+   * which is the search that missed `aqhaNumber` twice. `markings`,
+   * `microchipId`, `tags` and `profileImage` have no such read; `foaledOn`
+   * appears only inside a template string and, unlike `ownerEntity`, in no
+   * matching path. Requiring any of them would turn away a backup that
+   * restores perfectly.
    */
-  for (const excluded of ['markings', 'microchipId', 'foaledOn', 'ownerEntity', 'profileImage']) {
+  for (const excluded of ['markings', 'microchipId', 'foaledOn', 'profileImage']) {
     assert.doesNotMatch(
       shapeTable,
       new RegExp(`^\\s*'${excluded}',$`, 'm'),
@@ -2629,5 +2640,51 @@ test('a restored registration flag must be a boolean, because a seal asserts it'
   assert.equal((source.match(/optionalBooleans: \[/g) ?? []).length, 1);
   for (const field of ['socialReady', 'savedListing', 'shareReady']) {
     assert.doesNotMatch(source, new RegExp(`optionalBooleans: \\[[^\\]]*'${field}'`), `${field} does not belong here`);
+  }
+});
+
+test('a restored owner entity must be a string, because document intake normalizes it', async () => {
+  const shapeTable = await readFile('src/store/xbarStoreHelpers.ts', 'utf8');
+  const runtime = await readFile('src/lib/xbarRuntime.ts', 'utf8');
+  const store = await readFile('src/store/useXbarStore.ts', 'utf8');
+
+  /*
+   * Excluded once because it "appears only inside template strings". It does —
+   * AnimalProfile.tsx:341 stringifies happily — but a template string was never
+   * the only reader, and the JSX sweep that re-checked the exclusions was
+   * looking for a bare React child, which this never is.
+   */
+  const horsesStart = shapeTable.indexOf('horses: {');
+  const horsesShape = shapeTable.slice(horsesStart, shapeTable.indexOf('documents: {', horsesStart));
+  assert.match(horsesShape, /^\s*'ownerEntity',$/m, 'the owner entity must be a required string');
+
+  // Reader one: `{}` survives `filter(Boolean)` and reaches `normalizeToken`.
+  assert.match(
+    runtime,
+    /\[horse\.owner, horse\.ownerEntity\]\)\.filter\(Boolean\)/,
+    'buildKnownOwners still passes the owner entity through a truthiness filter',
+  );
+  // Reader two: no filter at all, so ABSENCE throws as surely as a wrong type —
+  // which is why this is a required string rather than an optional one.
+  assert.match(runtime, /\[horse\.ownerEntity, 0\.73,/, 'searchChecks still passes it in unfiltered');
+  assert.match(runtime, /function normalizeToken\(value: string\) \{\s*return value\s*\.toLowerCase\(\)/);
+
+  /*
+   * And why the throw costs more than a failed intake: the file is already in
+   * the cloud by the time the record is built, so every attempt strands an
+   * asset no document row will ever reference.
+   */
+  assert.ok(
+    store.indexOf('uploadDocumentAssetToCloud({') < store.indexOf('await buildDocumentRecord({'),
+    'the upload still precedes the record build, so a throw there orphans the asset',
+  );
+
+  /*
+   * Its five siblings in that same `searchChecks` array were already required.
+   * This one was the only gap, and keeping them all named here means a future
+   * exclusion of any of them fails rather than passing quietly.
+   */
+  for (const sibling of ['name', 'registrationNumber', 'aqhaNumber', 'barnName', 'owner']) {
+    assert.match(horsesShape, new RegExp(`^\\s*'${sibling}',$`, 'm'), `${sibling} must stay required`);
   }
 });
