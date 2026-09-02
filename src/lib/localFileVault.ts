@@ -676,6 +676,17 @@ export async function adoptVaultEntries(
   if (referenced.size === 0) return { adopted: 0, failed: [] };
 
   const failed: string[] = [];
+  /*
+   * Every referenced key this pass reached a conclusion about.
+   *
+   * The loop below walks what the VAULT holds, so a referenced key the listing
+   * does not mention was never considered at all — and silence read as
+   * success. The caller writes the records-owner marker only on an empty
+   * `failed`, and that marker permanently disables the retry, so a key missing
+   * from one incomplete listing became a document that could never be adopted
+   * and never be looked at again.
+   */
+  const accountedFor = new Set<string>();
   let adopted = 0;
 
   let stored: LocalFileSummary[];
@@ -690,7 +701,21 @@ export async function adoptVaultEntries(
 
   for (const entry of stored) {
     if (!referenced.has(entry.key)) continue;
-    if (entry.workspaceId !== undefined && entry.workspaceId !== fromOwner) continue;
+    if (entry.workspaceId !== undefined && entry.workspaceId !== fromOwner) {
+      /*
+       * Already the destination's, which is what a retry after a partial move
+       * looks like. Counting these as unresolved would mean the move could
+       * never finish: each pass would move nothing, report the entries it
+       * moved last time as failures, and the marker would never be written.
+       *
+       * Anything owned by a THIRD workspace is left alone — that is the file
+       * this function must not steal — but it is not settled either. The
+       * record names a document this workspace cannot open, and saying so
+       * costs a listing per load, while claiming otherwise is permanent.
+       */
+      if (entry.workspaceId === toOwner) accountedFor.add(entry.key);
+      continue;
+    }
 
     /*
      * Per entry, so one unreadable file does not abandon the rest — and so the
@@ -699,6 +724,7 @@ export async function adoptVaultEntries(
      * reconciliation settles, and the entries still tagged `fromOwner` are
      * refused by every ownership check for as long as the session lasts.
      */
+    accountedFor.add(entry.key);
     try {
       const full = await readLocalFile(entry.key);
       if (!full) {
@@ -711,6 +737,15 @@ export async function adoptVaultEntries(
       console.warn('Moving one of this device\u2019s files to the new workspace failed.', error);
       failed.push(entry.key);
     }
+  }
+
+  /*
+   * Whatever the listing never mentioned. Reconciled against what was ASKED
+   * for rather than against what happened to come back, because the failure
+   * this catches is a key the loop had no opportunity to fail on.
+   */
+  for (const key of referenced) {
+    if (!accountedFor.has(key)) failed.push(key);
   }
 
   return { adopted, failed };

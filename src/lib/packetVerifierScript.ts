@@ -326,6 +326,8 @@ export const PACKET_VERIFIER_SCRIPT = `
    * returns the first match, so a decoy placed ahead of either takes this
    * script's attention while the one the buyer uses does nothing.
    */
+  var sawRefresh = false;
+
   function armingProblems() {
     var found = [];
 
@@ -343,6 +345,45 @@ export const PACKET_VERIFIER_SCRIPT = `
         'This packet contains ' +
           handlers +
           ' inline event handler(s). A sealed packet contains none, so they were added after it was sealed — and one on the button above can stop this check running at all.',
+      );
+    }
+
+    /*
+     * A refresh directive does not wait to be clicked.
+     *
+     * meta http-equiv="refresh" content="0;url=..." sends the browser
+     * somewhere else the moment it is parsed — before the buyer presses
+     * Recompute, so no sweep below ever runs and no verdict is ever shown. It
+     * is not an embedded resource and does not raise the script count, so the
+     * other rules never saw it.
+     *
+     * A sealed packet emits exactly one meta element, the charset, and never
+     * an http-equiv. Removing the node is best effort: the navigation is
+     * scheduled when the element is parsed and does not reliably cancel. What
+     * does work is the dialog, which blocks this thread — a pending refresh
+     * cannot run while it is open, so the buyer is told before the page can
+     * leave.
+     */
+    var refreshes = [].slice.call(document.querySelectorAll('meta[http-equiv]'));
+    for (var m = 0; m < refreshes.length; m += 1) {
+      var equiv = String(refreshes[m].getAttribute('http-equiv') || '').toLowerCase();
+      if (equiv !== 'refresh') continue;
+      /*
+       * LATCHED, because removing the node hides the evidence from the next
+       * sweep. Neutralizing and then reporting PASS on the click that follows
+       * would be the worst outcome available here: the packet was altered, the
+       * check found it, and then forgot.
+       */
+      sawRefresh = true;
+      try {
+        if (refreshes[m].parentNode) refreshes[m].parentNode.removeChild(refreshes[m]);
+      } catch (error) {
+        // Best effort only; the dialog below is what the buyer relies on.
+      }
+    }
+    if (sawRefresh) {
+      found.push(
+        'This packet carries a refresh instruction that sends your browser somewhere else on its own. A sealed packet contains none, so it was added after sealing — do not follow wherever it was taking you.',
       );
     }
 

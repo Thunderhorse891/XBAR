@@ -2297,7 +2297,15 @@ test('signing in brings this device’s own files along, and nobody else’s', a
     const moved = await adoptVaultEntries([mine, alsoMine, theirs], 'local', 'ws-new');
 
     assert.equal(moved.adopted, 2, 'only the referenced local entries change hands');
-    assert.deepEqual(moved.failed, [], 'a clean move leaves nothing behind');
+    /*
+     * `theirs` is not stolen AND not silently written off. It stays with the
+     * account that owns it — that is the security half, asserted below — but a
+     * record naming a document this workspace cannot open is not a finished
+     * move, and the caller writes the records-owner marker only on an empty
+     * `failed`. That marker permanently disables the retry, so calling this
+     * clean would settle the question forever on one listing.
+     */
+    assert.deepEqual(moved.failed, [theirs], 'a referenced key that did not move must be named');
 
     const owners = new Map((await listLocalFiles()).map((entry) => [entry.key, entry.workspaceId]));
     assert.equal(owners.get(mine), 'ws-new');
@@ -2308,6 +2316,17 @@ test('signing in brings this device’s own files along, and nobody else’s', a
     // And the promoted files really are readable as the new owner now.
     const opened = await openLocalFile(mine, 'ws-new');
     assert.ok(opened, 'the whole point: the rancher can still open their document after signing in');
+
+    /*
+     * Running it again must CONVERGE. The entries the first pass moved now
+     * belong to the destination, so a pass that treated "not mine to move" as
+     * unresolved would report them failed for ever and the move could never
+     * finish — the over-rejection direction, and the one that turns a
+     * duplicate-report fix into a promotion that never completes.
+     */
+    const again = await adoptVaultEntries([mine, alsoMine], 'local', 'ws-new');
+    assert.equal(again.adopted, 0, 'there is nothing left to move');
+    assert.deepEqual(again.failed, [], 'and the entries the first pass moved are settled, not failures');
     opened?.release();
   } finally {
     restore();
@@ -2382,8 +2401,14 @@ test('a file that cannot be moved is named rather than counted as moved', async 
     const moved = await adoptVaultEntries([key], 'local', 'ws-new');
 
     assert.equal(moved.adopted, 0, 'a rolled-back retag has not moved anything');
-    assert.ok(
-      moved.failed.length > 0 || moved.adopted === 0,
+    /*
+     * `failed.length > 0 || adopted === 0` was the old assertion and it could
+     * not fail: the line above already pins `adopted` at 0, so the second half
+     * was always true and the first was never reached. It has to name the key.
+     */
+    assert.deepEqual(
+      moved.failed,
+      [key],
       'the key must come back unresolved, so the caller can decline to record the promotion as finished',
     );
   } finally {
@@ -2812,4 +2837,26 @@ test('a restored vault key must be a string, or the file it names is unreachable
    */
   const cloud = await readFile('src/lib/cloudWorkspace.ts', 'utf8');
   assert.doesNotMatch(cloud, /storage_path:/, 'if storagePath ever reaches a column, it needs the same guard');
+});
+
+test('a referenced file this device never had is reported, not assumed fine', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    /*
+     * The loop walks what the VAULT holds, so a referenced key the listing does
+     * not mention was never considered — and silence read as success. That
+     * matters because the caller writes the records-owner marker only on an
+     * empty `failed`, and the marker permanently disables the retry: one
+     * incomplete listing settled the question for good, and a document that
+     * appeared afterwards stayed tagged `local` and unopenable for ever.
+     */
+    const present = await storeLocalFile(new Blob(['coggins']), 'coggins.pdf', 'application/pdf', 'local');
+
+    const moved = await adoptVaultEntries([present, 'xbar-file-never-stored'], 'local', 'ws-new');
+
+    assert.equal(moved.adopted, 1, 'the file that is here still moves');
+    assert.deepEqual(moved.failed, ['xbar-file-never-stored'], 'the one that is not here must be named');
+  } finally {
+    restore();
+  }
 });

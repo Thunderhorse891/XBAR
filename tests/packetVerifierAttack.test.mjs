@@ -58,6 +58,13 @@ function element(attrs = {}, tagName = 'A') {
    * mechanism — a stub that always reported a size could not express it.
    */
   node.getBoundingClientRect = () => (node._collapsed ? { width: 0, height: 0 } : { width: 320, height: 24 });
+  // Removable, so the verifier's best-effort neutralization is observable
+  // rather than merely attempted into a stub that ignores it.
+  node.parentNode = {
+    removeChild: (child) => {
+      child._removed = true;
+    },
+  };
   return node;
 }
 
@@ -79,6 +86,7 @@ async function verify({
   offScreen = false,
   btnAttrs = {},
   decoyButtons = 0,
+  metas = [],
 }) {
   const out = element({ class: 'verify__out', 'data-digest': sealedDigest, ...outAttrs }, 'DIV');
   out._collapsed = outCollapsed;
@@ -174,6 +182,9 @@ async function verify({
       }
       if (selector === '#xbar-credential-payload') {
         return [record];
+      }
+      if (selector === 'meta[http-equiv]') {
+        return metas.filter((node) => node.getAttribute('http-equiv') !== null && !node._removed);
       }
       if (selector === '#xbar-verify-out') {
         return omitOut ? [] : [out, ...Array.from({ length: decoyOutputs }, () => element({}, 'DIV'))];
@@ -682,4 +693,39 @@ test('an untouched packet arms without complaint', async () => {
   const result = await verify(honest());
   assert.equal(result.state, 'pass', result.text);
   assert.deepEqual(result.alerts, [], 'arming must raise no dialog on an honest packet');
+});
+
+/*
+ * Leaving the packet before the buyer can check it.
+ *
+ * `<meta http-equiv="refresh" content="0;url=...">` sends the browser
+ * elsewhere the moment it is parsed — before anyone presses Recompute, so no
+ * sweep runs and no verdict appears. It is not an embedded resource and does
+ * not raise the script count, so every earlier rule missed it.
+ */
+test('a refresh directive is caught and neutralized when the script arms', async () => {
+  const refresh = element({ 'http-equiv': 'refresh', content: '0;url=https://attacker.example' }, 'META');
+  const result = await verify({ ...honest(), metas: [refresh] });
+
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /refresh instruction/);
+  assert.ok(result.alerts.length >= 1, 'the dialog blocks this thread, so a pending refresh cannot run behind it');
+  assert.equal(refresh._removed, true, 'and the node is removed as best effort');
+});
+
+test('the packet’s own charset meta is not mistaken for one', async () => {
+  // The over-correction guard: a sealed packet carries exactly one meta and it
+  // has no http-equiv, so the honest case must stay silent.
+  const charset = element({ charset: 'utf-8' }, 'META');
+  const result = await verify({ ...honest(), metas: [charset] });
+  assert.equal(result.state, 'pass', result.text);
+  assert.deepEqual(result.alerts, []);
+});
+
+test('an http-equiv that is not a refresh is left alone', async () => {
+  // Narrow on purpose: the attack is navigation, and flagging every http-equiv
+  // would be a rule about markup rather than about leaving the page.
+  const equiv = element({ 'http-equiv': 'content-type', content: 'text/html' }, 'META');
+  const result = await verify({ ...honest(), metas: [equiv] });
+  assert.equal(result.state, 'pass', result.text);
 });
