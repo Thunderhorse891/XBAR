@@ -1503,13 +1503,28 @@ export function canRestorePersistedState(raw: unknown): boolean {
      * container an array. `stringItems` asserts both, which is why it is not
      * repeated under `lists`.
      *
-     * The optional timestamps (`lastSharedAt`, `releaseConfirmedAt`, …) stay
-     * out: they reach only the `payload` jsonb column, which really does accept
-     * anything, and no route dereferences them.
+     * `lastSharedAt` stays out and is the only one that may: it reaches the
+     * `payload` jsonb column, which really does accept anything, and nothing
+     * reads it back — every occurrence in the app writes it.
+     *
+     * The two release-confirmation fields were excluded beside it on the same
+     * reasoning, and that reasoning was simply wrong about them. They are not
+     * decoration: `recordSharedChannel` gates the whole share on
+     * `!listing.releaseConfirmedAt || !listing.releaseConfirmedBy`
+     * (useXbarStore.ts), and a TRUTHINESS test passes anything that is not
+     * empty. A restored `releaseConfirmedAt: {}` therefore reads as an
+     * authorized seller release that never happened — the buyer packet goes
+     * out, and Sales.tsx disables the real Confirm action on
+     * `Boolean(releaseConfirmedAt)`, so nobody can even correct it.
+     *
+     * The question was never "is it rendered" or "is it a column". It is what
+     * READS the value, and a truthiness gate on a legal confirmation is the
+     * most consequential reader in this table.
      */
     sharedListings: {
       stringItems: ['channels'],
       strings: ['id', 'state', 'accessMode', 'horseId', 'sharePath', 'shareToken', 'tokenIssuedAt', 'updatedAt'],
+      optionalStrings: ['releaseConfirmedAt', 'releaseConfirmedBy'],
     },
     /*
      * `workspace.primaryModules.length` and `workspace.permissions.map()` —

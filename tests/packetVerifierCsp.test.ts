@@ -169,7 +169,7 @@ test('the presentation sweep runs before the crypto gate', () => {
    * stylesheets needs no crypto, so it must happen first or it never happens
    * where the attack is easiest.
    */
-  const sweepAt = PACKET_VERIFIER_SCRIPT.indexOf('var presentation = presentationProblems();');
+  const sweepAt = PACKET_VERIFIER_SCRIPT.indexOf('var presentation = armingProblems().concat(presentationProblems());');
   const cryptoAt = PACKET_VERIFIER_SCRIPT.indexOf('if (!window.crypto || !crypto.subtle');
   assert.ok(sweepAt > -1, 'the presentation sweep must run on click');
   assert.ok(cryptoAt > sweepAt, 'and it must run before the crypto gate returns');
@@ -227,4 +227,29 @@ test('the ancestry the verifier pins is the one the generator emits', async () =
     PACKET_VERIFIER_SCRIPT.includes(`var SEALED_OUT_CHAIN = [\n    ${chain},\n  ];`),
     `the verifier pins a stale ancestry. Set SEALED_OUT_CHAIN in src/lib/packetVerifierScript.ts to:\n  var SEALED_OUT_CHAIN = [\n    ${chain},\n  ];`,
   );
+});
+
+test('the packet carries no inline event handlers for the verifier to trip on', async () => {
+  /*
+   * The verifier refuses to arm if it finds one, which only works as a rule
+   * because the generator emits none. An inline handler on the verify button
+   * runs before this script reaches the end of the body and can silence it
+   * outright with `stopImmediatePropagation`, so a handler added here would
+   * both break every honest packet and, worse, make the rule look wrong rather
+   * than the markup.
+   */
+  const generator = await readFile('src/lib/localSalePacketGenerator.ts', 'utf8');
+  const html = generator.slice(generator.indexOf('const html = `'));
+  assert.ok(!/\son[a-z]+\s*=/i.test(html), 'a sealed packet must bind no handler through markup');
+  assert.match(PACKET_VERIFIER_SCRIPT, /function armingProblems\(\)/, 'and the check must run at arming time');
+
+  /*
+   * Arming, not clicking. A check inside the click handler cannot catch what
+   * stops the click handler running, which is the whole of this attack.
+   */
+  const armAt = PACKET_VERIFIER_SCRIPT.indexOf('var arming = armingProblems();');
+  // lastIndexOf: the missing-element guard registers an earlier listener of
+  // its own, and matching that one would assert nothing about this order.
+  const listenAt = PACKET_VERIFIER_SCRIPT.lastIndexOf("btn.addEventListener('click'");
+  assert.ok(armAt > -1 && listenAt > armAt, 'the sweep must happen before the listener is even registered');
 });

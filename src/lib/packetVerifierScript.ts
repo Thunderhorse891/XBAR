@@ -306,8 +306,78 @@ export const PACKET_VERIFIER_SCRIPT = `
     return found;
   }
 
+  /*
+   * Checked when this script ARMS, not when the button is pressed.
+   *
+   * An inline handler attribute is registered as the element is parsed, which
+   * is before this script runs at the end of the body. So
+   * onclick="event.stopImmediatePropagation()" on the verify button silences
+   * the listener below entirely: no presentation sweep, no attachment check,
+   * no script count, no verdict — and the packet still holds exactly one
+   * script element and an untouched stylesheet. A check that lives inside the
+   * handler cannot catch what stops the handler running, so this one does not
+   * live there.
+   *
+   * A sealed packet carries no event-handler attribute anywhere; the generator
+   * emits none at all, which is what makes this a fact about the format rather
+   * than a guess, and packetVerifierCsp fails if one is ever added.
+   *
+   * The button and the record are pinned unique for the same reason: getElementById
+   * returns the first match, so a decoy placed ahead of either takes this
+   * script's attention while the one the buyer uses does nothing.
+   */
+  function armingProblems() {
+    var found = [];
+
+    var handlers = 0;
+    var all = [].slice.call(document.querySelectorAll('*'));
+    for (var i = 0; i < all.length; i += 1) {
+      var attrs = all[i].attributes;
+      if (!attrs) continue;
+      for (var a = 0; a < attrs.length; a += 1) {
+        if (/^on/i.test(String(attrs[a].name || ''))) handlers += 1;
+      }
+    }
+    if (handlers) {
+      found.push(
+        'This packet contains ' +
+          handlers +
+          ' inline event handler(s). A sealed packet contains none, so they were added after it was sealed — and one on the button above can stop this check running at all.',
+      );
+    }
+
+    var ids = ['xbar-verify-btn', 'xbar-credential-payload'];
+    for (var k = 0; k < ids.length; k += 1) {
+      var named = document.querySelectorAll('#' + ids[k]);
+      if (named.length !== 1) {
+        found.push(
+          'This packet contains ' +
+            named.length +
+            ' elements with the id ' +
+            ids[k] +
+            '. A sealed packet contains one, so this check may be reading a copy rather than what you are looking at.',
+        );
+      }
+    }
+
+    return found;
+  }
+
+  var arming = armingProblems();
+  if (arming.length) {
+    warnAloud(arming);
+    show(
+      'fail',
+      'ALTERED. This packet was changed in a way that can stop this check running.' +
+        NL + NL +
+        arming.join(NL) +
+        NL + NL +
+        'Do not trust the button above or anything printed here. Use the by-hand steps below instead.',
+    );
+  }
+
   btn.addEventListener('click', function () {
-    var presentation = presentationProblems();
+    var presentation = armingProblems().concat(presentationProblems());
     if (presentation.length) {
       warnAloud(presentation);
       show(

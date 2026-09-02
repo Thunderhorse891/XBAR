@@ -44,6 +44,11 @@ const b64 = (text) => Buffer.from(text, 'utf8').toString('base64');
 function element(attrs = {}, tagName = 'A') {
   const node = { _attrs: { ...attrs }, textContent: '', tagName, parentElement: null };
   node.getAttribute = (name) => (name in node._attrs ? node._attrs[name] : null);
+  // Live view, because the verifier sweeps attribute NAMES looking for inline
+  // handlers — a stub exposing only getAttribute could not express one.
+  Object.defineProperty(node, 'attributes', {
+    get: () => Object.keys(node._attrs).map((name) => ({ name, value: node._attrs[name] })),
+  });
   node.setAttribute = (name, value) => {
     node._attrs[name] = value;
   };
@@ -72,6 +77,8 @@ async function verify({
   omitOut = false,
   coveredBy = null,
   offScreen = false,
+  btnAttrs = {},
+  decoyButtons = 0,
 }) {
   const out = element({ class: 'verify__out', 'data-digest': sealedDigest, ...outAttrs }, 'DIV');
   out._collapsed = outCollapsed;
@@ -98,7 +105,7 @@ async function verify({
   stamp.textContent = 'WATERMARK';
 
   let click;
-  const btn = element();
+  const btn = element(btnAttrs, 'BUTTON');
   btn.addEventListener = (_event, handler) => {
     click = handler;
   };
@@ -158,6 +165,16 @@ async function verify({
        * zero elements claiming to be the result box, so a decoy that steals
        * the verdict would read as a packet having no result box at all.
        */
+      // Every element in the packet, which is what the handler sweep walks.
+      if (selector === '*') {
+        return [...links, ...extras, ...inlineStyled, out, btn, record, stamp, ...sealedChain];
+      }
+      if (selector === '#xbar-verify-btn') {
+        return [btn, ...Array.from({ length: decoyButtons }, () => element({}, 'BUTTON'))];
+      }
+      if (selector === '#xbar-credential-payload') {
+        return [record];
+      }
       if (selector === '#xbar-verify-out') {
         return omitOut ? [] : [out, ...Array.from({ length: decoyOutputs }, () => element({}, 'DIV'))];
       }
@@ -184,7 +201,16 @@ async function verify({
   );
 
   assert.ok(click, 'the verifier must register a click handler');
-  click();
+
+  /*
+   * An inline handler that stops immediate propagation really does prevent
+   * this listener from running — it was registered first, as the button was
+   * parsed. Calling the listener anyway would make every check below look like
+   * it survives a silenced button, which is the opposite of what this attack
+   * does, so the harness declines to call it exactly as a browser would.
+   */
+  const silenced = /stopImmediatePropagation/.test(String(btnAttrs.onclick ?? ''));
+  if (!silenced) click();
 
   // A packet with no result box has nowhere to print, so the dialog is the
   // whole verdict and there is no data-state to wait for.
@@ -608,4 +634,52 @@ test('a result box scrolled out of view is not called an alteration', async () =
   const result = await verify({ ...honest(), offScreen: true });
   assert.equal(result.state, 'pass', result.text);
   assert.deepEqual(result.alerts, [], 'an honest packet below the fold must raise no dialog');
+});
+
+/*
+ * Silencing the check instead of hiding its answer.
+ *
+ * Every attack above lets the verifier run and then interferes with what it
+ * says. This one stops it running at all: an inline handler attribute is
+ * registered as the element is parsed, before this script reaches the end of
+ * the body, so `onclick="event.stopImmediatePropagation()"` on the verify
+ * button silences the listener entirely — with exactly one script element, an
+ * untouched stylesheet, and nothing embedded. A check living inside the click
+ * handler cannot catch what stops the handler running, so this one is made
+ * when the script arms.
+ */
+test('an inline handler on the verify button is caught when the script arms', async () => {
+  const result = await verify({
+    ...honest(),
+    btnAttrs: { onclick: 'event.stopImmediatePropagation()' },
+  });
+  assert.match(result.text, /inline event handler/);
+  assert.equal(result.state, 'fail', result.text);
+  assert.ok(result.alerts.length >= 1, 'the dialog is the channel that survives a silenced button');
+  assert.match(result.alerts[0], /controls how this check is displayed/);
+});
+
+test('an inline handler anywhere in the packet is caught, not just on the button', async () => {
+  // The rule is that a sealed packet carries none, not that the button is
+  // special — anything that can run script can rewrite the verdict.
+  const planted = element({ onmouseover: 'alert(1)' }, 'DIV');
+  const result = await verify({ ...honest(), extras: [planted] });
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /inline event handler/);
+});
+
+test('a decoy verify button that steals this script is caught', async () => {
+  // getElementById returns the first, so a decoy placed ahead of the real
+  // button takes the listener while the one the buyer clicks does nothing.
+  const result = await verify({ ...honest(), decoyButtons: 1 });
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /2 elements with the id xbar-verify-btn/);
+});
+
+test('an untouched packet arms without complaint', async () => {
+  // The over-correction guard: a sealed packet has no handler attributes and
+  // one of each id, so arming must be silent.
+  const result = await verify(honest());
+  assert.equal(result.state, 'pass', result.text);
+  assert.deepEqual(result.alerts, [], 'arming must raise no dialog on an honest packet');
 });

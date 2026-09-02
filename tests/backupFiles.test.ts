@@ -1243,11 +1243,58 @@ test('a record that installs but crashes the route it lands on is refused', asyn
   assert.match(listingsEntry, /stringItems: \['channels'\]/, 'a text[] column refuses a non-string entry');
   assert.doesNotMatch(listingsEntry, /lists: \[/, 'stringItems already asserts the array');
   /*
-   * The optional timestamps stay out: they reach only the `payload` jsonb
-   * column, which really does accept anything, and no route dereferences them.
+   * `lastSharedAt` stays out and is the only one of the optional timestamps
+   * that may: it reaches the `payload` jsonb column, which really does accept
+   * anything, and nothing reads it back — every occurrence writes it.
    */
   assert.doesNotMatch(listingsEntry, /'lastSharedAt'/, 'jsonb accepts anything, so this guards nothing');
   assert.doesNotMatch(listingsEntry, /'createdAt'/, 'createdAt reaches no column — the default fills it');
+
+  /*
+   * The two release-confirmation fields were excluded beside `lastSharedAt` on
+   * the same reasoning, and the reasoning was wrong about them: the exclusion
+   * claimed no route dereferences them while `recordSharedChannel` gates the
+   * ENTIRE share on their truthiness. `{}` is truthy, so a restored
+   * `releaseConfirmedAt: {}` reads as an authorized seller release that never
+   * happened — the buyer packet goes out, and Sales disables the real Confirm
+   * action on `Boolean(releaseConfirmedAt)` so nobody can correct it.
+   *
+   * Fifth exclusion overturned by the same question: not "is it rendered" or
+   * "is it a column", but WHAT READS IT.
+   */
+  for (const field of ['releaseConfirmedAt', 'releaseConfirmedBy']) {
+    assert.match(
+      listingsEntry,
+      new RegExp(`optionalStrings: \\[[^\\]]*'${field}'`),
+      `${field} gates the share on its truthiness, so a truthy object is a forged confirmation`,
+    );
+  }
+  // And the gate this protects, so the exclusion cannot be restored by arguing
+  // the field is unread — the reader is named here.
+  const store = await readFile('src/store/useXbarStore.ts', 'utf8');
+  assert.match(
+    store,
+    /if \(!listing\.releaseConfirmedAt \|\| !listing\.releaseConfirmedBy\)/,
+    'the share gate is a truthiness test, which is why the shape must assert the type',
+  );
+
+  /*
+   * Optional, and that is the over-rejection direction — the important one
+   * here. A listing that has NOT been confirmed yet is the ordinary case, not
+   * a damaged one, and requiring the field would turn away the backup of every
+   * workspace that has never shared a packet.
+   */
+  const optionalLoopAt = helpers.indexOf('for (const field of shape.optionalStrings ?? [])');
+  assert.ok(optionalLoopAt > -1, 'the preflight must actually read optionalStrings');
+  const optionalLoop = helpers.slice(
+    optionalLoopAt,
+    helpers.indexOf('}', helpers.indexOf('return false;', optionalLoopAt)),
+  );
+  assert.match(
+    optionalLoop,
+    /value !== undefined && value !== null && typeof value !== 'string'/,
+    'an unconfirmed listing must restore, while a truthy non-string must not',
+  );
   /*
    * `role` and `label` are the scalar half of a collection whose ARRAYS were
    * already guarded, which is exactly what made the gap easy to miss:
