@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 
 import {
+  MEANINGFUL_WORKSPACE_COLLECTIONS,
   didWorkspaceReadFail,
+  hasMeaningfulPersistedWorkspace,
   onWorkspacePersistFailure,
   shouldDeferUnhydratedWorkspaceWrite,
+  shouldProtectMeaningfulWorkspaceWrite,
   workspaceStateStorage,
 } from '../src/lib/workspaceStorage.js';
 import { installFakeIndexedDb } from './helpers/fakeIndexedDb.js';
@@ -541,4 +545,116 @@ test('an ordinary session is untouched by the unhydrated-write guard', () => {
   assert.equal(shouldDeferUnhydratedWorkspaceWrite(true, COMPLETE_WORKSPACE, false), true);
   assert.equal(shouldDeferUnhydratedWorkspaceWrite(true, null, true), true);
   assert.equal(shouldDeferUnhydratedWorkspaceWrite(true, null, false), false);
+});
+
+/*
+ * The guards were complete and the LIST was not.
+ *
+ * `hasMeaningfulPersistedWorkspace` named seven of the fourteen collections
+ * `partialize` persists, so a workspace whose only records were expense
+ * receipts, ranch assets, ownership records, sales leads, shared listings or
+ * audit events read as empty — and both guards then stood down and let a
+ * partial in-memory state overwrite it. A gap in a hand-written list, not a
+ * gap in the logic, which is why the test below checks the list against its
+ * source rather than restating it.
+ */
+
+const PERSISTED_ONLY_RECEIPTS = JSON.stringify({
+  state: { expenseReceipts: [{ id: 'r1', amount: 400 }], horses: [], documents: [] },
+});
+
+test('a workspace of only receipts is not an empty workspace', async () => {
+  let readsFail = false;
+  const restoreDb = installFakeIndexedDb({ failReads: () => readsFail });
+  const restoreWindow = installLocalStorageWith({});
+
+  try {
+    await workspaceStateStorage.setItem('xbar-live-workspace', PERSISTED_ONLY_RECEIPTS);
+
+    // Hydration fails, the app starts empty, then storage recovers and the
+    // rancher adds a horse. Before the list was completed, both guards saw
+    // "empty" on the stored side and let this through.
+    readsFail = true;
+    await workspaceStateStorage.getItem('xbar-live-workspace');
+    assert.equal(didWorkspaceReadFail(), true, 'precondition: hydration failed');
+
+    readsFail = false;
+    await workspaceStateStorage.setItem('xbar-live-workspace', PARTIAL_WORKSPACE);
+
+    assert.equal(
+      await workspaceStateStorage.getItem('xbar-live-workspace'),
+      PERSISTED_ONLY_RECEIPTS,
+      'a year of spend records is a workspace worth protecting',
+    );
+  } finally {
+    restoreWindow();
+    restoreDb();
+  }
+});
+
+test('the meaningful-collection list covers everything persisted, except the seeded one', async () => {
+  const store = await readFile('src/store/useXbarStore.ts', 'utf8');
+  const types = await readFile('src/store/xbarStoreTypes.ts', 'utf8');
+
+  /*
+   * The persisted set is read from `partialize` itself and the array-ness from
+   * the store's own type declaration, so adding a collection and forgetting
+   * this list fails here — not years later, during someone's restore.
+   */
+  const partializeAt = store.indexOf('partialize: (state) =>');
+  assert.ok(partializeAt > -1, 'partialize must be findable');
+  const persisted = store.slice(partializeAt, store.indexOf('}),', partializeAt));
+  const persistedKeys = [...persisted.matchAll(/(\w+): state\.(\w+),/g)]
+    .filter(([, left, right]) => left === right)
+    .map(([, key]) => key);
+  assert.ok(persistedKeys.length >= 14, `expected the persisted keys, found ${persistedKeys.length}`);
+
+  const collections = persistedKeys.filter((key) => new RegExp(`\\b${key}: \\w+\\[\\];`).test(types));
+  assert.ok(collections.length >= 13, `expected the persisted collections, found ${collections.length}`);
+
+  for (const key of collections) {
+    if (key === 'roleWorkspaces') {
+      /*
+       * The single documented exception, and the reason this list is not
+       * "every persisted array". `roleWorkspaces` is seeded from `roleSeed`,
+       * so it is non-empty on a fresh install and on every workspace that has
+       * ever existed. Counting it would make every state "meaningful",
+       * `!hasMeaningfulPersistedWorkspace(nextValue)` could never be true, and
+       * BOTH guards would be silently disabled — completing the list the
+       * obvious way removes the protection it was meant to complete.
+       */
+      assert.ok(
+        !(MEANINGFUL_WORKSPACE_COLLECTIONS as readonly string[]).includes(key),
+        'roleWorkspaces is seeded non-empty and must stay out, or the guards never fire',
+      );
+      continue;
+    }
+    assert.ok(
+      (MEANINGFUL_WORKSPACE_COLLECTIONS as readonly string[]).includes(key),
+      `${key} is persisted but does not count as meaningful — a workspace holding only these reads as empty`,
+    );
+  }
+});
+
+test('a fresh install still reads as empty, so the guard still fires', () => {
+  // The over-rejection direction. Every collection added to the list is seeded
+  // EMPTY, so widening it must not turn the initial state into something the
+  // guards refuse to overwrite — that would block a first session's very first
+  // save.
+  const freshInstall = JSON.stringify({
+    state: Object.fromEntries([
+      ...MEANINGFUL_WORKSPACE_COLLECTIONS.map((key) => [key, []]),
+      ['roleWorkspaces', [{ role: 'Admin' }]],
+      ['workspaceProfile', { ranchName: '', setupCompleteAt: '' }],
+    ]),
+  });
+
+  assert.equal(hasMeaningfulPersistedWorkspace(freshInstall), false);
+  assert.equal(shouldProtectMeaningfulWorkspaceWrite(freshInstall, PARTIAL_WORKSPACE), false);
+
+  // And a workspace holding only one of the newly counted collections is not.
+  for (const collection of ['expenseReceipts', 'ranchAssets', 'ownershipRecords', 'salesLeads', 'auditEvents']) {
+    const only = JSON.stringify({ state: { [collection]: [{ id: 'x' }] } });
+    assert.equal(hasMeaningfulPersistedWorkspace(only), true, `${collection} alone must count`);
+  }
 });

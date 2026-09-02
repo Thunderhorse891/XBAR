@@ -244,6 +244,47 @@ function hasItems(state: Record<string, unknown>, key: string) {
   return Array.isArray(value) && value.length > 0;
 }
 
+/*
+ * Every persisted collection that holds records a rancher entered.
+ *
+ * This was a hand-written subset naming seven of the fourteen collections
+ * `partialize` writes, and the seven it omitted are not obscure: a workspace
+ * whose only records are expense receipts, ranch assets, ownership records,
+ * sales leads, shared listings or audit events read as EMPTY. Both guards
+ * below then stood down and let a partial in-memory state overwrite the lot —
+ * the exact accident they exist to stop, reached through a gap in the list
+ * rather than a gap in the logic.
+ *
+ * `roleWorkspaces` is deliberately NOT here, and this is the whole reason the
+ * list is not simply "every persisted array". It is seeded from `roleSeed`, so
+ * it is non-empty on a fresh install and on every workspace that has ever
+ * existed. Counting it would make `hasMeaningfulPersistedWorkspace` answer
+ * `true` for absolutely everything — including the empty initial state — so
+ * `!hasMeaningfulPersistedWorkspace(nextValue)` could never be true and BOTH
+ * guards would be silently disabled. Completing the list the obvious way would
+ * have removed the protection it was meant to complete.
+ *
+ * The other six are all seeded empty (`ownershipSeed`, `expenseReceiptsSeed`,
+ * `ranchAssetsSeed`, `salesLeadsSeed`, `sharedListingsSeed` are empty arrays by
+ * deliberate comment, and `auditEvents` starts `[]`), so a fresh install still
+ * reads as empty and the guard still fires where it should.
+ */
+export const MEANINGFUL_WORKSPACE_COLLECTIONS = [
+  'horses',
+  'documents',
+  'intakeBatches',
+  'ownershipRecords',
+  'auditEvents',
+  'salePacketBuilds',
+  'buyerRoomEvents',
+  'expenseReceipts',
+  'ranchAssets',
+  'salesLeads',
+  'sharedListings',
+  'workspaceMembers',
+  'workspaceInvitations',
+] as const;
+
 export function hasMeaningfulPersistedWorkspace(value: string | null) {
   const state = parsePersistedState(value);
   if (!state || typeof state !== 'object') return false;
@@ -256,13 +297,7 @@ export function hasMeaningfulPersistedWorkspace(value: string | null) {
 
   return Boolean(
     (typeof profile?.setupCompleteAt === 'string' && profile.setupCompleteAt.trim()) ||
-    hasItems(workspace, 'horses') ||
-    hasItems(workspace, 'documents') ||
-    hasItems(workspace, 'intakeBatches') ||
-    hasItems(workspace, 'salePacketBuilds') ||
-    hasItems(workspace, 'buyerRoomEvents') ||
-    hasItems(workspace, 'workspaceMembers') ||
-    hasItems(workspace, 'workspaceInvitations'),
+    MEANINGFUL_WORKSPACE_COLLECTIONS.some((collection) => hasItems(workspace, collection)),
   );
 }
 
