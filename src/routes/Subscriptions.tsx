@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { canUsePaymentLinkFallback, checkoutRouteFor, startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency } from '@/lib/format';
 import {
-  PENDING_HOSTED_PURCHASE_KEY,
+  pendingHostedPurchaseKey,
   isPendingHostedPurchase,
   parsePendingHostedPurchase,
   pendingHostedPurchaseNotice,
@@ -157,17 +157,18 @@ export default function Subscriptions() {
    */
   const [pendingPurchase, setPendingPurchase] = useState(() => {
     try {
-      return parsePendingHostedPurchase(window.localStorage.getItem(PENDING_HOSTED_PURCHASE_KEY));
+      return parsePendingHostedPurchase(window.localStorage.getItem(pendingHostedPurchaseKey(workspaceId)));
     } catch {
       // Private windows and blocked storage throw on access. Losing the guard
       // is bad; refusing to render the billing screen is worse.
       return null;
     }
   });
-  const purchaseAwaitingActivation = isPendingHostedPurchase(pendingPurchase, new Date()) && !subscriptionActive;
+  const purchaseAwaitingActivation =
+    isPendingHostedPurchase(pendingPurchase, new Date(), workspaceId) && !subscriptionActive;
   const forgetPendingPurchase = () => {
     try {
-      window.localStorage.removeItem(PENDING_HOSTED_PURCHASE_KEY);
+      window.localStorage.removeItem(pendingHostedPurchaseKey(workspaceId));
     } catch {
       // Nothing to do — the state below is what the screen reads.
     }
@@ -201,9 +202,9 @@ export default function Subscriptions() {
       return;
     }
 
-    const started = { tier, startedAt: new Date().toISOString() };
+    const started = { tier, startedAt: new Date().toISOString(), workspaceId };
     try {
-      window.localStorage.setItem(PENDING_HOSTED_PURCHASE_KEY, JSON.stringify(started));
+      window.localStorage.setItem(pendingHostedPurchaseKey(workspaceId), JSON.stringify(started));
     } catch {
       // The redirect still happens: a storage failure must not stop someone
       // buying. It only costs the second-charge guard on this device.

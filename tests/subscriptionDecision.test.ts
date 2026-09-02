@@ -19,6 +19,7 @@ import { subscriptionPlans } from '../src/lib/subscriptionPlans.js';
 import {
   isPendingHostedPurchase,
   parsePendingHostedPurchase,
+  pendingHostedPurchaseKey,
   pendingHostedPurchaseNotice,
 } from '../src/lib/pendingHostedPurchase.js';
 
@@ -863,12 +864,12 @@ test('the billing screen routes a blocked plan card to the portal', async () => 
 
 test('a started hosted purchase holds checkout closed', () => {
   const startedAt = new Date('2026-09-02T03:00:00Z');
-  const pending = { tier: 'Professional' as const, startedAt: startedAt.toISOString() };
+  const pending = { tier: 'Professional' as const, startedAt: startedAt.toISOString(), workspaceId: 'ws-1' };
 
-  assert.equal(isPendingHostedPurchase(pending, new Date('2026-09-02T03:05:00Z')), true);
+  assert.equal(isPendingHostedPurchase(pending, new Date('2026-09-02T03:05:00Z'), 'ws-1'), true);
   // Still pending most of a day later: a manual grant can wait for someone's
   // morning, and a second charge in the meantime is the thing being prevented.
-  assert.equal(isPendingHostedPurchase(pending, new Date('2026-09-02T23:00:00Z')), true);
+  assert.equal(isPendingHostedPurchase(pending, new Date('2026-09-02T23:00:00Z'), 'ws-1'), true);
 });
 
 test('a started purchase does not lock the customer out forever', () => {
@@ -878,9 +879,9 @@ test('a started purchase does not lock the customer out forever', () => {
    * to expire — and the screen also offers an explicit way out, because the
    * person who knows they did not pay should not wait a day to say so.
    */
-  const pending = { tier: 'Professional' as const, startedAt: '2026-09-01T03:00:00Z' };
-  assert.equal(isPendingHostedPurchase(pending, new Date('2026-09-02T04:00:00Z')), false);
-  assert.equal(isPendingHostedPurchase(null, new Date()), false);
+  const pending = { tier: 'Professional' as const, startedAt: '2026-09-01T03:00:00Z', workspaceId: 'ws-1' };
+  assert.equal(isPendingHostedPurchase(pending, new Date('2026-09-02T04:00:00Z'), 'ws-1'), false);
+  assert.equal(isPendingHostedPurchase(null, new Date(), 'ws-1'), false);
 });
 
 test('a damaged pending marker must not stop someone paying', () => {
@@ -904,24 +905,68 @@ test('a damaged pending marker must not stop someone paying', () => {
    */
   assert.equal(parsePendingHostedPurchase(JSON.stringify({ tier: 'Professional', startedAt: 2026 })), null);
   assert.equal(parsePendingHostedPurchase(JSON.stringify({ tier: 2026, startedAt: '2026-09-02T03:00:00Z' })), null);
-  assert.deepEqual(
+  /*
+   * A marker with no workspace was written before the field existed. It is
+   * refused rather than adopted: guessing which workspace it belonged to could
+   * block the wrong one, and losing a guard leans toward letting someone buy —
+   * the direction every default here takes.
+   */
+  assert.equal(
     parsePendingHostedPurchase(JSON.stringify({ tier: 'Professional', startedAt: '2026-09-02T03:00:00Z' })),
-    {
-      tier: 'Professional',
-      startedAt: '2026-09-02T03:00:00Z',
-    },
+    null,
   );
+  assert.deepEqual(
+    parsePendingHostedPurchase(
+      JSON.stringify({ tier: 'Professional', startedAt: '2026-09-02T03:00:00Z', workspaceId: 'ws-1' }),
+    ),
+    { tier: 'Professional', startedAt: '2026-09-02T03:00:00Z', workspaceId: 'ws-1' },
+  );
+});
+
+test('one workspace cannot block another from buying', () => {
+  /*
+   * Browser storage is origin-wide and workspaces are not. A single key held
+   * one marker for the whole origin, so a rancher managing two workspaces in
+   * one browser carried A's pending purchase into B: B was blocked for a day
+   * with a notice about a purchase it never made, and clearing it to let B
+   * through removed A's duplicate-charge protection at the same time.
+   */
+  const pending = { tier: 'Professional' as const, startedAt: '2026-09-02T03:00:00Z', workspaceId: 'ws-a' };
+  const now = new Date('2026-09-02T03:05:00Z');
+
+  assert.equal(isPendingHostedPurchase(pending, now, 'ws-a'), true, 'the workspace that started it is still held');
+  assert.equal(isPendingHostedPurchase(pending, now, 'ws-b'), false, 'another workspace is not');
+
+  // The keys are separate too, so the two markers coexist and clearing one
+  // cannot remove the other's protection.
+  assert.notEqual(pendingHostedPurchaseKey('ws-a'), pendingHostedPurchaseKey('ws-b'));
+  assert.match(pendingHostedPurchaseKey('ws-a'), /ws-a/);
+
+  /*
+   * A local-only session has no workspace id at all — that is the
+   * `no_managed_identity` route by definition — so it gets its own stable
+   * scope rather than colliding with every cloud workspace on an empty string.
+   */
+  assert.equal(pendingHostedPurchaseKey(''), pendingHostedPurchaseKey(''));
+  assert.notEqual(pendingHostedPurchaseKey(''), pendingHostedPurchaseKey('ws-a'));
+  const local = { tier: 'Starter' as const, startedAt: '2026-09-02T03:00:00Z', workspaceId: '' };
+  assert.equal(isPendingHostedPurchase(local, now, ''), true);
+  assert.equal(isPendingHostedPurchase(local, now, 'ws-a'), false);
 });
 
 test('a clock that moved backwards still counts as pending', () => {
   // A future timestamp is a clock change, not a purchase from tomorrow.
   // Reading it as pending is the answer that does not charge twice.
-  const pending = { tier: 'Ranch Ops' as const, startedAt: '2026-09-03T03:00:00Z' };
-  assert.equal(isPendingHostedPurchase(pending, new Date('2026-09-02T03:00:00Z')), true);
+  const pending = { tier: 'Ranch Ops' as const, startedAt: '2026-09-03T03:00:00Z', workspaceId: 'ws-1' };
+  assert.equal(isPendingHostedPurchase(pending, new Date('2026-09-02T03:00:00Z'), 'ws-1'), true);
 });
 
 test('the notice says what is true here, not that the plan is active', () => {
-  const notice = pendingHostedPurchaseNotice({ tier: 'Ranch Ops', startedAt: '2026-09-02T03:00:00Z' });
+  const notice = pendingHostedPurchaseNotice({
+    tier: 'Ranch Ops',
+    startedAt: '2026-09-02T03:00:00Z',
+    workspaceId: 'ws-1',
+  });
 
   assert.match(notice, /Ranch Ops/);
   assert.match(notice, /2026-09-02/);
@@ -967,7 +1012,23 @@ test('every payment-link redirect goes through the pending-purchase guard', asyn
   assert.ok(helperAt > -1, 'the single payment-link redirect must be findable');
   const helper = screen.slice(helperAt, screen.indexOf('const openBillingPortal', helperAt));
   assert.match(helper, /purchaseAwaitingActivation && pendingPurchase/, 'it must refuse a repeat');
-  assert.match(helper, /localStorage\.setItem\(PENDING_HOSTED_PURCHASE_KEY/, 'and record the new one');
+  assert.match(helper, /localStorage\.setItem\(pendingHostedPurchaseKey\(workspaceId\)/, 'and record the new one');
+  /*
+   * Stamped with the workspace that started it, not a placeholder. A marker
+   * written under the local scope while a cloud workspace is open never matches
+   * on read, so the guard is silently lost — a green suite with no protection,
+   * which is worse than an obvious break.
+   */
+  assert.match(
+    helper,
+    /const started = \{ tier, startedAt: new Date\(\)\.toISOString\(\), workspaceId \};/,
+    'the marker must carry the workspace that started it',
+  );
+  assert.match(
+    screen,
+    /isPendingHostedPurchase\(pendingPurchase, new Date\(\), workspaceId\)/,
+    'and it must be read back against the workspace being viewed, not the one on the marker',
+  );
   assert.match(helper, /window\.location\.assign\(link\)/, 'before leaving the page');
 
   /*

@@ -19,9 +19,31 @@ export interface PendingHostedPurchase {
   tier: SubscriptionTier;
   /** ISO timestamp of the redirect to Stripe. */
   startedAt: string;
+  /**
+   * Which workspace started it. `''` for a local-only session, which is the
+   * `no_managed_identity` route and has no workspace id by definition.
+   */
+  workspaceId: string;
 }
 
-export const PENDING_HOSTED_PURCHASE_KEY = 'xbar-pending-hosted-purchase';
+/*
+ * Scoped to a workspace, because browser storage is not.
+ *
+ * A single key held one marker for the whole origin, so a rancher who manages
+ * two workspaces in one browser carried workspace A's pending purchase into
+ * workspace B: B was blocked from buying for a day with a notice about a
+ * purchase it never made, and clearing it to let B through removed A's
+ * duplicate-charge protection at the same time. One marker cannot serve two
+ * workspaces, so there is one per workspace.
+ *
+ * The id is in the KEY so the two never contend, and in the VALUE so a marker
+ * that somehow reaches the wrong key is still ignored rather than believed.
+ */
+export const PENDING_HOSTED_PURCHASE_KEY_PREFIX = 'xbar-pending-hosted-purchase';
+
+export function pendingHostedPurchaseKey(workspaceId: string): string {
+  return `${PENDING_HOSTED_PURCHASE_KEY_PREFIX}:${workspaceId || 'local'}`;
+}
 
 /*
  * How long a started purchase keeps blocking another one.
@@ -44,16 +66,37 @@ export function parsePendingHostedPurchase(raw: string | null): PendingHostedPur
     // be a stored value stopping someone from paying, which is the worse
     // failure of the two available here.
     if (typeof record.tier !== 'string' || typeof record.startedAt !== 'string') return null;
+    /*
+     * A marker without a workspace was written before this field existed. It is
+     * refused rather than adopted: guessing which workspace it belonged to
+     * could block the wrong one, and losing a guard leans toward letting
+     * someone buy, which is the direction every default here takes.
+     */
+    if (typeof record.workspaceId !== 'string') return null;
     if (!record.tier.trim() || Number.isNaN(Date.parse(record.startedAt))) return null;
-    return { tier: record.tier as SubscriptionTier, startedAt: record.startedAt };
+    return {
+      tier: record.tier as SubscriptionTier,
+      startedAt: record.startedAt,
+      workspaceId: record.workspaceId,
+    };
   } catch {
     return null;
   }
 }
 
-/** Whether a started purchase is still recent enough to hold checkout closed. */
-export function isPendingHostedPurchase(pending: PendingHostedPurchase | null, now: Date): boolean {
+/**
+ * Whether a started purchase is still recent enough to hold checkout closed,
+ * and belongs to the workspace asking.
+ */
+export function isPendingHostedPurchase(
+  pending: PendingHostedPurchase | null,
+  now: Date,
+  workspaceId: string,
+): boolean {
   if (!pending) return false;
+  // Another workspace's purchase is not this workspace's problem, and treating
+  // it as one blocks a sale that has nothing to do with it.
+  if (pending.workspaceId !== workspaceId) return false;
   const startedAt = Date.parse(pending.startedAt);
   if (Number.isNaN(startedAt)) return false;
   const age = now.getTime() - startedAt;
