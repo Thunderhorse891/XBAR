@@ -47,8 +47,27 @@ export const PACKET_VERIFIER_SCRIPT = `
   var btn = document.getElementById('xbar-verify-btn');
   var out = document.getElementById('xbar-verify-out');
   var record = document.getElementById('xbar-credential-payload');
-  if (!btn || !out || !record) return;
   var NL = String.fromCharCode(10);
+  /*
+   * A missing piece used to return in silence, which is the failure a
+   * verifier can least afford: the button does nothing and a forged verdict
+   * sits beside it unchallenged. There is nowhere to print here, so the one
+   * channel left is a dialog.
+   */
+  if (!btn || !out || !record) {
+    try {
+      if (btn) {
+        btn.addEventListener('click', function () {
+          window.alert(
+            'This packet is missing the part of itself that reports the result, so it cannot be checked here. Use the by-hand steps in the packet instead.',
+          );
+        });
+      }
+    } catch (error) {
+      // Nothing further is possible.
+    }
+    return;
+  }
   var sealed = out.getAttribute('data-digest') || '';
 
   function show(state, text) {
@@ -158,8 +177,58 @@ export const PACKET_VERIFIER_SCRIPT = `
    * no crypto.subtle at all — and that path returns early, into the same box
    * an added stylesheet can hide. Counting elements needs no crypto.
    */
-  function presentationProblems() {
+  /*
+   * The box the verdict lands in has to BE the box the buyer reads.
+   *
+   * Sealing the stylesheet closed the CSS route and only that route. The
+   * native hidden attribute hides an element with no CSS, no extra script and
+   * no embedded resource, so an altered packet could mark the result box
+   * hidden, append an ordinary element reading PASS, and let this script write
+   * its real verdict where nobody would see it. A duplicate id does the same
+   * thing from the other end: getElementById returns the first, so the verdict
+   * goes into a decoy while the visible one keeps its forged text.
+   *
+   * The measurement is the rule that does not depend on naming a mechanism,
+   * which is the mistake the CSS-only sweep already made once. A box occupying
+   * no space is not showing anyone anything, whatever was done to it.
+   */
+  function outputProblems() {
     var found = [];
+
+    var named = document.querySelectorAll('#xbar-verify-out');
+    if (named.length !== 1) {
+      found.push(
+        'This packet contains ' +
+          named.length +
+          ' elements claiming to be the result box. A sealed packet contains one, so the verdict below may have been written into a copy you cannot see.',
+      );
+    }
+
+    for (var node = out; node; node = node.parentElement) {
+      if (node.getAttribute && node.getAttribute('hidden') !== null) {
+        found.push(
+          'The result box on this packet, or something containing it, is marked hidden. Whatever is printed below was put somewhere you were not meant to read it.',
+        );
+        break;
+      }
+      if (String(node.tagName || '').toUpperCase() === 'DETAILS' && !node.open) {
+        found.push('The result box on this packet is inside a collapsed section, so the verdict below is not on screen.');
+        break;
+      }
+    }
+
+    if (typeof out.getBoundingClientRect === 'function') {
+      var box = out.getBoundingClientRect();
+      if (box && !box.width && !box.height) {
+        found.push('The result box on this packet takes up no space on the page, so the verdict below is not visible.');
+      }
+    }
+
+    return found;
+  }
+
+  function presentationProblems() {
+    var found = outputProblems();
     var sheets = document.querySelectorAll('style');
     if (sheets.length !== 1) {
       found.push(

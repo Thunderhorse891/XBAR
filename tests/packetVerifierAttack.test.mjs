@@ -42,11 +42,17 @@ const sha256Hex = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const b64 = (text) => Buffer.from(text, 'utf8').toString('base64');
 
 function element(attrs = {}, tagName = 'A') {
-  const node = { _attrs: { ...attrs }, textContent: '', tagName };
+  const node = { _attrs: { ...attrs }, textContent: '', tagName, parentElement: null };
   node.getAttribute = (name) => (name in node._attrs ? node._attrs[name] : null);
   node.setAttribute = (name, value) => {
     node._attrs[name] = value;
   };
+  /*
+   * Laid out unless something collapses it. The verifier measures its own
+   * output box, which is the rule that does not depend on naming a hiding
+   * mechanism — a stub that always reported a size could not express it.
+   */
+  node.getBoundingClientRect = () => (node._collapsed ? { width: 0, height: 0 } : { width: 320, height: 24 });
   return node;
 }
 
@@ -59,8 +65,21 @@ async function verify({
   stylesheets,
   inlineStyled = [],
   noSubtleCrypto = false,
+  outAttrs = {},
+  outCollapsed = false,
+  outAncestors = [],
+  decoyOutputs = 0,
+  omitOut = false,
 }) {
-  const out = element({ 'data-digest': sealedDigest });
+  const out = element({ 'data-digest': sealedDigest, ...outAttrs }, 'DIV');
+  out._collapsed = outCollapsed;
+  // Hiding an ANCESTOR is the same attack one level up, and the verifier walks
+  // the chain rather than checking the box alone.
+  let ancestorTail = out;
+  for (const ancestor of outAncestors) {
+    ancestorTail.parentElement = ancestor;
+    ancestorTail = ancestor;
+  }
   const record = element();
   record.textContent = payload;
   const stamp = element();
@@ -93,9 +112,12 @@ async function verify({
 
   const document = {
     getElementById: (id) =>
-      ({ 'xbar-verify-btn': btn, 'xbar-verify-out': out, 'xbar-credential-payload': record, 'xbar-watermark': stamp })[
-        id
-      ] ?? null,
+      ({
+        'xbar-verify-btn': btn,
+        'xbar-verify-out': omitOut ? undefined : out,
+        'xbar-credential-payload': record,
+        'xbar-watermark': stamp,
+      })[id] ?? null,
     /*
      * Honours the selector, because the attacks this file exists to catch are
      * exactly the things a selector was NOT written to see: a link without the
@@ -114,6 +136,14 @@ async function verify({
        * styling itself would pass — the stub reading exactly like coverage
        * while covering nothing.
        */
+      /*
+       * An id selector is not a tag name either. Falling through would report
+       * zero elements claiming to be the result box, so a decoy that steals
+       * the verdict would read as a packet having no result box at all.
+       */
+      if (selector === '#xbar-verify-out') {
+        return omitOut ? [] : [out, ...Array.from({ length: decoyOutputs }, () => element({}, 'DIV'))];
+      }
       if (selector === '[style]') {
         return [...links, ...extras, ...inlineStyled].filter((node) => node.getAttribute('style') !== null);
       }
@@ -138,6 +168,10 @@ async function verify({
 
   assert.ok(click, 'the verifier must register a click handler');
   click();
+
+  // A packet with no result box has nowhere to print, so the dialog is the
+  // whole verdict and there is no data-state to wait for.
+  if (omitOut) return { state: null, text: '', alerts };
 
   /*
    * Wait for the verdict, not for a fixed number of ticks. `crypto.subtle`
@@ -422,6 +456,79 @@ test('an untouched packet is not accused of styling itself', async () => {
   // The over-correction guard for all four above. A verifier that alerts on
   // every honest packet trains the buyer to click through the one that matters.
   const result = await verify(honestPacket((base64) => `data:application/pdf;base64,${base64}`));
+  assert.equal(result.state, 'pass', result.text);
+  assert.deepEqual(result.alerts, [], 'an honest packet must raise no dialog');
+});
+
+/*
+ * Hiding the VERDICT without touching the CSS.
+ *
+ * Sealing the stylesheet closed one route and only one. The native `hidden`
+ * attribute hides an element with no CSS, no extra script and no embedded
+ * resource, so an altered packet could mark the result box hidden, append an
+ * ordinary element reading PASS, and let the verifier write its real ALTERED
+ * where nobody would look. A duplicate id does it from the other end.
+ */
+const honest = () => honestPacket((base64) => `data:application/pdf;base64,${base64}`);
+
+test('a result box marked hidden is caught with no CSS involved', async () => {
+  const result = await verify({ ...honest(), outAttrs: { hidden: '' } });
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /marked hidden/);
+  assert.equal(result.alerts.length, 1, 'and it must be said out loud — the page decides what is visible');
+});
+
+test('hiding an ancestor of the result box is the same attack one level up', async () => {
+  const wrapper = element({ hidden: '' }, 'DIV');
+  const result = await verify({ ...honest(), outAncestors: [wrapper] });
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /marked hidden/);
+  assert.equal(result.alerts.length, 1);
+});
+
+test('a result box collapsed into a closed section is caught', async () => {
+  const collapsed = element({}, 'DETAILS');
+  collapsed.open = false;
+  const result = await verify({ ...honest(), outAncestors: [collapsed] });
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /collapsed section/);
+});
+
+test('a result box occupying no space is caught however it got that way', async () => {
+  /*
+   * The rule that does not name a mechanism, which is the mistake the
+   * CSS-only sweep made. Whatever was done to it, a box with no area is
+   * showing nobody anything.
+   */
+  const result = await verify({ ...honest(), outCollapsed: true });
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /takes up no space/);
+  assert.equal(result.alerts.length, 1);
+});
+
+test('a decoy result box that steals the verdict is caught', async () => {
+  // getElementById returns the first, so a duplicate id sends the real verdict
+  // into a copy while the visible one keeps its forged text.
+  const result = await verify({ ...honest(), decoyOutputs: 1 });
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /2 elements claiming to be the result box/);
+  assert.equal(result.alerts.length, 1);
+});
+
+test('a packet with its result box removed does not fail silently', async () => {
+  /*
+   * The button used to do nothing at all — no verdict, no error — while a
+   * forged PASS sat beside it unchallenged. That is the one failure mode a
+   * verifier cannot afford.
+   */
+  const result = await verify({ ...honest(), omitOut: true });
+  assert.equal(result.alerts.length, 1, 'the dialog is the only channel left');
+  assert.match(result.alerts[0], /missing the part of itself that reports the result/);
+});
+
+test('an untouched packet is not accused of hiding its own verdict', async () => {
+  // The over-correction guard for all six above.
+  const result = await verify(honest());
   assert.equal(result.state, 'pass', result.text);
   assert.deepEqual(result.alerts, [], 'an honest packet must raise no dialog');
 });
