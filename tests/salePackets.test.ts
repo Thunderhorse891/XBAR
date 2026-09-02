@@ -174,9 +174,18 @@ test('the packet rehashes its own files rather than trusting the printed seal', 
   const script = await readFile('src/lib/packetVerifierScript.ts', 'utf8');
 
   assert.match(script, /crypto\.subtle\.digest\('SHA-256'/, 'the check must actually hash');
+  /*
+   * The rule is that the bytes come out of the PAGE, not out of the record
+   * they are being checked against. This used to assert the exact selector
+   * `a[data-xbar-file]`, which stopped being the right one: that attribute is
+   * ordinary HTML an alterer controls, so selecting by it checked only the
+   * links the alterer chose to mark. Pinning the selector would have made the
+   * assertion demand the bug back.
+   */
+  assert.match(script, /document\.querySelectorAll\('a'\)/, 'every link in the packet must be examined');
   assert.match(
     script,
-    /querySelectorAll\('a\[data-xbar-file\]'\)/,
+    /link\.getAttribute\('href'\)/,
     'the files must be read out of the page, not taken from the record they are being checked against',
   );
   assert.match(

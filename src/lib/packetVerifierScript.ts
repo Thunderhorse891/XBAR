@@ -130,7 +130,30 @@ export const PACKET_VERIFIER_SCRIPT = `
           problems.push('The sealed record is not readable, so the files cannot be checked against it.');
         }
         var expected = (parsed && parsed.attachments) || [];
-        var links = [].slice.call(document.querySelectorAll('a[data-xbar-file]'));
+        /*
+         * EVERY link in the packet, not the ones that agreed to be checked.
+         *
+         * The selector used to be 'a[data-xbar-file]', and that attribute is
+         * ordinary HTML an alterer controls. Appending a link WITHOUT it —
+         * styled into the file list beside the real ones, labelled "Coggins
+         * 2026" — left every sealed link intact, every digest matching, and the
+         * verdict PASS, while the buyer clicked content the seal had never seen.
+         * The previous fix hardened the marked links; this is its complement,
+         * because an attacker who has to mark their forgery to have it checked
+         * simply will not.
+         *
+         * Safe to sweep the whole document because the generator emits no other
+         * anchors at all — the packet's only links are its attachments — and
+         * the packetVerifierCsp test fails if one is ever added without
+         * revisiting this.
+         */
+        var anchors = [].slice.call(document.querySelectorAll('a'));
+        var links = [];
+        var unmarked = [];
+        for (var a = 0; a < anchors.length; a += 1) {
+          if (anchors[a].getAttribute('data-xbar-file') === null) unmarked.push(anchors[a]);
+          else links.push(anchors[a]);
+        }
 
         return Promise.all(
           links.map(function (link) {
@@ -201,6 +224,15 @@ export const PACKET_VERIFIER_SCRIPT = `
           expected.forEach(function (match) {
             for (var i = 0; i < found.length; i += 1) if (found[i].id === match.id) return;
             problems.push('The file "' + match.fileName + '" was sealed but is missing from this packet.');
+          });
+
+          unmarked.forEach(function (link) {
+            var label = (link.textContent || '').trim() || link.getAttribute('href') || 'an unnamed link';
+            problems.push(
+              'This packet contains a link ("' +
+                label +
+                '") that is not part of the sealed record, so it was added after this packet was sealed. Do not open it.',
+            );
           });
 
           notes.push(found.length ? 'Files rehashed from this packet: ' + found.length : 'No embedded files to rehash.');

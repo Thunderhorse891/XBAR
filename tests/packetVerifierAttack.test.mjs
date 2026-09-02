@@ -58,7 +58,14 @@ async function verify({ payload, sealedDigest, links }) {
       ({ 'xbar-verify-btn': btn, 'xbar-verify-out': out, 'xbar-credential-payload': record, 'xbar-watermark': stamp })[
         id
       ] ?? null,
-    querySelectorAll: () => links,
+    /*
+     * Honours the selector, because the attack this file exists to catch is a
+     * link the selector was NOT written to see. A stub that returns the same
+     * list whatever it is asked cannot express that, and would have passed the
+     * unmarked-link forgery exactly as the shipped verifier did.
+     */
+    querySelectorAll: (selector) =>
+      selector === 'a' ? links : links.filter((link) => link.getAttribute('data-xbar-file') !== null),
   };
 
   // The script feature-detects through `window`, which is the browser it runs
@@ -159,4 +166,53 @@ test('undecodable base64 in a data URL is refused rather than throwing', async (
   const result = await verify(packet);
   assert.equal(result.state, 'fail');
   assert.match(result.text, /not embedded in this packet|Could not finish/);
+});
+
+test('a link the packet never sealed is reported ALTERED, however innocent it looks', async () => {
+  /*
+   * The complement to the relinked-attachment attack, and it needs no
+   * cleverness at all: leave every sealed link exactly as it is, and APPEND
+   * one. The verifier selected `a[data-xbar-file]`, and that attribute is
+   * ordinary HTML the alterer controls — so an added link simply was not
+   * looked at. Every sealed digest still matched, nothing was missing, and the
+   * verdict was PASS while the buyer clicked content the seal had never seen.
+   *
+   * An attacker who has to mark their own forgery to have it checked will not.
+   */
+  const packet = honestPacket((base64) => `data:application/pdf;base64,${base64}`);
+  const planted = element({ href: 'https://attacker.example/coggins-2026.pdf', download: 'coggins-2026.pdf' });
+  planted.textContent = 'Coggins 2026 (updated)';
+  packet.links.push(planted);
+
+  const result = await verify(packet);
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /Coggins 2026 \(updated\)/, 'the buyer must be told which link to distrust');
+  assert.match(result.text, /not part of the sealed record/);
+});
+
+test('an unnamed planted link is still reported, identified by its target', async () => {
+  // Same attack with no link text to quote. Reporting "a link" and nothing
+  // else would tell the buyer there is a problem and not which one it is.
+  const packet = honestPacket((base64) => `data:application/pdf;base64,${base64}`);
+  packet.links.push(element({ href: 'https://attacker.example/quiet.pdf' }));
+
+  const result = await verify(packet);
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /attacker\.example\/quiet\.pdf/);
+});
+
+test('the sealed links are still checked on their own terms', async () => {
+  /*
+   * The over-rejection direction for this change. Sweeping every anchor must
+   * not turn the marked links into unmarked ones: an honest packet has to keep
+   * passing (covered above), and a marked link whose bytes were swapped must
+   * still fail on the DIGEST rather than being lumped in as "not sealed" —
+   * otherwise the message sends a buyer looking for the wrong thing.
+   */
+  const packet = honestPacket(() => `data:application/pdf;base64,${b64('a different file entirely')}`);
+  const result = await verify(packet);
+
+  assert.equal(result.state, 'fail', result.text);
+  assert.match(result.text, /is not the one that was sealed/);
+  assert.doesNotMatch(result.text, /not part of the sealed record/);
 });
