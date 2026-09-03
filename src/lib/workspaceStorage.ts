@@ -123,12 +123,30 @@ function markFallbackAhead(name: string, ahead: boolean) {
   }
 }
 
-function isFallbackAhead(name: string): boolean {
-  if (browserStorageAccess() !== 'available') return false;
+/*
+ * Three answers, not two.
+ *
+ * A boolean forced an unreadable marker to mean "no fallback is ahead", which
+ * is the one thing it cannot mean: the marker and the fallback live in the SAME
+ * store, so a refusal to read hides both at once. The stale primary then looked
+ * authoritative, hydration was declared resolved, and the next successful write
+ * overwrote the newer copy — losing exactly the edits the outage had stranded
+ * there, permanently.
+ *
+ * `absent` is genuinely 'no': with no localStorage at all, no fallback was ever
+ * written. `blocked` and a thrown read are 'unknown', matching the distinction
+ * readLegacyValue already draws.
+ */
+type FallbackAhead = 'yes' | 'no' | 'unknown';
+
+function fallbackAheadState(name: string): FallbackAhead {
+  const access = browserStorageAccess();
+  if (access === 'absent') return 'no';
+  if (access === 'blocked') return 'unknown';
   try {
-    return window.localStorage.getItem(FALLBACK_AHEAD_PREFIX + name) !== null;
+    return window.localStorage.getItem(FALLBACK_AHEAD_PREFIX + name) !== null ? 'yes' : 'no';
   } catch {
-    return false;
+    return 'unknown';
   }
 }
 
@@ -434,7 +452,7 @@ export const workspaceStateStorage: StateStorage = {
      * an IndexedDB write refusal the newer workspace is in the fallback, and
      * returning this one hydrates the state the rancher had BEFORE the outage.
      */
-    if (indexed.value && !isFallbackAhead(name)) {
+    if (indexed.value && fallbackAheadState(name) === 'no') {
       // The workspace was found. Whatever the fallback would have said is moot.
       workspaceReadFailure = false;
       return indexed.value;
@@ -448,7 +466,20 @@ export const workspaceStateStorage: StateStorage = {
        * or this is a different browser profile. The primary copy is all there
        * is, so use it and stop claiming the fallback is ahead.
        */
-      if (!legacy.failed) markFallbackAhead(name, false);
+      if (legacy.failed) {
+        /*
+         * Not "the marker outlived its value" — we were refused. The fallback
+         * and its marker share a store, so a newer workspace may be sitting
+         * behind that refusal. Serve the primary, because the app has to load
+         * something, but leave hydration UNRESOLVED: that is what makes the
+         * deferral guard withhold the write that would otherwise overwrite it.
+         * Clearing the marker here would be worse still, destroying the only
+         * record that the fallback is the newer copy.
+         */
+        workspaceReadFailure = true;
+        return indexed.value;
+      }
+      markFallbackAhead(name, false);
       workspaceReadFailure = false;
       return indexed.value;
     }

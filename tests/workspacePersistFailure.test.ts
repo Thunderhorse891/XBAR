@@ -791,3 +791,96 @@ test('a recovered primary store wins for a key whose fallback is not cleared', a
     restoreDb();
   }
 });
+
+/*
+ * Both refusal modes, because they take DIFFERENT paths to the same wrong
+ * answer. A browser blocking site data throws from the `localStorage` GETTER,
+ * which browserStorageAccess reports as 'blocked' before any try/catch is
+ * reached; a store whose `getItem` throws is reported 'available' and fails
+ * inside the try. Covering only the getter left the catch clause free to
+ * collapse to "no fallback ahead" undetected — it survived as a mutant until
+ * this loop was parameterised.
+ */
+for (const where of ['getter', 'getItem'] as const) {
+  test(`an unreadable fallback marker (${where}) is not proof that no fallback is ahead`, async () => {
+    /*
+     * The marker and the fallback live in the SAME store, so a refusal to read
+     * hides both at once. Forcing that refusal to mean "no fallback is ahead" let
+     * the stale primary look authoritative and declared hydration resolved — and
+     * with hydration resolved, the next successful write overwrites IndexedDB and
+     * clears the fallback, destroying the edits the original outage had stranded
+     * there. Not a stale read: permanent loss, on a browser that had already
+     * failed once.
+     */
+    const v1 = JSON.stringify({ state: { horses: [{ id: 'h1' }] } });
+    const v2 = JSON.stringify({ state: { horses: [{ id: 'h1' }, { id: 'h2' }] } });
+
+    let dbRefusing = false;
+    const restoreDb = installFakeIndexedDb({ failWrites: () => dbRefusing });
+    const restoreWorking = installLocalStorageWith({});
+
+    try {
+      // The workspace before the outage reaches the primary store.
+      await workspaceStateStorage.setItem('xbar-live-workspace', v1);
+
+      // IndexedDB starts refusing. The newer workspace goes to the fallback, and
+      // the marker recording that ordering goes there with it.
+      dbRefusing = true;
+      await workspaceStateStorage.setItem('xbar-live-workspace', v2);
+    } finally {
+      restoreWorking();
+    }
+
+    // A later reload where localStorage is blocked. IndexedDB still reads, and
+    // still holds the copy from before the outage.
+    const restoreHostile = installHostileLocalStorage(where);
+    try {
+      const value = await workspaceStateStorage.getItem('xbar-live-workspace');
+
+      // The app must still load — refusing to hydrate strands the rancher too.
+      assert.equal(value, v1, 'the primary copy is all that can be read, so it is what loads');
+
+      // But it must NOT claim the question is settled.
+      assert.equal(
+        didWorkspaceReadFail(),
+        true,
+        'an unreadable marker leaves hydration unresolved; treating it as resolved is what loses the fallback',
+      );
+
+      // Which is what makes the guard withhold the write that would overwrite v2.
+      assert.equal(
+        shouldDeferUnhydratedWorkspaceWrite(didWorkspaceReadFail(), v1, false),
+        true,
+        'and an unresolved hydration must defer the write, or the newer fallback is overwritten',
+      );
+    } finally {
+      restoreHostile();
+      restoreDb();
+    }
+  });
+}
+
+test('a readable localStorage with no marker still resolves hydration', async () => {
+  // The over-rejection direction. Every ordinary reload reads a marker that is
+  // simply absent, and treating THAT as unknown would defer every write on a
+  // healthy browser — the same freeze this flag has already caused once.
+  const stored = JSON.stringify({ state: { horses: [{ id: 'h1' }] } });
+  const restoreDb = installFakeIndexedDb();
+  const restoreWindow = installLocalStorageWith({});
+
+  try {
+    await workspaceStateStorage.setItem('xbar-live-workspace', stored);
+    const value = await workspaceStateStorage.getItem('xbar-live-workspace');
+
+    assert.equal(value, stored);
+    assert.equal(didWorkspaceReadFail(), false, 'an absent marker is an answer, not a failure');
+    assert.equal(
+      shouldDeferUnhydratedWorkspaceWrite(didWorkspaceReadFail(), stored, false),
+      false,
+      'and a healthy browser must not have its writes withheld',
+    );
+  } finally {
+    restoreWindow();
+    restoreDb();
+  }
+});
