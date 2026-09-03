@@ -77,7 +77,7 @@ test('the stamped watermark and the sealed watermark are the same value', async 
 
   // Both bounds measured from the same anchor.
   const seal = code.slice(sealAt, code.indexOf('});', sealAt));
-  assert.match(seal, /\n\s*watermark,\n/, 'the resolved value must be what is sealed');
+  assert.match(seal, /\r?\n\s*watermark,\r?\n/, 'the resolved value must be what is sealed');
 
   assert.doesNotMatch(
     code,

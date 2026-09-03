@@ -163,6 +163,11 @@ test('a production build refuses the local flag even when it is set', () => {
 
   assert.equal(result.authorized, false);
   assert.equal(result.authorized === false && result.reason, 'Owner test mode is disabled in production builds.');
+  assert.equal(
+    result.authorized === false && result.configured,
+    false,
+    'a dev-only flag must not render an owner-mode diagnostic in production',
+  );
 });
 
 test('an environment that claims neither dev nor prod is treated as unsafe', () => {

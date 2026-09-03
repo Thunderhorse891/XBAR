@@ -303,7 +303,10 @@ test('no reconciliation instruction tells the operator to use set local', () => 
  * pointed them at revoking the grant they had deliberately kept.
  */
 test('the post-apply check classifies excluded rows as preserved, not as errors', () => {
-  const sql = readFileSync(path.join(migrationsDir, '20260821_reconcile_legacy_manual_billing.sql'), 'utf8');
+  const sql = readFileSync(path.join(migrationsDir, '20260821_reconcile_legacy_manual_billing.sql'), 'utf8').replace(
+    /\r\n/g,
+    '\n',
+  );
   const after = sql.slice(sql.indexOf('-- AFTER APPLYING\n-- --------------'));
   assert.ok(after.length > 0, 'the AFTER APPLYING section must exist');
 

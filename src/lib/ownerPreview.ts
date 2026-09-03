@@ -91,7 +91,14 @@ export function resolveOwnerPreviewAuthorization(env: OwnerPreviewEnvironment): 
     return { authorized: true, source: 'comp-allowlist' };
   }
 
-  const configured = env.compEmails.length > 0 || env.localFlagEnabled;
+  /*
+   * Only configuration a viewer can act on should render a diagnostic. A local
+   * owner flag left in a production build is intentionally ignored, and showing
+   * an "Owner test mode" banner for that case leaks an internal QA path to
+   * every customer without helping the operator fix anything from the app.
+   */
+  const localFlagCanRenderDiagnostic = env.localFlagEnabled && env.isDevBuild && !env.isProdBuild;
+  const configured = env.compEmails.length > 0 || localFlagCanRenderDiagnostic;
 
   /*
    * An allowlist with nobody signed in is the case that used to lie.
