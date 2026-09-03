@@ -35,7 +35,13 @@ import {
   upsertSharedListingInCloud,
 } from '@/lib/cloudWorkspace';
 import { didWorkspaceReadFail, workspaceStateStorage } from '@/lib/workspaceStorage';
-import { referencedVaultKeys, storeLocalFile, sweepLocalFileVault } from '@/lib/localFileVault';
+import {
+  beginVaultWrite,
+  endVaultWrite,
+  referencedVaultKeys,
+  storeLocalFile,
+  sweepLocalFileVault,
+} from '@/lib/localFileVault';
 import {
   canMarkTransferClear,
   computeOwnershipConfidence,
@@ -792,6 +798,15 @@ export const useXbarStore = create<XbarStore>()(
         let processedFiles = 0;
         set(() => ({ documentIntakeProgress: { processed: 0, total: totalFiles, phase: 'Reading documents' } }));
 
+        /*
+         * Every file's blob is written before the ONE `set` at the end installs
+         * the records that reference them. Until then the bytes sit in the vault
+         * with nothing pointing at them, which is precisely what the sweep
+         * deletes — so a cloud reconciliation settling mid-batch destroyed a
+         * file this was in the middle of saving, and the record installed
+         * afterwards pointed at a key that no longer existed.
+         */
+        beginVaultWrite();
         try {
           const selectedHorse = state.horses.find((horse) => horse.id === horseId);
           const batchId = createId('batch');
@@ -953,6 +968,9 @@ export const useXbarStore = create<XbarStore>()(
           console.error('Document upload failed', error);
           return { ok: false, message: 'Document upload failed. Check the selected files and try again.' };
         } finally {
+          // Released on every path, including the throw above: leaving the
+          // counter raised would make the vault unsweepable for the session.
+          endVaultWrite();
           // Always clear progress so the UI never sticks on a stale count.
           set(() => ({ documentIntakeProgress: null }));
         }

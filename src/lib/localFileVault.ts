@@ -856,8 +856,71 @@ export function orphanedVaultKeys(storedKeys: string[], referencedKeys: Iterable
  * as housekeeping, and failing to reclaim space is not a reason to stop the app
  * from starting.
  */
+/*
+ * Operations that write blobs before the records that reference them exist.
+ *
+ * `storeLocalFile` returns a key, and the record carrying that key is installed
+ * later — an OCR batch stores every file and then does ONE `set` at the end, and
+ * a backup import writes every blob before `importWorkspaceBackup` runs. In the
+ * gap the bytes are in the vault and nothing references them, which is exactly
+ * what the sweep is built to delete. Cloud reconciliation settling inside that
+ * window destroyed a file the app was in the middle of saving, and then
+ * installed a record pointing at the missing key.
+ *
+ * A counter rather than a lock: the writers do not contend with each other, only
+ * with the sweep, and the sweep is housekeeping. Skipping a pass costs nothing —
+ * it runs again on the next reconciliation — while deleting a live file costs
+ * the file.
+ */
+let vaultWritersInFlight = 0;
+
+/** True while any operation is between writing blobs and installing records. */
+export function isVaultWriteInFlight(): boolean {
+  return vaultWritersInFlight > 0;
+}
+
+/*
+ * The paired form, for an operation that already has the right try/finally.
+ *
+ * `endVaultWrite` MUST run on every path, which is what a `finally` is for. Use
+ * `withVaultWriteGuard` below wherever there is not already such a block —
+ * forgetting the end leaves the vault unsweepable for the rest of the session.
+ */
+export function beginVaultWrite(): void {
+  vaultWritersInFlight += 1;
+}
+
+export function endVaultWrite(): void {
+  // Never below zero: an unbalanced end would otherwise make a later real
+  // writer's increment look like no writer at all.
+  vaultWritersInFlight = Math.max(0, vaultWritersInFlight - 1);
+}
+
+/**
+ * Hold the sweep off for the whole of `run`, not just its individual writes.
+ *
+ * The unsafe window is write-until-record-installed, so the guard has to wrap
+ * the operation. Releases in a `finally`: a throw must not leave the vault
+ * permanently unsweepable.
+ */
+export async function withVaultWriteGuard<T>(run: () => Promise<T>): Promise<T> {
+  beginVaultWrite();
+  try {
+    return await run();
+  } finally {
+    endVaultWrite();
+  }
+}
+
 export async function sweepLocalFileVault(referencedKeys: Iterable<string>, workspaceId: string): Promise<number> {
   if (!isLocalFileVaultAvailable()) return 0;
+
+  /*
+   * Never sweep while a writer is mid-operation. Its blobs are already in the
+   * vault and its records are not yet installed, so every one of them looks
+   * orphaned from here.
+   */
+  if (isVaultWriteInFlight()) return 0;
 
   try {
     const stored = await listLocalFiles();

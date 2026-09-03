@@ -116,13 +116,28 @@ export default async function handler(req, res) {
     const requestedIds = Array.isArray(body.documentIds) ? body.documentIds.filter((id) => typeof id === 'string') : [];
     const { packetDocs, unavailable } = selectPacketDocuments(loaded.documents, requestedIds, MAX_PACKET_ATTACHMENTS);
 
+    /*
+     * What is IN the packet, which is not the same as what was selected for it.
+     *
+     * A download that fails is recorded in `unavailable`, and everything that
+     * describes the packet has to agree with that. Keeping the failed document
+     * in `packetDocs` meant the cover listed it under "Included Documents", the
+     * database row and the API response claimed it, and — worst of the four —
+     * the SEAL was computed over it. A buyer verifying that seal would have
+     * been told the packet contains a Coggins that is not in it, by the one
+     * mechanism in the product whose whole job is to be trustworthy.
+     *
+     * Stays parallel with `attachments`: same documents, same order.
+     */
     const attachments = [];
+    const includedDocs = [];
     for (const doc of packetDocs) {
       const { data, error } = await supabase.storage.from(DOCUMENT_BUCKET).download(doc.storage_path);
       if (error || !data) {
         unavailable.push(`${doc.title} (${error?.message || 'download failed'})`);
         continue;
       }
+      includedDocs.push(doc);
       attachments.push({
         label: `${doc.document_type}: ${doc.title}`,
         mimeType: doc.mime_type,
@@ -144,7 +159,7 @@ export default async function handler(req, res) {
       horseId,
       context,
       ownershipRecord,
-      documents: packetDocs,
+      documents: includedDocs,
       sealedAt: new Date().toISOString(),
     });
     const appOrigin =
@@ -188,8 +203,8 @@ export default async function handler(req, res) {
         },
         {
           heading: 'Included Documents',
-          lines: packetDocs.length
-            ? packetDocs.map((doc, index) => `${index + 1}. ${doc.document_type}: ${doc.title}`)
+          lines: includedDocs.length
+            ? includedDocs.map((doc, index) => `${index + 1}. ${doc.document_type}: ${doc.title}`)
             : ['No stored documents were attached to this horse.'],
         },
         // Immediately after the included list, so a buyer reading what is in
@@ -245,7 +260,7 @@ export default async function handler(req, res) {
       packet_pdf_path: packetPath,
       watermark_text: watermarkText,
       shared_with_email: buyerEmail,
-      document_ids: packetDocs.map((doc) => doc.document_id),
+      document_ids: includedDocs.map((doc) => doc.document_id),
       status: 'ready',
       size_bytes: packetSizeBytes,
       payload: { buyerName, unavailable, attachmentCount: attachments.length, seal },
@@ -288,7 +303,7 @@ export default async function handler(req, res) {
       entityId: packetId,
       metadata: {
         horseId,
-        documents: packetDocs.length,
+        documents: includedDocs.length,
         buyerEmail: buyerEmail ? 'set' : '',
         emailed: Boolean(emailResult.ok),
         sealCode: seal.sealCode,
@@ -303,7 +318,7 @@ export default async function handler(req, res) {
       downloadUrl,
       expiresInSeconds: SIGNED_URL_TTL_SECONDS,
       watermarkText,
-      includedDocumentIds: packetDocs.map((doc) => doc.document_id),
+      includedDocumentIds: includedDocs.map((doc) => doc.document_id),
       unavailableDocuments: unavailable,
       emailed: Boolean(emailResult.ok),
       emailMessage: emailResult.message || '',

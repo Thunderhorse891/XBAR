@@ -26,6 +26,7 @@ import {
   listLocalFiles,
   referencedVaultKeys,
 } from '@/lib/localFileVault';
+import { beginVaultWrite, endVaultWrite } from '@/lib/localFileVault';
 import { vaultOwnerId } from '@/lib/vaultOwner';
 import { promoteLocalVaultFiles } from '@/lib/workspacePromotion';
 import type { UserRole } from '@/types/xbar';
@@ -245,6 +246,14 @@ export default function Settings() {
 
   const handleImport = async (file?: File) => {
     if (!file) return;
+    /*
+     * `importLocalFiles` writes every blob before `importWorkspaceBackup`
+     * installs the records that reference them. Until it does, those bytes are
+     * in the vault and unreferenced, which is exactly what the orphan sweep
+     * deletes — so a cloud reconciliation settling mid-import destroyed files
+     * this had just restored, and left the restored records dangling.
+     */
+    beginVaultWrite();
     try {
       const text = await file.text();
       const payload = JSON.parse(text) as { files?: PortableLocalFile[]; omittedFiles?: UnbackedUpFile[] };
@@ -437,6 +446,8 @@ export default function Settings() {
     } catch {
       pushToast({ title: 'Import failed', message: 'Choose a valid XBAR backup JSON file.', tone: 'error' });
     } finally {
+      // Released on every path, including the catch above.
+      endVaultWrite();
       if (importRef.current) importRef.current.value = '';
     }
   };

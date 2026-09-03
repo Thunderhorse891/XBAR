@@ -16,6 +16,10 @@ import {
   storeLocalFile,
   sweepLocalFileVault,
   adoptVaultEntries,
+  beginVaultWrite,
+  endVaultWrite,
+  isVaultWriteInFlight,
+  withVaultWriteGuard,
 } from '../src/lib/localFileVault.js';
 import { resolvePacketAttachments } from '../src/lib/localPacketAttachments.js';
 import { promoteLocalVaultFiles } from '../src/lib/workspacePromotion.js';
@@ -2856,6 +2860,76 @@ test('a referenced file this device never had is reported, not assumed fine', as
 
     assert.equal(moved.adopted, 1, 'the file that is here still moves');
     assert.deepEqual(moved.failed, ['xbar-file-never-stored'], 'the one that is not here must be named');
+  } finally {
+    restore();
+  }
+});
+
+test('the sweep does not delete a file an operation is still installing', async () => {
+  /*
+   * The window between writing bytes and installing the record that references
+   * them. An OCR batch stores every file and does ONE `set` at the end; a
+   * backup import writes every blob before importWorkspaceBackup runs. In that
+   * gap the bytes are in the vault and nothing points at them — which is the
+   * exact definition the sweep uses for an orphan. Cloud reconciliation
+   * settling mid-operation destroyed a file the app was in the middle of
+   * saving, and the record installed afterwards pointed at a missing key.
+   */
+  const restore = installFakeIndexedDb();
+  try {
+    const key = await storeLocalFile(new Blob(['bytes']), 'in-flight.pdf', undefined, TEST_WORKSPACE);
+
+    // Mid-operation: the record referencing `key` does not exist yet, so the
+    // referenced set is legitimately empty.
+    beginVaultWrite();
+    try {
+      assert.equal(isVaultWriteInFlight(), true);
+      assert.equal(await sweepLocalFileVault([], TEST_WORKSPACE), 0, 'the sweep must decline while a writer is open');
+      assert.ok(await readLocalFile(key), 'and the bytes must still be there');
+    } finally {
+      endVaultWrite();
+    }
+
+    // The over-rejection direction. Once the operation is done, a genuinely
+    // orphaned file is still collectable — a guard that never lifts turns the
+    // sweep off for the session and the vault grows forever.
+    assert.equal(isVaultWriteInFlight(), false);
+    assert.equal(await sweepLocalFileVault([], TEST_WORKSPACE), 1, 'a real orphan is still swept afterwards');
+  } finally {
+    restore();
+  }
+});
+
+test('the guard is released even when the operation throws', async () => {
+  // A leaked counter is worse than the bug it prevents: it disables the sweep
+  // for the rest of the session and nothing ever says so.
+  await assert.rejects(
+    withVaultWriteGuard(async () => {
+      assert.equal(isVaultWriteInFlight(), true);
+      throw new Error('import failed');
+    }),
+    /import failed/,
+  );
+  assert.equal(isVaultWriteInFlight(), false, 'a throw must not leave the vault unsweepable');
+});
+
+test('nested writers hold the sweep until the last one finishes', async () => {
+  // A counter, not a boolean: an import that overlaps an intake must not have
+  // the inner operation's completion re-enable the sweep under the outer one.
+  const restore = installFakeIndexedDb();
+  try {
+    const key = await storeLocalFile(new Blob(['bytes']), 'nested.pdf', undefined, TEST_WORKSPACE);
+    beginVaultWrite();
+    beginVaultWrite();
+    endVaultWrite();
+    try {
+      assert.equal(isVaultWriteInFlight(), true, 'the outer writer is still open');
+      assert.equal(await sweepLocalFileVault([], TEST_WORKSPACE), 0);
+      assert.ok(await readLocalFile(key));
+    } finally {
+      endVaultWrite();
+    }
+    assert.equal(isVaultWriteInFlight(), false);
   } finally {
     restore();
   }

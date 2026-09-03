@@ -153,3 +153,46 @@ test('what the packet leaves out reaches the buyer, not just the seller', async 
   const builtAt = handler.indexOf('const omissionSection = packetOmissionSection(unavailable);');
   assert.ok(loopAt > -1 && builtAt > loopAt, 'the section must be built after every omission is known');
 });
+
+test('a document that failed to download is described as absent everywhere', async () => {
+  /*
+   * The appendix made this contradiction visible rather than causing it: a
+   * download failure was recorded in `unavailable` while the document stayed in
+   * `packetDocs`, so the same PDF page listed it under "Included Documents" and
+   * again under what is missing. The database row and the API response claimed
+   * it too — and worst of the four, so did the SEAL, which is the one mechanism
+   * in the product whose entire job is to be trustworthy. A buyer verifying it
+   * would have been assured the packet contains a Coggins that is not in it.
+   *
+   * Asserted from source: the loop is a live Supabase storage call, so the
+   * alternative is a bucket. What is checkable here is that nothing describing
+   * the packet is built from the pre-download selection.
+   */
+  const { readFile } = await import('node:fs/promises');
+  const handler = await readFile(new URL('../../api/sale-packets.js', import.meta.url), 'utf8');
+  const code = handler.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
+  // Only the download loop may read the selection.
+  const readsSelection = code.match(/packetDocs/g) ?? [];
+  assert.equal(
+    readsSelection.length,
+    2,
+    `packetDocs must appear only where it is created and where it is iterated, found ${readsSelection.length}`,
+  );
+  assert.match(code, /for \(const doc of packetDocs\)/, 'the download loop is the one reader');
+
+  // Everything that describes the packet reads what survived the download.
+  for (const [field, why] of [
+    ['documents: includedDocs,', 'the seal must cover only what is in the packet'],
+    ['includedDocs.map((doc, index)', 'the cover list must name only what is in it'],
+    ['document_ids: includedDocs.map', 'the stored row must record only what is in it'],
+    ['includedDocumentIds: includedDocs.map', 'the API response must report only what is in it'],
+    ['documents: includedDocs.length,', 'the audit count must count only what is in it'],
+  ]) {
+    assert.ok(code.includes(field), `${field} — ${why}`);
+  }
+
+  // And a failed download is still named to the buyer, so the two sets partition
+  // the selection rather than both dropping it.
+  assert.match(code, /unavailable\.push\(`\$\{doc\.title\} \(\$\{error\?\.message \|\| 'download failed'\}\)`\)/);
+});
