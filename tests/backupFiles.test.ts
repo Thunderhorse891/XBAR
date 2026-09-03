@@ -2865,6 +2865,27 @@ test('a referenced file this device never had is reported, not assumed fine', as
   }
 });
 
+/*
+ * Wait until every shared vault-write lock has actually been released.
+ *
+ * `endVaultWrite` asks for the release; the lock manager performs it a tick or
+ * two later, so "released" and "collectable" are different moments. Taking the
+ * lock EXCLUSIVELY queues behind the shared holders and resolves once they are
+ * gone, which is deterministic where a fixed number of ticks is not.
+ *
+ * A no-op on a runtime with no Web Locks API — which is the difference between
+ * Node 22 locally and Node 24 in CI, and is why this needed catching there.
+ */
+async function drainVaultWriteLock(): Promise<void> {
+  const locks = (
+    globalThis as {
+      navigator?: { locks?: { request?: (n: string, o: object, b: () => Promise<void>) => Promise<unknown> } };
+    }
+  ).navigator?.locks;
+  if (typeof locks?.request !== 'function') return;
+  await locks.request('xbar-vault-write', { mode: 'exclusive' }, async () => {});
+}
+
 test('the sweep does not delete a file an operation is still installing', async () => {
   /*
    * The window between writing bytes and installing the record that references
@@ -2894,6 +2915,7 @@ test('the sweep does not delete a file an operation is still installing', async 
     // orphaned file is still collectable — a guard that never lifts turns the
     // sweep off for the session and the vault grows forever.
     assert.equal(isVaultWriteInFlight(), false);
+    await drainVaultWriteLock();
     assert.equal(await sweepLocalFileVault([], TEST_WORKSPACE), 1, 'a real orphan is still swept afterwards');
   } finally {
     restore();
@@ -2997,8 +3019,7 @@ test('the sweep declines while another tab is mid-write', async () => {
     assert.ok(await readLocalFile(key), 'the other tab’s bytes must survive');
 
     releaseOtherTab();
-    await Promise.resolve();
-    await Promise.resolve();
+    await drainVaultWriteLock();
 
     // Over-rejection: once no tab holds it, a real orphan is collectable again.
     assert.equal(await sweepLocalFileVault([], TEST_WORKSPACE), 1, 'a real orphan is swept once every tab is done');

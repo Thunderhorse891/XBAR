@@ -970,6 +970,15 @@ export function endVaultWrite(): void {
   // writer's increment look like no writer at all.
   vaultWritersInFlight = Math.max(0, vaultWritersInFlight - 1);
   if (vaultWritersInFlight > 0) return;
+  /*
+   * Resolving the held promise ASKS for the release; the lock manager performs
+   * it a tick or two later. So a sweep run in the same turn as the last
+   * `endVaultWrite` still sees the lock and skips — which is correct behaviour
+   * rather than a bug, since the next reconciliation collects whatever it left.
+   * Worth knowing because it makes "released" and "collectable" different
+   * moments, and a test that asserts the second immediately after the first
+   * will fail on any runtime that actually implements Web Locks.
+   */
   releaseVaultWriteLock?.();
   releaseVaultWriteLock = null;
 }
