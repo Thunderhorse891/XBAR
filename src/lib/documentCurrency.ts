@@ -80,8 +80,25 @@ export function isCurrentDatedDocument(document: DatedDocument, maxAgeDays: numb
   // price into ready-to-close value on the strength of a date nobody could have
   // examined a horse on. Day against day, so tomorrow is refused however few
   // hours away it is, and today is accepted whatever the clock says.
-  if (examCalendarDay(examTime) > localCalendarDay(now)) return false;
-  return now.getTime() - examTime <= maxAgeDays * DAY_MS;
+  const examDay = examCalendarDay(examTime);
+  const today = localCalendarDay(now);
+  if (examDay > today) return false;
+
+  /*
+   * The far bound is a day count too, not an elapsed duration.
+   *
+   * Mixing the two left the expiry boundary decided by time of day and time
+   * zone: `now - examTime` measures an instant against a UTC midnight, so on
+   * the day a Coggins turns a year old a rancher in Denver is already about
+   * 365.75 days past it by noon and fails, while the same record on the same
+   * day still passes further east. The sale-packet gate and the revenue report
+   * both read this, so they disagreed with each other about the same horse
+   * depending on when it was opened.
+   *
+   * Both sides are UTC-midnight stamps, so the difference is an exact multiple
+   * of a day and the division is safe.
+   */
+  return (today - examDay) / DAY_MS <= maxAgeDays;
 }
 
 /** A document that has been reviewed AND whose exam is still inside the window. */

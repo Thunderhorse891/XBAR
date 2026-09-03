@@ -14,7 +14,7 @@ import { recordAuditEvent } from './_lib/audit.js';
 import { buildServerSaleCredential } from './_lib/sale-credential.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
 import { applyCors } from './_lib/cors.js';
-import { selectPacketDocuments } from './_lib/packet-selection.js';
+import { packetOmissionSection, selectPacketDocuments } from './_lib/packet-selection.js';
 
 const DOCUMENT_BUCKET =
   process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
@@ -152,6 +152,13 @@ export default async function handler(req, res) {
       process.env.VITE_PUBLIC_APP_URL ||
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
     // The SPA (and its public routes) is served under /app — the router basename.
+    /*
+     * Built here, not earlier: the download loop above appends to `unavailable`
+     * too, so a file that was selected and then failed to come out of storage
+     * has to reach the buyer's page along with the rest.
+     */
+    const omissionSection = packetOmissionSection(unavailable);
+
     // Point verification straight at the canonical path so the link never depends
     // on a bare-path redirect resolving first.
     const verifyUrl = `${appOrigin}/app/verify/${packetId}`;
@@ -185,6 +192,9 @@ export default async function handler(req, res) {
             ? packetDocs.map((doc, index) => `${index + 1}. ${doc.document_type}: ${doc.title}`)
             : ['No stored documents were attached to this horse.'],
         },
+        // Immediately after the included list, so a buyer reading what is in
+        // the packet sees what is not without having to look for it.
+        ...(omissionSection ? [omissionSection] : []),
         {
           heading: 'XBAR Verification Seal',
           lines: [

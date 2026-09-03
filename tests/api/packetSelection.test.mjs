@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { selectPacketDocuments } from '../../api/_lib/packet-selection.js';
+import { packetOmissionSection, selectPacketDocuments } from '../../api/_lib/packet-selection.js';
 
 /*
  * A sale packet that silently lacks a document is the failure this file exists
@@ -107,4 +107,49 @@ test('the packet keeps the horse order, not the order the seller ticked boxes in
     result.packetDocs.map((entry) => entry.document_id),
     ['d1', 'd3'],
   );
+});
+
+test('what the packet leaves out reaches the buyer, not just the seller', async () => {
+  /*
+   * Recording an omission in the API response told the SELLER. The buyer reads
+   * the PDF, and the PDF listed what was included and stopped — so a packet
+   * missing a Coggins looked exactly like one that never needed one. Same
+   * silent omission, one layer further out, and the buyer is the party who
+   * cannot go and ask the database what happened.
+   */
+  const documents = [doc('d1', 'Coggins', null), doc('d2', 'Registration')];
+  const { unavailable } = selectPacketDocuments(documents, ['d1', 'd2'], 20);
+  const section = packetOmissionSection(unavailable);
+
+  assert.ok(section, 'an omission must produce a cover section');
+  assert.match(section.heading, /Not Included/i);
+  assert.ok(
+    section.lines.some((line) => line.includes('Coggins')),
+    'the buyer must be told which document is missing, by name',
+  );
+  assert.ok(
+    section.lines.some((line) => /ask the seller/i.test(line)),
+    'and what to do about it',
+  );
+
+  // Singular and plural read correctly — this is a document a buyer reads.
+  assert.ok(section.lines.at(-1).includes('this file'), 'one omission is "this file"');
+  const many = packetOmissionSection(['A (reason)', 'B (reason)']);
+  assert.ok(many.lines.at(-1).includes('these files'), 'two omissions are "these files"');
+
+  // The over-rejection direction: a complete packet must not carry a notice
+  // about files it did include.
+  assert.equal(packetOmissionSection([]), null, 'a complete packet gets no notice at all');
+
+  // And the section is actually wired into the cover, after the included list.
+  const { readFile } = await import('node:fs/promises');
+  const handler = await readFile(new URL('../../api/sale-packets.js', import.meta.url), 'utf8');
+  assert.match(handler, /const omissionSection = packetOmissionSection\(unavailable\);/);
+  assert.match(handler, /\.\.\.\(omissionSection \? \[omissionSection\] : \[\]\),/);
+
+  // Built after the download loop, or a file that failed to come out of
+  // storage would be named to the seller and hidden from the buyer.
+  const loopAt = handler.indexOf("unavailable.push(`${doc.title} (${error?.message || 'download failed'})`)");
+  const builtAt = handler.indexOf('const omissionSection = packetOmissionSection(unavailable);');
+  assert.ok(loopAt > -1 && builtAt > loopAt, 'the section must be built after every omission is known');
 });

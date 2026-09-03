@@ -42,6 +42,28 @@ function cogginsDoc(
   } as DocumentRecord;
 }
 
+/*
+ * A Coggins whose exam is a DATE, with no time on it.
+ *
+ * This is what OCR and hand entry actually produce, and it is the shape the
+ * fixture above could not express: that one timestamps the exam at the same
+ * time of day as `now`, so an instant-based comparison and a day-based one
+ * agree by construction and the boundary bug was invisible to every case here.
+ * A bare 'YYYY-MM-DD' parses to UTC midnight, which is exactly where the two
+ * measures diverge.
+ */
+function dateOnlyCogginsDoc(horseId: string, examDaysAgo: number): DocumentRecord {
+  const examDate = new Date(now.getTime() - examDaysAgo * 86_400_000).toISOString().slice(0, 10);
+  return {
+    id: `doc-${horseId}-${examDate}`,
+    horseId,
+    type: 'Coggins',
+    state: 'Ready',
+    uploadedAt: now.toISOString(),
+    entities: { examDate },
+  } as DocumentRecord;
+}
+
 function clearRecord(horseId: string): OwnershipRecord {
   const record = createOwnershipRecord({ id: horseId, name: 'X', owner: 'Erin' } as HorseRecord);
   return {
@@ -368,5 +390,41 @@ test('both readiness callers answer from the shared module', async () => {
   for (const file of ['src/lib/businessIntelligence.ts', 'src/lib/xbarPhaseTwo.ts']) {
     const source = await readFile(file, 'utf8');
     assert.match(source, /from '\.\/documentCurrency\.js'/, `${file} must not answer this question itself`);
+  }
+});
+
+test('the expiry boundary does not move with the clock or the time zone', () => {
+  /*
+   * The far bound was still an elapsed duration while the near bound had become
+   * a calendar day. `now - examTime` measures an instant against a UTC
+   * midnight, so on the day a Coggins turns a year old it is already ~365.5
+   * days past by midday — the record expired partway through the day it should
+   * have been valid for, and did so at a different moment in every time zone.
+   * The sale-packet gate and the revenue report both read this, so they
+   * disagreed about the same horse depending on when it was opened.
+   */
+  assert.equal(
+    hasCurrentReadyDocument([dateOnlyCogginsDoc('h1', CURRENT_COGGINS_DAYS)], CURRENT_COGGINS_DAYS, now),
+    true,
+    'a Coggins on the last day of its window is current for the whole of that day',
+  );
+
+  // And the day after is not, so the window still closes.
+  assert.equal(
+    hasCurrentReadyDocument([dateOnlyCogginsDoc('h1', CURRENT_COGGINS_DAYS + 1)], CURRENT_COGGINS_DAYS, now),
+    false,
+    'the day after the window is over',
+  );
+
+  // The same document read at either end of the day gives the same answer,
+  // which is the property that was actually broken.
+  for (const hour of [0, 6, 12, 18, 23]) {
+    const sameDay = new Date(now);
+    sameDay.setUTCHours(hour, 0, 0, 0);
+    assert.equal(
+      hasCurrentReadyDocument([dateOnlyCogginsDoc('h1', CURRENT_COGGINS_DAYS)], CURRENT_COGGINS_DAYS, sameDay),
+      true,
+      `still current at ${hour}:00 — the boundary must not move with the clock`,
+    );
   }
 });
