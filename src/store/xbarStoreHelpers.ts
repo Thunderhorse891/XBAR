@@ -51,7 +51,23 @@ import type {
 import type { ExpenseReceiptInput, NewHorseInput } from '@/store/xbarStoreLogic';
 import type { PersistedXbarState, XbarStore } from '@/store/xbarStoreTypes';
 
-export const WORKSPACE_SCHEMA_VERSION = 8;
+/*
+ * Bumping this is what RUNS the migration, not just what labels it.
+ *
+ * Zustand calls `migrate` only when the stored version differs from this one,
+ * and `migrate` is `restorePersistedState` — which is where the entitlement
+ * clamp and the tier/usage normalization live. Left at 8 while every existing
+ * install was already stored at 8, an ordinary reload skipped all of it: a
+ * lapsed workspace kept showing the paid tier and paid limits it no longer had,
+ * and malformed persisted tier data kept reaching the billing screens. The
+ * clamp was written and shipped and never once ran for anyone who already had
+ * the app.
+ *
+ * So this number is part of the fix, not bookkeeping about it. Any change to
+ * what `restorePersistedState` normalizes needs it incremented in the same
+ * commit.
+ */
+export const WORKSPACE_SCHEMA_VERSION = 9;
 const legacyDemoHorseIds = new Set([
   'horse-wiggy',
   'horse-hancock',

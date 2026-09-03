@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
+import { WORKSPACE_SCHEMA_VERSION, restorePersistedState } from '../src/store/xbarStoreHelpers.js';
 import path from 'node:path';
 import {
   getBillingPortalAction,
@@ -1441,4 +1442,62 @@ test('the promotion path is the one place that carries the marker', async () => 
   const guardAt = promotion.indexOf("if (recorded && recorded !== 'local')");
   const migrateAt = promotion.indexOf('migratePendingHostedPurchase(');
   assert.ok(guardAt > -1 && migrateAt > guardAt, 'and only after the import check has let it through');
+});
+
+test('the entitlement clamp actually runs on an ordinary reload', async () => {
+  /*
+   * The clamp was written, shipped, and never ran.
+   *
+   * `restorePersistedState` is where clampSubscriptionToEntitlement is applied
+   * to a rehydrate, and Zustand calls it only through `migrate` — which fires
+   * only when the stored version differs from the configured one. The version
+   * stayed at 8 while every existing install was already stored at 8, so a
+   * reload skipped the whole thing: a lapsed workspace kept displaying the paid
+   * tier and paid limits it no longer had.
+   *
+   * The behaviour first, so this test fails for the real reason and not just
+   * because a number moved.
+   */
+  const lapsed = restorePersistedState({
+    subscription: {
+      tier: 'Ranch Ops',
+      purchasedTier: 'Ranch Ops',
+      billingState: 'Inactive',
+      usage: { horseLimit: 200, seatLimit: 20 },
+    },
+  });
+  assert.notEqual(
+    lapsed.subscription.tier,
+    'Ranch Ops',
+    'an inactive workspace must not keep the tier it stopped paying for',
+  );
+  assert.equal(lapsed.subscription.purchasedTier, 'Ranch Ops', 'but what they bought is still what they bought');
+
+  // And the wiring that decides whether the above ever executes.
+  const store = await readFile(path.resolve(process.cwd(), 'src/store/useXbarStore.ts'), 'utf8');
+  assert.match(
+    store,
+    /version: WORKSPACE_SCHEMA_VERSION,\s*migrate: \(persistedState\) => restorePersistedState\(persistedState\),/,
+    'the persist config must route the migration through restorePersistedState',
+  );
+
+  // Version 8 shipped on main. Anything at or below it means migrate never
+  // fires for an existing install and the clamp above is dead code in practice.
+  assert.ok(
+    WORKSPACE_SCHEMA_VERSION > 8,
+    `WORKSPACE_SCHEMA_VERSION is ${WORKSPACE_SCHEMA_VERSION}; version 8 is already on disk for every existing install, so migrate would never run`,
+  );
+});
+
+test('every writer of the schema version reads the same constant', async () => {
+  // cloudWorkspace.ts hardcoded `version: 8`. It would have gone on claiming 8
+  // after the bump, so a cloud snapshot imported as already-current and skipped
+  // the normalization the bump exists to run — the same defect as never
+  // bumping, reachable only through the cloud path.
+  for (const file of ['src/lib/cloudWorkspace.ts', 'src/store/useXbarStore.ts']) {
+    const source = await readFile(path.resolve(process.cwd(), file), 'utf8');
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    assert.doesNotMatch(code, /version: \d+/, `${file} must not write a literal schema version`);
+    assert.match(code, /version: WORKSPACE_SCHEMA_VERSION/, `${file} must write the shared constant`);
+  }
 });

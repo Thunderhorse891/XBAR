@@ -1,6 +1,7 @@
 import { apiConfig, isRelationalCloudEnabled, isSnapshotFallbackEnabled, supabaseConfig } from '@/lib/platformConfig';
 import { publicShareEventToBuyerRoomEvent, type PublicShareEventRow } from '@/lib/buyerDealRoom';
 import { createId, todayStamp } from '@/lib/xbarRuntime';
+import { WORKSPACE_SCHEMA_VERSION } from '@/store/xbarStoreHelpers';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
 import { openLocalFile } from '@/lib/localFileVault';
@@ -927,7 +928,11 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
 
   const backup: CloudWorkspaceBackup = {
     app: 'XBAR',
-    version: 8,
+    // The constant, never a literal: this was hardcoded 8 and would have gone
+    // on claiming 8 the moment the schema moved, so a cloud snapshot would
+    // import as already-current and skip the very normalization the bump
+    // exists to run.
+    version: WORKSPACE_SCHEMA_VERSION,
     exportedAt: pickNewestTimestamp([
       ...(membershipsResult.data ?? []).map((row) => row.updated_at),
       ...(invitationsResult.data ?? []).map((row) => row.updated_at),
