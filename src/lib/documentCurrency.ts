@@ -26,12 +26,34 @@ export const CURRENT_COGGINS_DAYS = 365;
 
 const DAY_MS = 86_400_000;
 
-// examDate is a calendar date, so Date.parse reads it as UTC midnight. Someone
-// in UTC+13 recording today's exam produces a timestamp up to about fourteen
-// hours ahead of a UTC clock, and a device clock can drift further still. One
-// day of slack lets a genuine same-day exam through while a wrong year — the
-// case worth catching — is off by hundreds of them.
-const FUTURE_EXAM_TOLERANCE_MS = DAY_MS;
+/*
+ * The calendar day an exam falls on, as a UTC-midnight timestamp.
+ *
+ * An exam date is a calendar date with no zone attached to it, so the only
+ * honest comparison is day against day. A tolerance in milliseconds cannot
+ * express that: 24 hours of slack admits a document dated genuinely tomorrow,
+ * and anything less rejects a same-day exam recorded east of UTC. Normalizing
+ * both sides to a day removes the choice.
+ *
+ * `Date.parse` reads a bare 'YYYY-MM-DD' as UTC midnight, and a stored record
+ * may instead carry a full timestamp, so the exam side is reduced by its UTC
+ * components — the day it was written down as.
+ */
+function examCalendarDay(examTime: number): number {
+  const exam = new Date(examTime);
+  return Date.UTC(exam.getUTCFullYear(), exam.getUTCMonth(), exam.getUTCDate());
+}
+
+/*
+ * Today, in the zone of whoever is looking.
+ *
+ * Deliberately local rather than UTC. A rancher in UTC+13 recording this
+ * morning's Coggins is not filing a future document, and one in UTC-10 should
+ * not have tomorrow's date accepted because it is already tomorrow in London.
+ */
+function localCalendarDay(now: Date): number {
+  return Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+}
 
 export function isDocumentReady(document: Pick<DocumentRecord, 'state'>): boolean {
   return document.state === 'Ready';
@@ -53,13 +75,13 @@ export function documentExamTime(document: DatedDocument): number | null {
 export function isCurrentDatedDocument(document: DatedDocument, maxAgeDays: number, now: Date = new Date()): boolean {
   const examTime = documentExamTime(document);
   if (examTime === null) return false;
-  const age = now.getTime() - examTime;
   // An exam cannot have happened yet. Without this the window is open-ended on
   // the near side, so a typo'd year clears a sale blocker and moves an asking
   // price into ready-to-close value on the strength of a date nobody could have
-  // examined a horse on.
-  if (age < -FUTURE_EXAM_TOLERANCE_MS) return false;
-  return age <= maxAgeDays * DAY_MS;
+  // examined a horse on. Day against day, so tomorrow is refused however few
+  // hours away it is, and today is accepted whatever the clock says.
+  if (examCalendarDay(examTime) > localCalendarDay(now)) return false;
+  return now.getTime() - examTime <= maxAgeDays * DAY_MS;
 }
 
 /** A document that has been reviewed AND whose exam is still inside the window. */

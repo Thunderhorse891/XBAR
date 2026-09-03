@@ -154,14 +154,23 @@ test('an exam that has not happened yet is not a current exam', () => {
     'a Coggins dated next year is not current',
   );
 
-  // The over-rejection direction. examDate is a calendar date read as UTC
-  // midnight, so a same-day exam recorded east of UTC lands slightly ahead of
-  // a UTC clock and must still count.
-  for (const examDaysAgo of [-1, 0, 30]) {
+  // And the near boundary is a DAY, not a duration. A tolerance measured in
+  // hours cannot separate these two: `now` is noon, so a document dated
+  // tomorrow is only twelve hours ahead and any slack wide enough to admit a
+  // same-day exam recorded east of UTC would admit it too.
+  assert.equal(
+    hasCurrentReadyDocument([cogginsDoc('h1', -1)], CURRENT_COGGINS_DAYS, now),
+    false,
+    "tomorrow's exam has still not happened, however few hours away it is",
+  );
+
+  // The over-rejection direction: a same-day exam counts whatever the clock
+  // says, including one written down at a moment later in the day than `now`.
+  for (const examDaysAgo of [0, -0.25, 0.25, 30]) {
     assert.equal(
       hasCurrentReadyDocument([cogginsDoc('h1', examDaysAgo)], CURRENT_COGGINS_DAYS, now),
       true,
-      `an exam ${examDaysAgo} days ago is still current`,
+      `an exam ${examDaysAgo} days from now is on a day that has already started`,
     );
   }
 });
