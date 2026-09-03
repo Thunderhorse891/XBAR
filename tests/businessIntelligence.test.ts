@@ -130,6 +130,7 @@ test('the risk report and the sale-packet gate agree about the same horse', () =
     [400, 'Ready'],
     [30, 'Needs Review'],
     [null, 'Ready'],
+    [-400, 'Ready'],
   ] as const) {
     const documents = [cogginsDoc('h1', examDaysAgo, state)];
     const gate = hasCurrentReadyDocument(documents, CURRENT_COGGINS_DAYS, now);
@@ -138,6 +139,29 @@ test('the risk report and the sale-packet gate agree about the same horse', () =
       gate,
       report.items.length === 0,
       `the gate and the risk report disagree for exam ${examDaysAgo} days ago in state ${state}`,
+    );
+  }
+});
+
+test('an exam that has not happened yet is not a current exam', () => {
+  // The window used to be bounded only on the far side, so `now - examTime`
+  // went negative for a future date and satisfied the test outright. A typo'd
+  // year therefore cleared the sale blocker and moved the whole asking price
+  // into ready-to-close value.
+  assert.equal(
+    hasCurrentReadyDocument([cogginsDoc('h1', -400)], CURRENT_COGGINS_DAYS, now),
+    false,
+    'a Coggins dated next year is not current',
+  );
+
+  // The over-rejection direction. examDate is a calendar date read as UTC
+  // midnight, so a same-day exam recorded east of UTC lands slightly ahead of
+  // a UTC clock and must still count.
+  for (const examDaysAgo of [-1, 0, 30]) {
+    assert.equal(
+      hasCurrentReadyDocument([cogginsDoc('h1', examDaysAgo)], CURRENT_COGGINS_DAYS, now),
+      true,
+      `an exam ${examDaysAgo} days ago is still current`,
     );
   }
 });

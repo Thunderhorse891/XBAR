@@ -26,6 +26,13 @@ export const CURRENT_COGGINS_DAYS = 365;
 
 const DAY_MS = 86_400_000;
 
+// examDate is a calendar date, so Date.parse reads it as UTC midnight. Someone
+// in UTC+13 recording today's exam produces a timestamp up to about fourteen
+// hours ahead of a UTC clock, and a device clock can drift further still. One
+// day of slack lets a genuine same-day exam through while a wrong year — the
+// case worth catching — is off by hundreds of them.
+const FUTURE_EXAM_TOLERANCE_MS = DAY_MS;
+
 export function isDocumentReady(document: Pick<DocumentRecord, 'state'>): boolean {
   return document.state === 'Ready';
 }
@@ -46,7 +53,13 @@ export function documentExamTime(document: DatedDocument): number | null {
 export function isCurrentDatedDocument(document: DatedDocument, maxAgeDays: number, now: Date = new Date()): boolean {
   const examTime = documentExamTime(document);
   if (examTime === null) return false;
-  return now.getTime() - examTime <= maxAgeDays * DAY_MS;
+  const age = now.getTime() - examTime;
+  // An exam cannot have happened yet. Without this the window is open-ended on
+  // the near side, so a typo'd year clears a sale blocker and moves an asking
+  // price into ready-to-close value on the strength of a date nobody could have
+  // examined a horse on.
+  if (age < -FUTURE_EXAM_TOLERANCE_MS) return false;
+  return age <= maxAgeDays * DAY_MS;
 }
 
 /** A document that has been reviewed AND whose exam is still inside the window. */
