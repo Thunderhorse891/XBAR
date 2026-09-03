@@ -190,7 +190,7 @@ export function SalePacketWizard({
      * down. Between the two the blob is unreferenced, which is what the orphan
      * sweep deletes — the same window the intake and the backup import have.
      */
-    beginVaultWrite();
+    await beginVaultWrite();
     try {
       const auth = { workspaceId, accessToken: session?.access_token ?? '' };
       let downloadUrl: string | undefined;

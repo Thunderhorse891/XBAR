@@ -908,10 +908,19 @@ function vaultLockManager(): VaultLockManager | null {
 }
 
 /*
- * Held for as long as the counter is above zero, released when it returns to
- * zero. A resolver rather than an awaited body because the paired
- * begin/end API has to span call sites that the lock callback cannot wrap.
+ * Two promises, because "asked for the lock" and "holding the lock" are
+ * different states and only the second one is safe to write in.
+ *
+ * `vaultLockGranted` resolves when the shared lock is actually held, and
+ * `beginVaultWrite` awaits it. Firing the request and returning immediately
+ * left a window between `storeLocalFile` and the grant in which the sweep could
+ * still take the exclusive lock — the guard looked present and protected
+ * nothing.
+ *
+ * `releaseVaultWriteLock` resolves the promise the lock callback is parked on,
+ * which is how a lock gets released from outside the callback that holds it.
  */
+let vaultLockGranted: Promise<void> | null = null;
 let releaseVaultWriteLock: (() => void) | null = null;
 
 /** True while any operation IN THIS TAB is between writing blobs and installing records. */
@@ -919,50 +928,50 @@ export function isVaultWriteInFlight(): boolean {
   return vaultWritersInFlight > 0;
 }
 
-/**
- * True when a writer is open in another tab.
- *
- * Never waits and never throws: a browser without the Web Locks API answers
- * `false`, which leaves exactly the single-tab behaviour that shipped before
- * this — no worse, and no reason to refuse the sweep outright.
- */
-async function vaultWriteHeldElsewhere(): Promise<boolean> {
-  const locks = vaultLockManager();
-  if (!locks) return false;
-  try {
-    let acquired = false;
-    await locks.request(VAULT_WRITE_LOCK, { mode: 'exclusive', ifAvailable: true }, async (lock) => {
-      // `ifAvailable` hands back null rather than queueing when the lock is
-      // held. Getting it means no writer is open in any tab.
-      acquired = lock !== null;
-    });
-    return !acquired;
-  } catch {
-    return false;
-  }
-}
-
 /*
  * The paired form, for an operation that already has the right try/finally.
  *
- * `endVaultWrite` MUST run on every path, which is what a `finally` is for. Use
- * `withVaultWriteGuard` below wherever there is not already such a block —
- * forgetting the end leaves the vault unsweepable for the rest of the session.
+ * MUST be awaited: it returns once the shared lock is held, and writing blobs
+ * before that point is the race this exists to close. `endVaultWrite` must run
+ * on every path, which is what a `finally` is for — use `withVaultWriteGuard`
+ * below wherever there is not already such a block, since forgetting the end
+ * leaves the vault unsweepable for the rest of the session.
  */
-export function beginVaultWrite(): void {
+export async function beginVaultWrite(): Promise<void> {
   vaultWritersInFlight += 1;
-  // One shared lock for the whole nest, taken by the outermost writer.
-  if (vaultWritersInFlight > 1) return;
-  const locks = vaultLockManager();
-  if (!locks) return;
-  const held = new Promise<void>((resolve) => {
-    releaseVaultWriteLock = resolve;
-  });
-  // Not awaited: the writer must not stall waiting to be granted, and a shared
-  // lock is only ever contended by the sweep, which asks rather than waits.
-  void Promise.resolve(locks.request(VAULT_WRITE_LOCK, { mode: 'shared' }, () => held)).catch(() => {
-    releaseVaultWriteLock = null;
-  });
+
+  // One shared lock for the whole nest, taken by the outermost writer. A nested
+  // caller still awaits the same promise: it must not proceed before the lock
+  // the outer one asked for has actually been granted.
+  if (vaultWritersInFlight === 1) {
+    const locks = vaultLockManager();
+    if (!locks) {
+      // No Web Locks API: the in-process counter is the whole guard, and it is
+      // already raised. Nothing to wait for.
+      vaultLockGranted = Promise.resolve();
+    } else {
+      let granted: () => void = () => {};
+      vaultLockGranted = new Promise<void>((resolve) => {
+        granted = resolve;
+      });
+      const held = new Promise<void>((resolve) => {
+        releaseVaultWriteLock = resolve;
+      });
+      void Promise.resolve(
+        locks.request(VAULT_WRITE_LOCK, { mode: 'shared' }, () => {
+          granted();
+          return held;
+        }),
+      ).catch(() => {
+        // A refused lock must not strand the writer forever. The counter still
+        // guards this tab, which is the behaviour that shipped before locks.
+        releaseVaultWriteLock = null;
+        granted();
+      });
+    }
+  }
+
+  await vaultLockGranted;
 }
 
 export function endVaultWrite(): void {
@@ -981,17 +990,11 @@ export function endVaultWrite(): void {
    */
   releaseVaultWriteLock?.();
   releaseVaultWriteLock = null;
+  vaultLockGranted = null;
 }
 
-/**
- * Hold the sweep off for the whole of `run`, not just its individual writes.
- *
- * The unsafe window is write-until-record-installed, so the guard has to wrap
- * the operation. Releases in a `finally`: a throw must not leave the vault
- * permanently unsweepable.
- */
 export async function withVaultWriteGuard<T>(run: () => Promise<T>): Promise<T> {
-  beginVaultWrite();
+  await beginVaultWrite();
   try {
     return await run();
   } finally {
@@ -999,18 +1002,7 @@ export async function withVaultWriteGuard<T>(run: () => Promise<T>): Promise<T> 
   }
 }
 
-export async function sweepLocalFileVault(referencedKeys: Iterable<string>, workspaceId: string): Promise<number> {
-  if (!isLocalFileVaultAvailable()) return 0;
-
-  /*
-   * Never sweep while a writer is mid-operation. Its blobs are already in the
-   * vault and its records are not yet installed, so every one of them looks
-   * orphaned from here.
-   */
-  if (isVaultWriteInFlight()) return 0;
-  // And in any other tab, which the counter above cannot see.
-  if (await vaultWriteHeldElsewhere()) return 0;
-
+async function sweepOwnedVaultEntries(referencedKeys: Iterable<string>, workspaceId: string): Promise<number> {
   try {
     const stored = await listLocalFiles();
     const referenced = new Set(referencedKeys);
@@ -1051,6 +1043,50 @@ export async function sweepLocalFileVault(referencedKeys: Iterable<string>, work
   } catch {
     return 0;
   }
+}
+
+export async function sweepLocalFileVault(referencedKeys: Iterable<string>, workspaceId: string): Promise<number> {
+  if (!isLocalFileVaultAvailable()) return 0;
+
+  /*
+   * Never sweep while a writer is mid-operation. Its blobs are already in the
+   * vault and its records are not yet installed, so every one of them looks
+   * orphaned from here.
+   */
+  if (isVaultWriteInFlight()) return 0;
+
+  const locks = vaultLockManager();
+  // No Web Locks API: the counter above is the whole guard, which is the
+  // single-tab behaviour this had before locks and is better than never
+  // sweeping at all on those browsers.
+  if (!locks) return sweepOwnedVaultEntries(referencedKeys, workspaceId);
+
+  /*
+   * The lock is HELD for the whole sweep, not probed and released.
+   *
+   * Asking "is anyone writing?" and then listing and deleting is not a guard:
+   * a tab that starts a guarded write immediately after the probe commits its
+   * blob before its record exists, and this sweep — already past the check —
+   * deletes it. The only version of this that means anything keeps the
+   * exclusive lock across the listing and every delete, so a writer anywhere
+   * cannot begin until the sweep is done.
+   *
+   * `ifAvailable` still applies: the sweep declines rather than queues, because
+   * blocking behind a long document batch to do housekeeping would be worse
+   * than the leak it collects.
+   */
+  let swept = 0;
+  try {
+    await locks.request(VAULT_WRITE_LOCK, { mode: 'exclusive', ifAvailable: true }, async (lock) => {
+      // `ifAvailable` hands back null rather than queueing when a writer holds
+      // it in any tab. Nothing to do; the next reconciliation tries again.
+      if (lock === null) return;
+      swept = await sweepOwnedVaultEntries(referencedKeys, workspaceId);
+    });
+  } catch {
+    return 0;
+  }
+  return swept;
 }
 
 /*

@@ -806,7 +806,7 @@ export const useXbarStore = create<XbarStore>()(
          * file this was in the middle of saving, and the record installed
          * afterwards pointed at a key that no longer existed.
          */
-        beginVaultWrite();
+        await beginVaultWrite();
         try {
           const selectedHorse = state.horses.find((horse) => horse.id === horseId);
           const batchId = createId('batch');
@@ -1304,7 +1304,7 @@ export const useXbarStore = create<XbarStore>()(
          * about, and its blob is written before the `set` below installs the
          * record that references it — the same window the intake has.
          */
-        beginVaultWrite();
+        await beginVaultWrite();
         try {
           let uploadedAsset: Awaited<ReturnType<typeof uploadDocumentAssetToCloud>> = null;
           if (input.file) {

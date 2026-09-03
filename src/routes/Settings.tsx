@@ -253,7 +253,7 @@ export default function Settings() {
      * deletes — so a cloud reconciliation settling mid-import destroyed files
      * this had just restored, and left the restored records dangling.
      */
-    beginVaultWrite();
+    await beginVaultWrite();
     try {
       const text = await file.text();
       const payload = JSON.parse(text) as { files?: PortableLocalFile[]; omittedFiles?: UnbackedUpFile[] };

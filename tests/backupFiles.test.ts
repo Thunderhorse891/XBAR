@@ -2902,7 +2902,7 @@ test('the sweep does not delete a file an operation is still installing', async 
 
     // Mid-operation: the record referencing `key` does not exist yet, so the
     // referenced set is legitimately empty.
-    beginVaultWrite();
+    await beginVaultWrite();
     try {
       assert.equal(isVaultWriteInFlight(), true);
       assert.equal(await sweepLocalFileVault([], TEST_WORKSPACE), 0, 'the sweep must decline while a writer is open');
@@ -2941,8 +2941,8 @@ test('nested writers hold the sweep until the last one finishes', async () => {
   const restore = installFakeIndexedDb();
   try {
     const key = await storeLocalFile(new Blob(['bytes']), 'nested.pdf', undefined, TEST_WORKSPACE);
-    beginVaultWrite();
-    beginVaultWrite();
+    await beginVaultWrite();
+    await beginVaultWrite();
     endVaultWrite();
     try {
       assert.equal(isVaultWriteInFlight(), true, 'the outer writer is still open');
@@ -2957,10 +2957,36 @@ test('nested writers hold the sweep until the last one finishes', async () => {
   }
 });
 
-/** A Web Locks stand-in. `ifAvailable` hands back null when the name is held,
- * which is the behaviour the sweep's question depends on. */
+/*
+ * A Web Locks stand-in that actually models the modes.
+ *
+ * The first version tracked only "is this name held", which cannot express the
+ * thing under test: shared holders coexist, an exclusive request waits for all
+ * of them, and `ifAvailable` declines instead of queueing. A fake that collapses
+ * those three into one boolean lets a sweep that merely PROBES the lock look
+ * identical to one that holds it — which is exactly the bug this file is here
+ * to catch.
+ */
 function installFakeLocks() {
-  const held = new Set<string>();
+  let sharedHolders = 0;
+  let exclusiveHeld = false;
+  const waiters: (() => void)[] = [];
+
+  const settle = () => {
+    // Wake anything that might now be able to proceed.
+    const pending = waiters.splice(0, waiters.length);
+    for (const wake of pending) wake();
+  };
+
+  const waitUntil = (ready: () => boolean) =>
+    new Promise<void>((resolve) => {
+      const attempt = () => {
+        if (ready()) resolve();
+        else waiters.push(attempt);
+      };
+      attempt();
+    });
+
   const globals = globalThis as { navigator?: unknown };
   const previous = Object.getOwnPropertyDescriptor(globals, 'navigator');
   const locks = {
@@ -2969,12 +2995,20 @@ function installFakeLocks() {
       options: { mode?: 'shared' | 'exclusive'; ifAvailable?: boolean },
       body: (lock: unknown) => Promise<unknown>,
     ) => {
-      if (options.ifAvailable && held.has(name)) return body(null);
-      held.add(name);
+      const exclusive = options.mode === 'exclusive';
+      const free = () => (exclusive ? sharedHolders === 0 && !exclusiveHeld : !exclusiveHeld);
+
+      if (options.ifAvailable && !free()) return body(null);
+      if (!free()) await waitUntil(free);
+
+      if (exclusive) exclusiveHeld = true;
+      else sharedHolders += 1;
       try {
         return await body({ name });
       } finally {
-        held.delete(name);
+        if (exclusive) exclusiveHeld = false;
+        else sharedHolders -= 1;
+        settle();
       }
     },
   };
@@ -3056,6 +3090,11 @@ test('every vault writer holds the guard', async () => {
     ['src/components/SalePacketWizard.tsx', 'the generated packet'],
   ] as const) {
     const source = await readFile(file, 'utf8');
+    // AWAITED, not merely called. `beginVaultWrite` returns once the shared
+    // lock is actually held; firing it and carrying on writes blobs during the
+    // window before the grant, which is the race the lock exists to close.
+    const bare = (source.match(/(?<!await )beginVaultWrite\(\)/g) ?? []).length;
+    assert.equal(bare, 0, `${file} must await beginVaultWrite, or it writes before the lock is held`);
     const begins = (source.match(/beginVaultWrite\(\)/g) ?? []).length;
     const ends = (source.match(/endVaultWrite\(\)/g) ?? []).length;
     assert.ok(begins > 0, `${file} writes vault blobs for ${why} and must hold the guard`);
@@ -3064,4 +3103,43 @@ test('every vault writer holds the guard', async () => {
 
   const store = await readFile('src/store/useXbarStore.ts', 'utf8');
   assert.equal((store.match(/beginVaultWrite\(\)/g) ?? []).length, 2, 'both the intake and the receipt path');
+});
+
+test('a writer cannot start in the middle of a sweep', async () => {
+  /*
+   * The difference between probing the lock and holding it.
+   *
+   * Asking "is anyone writing?", releasing, and then listing and deleting is
+   * not a guard: a tab that starts a write immediately after the probe commits
+   * its blob before its record exists, and the sweep — already past the check —
+   * deletes it. Held for the whole sweep, a writer anywhere simply cannot begin
+   * until the sweep is done, which is what this asserts by ordering.
+   */
+  const restoreDb = installFakeIndexedDb();
+  const restoreLocks = installFakeLocks();
+  try {
+    await storeLocalFile(new Blob(['bytes']), 'orphan.pdf', undefined, TEST_WORKSPACE);
+
+    const order: string[] = [];
+    const sweeping = sweepLocalFileVault([], TEST_WORKSPACE).then((count) => {
+      order.push('sweep-done');
+      return count;
+    });
+
+    // Start a writer while the sweep is in flight. It must not be granted until
+    // the sweep releases.
+    const writing = beginVaultWrite().then(() => {
+      order.push('writer-granted');
+    });
+
+    const swept = await sweeping;
+    await writing;
+    endVaultWrite();
+
+    assert.equal(swept, 1, 'the sweep still collects the orphan it was started for');
+    assert.deepEqual(order, ['sweep-done', 'writer-granted'], 'the writer must wait for the sweep, not race it');
+  } finally {
+    restoreLocks();
+    restoreDb();
+  }
 });
