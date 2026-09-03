@@ -447,6 +447,22 @@ export const PACKET_VERIFIER_SCRIPT = `
       );
     }
 
+    /*
+     * The control has to be OPERABLE, not merely present.
+     *
+     * The disabled attribute is native: no CSS, no script, no embedded
+     * resource, and the button simply never fires. Every check that waits for
+     * a click is then unreachable — the same shape as an inline handler that
+     * silences the listener, and the reason both are answered here rather than
+     * inside the handler they would prevent. A sealed packet emits the button
+     * with a class, an id and a type, and nothing else.
+     */
+    if (btn.getAttribute('disabled') !== null) {
+      found.push(
+        'The button that runs this check has been disabled, so it cannot run. A sealed packet leaves it working, so this was done after sealing — do not trust anything shown here.',
+      );
+    }
+
     var ids = ['xbar-verify-btn', 'xbar-credential-payload'];
     for (var k = 0; k < ids.length; k += 1) {
       var named = document.querySelectorAll('#' + ids[k]);

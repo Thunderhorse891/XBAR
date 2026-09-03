@@ -658,3 +658,136 @@ test('a fresh install still reads as empty, so the guard still fires', () => {
     assert.equal(hasMeaningfulPersistedWorkspace(only), true, `${collection} alone must count`);
   }
 });
+
+test('a workspace saved to the fallback after a write refusal is what hydrates next time', async () => {
+  /*
+   * `setItem` already did the right thing when IndexedDB refused: the value
+   * went to localStorage. The READ path did not know that had happened. It
+   * returned the first truthy IndexedDB value it found — the copy from before
+   * the outage — so the app hydrated stale records, and the next successful
+   * write then removed the newer fallback. Every edit made during the outage
+   * disappeared with nothing on screen having said a word.
+   */
+  let refuseWrites = false;
+  const restoreDb = installFakeIndexedDb({ failWrites: () => refuseWrites });
+  const restoreWindow = installLocalStorageWith({});
+
+  try {
+    const before = JSON.stringify({ state: { horses: [{ id: 'h1' }] } });
+    await workspaceStateStorage.setItem('xbar-live-workspace', before);
+    assert.equal(await workspaceStateStorage.getItem('xbar-live-workspace'), before, 'the primary store holds it');
+
+    // IndexedDB starts refusing. The day's work goes to the fallback.
+    refuseWrites = true;
+    const after = JSON.stringify({ state: { horses: [{ id: 'h1' }, { id: 'h2' }] } });
+    await workspaceStateStorage.setItem('xbar-live-workspace', after);
+
+    assert.equal(
+      await workspaceStateStorage.getItem('xbar-live-workspace'),
+      after,
+      'the newer workspace must hydrate, not the copy from before the outage',
+    );
+  } finally {
+    restoreWindow();
+    restoreDb();
+  }
+});
+
+test('the primary store becomes authoritative again once it accepts a write', async () => {
+  // The over-rejection direction: a marker that outlived the outage would
+  // pin every later load to a fallback the app has already moved past.
+  let refuseWrites = true;
+  const restoreDb = installFakeIndexedDb({ failWrites: () => refuseWrites });
+  const restoreWindow = installLocalStorageWith({});
+
+  try {
+    const duringOutage = JSON.stringify({ state: { horses: [{ id: 'h1' }] } });
+    await workspaceStateStorage.setItem('xbar-live-workspace', duringOutage);
+
+    refuseWrites = false;
+    const recovered = JSON.stringify({ state: { horses: [{ id: 'h1' }, { id: 'h2' }] } });
+    await workspaceStateStorage.setItem('xbar-live-workspace', recovered);
+
+    assert.equal(
+      await workspaceStateStorage.getItem('xbar-live-workspace'),
+      recovered,
+      'the store that caught up is authoritative again',
+    );
+  } finally {
+    restoreWindow();
+    restoreDb();
+  }
+});
+
+test('a fallback workspace is not deleted until IndexedDB has actually taken it', async () => {
+  /*
+   * The migration on read discarded the result of the write and removed the
+   * legacy value anyway. IndexedDB can be perfectly readable and still refuse
+   * a write — an aborted transaction, a full quota — so a rancher who merely
+   * opened and closed the app lost the only durable copy of their workspace.
+   */
+  const stored = JSON.stringify({ state: { horses: [{ id: 'h1' }] } });
+  const restoreDb = installFakeIndexedDb({ abortWrites: true });
+  const restoreWindow = installLocalStorageWith({ 'xbar-live-workspace': stored });
+
+  try {
+    assert.equal(await workspaceStateStorage.getItem('xbar-live-workspace'), stored, 'it hydrates from the fallback');
+    // Opened and closed again: the only copy must still be there.
+    assert.equal(
+      await workspaceStateStorage.getItem('xbar-live-workspace'),
+      stored,
+      'a refused migration must not delete the workspace it could not move',
+    );
+  } finally {
+    restoreWindow();
+    restoreDb();
+  }
+});
+
+test('a migration that succeeds still clears the legacy copy', async () => {
+  // The over-rejection guard for the fix above: keeping the legacy value
+  // forever would leave two copies drifting apart.
+  const stored = JSON.stringify({ state: { horses: [{ id: 'h1' }] } });
+  const restoreDb = installFakeIndexedDb();
+  const restoreWindow = installLocalStorageWith({ 'xbar-live-workspace': stored });
+
+  try {
+    assert.equal(await workspaceStateStorage.getItem('xbar-live-workspace'), stored);
+    assert.equal(
+      window.localStorage.getItem('xbar-live-workspace'),
+      null,
+      'once IndexedDB has it, the legacy copy is gone',
+    );
+  } finally {
+    restoreWindow();
+    restoreDb();
+  }
+});
+
+test('a recovered primary store wins for a key whose fallback is not cleared', async () => {
+  /*
+   * The workspace key has its legacy copy removed once IndexedDB accepts a
+   * write, which hides a stale marker: the fallback is gone, so preferring it
+   * is a no-op. Every OTHER key keeps its fallback, and there a marker left
+   * set after the store recovered pins reads to the older copy for good.
+   */
+  let refuseWrites = true;
+  const restoreDb = installFakeIndexedDb({ failWrites: () => refuseWrites });
+  const restoreWindow = installLocalStorageWith({});
+
+  try {
+    await workspaceStateStorage.setItem('xbar-other-store', 'during-outage');
+
+    refuseWrites = false;
+    await workspaceStateStorage.setItem('xbar-other-store', 'recovered');
+
+    assert.equal(
+      await workspaceStateStorage.getItem('xbar-other-store'),
+      'recovered',
+      'the store that caught up is authoritative again, even where the fallback survives',
+    );
+  } finally {
+    restoreWindow();
+    restoreDb();
+  }
+});

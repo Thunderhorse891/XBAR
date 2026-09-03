@@ -23,6 +23,15 @@ export interface FakeOptions {
   /** Abort the transaction outright, before the request itself succeeds. */
   abortWrites?: boolean;
   /**
+   * The same refusal, decided per write.
+   *
+   * A predicate for the reason `failReads` is one: the interesting case is a
+   * store that ACCEPTED a write and then stops — that is how the fallback ends
+   * up holding a newer workspace than the primary store, and a flag fixed at
+   * install time cannot express it at all.
+   */
+  failWrites?: () => boolean;
+  /**
    * Let the request succeed and then abort while committing.
    *
    * This is how a browser out of storage quota actually behaves, and it is the
@@ -114,7 +123,15 @@ export function installFakeIndexedDb(options: FakeOptions = {}) {
             const issue = <T>(compute: () => T, write?: () => void) => {
               const childRequest: Record<string, unknown> = { result: undefined, error: null };
               later(() => {
-                if (options.abortWrites) {
+                // `abortWrites` breaks the store outright, reads included, and
+                // existing tests depend on that. `failWrites` is narrower and
+                // has to be: the case it exists for is a store that READS
+                // perfectly and refuses writes, which is how the fallback ends
+                // up newer than the primary. Aborting its reads too would make
+                // that scenario untestable — the read would fail, the primary
+                // value would look absent, and the fallback would be returned
+                // for the wrong reason.
+                if (options.abortWrites || (write && options.failWrites?.())) {
                   settled = true;
                   (transaction.onabort as (() => void) | undefined)?.();
                   return;

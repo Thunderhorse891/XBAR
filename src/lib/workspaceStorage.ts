@@ -95,6 +95,43 @@ function writeLegacyValue(name: string, value: string): boolean {
   }
 }
 
+/*
+ * A note that the fallback is AHEAD of the primary store.
+ *
+ * `setItem` already does the right thing when IndexedDB refuses a write: the
+ * value goes to localStorage instead. The read path did not know that had
+ * happened. It returned the first truthy IndexedDB value it found, which after
+ * such a refusal is the OLDER copy — so the app hydrated stale records, and
+ * the next successful write then removed the newer fallback. Every edit made
+ * during the outage disappeared with nothing on screen having said a word.
+ *
+ * Nothing in the stored value carries a clock to compare, so this records the
+ * ordering at the one moment it is actually known: when the fallback write
+ * happens because the primary one failed. It lives in localStorage because
+ * IndexedDB is the store that just proved unreliable.
+ */
+const FALLBACK_AHEAD_PREFIX = 'xbar-workspace-fallback-ahead:';
+
+function markFallbackAhead(name: string, ahead: boolean) {
+  if (browserStorageAccess() !== 'available') return;
+  try {
+    if (ahead) window.localStorage.setItem(FALLBACK_AHEAD_PREFIX + name, '1');
+    else window.localStorage.removeItem(FALLBACK_AHEAD_PREFIX + name);
+  } catch {
+    // A marker that cannot be written leaves the previous behaviour, which is
+    // the behaviour that shipped — never worse than not having tried.
+  }
+}
+
+function isFallbackAhead(name: string): boolean {
+  if (browserStorageAccess() !== 'available') return false;
+  try {
+    return window.localStorage.getItem(FALLBACK_AHEAD_PREFIX + name) !== null;
+  } catch {
+    return false;
+  }
+}
+
 function removeLegacyValue(name: string) {
   if (browserStorageAccess() !== 'available') {
     return;
@@ -392,13 +429,29 @@ function notifyPersistFailure(name: string) {
 export const workspaceStateStorage: StateStorage = {
   async getItem(name) {
     const indexed = await readIndexedValue(name);
-    if (indexed.value) {
+    /*
+     * A primary value is authoritative only when nothing says otherwise. After
+     * an IndexedDB write refusal the newer workspace is in the fallback, and
+     * returning this one hydrates the state the rancher had BEFORE the outage.
+     */
+    if (indexed.value && !isFallbackAhead(name)) {
       // The workspace was found. Whatever the fallback would have said is moot.
       workspaceReadFailure = false;
       return indexed.value;
     }
 
     const legacy = readLegacyValue(name);
+
+    if (indexed.value && !legacy.value) {
+      /*
+       * The marker outlived the value it described — localStorage was cleared,
+       * or this is a different browser profile. The primary copy is all there
+       * is, so use it and stop claiming the fallback is ahead.
+       */
+      if (!legacy.failed) markFallbackAhead(name, false);
+      workspaceReadFailure = false;
+      return indexed.value;
+    }
 
     /*
      * A value from EITHER store resolves hydration.
@@ -420,9 +473,19 @@ export const workspaceStateStorage: StateStorage = {
     workspaceReadFailure = legacy.value ? false : indexed.failed || legacy.failed;
 
     if (legacy.value) {
-      await writeIndexedValue(name, legacy.value);
-      if (name === LEGACY_KEY) {
-        removeLegacyValue(name);
+      /*
+       * The result is acted on, not discarded. IndexedDB can be readable and
+       * still refuse a write — an aborted transaction, a full quota — and
+       * removing the legacy value anyway deleted the only durable copy of the
+       * workspace. A rancher who merely opened and closed the app lost
+       * everything on the next load.
+       */
+      const migrated = await writeIndexedValue(name, legacy.value);
+      if (migrated) {
+        markFallbackAhead(name, false);
+        if (name === LEGACY_KEY) {
+          removeLegacyValue(name);
+        }
       }
     }
 
@@ -462,7 +525,11 @@ export const workspaceStateStorage: StateStorage = {
 
     const persisted = await writeIndexedValue(name, value);
     if (!persisted) {
-      if (!writeLegacyValue(name, value)) {
+      if (writeLegacyValue(name, value)) {
+        // The fallback now holds a newer workspace than the primary store, and
+        // the read path has no other way to find that out.
+        markFallbackAhead(name, true);
+      } else {
         // Both stores refused. The app carries on with the workspace in memory,
         // which is the right behaviour — losing the current session's work on
         // top of a storage failure helps nobody — but it must not look saved.
@@ -471,6 +538,9 @@ export const workspaceStateStorage: StateStorage = {
       return;
     }
 
+    // The primary store has caught up, so it is authoritative again.
+    markFallbackAhead(name, false);
+
     if (name === LEGACY_KEY) {
       removeLegacyValue(name);
     }
@@ -478,5 +548,6 @@ export const workspaceStateStorage: StateStorage = {
   async removeItem(name) {
     await removeIndexedValue(name);
     removeLegacyValue(name);
+    markFallbackAhead(name, false);
   },
 };

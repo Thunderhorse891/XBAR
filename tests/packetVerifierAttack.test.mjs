@@ -794,3 +794,25 @@ test('an honest packet is not warned about at arming', async () => {
   assert.deepEqual(result.armingAlerts, [], 'a sealed packet must open silently');
   assert.equal(result.state, 'pass', result.text);
 });
+
+test('a disabled verify button is caught while the script arms', async () => {
+  /*
+   * `disabled` is native: no CSS, no script, no embedded resource, and the
+   * button never fires — so every check that waits for a click is unreachable.
+   * The same shape as the inline handler that silences the listener, which is
+   * why both are answered at arming rather than inside the handler they
+   * prevent.
+   */
+  const result = await verify({ ...honest(), btnAttrs: { disabled: '' } });
+  assert.equal(result.armingAlerts.length, 1, 'a button that cannot be pressed must not silence the warning');
+  assert.match(result.text, /button that runs this check has been disabled/);
+  assert.equal(result.state, 'fail', result.text);
+});
+
+test('an ordinary enabled button is not called disabled', async () => {
+  // The over-correction guard: the sealed button carries a class, an id and a
+  // type, and none of those may read as tampering.
+  const result = await verify({ ...honest(), btnAttrs: { class: 'verify__btn', type: 'button' } });
+  assert.equal(result.state, 'pass', result.text);
+  assert.deepEqual(result.armingAlerts, []);
+});
