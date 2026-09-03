@@ -874,9 +874,72 @@ export function orphanedVaultKeys(storedKeys: string[], referencedKeys: Iterable
  */
 let vaultWritersInFlight = 0;
 
-/** True while any operation is between writing blobs and installing records. */
+/*
+ * The counter alone only covers ONE tab.
+ *
+ * The vault is IndexedDB, which is shared by every XBAR tab on this origin, and
+ * a module-level variable is not. So a document being written in a second tab
+ * left this tab's counter at zero, the sweep ran, and it deleted the only copy
+ * of a blob the other tab was about to reference. A Web Lock is the one thing
+ * both realms can see.
+ *
+ * SHARED for writers, EXCLUSIVE for the sweep: writers do not exclude each
+ * other, only the sweep, and the sweep only needs to know whether any writer is
+ * open anywhere. `ifAvailable` makes that a question rather than a wait — the
+ * sweep must never block a tab, it is housekeeping.
+ */
+const VAULT_WRITE_LOCK = 'xbar-vault-write';
+
+type VaultLockManager = {
+  request: (
+    name: string,
+    options: { mode?: 'shared' | 'exclusive'; ifAvailable?: boolean },
+    body: (lock: unknown) => Promise<unknown>,
+  ) => Promise<unknown>;
+};
+
+function vaultLockManager(): VaultLockManager | null {
+  try {
+    const manager = (globalThis as { navigator?: { locks?: VaultLockManager } }).navigator?.locks;
+    return typeof manager?.request === 'function' ? manager : null;
+  } catch {
+    return null;
+  }
+}
+
+/*
+ * Held for as long as the counter is above zero, released when it returns to
+ * zero. A resolver rather than an awaited body because the paired
+ * begin/end API has to span call sites that the lock callback cannot wrap.
+ */
+let releaseVaultWriteLock: (() => void) | null = null;
+
+/** True while any operation IN THIS TAB is between writing blobs and installing records. */
 export function isVaultWriteInFlight(): boolean {
   return vaultWritersInFlight > 0;
+}
+
+/**
+ * True when a writer is open in another tab.
+ *
+ * Never waits and never throws: a browser without the Web Locks API answers
+ * `false`, which leaves exactly the single-tab behaviour that shipped before
+ * this — no worse, and no reason to refuse the sweep outright.
+ */
+async function vaultWriteHeldElsewhere(): Promise<boolean> {
+  const locks = vaultLockManager();
+  if (!locks) return false;
+  try {
+    let acquired = false;
+    await locks.request(VAULT_WRITE_LOCK, { mode: 'exclusive', ifAvailable: true }, async (lock) => {
+      // `ifAvailable` hands back null rather than queueing when the lock is
+      // held. Getting it means no writer is open in any tab.
+      acquired = lock !== null;
+    });
+    return !acquired;
+  } catch {
+    return false;
+  }
 }
 
 /*
@@ -888,12 +951,27 @@ export function isVaultWriteInFlight(): boolean {
  */
 export function beginVaultWrite(): void {
   vaultWritersInFlight += 1;
+  // One shared lock for the whole nest, taken by the outermost writer.
+  if (vaultWritersInFlight > 1) return;
+  const locks = vaultLockManager();
+  if (!locks) return;
+  const held = new Promise<void>((resolve) => {
+    releaseVaultWriteLock = resolve;
+  });
+  // Not awaited: the writer must not stall waiting to be granted, and a shared
+  // lock is only ever contended by the sweep, which asks rather than waits.
+  void Promise.resolve(locks.request(VAULT_WRITE_LOCK, { mode: 'shared' }, () => held)).catch(() => {
+    releaseVaultWriteLock = null;
+  });
 }
 
 export function endVaultWrite(): void {
   // Never below zero: an unbalanced end would otherwise make a later real
   // writer's increment look like no writer at all.
   vaultWritersInFlight = Math.max(0, vaultWritersInFlight - 1);
+  if (vaultWritersInFlight > 0) return;
+  releaseVaultWriteLock?.();
+  releaseVaultWriteLock = null;
 }
 
 /**
@@ -921,6 +999,8 @@ export async function sweepLocalFileVault(referencedKeys: Iterable<string>, work
    * orphaned from here.
    */
   if (isVaultWriteInFlight()) return 0;
+  // And in any other tab, which the counter above cannot see.
+  if (await vaultWriteHeldElsewhere()) return 0;
 
   try {
     const stored = await listLocalFiles();

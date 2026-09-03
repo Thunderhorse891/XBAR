@@ -1299,6 +1299,12 @@ export const useXbarStore = create<XbarStore>()(
           };
         }
 
+        /*
+         * A receipt is the evidence behind a number an accountant will ask
+         * about, and its blob is written before the `set` below installs the
+         * record that references it — the same window the intake has.
+         */
+        beginVaultWrite();
         try {
           let uploadedAsset: Awaited<ReturnType<typeof uploadDocumentAssetToCloud>> = null;
           if (input.file) {
@@ -1375,6 +1381,8 @@ export const useXbarStore = create<XbarStore>()(
         } catch (error) {
           console.error('Expense receipt upload failed', error);
           return { ok: false, message: 'Receipt upload failed. Check the fields and try again.' };
+        } finally {
+          endVaultWrite();
         }
       },
       createSalesLead: ({ horseId, name, channel, shareReady }) => {

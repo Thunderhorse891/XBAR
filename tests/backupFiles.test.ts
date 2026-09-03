@@ -2934,3 +2934,113 @@ test('nested writers hold the sweep until the last one finishes', async () => {
     restore();
   }
 });
+
+/** A Web Locks stand-in. `ifAvailable` hands back null when the name is held,
+ * which is the behaviour the sweep's question depends on. */
+function installFakeLocks() {
+  const held = new Set<string>();
+  const globals = globalThis as { navigator?: unknown };
+  const previous = Object.getOwnPropertyDescriptor(globals, 'navigator');
+  const locks = {
+    request: async (
+      name: string,
+      options: { mode?: 'shared' | 'exclusive'; ifAvailable?: boolean },
+      body: (lock: unknown) => Promise<unknown>,
+    ) => {
+      if (options.ifAvailable && held.has(name)) return body(null);
+      held.add(name);
+      try {
+        return await body({ name });
+      } finally {
+        held.delete(name);
+      }
+    },
+  };
+  Object.defineProperty(globals, 'navigator', { value: { locks }, configurable: true, writable: true });
+  return () => {
+    if (previous) Object.defineProperty(globals, 'navigator', previous);
+    else delete (globals as { navigator?: unknown }).navigator;
+  };
+}
+
+test('the sweep declines while another tab is mid-write', async () => {
+  /*
+   * The counter is module-local and the vault is not: IndexedDB is shared by
+   * every XBAR tab on the origin. A document being written in a second tab left
+   * THIS tab's counter at zero, so the sweep ran and deleted the only copy of a
+   * blob the other tab was about to reference — and that tab then persisted a
+   * record pointing at nothing. A Web Lock is the one thing both realms see.
+   */
+  const restoreDb = installFakeIndexedDb();
+  const restoreLocks = installFakeLocks();
+  try {
+    const key = await storeLocalFile(new Blob(['bytes']), 'other-tab.pdf', undefined, TEST_WORKSPACE);
+
+    // Stand in for the other tab: hold the shared lock without touching this
+    // realm's counter, which is exactly the situation that was unprotected.
+    let releaseOtherTab = () => {};
+    const otherTabHolds = new Promise<void>((resolve) => {
+      releaseOtherTab = resolve;
+    });
+    const navigatorLocks = (
+      globalThis as {
+        navigator: {
+          locks: { request: (name: string, options: object, body: () => Promise<void>) => Promise<unknown> };
+        };
+      }
+    ).navigator.locks;
+    void navigatorLocks.request('xbar-vault-write', { mode: 'shared' }, () => otherTabHolds);
+    await Promise.resolve();
+
+    assert.equal(isVaultWriteInFlight(), false, 'this tab has no writer of its own — that is the point');
+    assert.equal(await sweepLocalFileVault([], TEST_WORKSPACE), 0, 'and the sweep must still decline');
+    assert.ok(await readLocalFile(key), 'the other tab’s bytes must survive');
+
+    releaseOtherTab();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Over-rejection: once no tab holds it, a real orphan is collectable again.
+    assert.equal(await sweepLocalFileVault([], TEST_WORKSPACE), 1, 'a real orphan is swept once every tab is done');
+  } finally {
+    restoreLocks();
+    restoreDb();
+  }
+});
+
+test('a browser without the Web Locks API still sweeps', async () => {
+  // Degrading to "never sweep" would grow the vault forever on any browser
+  // without the API. The single-tab counter is still enforced there.
+  const restoreDb = installFakeIndexedDb();
+  const globals = globalThis as { navigator?: unknown };
+  const previous = Object.getOwnPropertyDescriptor(globals, 'navigator');
+  delete globals.navigator;
+  try {
+    await storeLocalFile(new Blob(['bytes']), 'no-locks.pdf', undefined, TEST_WORKSPACE);
+    assert.equal(await sweepLocalFileVault([], TEST_WORKSPACE), 1, 'an orphan is still collectable with no lock API');
+  } finally {
+    if (previous) Object.defineProperty(globals, 'navigator', previous);
+    restoreDb();
+  }
+});
+
+test('every vault writer holds the guard', async () => {
+  // The guard is only worth having if it is on all four writers. Three were
+  // added one review round apart, which is how the receipt and packet paths
+  // came to be missed.
+  const { readFile } = await import('node:fs/promises');
+  for (const [file, why] of [
+    ['src/store/useXbarStore.ts', 'document intake and expense receipts'],
+    ['src/routes/Settings.tsx', 'backup import'],
+    ['src/components/SalePacketWizard.tsx', 'the generated packet'],
+  ] as const) {
+    const source = await readFile(file, 'utf8');
+    const begins = (source.match(/beginVaultWrite\(\)/g) ?? []).length;
+    const ends = (source.match(/endVaultWrite\(\)/g) ?? []).length;
+    assert.ok(begins > 0, `${file} writes vault blobs for ${why} and must hold the guard`);
+    assert.equal(begins, ends, `${file} must release the guard exactly as often as it takes it`);
+  }
+
+  const store = await readFile('src/store/useXbarStore.ts', 'utf8');
+  assert.equal((store.match(/beginVaultWrite\(\)/g) ?? []).length, 2, 'both the intake and the receipt path');
+});
