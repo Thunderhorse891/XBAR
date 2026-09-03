@@ -112,14 +112,24 @@ function writeLegacyValue(name: string, value: string): boolean {
  */
 const FALLBACK_AHEAD_PREFIX = 'xbar-workspace-fallback-ahead:';
 
-function markFallbackAhead(name: string, ahead: boolean) {
-  if (browserStorageAccess() !== 'available') return;
+/**
+ * Record — or clear — that the fallback holds the newer workspace.
+ *
+ * Reports whether it took. Swallowing the failure was safe for the CLEARING
+ * direction and quietly destructive for the setting one: a fallback write can
+ * succeed and then leave no room for the marker, and without the marker the
+ * read path cannot tell the fallback is newer. The next load returns the older
+ * primary copy as authoritative and the write after that overwrites the newer
+ * one. So the caller is told, and decides.
+ */
+function markFallbackAhead(name: string, ahead: boolean): boolean {
+  if (browserStorageAccess() !== 'available') return false;
   try {
     if (ahead) window.localStorage.setItem(FALLBACK_AHEAD_PREFIX + name, '1');
     else window.localStorage.removeItem(FALLBACK_AHEAD_PREFIX + name);
+    return true;
   } catch {
-    // A marker that cannot be written leaves the previous behaviour, which is
-    // the behaviour that shipped — never worse than not having tried.
+    return false;
   }
 }
 
@@ -557,9 +567,20 @@ export const workspaceStateStorage: StateStorage = {
     const persisted = await writeIndexedValue(name, value);
     if (!persisted) {
       if (writeLegacyValue(name, value)) {
-        // The fallback now holds a newer workspace than the primary store, and
-        // the read path has no other way to find that out.
-        markFallbackAhead(name, true);
+        /*
+         * The fallback now holds a newer workspace than the primary store, and
+         * the marker is the read path's ONLY way to find that out — so a
+         * fallback whose marker did not land is not a saved workspace. It is
+         * the exact quota case that makes this likely: the value fits, the
+         * marker does not, and the next load then hands back the older primary
+         * copy as authoritative and overwrites this one.
+         *
+         * The value is deliberately left in place rather than rolled back: it
+         * is still the newest copy of the workspace, and deleting it to keep
+         * the stores tidy would be the loss itself. What changes is that the
+         * app stops claiming the write succeeded.
+         */
+        if (!markFallbackAhead(name, true)) notifyPersistFailure(name);
       } else {
         // Both stores refused. The app carries on with the workspace in memory,
         // which is the right behaviour — losing the current session's work on

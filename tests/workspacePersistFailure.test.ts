@@ -884,3 +884,74 @@ test('a readable localStorage with no marker still resolves hydration', async ()
     restoreDb();
   }
 });
+
+test('a fallback whose freshness marker did not land is not a saved workspace', async () => {
+  /*
+   * The quota case, exactly: IndexedDB refuses, the workspace value still fits
+   * in localStorage, and the marker recording that the fallback is NEWER does
+   * not. The marker is the read path's only way to know — without it the next
+   * load hands back the older primary copy as authoritative and the write after
+   * that overwrites this one. Reporting the fallback as saved is therefore a
+   * lie that costs the workspace.
+   */
+  const previous = (globalThis as { window?: unknown }).window;
+  const store = new Map<string, string>();
+  (globalThis as { window?: unknown }).window = {
+    localStorage: {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        // Room for the workspace, none for the marker beside it.
+        if (key.startsWith('xbar-workspace-fallback-ahead:')) throw new Error('QuotaExceededError');
+        store.set(key, value);
+      },
+      removeItem: (key: string) => store.delete(key),
+    },
+  };
+  const restoreDb = installFakeIndexedDb({ abortWrites: true });
+  const failures: string[] = [];
+  const unsubscribe = onWorkspacePersistFailure((failure) => failures.push(failure.name));
+
+  try {
+    const value = JSON.stringify({ state: { horses: [{ id: 'h1' }] } });
+    await workspaceStateStorage.setItem('xbar-live-workspace', value);
+
+    // The value is kept: it is the newest copy, and deleting it to keep the
+    // stores tidy would be the loss itself.
+    assert.equal(store.get('xbar-live-workspace'), value, 'the newer workspace must not be rolled back');
+    assert.deepEqual(failures, ['xbar-live-workspace'], 'but the app must stop claiming it is saved');
+  } finally {
+    unsubscribe();
+    restoreDb();
+    if (previous === undefined) delete (globalThis as { window?: unknown }).window;
+    else (globalThis as { window?: unknown }).window = previous;
+  }
+});
+
+test('a fallback whose marker lands is still reported as saved', async () => {
+  // The over-rejection direction. Falling back to localStorage is the NORMAL
+  // path for a browser whose IndexedDB is unusable; reporting every such write
+  // as a failure would tell those ranchers their work is unsaved forever.
+  const previous = (globalThis as { window?: unknown }).window;
+  const store = new Map<string, string>();
+  (globalThis as { window?: unknown }).window = {
+    localStorage: {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => store.set(key, value),
+      removeItem: (key: string) => store.delete(key),
+    },
+  };
+  const restoreDb = installFakeIndexedDb({ abortWrites: true });
+  const failures: string[] = [];
+  const unsubscribe = onWorkspacePersistFailure((failure) => failures.push(failure.name));
+
+  try {
+    await workspaceStateStorage.setItem('xbar-live-workspace', JSON.stringify({ state: { horses: [] } }));
+    assert.equal(store.get('xbar-workspace-fallback-ahead:xbar-live-workspace'), '1', 'the marker must be recorded');
+    assert.deepEqual(failures, [], 'a fallback that recorded its freshness is a successful save');
+  } finally {
+    unsubscribe();
+    restoreDb();
+    if (previous === undefined) delete (globalThis as { window?: unknown }).window;
+    else (globalThis as { window?: unknown }).window = previous;
+  }
+});
