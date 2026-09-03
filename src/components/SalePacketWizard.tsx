@@ -191,6 +191,18 @@ export function SalePacketWizard({
     let localPacket: LocalSalePacket | undefined;
     let localSeal: SaleCredentialSeal | undefined;
     let localFileKey: string | undefined;
+    /*
+     * What the cloud left out, which was previously thrown away.
+     *
+     * `unavailableDocuments` has always been in the response type and was read
+     * by nothing, so a selection the server could not embed — a file still only
+     * in the on-device vault, one detached since the wizard loaded, one past
+     * the attachment cap, one whose download failed — vanished silently and the
+     * summary reported the packet ready. The local branch has said which files
+     * are missing since it was fixed; this is the same sentence for the other
+     * branch.
+     */
+    let remoteUnavailable: string[] = [];
 
     if (hasBackendIdentity(auth)) {
       const remote = await createSalePacketRemote(auth, {
@@ -218,6 +230,7 @@ export function SalePacketWizard({
       downloadUrl = remote.downloadUrl;
       serverSeal = remote.seal;
       verifyUrl = remote.verifyUrl;
+      remoteUnavailable = remote.unavailableDocuments ?? [];
     } else {
       /*
        * No cloud identity — render the packet here.
@@ -364,7 +377,9 @@ export function SalePacketWizard({
     const packetStored = Boolean(downloadUrl || localFileKey);
     pushToast({
       title: downloadUrl
-        ? 'Sale packet PDF ready'
+        ? remoteUnavailable.length
+          ? 'Sale packet PDF ready — some files not included'
+          : 'Sale packet PDF ready'
         : localFileKey
           ? localPacket?.unattachedDocuments.length
             ? 'Sale packet ready — some files not included'
@@ -385,7 +400,7 @@ export function SalePacketWizard({
            * ever sets 'tab' or 'none', because `window.open` cannot report a
            * download.
            */
-          `Watermarked PDF ${packetDelivery === 'tab' ? 'opened in a new tab' : 'is ready — use the download button below to open it'}. Buyer activity is now tracked in Buyer follow-up.`
+          `Watermarked PDF ${packetDelivery === 'tab' ? 'opened in a new tab' : 'is ready — use the download button below to open it'}.${remoteUnavailable.length ? ` Not included: ${remoteUnavailable.join(', ')}.` : ''} Buyer activity is now tracked in Buyer follow-up.`
         : localFileKey
           ? // Says what is in it. A count the seller can check against what they
             // selected is the difference between finding a missing Coggins now
@@ -398,7 +413,12 @@ export function SalePacketWizard({
        * success-toned summary beside it says the opposite.
        */
       tone:
-        packetStored && packetDelivery !== 'none' && !localPacket?.unattachedDocuments.length ? 'success' : 'warning',
+        packetStored &&
+        packetDelivery !== 'none' &&
+        !localPacket?.unattachedDocuments.length &&
+        !remoteUnavailable.length
+          ? 'success'
+          : 'warning',
     });
   };
 

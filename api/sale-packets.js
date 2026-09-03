@@ -14,6 +14,7 @@ import { recordAuditEvent } from './_lib/audit.js';
 import { buildServerSaleCredential } from './_lib/sale-credential.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
 import { applyCors } from './_lib/cors.js';
+import { selectPacketDocuments } from './_lib/packet-selection.js';
 
 const DOCUMENT_BUCKET =
   process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
@@ -113,14 +114,9 @@ export default async function handler(req, res) {
     // Select the documents to bundle: caller-specified list, or every stored
     // document attached to the horse (originals + generated templates).
     const requestedIds = Array.isArray(body.documentIds) ? body.documentIds.filter((id) => typeof id === 'string') : [];
-    let packetDocs = loaded.documents.filter((doc) => doc.storage_path);
-    if (requestedIds.length) {
-      packetDocs = packetDocs.filter((doc) => requestedIds.includes(doc.document_id));
-    }
-    packetDocs = packetDocs.slice(0, MAX_PACKET_ATTACHMENTS);
+    const { packetDocs, unavailable } = selectPacketDocuments(loaded.documents, requestedIds, MAX_PACKET_ATTACHMENTS);
 
     const attachments = [];
-    const unavailable = [];
     for (const doc of packetDocs) {
       const { data, error } = await supabase.storage.from(DOCUMENT_BUCKET).download(doc.storage_path);
       if (error || !data) {

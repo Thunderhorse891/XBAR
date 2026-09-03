@@ -175,12 +175,17 @@ export async function resolvePacketAttachments(
         unattached.push({ title: label(document), reason: 'too large to include in this packet' });
         continue;
       }
+      // Charged only once the bytes are actually encoded. Incrementing first
+      // meant a file whose encode threw was billed against the budget it never
+      // entered, so a later healthy document was refused as "too large" for
+      // room nothing was occupying — a packet missing more proof than it had to.
+      const dataUrl = await toDataUrl(entry.blob, entry.type || document.mimeType || '');
       usedBytes += entry.size;
       attachments.push({
         id: document.id,
         label: label(document),
         fileName: entry.name || document.fileName || document.title,
-        dataUrl: await toDataUrl(entry.blob, entry.type || document.mimeType || ''),
+        dataUrl,
         sizeBytes: entry.size,
       });
     } catch (error) {

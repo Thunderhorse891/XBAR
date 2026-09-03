@@ -280,3 +280,40 @@ test('the byte ceiling binds on the bytes the vault holds, not on recorded sizes
     restore();
   }
 });
+
+test('a file that fails to encode does not spend the budget it never entered', async () => {
+  const restore = installFakeIndexedDb();
+  try {
+    // The encode is the last thing that can fail, and it fails after the size
+    // has already been measured. Charging the budget before it succeeded meant
+    // the failed file held room in the packet it was not in, so the next
+    // healthy document was refused as "too large" for space nothing occupied —
+    // a packet short two documents because one of them broke.
+    const doomed = new Blob(['aaaaaa']);
+    Object.defineProperty(doomed, 'arrayBuffer', {
+      value: () => Promise.reject(new Error('encode failed')),
+    });
+    const badKey = await storeLocalFile(doomed, 'bad.pdf', undefined, TEST_WORKSPACE);
+    const goodKey = await storeLocalFile(new Blob(['bbbbbb']), 'good.pdf', undefined, TEST_WORKSPACE);
+
+    const { attachments, unattached } = await resolvePacketAttachments(
+      [
+        document({ id: 'd1', title: 'Broken', localFileKey: badKey, fileSizeBytes: 6 }),
+        document({ id: 'd2', title: 'Healthy', localFileKey: goodKey, fileSizeBytes: 6 }),
+      ],
+      TEST_WORKSPACE,
+      // Room for exactly one of the two. If the failed encode is charged, the
+      // healthy file does not fit.
+      { maxBytes: 8 },
+    );
+
+    assert.deepEqual(
+      attachments.map((item) => item.fileName),
+      ['good.pdf'],
+      'the healthy document must still fit',
+    );
+    assert.deepEqual(unattached, [{ title: 'Coggins: Broken', reason: 'the stored file could not be read' }]);
+  } finally {
+    restore();
+  }
+});

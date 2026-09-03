@@ -186,6 +186,40 @@ test('a locally generated packet contains the documents it lists', async () => {
   );
 });
 
+test('the cloud path says what it left out, the same as the local path does', async () => {
+  const wizard = await readFile('src/components/SalePacketWizard.tsx', 'utf8');
+  const api = await readFile('src/lib/backendApi.ts', 'utf8');
+
+  // `unavailableDocuments` was in the response type and read by nothing, so a
+  // selection the server could not embed — a file still only in the on-device
+  // vault, one detached since the wizard loaded, one past the attachment cap,
+  // one whose download failed — vanished between the two, and the summary
+  // reported the packet ready. A source assertion because the alternative
+  // needs a live Supabase bucket; the selection accounting itself is covered
+  // directly in tests/api/packetSelection.test.mjs.
+  assert.match(api, /unavailableDocuments: string\[\]/, 'the response must still carry the omissions');
+  assert.match(
+    wizard,
+    /remoteUnavailable = remote\.unavailableDocuments \?\? \[\]/,
+    'and the wizard must actually read them rather than discarding the field',
+  );
+  assert.match(
+    wizard,
+    /'Sale packet PDF ready — some files not included'/,
+    'the cloud title must warn when something is missing, as the local title does',
+  );
+  assert.match(
+    wizard,
+    /remoteUnavailable\.length \? ` Not included: \$\{remoteUnavailable\.join\(', '\)\}\.` : ''/,
+    'and name them, since a warning the seller cannot act on is not a warning',
+  );
+  assert.match(
+    wizard,
+    /!remoteUnavailable\.length\s*\?\s*'success'\s*:\s*'warning'/,
+    'a packet missing documents must not be toned as an unqualified success',
+  );
+});
+
 test('the seller is told how much of the packet is actually in it', async () => {
   const source = await readFile('src/components/SalePacketWizard.tsx', 'utf8');
 
@@ -430,10 +464,14 @@ test('the cloud packet never claims a tab the browser refused', async () => {
    * Each branch already pushes its own warning toast when delivery fails, and a
    * success-toned summary sitting beside it says the opposite.
    */
-  assert.match(
-    wizardCode,
-    /packetStored && packetDelivery !== 'none' && !localPacket\?\.unattachedDocuments\.length \? 'success' : 'warning'/,
-  );
+  // Matched on the conjuncts rather than the whole ternary verbatim: this
+  // condition legitimately grows a clause when a new way to be incomplete is
+  // found (the cloud omissions list was the last one), and prettier rewraps it
+  // across lines when it does. What must not change is that delivery and
+  // completeness both still gate the tone.
+  const tone = wizardCode.replace(/\s+/g, ' ');
+  assert.match(tone, /tone: packetStored && packetDelivery !== 'none' && !localPacket\?\.unattachedDocuments\.length/);
+  assert.match(tone, /!localPacket\?\.unattachedDocuments\.length[^;]*\? 'success' : 'warning'/);
 });
 
 test('an import never grants a restored file script execution', async () => {
