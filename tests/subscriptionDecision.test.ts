@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { WORKSPACE_SCHEMA_VERSION, restorePersistedState } from '../src/store/xbarStoreHelpers.js';
 import path from 'node:path';
 import {
   getBillingPortalAction,
@@ -1448,32 +1447,34 @@ test('the entitlement clamp actually runs on an ordinary reload', async () => {
   /*
    * The clamp was written, shipped, and never ran.
    *
-   * `restorePersistedState` is where clampSubscriptionToEntitlement is applied
-   * to a rehydrate, and Zustand calls it only through `migrate` — which fires
-   * only when the stored version differs from the configured one. The version
-   * stayed at 8 while every existing install was already stored at 8, so a
-   * reload skipped the whole thing: a lapsed workspace kept displaying the paid
-   * tier and paid limits it no longer had.
+   * restorePersistedState is where clampSubscriptionToEntitlement is applied to
+   * a rehydrate, and Zustand calls it only through `migrate` — which fires only
+   * when the stored version differs from the configured one. The version stayed
+   * at 8 while every existing install was already stored at 8, so a reload
+   * skipped the whole thing: a lapsed workspace kept displaying the paid tier
+   * and paid limits it no longer had.
    *
-   * The behaviour first, so this test fails for the real reason and not just
-   * because a number moved.
+   * The policy itself is asserted directly, since that is importable. The
+   * wiring around it is asserted from source: xbarStoreHelpers.ts uses
+   * extensionless `@/` imports that do not resolve under tsconfig.test.json's
+   * NodeNext resolution, so it is not part of this compilation — which is why
+   * backupFiles.test.ts reaches restorePersistedState the same way.
    */
-  const lapsed = restorePersistedState({
-    subscription: {
-      tier: 'Ranch Ops',
-      purchasedTier: 'Ranch Ops',
-      billingState: 'Inactive',
-      usage: { horseLimit: 200, seatLimit: 20 },
-    },
-  });
-  assert.notEqual(
-    lapsed.subscription.tier,
-    'Ranch Ops',
-    'an inactive workspace must not keep the tier it stopped paying for',
-  );
-  assert.equal(lapsed.subscription.purchasedTier, 'Ranch Ops', 'but what they bought is still what they bought');
+  const lapsed = clampSubscriptionToEntitlement({
+    tier: 'Ranch Ops',
+    purchasedTier: 'Ranch Ops',
+    billingState: 'Inactive',
+  } as SubscriptionProfile);
+  assert.notEqual(lapsed.tier, 'Ranch Ops', 'an inactive workspace must not keep the tier it stopped paying for');
+  assert.equal(lapsed.purchasedTier, 'Ranch Ops', 'but what they bought is still what they bought');
 
-  // And the wiring that decides whether the above ever executes.
+  const helpers = await readFile(path.resolve(process.cwd(), 'src/store/xbarStoreHelpers.ts'), 'utf8');
+  assert.match(
+    helpers,
+    /const entitledSubscription = clampSubscriptionToEntitlement\(subscription\);/,
+    'restorePersistedState must be where that policy is applied to a rehydrate',
+  );
+
   const store = await readFile(path.resolve(process.cwd(), 'src/store/useXbarStore.ts'), 'utf8');
   assert.match(
     store,
@@ -1481,11 +1482,19 @@ test('the entitlement clamp actually runs on an ordinary reload', async () => {
     'the persist config must route the migration through restorePersistedState',
   );
 
-  // Version 8 shipped on main. Anything at or below it means migrate never
-  // fires for an existing install and the clamp above is dead code in practice.
+  /*
+   * Version 8 shipped on main. At or below it, `migrate` never fires for an
+   * existing install and everything above is dead code in practice.
+   *
+   * Read from source rather than imported for the module reason above — and the
+   * regex is anchored to the declaration so a number in a comment cannot
+   * satisfy it.
+   */
+  const declared = helpers.match(/export const WORKSPACE_SCHEMA_VERSION = (\d+);/);
+  assert.ok(declared, 'WORKSPACE_SCHEMA_VERSION must be a plain numeric literal so this check can read it');
   assert.ok(
-    WORKSPACE_SCHEMA_VERSION > 8,
-    `WORKSPACE_SCHEMA_VERSION is ${WORKSPACE_SCHEMA_VERSION}; version 8 is already on disk for every existing install, so migrate would never run`,
+    Number(declared[1]) > 8,
+    `WORKSPACE_SCHEMA_VERSION is ${declared[1]}; version 8 is already on disk for every existing install, so migrate would never run`,
   );
 });
 
