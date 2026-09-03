@@ -1167,9 +1167,20 @@ function installClaimHarness(locks?: unknown, log?: string[]): ClaimHarness {
   };
 }
 
-const claimFor = (workspaceId: string, tier = 'Pro'): PendingHostedPurchase => ({
+const DEFAULT_CLAIM_STARTED_AT = '2026-09-02T04:00:00.000Z';
+
+/*
+ * `startedAt` is settable, and has to be.
+ *
+ * It was hardcoded, so every marker in this file was born inside the pending
+ * window no matter what clock a test handed the code under test. An EXPIRED
+ * marker — the thing the 24-hour window exists to produce, and the state that
+ * decides whether a workspace may buy again — could not be built here at all,
+ * which is why a migration that kept expired markers passed every case.
+ */
+const claimFor = (workspaceId: string, tier = 'Pro', startedAt = DEFAULT_CLAIM_STARTED_AT): PendingHostedPurchase => ({
   tier: tier as SubscriptionTier,
-  startedAt: '2026-09-02T04:00:00.000Z',
+  startedAt,
   workspaceId,
 });
 
@@ -1355,7 +1366,7 @@ test('a local ranch carries its pending purchase into the workspace it becomes',
     const started = await claimPendingHostedPurchase(claimFor('', 'Pro'), now, true);
     assert.equal(started.claimed, true, 'the local ranch starts a purchase');
 
-    migratePendingHostedPurchase('', 'ws-new');
+    migratePendingHostedPurchase('', 'ws-new', now);
 
     const again = await claimPendingHostedPurchase(claimFor('ws-new', 'Pro'), now, true);
     assert.equal(again.claimed, false, 'the promoted workspace must still be held by it');
@@ -1377,10 +1388,13 @@ test('a promotion does not overwrite a purchase the workspace already had', asyn
     await claimPendingHostedPurchase(claimFor('', 'Pro'), now, true);
     await claimPendingHostedPurchase(claimFor('ws-new', 'Ranch'), now, true);
 
-    migratePendingHostedPurchase('', 'ws-new');
+    // `now` is passed explicitly. Without it this defaulted to the real clock,
+    // so the destination marker was long expired and the test passed only
+    // because ANY marker used to win — the very bug below.
+    migratePendingHostedPurchase('', 'ws-new', now);
 
     const kept = readPendingHostedPurchase('ws-new');
-    assert.equal(kept?.tier, 'Ranch', 'the workspace keeps its own, which is the one that belongs there');
+    assert.equal(kept?.tier, 'Ranch', 'a STILL-PENDING marker of the workspace’s own is the one that belongs there');
     assert.equal(readPendingHostedPurchase(''), null, 'and the stale copy is dropped rather than merged');
   } finally {
     harness.restore();
@@ -1508,5 +1522,43 @@ test('every writer of the schema version reads the same constant', async () => {
     const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
     assert.doesNotMatch(code, /version: \d+/, `${file} must not write a literal schema version`);
     assert.match(code, /version: WORKSPACE_SCHEMA_VERSION/, `${file} must write the shared constant`);
+  }
+});
+
+test('an expired marker on the destination does not shut out a live one', async () => {
+  /*
+   * `readPendingHostedPurchase` returns anything parseable; the 24-hour window
+   * is applied by `isPendingHostedPurchase`, and the migration used the wrong
+   * one of the two. So a workspace carrying an abandoned marker from weeks ago
+   * kept it, the recent purchase's marker was cleared from the local scope, and
+   * the guard was left holding a record that reads inactive — checkout reopened
+   * while a real payment-link purchase was still awaiting manual activation.
+   * A duplicate charge, in exactly the case this function exists to prevent.
+   */
+  const harness = installClaimHarness(undefined);
+  try {
+    const longAgo = new Date('2026-08-01T04:00:00.000Z');
+    const now = new Date('2026-09-02T04:00:01.000Z');
+
+    // The destination's own marker, abandoned a month ago.
+    await claimPendingHostedPurchase(claimFor('ws-new', 'Ranch', longAgo.toISOString()), longAgo, true);
+    // The purchase the rancher actually just made, before signing in.
+    await claimPendingHostedPurchase(claimFor('', 'Pro'), now, true);
+
+    migratePendingHostedPurchase('', 'ws-new', now);
+
+    const kept = readPendingHostedPurchase('ws-new');
+    assert.equal(kept?.tier, 'Pro', 'the live purchase must win over an expired marker');
+    assert.equal(
+      kept?.startedAt,
+      DEFAULT_CLAIM_STARTED_AT,
+      'carrying its own start time across, not the abandoned marker’s and not a fresh stamp',
+    );
+
+    // Which is the point: the workspace is still held against a second charge.
+    const again = await claimPendingHostedPurchase(claimFor('ws-new', 'Pro'), now, true);
+    assert.equal(again.claimed, false, 'checkout must stay closed while that purchase is pending');
+  } finally {
+    harness.restore();
   }
 });

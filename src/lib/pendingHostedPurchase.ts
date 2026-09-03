@@ -256,7 +256,11 @@ export function claimPendingHostedPurchase(
  * window past the purchase it describes, and the window is the only thing
  * bounding how long an abandoned checkout keeps someone from buying.
  */
-export function migratePendingHostedPurchase(fromWorkspaceId: string, toWorkspaceId: string): void {
+export function migratePendingHostedPurchase(
+  fromWorkspaceId: string,
+  toWorkspaceId: string,
+  now: Date = new Date(),
+): void {
   if (!toWorkspaceId || toWorkspaceId === 'local') return;
   if (pendingHostedPurchaseKey(fromWorkspaceId) === pendingHostedPurchaseKey(toWorkspaceId)) return;
 
@@ -264,11 +268,21 @@ export function migratePendingHostedPurchase(fromWorkspaceId: string, toWorkspac
   if (!carried) return;
 
   /*
-   * A marker already under the destination is the workspace's own, and it is
-   * the one that belongs there. The stale copy is dropped rather than merged:
-   * keeping it would hand the same guard two answers on the next promotion.
+   * Only a marker that is STILL PENDING belongs to the destination.
+   *
+   * `readPendingHostedPurchase` returns anything parseable; the window is
+   * applied by `isPendingHostedPurchase`, and this used the wrong one of the
+   * two. So a workspace carrying an abandoned marker from weeks ago kept it,
+   * the recent one was cleared from the source, and the guard was left holding
+   * a record that reads inactive — checkout reopened while a real purchase was
+   * still awaiting activation. A duplicate charge in exactly the case this
+   * function exists to prevent.
+   *
+   * The workspace id is checked by the same predicate, so a marker stored
+   * under this key but stamped for another workspace is not a live guard
+   * either, and does not get to block the one that is.
    */
-  if (!readPendingHostedPurchase(toWorkspaceId)) {
+  if (!isPendingHostedPurchase(readPendingHostedPurchase(toWorkspaceId), now, toWorkspaceId)) {
     writePendingHostedPurchase({ ...carried, workspaceId: toWorkspaceId });
   }
   clearPendingHostedPurchase(fromWorkspaceId);
