@@ -1,16 +1,11 @@
 import { sendJson } from './_lib/http.js';
+import { clientManagedBillingEnabled, serverManagedBillingEnabled } from './_lib/managed-billing.js';
 
 /*
  * Liveness/readiness probe for uptime monitoring and load balancers.
  * Reports which subsystems are configured without leaking any secret values,
  * and never touches the database — it must stay cheap enough to poll.
  */
-
-function readFlag(name) {
-  const normalized = process.env[name]?.trim().toLowerCase() ?? '';
-  if (!normalized) return false;
-  return ['1', 'true', 'yes', 'on'].includes(normalized);
-}
 
 function hasEnv(name) {
   return Boolean(process.env[name]?.trim());
@@ -21,8 +16,14 @@ export default function handler(req, res) {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
   }
 
-  const managedBilling = readFlag('MANAGED_BILLING_ENABLED');
-  const clientManagedBilling = readFlag('VITE_MANAGED_BILLING_ENABLED');
+  /*
+   * Each flag read the way its OWN consumer reads it. The server's is the
+   * strict form the checkout endpoint acts on; the client's is the broad form
+   * its generic reader accepts. Asking one question of both is what let
+   * readiness be green over a checkout that could not run.
+   */
+  const managedBilling = serverManagedBillingEnabled();
+  const clientManagedBilling = clientManagedBillingEnabled();
   const stripePriceIds = [
     'STRIPE_PRICE_ID_STARTER',
     'STRIPE_PRICE_ID_PROFESSIONAL',
@@ -113,6 +114,17 @@ export default function handler(req, res) {
   }
   if (managedBillingTouched && !subsystems.clientManagedBilling) {
     reasons.push('VITE_MANAGED_BILLING_ENABLED must be true before the app will offer managed checkout.');
+  }
+  /*
+   * The mismatch itself, named. A client that offers checkout while the server
+   * refuses it is not a missing value — every variable is set — so none of the
+   * checks above can see it. It is the one shape that fails for the customer
+   * at the moment they try to pay.
+   */
+  if (subsystems.clientManagedBilling && !subsystems.managedBilling) {
+    reasons.push(
+      'VITE_MANAGED_BILLING_ENABLED is on but MANAGED_BILLING_ENABLED is not exactly "true", so the app offers checkout the server will refuse.',
+    );
   }
 
   const ok = billingReady;

@@ -19,9 +19,11 @@ import { subscriptionPlans } from '../src/lib/subscriptionPlans.js';
 import {
   claimPendingHostedPurchase,
   isPendingHostedPurchase,
+  migratePendingHostedPurchase,
   parsePendingHostedPurchase,
   pendingHostedPurchaseKey,
   pendingHostedPurchaseNotice,
+  readPendingHostedPurchase,
   withPendingPurchaseLock,
 } from '../src/lib/pendingHostedPurchase.js';
 import type { PendingHostedPurchase } from '../src/lib/pendingHostedPurchase.js';
@@ -1335,4 +1337,108 @@ test('the billing screen claims the purchase rather than reading and writing it'
 
   const assigned = [...screen.matchAll(/await followPaymentLink\(/g)];
   assert.equal(assigned.length, 2, 'both payment-link routes must await the claim before redirecting');
+});
+
+/*
+ * Signing in must not hand back a purchase already in flight.
+ *
+ * The marker is scoped to a workspace on purpose — one browser can hold two
+ * ranches, and a purchase started by one must not block the other. Promotion
+ * is the case scoping alone gets wrong: the same person, the same browser, the
+ * same purchase, and a new `workspaceId`. Both the screen and the claim then
+ * look under a key nobody wrote.
+ */
+test('a local ranch carries its pending purchase into the workspace it becomes', async () => {
+  const harness = installClaimHarness(undefined);
+  try {
+    const now = new Date('2026-09-02T04:00:01.000Z');
+    const started = await claimPendingHostedPurchase(claimFor('', 'Pro'), now, true);
+    assert.equal(started.claimed, true, 'the local ranch starts a purchase');
+
+    migratePendingHostedPurchase('', 'ws-new');
+
+    const again = await claimPendingHostedPurchase(claimFor('ws-new', 'Pro'), now, true);
+    assert.equal(again.claimed, false, 'the promoted workspace must still be held by it');
+    assert.equal(
+      again.claimed === false && again.blockedBy.startedAt,
+      '2026-09-02T04:00:00.000Z',
+      'and the original start time is carried, not restamped',
+    );
+    assert.equal(readPendingHostedPurchase(''), null, 'the local copy is not left behind to fire twice');
+  } finally {
+    harness.restore();
+  }
+});
+
+test('a promotion does not overwrite a purchase the workspace already had', async () => {
+  const harness = installClaimHarness(undefined);
+  try {
+    const now = new Date('2026-09-02T04:00:01.000Z');
+    await claimPendingHostedPurchase(claimFor('', 'Pro'), now, true);
+    await claimPendingHostedPurchase(claimFor('ws-new', 'Ranch'), now, true);
+
+    migratePendingHostedPurchase('', 'ws-new');
+
+    const kept = readPendingHostedPurchase('ws-new');
+    assert.equal(kept?.tier, 'Ranch', 'the workspace keeps its own, which is the one that belongs there');
+    assert.equal(readPendingHostedPurchase(''), null, 'and the stale copy is dropped rather than merged');
+  } finally {
+    harness.restore();
+  }
+});
+
+test('promotion to nothing, or to the same scope, changes nothing', async () => {
+  // The over-rejection direction: a no-op promotion must not move or drop a
+  // marker, or an ordinary reload would clear the guard.
+  const harness = installClaimHarness(undefined);
+  try {
+    const now = new Date('2026-09-02T04:00:01.000Z');
+    await claimPendingHostedPurchase(claimFor('', 'Pro'), now, true);
+
+    for (const target of ['', 'local']) {
+      migratePendingHostedPurchase('', target);
+      assert.equal(readPendingHostedPurchase('')?.tier, 'Pro', `promotion to ${JSON.stringify(target)} is a no-op`);
+    }
+  } finally {
+    harness.restore();
+  }
+});
+
+test('signing out does not hand a cloud purchase to the local ranch', async () => {
+  // The reverse direction. Promotion only ever runs local -> cloud, so a call
+  // pointing the other way is a sign-out, not a promotion, and the cloud
+  // workspace's marker has to stay where it is. The local scope is shared by
+  // every signed-out session on the machine; moving a paid workspace's claim
+  // there would let the next unrelated session consume it.
+  const harness = installClaimHarness(undefined);
+  try {
+    const now = new Date('2026-09-02T04:00:01.000Z');
+    await claimPendingHostedPurchase(claimFor('ws-a', 'Pro'), now, true);
+
+    for (const target of ['', 'local']) {
+      migratePendingHostedPurchase('ws-a', target);
+      assert.equal(
+        readPendingHostedPurchase('ws-a')?.tier,
+        'Pro',
+        `signing out to ${JSON.stringify(target)} leaves the cloud marker alone`,
+      );
+      assert.equal(readPendingHostedPurchase(target), null, `and writes nothing into ${JSON.stringify(target)}`);
+    }
+  } finally {
+    harness.restore();
+  }
+});
+
+test('the promotion path is the one place that carries the marker', async () => {
+  /*
+   * Called inside `promoteLocalVaultFiles` rather than at its two call sites,
+   * because that is where the "this really is a promotion" test already lives:
+   * an import must not inherit another ranch's purchase.
+   */
+  const promotion = await readFile(path.join(process.cwd(), 'src/lib/workspacePromotion.ts'), 'utf8');
+  assert.match(promotion, /migratePendingHostedPurchase\('', owner\);/, 'the marker must move with the records');
+
+  const guardAt = promotion.indexOf("if (recorded && recorded !== 'local')");
+  const migrateAt = promotion.indexOf('migratePendingHostedPurchase(');
+  assert.ok(guardAt > -1 && migrateAt > guardAt, 'and only after the import check has let it through');
 });

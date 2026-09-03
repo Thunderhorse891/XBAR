@@ -1,3 +1,4 @@
+import { serverManagedBillingEnabled } from '../_lib/managed-billing.js';
 import Stripe from 'stripe';
 import { readJsonBody, sendJson } from '../_lib/http.js';
 import { buildSubscriptionProfile, getStripePriceIdByTier } from '../_lib/subscription-plans.js';
@@ -21,7 +22,7 @@ const RATE_LIMIT = { bucket: 'checkout', limit: 10, windowSeconds: 60 };
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY || '';
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026-02-25.clover' }) : null;
-const managedBillingEnabled = process.env.MANAGED_BILLING_ENABLED?.trim().toLowerCase() === 'true';
+const managedBillingEnabled = serverManagedBillingEnabled();
 
 function getTrustedReturnUrl(requestedReturnUrl) {
   const vercelOrigin = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '';

@@ -240,3 +240,36 @@ export function claimPendingHostedPurchase(
     return { claimed: true, pending };
   });
 }
+
+/**
+ * Carry a local ranch's pending purchase into the workspace it becomes.
+ *
+ * The marker is scoped to a workspace on purpose — one browser can hold two
+ * ranches, and a purchase started by one must not block the other. Signing in
+ * is the case that scoping alone gets wrong: the same person, the same
+ * browser, the same purchase, and a new `workspaceId`. Both the screen and the
+ * claim then look under a key nobody wrote, so a payment link already
+ * completed and waiting on a manual grant would be offered again inside the
+ * same window.
+ *
+ * `startedAt` is carried across unchanged. Restamping it would extend the
+ * window past the purchase it describes, and the window is the only thing
+ * bounding how long an abandoned checkout keeps someone from buying.
+ */
+export function migratePendingHostedPurchase(fromWorkspaceId: string, toWorkspaceId: string): void {
+  if (!toWorkspaceId || toWorkspaceId === 'local') return;
+  if (pendingHostedPurchaseKey(fromWorkspaceId) === pendingHostedPurchaseKey(toWorkspaceId)) return;
+
+  const carried = readPendingHostedPurchase(fromWorkspaceId);
+  if (!carried) return;
+
+  /*
+   * A marker already under the destination is the workspace's own, and it is
+   * the one that belongs there. The stale copy is dropped rather than merged:
+   * keeping it would hand the same guard two answers on the next promotion.
+   */
+  if (!readPendingHostedPurchase(toWorkspaceId)) {
+    writePendingHostedPurchase({ ...carried, workspaceId: toWorkspaceId });
+  }
+  clearPendingHostedPurchase(fromWorkspaceId);
+}

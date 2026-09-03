@@ -13,6 +13,7 @@
 // and the other not is the same defect with a different route in.
 
 import { adoptVaultEntries, referencedVaultKeys } from './localFileVault.js';
+import { migratePendingHostedPurchase } from './pendingHostedPurchase.js';
 import { readRecordsOwner, rememberRecordsOwner } from './recordsOwner.js';
 
 interface PromotableWorkspace {
@@ -70,6 +71,15 @@ export async function promoteLocalVaultFiles(
    */
   const recorded = readRecordsOwner();
   if (recorded && recorded !== 'local') return { adopted: 0, failed: [] };
+
+  /*
+   * The pending-purchase marker moves with the records, and for the same
+   * reason: it was written by this device before it had a workspace id. It is
+   * carried here rather than at the two call sites because that is where the
+   * "this really is a promotion" test already lives — an import must not
+   * inherit another ranch's purchase.
+   */
+  migratePendingHostedPurchase('', owner);
 
   const result = await adoptVaultEntries(
     referencedVaultKeys(workspace.documents ?? [], workspace.expenseReceipts ?? [], workspace.salePacketBuilds ?? []),
