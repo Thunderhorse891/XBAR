@@ -1664,3 +1664,39 @@ test('the web build is completely unaffected by the flag existing', () => {
     );
   }
 });
+
+test('a store build offers no billing portal either, for every subscription state', () => {
+  // The hole that gating checkout alone left open. The portal is a second
+  // external purchase path -- .env.example calls it where a subscriber goes to
+  // "upgrade, downgrade, settle a failed payment, or cancel" -- and it is the
+  // PRIMARY action for exactly the customers checkout turns away. Closing one
+  // and leaving the other would have routed every paying native customer to
+  // Stripe through the one button still lit.
+  for (const canManageBilling of [true, false])
+    for (const subscriptionActive of [true, false])
+      for (const subscriptionRecoverable of [true, false]) {
+        assert.equal(
+          getBillingPortalAction({
+            portalUrl: 'https://billing.stripe.com/p/login/test',
+            canManageBilling,
+            subscriptionActive,
+            subscriptionRecoverable,
+            nativeApp: true,
+          }),
+          null,
+          `a store build offered the portal with ${JSON.stringify({ canManageBilling, subscriptionActive, subscriptionRecoverable })}`,
+        );
+      }
+
+  // And the web keeps it, or this "fix" would have removed the only route a
+  // paying customer has to change or cancel a plan.
+  assert.deepEqual(
+    getBillingPortalAction({
+      portalUrl: 'https://billing.stripe.com/p/login/test',
+      canManageBilling: true,
+      subscriptionActive: true,
+      nativeApp: false,
+    }),
+    { url: 'https://billing.stripe.com/p/login/test', label: 'Manage your subscription' },
+  );
+});

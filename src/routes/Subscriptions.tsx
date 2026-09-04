@@ -124,6 +124,7 @@ export default function Subscriptions() {
     canManageBilling,
     subscriptionActive,
     subscriptionRecoverable,
+    nativeApp,
   });
   const continuePath = workspaceReady ? '/' : '/setup';
   const checkoutReadinessLabel = selectedCheckoutConfigured
