@@ -353,3 +353,31 @@ test('the unrendered activation checklist stays unrendered', () => {
     `activation.ts is now rendered by ${offenders.join(', ')}; its billing step is unfinishable in a store build and needs gating like GettingStarted's`,
   );
 });
+
+/*
+ * The submission runbook prescribes a GLOBAL Supabase change, so it has to
+ * account for every flow that change touches.
+ *
+ * Setting the Magic Link template to carry {{ .Token }} turns every
+ * signInWithOtp email in the deployment into a code -- not just the native
+ * one. Settings still exposes "Send magic link", and that screen has no code
+ * input, so a token-only template would hand web users a code the flow that
+ * sent it cannot consume. The runbook must therefore say to keep the
+ * confirmation URL, for as long as that button exists.
+ */
+test('the runbook keeps the magic link alive while adding the code', () => {
+  const settings = readFileSync(path.join(process.cwd(), 'src/routes/Settings.tsx'), 'utf8');
+  if (!/sendMagicLink\(/.test(settings)) return; // Button gone: the requirement lapses with it.
+
+  const runbook = readFileSync(path.join(process.cwd(), 'ios-submission/README.md'), 'utf8');
+  assert.match(
+    runbook,
+    /\{\{ \.Token \}\}/,
+    'the runbook no longer requires the OTP token, so native code sign-in silently sends a link',
+  );
+  assert.match(
+    runbook,
+    /\{\{ \.ConfirmationURL \}\}/,
+    "the runbook must keep the confirmation URL: Settings' magic link has no code input and would break",
+  );
+});
