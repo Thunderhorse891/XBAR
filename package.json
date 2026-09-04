@@ -23,6 +23,7 @@
     "test:e2e": "playwright test",
     "build:local": "node scripts/build-local.mjs",
     "test:prod-smoke": "npm run build:local && playwright test --config=playwright.prod.config.ts",
+    "test:mobile-smoke": "node scripts/build-mobile-smoke.mjs && playwright test --config=playwright.mobile.config.ts --grep-invert @auth && node scripts/build-mobile-smoke.mjs --auth && playwright test --config=playwright.mobile.config.ts --grep @auth",
     "supabase:prepare": "node scripts/prepare-supabase-schema.mjs",
     "mobile:sync": "node scripts/build-mobile.mjs && cap sync",
     "mobile:copy": "node scripts/build-mobile.mjs && cap copy",

@@ -53,6 +53,18 @@ jobs:
       - name: Production smoke test (built dist)
         run: npm run test:prod-smoke
 
+      # The only check that proves the STORE build behaves differently from the
+      # web build. The gates are runtime checks a bundler cannot tree-shake, so
+      # the strings survive in the JavaScript either way and grepping the bundle
+      # proves nothing -- what renders is what matters. Builds twice on purpose:
+      # the billing assertions need a local-mode bundle (a workspace can be
+      # created without a session, so the screen is reachable) with payment
+      # links configured, and the sign-in assertions need a Supabase-configured
+      # one, or their absence would prove auth was unconfigured rather than that
+      # the gate worked.
+      - name: Store build smoke test (native bundle)
+        run: npm run test:mobile-smoke
+
       - name: Upload smoke test traces on failure
         if: failure()
         uses: actions/upload-artifact@v6
