@@ -1133,3 +1133,185 @@ test('clamping a negative offer does not discard the real one beside it', () => 
 
   assert.equal(report.money.pipelineValue, 20000, 'the real offer still counts');
 });
+
+test('category shares always add up to exactly 100', () => {
+  /*
+   * Rounding each share independently misses 100 about a third of the time,
+   * landing anywhere from 98% to 102%. The figure is printed beside every
+   * category on screen, written to the CSV, read out as "N% of spend" in the
+   * banker-facing PDF, and used as a BAR WIDTH — so the error shows four ways
+   * at once, and percentages that do not add up cost a lender's confidence in
+   * every other number on the page.
+   *
+   * The four amounts below are the shape that fails under naive rounding:
+   * 2100/5450, 2000/5450, 1050/5450, 300/5450 round to 39 + 37 + 19 + 6 = 101.
+   */
+  const report = buildRanchReport(
+    input({
+      expenseReceipts: [
+        receipt({ id: 'r1', amount: 2100, category: 'Vet Care' }),
+        receipt({ id: 'r2', amount: 2000, category: 'Bedding' }),
+        receipt({ id: 'r3', amount: 1050, category: 'Feed' }),
+        receipt({ id: 'r4', amount: 300, category: 'Farrier' }),
+      ],
+    }),
+    NOW,
+  );
+
+  assert.equal(
+    report.categories.reduce((total, row) => total + row.share, 0),
+    100,
+    `shares were ${report.categories.map((row) => `${row.category} ${row.share}%`).join(', ')}`,
+  );
+
+  // And each share stays within a point of its exact value — the total is not
+  // reached by inflating one category to cover the rest.
+  const spend = report.money.receiptSpend;
+  for (const row of report.categories) {
+    const exact = (row.total / spend) * 100;
+    assert.ok(
+      Math.abs(row.share - exact) < 1,
+      `${row.category} reported ${row.share}% for an exact ${exact.toFixed(2)}%`,
+    );
+  }
+});
+
+test('one category owns the whole spend, and no receipts means no percentages', () => {
+  // The two ends. A single category is 100%, not 99% or 101%; and with nothing
+  // spent there is nothing to apportion, rather than a row reading "NaN%".
+  const only = buildRanchReport(
+    input({ expenseReceipts: [receipt({ id: 'r1', amount: 333, category: 'Feed' })] }),
+    NOW,
+  );
+  assert.deepEqual(
+    only.categories.map((row) => [row.category, row.share]),
+    [['Feed', 100]],
+  );
+
+  const none = buildRanchReport(input({ expenseReceipts: [] }), NOW);
+  assert.deepEqual(none.categories, []);
+
+  // A receipt logged with a zero amount is the case that actually reaches the
+  // apportionment with nothing to divide: the category row exists, so the empty
+  // list above never exercises the guard, but total spend is 0. Without the
+  // guard every share is 0/0 -- and NaN reaches four places that all render it
+  // verbatim: the on-screen "NaN%", the bar's style width: NaN%, the CSV
+  // column, and the banker PDF's "NaN% of spend".
+  const zero = buildRanchReport(input({ expenseReceipts: [receipt({ id: 'r1', amount: 0, category: 'Feed' })] }), NOW);
+  assert.deepEqual(
+    zero.categories.map((row) => [row.category, row.share]),
+    [['Feed', 0]],
+  );
+  for (const row of zero.categories) {
+    assert.ok(Number.isFinite(row.share), `share must be a real number, got ${row.share}`);
+  }
+});
+
+test('a corrupt receipt amount cannot make a category report more than all the spend', () => {
+  // Both writers refuse these amounts -- the entry form and the restore
+  // preflight each require a finite amount greater than zero -- so this is the
+  // backstop the rest of the module's money totals already have, applied to the
+  // one total that did not have it. The category loop used `+=` on the raw
+  // amount while every other figure went through `sum`, so the two could
+  // disagree about the same receipts.
+  //
+  // The consequence was not a wrong figure but an impossible one: a share of
+  // 200% or -100%, printed beside the category and drawn as a bar whose width
+  // is that number.
+  const corrupt = (amount: unknown) =>
+    buildRanchReport(
+      input({
+        expenseReceipts: [
+          { ...receipt({ id: 'r1', amount: 0, category: 'Feed' }), amount } as ExpenseReceipt,
+          receipt({ id: 'r2', amount: 500, category: 'Farrier' }),
+        ],
+      }),
+      NOW,
+    );
+
+  // A string concatenates rather than adding: '0' + '1000' is '01000', which
+  // then divides and renders as though it were money.
+  for (const amount of ['1000', {}, Number.NaN, Number.POSITIVE_INFINITY, -500]) {
+    const report = corrupt(amount);
+    const shares = report.categories.map((row) => row.share);
+    assert.ok(
+      shares.every((share) => Number.isInteger(share) && share >= 0 && share <= 100),
+      `amount ${JSON.stringify(amount)} produced shares ${JSON.stringify(shares)}`,
+    );
+    assert.equal(
+      shares.reduce((total, share) => total + share, 0),
+      100,
+      `amount ${JSON.stringify(amount)} produced shares summing to something other than 100`,
+    );
+
+    // The share is only half of what the row prints. `total` is rendered as a
+    // dollar figure beside it, so a category holding the string '01000' shows a
+    // wrong amount of money even where the percentage came out sane.
+    for (const row of report.categories) {
+      assert.ok(
+        typeof row.total === 'number' && Number.isFinite(row.total),
+        `amount ${JSON.stringify(amount)} left ${row.category} holding ${JSON.stringify(row.total)}`,
+      );
+      assert.ok(
+        typeof row.thisMonth === 'number' && Number.isFinite(row.thisMonth),
+        `amount ${JSON.stringify(amount)} left ${row.category} holding ${JSON.stringify(row.thisMonth)} this month`,
+      );
+    }
+
+    // And the categories account for the recorded spend exactly. These are the
+    // same receipts counted two ways; a reader who adds the category column up
+    // must land on the spend figure printed above it.
+    assert.equal(
+      report.categories.reduce((total, row) => total + row.total, 0),
+      report.money.receiptSpend,
+      `amount ${JSON.stringify(amount)}: the category rows do not add up to recorded spend`,
+    );
+  }
+});
+
+test('equal spend resolves the leftover point by name, not by chance', () => {
+  // Three categories at exactly a third each floor to 33, leaving one point
+  // over and three equally deserving claimants. Which one takes it must not
+  // depend on the order the receipts happened to arrive in, or the same ranch
+  // data prints a different report on a different day.
+  const first = buildRanchReport(
+    input({
+      expenseReceipts: [
+        receipt({ id: 'r1', amount: 100, category: 'Vet Care' }),
+        receipt({ id: 'r2', amount: 100, category: 'Bedding' }),
+        receipt({ id: 'r3', amount: 100, category: 'Farrier' }),
+      ],
+    }),
+    NOW,
+  );
+  const second = buildRanchReport(
+    input({
+      expenseReceipts: [
+        receipt({ id: 'r1', amount: 100, category: 'Farrier' }),
+        receipt({ id: 'r2', amount: 100, category: 'Vet Care' }),
+        receipt({ id: 'r3', amount: 100, category: 'Bedding' }),
+      ],
+    }),
+    NOW,
+  );
+
+  assert.deepEqual(
+    first.categories.map((row) => [row.category, row.share]),
+    second.categories.map((row) => [row.category, row.share]),
+    'the same spend must produce the same report whatever order the receipts arrived in',
+  );
+  // Named, not merely stable: ties break alphabetically, so Bedding takes the
+  // spare point in both runs.
+  assert.deepEqual(
+    first.categories.map((row) => [row.category, row.share]),
+    [
+      ['Bedding', 34],
+      ['Farrier', 33],
+      ['Vet Care', 33],
+    ],
+  );
+  assert.equal(
+    first.categories.reduce((total, row) => total + row.share, 0),
+    100,
+  );
+});
