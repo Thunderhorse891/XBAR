@@ -80,7 +80,13 @@ export interface HorseEconomicsRow {
 export interface CategorySpendRow {
   category: string;
   total: number;
-  /** Percent of investedToDate, rounded. */
+  /**
+   * Percent of receipt spend, as whole points that sum to exactly 100.
+   *
+   * Not `investedToDate` — acquisitions have no receipt behind them, so
+   * dividing by a total that includes them would leave the categories summing
+   * to less than 100 with nothing on the page explaining the gap.
+   */
   share: number;
   thisMonth: number;
 }
@@ -194,6 +200,74 @@ function trailingMonthlyBurn(receipts: ExpenseReceipt[], now: Date): number {
   return Math.round(sum(trailing.map((receipt) => receipt.amount)) / TRAILING_MONTHS);
 }
 
+/*
+ * Whole-point shares that actually add up to 100.
+ *
+ * Rounding each category independently does not: with four categories it
+ * misses 100 about a third of the time, landing anywhere from 98% to 102%.
+ * That figure is printed beside every category on screen, written to the CSV,
+ * read out as "N% of spend" in the banker-facing PDF, and used as a bar WIDTH —
+ * so the error is visible three ways at once, and "the percentages on your
+ * report do not add up" is exactly the kind of thing that costs a lender's
+ * confidence in every other number on the page.
+ *
+ * Largest remainder: floor every share, then hand the leftover points to the
+ * categories with the largest fractional parts. Each share stays within one
+ * point of its exact value, the total is exactly 100, and a category too small
+ * to earn a point still reports 0 rather than being rounded up out of nothing.
+ *
+ * With nothing spent the exact share is 0/0, so every share is 0 — a report
+ * that renders "NaN%" to a banker is worse than one that renders nothing. The
+ * empty-receipt case is not what exercises this: no receipts means no category
+ * rows at all. A receipt logged with an amount of zero is what reaches the
+ * apportionment with nothing to divide.
+ */
+function apportionCategoryShares(rows: { category: string; total: number; thisMonth: number }[]): CategorySpendRow[] {
+  /*
+   * The basis is derived from the rows rather than passed in, so it cannot
+   * disagree with what is being divided.
+   *
+   * It was `receiptSpend`, computed separately over the same receipts, and the
+   * two could differ: `sum` skips a non-finite amount and the category loop
+   * added it raw, so one corrupt receipt left a category holding a total that
+   * was never in the denominator. A single `"1000"` typed into a restored
+   * backup produced a category reporting 200% of spend, drawn as a bar twice
+   * the width of its track.
+   *
+   * Clamped to positive for the same reason `exact` can then never be
+   * negative. A refund-shaped amount is not a share of anything, and a
+   * negative percentage renders as a bar with a negative width. Neither writer
+   * can produce one — the entry form refuses an amount that is not greater
+   * than zero, and so does the restore preflight — so for every real workspace
+   * this basis is exactly `receiptSpend` and the shares are unchanged. It
+   * matters only for data that got in some other way, which is precisely when
+   * a banker-facing page must not print nonsense.
+   */
+  const basis = rows.reduce(
+    (total, row) => (Number.isFinite(row.total) && row.total > 0 ? total + row.total : total),
+    0,
+  );
+  if (basis <= 0) return rows.map((row) => ({ ...row, share: 0 }));
+
+  const exact = rows.map((row) => (Number.isFinite(row.total) && row.total > 0 ? (row.total / basis) * 100 : 0));
+  const shares = exact.map((value) => Math.floor(value));
+  let leftover = 100 - shares.reduce((total, value) => total + value, 0);
+
+  const byRemainder = exact
+    .map((value, index) => ({ index, remainder: value - Math.floor(value) }))
+    // Index breaks a tie, so two categories with identical remainders resolve
+    // by the caller's order rather than by whatever sort happens to do.
+    .sort((a, b) => b.remainder - a.remainder || a.index - b.index);
+
+  for (const entry of byRemainder) {
+    if (leftover <= 0) break;
+    shares[entry.index] += 1;
+    leftover -= 1;
+  }
+
+  return rows.map((row, index) => ({ ...row, share: shares[index] }));
+}
+
 export function buildRanchReport(input: RanchReportInput, now: Date = new Date()): RanchReport {
   const { horses, documents, expenseReceipts, salesLeads, ownershipRecords } = input;
 
@@ -252,6 +326,12 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
 
   const categoryTotals = new Map<string, { total: number; thisMonth: number }>();
   for (const receipt of expenseReceipts) {
+    // The same rule `sum` applies, for the same reason. `+=` on a string
+    // CONCATENATES: a receipt amount of `"1000"` turned a category total into
+    // the string `"01000"`, which then sorted, divided and rendered as though
+    // it were money. This was the one money total in the report that did not
+    // go through `sum`, and so the one that could disagree with it.
+    if (!Number.isFinite(receipt.amount)) continue;
     const bucket = categoryTotals.get(receipt.category) ?? { total: 0, thisMonth: 0 };
     bucket.total += receipt.amount;
     if (sameMonth(receipt.receiptDate, now)) bucket.thisMonth += receipt.amount;
@@ -259,22 +339,13 @@ export function buildRanchReport(input: RanchReportInput, now: Date = new Date()
   }
 
   const receiptSpend = sum(expenseReceipts.map((receipt) => receipt.amount));
-  const categories: CategorySpendRow[] = [...categoryTotals.entries()]
-    .map(([category, bucket]) => ({
-      category,
-      total: bucket.total,
-      // A share of receipt spend, not of invested-to-date. Acquisitions are not
-      // a spend category and have no receipt behind them, so dividing by a
-      // total that includes them would leave the categories summing to less
-      // than 100% with nothing on the page explaining the gap.
-      //
-      // Guarded rather than assumed non-zero: with no receipts at all this is
-      // 0/0, and a report that renders "NaN%" to a banker is worse than one
-      // that renders nothing.
-      share: receiptSpend > 0 ? Math.round((bucket.total / receiptSpend) * 100) : 0,
-      thisMonth: bucket.thisMonth,
-    }))
-    .sort((a, b) => b.total - a.total);
+  const categories: CategorySpendRow[] = apportionCategoryShares(
+    [...categoryTotals.entries()]
+      .map(([category, bucket]) => ({ category, total: bucket.total, thisMonth: bucket.thisMonth }))
+      // Name breaks a tie on equal spend so the order — and therefore which
+      // category absorbs a leftover point below — is the same on every run.
+      .sort((a, b) => b.total - a.total || a.category.localeCompare(b.category)),
+  );
 
   // What the horses cost to buy. Real money the operation has put in, and
   // invisible until now: a horse bought for $10,000 with no receipts against it
