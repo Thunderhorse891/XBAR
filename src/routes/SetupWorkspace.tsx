@@ -1,6 +1,8 @@
 import { type FormEvent, useMemo, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { XbarMark } from '@/components/BrandMark';
+import { billingPathForTier } from '@/lib/billingRoutes';
+import { saveWorkspaceBackupToCloud } from '@/lib/cloudWorkspace';
 import { isStaticPreviewHost, isSupabaseConfigured } from '@/lib/platformConfig';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
@@ -16,14 +18,22 @@ const setupStages = [
 
 export default function SetupWorkspace() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const workspaceHydrated = useWorkspaceHydrated();
   const workspaceReady = useWorkspaceReady();
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const initializeWorkspace = useXbarStore((state) => state.initializeWorkspace);
+  const exportWorkspaceBackup = useXbarStore((state) => state.exportWorkspaceBackup);
   const status = useCloudStore((state) => state.status);
+  const session = useCloudStore((state) => state.session);
+  const workspaceId = useCloudStore((state) => state.workspaceId);
+  const setLastSyncAt = useCloudStore((state) => state.setLastSyncAt);
+  const setSyncState = useCloudStore((state) => state.setSyncState);
+  const setWorkspaceAccessProfile = useCloudStore((state) => state.setWorkspaceAccessProfile);
   const pushToast = useUiStore((state) => state.pushToast);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [cloudSetupBlocked, setCloudSetupBlocked] = useState(false);
   const [form, setForm] = useState({
     businessName: workspaceProfile.businessName,
     ranchName: workspaceProfile.ranchName,
@@ -37,6 +47,9 @@ export default function SetupWorkspace() {
   const previewMode = isStaticPreviewHost();
   const supabaseReady = isSupabaseConfigured();
   const canQuickStart = previewMode || !supabaseReady;
+  const selectedPlan = params.get('plan') ?? '';
+  const postSetupPath = useMemo(() => (selectedPlan ? billingPathForTier(selectedPlan) : '/'), [selectedPlan]);
+  const cloudWorkspaceRequired = supabaseReady && status === 'signed-in' && !workspaceId;
 
   const accessLabel = useMemo(() => {
     if (!supabaseReady) return 'Browser trial';
@@ -47,13 +60,39 @@ export default function SetupWorkspace() {
     return <div className="app-loading-shell">Loading ranch workspace...</div>;
   }
 
-  if (workspaceReady) {
-    return <Navigate to="/" replace />;
+  if (workspaceReady && !saving && !cloudSetupBlocked && !cloudWorkspaceRequired) {
+    return <Navigate to={postSetupPath} replace />;
   }
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const persistCloudWorkspace = async () => {
+    if (!supabaseReady || !session?.user) return { ok: true, message: '' };
+
+    setSyncState('syncing', 'Creating cloud workspace...');
+    let saved: Awaited<ReturnType<typeof saveWorkspaceBackupToCloud>>;
+    try {
+      saved = await saveWorkspaceBackupToCloud(exportWorkspaceBackup());
+    } catch (error) {
+      saved = {
+        ok: false,
+        message: error instanceof Error ? error.message : 'Unable to create the cloud workspace.',
+      };
+    }
+
+    if (!saved.ok) {
+      setSyncState('error', `${saved.message} Try again before choosing a paid plan.`);
+      return saved;
+    }
+
+    if (saved.workspaceId) setWorkspaceAccessProfile(saved.workspaceId, 'Admin');
+    if (saved.updatedAt) setLastSyncAt(saved.updatedAt);
+    setSyncState('idle', saved.message);
+    return saved;
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSaving(true);
+    setCloudSetupBlocked(false);
 
     const result = initializeWorkspace(form);
     pushToast({
@@ -68,9 +107,19 @@ export default function SetupWorkspace() {
       return;
     }
 
+    const cloudSaved = await persistCloudWorkspace();
+    if (!cloudSaved.ok) {
+      const message = `${cloudSaved.message} Your ranch was created on this device, but checkout needs the cloud workspace first.`;
+      setFormError(message);
+      pushToast({ title: 'Cloud workspace not saved', message, tone: 'error' });
+      setCloudSetupBlocked(true);
+      setSaving(false);
+      return;
+    }
+
     setFormError('');
     setSaving(false);
-    navigate('/', { replace: true });
+    navigate(postSetupPath, { replace: true });
   };
 
   const handleQuickStart = () => {
@@ -94,7 +143,7 @@ export default function SetupWorkspace() {
     });
 
     if (result.ok) {
-      navigate('/', { replace: true });
+      navigate(postSetupPath, { replace: true });
     }
   };
 

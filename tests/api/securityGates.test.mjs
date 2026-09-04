@@ -21,8 +21,13 @@ const documentsDispatcher = (await import(pathToFileURL(path.resolve('api/docume
  * must fail safe in: no service-role writes, no billing sessions, no invites.
  */
 
-function invoke(handler, { method = 'POST', body, headers = {}, url = '/api/test', query } = {}) {
-  const req = body === undefined ? Readable.from([]) : Readable.from([JSON.stringify(body)]);
+function invoke(handler, { method = 'POST', body, rawBody, headers = {}, url = '/api/test', query } = {}) {
+  const req =
+    rawBody !== undefined
+      ? Readable.from([rawBody])
+      : body === undefined
+        ? Readable.from([])
+        : Readable.from([JSON.stringify(body)]);
   req.method = method;
   req.url = url;
   req.headers = headers;
@@ -263,6 +268,12 @@ test('checkout refuses to create sessions while managed billing is disabled', as
   const response = await invoke(checkoutHandler, { body: { tier: 'Starter', workspaceId: 'w1' } });
   assert.equal(response.statusCode, 503);
   assert.match(response.body.message, /Managed billing is paused/);
+});
+
+test('checkout rejects malformed JSON instead of crashing', async () => {
+  const response = await invoke(checkoutHandler, { rawBody: '{"tier":' });
+  assert.equal(response.statusCode, 400);
+  assert.match(response.body.message, /valid JSON/);
 });
 
 test('webhook refuses unsigned traffic when Stripe is not configured', async () => {

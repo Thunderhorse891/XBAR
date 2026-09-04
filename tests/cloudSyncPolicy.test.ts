@@ -135,3 +135,33 @@ test('reconciliation still finishes a conflict LOCKED', async () => {
     'and autosave must still require both flags, or the unlock guards nothing',
   );
 });
+
+test('the first relational workspace id becomes active before billing depends on it', async () => {
+  const cloud = await readFile('src/lib/cloudWorkspace.ts', 'utf8');
+  const store = await readFile('src/store/useCloudStore.ts', 'utf8');
+  const setup = await readFile('src/routes/SetupWorkspace.tsx', 'utf8');
+  const bootstrap = await readFile('src/components/CloudBootstrap.tsx', 'utf8');
+
+  /*
+   * `workspaces` is created by the first relational save, not by Supabase auth.
+   * The returned id must be published immediately; otherwise the billing screen
+   * can open with a database row present while the browser still believes the
+   * workspace has no managed-billing identity.
+   */
+  assert.match(cloud, /type CloudSaveResult = \{[\s\S]*workspaceId\?: string;/);
+  assert.match(cloud, /message: 'Relational workspace updated\.',\s*workspaceId,/);
+  assert.match(store, /setWorkspaceAccessProfile: \(workspaceId: string, workspaceRole\?: UserRole\) => void;/);
+  assert.match(
+    store,
+    /setWorkspaceAccessProfile: \(workspaceId, workspaceRole = 'Admin'\) => set\(\{ workspaceId, workspaceRole \}\)/,
+  );
+  assert.match(setup, /if \(saved\.workspaceId\) setWorkspaceAccessProfile\(saved\.workspaceId, 'Admin'\);/);
+  assert.match(
+    bootstrap,
+    /saved\.ok && saved\.workspaceId && saved\.workspaceId !== workspaceId\) \{\s*setWorkspaceAccessProfile\(saved\.workspaceId, 'Admin'\);/,
+  );
+  assert.match(
+    bootstrap,
+    /result\.workspaceId && result\.workspaceId !== workspaceId\) \{\s*setWorkspaceAccessProfile\(result\.workspaceId, 'Admin'\);/,
+  );
+});

@@ -57,6 +57,29 @@ test('billing tiers remain reachable before workspace setup', () => {
   assert.match(source, /<RequireWorkspaceSetup>\s*<Outlet \/>/, 'operational routes stay protected by setup');
 });
 
+test('paid signup creates the cloud workspace before billing checkout', () => {
+  const login = readRepoFile('src/routes/Login.tsx');
+  const setup = readRepoFile('src/routes/SetupWorkspace.tsx');
+
+  /*
+   * A new Supabase auth user is not enough to sell a plan: checkout needs the
+   * workspace id written by the first workspace save. Paid signups therefore
+   * carry the selected tier through setup, and setup refuses to move on to
+   * billing until the cloud workspace has been saved.
+   */
+  assert.match(login, /if \(authMode === 'signup'\) return workspaceSetupPath;/);
+  assert.match(login, /setupParams\.set\('plan', selectedPlan\)/);
+  assert.match(
+    setup,
+    /const postSetupPath = useMemo\(\(\) => \(selectedPlan \? billingPathForTier\(selectedPlan\) : '\/'\)/,
+  );
+  assert.match(setup, /const cloudSaved = await persistCloudWorkspace\(\);/);
+  assert.match(setup, /checkout needs the cloud workspace first/);
+  assert.match(setup, /const cloudWorkspaceRequired = supabaseReady && status === 'signed-in' && !workspaceId;/);
+  assert.match(setup, /workspaceReady && !saving && !cloudSetupBlocked && !cloudWorkspaceRequired/);
+  assert.match(setup, /navigate\(postSetupPath, \{ replace: true \}\)/);
+});
+
 test('billing cards can select tiers even when checkout is not configured', () => {
   const source = readRepoFile('src/routes/Subscriptions.tsx');
 

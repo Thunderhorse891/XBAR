@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useId, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { XbarMark } from '@/components/BrandMark';
-import { billingPath } from '@/lib/billingRoutes';
+import { billingPath, billingPathForTier } from '@/lib/billingRoutes';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import { productEvent, productEventNames } from '@/lib/productEvents';
 import { trackRuntimeEvent } from '@/lib/runtimeEvents';
@@ -29,11 +29,18 @@ export default function Login() {
   const [busy, setBusy] = useState<BusyState>('');
   const authMode: AuthMode = params.get('mode') === 'signup' ? 'signup' : 'signin';
   const selectedPlan = params.get('plan') ?? '';
+  const workspaceSetupPath = useMemo(() => {
+    const setupParams = new URLSearchParams();
+    if (selectedPlan) setupParams.set('plan', selectedPlan);
+    const query = setupParams.toString();
+    return query ? `/setup?${query}` : '/setup';
+  }, [selectedPlan]);
   const redirectTarget = useMemo(() => {
+    if (authMode === 'signup') return workspaceSetupPath;
     const from = (location.state as { from?: string } | null)?.from;
     if (from) return from;
-    return selectedPlan ? `${billingPath}?plan=${encodeURIComponent(selectedPlan)}` : billingPath;
-  }, [location.state, selectedPlan]);
+    return selectedPlan ? billingPathForTier(selectedPlan) : billingPath;
+  }, [authMode, location.state, selectedPlan, workspaceSetupPath]);
   const supabaseReady = isSupabaseConfigured();
 
   const setMode = (mode: AuthMode) => {
@@ -73,12 +80,12 @@ export default function Login() {
   const openBrowserWorkspace = () => {
     markLocalWorkspaceIntent();
     setUpWorkspace({ businessName: 'XBAR Ranch', ranchName: 'XBAR Ranch' });
-    navigate(redirectTarget, { replace: true });
+    navigate(selectedPlan ? billingPathForTier(selectedPlan) : billingPath, { replace: true });
   };
 
   const openWorkspaceSetup = () => {
     markLocalWorkspaceIntent();
-    navigate('/setup');
+    navigate(workspaceSetupPath);
   };
 
   const submit = async (event: FormEvent) => {
@@ -127,7 +134,7 @@ export default function Login() {
   const label = authMode === 'signin' ? 'System access' : selectedPlan ? `${selectedPlan} tier` : 'New workspace';
   const title = authMode === 'signin' ? 'Sign In' : 'Create Account';
   const description = selectedPlan
-    ? `Create credentials, then continue to the ${selectedPlan} plan.`
+    ? `Create credentials, set up your workspace, then continue to the ${selectedPlan} plan.`
     : authMode === 'signin'
       ? 'Sign in to your workspace.'
       : 'Create a sign-in for your XBAR workspace.';

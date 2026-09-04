@@ -63,6 +63,14 @@ export default async function handler(req, res) {
     return;
   }
 
+  const accessToken = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim() || '';
+  let body;
+  try {
+    body = await readJsonBody(req);
+  } catch {
+    return sendJson(res, 400, { ok: false, message: 'Request body must be valid JSON.' });
+  }
+
   if (!managedBillingEnabled) {
     return sendJson(res, 503, { ok: false, message: 'Managed billing is paused. No payment session was created.' });
   }
@@ -71,8 +79,6 @@ export default async function handler(req, res) {
     return sendJson(res, 503, { ok: false, message: 'Stripe server billing is not configured.' });
   }
 
-  const accessToken = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim() || '';
-  const body = await readJsonBody(req);
   const parsed = parseBody(checkoutSchema, body);
   if (!parsed.ok) {
     return sendJson(res, 400, { ok: false, message: parsed.message });
