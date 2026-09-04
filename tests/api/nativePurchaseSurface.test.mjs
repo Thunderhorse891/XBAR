@@ -234,3 +234,50 @@ test('the mobile build points in-app links at the SPA, not the marketing root', 
     assert.match(env, new RegExp(`${key}:`), `${key} is computed but never passed to the build`);
   }
 });
+
+/*
+ * Hiding OAuth must not lock anyone out.
+ *
+ * The store build removes the Google, Apple and Facebook buttons, because
+ * signInWithOAuth navigates the WebView to the provider and returns to
+ * capacitor://localhost -- a redirect Google refuses and Supabase will not
+ * accept. That is correct, and on its own it strands every account created
+ * through those providers: they have no password, so the password form cannot
+ * help them and "Forgot password?" resets a password that was never set. They
+ * would install the app and have no route in at all.
+ *
+ * So removing the buttons and offering nothing in their place is not an option
+ * the store build is allowed to be in, and that is what this asserts: the two
+ * decisions live in one file and have to move together.
+ */
+test('a store build that hides OAuth still offers a way in', () => {
+  const source = readFileSync(path.join(process.cwd(), 'src/routes/Login.tsx'), 'utf8');
+
+  assert.match(
+    source,
+    /canPresentThirdPartySignIn\(\)/,
+    'the login screen no longer gates third-party sign-in for a store build',
+  );
+  // Two independent facts, not a proximity match: the handler sits some 5KB
+  // from the JSX that renders it, so any "these appear near each other" regex
+  // is really measuring file layout. It fails on correct code the moment
+  // someone moves a function.
+  assert.match(
+    source,
+    /!canPresentThirdPartySignIn\(\)/,
+    'the store build hides OAuth with no branch offering anything in its place, stranding password-less accounts',
+  );
+  assert.match(
+    source,
+    /cloud\.sendMagicLink\(/,
+    'nothing on the login screen sends an emailed sign-in link, so an OAuth-only account has no route into the app',
+  );
+
+  // The control has to explain who it is for. An OAuth-only customer has no
+  // reason to guess that an emailed link is now their route in.
+  assert.match(
+    source,
+    /signed up with Google, Apple or Facebook/,
+    'the emailed sign-in offers no explanation, so an OAuth-only customer will read the app as broken',
+  );
+});

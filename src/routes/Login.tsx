@@ -12,7 +12,7 @@ import './cleanEntryExperience.css';
 import { canPresentThirdPartySignIn, canPresentPurchaseFlow } from '@/lib/nativePlatform';
 
 type AuthMode = 'signin' | 'signup';
-type BusyState = 'password' | 'google' | 'facebook' | 'apple' | 'reset' | '';
+type BusyState = 'password' | 'google' | 'facebook' | 'apple' | 'reset' | 'link' | '';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -124,6 +124,29 @@ export default function Login() {
           ? await cloud.signInWithFacebook()
           : await cloud.signInWithApple();
     toast(result.ok ? `Continue with ${provider}` : `${provider} sign-in unavailable`, result);
+    setBusy('');
+  };
+  /*
+   * The only way into a store build for an account that has no password.
+   *
+   * Hiding the OAuth buttons on native (they cannot complete in a WebView)
+   * removed the sole credential of every account created through Google, Apple
+   * or Facebook. Those accounts have no password, so the password form cannot
+   * help them and "Forgot password?" resets a password that was never set.
+   * Without this control they could install the app and have no route in at
+   * all — which is both a lockout and a broken feature under Guideline 2.1.
+   *
+   * The emailed link resolves against the public site rather than
+   * capacitor://localhost (see authCallbackOrigin), so it signs them in on the
+   * web. That is a real limitation, not a fix: from there they can set a
+   * password and use it in the app. Returning into the app itself needs
+   * ASWebAuthenticationSession and a registered deep link, verified on a
+   * device.
+   */
+  const emailSignInLink = async () => {
+    setBusy('link');
+    const result = await cloud.sendMagicLink(email);
+    toast(result.ok ? 'Sign-in link sent' : 'Sign-in link unavailable', result);
     setBusy('');
   };
   const reset = async () => {
@@ -256,6 +279,26 @@ export default function Login() {
             >
               {busy === 'password' ? 'Authenticating...' : authMode === 'signin' ? 'Sign In' : 'Create Account'}
             </button>
+            {supabaseReady && !canPresentThirdPartySignIn() && authMode === 'signin' && (
+              <>
+                <div className="clean-divider">
+                  <span>or</span>
+                </div>
+                <button type="button" disabled={busy !== '' || !email.trim()} onClick={() => void emailSignInLink()}>
+                  {busy === 'link' ? 'Sending...' : 'Email me a sign-in link'}
+                </button>
+                {/*
+                  Reachable is not the same as findable. Someone who signed up
+                  with Google arrives here, finds their button gone, and has no
+                  reason to think an emailed link is the route in — so the
+                  control has to say who it is for, or the app reads as broken.
+                */}
+                <p className="clean-auth-hint">
+                  If you first signed up with Google, Apple or Facebook, use this — those buttons cannot complete
+                  sign-in inside the app.
+                </p>
+              </>
+            )}
             {supabaseReady && canPresentThirdPartySignIn() && (
               <>
                 <div className="clean-divider">
