@@ -16,6 +16,7 @@ export function CloudBootstrap() {
   const autosaveUnlocked = useCloudStore((state) => state.autosaveUnlocked);
   const setLastSyncAt = useCloudStore((state) => state.setLastSyncAt);
   const setSyncState = useCloudStore((state) => state.setSyncState);
+  const setWorkspaceAccessProfile = useCloudStore((state) => state.setWorkspaceAccessProfile);
   const setAutosaveReady = useCloudStore((state) => state.setAutosaveReady);
   const setCurrentRole = useXbarStore((state) => state.setCurrentRole);
   const importWorkspaceBackup = useXbarStore((state) => state.importWorkspaceBackup);
@@ -149,6 +150,9 @@ export function CloudBootstrap() {
         const saved = await saveWorkspaceBackupToCloud(local);
         if (cancelled) return;
         if (saved.ok && saved.updatedAt) setLastSyncAt(saved.updatedAt);
+        if (saved.ok && saved.workspaceId && saved.workspaceId !== workspaceId) {
+          setWorkspaceAccessProfile(saved.workspaceId, 'Admin');
+        }
 
         /*
          * The device's files come with the records.
@@ -235,6 +239,7 @@ export function CloudBootstrap() {
     setAutosaveReady,
     setLastSyncAt,
     setSyncState,
+    setWorkspaceAccessProfile,
     workspaceHydrated,
     workspaceId,
   ]);
@@ -261,6 +266,9 @@ export function CloudBootstrap() {
       saving = false;
       if (disposed) return;
       if (result.ok) {
+        if (result.workspaceId && result.workspaceId !== workspaceId) {
+          setWorkspaceAccessProfile(result.workspaceId, 'Admin');
+        }
         lastPersistedSignatureRef.current = signature;
         if (result.updatedAt) setLastSyncAt(result.updatedAt);
         setSyncState('idle', result.message);
@@ -292,7 +300,9 @@ export function CloudBootstrap() {
     exportWorkspaceBackup,
     setLastSyncAt,
     setSyncState,
+    setWorkspaceAccessProfile,
     workspaceHydrated,
+    workspaceId,
   ]);
 
   return null;

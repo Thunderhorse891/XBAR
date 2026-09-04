@@ -38,6 +38,7 @@ type CloudStore = {
   initialize: () => Promise<(() => void) | void>;
   setLastSyncAt: (value: string) => void;
   setSyncState: (state: CloudSyncState, message?: string) => void;
+  setWorkspaceAccessProfile: (workspaceId: string, workspaceRole?: UserRole) => void;
   // Both arguments are required so a new call site cannot quietly inherit the
   // permissive half of this pair.
   setAutosaveReady: (ready: boolean, unlocked: boolean) => void;
@@ -68,6 +69,12 @@ type CloudStore = {
   signOut: () => Promise<CloudActionResult>;
   deleteAccount: (confirmation: string) => Promise<CloudActionResult>;
 };
+
+function currentAuthRedirectUrl() {
+  return typeof window !== 'undefined'
+    ? `${window.location.origin}${window.location.pathname}${window.location.search}`
+    : undefined;
+}
 
 export const useCloudStore = create<CloudStore>((set, get) => ({
   initialized: false,
@@ -131,6 +138,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
   },
   setLastSyncAt: (value) => set({ lastSyncAt: value }),
   setSyncState: (state, message = '') => set({ syncState: state, syncMessage: message }),
+  setWorkspaceAccessProfile: (workspaceId, workspaceRole = 'Admin') => set({ workspaceId, workspaceRole }),
   setAutosaveReady: (ready, unlocked) => set({ autosaveReady: ready, autosaveUnlocked: unlocked }),
   unlockAutosaveAfterManualSync: () => set((state) => (state.autosaveReady ? { autosaveUnlocked: true } : state)),
   sendMagicLink: async (email) => {
@@ -144,8 +152,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'Enter an email address first.' };
     }
 
-    const emailRedirectTo =
-      typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    const emailRedirectTo = currentAuthRedirectUrl();
     const { error } = await client.auth.signInWithOtp({
       email: trimmedEmail,
       options: {
@@ -198,8 +205,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'Use at least 8 characters for the password.' };
     }
 
-    const emailRedirectTo =
-      typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    const emailRedirectTo = currentAuthRedirectUrl();
     const { error } = await client.auth.signUp({
       email: trimmedEmail,
       password,
@@ -225,8 +231,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'Enter the email address for this workspace.' };
     }
 
-    const redirectTo =
-      typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    const redirectTo = currentAuthRedirectUrl();
     const { error } = await client.auth.resetPasswordForEmail(trimmedEmail, {
       redirectTo,
     });
@@ -243,8 +248,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'Supabase is not configured for this build.' };
     }
 
-    const redirectTo =
-      typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    const redirectTo = currentAuthRedirectUrl();
     const { error } = await client.auth.signInWithOAuth({
       provider: 'facebook',
       options: {
@@ -264,8 +268,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'Supabase is not configured for this build.' };
     }
 
-    const redirectTo =
-      typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    const redirectTo = currentAuthRedirectUrl();
     const { error } = await client.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo },
@@ -283,8 +286,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'Supabase is not configured for this build.' };
     }
 
-    const redirectTo =
-      typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined;
+    const redirectTo = currentAuthRedirectUrl();
     const { error } = await client.auth.signInWithOAuth({
       provider: 'apple',
       options: { redirectTo },

@@ -48,6 +48,14 @@ type CloudWorkspaceBackup = {
 type RelationalMirrorResult = {
   ok: boolean;
   message: string;
+  workspaceId?: string;
+};
+
+type CloudSaveResult = {
+  ok: boolean;
+  message: string;
+  updatedAt?: string;
+  workspaceId?: string;
 };
 
 type WorkspaceAccessProfile = {
@@ -848,6 +856,7 @@ async function saveWorkspaceBackupToRelationalCloud(
     return {
       ok: true,
       message: 'Relational workspace updated.',
+      workspaceId,
     };
   } catch (error) {
     return {
@@ -1009,7 +1018,7 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
   } as const;
 }
 
-export async function saveWorkspaceBackupToCloud(backup: unknown) {
+export async function saveWorkspaceBackupToCloud(backup: unknown): Promise<CloudSaveResult> {
   const client = getSupabaseClient();
   if (!client) {
     return { ok: false, message: 'Supabase is not configured for this build.' };
@@ -1032,6 +1041,7 @@ export async function saveWorkspaceBackupToCloud(backup: unknown) {
             ? 'Cloud sync complete. Relational workspace updated.'
             : `Relational workspace updated, but snapshot backup failed: ${snapshot.message}`,
           updatedAt,
+          workspaceId: relational.workspaceId,
         };
       }
 
@@ -1039,6 +1049,7 @@ export async function saveWorkspaceBackupToCloud(backup: unknown) {
         ok: true,
         message: 'Cloud sync complete. Relational workspace updated.',
         updatedAt,
+        workspaceId: relational.workspaceId,
       };
     }
 
