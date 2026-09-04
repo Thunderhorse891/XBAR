@@ -23,6 +23,7 @@ import { hasBuyerShareAccess } from '@/lib/workspaceAccess';
 import { buildDocumentTrustProfile, buildHorsePacketCompleteness } from '@/lib/xbarPhaseTwo';
 import { useUiStore } from '@/store/useUiStore';
 import { useHorseRecord, useXbarStore } from '@/store/useXbarStore';
+import { publicSiteHref } from '@/lib/nativePlatform';
 
 // Buyer follow-up actions: questions, call requests, and offers flow back to
 // the seller — through the public API on real shared links, or straight into
@@ -674,11 +675,11 @@ export default function BuyerProfile() {
             independent verification of registration and health status.
           </p>
           <p style={{ marginTop: '6px' }}>
-            <a href="/terms" style={{ color: 'rgba(100,140,180,0.45)', textDecoration: 'none' }}>
+            <a href={publicSiteHref('/terms')} style={{ color: 'rgba(100,140,180,0.45)', textDecoration: 'none' }}>
               Terms
             </a>{' '}
             ·{' '}
-            <a href="/privacy" style={{ color: 'rgba(100,140,180,0.45)', textDecoration: 'none' }}>
+            <a href={publicSiteHref('/privacy')} style={{ color: 'rgba(100,140,180,0.45)', textDecoration: 'none' }}>
               Privacy
             </a>
           </p>

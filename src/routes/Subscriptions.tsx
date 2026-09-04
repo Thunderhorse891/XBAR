@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { canUsePaymentLinkFallback, checkoutRouteFor, startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency } from '@/lib/format';
+import { isNativeApp } from '@/lib/nativePlatform';
 import {
   claimPendingHostedPurchase,
   clearPendingHostedPurchase,
@@ -108,6 +109,16 @@ export default function Subscriptions() {
    * subscription the way checkout would.
    */
   const hasBillingPortal = Boolean(stripeConfig.billingPortalUrl.trim());
+  /*
+   * Read once per render and passed to every readiness call below.
+   *
+   * App Store Review Guideline 3.1.1: a digital subscription sold inside the
+   * app has to go through In-App Purchase, so a store build offers no purchase
+   * path at all. The refusal lives in getCheckoutReadiness rather than in the
+   * JSX here, so all three call sites answer the same question and no role or
+   * Stripe configuration can reopen a way around it.
+   */
+  const nativeApp = isNativeApp();
   const billingPortalAction = getBillingPortalAction({
     portalUrl: stripeConfig.billingPortalUrl,
     canManageBilling,
@@ -130,6 +141,7 @@ export default function Subscriptions() {
     // was refused — all three have to answer the same question.
     subscriptionActive,
     hasBillingPortal,
+    nativeApp,
   });
   // Entitlement, not price. The stored rate is the price of the plan that was
   // bought and survives a cancellation, so using it as the "this is your
@@ -268,17 +280,26 @@ export default function Subscriptions() {
       subscriptionRecoverable,
       subscriptionActive,
       hasBillingPortal,
+      nativeApp,
     });
     if (!readiness.ready) {
       emit(productEventNames.checkoutFailed, { tier, reason: readiness.reason }, 'warning');
       pushToast({
         title:
-          readiness.mode === 'manual'
-            ? 'Billing not configured yet'
-            : readiness.mode === 'recover'
-              ? 'Payment needs to be settled first'
-              : 'Checkout needs attention',
-        message: `${readiness.reason} Your workspace and current plan were not changed.`,
+          readiness.mode === 'external'
+            ? 'Plans are managed outside the app'
+            : readiness.mode === 'manual'
+              ? 'Billing not configured yet'
+              : readiness.mode === 'recover'
+                ? 'Payment needs to be settled first'
+                : 'Checkout needs attention',
+        // The external refusal already says the workspace is unchanged, and
+        // saying it twice reads like something went wrong. Nothing did: a store
+        // build is not supposed to sell anything.
+        message:
+          readiness.mode === 'external'
+            ? readiness.reason
+            : `${readiness.reason} Your workspace and current plan were not changed.`,
         tone: 'warning',
       });
       setCheckoutTier(null);
@@ -366,6 +387,7 @@ export default function Subscriptions() {
       subscriptionRecoverable,
       subscriptionActive,
       hasBillingPortal,
+      nativeApp,
     });
     const chooseTier = () => {
       selectTier(tier);
@@ -584,9 +606,11 @@ export default function Subscriptions() {
                 ? 'Opening checkout...'
                 : selectedPaidCurrent
                   ? 'Current plan'
-                  : selectedReadiness.mode === 'manual'
-                    ? 'Billing not configured yet'
-                    : 'Continue to secure checkout'}
+                  : selectedReadiness.mode === 'external'
+                    ? 'Managed outside the app'
+                    : selectedReadiness.mode === 'manual'
+                      ? 'Billing not configured yet'
+                      : 'Continue to secure checkout'}
             </button>
           )}
           <button className="checkout-secondary-action" type="button" onClick={startTrial}>

@@ -9,6 +9,7 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import './cleanEntryExperience.css';
+import { canPresentThirdPartySignIn, canPresentPurchaseFlow } from '@/lib/nativePlatform';
 
 type AuthMode = 'signin' | 'signup';
 type BusyState = 'password' | 'google' | 'facebook' | 'apple' | 'reset' | '';
@@ -255,7 +256,7 @@ export default function Login() {
             >
               {busy === 'password' ? 'Authenticating...' : authMode === 'signin' ? 'Sign In' : 'Create Account'}
             </button>
-            {supabaseReady && (
+            {supabaseReady && canPresentThirdPartySignIn() && (
               <>
                 <div className="clean-divider">
                   <span>or continue with</span>
@@ -287,7 +288,7 @@ export default function Login() {
                 </button>
               </div>
             )}
-            <a href="/pricing">View plans</a>
+            {canPresentPurchaseFlow() && <a href="/pricing">View plans</a>}
             <span>© 2026 XBAR</span>
           </div>
         </section>
