@@ -177,3 +177,39 @@ test('emailed auth callbacks do not point at capacitor://localhost', () => {
   const direct = [...source.matchAll(/emailRedirectTo:\s*`\$\{window\.location\.origin/g)];
   assert.equal(direct.length, 0, 'an auth redirect builds its URL from window.location.origin directly');
 });
+
+/*
+ * The app and the marketing site are two roots on one origin.
+ *
+ * `npm run build` moves the SPA shell to app.html, served under /app/*, and
+ * replaces / with static marketing HTML that has no router and ignores a hash.
+ * Verified from the build output, not assumed: dist/index.html carries no
+ * `id="root"` and no hash handling; dist/app.html is the shell.
+ *
+ * These were one variable, and the failure mode is the dangerous kind -- it
+ * renders. buildPublicShareUrl consumes the app URL, so pointing it at the site
+ * root turns every shared, copied and emailed buyer link into
+ * `https://site/#/profiles/<id>`, which loads the marketing homepage, looks
+ * like a working page, and never shows the horse.
+ */
+test('the mobile build points in-app links at the SPA, not the marketing root', () => {
+  const source = readFileSync(path.join(process.cwd(), 'scripts/build-mobile.mjs'), 'utf8');
+
+  assert.match(
+    source,
+    /VITE_PUBLIC_SITE_URL/,
+    'the mobile build no longer sets a marketing origin, so legal links resolve against the SPA base',
+  );
+  assert.match(
+    source,
+    /\$\{publicSiteUrl\}\/app/,
+    'the mobile build no longer derives the app base from /app, so buyer share links load the marketing homepage',
+  );
+
+  // Both have to reach the bundle. Computing them and passing one is the same
+  // class of miss as computing authCallbackOrigin and never calling it.
+  const env = source.slice(source.indexOf('const env = {'));
+  for (const key of ['VITE_PUBLIC_SITE_URL', 'VITE_PUBLIC_APP_URL', 'VITE_NATIVE_APP']) {
+    assert.match(env, new RegExp(`${key}:`), `${key} is computed but never passed to the build`);
+  }
+});
