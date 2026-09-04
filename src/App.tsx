@@ -1,19 +1,18 @@
 import { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter, HashRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import { RequireCloudAuth } from './components/RequireCloudAuth';
 import { RequireSharedListings } from './components/RequireSubscriptionFeature';
 import { RequireWorkspaceSetup } from './components/RequireWorkspaceSetup';
 import { SubscriptionEnforcement } from './components/SubscriptionEnforcement';
 import { InteractionShell } from './components/InteractionSystem';
+import { OwnerTestModeBar } from './components/OwnerTestModeBar';
 import { Toaster } from './components/ui/sonner';
 import { billingPath } from './lib/billingRoutes';
 import { buyerFollowUpPath } from './lib/buyerRoutes';
 import { appBasePath } from './lib/routeCanon';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
-import { isCompedEmail } from './lib/compAccess';
 import { useCloudStore } from './store/useCloudStore';
-import { useXbarStore } from './store/useXbarStore';
 import './routes/operationsHierarchy.css';
 import './routes/interactionSystem.css';
 import './routes/xbarCommandSystem.css';
@@ -118,24 +117,18 @@ function applyRouteMeta(path: string) {
   document.title = path === '/login' ? 'Sign in | XBAR' : routeTitle(path);
 }
 
-// Operator comp bridge: when the signed-in email is on the comp allowlist
-// (VITE_XBAR_COMP_EMAILS), grant the full Enterprise tier so an internal / QA /
-// owner account can exercise every gated feature. Self-heals after a cloud sync
-// that would otherwise restore the real tier. No-op for everyone else, and the
-// server enforces the same allowlist for cloud actions.
-function CompAccessBridge() {
-  const sessionEmail = useCloudStore((state) => state.session?.user?.email ?? '');
-  const tier = useXbarStore((state) => state.subscription.tier);
-  const applySubscriptionTier = useXbarStore((state) => state.applySubscriptionTier);
-
-  useEffect(() => {
-    if (isCompedEmail(sessionEmail) && tier !== 'Enterprise') {
-      applySubscriptionTier('Enterprise', { billingState: 'Manual Billing' });
-    }
-  }, [sessionEmail, tier, applySubscriptionTier]);
-
-  return null;
-}
+// Operator comp access is no longer a bridge that writes to the store.
+//
+// The previous version reacted to a comped email by calling
+// `applySubscriptionTier('Enterprise', { billingState: 'Manual Billing' })`,
+// which overwrites the workspace's real subscription — the same field a genuine
+// plan lives in, persisted and synced — and "self-healed" by rewriting it again
+// after every cloud sync that restored the truth. There was no way back to the
+// real plan because the real plan had been overwritten.
+//
+// Tier preview is now a read-time overlay (src/hooks/useOwnerPreview.ts) that
+// never writes to the subscription, so returning to the real entitlement is
+// simply switching the overlay off. See OwnerTestModeBar for the control.
 
 function RouteTelemetry() {
   const location = useLocation();
@@ -173,8 +166,9 @@ export default function App() {
         <Toaster position="top-right" richColors closeButton />
         <InteractionShell />
         <SubscriptionEnforcement />
-        <CompAccessBridge />
         <RouteTelemetry />
+        {/* Renders nothing unless the viewer is an authorized owner. */}
+        <OwnerTestModeBar />
         <Suspense
           fallback={
             <div className="app-loading-shell" role="status" aria-live="polite">
@@ -201,61 +195,67 @@ export default function App() {
               path="/"
               element={
                 <RequireCloudAuth>
-                  <RequireWorkspaceSetup>
-                    <MainLayout />
-                  </RequireWorkspaceSetup>
+                  <MainLayout />
                 </RequireCloudAuth>
               }
             >
-              <Route index element={<Dashboard />} />
-              <Route path="getting-started" element={<GettingStarted />} />
-              <Route path="today" element={<TodayWork />} />
-              <Route path="herd-groups" element={<HerdGroups />} />
-              <Route path="pastures" element={<Pastures />} />
-              <Route path="feed" element={<FeedInventory />} />
-              <Route path="documents-vault" element={<Navigate to="/documents" replace />} />
-              <Route path="sales-pipeline" element={<Navigate to="/sales" replace />} />
-              <Route path="buyer-deal-room" element={<Navigate to="/buyers" replace />} />
-              <Route path="buyer-follow-up" element={<Navigate to="/buyers" replace />} />
-              <Route path="buyers" element={<BuyerDealRoom />} />
-              <Route path="buyers/:leadId" element={<BuyerDealRoom />} />
-              <Route path="sale-packets" element={<SalePacketStudio />} />
-              <Route path="sale-packet-studio" element={<Navigate to="/sale-packets" replace />} />
-              <Route path="reports" element={<Reports />} />
-              <Route path="financials" element={<Financials />} />
-              <Route path="animals" element={<Navigate to="/horses" replace />} />
-              <Route path="animals/:id" element={<LegacyHorseRedirect />} />
-              <Route path="health-care" element={<HealthCare />} />
-              <Route path="ownership-chain" element={<OwnershipChain />} />
-              <Route path="equipment" element={<EquipmentPage />} />
-              <Route path="breeding-foaling" element={<BreedingFoaling />} />
               <Route path="plans" element={<Navigate to={billingPath} replace />} />
-              <Route path="horses" element={<Horses />} />
-              <Route path="horses/:id" element={<AnimalProfile />} />
-              <Route path="documents" element={<Documents />} />
-              <Route path="document-library" element={<Navigate to="/documents" replace />} />
-              <Route path="weather" element={<Weather />} />
-              <Route path="ownership" element={<Ownership />} />
-              <Route path="medical" element={<Medical />} />
-              <Route path="breeding" element={<Breeding />} />
-              <Route path="sales" element={<Sales />} />
-              <Route path="follow-ups" element={<FollowUpsRedirect />} />
-              <Route path="expenses" element={<Expenses />} />
-              <Route path="reminders" element={<Reminders />} />
-              <Route path="assets" element={<RanchAssets />} />
-              <Route path="assets-equipment" element={<Navigate to="/assets" replace />} />
               <Route path="billing" element={<Subscriptions />} />
               <Route path="subscriptions" element={<Navigate to={billingPath} replace />} />
               <Route
-                path="shared-access"
                 element={
-                  <RequireSharedListings>
-                    <SharedAccess />
-                  </RequireSharedListings>
+                  <RequireWorkspaceSetup>
+                    <Outlet />
+                  </RequireWorkspaceSetup>
                 }
-              />
-              <Route path="settings" element={<Settings />} />
-              <Route path="*" element={<NotFound />} />
+              >
+                <Route index element={<Dashboard />} />
+                <Route path="getting-started" element={<GettingStarted />} />
+                <Route path="today" element={<TodayWork />} />
+                <Route path="herd-groups" element={<HerdGroups />} />
+                <Route path="pastures" element={<Pastures />} />
+                <Route path="feed" element={<FeedInventory />} />
+                <Route path="documents-vault" element={<Navigate to="/documents" replace />} />
+                <Route path="sales-pipeline" element={<Navigate to="/sales" replace />} />
+                <Route path="buyer-deal-room" element={<Navigate to="/buyers" replace />} />
+                <Route path="buyer-follow-up" element={<Navigate to="/buyers" replace />} />
+                <Route path="buyers" element={<BuyerDealRoom />} />
+                <Route path="buyers/:leadId" element={<BuyerDealRoom />} />
+                <Route path="sale-packets" element={<SalePacketStudio />} />
+                <Route path="sale-packet-studio" element={<Navigate to="/sale-packets" replace />} />
+                <Route path="reports" element={<Reports />} />
+                <Route path="financials" element={<Financials />} />
+                <Route path="animals" element={<Navigate to="/horses" replace />} />
+                <Route path="animals/:id" element={<LegacyHorseRedirect />} />
+                <Route path="health-care" element={<HealthCare />} />
+                <Route path="ownership-chain" element={<OwnershipChain />} />
+                <Route path="equipment" element={<EquipmentPage />} />
+                <Route path="breeding-foaling" element={<BreedingFoaling />} />
+                <Route path="horses" element={<Horses />} />
+                <Route path="horses/:id" element={<AnimalProfile />} />
+                <Route path="documents" element={<Documents />} />
+                <Route path="document-library" element={<Navigate to="/documents" replace />} />
+                <Route path="weather" element={<Weather />} />
+                <Route path="ownership" element={<Ownership />} />
+                <Route path="medical" element={<Medical />} />
+                <Route path="breeding" element={<Breeding />} />
+                <Route path="sales" element={<Sales />} />
+                <Route path="follow-ups" element={<FollowUpsRedirect />} />
+                <Route path="expenses" element={<Expenses />} />
+                <Route path="reminders" element={<Reminders />} />
+                <Route path="assets" element={<RanchAssets />} />
+                <Route path="assets-equipment" element={<Navigate to="/assets" replace />} />
+                <Route
+                  path="shared-access"
+                  element={
+                    <RequireSharedListings>
+                      <SharedAccess />
+                    </RequireSharedListings>
+                  }
+                />
+                <Route path="settings" element={<Settings />} />
+                <Route path="*" element={<NotFound />} />
+              </Route>
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

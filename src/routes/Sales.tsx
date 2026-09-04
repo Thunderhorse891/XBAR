@@ -718,6 +718,30 @@ export default function Sales() {
                       setLeadError('Deposit amount is required when the deposit is due or paid.');
                       return;
                     }
+                    /*
+                     * Money entered here is stored as `Number(value)` on a bare
+                     * truthiness test, so '-500' was saved as -500. The deposit
+                     * rule above only fires when a deposit is due, and the
+                     * offer and counteroffer had no rule at all — this screen
+                     * was the one door into a negative offer amount, and the
+                     * figure it lands in is `pipelineValue` on the report a
+                     * rancher hands a banker.
+                     *
+                     * `buildBuyerOfferPatch` already refuses these through
+                     * `parsePositiveMoney`; this is the same rule at the other
+                     * entrance, not a new policy.
+                     */
+                    const nonPositive = (
+                      [
+                        ['Offer amount', leadOfferAmount],
+                        ['Counteroffer', leadCounterOfferAmount],
+                        ['Deposit amount', leadDepositAmount],
+                      ] as const
+                    ).find(([, raw]) => raw && !(Number(raw) > 0));
+                    if (nonPositive) {
+                      setLeadError(`${nonPositive[0]} must be greater than $0.`);
+                      return;
+                    }
                     if (leadOfferStatus === 'Deposit Paid' && leadDepositStatus !== 'Paid') {
                       setLeadError('Mark the deposit status Paid before completing the deposit-paid step.');
                       return;

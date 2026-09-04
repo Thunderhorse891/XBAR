@@ -33,7 +33,29 @@
 
 import { sha256 } from './sha256.js';
 
-export const SALE_CREDENTIAL_VERSION = 2 as const;
+/*
+ * v3, two changes from v2:
+ *
+ *  - Attachment digests cover the file's decoded BYTES rather than the base64
+ *    text that carried them. Same tamper-evidence either way, but only the
+ *    bytes are what `shasum -a 256` prints for a file saved out of the packet,
+ *    and a seal nobody can practically recompute is a seal that only gets read.
+ *  - `care` no longer carries `veterinarian`, `farrier` or `medicalNotes`. The
+ *    payload is published inside the packet so the digest can be recomputed,
+ *    which makes everything sealed also everything disclosed — so the sealed
+ *    set had to narrow to what a buyer may actually see.
+ *
+ * Both land under one version because no v3 packet exists outside this branch;
+ * two different payload shapes must never share a version number.
+ */
+/*
+ * 4: the buyer watermark joined the sealed payload.
+ *
+ * Bumped rather than added quietly. The payload's shape is what a buyer hashes
+ * by hand, and a reader comparing two packets sealed weeks apart should be able
+ * to tell from the version alone that the covered facts differ.
+ */
+export const SALE_CREDENTIAL_VERSION = 4 as const;
 
 /** Every buyer-facing metadata field of one included document. File bytes are
  * generated server-side; these fields are what the packet renders, so covering
@@ -63,7 +85,6 @@ export interface CredentialIdentity {
   microchipId: string;
   sire: string;
   dam: string;
-  owner: string;
 }
 
 /** Buyer-facing sale terms the packet renders. */
@@ -82,12 +103,22 @@ export interface CredentialOwnership {
 }
 
 /** Buyer-facing care & disclosure summary the packet renders. */
+/**
+ * Care facts the seal covers — and therefore the care facts the packet shows.
+ *
+ * `veterinarian`, `farrier` and `medicalNotes` were here and are deliberately
+ * gone. The first two are third parties' contact details; the third is
+ * unreviewed internal free text. None of them belong in a document emailed to a
+ * prospective buyer, and leaving them in the payload would publish them twice
+ * over now that the payload is printed inside the packet for verification.
+ *
+ * Health disclosure did not go away with them: it comes from the vet records
+ * and Coggins the seller deliberately attached, which the buyer can read in
+ * full rather than through someone's shorthand.
+ */
 export interface CredentialCare {
   status: string;
   lastVetVisit: string;
-  veterinarian: string;
-  farrier: string;
-  medicalNotes: string;
 }
 
 /** Release-gate verdict the packet renders. */
@@ -98,6 +129,25 @@ export interface CredentialRelease {
   warnings: string[];
 }
 
+/**
+ * One file physically embedded in the packet.
+ *
+ * Sealed by the digest of its BYTES, not by its name or size. Once a packet
+ * carries the documents themselves rather than a list of their titles, a seal
+ * over the titles proves nothing about what a buyer actually opens: swap the
+ * base64 behind `Coggins 2026` and every sealed fact still matches. The packet
+ * tells its reader that a matching seal means it is unaltered, so that has to
+ * be true of the files too.
+ */
+export interface CredentialAttachment {
+  /** The document record's id, so the file lines up with its metadata entry. */
+  id: string;
+  fileName: string;
+  sizeBytes: number;
+  /** SHA-256 of the file's bytes. */
+  digest: string;
+}
+
 export interface SaleCredentialInput {
   /** Stable public identifier for the animal (never the internal record id). */
   passportId: string;
@@ -106,9 +156,26 @@ export interface SaleCredentialInput {
   ownership: CredentialOwnership;
   care: CredentialCare;
   documents: CredentialDocument[];
+  /** Files embedded in the packet. Empty when the packet only lists documents. */
+  attachments: CredentialAttachment[];
   release: CredentialRelease;
   /** Human labels of the ownership proofs that were VERIFIED at seal time. */
   verifiedProofs: string[];
+  /**
+   * The buyer-specific watermark stamped across the packet — REQUIRED.
+   *
+   * This is the packet's only means of tracing a leaked copy back to the buyer
+   * it was issued to, and it was outside the seal: a recipient could edit the
+   * watermark out of the HTML, or swap in someone else's name, and the verifier
+   * still reported a matching seal. Sealing it makes the attribution as
+   * tamper-evident as the facts beside it.
+   *
+   * Required rather than optional so a caller cannot silently seal a packet
+   * with no attribution — which is the one outcome the field exists to prevent.
+   * Callers pass the RESOLVED value (`resolvePacketWatermark`), never the raw
+   * input, so the seal and the printed page cannot describe different buyers.
+   */
+  watermark: string;
   sealedAt: string; // ISO
   sealedBy: string;
 }
@@ -157,9 +224,21 @@ export function buildCredentialPayload(input: SaleCredentialInput): string {
     }))
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
+  // Sorted by id like the documents above, so the same set of files always
+  // serializes identically regardless of the order they were read in.
+  const attachments = [...input.attachments]
+    .map((file) => ({
+      id: file.id,
+      fileName: file.fileName,
+      sizeBytes: file.sizeBytes,
+      digest: file.digest,
+    }))
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
   const payload: Json = {
     version: SALE_CREDENTIAL_VERSION,
     passportId: input.passportId,
+    watermark: input.watermark,
     identity: {
       name: input.identity.name,
       barnName: input.identity.barnName,
@@ -175,7 +254,6 @@ export function buildCredentialPayload(input: SaleCredentialInput): string {
       microchipId: input.identity.microchipId,
       sire: input.identity.sire,
       dam: input.identity.dam,
-      owner: input.identity.owner,
     },
     sale: {
       askPrice: input.sale.askPrice,
@@ -191,11 +269,9 @@ export function buildCredentialPayload(input: SaleCredentialInput): string {
     care: {
       status: input.care.status,
       lastVetVisit: input.care.lastVetVisit,
-      veterinarian: input.care.veterinarian,
-      farrier: input.care.farrier,
-      medicalNotes: input.care.medicalNotes,
     },
     documents,
+    attachments,
     release: {
       status: input.release.status,
       allowed: input.release.allowed,
@@ -230,9 +306,16 @@ function buildManifest(input: SaleCredentialInput): string[] {
     `Ownership: ${input.ownership.legalOwner || 'unknown'} · transfer ${input.ownership.transferStatus || 'unknown'}`,
     `Care & disclosure summary sealed`,
     `Proof documents sealed: ${input.documents.length}`,
+    input.attachments.length
+      ? `Embedded files sealed by content: ${input.attachments.length}`
+      : 'Embedded files: none in this packet',
     input.verifiedProofs.length
       ? `Verified proofs: ${[...input.verifiedProofs].sort().join(', ')}`
       : 'Verified proofs: none verified at seal time',
+    // Displayed beside the seal so the buyer can read who this copy was issued
+    // to out of the SEALED record, rather than off the watermark on the page —
+    // which is the copy an altered packet would have changed.
+    `Issued to (watermark): ${input.watermark}`,
   ];
 }
 

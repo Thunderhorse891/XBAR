@@ -122,7 +122,172 @@ Required for managed Stripe billing and webhook reconciliation:
 - `STRIPE_PRICE_ID_ENTERPRISE`
 - `PUBLIC_APP_URL`
 
-Optional browser configuration is documented in `.env.example`.
+Owner/QA access (all optional, all off by default):
+
+- `XBAR_COMP_EMAILS` (server) — the allowlist that grants full entitlements for
+  API-checked cloud actions. It is keyed on email rather than workspace, always
+  grants Enterprise rather than a chosen tier, and is applied by the API only —
+  the database limit triggers read `workspace_subscription_profiles` and never
+  see it. So it is a preview and QA tool, **not** a way to comp a paying
+  customer: the API would report Enterprise while seat, storage and commercial
+  writes were still refused at the stored tier.
+- `VITE_XBAR_COMP_EMAILS` (client) — the matching list so the UI shows what the
+  server will honour. Set both to the same value; setting only the client one
+  shows tiers the server refuses.
+- `VITE_XBAR_LOCAL_OWNER_MODE` (client) — local tier preview for a machine with
+  no cloud account. **Not available in production**: it is compiled in at build
+  time and a production bundle refuses it even when the variable is set, so it
+  cannot be switched on from a URL, from localStorage, or from anything a
+  visitor can edit. It previews the UI only — cloud actions are still authorized
+  against the real account.
+
+Tier preview never writes to a workspace's real subscription, so returning to
+the real plan is switching the overlay off rather than repairing data.
+
+Optional browser configuration is documented in `.env.example`, which states for
+every variable whether it is client-safe or server-only, whether it is needed
+now or later, and what the app does when it is absent.
+
+### Running without Supabase or Stripe
+
+Neither is required. With both absent the app runs locally: records stay in the
+browser, and the billing screen shows every tier, price, limit and feature list
+while saying **Billing not configured yet**. No checkout opens, no subscription
+record is created, and no identifier is invented — missing configuration is
+reported, never faked.
+
+### Pending Supabase migrations (not applied)
+
+Five migrations in `supabase/migrations/` are written and reviewed but have
+**not** been run against any project. The order matters, and it is carried by
+the version prefixes rather than by convention — Supabase takes the digits
+before the first underscore as the migration version, so each file needs its
+own:
+
+1. `20260820_entitlement_helpers_honor_inactive.sql` — schema. Makes the
+   database's limit helpers agree with the API about which billing states keep
+   a purchased tier. Safe to re-run: both functions are `create or replace`
+   with unchanged signatures, and no trigger is detached.
+2. `20260821_reconcile_legacy_manual_billing.sql` — **data**. Reconciles rows
+   the previous status mapper stored as `Manual Billing` when the subscription
+   had actually canceled, paused, or never completed its first payment. Without
+   this, step 1 changes nothing for those workspaces, because `Manual Billing`
+   is correctly still an entitled state.
+3. `20260822_restrict_anon_rpc_surface.sql` — grants. Closes the unauthenticated
+   RPC surface left by PostgreSQL's default `EXECUTE` grant to `PUBLIC`.
+4. `20260826_checkout_session_lock.sql` — schema. Adds the column that
+   serializes Checkout Session creation per workspace, so two concurrent
+   requests cannot each create a billable subscription session. Additive and
+   independent of the other three: one nullable column and one partial index,
+   no rewrite, and its order in the sequence does not matter.
+5. `20260827_subscription_event_ordering.sql` — schema. Adds
+   `stripe_event_created_at` and the `xbar_apply_subscription_event` function
+   that applies a billing event atomically, so a retried event Stripe created
+   earlier cannot overwrite a newer one. Events sharing a `created` second are
+   admitted — a plan change emits several — except that a tied entitlement
+   adopted from a SIBLING subscription loses, which is what stops one of two
+   simultaneously canceled subscriptions writing back a stale `Active`
+   snapshot of the other. Only that write is speculative: the sibling list is
+   read before the lock. An event about its own subscription still wins a tie,
+   so a re-subscription completed in the same second as a cancellation is not
+   thrown away. Additive: one nullable column, one index, one
+   function, no backfill.
+
+Apply them **one at a time**, not with a single `supabase db push`. That command
+applies every pending migration in one go, which would run the data
+reconciliation before anyone had read its dry-run.
+
+```
+# 1. schema only — safe to apply directly
+psql "$DATABASE_URL" -f supabase/migrations/20260820_entitlement_helpers_honor_inactive.sql
+
+# 2a. READ FIRST: the dry-run at the top of the file lists every candidate row
+#     and its disposition. Run that query and read every row.
+# 2b. The migration is inert on its own — applying it without the setting below
+#     changes nothing and prints "reconciliation SKIPPED". Re-run it with:
+#     Omit either list entirely if it is empty; a literal '<uuid>,<uuid>'
+#     aborts the migration rather than being ignored.
+psql "$DATABASE_URL" \
+  -c "set xbar.reconcile_confirmed = 'yes'" \
+  -c "set xbar.reconcile_exclude = '<uuid>,<uuid>'" \
+  -c "set xbar.reconcile_terminal = '<uuid>,<uuid>'" \
+  -f supabase/migrations/20260821_reconcile_legacy_manual_billing.sql
+# 2c. Confirm the outcome. The AFTER APPLYING block at the bottom of that file
+#     lists every remaining Manual Billing row with its disposition. It reads
+#     xbar.reconcile_exclude, so restate the same list if you run it in a new
+#     session, and expect the rows you excluded to come back Stripe-backed and
+#     still Manual Billing — that is what excluding them did.
+# 2d. Clear all three so they cannot colour later work in the same session:
+psql "$DATABASE_URL" \
+  -c "reset xbar.reconcile_confirmed" \
+  -c "reset xbar.reconcile_exclude" \
+  -c "reset xbar.reconcile_terminal"
+
+# 3a. grants — STAGING FIRST. This one revokes; a missing grant is a broken
+#     read for every signed-in user, so it is proved somewhere disposable.
+psql "$STAGING_DATABASE_URL" -f supabase/migrations/20260822_restrict_anon_rpc_surface.sql
+node scripts/verify-rpc-surface.mjs "$STAGING_DATABASE_URL"
+# 3b. Then exercise staging by hand — steps 3 and 4 of the HOW TO APPLY block
+#     inside that migration. The verifier proves the anon surface shrank; only
+#     loading a workspace and running a document upload proves nothing that
+#     should still work broke.
+# 3c. ONLY THEN production, ideally in a low-traffic window. Skipping this line
+#     leaves production on the default unauthenticated EXECUTE grants — every
+#     SECURITY DEFINER function, the unmaintained legacy listing resolver
+#     included — which is the whole of what this migration exists to close.
+psql "$DATABASE_URL" -f supabase/migrations/20260822_restrict_anon_rpc_surface.sql
+node scripts/verify-rpc-surface.mjs "$DATABASE_URL"
+
+# 4. checkout lock — additive, safe to apply directly, order does not matter
+psql "$DATABASE_URL" -f supabase/migrations/20260826_checkout_session_lock.sql
+
+# 5. billing event ordering — additive, safe to apply directly
+psql "$DATABASE_URL" -f supabase/migrations/20260827_subscription_event_ordering.sql
+```
+
+**(4) and (5) are prerequisites for billing, not optimizations to schedule
+later.** Apply both before Stripe is switched on, and note that they fail in
+opposite directions:
+
+Until (4) is applied, `api/stripe/checkout.js` cannot claim its lock and
+**refuses every checkout** as retryable. That is deliberate — the alternative
+is creating billable sessions without serialization — and it fails visibly, on
+the way in.
+
+Until (5) is applied, `api/stripe/webhook.js` cannot call
+`xbar_apply_subscription_event` and **every entitlement webhook fails**. That
+one fails on the way OUT, which is the dangerous order: a customer can complete
+and pay for a Checkout Session and never have the plan activated, because the
+event that would have granted it errors and Stripe eventually stops retrying.
+Applying (5) without (4) is therefore the worse half-deployment of the two —
+prefer both, and if you must stage them, apply (5) first.
+
+`xbar.reconcile_exclude` is how you keep a row the migration would otherwise
+downgrade. A populated `stripe_subscription_id` proves the workspace was billed
+through Stripe at some point; it does **not** prove the current `Manual Billing`
+value came from the old mapper. If you deliberately moved a paying customer to
+manual invoicing, or comped them after they had been paying, that row looks
+identical from inside the database — list its workspace id here and it is left
+alone.
+
+`xbar.reconcile_terminal` is the other half of that decision. A reconciled row
+is written `subscriptionRecoverable: true` by default, which withholds checkout
+so a paused or unpaid subscription cannot be bought a second time. A **canceled**
+subscription will never send another webhook to correct that flag, so a
+customer who wants to come back would stay blocked. List the workspaces you have
+confirmed in the Stripe dashboard are canceled or expired, and they are written
+`false` and can purchase immediately. The migration's RECOVERABILITY section
+carries a query over `workspace_subscription_events` to shortlist them.
+
+Use plain `set`, not `set local`: these are issued before the migration's own
+`begin`, and `set local` outside a transaction block applies nothing — the
+migration would read an empty setting and report `reconciliation SKIPPED` while
+you believed you had confirmed it. Being session-scoped, they outlive the
+migration — step 2d above clears all three when you are finished.
+
+After applying, re-run the security advisor and confirm
+`anon_security_definer_function_executable` has dropped to the intended set;
+the counts are documented at the bottom of file 3.
 
 ### Operations
 

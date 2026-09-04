@@ -18,7 +18,11 @@ import { hasRoleCapability } from '@/lib/permissions';
 import { hasHorsePhoto, isHorsePhotoAsset } from '@/lib/animalPassport';
 import { buildSaleHold } from '@/lib/saleTrustEngine';
 import { buildPacketCredential } from '@/lib/localSalePacketGenerator';
+import { toPacketDisclosure } from '@/lib/salePacketDisclosure';
+import { onWorkspaceSettled, vaultOwnerId } from '@/lib/vaultOwner';
+import { readRecordsOwner, rememberRecordsOwner } from '@/lib/recordsOwner';
 import { featureGate } from '@/lib/commercialEngine';
+import { isCurrentPaidPlan } from '@/lib/subscriptionDecision';
 import { buildOfferDecision } from '@/lib/profitIntelligence';
 import { scheduleBuyerActivityFollowUp } from '@/lib/salesFollowUp';
 import {
@@ -30,7 +34,14 @@ import {
   uploadMediaAssetToCloud,
   upsertSharedListingInCloud,
 } from '@/lib/cloudWorkspace';
-import { workspaceStateStorage } from '@/lib/workspaceStorage';
+import { didWorkspaceReadFail, workspaceStateStorage } from '@/lib/workspaceStorage';
+import {
+  beginVaultWrite,
+  endVaultWrite,
+  referencedVaultKeys,
+  storeLocalFile,
+  sweepLocalFileVault,
+} from '@/lib/localFileVault';
 import {
   canMarkTransferClear,
   computeOwnershipConfidence,
@@ -44,6 +55,7 @@ import {
   validateLeadInput,
   validateLocationPatch,
   validateNewHorseInput,
+  workspaceBackupPayload,
 } from '@/store/xbarStoreLogic';
 import type {
   BreedingEconomics,
@@ -55,7 +67,7 @@ import type {
   SalesLead,
   WorkspaceInvitationRecord,
 } from '@/types/xbar';
-import type { BuyerRoomEvent, DocumentRecord, SalePacketBuild } from '@/types/xbar';
+import type { BuyerRoomEvent, DocumentRecord, SalePacketBuild, SubscriptionProfile } from '@/types/xbar';
 import type { XbarStore } from '@/store/xbarStoreTypes';
 import {
   WORKSPACE_SCHEMA_VERSION,
@@ -79,6 +91,49 @@ import {
   syncDerivedValues,
 } from '@/store/xbarStoreHelpers';
 
+/**
+ * The subscription a gate INSIDE a store action must evaluate: the real one.
+ *
+ * These gates decide whether a record may be created — a buyer deal room, a
+ * breeding revenue entry, a horse, an invitation, an uploaded asset — so they
+ * are write gates, and an owner preview must not relax them.
+ *
+ * They briefly resolved through `overlayTier`, so that a previewed tier
+ * unlocked them the same way it unlocks a screen. The justification was that a
+ * preview "only decides which local gate fires first, because every cloud write
+ * is still authorized by the API against the real account". That is not true of
+ * the ordinary configuration: with relational sync off,
+ * `saveWorkspaceBackupToCloud` falls back to a direct
+ * `workspace_snapshots` upsert whose RLS checks row ownership and nothing about
+ * entitlements. There is no API in that path to refuse anything, so records
+ * created under a previewed tier were persisted to the cloud and read back
+ * later.
+ *
+ * Keeping the outer and inner gates in agreement — the reason these were
+ * converted in the first place — still holds: both now evaluate the real plan,
+ * so an owner previewing Enterprise is refused once, with a message that says
+ * they are previewing, rather than passing one gate and failing the next.
+ *
+ * Named rather than inlined so the intent survives: this is deliberately the
+ * real subscription, not an oversight waiting to be "fixed" back to the
+ * overlay.
+ */
+function gateSubscription(subscription: SubscriptionProfile): SubscriptionProfile {
+  return subscription;
+}
+
+/**
+ * Usage for a limit check.
+ *
+ * Counts and limits both come from the real plan. Overlaying the limits here
+ * let a previewed Enterprise allowance authorize records that a Starter
+ * workspace then synced to the cloud; `horsesUsed`, `storageUsedGb` and the
+ * rest were always real, so only the limit half was ever in question.
+ */
+function entitledUsage(subscription: SubscriptionProfile): SubscriptionProfile['usage'] {
+  return gateSubscription(subscription).usage;
+}
+
 export const useXbarStore = create<XbarStore>()(
   persist(
     (set, get) => ({
@@ -101,9 +156,10 @@ export const useXbarStore = create<XbarStore>()(
         });
         const resetLegacyDemo = looksLikeLegacyDemoWorkspace(selectPersistedState(current));
         const seedState = resetLegacyDemo ? createEmptyWorkspaceState() : selectPersistedState(current);
-        const workspaceMembers = seedState.workspaceMembers.length
-          ? seedState.workspaceMembers
-          : [createInitialWorkspaceMember(nextProfile)];
+        const createdInitialAdmin = seedState.workspaceMembers.length === 0;
+        const workspaceMembers = createdInitialAdmin
+          ? [createInitialWorkspaceMember(nextProfile)]
+          : seedState.workspaceMembers;
         const derived = syncDerivedValues({
           horses: seedState.horses,
           salesLeads: seedState.salesLeads,
@@ -116,12 +172,26 @@ export const useXbarStore = create<XbarStore>()(
 
         set({
           ...seedState,
+          currentRole: createdInitialAdmin ? 'Admin' : current.currentRole,
           subscription: derived.subscription,
           sharedAccess: derived.sharedAccess,
           horses: derived.horses,
           workspaceMembers,
           workspaceProfile: nextProfile,
         });
+
+        /*
+         * The CREATION path, which is the one first-run actually takes.
+         *
+         * `initializeWorkspace` has two success returns, and the marker was
+         * only on the second — the profile update. `SetupWorkspace.tsx` calls
+         * this action and navigates away, so a brand-new local ranch on a
+         * Supabase-configured deployment carried no owner marker at all, and
+         * the sweep withheld itself forever: blobs from deleted documents,
+         * receipts and packets accumulating until the rancher happened to edit
+         * their profile.
+         */
+        rememberRecordsOwner(vaultOwnerId());
 
         return {
           ok: true,
@@ -167,6 +237,9 @@ export const useXbarStore = create<XbarStore>()(
           sharedAccess: derived.sharedAccess,
           horses: derived.horses,
         });
+        // The UPDATE path. Both returns claim the records, because either one
+        // can be the moment this browser first has a workspace to own.
+        rememberRecordsOwner(vaultOwnerId());
         return { ok: true, message: 'Workspace profile updated.' };
       },
       applySubscriptionTier: (tier, options = {}) => {
@@ -176,7 +249,9 @@ export const useXbarStore = create<XbarStore>()(
         }
 
         const state = get();
-        if (state.subscription.tier === tier && state.subscription.monthlyRate > 0) {
+        // Entitlement, not price: the stored rate outlives a cancellation, so
+        // this refused to re-apply a tier the workspace had lapsed out of.
+        if (isCurrentPaidPlan(state.subscription, tier)) {
           return { ok: false, message: `${tier} is already the active plan.` };
         }
 
@@ -460,8 +535,8 @@ export const useXbarStore = create<XbarStore>()(
           role,
           members: state.workspaceMembers,
           invitations: state.workspaceInvitations,
-          seatLimit: state.subscription.usage.seatLimit,
-          sharedAccessSeatLimit: state.subscription.usage.sharedAccessSeatLimit,
+          seatLimit: entitledUsage(state.subscription).seatLimit,
+          sharedAccessSeatLimit: entitledUsage(state.subscription).sharedAccessSeatLimit,
         });
 
         if (validationError) {
@@ -709,7 +784,8 @@ export const useXbarStore = create<XbarStore>()(
 
         const state = get();
         const storageIncrease = estimateStorageGb(fileList);
-        if (state.subscription.usage.storageUsedGb + storageIncrease > state.subscription.usage.storageLimitGb) {
+        const planUsage = entitledUsage(state.subscription);
+        if (planUsage.storageUsedGb + storageIncrease > planUsage.storageLimitGb) {
           return {
             ok: false,
             message: 'Storage limit reached for the current plan. Upgrade before adding more files.',
@@ -722,6 +798,15 @@ export const useXbarStore = create<XbarStore>()(
         let processedFiles = 0;
         set(() => ({ documentIntakeProgress: { processed: 0, total: totalFiles, phase: 'Reading documents' } }));
 
+        /*
+         * Every file's blob is written before the ONE `set` at the end installs
+         * the records that reference them. Until then the bytes sit in the vault
+         * with nothing pointing at them, which is precisely what the sweep
+         * deletes — so a cloud reconciliation settling mid-batch destroyed a
+         * file this was in the middle of saving, and the record installed
+         * afterwards pointed at a key that no longer existed.
+         */
+        await beginVaultWrite();
         try {
           const selectedHorse = state.horses.find((horse) => horse.id === horseId);
           const batchId = createId('batch');
@@ -734,7 +819,7 @@ export const useXbarStore = create<XbarStore>()(
                   horseId: selectedHorse?.id ?? horseId,
                 });
               } catch (error) {
-                console.error('Cloud document upload failed; storing file locally instead.', error);
+                console.error('Cloud document upload failed; keeping the file on this device instead.', error);
               }
               const document = await buildDocumentRecord({
                 file,
@@ -744,7 +829,21 @@ export const useXbarStore = create<XbarStore>()(
                 horses: get().horses,
                 existingDocuments: get().documents,
               });
-              const localFileUrl = undefined;
+              // Cloud storage did not take this file — it is either not
+              // configured for this build or the upload failed. Keeping the
+              // bytes on the device is the whole local-first promise, and it
+              // was not being kept: this used to assign `undefined` directly
+              // under a log line announcing a local save that never happened,
+              // so a workspace with no Supabase project stored a file's name,
+              // type and size and dropped its contents.
+              let localFileKey: string | undefined;
+              if (!uploadedAsset) {
+                try {
+                  localFileKey = await storeLocalFile(file, file.name, file.type, vaultOwnerId());
+                } catch (error) {
+                  console.error('On-device file storage failed; this record will carry no file.', error);
+                }
+              }
               processedFiles += 1;
               set(() => ({
                 documentIntakeProgress: { processed: processedFiles, total: totalFiles, phase: 'Reading documents' },
@@ -755,7 +854,7 @@ export const useXbarStore = create<XbarStore>()(
                 fileName: file.name,
                 mimeType: file.type || undefined,
                 fileSizeBytes: file.size,
-                fileUrl: localFileUrl,
+                localFileKey,
                 storagePath: uploadedAsset?.storagePath,
               };
             }),
@@ -798,7 +897,7 @@ export const useXbarStore = create<XbarStore>()(
                   })
                   .filter((bundle): bundle is NonNullable<typeof bundle> => Boolean(bundle))
               : [];
-          const availableHorseSlots = Math.max(0, state.subscription.usage.horseLimit - state.horses.length);
+          const availableHorseSlots = Math.max(0, entitledUsage(state.subscription).horseLimit - state.horses.length);
           const omittedHorseCount = Math.max(0, createdHorseBundles.length - availableHorseSlots);
           createdHorseBundles = createdHorseBundles.slice(0, availableHorseSlots);
 
@@ -810,7 +909,12 @@ export const useXbarStore = create<XbarStore>()(
             );
             documents = documents.map((document) => createdDocumentMap.get(document.id) ?? document);
           }
-          const localDocumentCount = documents.filter((document) => !document.storagePath).length;
+          // Only the files nobody can open. A document held in the on-device
+          // vault has its bytes and opens on this device, so counting it as
+          // "metadata only" would report a data-loss event that did not occur.
+          const localDocumentCount = documents.filter(
+            (document) => !document.storagePath && !document.localFileKey,
+          ).length;
           const createdHorses = createdHorseBundles.map((bundle) => bundle.horse);
           const createdOwnershipRecords = createdHorseBundles.map((bundle) => bundle.ownershipRecord);
 
@@ -856,7 +960,7 @@ export const useXbarStore = create<XbarStore>()(
 
           return {
             ok: true,
-            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the upload batch.` : ''}${omittedHorseCount ? ` ${omittedHorseCount} additional horse candidate${omittedHorseCount === 1 ? ' was' : 's were'} left for review because the horse limit was reached.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only because cloud file storage is not available.` : ''}`,
+            message: `${documents.length} file${documents.length === 1 ? '' : 's'} entered the document queue.${createdHorses.length ? ` ${createdHorses.length} new horse record${createdHorses.length === 1 ? ' was' : 's were'} created from the upload batch.` : ''}${omittedHorseCount ? ` ${omittedHorseCount} additional horse candidate${omittedHorseCount === 1 ? ' was' : 's were'} left for review because the horse limit was reached.` : ''}${localDocumentCount ? ` ${localDocumentCount} kept as metadata only — this browser could not store the file on this device either.` : ''}`,
             id: batch.id,
             createdHorseIds: createdHorses.map((horse) => horse.id),
           };
@@ -864,6 +968,9 @@ export const useXbarStore = create<XbarStore>()(
           console.error('Document upload failed', error);
           return { ok: false, message: 'Document upload failed. Check the selected files and try again.' };
         } finally {
+          // Released on every path, including the throw above: leaving the
+          // counter raised would make the vault unsweepable for the session.
+          endVaultWrite();
           // Always clear progress so the UI never sticks on a stale count.
           set(() => ({ documentIntakeProgress: null }));
         }
@@ -958,7 +1065,7 @@ export const useXbarStore = create<XbarStore>()(
             : attached;
         }
 
-        const availableHorseSlots = Math.max(0, state.subscription.usage.horseLimit - state.horses.length);
+        const availableHorseSlots = Math.max(0, entitledUsage(state.subscription).horseLimit - state.horses.length);
         if (availableHorseSlots < 1) {
           return { ok: false, message: 'Your plan’s horse limit is reached. Upgrade to add more horses.' };
         }
@@ -1054,7 +1161,8 @@ export const useXbarStore = create<XbarStore>()(
         // Pre-flight against the whole selection so we never start uploads that
         // clearly cannot fit; the actual charge below is only for retained files.
         const preflightIncrease = estimateStorageGb(fileList);
-        if (state.subscription.usage.storageUsedGb + preflightIncrease > state.subscription.usage.storageLimitGb) {
+        const mediaUsage = entitledUsage(state.subscription);
+        if (mediaUsage.storageUsedGb + preflightIncrease > mediaUsage.storageLimitGb) {
           return { ok: false, message: 'Storage limit reached for this plan. Upgrade before uploading more media.' };
         }
 
@@ -1183,16 +1291,20 @@ export const useXbarStore = create<XbarStore>()(
 
         const fileList = input.file ? [input.file] : [];
         const storageIncrease = estimateStorageGb(fileList);
-        if (
-          fileList.length &&
-          state.subscription.usage.storageUsedGb + storageIncrease > state.subscription.usage.storageLimitGb
-        ) {
+        const receiptUsage = entitledUsage(state.subscription);
+        if (fileList.length && receiptUsage.storageUsedGb + storageIncrease > receiptUsage.storageLimitGb) {
           return {
             ok: false,
             message: 'Storage limit reached for the current plan. Remove files or upgrade before adding more receipts.',
           };
         }
 
+        /*
+         * A receipt is the evidence behind a number an accountant will ask
+         * about, and its blob is written before the `set` below installs the
+         * record that references it — the same window the intake has.
+         */
+        await beginVaultWrite();
         try {
           let uploadedAsset: Awaited<ReturnType<typeof uploadDocumentAssetToCloud>> = null;
           if (input.file) {
@@ -1202,13 +1314,24 @@ export const useXbarStore = create<XbarStore>()(
                 horseId: input.horseId,
               });
             } catch (error) {
-              console.error('Cloud receipt upload failed; storing receipt locally instead.', error);
+              console.error('Cloud receipt upload failed; keeping the file on this device instead.', error);
             }
           }
 
-          const localFileUrl = undefined;
+          // Same as the document path: when the cloud did not take the file,
+          // the device does. A receipt is the evidence behind a number an
+          // accountant will ask about, so storing the amount and discarding the
+          // scan is the one outcome that must not happen quietly.
+          let localFileKey: string | undefined;
+          if (input.file && !uploadedAsset) {
+            try {
+              localFileKey = await storeLocalFile(input.file, input.file.name, input.file.type, vaultOwnerId());
+            } catch (error) {
+              console.error('On-device receipt storage failed; this record will carry no file.', error);
+            }
+          }
           const receipt = createExpenseReceiptRecord(input, {
-            fileUrl: localFileUrl,
+            localFileKey,
             storagePath: uploadedAsset?.storagePath,
             fileName: input.file?.name,
             mimeType: input.file?.type || undefined,
@@ -1244,14 +1367,22 @@ export const useXbarStore = create<XbarStore>()(
             },
           }));
 
+          // Warn only when the bytes are genuinely gone. A receipt held in the
+          // on-device vault opens from this browser, so telling its owner the
+          // file "requires cloud storage" would send them to configure Supabase
+          // to recover a scan they already have — the same stale warning the
+          // document path carried, one function down.
+          const receiptFileLost = Boolean(input.file) && !uploadedAsset?.storagePath && !localFileKey;
           return {
             ok: true,
-            message: `${receipt.category} receipt logged.${input.file && !uploadedAsset?.storagePath ? ' Receipt file metadata was saved, but the file itself requires cloud storage.' : ''}`,
+            message: `${receipt.category} receipt logged.${receiptFileLost ? ' The receipt file could not be saved — this browser could not store it on this device, and cloud storage is unavailable.' : ''}`,
             id: receipt.id,
           };
         } catch (error) {
           console.error('Expense receipt upload failed', error);
           return { ok: false, message: 'Receipt upload failed. Check the fields and try again.' };
+        } finally {
+          endVaultWrite();
         }
       },
       createSalesLead: ({ horseId, name, channel, shareReady }) => {
@@ -1337,7 +1468,7 @@ export const useXbarStore = create<XbarStore>()(
           patch.depositAmount !== undefined ||
           patch.depositStatus !== undefined
         ) {
-          const planBlocked = featureGate(get().subscription, 'buyerDealRoom');
+          const planBlocked = featureGate(gateSubscription(get().subscription), 'buyerDealRoom');
           if (planBlocked) return { ok: false, message: planBlocked };
         }
 
@@ -1594,7 +1725,7 @@ export const useXbarStore = create<XbarStore>()(
       updateBreedingEconomics: (horseId, economics) => {
         const deniedMessage = requireRoleCapability(get().currentRole, 'manageBreeding');
         if (deniedMessage) return { ok: false, message: deniedMessage };
-        const planBlocked = featureGate(get().subscription, 'breedingRevenue');
+        const planBlocked = featureGate(gateSubscription(get().subscription), 'breedingRevenue');
         if (planBlocked) return { ok: false, message: planBlocked };
         if (!get().horses.some((horse) => horse.id === horseId))
           return { ok: false, message: 'Horse record not found.' };
@@ -2072,16 +2203,33 @@ export const useXbarStore = create<XbarStore>()(
         const state = get();
         const credential: SaleCredentialSeal = input.serverSeal
           ? { ...input.serverSeal, anchor: 'server' }
-          : {
-              ...buildPacketCredential({
-                horse,
-                documents: state.documents,
-                ownershipRecord: state.ownershipRecords.find((record) => record.horseId === input.horseId),
-                selectedDocumentIds: input.documentIds,
-                generatedBy: input.createdBy,
-              }),
-              anchor: 'local',
-            };
+          : input.localSeal
+            ? // The seal the browser actually printed onto the packet. Sealing
+              // again here would fingerprint the same records at a later
+              // instant and produce a different digest, so the code on the
+              // document and the code in the app would not match — and matching
+              // them is the whole purpose of showing a buyer either one.
+              { ...input.localSeal, anchor: 'local' }
+            : (() => {
+                const packetOwnership = state.ownershipRecords.find((record) => record.horseId === input.horseId);
+                return {
+                  ...buildPacketCredential({
+                    horse,
+                    documents: state.documents,
+                    ownershipRecord: packetOwnership,
+                    // Explicit, like the generator's — the seal covers the
+                    // buyer-safe allowlist, never the raw record.
+                    disclosure: toPacketDisclosure(horse, packetOwnership, state.workspaceProfile),
+                    selectedDocumentIds: input.documentIds,
+                    generatedBy: input.createdBy,
+                    // The same watermark stored on the packet record below, so
+                    // the seal recorded here attributes the copy to the buyer
+                    // it was actually issued to.
+                    watermark: input.watermark,
+                  }),
+                  anchor: 'local' as const,
+                };
+              })();
 
         const packet: SalePacketBuild = {
           id: createId('packet'),
@@ -2094,8 +2242,12 @@ export const useXbarStore = create<XbarStore>()(
           documentIds: input.documentIds,
           includesBillOfSale: input.includesBillOfSale,
           status: 'generated',
-          fileName: `sale-packet-${slug}-${todayStamp()}.pdf`,
+          // `.pdf` only when a PDF was actually produced. A locally rendered
+          // packet is HTML, and a file named `.pdf` that is not one fails to
+          // open on the buyer's machine with no explanation.
+          fileName: input.fileName ?? `sale-packet-${slug}-${todayStamp()}.pdf`,
           downloadUrl: input.downloadUrl,
+          localFileKey: input.localFileKey,
           credential,
         };
         const auditEvent = createAuditEvent({
@@ -2182,13 +2334,29 @@ export const useXbarStore = create<XbarStore>()(
         if (deniedMessage) {
           return { ok: false, message: deniedMessage };
         }
-        const planBlocked = featureGate(get().subscription, 'buyerDealRoom');
+        const planBlocked = featureGate(gateSubscription(get().subscription), 'buyerDealRoom');
         if (planBlocked) {
           return { ok: false, message: planBlocked };
         }
 
         const event = get().buyerRoomEvents.find((item) => item.id === eventId);
-        if (!event || event.kind !== 'offer' || !(event.amount && event.amount > 0)) {
+        /*
+         * `Number.isFinite`, not truthiness. `event.amount && event.amount > 0`
+         * is satisfied by the STRING "1000", which was then written verbatim
+         * into `offerAmount` below — and the report sums offers, so a second
+         * captured string concatenates rather than adds and the pipeline figure
+         * on the banker's export becomes millions.
+         *
+         * `buildBuyerRoomEvent` already coerces with `Number.isFinite` when it
+         * makes an event, so this agrees with the writer rather than trusting
+         * it: the amount reaching a money total should not depend on every
+         * upstream producer having been careful.
+         */
+        const offerAmount =
+          typeof event?.amount === 'number' && Number.isFinite(event.amount) && event.amount > 0
+            ? event.amount
+            : undefined;
+        if (!event || event.kind !== 'offer' || offerAmount === undefined) {
           return { ok: false, message: 'Buyer offer event not found.' };
         }
 
@@ -2219,10 +2387,25 @@ export const useXbarStore = create<XbarStore>()(
         const updated = get().updateSalesLead(lead.id, {
           stage: 'Offer',
           lastTouch: todayStamp(),
-          offerAmount: event.amount,
+          offerAmount,
           offerStatus: 'Submitted',
           shareReady: true,
           notes,
+          /*
+           * Reopening a closed lead clears its outcome.
+           *
+           * This reuses an existing lead matched on the buyer, and that lead
+           * may already be closed. Leaving `outcome: 'Won'` in place while
+           * moving the stage back to `Offer` produces a record that is
+           * simultaneously sold and live, which the ranch report then reads
+           * both ways at once: `soldHorseIds` counts the horse as sold while
+           * the new amount lands in open pipeline.
+           *
+           * A buyer submitting a fresh offer is the deal being live again, so
+           * the outcome no longer describes it. `undefined` rather than a
+           * delete because the patch is applied as `{ ...item, ...patch }`.
+           */
+          outcome: undefined,
         });
         if (!updated.ok) {
           return updated;
@@ -2231,7 +2414,7 @@ export const useXbarStore = create<XbarStore>()(
         return {
           ok: true,
           id: lead.id,
-          message: `${event.actor}'s ${event.amount.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })} offer is now in the Sales margin workflow.`,
+          message: `${event.actor}'s ${offerAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })} offer is now in the Sales margin workflow.`,
         };
       },
       captureBuyerRoomFollowUp: (eventId) => {
@@ -2239,7 +2422,7 @@ export const useXbarStore = create<XbarStore>()(
         if (deniedMessage) {
           return { ok: false, message: deniedMessage };
         }
-        const planBlocked = featureGate(get().subscription, 'buyerDealRoom');
+        const planBlocked = featureGate(gateSubscription(get().subscription), 'buyerDealRoom');
         if (planBlocked) {
           return { ok: false, message: planBlocked };
         }
@@ -2433,17 +2616,11 @@ export const useXbarStore = create<XbarStore>()(
         workspace: selectPersistedState(get()),
       }),
       importWorkspaceBackup: (backup) => {
-        const payload =
-          backup && typeof backup === 'object' && 'workspace' in (backup as Record<string, unknown>)
-            ? (backup as { workspace: unknown }).workspace
-            : backup;
-        if (
-          !payload ||
-          typeof payload !== 'object' ||
-          (!('horses' in (payload as Record<string, unknown>)) &&
-            !('documents' in (payload as Record<string, unknown>)) &&
-            !('subscription' in (payload as Record<string, unknown>)))
-        ) {
+        // The same check `workspaceBackupPayload` offers callers that need to
+        // know before they change anything — see the file-restore path in
+        // Settings, which must not write blobs for a backup this would reject.
+        const payload = workspaceBackupPayload(backup);
+        if (!payload) {
           return {
             ok: false,
             message: 'Backup file is missing the XBAR workspace payload.',
@@ -2451,6 +2628,14 @@ export const useXbarStore = create<XbarStore>()(
         }
         const nextState = restorePersistedState(payload);
         set(nextState);
+        /*
+         * These records now belong to whoever imported them, and only this
+         * marker can say so later. A cloud import REPLACES the local-only
+         * records under the same persist key, so without it a later signed-out
+         * session sees `'local'` as the vault owner beside another workspace's
+         * records and sweeps every local file away.
+         */
+        rememberRecordsOwner(vaultOwnerId());
         return {
           ok: true,
           message: `Imported ${nextState.horses.length} horses, ${nextState.documents.length} documents, and ${nextState.salesLeads.length} leads.`,
@@ -2462,6 +2647,79 @@ export const useXbarStore = create<XbarStore>()(
       storage: createJSONStorage(() => workspaceStateStorage),
       version: WORKSPACE_SCHEMA_VERSION,
       migrate: (persistedState) => restorePersistedState(persistedState),
+      /*
+       * Reclaim file bytes the workspace no longer points at.
+       *
+       * Records in this app are archived far more often than they are deleted,
+       * and deleting a horse cascades to its receipts, so hunting down every
+       * removal path is how an orphaned blob survives forever. Reconciling the
+       * vault against the rehydrated state catches all of them at once,
+       * including paths that do not exist yet. It never throws: failing to
+       * reclaim space is not a reason to stop the app from starting.
+       */
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+
+        /*
+         * Never sweep against a workspace we failed to read.
+         *
+         * `readIndexedValue` returns null both when there is nothing stored and
+         * when the read threw, and persist hydrates the empty initial state
+         * either way. On a transient failure — the database briefly locked by
+         * another tab, a storage hiccup — the reference set is empty while the
+         * vault still holds every document, receipt and packet the ranch owns,
+         * and the sweep would delete all of it permanently on a start-up that
+         * would have recovered on the next reload.
+         *
+         * A genuinely empty workspace is a real state and still sweeps; this
+         * refuses only the case where "empty" means "unknown".
+         */
+        if (didWorkspaceReadFail()) return;
+
+        /*
+         * Deferred until the workspace has SETTLED, and re-read at that moment.
+         *
+         * Two separate mistakes lived here. Sweeping at rehydration asked
+         * `vaultOwnerId()` before the cloud store had one, so a signed-in reload
+         * swept as 'local' and reclaimed nothing. Waiting only for the id was
+         * worse: the id is published before CloudBootstrap reconciles remote
+         * state, so a browser that last persisted workspace A and reloads signed
+         * into B would sweep B's files against A's keys — deleting them
+         * permanently before B's records loaded.
+         *
+         * So it waits for reconciliation, and reads the records that exist then
+         * rather than the ones captured at rehydration.
+         */
+        onWorkspaceSettled(() => {
+          const owner = vaultOwnerId();
+          const recorded = readRecordsOwner();
+
+          /*
+           * Sweep only when the records on screen belong to the vault owner.
+           *
+           * Settling says reconciliation finished; it does not say WHOSE
+           * records finished. One persist key holds one workspace, so importing
+           * a cloud backup replaces the local-only records in place — and a
+           * later session that cannot produce a sign-in (expired, or an auth
+           * read that failed) reports `signed-out`, which puts `'local'` beside
+           * another workspace's records. Every `'local'`-owned file is then
+           * unreferenced, and the sweep is what deletes them.
+           *
+           * An unrecorded owner is unknown, not `'local'`. It is only safe to
+           * assume otherwise where no cloud workspace could ever have been
+           * imported — a deployment with no Supabase project at all — which is
+           * also the population that most needs the sweep, since the on-device
+           * vault is their only storage.
+           */
+          if (recorded ? recorded !== owner : isSupabaseConfigured()) return;
+
+          const current = useXbarStore.getState();
+          void sweepLocalFileVault(
+            referencedVaultKeys(current.documents, current.expenseReceipts, current.salePacketBuilds),
+            owner,
+          );
+        });
+      },
       partialize: (state) =>
         selectPersistedState({
           horses: state.horses,

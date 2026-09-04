@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { Panel, Pill, ProgressBar } from '@/components/app-ui';
 import { billingPathForTier } from '@/lib/billingRoutes';
 import { buildUsageMeters, highestUsagePressure, nextPlan, type UsagePressure } from '@/lib/commercialEngine';
-import { useXbarStore } from '@/store/useXbarStore';
+import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 
 function pressureCopy(level: UsagePressure) {
   if (level === 'blocked') return 'Hard gate';
@@ -18,7 +18,7 @@ function pressureTone(level: UsagePressure) {
 }
 
 export function UsageMeterPanel({ compact = false }: { compact?: boolean }) {
-  const subscription = useXbarStore((state) => state.subscription);
+  const subscription = useEffectiveSubscription();
   const meters = buildUsageMeters(subscription);
   const pressure = highestUsagePressure(subscription);
   const visibleMeters = compact ? meters.slice(0, 4) : meters;

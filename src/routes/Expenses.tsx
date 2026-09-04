@@ -9,11 +9,14 @@ import { buildProfitPortfolio } from '@/lib/profitIntelligence';
 import { profitIntelligenceGate } from '@/lib/subscriptionGates';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useCurrentRoleWorkspace, useXbarStore } from '@/store/useXbarStore';
-import type { ExpenseCategory } from '@/types/xbar';
+import type { ExpenseCategory, ExpenseReceipt } from '@/types/xbar';
 import { EXPENSE_CATEGORIES } from '@/features/expenses/constants';
 import { matchesSearch } from '@/features/expenses/helpers';
 import type { ExpenseFilter } from '@/features/expenses/types';
 import './operationsExperience.css';
+import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
+import { openStoredFileInTab } from '@/lib/openStoredFile';
+import { hasStoredFile, storedFileLabel } from '@/lib/storedFiles';
 
 const RANCH_WIDE = 'Ranch-wide';
 
@@ -27,7 +30,7 @@ export default function Expenses() {
   const horses = useXbarStore((state) => state.horses);
   const expenseReceipts = useXbarStore((state) => state.expenseReceipts);
   const salesLeads = useXbarStore((state) => state.salesLeads);
-  const subscription = useXbarStore((state) => state.subscription);
+  const subscription = useEffectiveSubscription();
   const addExpenseReceipt = useXbarStore((state) => state.addExpenseReceipt);
   const updateHorse = useXbarStore((state) => state.updateHorse);
   const roleWorkspace = useCurrentRoleWorkspace();
@@ -37,6 +40,7 @@ export default function Expenses() {
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [savingReceipt, setSavingReceipt] = useState(false);
   const [intakeOpen, setIntakeOpen] = useState(false);
+  const [openingReceiptId, setOpeningReceiptId] = useState('');
   const profitPortfolio = useMemo(
     () => buildProfitPortfolio(horses, expenseReceipts, salesLeads),
     [expenseReceipts, horses, salesLeads],
@@ -186,6 +190,19 @@ export default function Expenses() {
         },
       ]
     : [];
+
+  // The scan behind the number. A receipt held only in the cloud needs a signed
+  // URL and a session; one held on this device needs neither — both go through
+  // the same resolver so the button behaves the same either way.
+  const openReceiptFile = async (receipt: ExpenseReceipt) => {
+    setOpeningReceiptId(receipt.id);
+    const result = await openStoredFileInTab(receipt);
+    setOpeningReceiptId('');
+
+    if (!result.ok) {
+      pushToast({ title: 'Receipt unavailable', message: result.message, tone: 'error' });
+    }
+  };
 
   const filteredReceipts = useMemo(() => {
     return expenseReceipts
@@ -703,9 +720,42 @@ export default function Expenses() {
                     <span>{horse?.name ?? RANCH_WIDE}</span>
                     <span>{receipt.vendor || 'Vendor pending'}</span>
                     <span>{formatDateLabel(receipt.receiptDate)}</span>
+                    {hasStoredFile(receipt) ? <span>{storedFileLabel(receipt)}</span> : null}
                   </div>
                 </>
               );
+
+              // A receipt with a file gets explicit actions instead of a
+              // card-wide click target: a button cannot be nested inside a
+              // button, and the scan is the evidence behind the number — there
+              // was previously no way to look at it at all.
+              if (hasStoredFile(receipt)) {
+                return (
+                  <article key={receipt.id} className="ops-record-card ops-record-card--static">
+                    {content}
+                    <div className="inline-actions inline-actions--card">
+                      <button
+                        className="button button--ghost button--compact"
+                        type="button"
+                        onClick={() => void openReceiptFile(receipt)}
+                        disabled={openingReceiptId === receipt.id}
+                      >
+                        {openingReceiptId === receipt.id ? 'Opening...' : 'Open receipt'}
+                      </button>
+                      {receipt.horseId ? (
+                        <button
+                          className="button button--ghost button--compact"
+                          type="button"
+                          onClick={() => navigate(`/horses/${receipt.horseId}`)}
+                        >
+                          Open horse
+                        </button>
+                      ) : null}
+                    </div>
+                  </article>
+                );
+              }
+
               return receipt.horseId ? (
                 <button
                   key={receipt.id}

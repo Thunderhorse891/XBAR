@@ -359,3 +359,32 @@ export function buildHorseEnrichmentFromEntities(
 
   return { patch, applied };
 }
+
+/*
+ * Is this file an XBAR workspace backup at all?
+ *
+ * Extracted from `importWorkspaceBackup` so a caller can ask BEFORE it changes
+ * anything. Restoring a backup now also writes file bytes into the on-device
+ * vault, under the keys the backup carries — so a payload that turns out to be
+ * rejected must be rejected before those writes, not after. Overwriting the
+ * blobs of the workspace currently loaded, and then reporting "Import blocked",
+ * would leave real documents silently pointing at some other file's bytes.
+ *
+ * Deliberately the same shape check the import itself applies, in one place, so
+ * the two cannot disagree about what counts as a backup.
+ */
+export function workspaceBackupPayload(backup: unknown): Record<string, unknown> | null {
+  const payload =
+    backup && typeof backup === 'object' && 'workspace' in (backup as Record<string, unknown>)
+      ? (backup as { workspace: unknown }).workspace
+      : backup;
+
+  if (!payload || typeof payload !== 'object') return null;
+
+  const record = payload as Record<string, unknown>;
+  if (!('horses' in record) && !('documents' in record) && !('subscription' in record)) {
+    return null;
+  }
+
+  return record;
+}

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { assessRevenueAtRisk, detectSpendAnomalies } from '../src/lib/businessIntelligence.js';
+import { CURRENT_COGGINS_DAYS, hasCurrentReadyDocument } from '../src/lib/documentCurrency.js';
 import { createOwnershipRecord } from '../src/store/xbarStoreLogic.js';
 import type { DocumentRecord, ExpenseReceipt, HorseRecord, OwnershipRecord } from '../src/types/xbar.js';
 
@@ -16,13 +17,50 @@ function horse(id: string, name: string, askPrice: number, status: HorseRecord['
   } as unknown as HorseRecord;
 }
 
-function cogginsDoc(horseId: string, daysAgo: number): DocumentRecord {
+/*
+ * The EXAM date varies; the upload is always today.
+ *
+ * That separation is the whole point. The assessment used to measure the
+ * twelve months from `uploadedAt`, so a year-old Coggins uploaded this morning
+ * read as current — and this fixture, which set only `uploadedAt`, could not
+ * tell the two apart. Pinning the upload to today means every case below fails
+ * if the window is ever measured from it again.
+ */
+function cogginsDoc(
+  horseId: string,
+  examDaysAgo: number | null,
+  state: DocumentRecord['state'] = 'Ready',
+): DocumentRecord {
   return {
-    id: `doc-${horseId}-${daysAgo}`,
+    id: `doc-${horseId}-${examDaysAgo}-${state}`,
+    horseId,
+    type: 'Coggins',
+    state,
+    uploadedAt: now.toISOString(),
+    entities:
+      examDaysAgo === null ? {} : { examDate: new Date(now.getTime() - examDaysAgo * 86_400_000).toISOString() },
+  } as DocumentRecord;
+}
+
+/*
+ * A Coggins whose exam is a DATE, with no time on it.
+ *
+ * This is what OCR and hand entry actually produce, and it is the shape the
+ * fixture above could not express: that one timestamps the exam at the same
+ * time of day as `now`, so an instant-based comparison and a day-based one
+ * agree by construction and the boundary bug was invisible to every case here.
+ * A bare 'YYYY-MM-DD' parses to UTC midnight, which is exactly where the two
+ * measures diverge.
+ */
+function dateOnlyCogginsDoc(horseId: string, examDaysAgo: number): DocumentRecord {
+  const examDate = new Date(now.getTime() - examDaysAgo * 86_400_000).toISOString().slice(0, 10);
+  return {
+    id: `doc-${horseId}-${examDate}`,
     horseId,
     type: 'Coggins',
     state: 'Ready',
-    uploadedAt: new Date(now.getTime() - daysAgo * 86_400_000).toISOString(),
+    uploadedAt: now.toISOString(),
+    entities: { examDate },
   } as DocumentRecord;
 }
 
@@ -62,11 +100,101 @@ test('unverified ownership documents price the listing as blocked with a fix act
   assert.equal(result.items[0]!.actionRoute, '/ownership');
 });
 
-test('stale Coggins blocks the sale and routes to a pre-filled upload', () => {
+test('a Coggins whose EXAM is stale blocks the sale, however recent the upload', () => {
+  // Uploaded today, drawn 400 days ago. Measured from the upload this was
+  // "current" and the horse's full ask counted as ready to close.
   const result = assessRevenueAtRisk([horse('h1', 'Spirit', 12000)], [clearRecord('h1')], [cogginsDoc('h1', 400)], now);
   assert.equal(result.valueAtRisk, 12000);
-  assert.match(result.items[0]!.blockers[0] ?? '', /Coggins/);
+  assert.match(result.items[0]!.blockers[0] ?? '', /no current exam date/);
+  assert.equal(result.items[0]!.actionRoute, '/documents?horse=h1');
+});
+
+test('a Coggins nobody has reviewed is not proof of anything', () => {
+  for (const state of ['Queued', 'Needs Review', 'Matched'] as const) {
+    const result = assessRevenueAtRisk(
+      [horse('h1', 'Spirit', 12000)],
+      [clearRecord('h1')],
+      [cogginsDoc('h1', 30, state)],
+      now,
+    );
+    assert.equal(result.valueAtRisk, 12000, `${state} must not count as a current Coggins`);
+    assert.equal(result.readyValue, 0, `${state} must not move the ask into ready`);
+  }
+});
+
+test('a reviewed Coggins with no exam date at all is not current', () => {
+  const result = assessRevenueAtRisk(
+    [horse('h1', 'Spirit', 12000)],
+    [clearRecord('h1')],
+    [cogginsDoc('h1', null)],
+    now,
+  );
+  assert.equal(result.valueAtRisk, 12000);
+  assert.match(result.items[0]!.blockers[0] ?? '', /no current exam date/);
+});
+
+test('a horse with no Coggins is told to upload one, not to review one', () => {
+  // Telling someone to review a document they never uploaded is how a report
+  // stops being read.
+  const result = assessRevenueAtRisk([horse('h1', 'Spirit', 12000)], [clearRecord('h1')], [], now);
+  assert.match(result.items[0]!.blockers[0] ?? '', /No Coggins on file/);
   assert.equal(result.items[0]!.actionRoute, '/documents?upload=1&horse=h1');
+});
+
+test('the risk report and the sale-packet gate agree about the same horse', () => {
+  /*
+   * The finding in one assertion. They answered the same question differently,
+   * so the gate held a horse back while the report counted its full ask as
+   * ready — and the report is what reaches a spreadsheet and a PDF.
+   */
+  for (const [examDaysAgo, state] of [
+    [30, 'Ready'],
+    [400, 'Ready'],
+    [30, 'Needs Review'],
+    [null, 'Ready'],
+    [-400, 'Ready'],
+  ] as const) {
+    const documents = [cogginsDoc('h1', examDaysAgo, state)];
+    const gate = hasCurrentReadyDocument(documents, CURRENT_COGGINS_DAYS, now);
+    const report = assessRevenueAtRisk([horse('h1', 'Spirit', 12000)], [clearRecord('h1')], documents, now);
+    assert.equal(
+      gate,
+      report.items.length === 0,
+      `the gate and the risk report disagree for exam ${examDaysAgo} days ago in state ${state}`,
+    );
+  }
+});
+
+test('an exam that has not happened yet is not a current exam', () => {
+  // The window used to be bounded only on the far side, so `now - examTime`
+  // went negative for a future date and satisfied the test outright. A typo'd
+  // year therefore cleared the sale blocker and moved the whole asking price
+  // into ready-to-close value.
+  assert.equal(
+    hasCurrentReadyDocument([cogginsDoc('h1', -400)], CURRENT_COGGINS_DAYS, now),
+    false,
+    'a Coggins dated next year is not current',
+  );
+
+  // And the near boundary is a DAY, not a duration. A tolerance measured in
+  // hours cannot separate these two: `now` is noon, so a document dated
+  // tomorrow is only twelve hours ahead and any slack wide enough to admit a
+  // same-day exam recorded east of UTC would admit it too.
+  assert.equal(
+    hasCurrentReadyDocument([cogginsDoc('h1', -1)], CURRENT_COGGINS_DAYS, now),
+    false,
+    "tomorrow's exam has still not happened, however few hours away it is",
+  );
+
+  // The over-rejection direction: a same-day exam counts whatever the clock
+  // says, including one written down at a moment later in the day than `now`.
+  for (const examDaysAgo of [0, -0.25, 0.25, 30]) {
+    assert.equal(
+      hasCurrentReadyDocument([cogginsDoc('h1', examDaysAgo)], CURRENT_COGGINS_DAYS, now),
+      true,
+      `an exam ${examDaysAgo} days from now is on a day that has already started`,
+    );
+  }
 });
 
 test('horses without sale intent are ignored', () => {
@@ -132,12 +260,24 @@ test('horse economics compute burn, break-even, and the safe discount floor', as
     { id: 'e4', horseId: 'other', category: 'Feed', amount: 999, receiptDate: now.toISOString() } as ExpenseReceipt,
   ];
   const economics = computeHorseEconomics(horse('h1', 'Spirit', 12000), receipts, now);
+
+  // Everything ever spent on this horse, whenever it was spent.
   assert.equal(economics.costToDate, 2400);
-  assert.equal(economics.monthlyBurn, 300);
-  assert.equal(economics.breakEvenPrice, 3000);
-  assert.equal(economics.safeDiscountFloor, 3450);
-  assert.equal(economics.projectedMargin, 9000);
-  assert.equal(economics.marginPercent, 75);
+
+  // Burn averages the three COMPLETE months before this one, so only e2 ($600,
+  // last month) is inside the window: 600 / 3 = 200. e1 is this month, which is
+  // still in progress and is reported as current spend rather than averaged
+  // against whole months; e3 is a year old.
+  //
+  // This previously read 300, which was the old defect in disguise: the window
+  // ran from three months back to today, spanning four calendar months, and
+  // divided by three — $900 over two months came out as $300 by coincidence.
+  assert.equal(economics.monthlyBurn, 200);
+
+  assert.equal(economics.breakEvenPrice, 2800, 'cost to date plus two months of carry');
+  assert.equal(economics.safeDiscountFloor, 3220, 'break-even plus the 15% protected margin');
+  assert.equal(economics.projectedMargin, 9200);
+  assert.equal(economics.marginPercent, 77);
 });
 
 test('an active medical review prices the listing as blocked with disclosure required', () => {
@@ -152,4 +292,139 @@ test('an active medical review prices the listing as blocked with disclosure req
   assert.equal(result.valueAtRisk, 9000);
   assert.match(result.items[0]!.blockers[0] ?? '', /medical review/);
   assert.equal(result.items[0]!.actionRoute, '/medical?horse=h1');
+});
+
+/*
+ * The purchase price belongs in a horse's economics.
+ *
+ * computeHorseEconomics summed linked receipts only, so a horse bought for
+ * $10,000 with nothing spent on it reported $0 to date — and this figure is
+ * what safeDiscountFloor is built from. The sale-packet wizard shows that floor
+ * to a seller as the lowest price worth taking, so a floor that ignores the
+ * purchase price can talk somebody into an offer below their real break-even.
+ */
+test('horse economics include what the horse cost to buy', async () => {
+  const { computeHorseEconomics } = await import('../src/lib/businessIntelligence.js');
+
+  const bought = computeHorseEconomics(horse('h1', 'Bought', 20000), [], now);
+  assert.equal(bought.costToDate, 0, 'the helper fixture has no cost basis');
+
+  const withBasis = computeHorseEconomics({ ...horse('h1', 'Bought', 20000), costBasis: 10_000 } as never, [], now);
+  assert.equal(withBasis.costToDate, 10_000);
+  assert.equal(withBasis.breakEvenPrice, 10_000, 'no receipts, so no carry to add');
+  assert.equal(withBasis.projectedMargin, 10_000, '20,000 asking less 10,000 break-even');
+  assert.equal(withBasis.safeDiscountFloor, 11_500, 'break-even plus the 15% protected margin');
+
+  // And it adds to spend rather than replacing it.
+  const both = computeHorseEconomics(
+    { ...horse('h1', 'Bought', 20000), costBasis: 10_000 } as never,
+    [
+      {
+        id: 'e1',
+        horseId: 'h1',
+        category: 'Feed',
+        amount: 600,
+        receiptDate: new Date(now.getFullYear(), now.getMonth() - 1, 2).toISOString(),
+      } as ExpenseReceipt,
+    ],
+    now,
+  );
+  assert.equal(both.costToDate, 10_600);
+
+  // A negative basis must not reduce what a horse has cost.
+  const negative = computeHorseEconomics({ ...horse('h1', 'Bought', 20000), costBasis: -500 } as never, [], now);
+  assert.equal(negative.costToDate, 0);
+});
+
+test('document currency is not re-implemented outside its module', async () => {
+  /*
+   * The recurrence guard, and it sweeps rather than naming the two files that
+   * drifted — enumerating known call sites is exactly how this defect survived.
+   * Two modules each defined a `hasCurrentCoggins`, under the same name, with
+   * different meanings, and nothing connected them.
+   *
+   * KNOWN EXCLUSION: src/lib/saleTrustEngine.ts holds a third one, which falls
+   * back to `uploadedAt` when a Ready document carries no exam date. It is the
+   * same class of defect and it gates a sale, but that file is not touched by
+   * this change, so fixing it here would widen the diff into code this branch
+   * does not own. It is listed rather than skipped so it cannot be mistaken
+   * for something nobody noticed.
+   *
+   * Not swept: dashboardOps and documentTemplateLibrary also read
+   * `entities.examDate ?? uploadedAt`, but to schedule a reminder and to sort
+   * and print a date — neither decides whether a horse is ready, which is the
+   * question that has to have one answer.
+   */
+  const { readdir, readFile } = await import('node:fs/promises');
+  const knownExclusions = ['saleTrustEngine.ts'];
+
+  const offenders: string[] = [];
+  const walk = async (dir: string): Promise<void> => {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const full = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) {
+        await walk(full);
+        continue;
+      }
+      if (!/\.tsx?$/.test(entry.name)) continue;
+      if (entry.name === 'documentCurrency.ts' || knownExclusions.includes(entry.name)) continue;
+
+      const source = await readFile(full, 'utf8');
+      // Strip comments: this file's own explanation of the fix names these.
+      const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+      if (/function\s+(hasCurrentCoggins|hasCurrentReadyDocument|isCurrentDatedDocument)/.test(code)) {
+        offenders.push(`${full} defines its own currency predicate`);
+      }
+      if (/365\s*\*\s*24/.test(code) || /COGGINS_VALID_DAYS/.test(code)) {
+        offenders.push(`${full} measures its own twelve-month window`);
+      }
+    }
+  };
+  await walk('src');
+
+  assert.deepEqual(offenders, [], `document currency must come from documentCurrency.ts:\n${offenders.join('\n')}`);
+});
+
+test('both readiness callers answer from the shared module', async () => {
+  const { readFile } = await import('node:fs/promises');
+  for (const file of ['src/lib/businessIntelligence.ts', 'src/lib/xbarPhaseTwo.ts']) {
+    const source = await readFile(file, 'utf8');
+    assert.match(source, /from '\.\/documentCurrency\.js'/, `${file} must not answer this question itself`);
+  }
+});
+
+test('the expiry boundary does not move with the clock or the time zone', () => {
+  /*
+   * The far bound was still an elapsed duration while the near bound had become
+   * a calendar day. `now - examTime` measures an instant against a UTC
+   * midnight, so on the day a Coggins turns a year old it is already ~365.5
+   * days past by midday — the record expired partway through the day it should
+   * have been valid for, and did so at a different moment in every time zone.
+   * The sale-packet gate and the revenue report both read this, so they
+   * disagreed about the same horse depending on when it was opened.
+   */
+  assert.equal(
+    hasCurrentReadyDocument([dateOnlyCogginsDoc('h1', CURRENT_COGGINS_DAYS)], CURRENT_COGGINS_DAYS, now),
+    true,
+    'a Coggins on the last day of its window is current for the whole of that day',
+  );
+
+  // And the day after is not, so the window still closes.
+  assert.equal(
+    hasCurrentReadyDocument([dateOnlyCogginsDoc('h1', CURRENT_COGGINS_DAYS + 1)], CURRENT_COGGINS_DAYS, now),
+    false,
+    'the day after the window is over',
+  );
+
+  // The same document read at either end of the day gives the same answer,
+  // which is the property that was actually broken.
+  for (const hour of [0, 6, 12, 18, 23]) {
+    const sameDay = new Date(now);
+    sameDay.setUTCHours(hour, 0, 0, 0);
+    assert.equal(
+      hasCurrentReadyDocument([dateOnlyCogginsDoc('h1', CURRENT_COGGINS_DAYS)], CURRENT_COGGINS_DAYS, sameDay),
+      true,
+      `still current at ${hour}:00 — the boundary must not move with the clock`,
+    );
+  }
 });

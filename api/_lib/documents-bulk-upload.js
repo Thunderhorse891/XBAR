@@ -135,9 +135,16 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
   }
 
   const entitlements = await getWorkspaceEntitlements(supabase, workspaceId, user?.email);
+  if (!entitlements.ok) {
+    return { ok: false, status: entitlements.status, message: entitlements.message };
+  }
+
   const capacity = await checkDocumentCapacity(supabase, workspaceId, expanded.length, entitlements.limits);
   if (!capacity.ok) {
-    return { ok: false, status: 403, message: capacity.message };
+    // status carries the difference between "over your limit" (403) and
+    // "we could not check" (503); the latter is retryable and must not read
+    // to the customer as a billing problem.
+    return { ok: false, status: capacity.status ?? 403, message: capacity.message };
   }
 
   // Storage gate: reject the whole batch before uploading anything if the
@@ -145,12 +152,23 @@ async function processBatch({ supabase, workspaceId, user, body, mode }) {
   const incomingStorageBytes = expanded.reduce((sum, file) => sum + fileByteSize(file), 0);
   const storage = await checkStorageCapacity(supabase, workspaceId, incomingStorageBytes, entitlements.limits);
   if (!storage.ok) {
-    return { ok: false, status: 403, message: storage.message };
+    return { ok: false, status: storage.status ?? 403, message: storage.message };
   }
 
   // Horse-limit gate for auto-created horses: track remaining slots so the
   // OCR pipeline cannot exceed the tier by creating horses from documents.
   const horseCapacity = await checkHorseCapacity(supabase, workspaceId, 0, entitlements.limits);
+  // Refuse before computing the allowance, exactly as commitAssignments does. A
+  // failed count leaves `used` undefined, and `used ?? 0` would then hand this
+  // batch a full fresh allowance regardless of how many horses already exist —
+  // reading "usage unknown" as "usage zero" is the failure the gates exist to
+  // prevent. Auto-creation makes it worse than a wrong number: the database
+  // trigger may reject the over-limit horse while createHorseFromCandidate
+  // ignores that error, links documents to it, and reports a horse that was
+  // never written.
+  if (!horseCapacity.ok) {
+    return { ok: false, status: horseCapacity.status ?? 403, message: horseCapacity.message };
+  }
   let horseSlotsLeft = Math.max(0, entitlements.limits.horseLimit - (horseCapacity.used ?? 0));
 
   const batchId = `batch-${randomUUID()}`;
@@ -358,7 +376,17 @@ async function commitAssignments({ supabase, workspaceId, user, assignments }) {
 
   // Horse-limit gate for review-committed creations, mirroring the auto flow.
   const entitlements = await getWorkspaceEntitlements(supabase, workspaceId, user?.email);
+  if (!entitlements.ok) {
+    return { ok: false, status: entitlements.status, message: entitlements.message };
+  }
+
   const horseCapacity = await checkHorseCapacity(supabase, workspaceId, 0, entitlements.limits);
+  // Without this check a failed count left `used` undefined, so horseSlotsLeft
+  // became the entire tier limit and the gate granted a full allowance on the
+  // strength of a query that never returned.
+  if (!horseCapacity.ok) {
+    return { ok: false, status: horseCapacity.status ?? 403, message: horseCapacity.message };
+  }
   let horseSlotsLeft = Math.max(0, entitlements.limits.horseLimit - (horseCapacity.used ?? 0));
 
   const results = [];

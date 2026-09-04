@@ -65,6 +65,10 @@ export default async function handler(req, res) {
   const minimumPlan = templateRow?.minimum_plan || template.minimumPlan;
 
   const entitlements = await getWorkspaceEntitlements(supabase, workspaceId, user?.email);
+  if (!entitlements.ok) {
+    return sendJson(res, entitlements.status, { ok: false, message: entitlements.message });
+  }
+
   if (!tierIncludesPlan(entitlements.effectiveTier, minimumPlan)) {
     return sendJson(res, 403, {
       ok: false,
@@ -125,9 +129,13 @@ export default async function handler(req, res) {
 
     const storage = await checkStorageCapacity(supabase, workspaceId, pdfSizeBytes, entitlements.limits);
     if (!storage.ok) {
-      return sendJson(res, 403, {
+      // Propagate the gate's own status and code. A refusal because usage could
+      // not be read is a retryable 503, not a quota violation — reporting it as
+      // storage_limit_reached tells the customer to upgrade over a transient
+      // database error, and stops clients treating it as retryable.
+      return sendJson(res, storage.status ?? 403, {
         ok: false,
-        code: 'storage_limit_reached',
+        code: storage.retryable ? 'usage_unavailable' : 'storage_limit_reached',
         message: storage.message,
         currentPlan: entitlements.effectiveTier,
         billingState: entitlements.billingState,

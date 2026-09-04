@@ -14,6 +14,7 @@ import { recordAuditEvent } from './_lib/audit.js';
 import { buildServerSaleCredential } from './_lib/sale-credential.js';
 import { enforceRateLimit } from './_lib/rate-limit.js';
 import { applyCors } from './_lib/cors.js';
+import { packetOmissionSection, selectPacketDocuments } from './_lib/packet-selection.js';
 
 const DOCUMENT_BUCKET =
   process.env.SUPABASE_DOCUMENT_BUCKET || process.env.VITE_SUPABASE_DOCUMENT_BUCKET || 'horse-documents';
@@ -68,6 +69,10 @@ export default async function handler(req, res) {
   const { supabase, user } = access;
 
   const entitlements = await getWorkspaceEntitlements(supabase, workspaceId, user?.email);
+  if (!entitlements.ok) {
+    return sendJson(res, entitlements.status, { ok: false, message: entitlements.message });
+  }
+
   if (!tierIncludesPlan(entitlements.effectiveTier, 'Professional')) {
     return sendJson(res, 403, {
       ok: false,
@@ -80,9 +85,11 @@ export default async function handler(req, res) {
   }
   const capacity = await checkSalePacketCapacity(supabase, workspaceId, 1, entitlements.limits);
   if (!capacity.ok) {
-    return sendJson(res, 403, {
+    // A retryable "could not verify" is a 503 and is not a packet-limit
+    // problem, so it must not carry the limit-reached code either.
+    return sendJson(res, capacity.status ?? 403, {
       ok: false,
-      code: 'sale_packet_limit_reached',
+      code: capacity.retryable ? 'usage_unavailable' : 'sale_packet_limit_reached',
       message: capacity.message,
       currentPlan: entitlements.effectiveTier,
       billingState: entitlements.billingState,
@@ -107,20 +114,30 @@ export default async function handler(req, res) {
     // Select the documents to bundle: caller-specified list, or every stored
     // document attached to the horse (originals + generated templates).
     const requestedIds = Array.isArray(body.documentIds) ? body.documentIds.filter((id) => typeof id === 'string') : [];
-    let packetDocs = loaded.documents.filter((doc) => doc.storage_path);
-    if (requestedIds.length) {
-      packetDocs = packetDocs.filter((doc) => requestedIds.includes(doc.document_id));
-    }
-    packetDocs = packetDocs.slice(0, MAX_PACKET_ATTACHMENTS);
+    const { packetDocs, unavailable } = selectPacketDocuments(loaded.documents, requestedIds, MAX_PACKET_ATTACHMENTS);
 
+    /*
+     * What is IN the packet, which is not the same as what was selected for it.
+     *
+     * A download that fails is recorded in `unavailable`, and everything that
+     * describes the packet has to agree with that. Keeping the failed document
+     * in `packetDocs` meant the cover listed it under "Included Documents", the
+     * database row and the API response claimed it, and — worst of the four —
+     * the SEAL was computed over it. A buyer verifying that seal would have
+     * been told the packet contains a Coggins that is not in it, by the one
+     * mechanism in the product whose whole job is to be trustworthy.
+     *
+     * Stays parallel with `attachments`: same documents, same order.
+     */
     const attachments = [];
-    const unavailable = [];
+    const includedDocs = [];
     for (const doc of packetDocs) {
       const { data, error } = await supabase.storage.from(DOCUMENT_BUCKET).download(doc.storage_path);
       if (error || !data) {
         unavailable.push(`${doc.title} (${error?.message || 'download failed'})`);
         continue;
       }
+      includedDocs.push(doc);
       attachments.push({
         label: `${doc.document_type}: ${doc.title}`,
         mimeType: doc.mime_type,
@@ -142,7 +159,7 @@ export default async function handler(req, res) {
       horseId,
       context,
       ownershipRecord,
-      documents: packetDocs,
+      documents: includedDocs,
       sealedAt: new Date().toISOString(),
     });
     const appOrigin =
@@ -150,6 +167,13 @@ export default async function handler(req, res) {
       process.env.VITE_PUBLIC_APP_URL ||
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
     // The SPA (and its public routes) is served under /app — the router basename.
+    /*
+     * Built here, not earlier: the download loop above appends to `unavailable`
+     * too, so a file that was selected and then failed to come out of storage
+     * has to reach the buyer's page along with the rest.
+     */
+    const omissionSection = packetOmissionSection(unavailable);
+
     // Point verification straight at the canonical path so the link never depends
     // on a bare-path redirect resolving first.
     const verifyUrl = `${appOrigin}/app/verify/${packetId}`;
@@ -179,10 +203,13 @@ export default async function handler(req, res) {
         },
         {
           heading: 'Included Documents',
-          lines: packetDocs.length
-            ? packetDocs.map((doc, index) => `${index + 1}. ${doc.document_type}: ${doc.title}`)
+          lines: includedDocs.length
+            ? includedDocs.map((doc, index) => `${index + 1}. ${doc.document_type}: ${doc.title}`)
             : ['No stored documents were attached to this horse.'],
         },
+        // Immediately after the included list, so a buyer reading what is in
+        // the packet sees what is not without having to look for it.
+        ...(omissionSection ? [omissionSection] : []),
         {
           heading: 'XBAR Verification Seal',
           lines: [
@@ -205,9 +232,13 @@ export default async function handler(req, res) {
     // post-upload database exception).
     const storage = await checkStorageCapacity(supabase, workspaceId, packetSizeBytes, entitlements.limits);
     if (!storage.ok) {
-      return sendJson(res, 403, {
+      // Propagate the gate's own status and code. A refusal because usage could
+      // not be read is a retryable 503, not a quota violation — reporting it as
+      // storage_limit_reached tells the customer to upgrade over a transient
+      // database error, and stops clients treating it as retryable.
+      return sendJson(res, storage.status ?? 403, {
         ok: false,
-        code: 'storage_limit_reached',
+        code: storage.retryable ? 'usage_unavailable' : 'storage_limit_reached',
         message: storage.message,
         currentPlan: entitlements.effectiveTier,
         billingState: entitlements.billingState,
@@ -229,7 +260,7 @@ export default async function handler(req, res) {
       packet_pdf_path: packetPath,
       watermark_text: watermarkText,
       shared_with_email: buyerEmail,
-      document_ids: packetDocs.map((doc) => doc.document_id),
+      document_ids: includedDocs.map((doc) => doc.document_id),
       status: 'ready',
       size_bytes: packetSizeBytes,
       payload: { buyerName, unavailable, attachmentCount: attachments.length, seal },
@@ -272,7 +303,7 @@ export default async function handler(req, res) {
       entityId: packetId,
       metadata: {
         horseId,
-        documents: packetDocs.length,
+        documents: includedDocs.length,
         buyerEmail: buyerEmail ? 'set' : '',
         emailed: Boolean(emailResult.ok),
         sealCode: seal.sealCode,
@@ -287,7 +318,7 @@ export default async function handler(req, res) {
       downloadUrl,
       expiresInSeconds: SIGNED_URL_TTL_SECONDS,
       watermarkText,
-      includedDocumentIds: packetDocs.map((doc) => doc.document_id),
+      includedDocumentIds: includedDocs.map((doc) => doc.document_id),
       unavailableDocuments: unavailable,
       emailed: Boolean(emailResult.ok),
       emailMessage: emailResult.message || '',

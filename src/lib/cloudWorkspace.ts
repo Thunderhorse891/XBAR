@@ -1,7 +1,11 @@
 import { apiConfig, isRelationalCloudEnabled, isSnapshotFallbackEnabled, supabaseConfig } from '@/lib/platformConfig';
 import { publicShareEventToBuyerRoomEvent, type PublicShareEventRow } from '@/lib/buyerDealRoom';
 import { createId, todayStamp } from '@/lib/xbarRuntime';
+import { WORKSPACE_SCHEMA_VERSION } from '@/store/xbarStoreHelpers';
 import { getSupabaseClient } from '@/lib/supabaseClient';
+import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
+import { openLocalFile } from '@/lib/localFileVault';
+import { vaultOwnerId } from '@/lib/vaultOwner';
 import type { Session } from '@supabase/supabase-js';
 import type {
   DocumentRecord,
@@ -924,7 +928,11 @@ async function loadWorkspaceBackupFromRelationalCloud(session: Session) {
 
   const backup: CloudWorkspaceBackup = {
     app: 'XBAR',
-    version: 8,
+    // The constant, never a literal: this was hardcoded 8 and would have gone
+    // on claiming 8 the moment the schema moved, so a cloud snapshot would
+    // import as already-current and skip the very normalization the bump
+    // exists to run.
+    version: WORKSPACE_SCHEMA_VERSION,
     exportedAt: pickNewestTimestamp([
       ...(membershipsResult.data ?? []).map((row) => row.updated_at),
       ...(invitationsResult.data ?? []).map((row) => row.updated_at),
@@ -1169,13 +1177,75 @@ export async function uploadDocumentAssetToCloud(params: { file: File; horseId?:
   };
 }
 
-export async function getDocumentAccessUrl(document: Pick<DocumentRecord, 'fileUrl' | 'storagePath'>) {
+/**
+ * Resolve a record to something the browser can open.
+ *
+ * The on-device vault is consulted before cloud storage, and deliberately so:
+ * a file kept locally needs no session, no network and no signed URL, so
+ * checking it first is both faster and the only branch that works for the
+ * workspaces this product says it supports. `release` is present only for those
+ * — an object URL holds the blob in memory until it is revoked.
+ */
+export async function getDocumentAccessUrl(
+  document: Pick<DocumentRecord, 'fileUrl' | 'storagePath' | 'localFileKey'>,
+): Promise<
+  | {
+      ok: true;
+      url: string;
+      release?: () => void;
+      /**
+       * False when the file must be downloaded rather than rendered in a tab.
+       * Absent for cloud URLs, which are served from Supabase's origin and
+       * cannot reach this app's storage whatever their type.
+       */
+      inlineSafe?: boolean;
+      fileName?: string;
+    }
+  | { ok: false; message: string }
+> {
   const directFileUrl = document.fileUrl?.trim();
   if (directFileUrl) {
+    /*
+     * The scheme is checked HERE, at the point the string leaves the record.
+     *
+     * `fileUrl` is workspace data, and workspace data can arrive in an imported
+     * backup. `openStoredFile` assigns this to a same-origin `about:blank`, so
+     * a `javascript:` URL in a backup runs with this app's origin and reads the
+     * vault. Refusing at the source means every caller is covered, including
+     * ones added later that never think about it.
+     */
+    if (!isNavigableFileUrl(directFileUrl)) {
+      return {
+        ok: false,
+        message: 'This document points at an address this app will not open. Re-upload the file to fix the record.',
+      } as const;
+    }
+
     return {
       ok: true,
       url: directFileUrl,
     } as const;
+  }
+
+  if (document.localFileKey) {
+    const handle = await openLocalFile(document.localFileKey, vaultOwnerId());
+    if (handle) {
+      return {
+        ok: true,
+        url: handle.url,
+        release: handle.release,
+        // Carried through so the caller downloads rather than navigating. The
+        // url is already inert either way; this is what stops a blank tab.
+        inlineSafe: handle.inlineSafe,
+        fileName: handle.name,
+      } as const;
+    }
+    if (!document.storagePath) {
+      return {
+        ok: false,
+        message: 'This file was saved on a different device or browser, and is not stored on this one.',
+      } as const;
+    }
   }
 
   if (!document.storagePath) {

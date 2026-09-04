@@ -1,5 +1,11 @@
 import type { DocumentRecord, ExpenseReceipt, HorseRecord, OwnershipRecord } from '../types/xbar.js';
 import { normalizeOwnershipRecord } from '../store/xbarStoreLogic.js';
+import { monthKeyForDate, monthKeyOf, trailingMonthKeys } from './receiptMonths.js';
+import {
+  CURRENT_COGGINS_DAYS,
+  hasCurrentReadyDocument,
+  hasResolvedDocumentMissingCurrentDate,
+} from './documentCurrency.js';
 
 /*
  * Business intelligence over the structured records: prices the operational
@@ -24,20 +30,49 @@ export interface RevenueRiskAssessment {
   items: RevenueRiskItem[];
 }
 
-const COGGINS_VALID_DAYS = 365;
-
-function hasCurrentCoggins(horseId: string, documents: DocumentRecord[], now: Date): boolean {
-  return documents.some((document) => {
-    if (document.horseId !== horseId || document.type !== 'Coggins') return false;
-    if (document.state === 'Archived') return false;
-    const uploaded = Date.parse(document.uploadedAt);
-    if (Number.isNaN(uploaded)) return false;
-    return (now.getTime() - uploaded) / 86_400_000 <= COGGINS_VALID_DAYS;
-  });
+/*
+ * The SAME question the sale-packet gate asks, answered by the same code.
+ *
+ * This used to accept any Coggins that was not Archived and measure the
+ * twelve months from `uploadedAt`. Both halves were wrong in the same
+ * direction. `uploadedAt` is when the file arrived and says nothing about when
+ * the blood was drawn, so a year-old Coggins uploaded this morning read as
+ * current; and a document still sitting in Queued or Needs Review counted as
+ * proof of something nobody had checked.
+ *
+ * The packet gate already required a Ready document with a current
+ * `entities.examDate`, so the two disagreed about the same horse: the gate
+ * held it back while this priced its full ask as ready to close — into the
+ * Reports screen, a CSV and a PDF. Both now call `documentCurrency`.
+ */
+function cogginsFor(horseId: string, documents: DocumentRecord[]): DocumentRecord[] {
+  return documents.filter((document) => document.horseId === horseId && document.type === 'Coggins');
 }
 
 // A horse counts as sale inventory when it carries an asking price or is in
 // sale prep. Risk = listed dollars a buyer cannot close on today.
+/**
+ * Is this horse part of the sale inventory?
+ *
+ * Exported because two places on the ranch report answer this question and were
+ * answering it differently: the risk assessment counted a horse in `Sale Prep`
+ * with no price entered yet, while the headline "Listed for sale" count tested
+ * `askPrice > 0` alone. The same report then showed a smaller herd than the
+ * blockers list below it, with nothing on the page explaining the gap.
+ *
+ * A price is sufficient but not necessary. Getting a horse ready to sell is
+ * where the readiness work happens, and it starts long before anyone decides
+ * what to ask for it.
+ */
+export function isSaleInventory(horse: HorseRecord): boolean {
+  return (
+    (horse.sale?.askPrice ?? 0) > 0 ||
+    horse.status === 'Sale Prep' ||
+    horse.sale?.listingState === 'Market Ready' ||
+    horse.sale?.listingState === 'Buyer Review'
+  );
+}
+
 export function assessRevenueAtRisk(
   horses: HorseRecord[],
   ownershipRecords: OwnershipRecord[],
@@ -50,12 +85,7 @@ export function assessRevenueAtRisk(
 
   for (const horse of horses) {
     const askPrice = horse.sale?.askPrice ?? 0;
-    const listed =
-      askPrice > 0 ||
-      horse.status === 'Sale Prep' ||
-      horse.sale?.listingState === 'Market Ready' ||
-      horse.sale?.listingState === 'Buyer Review';
-    if (!listed) continue;
+    if (!isSaleInventory(horse)) continue;
     totalListedValue += askPrice;
 
     const blockers: string[] = [];
@@ -81,11 +111,30 @@ export function assessRevenueAtRisk(
       }
     }
 
-    if (!hasCurrentCoggins(horse.id, documents, now)) {
-      blockers.push('No current Coggins on file (12-month window)');
-      if (!actionLabel) {
-        actionLabel = `Upload Coggins for ${horse.name}`;
-        actionRoute = `/documents?upload=1&horse=${horse.id}`;
+    const cogginsDocs = cogginsFor(horse.id, documents);
+    if (!hasCurrentReadyDocument(cogginsDocs, CURRENT_COGGINS_DAYS, now)) {
+      /*
+       * Which of the three it is decides what the rancher has to DO, and
+       * telling someone to upload a Coggins they already uploaded is how a
+       * report gets ignored. Nothing on file is an upload; something on file
+       * that cannot be relied on is a correction.
+       */
+      if (!cogginsDocs.length) {
+        blockers.push('No Coggins on file');
+        if (!actionLabel) {
+          actionLabel = `Upload Coggins for ${horse.name}`;
+          actionRoute = `/documents?upload=1&horse=${horse.id}`;
+        }
+      } else {
+        blockers.push(
+          hasResolvedDocumentMissingCurrentDate(cogginsDocs, CURRENT_COGGINS_DAYS, now)
+            ? 'Coggins on file has no current exam date (12-month window)'
+            : 'Coggins on file has not been reviewed yet',
+        );
+        if (!actionLabel) {
+          actionLabel = `Review Coggins for ${horse.name}`;
+          actionRoute = `/documents?horse=${horse.id}`;
+        }
       }
     }
 
@@ -119,21 +168,19 @@ export interface SpendAnomaly {
 const ANOMALY_THRESHOLD_PERCENT = 25;
 const MINIMUM_MONTH_SPEND = 50;
 
-function monthKey(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-}
-
 // Flags categories where this month's spend runs more than 25% above the
 // trailing three-month average (ignoring trivial totals).
 export function detectSpendAnomalies(receipts: ExpenseReceipt[], now: Date = new Date()): SpendAnomaly[] {
-  const currentKey = monthKey(now);
-  const trailingKeys = [1, 2, 3].map((offset) => monthKey(new Date(now.getFullYear(), now.getMonth() - offset, 1)));
+  const currentKey = monthKeyForDate(now);
+  const trailingKeys = trailingMonthKeys(now, 3);
 
   const totals = new Map<string, { current: number; trailing: number }>();
   for (const receipt of receipts) {
-    const date = new Date(receipt.receiptDate);
-    if (Number.isNaN(date.getTime())) continue;
-    const key = monthKey(date);
+    // Read from the date string, not from a parsed Date. A date-only value is
+    // parsed as UTC, so in US time zones a receipt dated the 1st was filed
+    // under the previous month and dropped out of this month's total.
+    const key = monthKeyOf(receipt.receiptDate);
+    if (key === null) continue;
     const bucket = totals.get(receipt.category) ?? { current: 0, trailing: 0 };
     if (key === currentKey) bucket.current += receipt.amount;
     else if (trailingKeys.includes(key)) bucket.trailing += receipt.amount;
@@ -173,6 +220,7 @@ export interface HorseEconomics {
 }
 
 const CARRY_MONTHS = 2; // expected months on market while a buyer closes
+const TRAILING_MONTHS = 3; // complete months the burn figure averages over
 const PROTECTED_MARGIN = 0.15; // never discount below cost + 15%
 
 // Margin intelligence for a sale horse: what it cost, what it burns per
@@ -184,14 +232,29 @@ export function computeHorseEconomics(
   now: Date = new Date(),
 ): HorseEconomics {
   const horseReceipts = receipts.filter((receipt) => receipt.horseId === horse.id);
-  const costToDate = horseReceipts.reduce((sum, receipt) => sum + receipt.amount, 0);
 
-  const trailingStart = new Date(now.getFullYear(), now.getMonth() - 3, 1).getTime();
+  // What the horse has cost, which is the purchase plus everything spent since.
+  //
+  // costBasis was omitted, so a horse bought for $10,000 with no receipts yet
+  // reported $0 invested — and this figure is what `safeDiscountFloor` is built
+  // from. A seller negotiating against a floor that ignores the purchase price
+  // can accept an offer well below their actual break-even, which is real money
+  // and the reason this is fixed here rather than only in the report that
+  // surfaced it. buildHorseProfitProfile has always defined it as
+  // `costBasis + spend`; this now agrees with it.
+  const costBasis = Math.max(0, horse.costBasis ?? 0);
+  const costToDate = costBasis + horseReceipts.reduce((sum, receipt) => sum + receipt.amount, 0);
+
+  // The three COMPLETE months before this one, so the divisor matches the
+  // period. A range from three months back to today spans four calendar months
+  // and was divided by three, overstating every horse's monthly cost by a third
+  // for an operation that spends evenly.
+  const trailingWindow = new Set(trailingMonthKeys(now, TRAILING_MONTHS));
   const trailingSpend = horseReceipts.reduce((sum, receipt) => {
-    const date = Date.parse(receipt.receiptDate);
-    return !Number.isNaN(date) && date >= trailingStart && date <= now.getTime() ? sum + receipt.amount : sum;
+    const key = monthKeyOf(receipt.receiptDate);
+    return key !== null && trailingWindow.has(key) ? sum + receipt.amount : sum;
   }, 0);
-  const monthlyBurn = Math.round(trailingSpend / 3);
+  const monthlyBurn = Math.round(trailingSpend / TRAILING_MONTHS);
 
   const askPrice = horse.sale?.askPrice ?? 0;
   const breakEvenPrice = Math.round(costToDate + monthlyBurn * CARRY_MONTHS);

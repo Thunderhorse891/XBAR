@@ -8,6 +8,12 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { type RemoteSalePacketSeal, createSalePacketRemote, hasBackendIdentity } from '@/lib/backendApi';
+import { type LocalSalePacket, buildLocalSalePacket, isBuyerSafeDocumentType } from '@/lib/localSalePacketGenerator';
+import { resolvePacketAttachments } from '@/lib/localPacketAttachments';
+import { beginVaultWrite, endVaultWrite, storeLocalFile } from '@/lib/localFileVault';
+import { openStoredFileInTab } from '@/lib/openStoredFile';
+import { vaultOwnerId } from '@/lib/vaultOwner';
+import type { DocumentRecord, SaleCredentialSeal } from '@/types/xbar';
 import { billingPathForTier } from '@/lib/billingRoutes';
 import { openFacebookShareDialog } from '@/lib/facebookSharing';
 import { buildBadgeSnippet, buildShareText } from '@/lib/verificationBadge';
@@ -51,6 +57,7 @@ export function SalePacketWizard({
   const createSalePacketBuild = useXbarStore((state) => state.createSalePacketBuild);
   const logBuyerRoomEvent = useXbarStore((state) => state.logBuyerRoomEvent);
   const createSalesLead = useXbarStore((state) => state.createSalesLead);
+  const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const currentRole = useXbarStore((state) => state.currentRole);
   const session = useCloudStore((state) => state.session);
   const workspaceId = useCloudStore((state) => state.workspaceId);
@@ -65,6 +72,7 @@ export function SalePacketWizard({
   const [generated, setGenerated] = useState<{
     packetId: string;
     downloadUrl?: string;
+    localFileKey?: string;
     sealCode?: string;
     sealedAt?: string;
     sealAnchor?: 'local' | 'server';
@@ -97,7 +105,19 @@ export function SalePacketWizard({
   );
   const cogginsBlocked = (risk?.blockers ?? []).some((blocker) => blocker.includes('Coggins'));
   const careHold = horse?.status === 'Medical Review';
-  const readyDocs = documents.filter((document) => document.horseId === effectiveHorseId && document.state === 'Ready');
+  /*
+   * Buyer-safe types only, which is both what gets offered and what gets
+   * selected by default.
+   *
+   * `Breeding Contract` is a Ready document on the horse and was therefore
+   * ticked automatically — a commercial agreement with a third party, sent to a
+   * stranger under the heading "approved documents". Listing its title was
+   * already wrong; embedding its full contents makes it a disclosure.
+   */
+  const readyDocs = documents.filter(
+    (document) =>
+      document.horseId === effectiveHorseId && document.state === 'Ready' && isBuyerSafeDocumentType(document.type),
+  );
   const docSelection = selectedDocIds ?? readyDocs.map((document) => document.id);
   const defaultWatermark = `Copy for ${buyerName.trim() || 'buyer review'} – ${new Date().toISOString().slice(0, 10)}`;
   const effectiveWatermark = watermark.trim() || defaultWatermark;
@@ -164,92 +184,253 @@ export function SalePacketWizard({
   const generate = async () => {
     if (!horse) return;
     setIsGenerating(true);
-    const auth = { workspaceId, accessToken: session?.access_token ?? '' };
-    let downloadUrl: string | undefined;
-    let serverSeal: RemoteSalePacketSeal | undefined;
-    let verifyUrl: string | undefined;
+    /*
+     * The generated packet's bytes go into the on-device vault, and the record
+     * that references them is only created by `createSalePacketBuild` further
+     * down. Between the two the blob is unreferenced, which is what the orphan
+     * sweep deletes — the same window the intake and the backup import have.
+     */
+    await beginVaultWrite();
+    try {
+      const auth = { workspaceId, accessToken: session?.access_token ?? '' };
+      let downloadUrl: string | undefined;
+      let serverSeal: RemoteSalePacketSeal | undefined;
+      let verifyUrl: string | undefined;
+      let localPacket: LocalSalePacket | undefined;
+      let localSeal: SaleCredentialSeal | undefined;
+      let localFileKey: string | undefined;
+      /*
+       * What the cloud left out, which was previously thrown away.
+       *
+       * `unavailableDocuments` has always been in the response type and was read
+       * by nothing, so a selection the server could not embed — a file still only
+       * in the on-device vault, one detached since the wizard loaded, one past
+       * the attachment cap, one whose download failed — vanished silently and the
+       * summary reported the packet ready. The local branch has said which files
+       * are missing since it was fixed; this is the same sentence for the other
+       * branch.
+       */
+      let remoteUnavailable: string[] = [];
 
-    if (hasBackendIdentity(auth)) {
-      const remote = await createSalePacketRemote(auth, {
+      if (hasBackendIdentity(auth)) {
+        const remote = await createSalePacketRemote(auth, {
+          horseId: horse.id,
+          buyerName: buyerName.trim() || undefined,
+          buyerEmail: buyerEmail.trim() || undefined,
+          watermarkText: effectiveWatermark,
+          documentIds: docSelection,
+        });
+        if (!remote.ok) {
+          setIsGenerating(false);
+          if (remote.tierBlock) {
+            pushToast({
+              title: `Sale packets need the ${remote.tierBlock.requiredPlan} plan`,
+              message: remote.message,
+              tone: 'warning',
+            });
+            close();
+            navigate(billingPathForTier(remote.tierBlock.requiredPlan));
+            return;
+          }
+          pushToast({ title: 'Packet PDF failed', message: remote.message, tone: 'error' });
+          return;
+        }
+        downloadUrl = remote.downloadUrl;
+        serverSeal = remote.seal;
+        verifyUrl = remote.verifyUrl;
+        remoteUnavailable = remote.unavailableDocuments ?? [];
+      } else {
+        /*
+         * No cloud identity — render the packet here.
+         *
+         * This branch used to produce no document at all: the build was recorded,
+         * `downloadUrl` stayed undefined, and the toast told the seller to sign in
+         * to the cloud to get the PDF. A workspace running the way this product
+         * says it can run therefore had no artifact to send a buyer, even though
+         * the generator that makes one has been in the repository the whole time.
+         */
+        // The documents themselves, not just their titles. The cloud path appends
+        // each selected file into the packet PDF; the local path listed them and
+        // contained none of them, while this wizard told the seller they were
+        // "bundled" — so a buyer could open a supposedly complete packet with no
+        // Coggins and no registration in it, and nothing saying so.
+        const resolved = await resolvePacketAttachments(
+          docSelection
+            .map((id) => documents.find((record) => record.id === id))
+            .filter((record): record is DocumentRecord => Boolean(record)),
+          vaultOwnerId(),
+        );
+
+        localPacket = buildLocalSalePacket({
+          horse,
+          workspaceProfile,
+          documents,
+          ownershipRecord: ownershipRecords.find((record) => record.horseId === horse.id),
+          selectedDocumentIds: docSelection,
+          generatedBy: currentRole,
+          watermark: effectiveWatermark,
+          attachments: resolved.attachments,
+          unattached: resolved.unattached,
+        });
+        localSeal = { ...localPacket.credential, anchor: 'local' as const };
+
+        // Kept in the on-device vault rather than only as an object URL: a
+        // `blob:` address dies with the page, so the packet the seller went back
+        // to send the next morning was a dead link.
+        try {
+          localFileKey = await storeLocalFile(
+            new Blob([localPacket.html], { type: 'text/html' }),
+            localPacket.fileName,
+            'text/html',
+            vaultOwnerId(),
+            // XBAR wrote this file, so it may open as a document and run the
+            // verifier the CSP allows. An uploaded .html never gets that.
+            { generated: true },
+          );
+        } catch (error) {
+          console.error('Storing the generated packet on this device failed.', error);
+        }
+      }
+
+      const build = createSalePacketBuild({
         horseId: horse.id,
         buyerName: buyerName.trim() || undefined,
         buyerEmail: buyerEmail.trim() || undefined,
-        watermarkText: effectiveWatermark,
+        watermark: effectiveWatermark,
         documentIds: docSelection,
+        includesBillOfSale: false,
+        createdBy: currentRole,
+        downloadUrl,
+        serverSeal,
+        localSeal,
+        localFileKey,
+        fileName: localPacket?.fileName,
       });
-      if (!remote.ok) {
-        setIsGenerating(false);
-        if (remote.tierBlock) {
-          pushToast({
-            title: `Sale packets need the ${remote.tierBlock.requiredPlan} plan`,
-            message: remote.message,
-            tone: 'warning',
-          });
-          close();
-          navigate(billingPathForTier(remote.tierBlock.requiredPlan));
-          return;
-        }
-        pushToast({ title: 'Packet PDF failed', message: remote.message, tone: 'error' });
+      setIsGenerating(false);
+
+      if (!build.ok || !build.packet) {
+        pushToast({ title: 'Packet blocked', message: build.message, tone: 'error' });
         return;
       }
-      downloadUrl = remote.downloadUrl;
-      serverSeal = remote.seal;
-      verifyUrl = remote.verifyUrl;
-    }
 
-    const build = createSalePacketBuild({
-      horseId: horse.id,
-      buyerName: buyerName.trim() || undefined,
-      buyerEmail: buyerEmail.trim() || undefined,
-      watermark: effectiveWatermark,
-      documentIds: docSelection,
-      includesBillOfSale: false,
-      createdBy: currentRole,
-      downloadUrl,
-      serverSeal,
-    });
-    setIsGenerating(false);
-
-    if (!build.ok || !build.packet) {
-      pushToast({ title: 'Packet blocked', message: build.message, tone: 'error' });
-      return;
-    }
-
-    // Buyer follow-up opens automatically: share event + sales lead.
-    if (buyerName.trim()) {
-      logBuyerRoomEvent({
-        horseId: horse.id,
-        kind: 'packet-shared',
-        actor: buyerName.trim(),
-        packetId: build.packet.id,
-        note: buyerEmail.trim() ? `Shared to ${buyerEmail.trim()}` : 'Shared directly',
-      });
-      const existingLead = salesLeads.some(
-        (lead) => lead.horseId === horse.id && lead.name.toLowerCase() === buyerName.trim().toLowerCase(),
-      );
-      if (!existingLead) {
-        createSalesLead({ name: buyerName.trim(), channel: 'Referral', horseId: horse.id, shareReady: true });
+      // Buyer follow-up opens automatically: share event + sales lead.
+      if (buyerName.trim()) {
+        logBuyerRoomEvent({
+          horseId: horse.id,
+          kind: 'packet-shared',
+          actor: buyerName.trim(),
+          packetId: build.packet.id,
+          note: buyerEmail.trim() ? `Shared to ${buyerEmail.trim()}` : 'Shared directly',
+        });
+        const existingLead = salesLeads.some(
+          (lead) => lead.horseId === horse.id && lead.name.toLowerCase() === buyerName.trim().toLowerCase(),
+        );
+        if (!existingLead) {
+          createSalesLead({ name: buyerName.trim(), channel: 'Referral', horseId: horse.id, shareReady: true });
+        }
       }
-    }
 
-    if (downloadUrl && typeof window !== 'undefined') {
-      window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+      // Whether a tab actually opened, which is not the same as whether the packet
+      // exists. This branch runs after attachment resolution and an IndexedDB
+      // write, so the click is long past counting as user activation and browsers
+      // commonly refuse — the summary below used to announce a tab that was never
+      // there, directly contradicting the warning the seller had just been shown.
+      /*
+       * What actually happened, not what was attempted.
+       *
+       * A file that must not run as a document is downloaded and no tab exists,
+       * so reporting every success as a tab sent the seller looking for a window
+       * that was never opened — the same defect as the blocked-popup case this
+       * variable was introduced for, arriving by a different route.
+       */
+      let packetDelivery: 'tab' | 'download' | 'none' = 'none';
+      if (downloadUrl && typeof window !== 'undefined') {
+        /*
+         * The cloud path had the same defect the local path was fixed for.
+         *
+         * This runs after `createSalePacketRemote` awaited a network request, so
+         * the click no longer counts as user activation and browsers commonly
+         * refuse the popup. The `null` was discarded and the summary announced a
+         * PDF that had opened in a tab nobody could see — the seller's only clue
+         * that the packet existed at all.
+         */
+        packetDelivery = window.open(downloadUrl, '_blank', 'noopener,noreferrer') ? 'tab' : 'none';
+        if (packetDelivery === 'none') {
+          pushToast({
+            title: 'Packet ready — tab was blocked',
+            message: 'Your browser blocked the new tab. Use the download button below to open the packet.',
+            tone: 'warning',
+          });
+        }
+      } else if (localFileKey) {
+        const opened = await openStoredFileInTab(build.packet);
+        packetDelivery = opened.ok ? opened.delivery : 'none';
+        if (!opened.ok) {
+          pushToast({ title: 'Packet could not be opened', message: opened.message, tone: 'warning' });
+        }
+      }
+      setGenerated({
+        packetId: build.packet.id,
+        downloadUrl,
+        localFileKey,
+        sealCode: build.packet.credential?.sealCode,
+        sealedAt: build.packet.credential?.sealedAt,
+        sealAnchor: build.packet.credential?.anchor,
+        verifyUrl,
+      });
+
+      // Three genuinely different outcomes, said plainly. The old copy had two,
+      // and told a seller with a finished packet in front of them to sign in to
+      // the cloud to get one.
+      const packetStored = Boolean(downloadUrl || localFileKey);
+      pushToast({
+        title: downloadUrl
+          ? remoteUnavailable.length
+            ? 'Sale packet PDF ready — some files not included'
+            : 'Sale packet PDF ready'
+          : localFileKey
+            ? localPacket?.unattachedDocuments.length
+              ? 'Sale packet ready — some files not included'
+              : 'Sale packet ready on this device'
+            : 'Sale packet recorded',
+        message: downloadUrl
+          ? /*
+             * Read off the delivery, exactly as the local branch below does.
+             *
+             * Recording `packetDelivery` on the cloud path was only half the fix:
+             * the summary still announced a tab unconditionally, so a seller
+             * whose popup was blocked got "your browser blocked the new tab"
+             * immediately followed by "opened in a new tab" — and the second one
+             * is the reassuring one. Two toasts, one of them false, about whether
+             * the buyer packet is on screen.
+             *
+             * Two outcomes rather than the local branch's three: this path only
+             * ever sets 'tab' or 'none', because `window.open` cannot report a
+             * download.
+             */
+            `Watermarked PDF ${packetDelivery === 'tab' ? 'opened in a new tab' : 'is ready — use the download button below to open it'}.${remoteUnavailable.length ? ` Not included: ${remoteUnavailable.join(', ')}.` : ''} Buyer activity is now tracked in Buyer follow-up.`
+          : localFileKey
+            ? // Says what is in it. A count the seller can check against what they
+              // selected is the difference between finding a missing Coggins now
+              // and the buyer finding it.
+              `${localPacket?.attachedFiles ?? 0} of ${docSelection.length} document${docSelection.length === 1 ? '' : 's'} embedded in the packet, saved on this device${packetDelivery === 'tab' ? ' and opened in a new tab' : packetDelivery === 'download' ? ' and downloaded to this device' : ' — open it from Sale packets when you are ready'}.${localPacket?.unattachedDocuments.length ? ` Not included: ${localPacket.unattachedDocuments.map((item) => item.title).join(', ')}.` : ''}`
+            : `${build.message} The packet could not be saved on this device, so only the record was kept. Buyer follow-up is tracking this buyer either way.`,
+        /*
+         * A packet nothing could open is not a success, on either path. Both
+         * branches push their own warning toast when delivery fails, and a
+         * success-toned summary beside it says the opposite.
+         */
+        tone:
+          packetStored &&
+          packetDelivery !== 'none' &&
+          !localPacket?.unattachedDocuments.length &&
+          !remoteUnavailable.length
+            ? 'success'
+            : 'warning',
+      });
+    } finally {
+      endVaultWrite();
     }
-    setGenerated({
-      packetId: build.packet.id,
-      downloadUrl,
-      sealCode: build.packet.credential?.sealCode,
-      sealedAt: build.packet.credential?.sealedAt,
-      sealAnchor: build.packet.credential?.anchor,
-      verifyUrl,
-    });
-    pushToast({
-      title: downloadUrl ? 'Sale packet PDF ready' : 'Sale packet recorded',
-      message: downloadUrl
-        ? 'Watermarked PDF opened in a new tab. Buyer activity is now tracked in Buyer follow-up.'
-        : `${build.message} Cloud sign-in generates the watermarked PDF; Buyer follow-up is tracking this buyer either way.`,
-      tone: 'success',
-    });
   };
 
   return (
@@ -625,7 +806,7 @@ export function SalePacketWizard({
                 </div>
               )}
               <div className="confirm-dialog__acks">
-                {generated.downloadUrl && (
+                {generated.downloadUrl ? (
                   <a
                     className="button button--primary button--compact"
                     href={generated.downloadUrl}
@@ -634,7 +815,24 @@ export function SalePacketWizard({
                   >
                     Download packet PDF
                   </a>
-                )}
+                ) : generated.localFileKey ? (
+                  // Not an <a href>: the packet lives in this device's vault,
+                  // and the object URL that reaches it has to be created on
+                  // demand and released afterwards.
+                  <button
+                    className="button button--primary button--compact"
+                    type="button"
+                    onClick={() => {
+                      void openStoredFileInTab({ localFileKey: generated.localFileKey }).then((result) => {
+                        if (!result.ok) {
+                          pushToast({ title: 'Packet unavailable', message: result.message, tone: 'error' });
+                        }
+                      });
+                    }}
+                  >
+                    Open packet
+                  </button>
+                ) : null}
                 <button
                   className="button button--ghost button--compact"
                   type="button"

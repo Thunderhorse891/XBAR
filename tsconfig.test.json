@@ -16,15 +16,19 @@
   "include": [
     "src/store/xbarStoreLogic.ts",
     "src/types/xbar.ts",
+    "src/lib/salePacketDisclosure.ts",
+    "src/lib/packetVerifierScript.ts",
     "src/lib/xbarRuntime.ts",
     "src/lib/xbarPhaseTwo.ts",
     "src/lib/xbarGrowth.ts",
     "src/lib/platformConfig.ts",
+    "src/lib/billingApi.ts",
     "src/lib/facebookSharing.ts",
     "src/lib/permissions.ts",
     "src/lib/cloudSyncPolicy.ts",
     "src/lib/workspaceStorage.ts",
     "src/vite-env.d.ts",
+    "src/types/api-pdf.d.ts",
     "tests/**/*.ts"
   ]
 }

@@ -10,7 +10,8 @@
 
 const args = process.argv.slice(2);
 const urlFlagIndex = args.indexOf('--url');
-const probeUrl = urlFlagIndex >= 0 ? args[urlFlagIndex + 1] : null;
+const bareProbeUrl = args.find((arg) => /^https?:\/\//i.test(arg));
+const probeUrl = urlFlagIndex >= 0 ? args[urlFlagIndex + 1] : bareProbeUrl;
 
 const isSet = (name) => Boolean(process.env[name]?.trim());
 const flagOn = (name) => /^(1|true|yes|on)$/i.test(process.env[name]?.trim() ?? '');

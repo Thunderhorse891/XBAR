@@ -3,6 +3,7 @@ import { Check } from 'lucide-react';
 import { Card, PageHead, ProgressRing } from '@/components/saas';
 import { billingPath } from '@/lib/billingRoutes';
 import { useXbarStore } from '@/store/useXbarStore';
+import { hasActivePaidPlan } from '@/lib/subscriptionDecision';
 
 type Step = {
   id: string;
@@ -88,7 +89,11 @@ export default function GettingStarted() {
       id: 'plan',
       title: 'Review billing',
       detail: `${subscription.tier} billing is set for this workspace.`,
-      done: subscription.billingState === 'Active' || subscription.monthlyRate > 0,
+      // Not just an entitled state: a new workspace is seeded as
+      // 'Manual Billing' at rate 0, which is a setup state rather than a
+      // purchase, so entitlement alone would tick this off before anyone had
+      // configured billing at all.
+      done: hasActivePaidPlan(subscription),
       action: 'Open billing',
       to: billingPath,
     },

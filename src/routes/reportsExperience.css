@@ -1,0 +1,226 @@
+/*
+ * Reports screen.
+ *
+ * Layers on operationsExperience.css rather than restating it: the hero, metric
+ * grid, panels and buttons all come from there, so only what this screen adds
+ * lives here — the money table, the blocker rows and the category bars.
+ *
+ * Panels on this screen are the light surface defined by `.ops-panel`
+ * (near-white background, #14202d text), so everything below is written against
+ * that, not against the dark page behind it.
+ */
+
+/* The empty state has no ledger panel, so the hero's second column would sit
+   as 320px of blank gradient. Collapse it to the content it actually has. */
+.ops-hero--solo {
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+}
+
+.report-table-scroll {
+  /* Seven money columns do not fit a phone. The table scrolls inside its panel
+     so the page itself never scrolls sideways. */
+  overflow-x: auto;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+
+.report-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: #14202d;
+}
+
+.report-table thead th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #5b6b7d;
+  padding: 0 12px 8px;
+  border-bottom: 1px solid rgba(20, 32, 45, 0.14);
+  white-space: nowrap;
+}
+
+.report-table tbody tr {
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.report-table tbody tr:hover,
+.report-table tbody tr:focus-visible {
+  background: rgba(20, 32, 45, 0.05);
+  outline: none;
+}
+
+.report-table tbody tr:focus-visible {
+  box-shadow: inset 0 0 0 2px rgba(37, 99, 165, 0.55);
+}
+
+.report-table tbody th,
+.report-table tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(20, 32, 45, 0.08);
+  vertical-align: middle;
+  text-align: left;
+  font-weight: 500;
+}
+
+.report-table__num {
+  text-align: right;
+  /* Tabular figures so columns of money line up on the decimal rather than
+     wobbling with the width of each digit. */
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.report-table thead .report-table__num {
+  text-align: right;
+}
+
+.report-table__name {
+  display: block;
+  font-weight: 700;
+}
+
+.report-table__meta {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: #5b6b7d;
+}
+
+.report-table__muted {
+  color: #7a8899;
+  font-style: italic;
+  text-align: center;
+}
+
+.report-risk {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.report-risk__row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 0;
+  border-bottom: 1px solid rgba(20, 32, 45, 0.08);
+}
+
+.report-risk__row:last-child {
+  border-bottom: none;
+}
+
+.report-risk__main {
+  /* Takes the slack so the amount and the action button stay put down the
+     right edge regardless of how long a blocker list runs. */
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.report-risk__name {
+  display: block;
+  font-weight: 700;
+  font-size: 14px;
+  color: #14202d;
+}
+
+.report-risk__blockers {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  color: #5b6b7d;
+}
+
+.report-risk__amount {
+  flex: 0 0 auto;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #14202d;
+  white-space: nowrap;
+}
+
+.report-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.report-bar__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+  color: #14202d;
+  margin-bottom: 6px;
+}
+
+.report-bar__head span:last-child {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.report-bar__track {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(20, 32, 45, 0.1);
+  overflow: hidden;
+}
+
+.report-bar__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #2563a5, #3f88d0);
+}
+
+.report-readiness {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 4px;
+}
+
+.ops-experience .button--block {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+}
+
+@media (max-width: 720px) {
+  .report-risk__row {
+    /* The action button wraps under the name rather than squeezing the
+       blocker text down to one word per line. */
+    flex-wrap: wrap;
+  }
+
+  .report-risk__main {
+    flex: 1 1 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-table tbody tr {
+    transition: none;
+  }
+}
+
+/* Specificity matters here: `.ops-hero__ledger strong` in
+   operationsExperience.css is (0,1,1) and a bare class is (0,1,0), so a
+   single-class rule loses and the headline kept its currency-sized font. */
+.ops-hero__ledger strong.report-locked__headline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* The ledger headline is sized for a compact currency figure. "Locked" plus
+     its padlock is far wider and ran off the panel at that scale. */
+  font-size: clamp(1.6rem, 2.6vw, 2.4rem);
+  line-height: 1.1;
+}

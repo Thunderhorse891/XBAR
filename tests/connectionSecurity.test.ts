@@ -20,9 +20,16 @@ const rateLimitSource = await readFile(fromRoot('api/_lib/rate-limit.js'), 'utf8
 const vercelConfigSource = await readFile(fromRoot('vercel.json'), 'utf8');
 const validationSource = await readFile(fromRoot('api/_lib/validation.js'), 'utf8');
 const corsSource = await readFile(fromRoot('api/_lib/cors.js'), 'utf8');
+const managedBillingSource = await readFile(fromRoot('api/_lib/managed-billing.js'), 'utf8');
 
 test('managed checkout is admin-only and validates return origins', () => {
-  assert.match(checkoutSource, /MANAGED_BILLING_ENABLED/);
+  // The flag itself lives in api/_lib/managed-billing.js so the server gate and
+  // the health check cannot drift apart. Follow it to its home rather than
+  // dropping the assertion: checkout must still consult it, and it must still
+  // be the MANAGED_BILLING_ENABLED variable that decides.
+  assert.match(checkoutSource, /serverManagedBillingEnabled\(\)/);
+  assert.match(managedBillingSource, /export function serverManagedBillingEnabled/);
+  assert.match(managedBillingSource, /env\.MANAGED_BILLING_ENABLED/);
   assert.match(checkoutSource, /Managed billing is paused\. No payment session was created\./);
   assert.match(checkoutSource, /access\.role !== 'Admin'/);
   assert.match(checkoutSource, /configuredOrigins\.includes\(requestedUrl\.origin\)/);

@@ -48,11 +48,15 @@ export default async function handler(req, res) {
   // Server-side seat-limit enforcement: active members plus pending invites
   // count against the tier's seats. The client check is UX; this is the gate.
   const entitlements = await getWorkspaceEntitlements(supabase, workspaceId, access.user?.email);
+  if (!entitlements.ok) {
+    return sendJson(res, entitlements.status, { ok: false, message: entitlements.message });
+  }
+
   const capacity = await checkSeatCapacity(supabase, workspaceId, 1, entitlements.limits, {
     excludeInvitationId: invitationId,
   });
   if (!capacity.ok) {
-    return sendJson(res, 403, { ok: false, message: capacity.message });
+    return sendJson(res, capacity.status ?? 403, { ok: false, message: capacity.message });
   }
 
   // Server-side config first: PUBLIC_APP_URL is the documented server var,

@@ -15,7 +15,22 @@ import { workspaceStorageDriverLabel } from '@/lib/workspaceStorage';
 import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useCurrentRoleCapability, useXbarStore } from '@/store/useXbarStore';
+import { workspaceBackupPayload } from '@/store/xbarStoreLogic';
+import { canRestorePersistedState } from '@/store/xbarStoreHelpers';
+import {
+  type PortableLocalFile,
+  type UnbackedUpFile,
+  clearLocalFileVault,
+  exportLocalFiles,
+  importLocalFiles,
+  listLocalFiles,
+  referencedVaultKeys,
+} from '@/lib/localFileVault';
+import { beginVaultWrite, endVaultWrite } from '@/lib/localFileVault';
+import { vaultOwnerId } from '@/lib/vaultOwner';
+import { promoteLocalVaultFiles } from '@/lib/workspacePromotion';
 import type { UserRole } from '@/types/xbar';
+import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 
 function roleLabel(role: UserRole) {
   return role === 'Owner' ? 'Horse Owner / Client' : role;
@@ -37,7 +52,7 @@ export default function Settings() {
   const workspaceProfile = useXbarStore((state) => state.workspaceProfile);
   const workspaceMembers = useXbarStore((state) => state.workspaceMembers);
   const workspaceInvitations = useXbarStore((state) => state.workspaceInvitations);
-  const subscription = useXbarStore((state) => state.subscription);
+  const subscription = useEffectiveSubscription();
   const updateWorkspaceProfile = useXbarStore((state) => state.updateWorkspaceProfile);
   const inviteWorkspaceMember = useXbarStore((state) => state.inviteWorkspaceMember);
   const revokeWorkspaceInvitation = useXbarStore((state) => state.revokeWorkspaceInvitation);
@@ -52,6 +67,8 @@ export default function Settings() {
   const lastCloudSyncAt = useCloudStore((state) => state.lastSyncAt);
   const cloudSyncState = useCloudStore((state) => state.syncState);
   const setLastCloudSyncAt = useCloudStore((state) => state.setLastSyncAt);
+  const setCloudSyncState = useCloudStore((state) => state.setSyncState);
+  const unlockAutosaveAfterManualSync = useCloudStore((state) => state.unlockAutosaveAfterManualSync);
   const sendMagicLink = useCloudStore((state) => state.sendMagicLink);
   const signInWithFacebook = useCloudStore((state) => state.signInWithFacebook);
   const signOutCloud = useCloudStore((state) => state.signOut);
@@ -68,6 +85,7 @@ export default function Settings() {
   const [cloudBusy, setCloudBusy] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [exportingBackup, setExportingBackup] = useState(false);
   const facebookConnected = cloudSession?.user?.app_metadata?.provider === 'facebook';
   const activeMembers = workspaceMembers.filter((member) => member.status === 'Active');
   const pendingInvites = workspaceInvitations.filter((invite) => invite.status === 'Pending');
@@ -77,20 +95,72 @@ export default function Settings() {
     setProfileDraft(workspaceProfile);
   }, [workspaceProfile]);
 
-  const handleExport = () => {
+  /*
+   * The backup carries the files, not just the records that mention them.
+   *
+   * The workspace JSON keeps only an opaque `localFileKey` per document and
+   * receipt; the bytes live in a separate IndexedDB store. Restored on a second
+   * device, every one of those records was listed as stored on-device and could
+   * not be opened — the backup a rancher runs precisely so they do not lose
+   * their proof was leaving all of it behind.
+   */
+  const handleExport = async () => {
+    if (exportingBackup) return;
+    setExportingBackup(true);
     let url = '';
     try {
       const backup = exportWorkspaceBackup();
-      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      const workspace = backup.workspace as {
+        documents?: { localFileKey?: string }[];
+        expenseReceipts?: { localFileKey?: string }[];
+        salePacketBuilds?: { localFileKey?: string }[];
+      };
+      const { files, skipped } = await exportLocalFiles(
+        referencedVaultKeys(
+          workspace.documents ?? [],
+          workspace.expenseReceipts ?? [],
+          workspace.salePacketBuilds ?? [],
+        ),
+        // A restored record can name a file this workspace does not own. The
+        // backup is the one path that COPIES the bytes somewhere they open
+        // freely, so the owner has to reach the read.
+        vaultOwnerId(),
+      );
+
+      /*
+       * The omissions travel WITH the archive, not only in the toast.
+       *
+       * A file left out here — missing, unreadable, or past the size budget —
+       * produced a warning that lived exactly as long as the toast. The archive
+       * itself recorded nothing, so importing it months later restored records
+       * pointing at files that were never in the backup, and reported an
+       * ordinary success: import can only report entries it was given and
+       * failed to write, and these were never given.
+       *
+       * Recording them means a restore can say which files to go and find, and
+       * why they are not here.
+       */
+      const blob = new Blob([JSON.stringify({ ...backup, files, omittedFiles: skipped }, null, 2)], {
+        type: 'application/json',
+      });
       url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
       anchor.download = `xbar-workspace-${backup.exportedAt.slice(0, 10)}.json`;
       anchor.click();
+
+      // What went in, and what did not. A backup that quietly omits files is
+      // the failure this change exists to remove, so an incomplete one says so
+      // rather than reporting plain success.
+      const fileSummary = files.length
+        ? `${files.length} file${files.length === 1 ? '' : 's'} included.`
+        : 'No files were stored on this device.';
       pushToast({
-        title: 'Backup exported',
-        message: 'Ranch backup downloaded successfully.',
-        tone: 'success',
+        title: skipped.length ? 'Backup exported — some files not included' : 'Backup exported',
+        message: skipped.length
+          ? `${fileSummary} ${skipped.length} could not be included: ${skipped.map((entry) => `${entry.name} (${entry.reason})`).join('; ')}`
+          : `Ranch backup downloaded. ${fileSummary}`,
+        tone: skipped.length ? 'warning' : 'success',
       });
     } catch {
       pushToast({
@@ -100,6 +170,7 @@ export default function Settings() {
       });
     } finally {
       if (url) URL.revokeObjectURL(url);
+      setExportingBackup(false);
     }
   };
 
@@ -109,6 +180,29 @@ export default function Settings() {
 
   const handleDeleteAccount = async () => {
     if (!canConfirmDelete || deleting) return;
+
+    /*
+     * Captured BEFORE anything is cleared, and that ordering is the whole fix.
+     *
+     * `deleteAccount` clears the cloud workspace id and `resetWorkspace` erases
+     * the records, so reading either afterwards answered for a workspace that
+     * no longer existed: every successful cloud deletion purged as `'local'`
+     * with an empty key list. The deleted account's files stayed on the device,
+     * and this browser's LOCAL-only workspace had its files deleted instead —
+     * wrong in both directions at once.
+     */
+    const departingWorkspaceId = vaultOwnerId();
+    const departing = exportWorkspaceBackup().workspace as {
+      documents?: { localFileKey?: string }[];
+      expenseReceipts?: { localFileKey?: string }[];
+      salePacketBuilds?: { localFileKey?: string }[];
+    };
+    const departingKeys = referencedVaultKeys(
+      departing.documents ?? [],
+      departing.expenseReceipts ?? [],
+      departing.salePacketBuilds ?? [],
+    );
+
     setDeleting(true);
     const result = await deleteAccount(deleteConfirm);
     setDeleting(false);
@@ -126,24 +220,234 @@ export default function Settings() {
     } catch {
       // best effort — the account is already deleted on the server
     }
+    // The files live in their own database, which `persist.clearStorage` knows
+    // nothing about. Without this, registration papers, receipts and generated
+    // packets stayed on the device while the UI reported the account
+    // permanently deleted.
+    // Scoped to the workspace being deleted, plus whatever its own records
+    // pointed at — both captured at the top, while they still existed. The
+    // vault is origin-wide: dropping the database would take a second account's
+    // documents with it, and this browser may well hold one.
+    const { cleared } = await clearLocalFileVault(departingWorkspaceId, departingKeys);
     setDeleteConfirm('');
-    pushToast({ title: 'Account deleted', message: result.message, tone: 'success' });
+    // The server side is done either way — the account is gone. But if this
+    // browser refused to drop the file database, the proof documents are still
+    // on this machine, and "permanently deleted" would be false about the part
+    // the person can still see.
+    pushToast({
+      title: cleared ? 'Account deleted' : 'Account deleted — files still on this device',
+      message: cleared
+        ? result.message
+        : `${result.message} This browser would not remove the files stored on this device; close other XBAR tabs and clear this site's data to finish removing them.`,
+      tone: cleared ? 'success' : 'warning',
+    });
     navigate('/login', { replace: true });
   };
 
   const handleImport = async (file?: File) => {
     if (!file) return;
+    /*
+     * `importLocalFiles` writes every blob before `importWorkspaceBackup`
+     * installs the records that reference them. Until it does, those bytes are
+     * in the vault and unreferenced, which is exactly what the orphan sweep
+     * deletes — so a cloud reconciliation settling mid-import destroyed files
+     * this had just restored, and left the restored records dangling.
+     */
+    await beginVaultWrite();
     try {
       const text = await file.text();
-      const result = importWorkspaceBackup(JSON.parse(text));
+      const payload = JSON.parse(text) as { files?: PortableLocalFile[]; omittedFiles?: UnbackedUpFile[] };
+
+      /*
+       * Validate, then write files, then write records.
+       *
+       * The order is load-bearing in both directions. Files must land before
+       * the records that point at them, or a record briefly references a blob
+       * that is not there yet. But the vault must not be touched at all until
+       * the workspace payload is known to be acceptable: restoration preserves
+       * keys and uses `put`, so writing first and rejecting after would
+       * overwrite blobs belonging to the workspace currently loaded and then
+       * report "Import blocked" — leaving real documents silently pointing at
+       * some other file's bytes.
+       */
+      const workspace = workspaceBackupPayload(payload);
+      if (!workspace) {
+        pushToast({
+          title: 'Import blocked',
+          message: 'Backup file is missing the XBAR workspace payload.',
+          tone: 'error',
+        });
+        return;
+      }
+
+      /*
+       * The shape check is a precondition, not a guarantee.
+       *
+       * `{ workspace: { horses: [null] } }` has a `horses` key and passes it,
+       * then `restorePersistedState` dereferences the null and throws — after
+       * the vault has already been overwritten. So the real normalization runs
+       * first, on a payload that has not touched anything yet.
+       */
+      if (!canRestorePersistedState(workspace)) {
+        pushToast({
+          title: 'Import blocked',
+          message: 'This backup file is damaged and could not be read. Nothing on this device was changed.',
+          tone: 'error',
+        });
+        return;
+      }
+
+      // Restored under their ORIGINAL keys — a fresh key would leave every
+      // document pointing at nothing. A backup written before this shipped has
+      // no `files`, and restores exactly as it always did.
+      /*
+       * A restored file is NEVER treated as XBAR-generated.
+       *
+       * My previous attempt derived provenance from the archive's own
+       * `salePacketBuilds`, calling them validated — but `canRestorePersistedState`
+       * only requires a non-empty id, so a crafted backup could carry a packet
+       * record whose `localFileKey` points at an arbitrary HTML entry. That
+       * entry would be stored `generated: true`, bypass the inert-MIME
+       * allowlist, and execute attacker script in this origin the moment the
+       * "packet" was opened — on any host without the Vercel CSP, which
+       * includes the supported local and static-preview builds.
+       *
+       * Executable provenance cannot be derived from anything the archive
+       * controls, and every route into it here is archive-controlled. So a
+       * restored packet is download-only. It is still complete and still
+       * verifiable: opened from disk it is not same-origin with XBAR, and its
+       * verifier runs there with no CSP to satisfy.
+       */
+      const { restored, failed, remapped } = Array.isArray(payload.files)
+        ? await importLocalFiles(payload.files, { workspaceId: vaultOwnerId() })
+        : { restored: 0, failed: [] as UnbackedUpFile[], remapped: {} as Record<string, string> };
+
+      /*
+       * Follow any keys the vault had to re-mint.
+       *
+       * A key in this backup can already exist in the origin-wide vault owned by
+       * ANOTHER account in this browser. Restoring over it would destroy that
+       * account's only local copy, so the vault mints a fresh key instead — and
+       * the restored records still point at the old one until they are rewritten
+       * here. Without this the file lands and the document opens to nothing.
+       */
+      if (Object.keys(remapped).length > 0) {
+        for (const group of ['documents', 'expenseReceipts', 'salePacketBuilds'] as const) {
+          const records = (workspace as Record<string, unknown>)[group];
+          if (!Array.isArray(records)) continue;
+          for (const record of records as { localFileKey?: string }[]) {
+            const next = record?.localFileKey ? remapped[record.localFileKey] : undefined;
+            if (next) record.localFileKey = next;
+          }
+        }
+      }
+
+      const result = importWorkspaceBackup(payload);
+
+      /*
+       * Reconcile what the workspace REFERENCES against what the vault holds.
+       *
+       * `failed` covers only files that were in the archive and would not
+       * write. It cannot see a file the export left out, because that file is
+       * not in `payload.files` at all — and those are the ones that matter,
+       * since they are exactly the records that now point at nothing.
+       *
+       * Asking the vault after the restore catches all of it at once: files
+       * omitted at export, an archive truncated or hand-edited since, and a
+       * backup written before omissions were recorded. The archive's own
+       * `omittedFiles` list is used only to say WHY, which reconciliation
+       * cannot reconstruct.
+       */
+      let danglingNote = '';
+      if (result.ok) {
+        try {
+          // Read back what was actually restored, through the same accessor
+          // the export used — so the two sides ask the same question.
+          const restoredWorkspace = exportWorkspaceBackup().workspace as {
+            documents?: { localFileKey?: string }[];
+            expenseReceipts?: { localFileKey?: string }[];
+            salePacketBuilds?: { localFileKey?: string }[];
+          };
+          const referenced = referencedVaultKeys(
+            restoredWorkspace.documents ?? [],
+            restoredWorkspace.expenseReceipts ?? [],
+            restoredWorkspace.salePacketBuilds ?? [],
+          );
+          /*
+           * Held BY THIS WORKSPACE. The vault is origin-wide, so "the key is in
+           * the vault" was never the question.
+           *
+           * A file omitted from the archive never passes through
+           * `importLocalFiles`, so its key is not remapped and the restored
+           * record keeps the ORIGINAL workspace's key. Counting any vault entry
+           * as held then reported that record as fine while it pointed at
+           * another account's document — the one case where the note most
+           * needed to fire.
+           *
+           * Untagged entries count as held: they predate ownership being
+           * recorded, and calling a person's own legacy file missing is a false
+           * alarm. Only a proven foreign owner is treated as unresolved.
+           */
+          const owner = vaultOwnerId();
+          const held = new Set(
+            (await listLocalFiles())
+              .filter((entry) => entry.workspaceId === undefined || entry.workspaceId === owner)
+              .map((entry) => entry.key),
+          );
+          const dangling = referenced.filter((key) => !held.has(key));
+
+          if (dangling.length) {
+            /*
+             * Keyed by the vault key, because that is what a dangling record
+             * names. `entry.name` is the fallback for archives written before
+             * the key was recorded — those stored the display filename under
+             * `name`, so matching on it keeps their reasons readable.
+             */
+            const omissions = new Map(
+              (Array.isArray(payload.omittedFiles) ? payload.omittedFiles : []).map((entry) => [
+                entry.key || entry.name,
+                entry,
+              ]),
+            );
+            const named = dangling
+              .slice(0, 5)
+              .map((key) => {
+                const omission = omissions.get(key);
+                if (!omission) return key;
+                // The filename is what the person recognises; the key is not.
+                return `${omission.name || key} (${omission.reason})`;
+              })
+              .join('; ');
+            danglingNote = ` ${dangling.length} record${dangling.length === 1 ? '' : 's'} still point at ${
+              dangling.length === 1 ? 'a file' : 'files'
+            } that is not on this device: ${named}${dangling.length > 5 ? '; …' : ''}`;
+          }
+        } catch {
+          // The vault being unreadable is its own failure and is reported where
+          // files are used. Not being able to COUNT the gaps must not turn a
+          // successful restore into a failed one.
+          danglingNote = ' Files on this device could not be checked against the restored records.';
+        }
+      }
+
+      // A file that did not come back leaves a record pointing at nothing, and
+      // this is the only place the rancher can be told which one.
+      const restoredNote = restored ? ` ${restored} file${restored === 1 ? '' : 's'} restored to this device.` : '';
+      const failedNote = failed.length
+        ? ` ${failed.length} could not be restored: ${failed.map((entry) => `${entry.name} (${entry.reason})`).join('; ')}`
+        : '';
+
+      const incomplete = failed.length > 0 || danglingNote !== '';
       pushToast({
-        title: result.ok ? 'Backup imported' : 'Import blocked',
-        message: result.message,
-        tone: result.ok ? 'success' : 'error',
+        title: !result.ok ? 'Import blocked' : incomplete ? 'Backup imported — some files missing' : 'Backup imported',
+        message: result.ok ? `${result.message}${restoredNote}${failedNote}${danglingNote}` : result.message,
+        tone: !result.ok ? 'error' : incomplete ? 'warning' : 'success',
       });
     } catch {
       pushToast({ title: 'Import failed', message: 'Choose a valid XBAR backup JSON file.', tone: 'error' });
     } finally {
+      // Released on every path, including the catch above.
+      endVaultWrite();
       if (importRef.current) importRef.current.value = '';
     }
   };
@@ -181,13 +485,45 @@ export default function Settings() {
 
   const handlePushCloud = async () => {
     setCloudBusy(true);
-    const result = await saveWorkspaceBackupToCloud(exportWorkspaceBackup());
+    const backup = exportWorkspaceBackup();
+    const result = await saveWorkspaceBackupToCloud(backup);
+
+    /*
+     * The same promotion CloudBootstrap performs, because this is the button
+     * the conflict-lock message sends people to: "Autosave is locked until you
+     * choose Push cloud or Pull cloud in Settings." Pushing the records without
+     * handing over their files leaves the signed-in workspace unable to open a
+     * single one of the documents it just uploaded.
+     */
+    const promoted = result.ok
+      ? await promoteLocalVaultFiles(backup.workspace as Parameters<typeof promoteLocalVaultFiles>[0], vaultOwnerId())
+      : { adopted: 0, failed: [] };
+
     pushToast({
       title: result.ok ? 'Cloud sync complete' : 'Cloud sync failed',
-      message: result.message,
-      tone: result.ok ? 'success' : 'error',
+      message: promoted.failed.length
+        ? `${result.message} ${promoted.failed.length} file${promoted.failed.length === 1 ? '' : 's'} on this device could not be moved to the cloud workspace yet and will be retried.`
+        : result.message,
+      tone: result.ok && !promoted.failed.length ? 'success' : 'error',
     });
     if (result.ok && result.updatedAt) setLastCloudSyncAt(result.updatedAt);
+    /*
+     * Choosing a copy is what `conflict-lock` was waiting for, and nothing else
+     * clears it: reconciliation runs once per hydration and its effect is keyed
+     * on the workspace and the session, neither of which changes when this
+     * button is pressed. Without this the rancher is told the sync completed,
+     * every later edit is skipped by autosave, and the cloud silently stops
+     * receiving work until the tab is reloaded.
+     *
+     * Unlocked on `result.ok` even when some files could not be promoted — the
+     * same condition that already advances the sync timestamp. The records are
+     * in the cloud and the conflict is settled; the files retry on their own,
+     * and staying locked over a retry is the failure this fixes.
+     */
+    if (result.ok) {
+      unlockAutosaveAfterManualSync();
+      setCloudSyncState('idle', 'Cloud workspace ready.');
+    }
     setCloudBusy(false);
   };
 
@@ -206,6 +542,12 @@ export default function Settings() {
       tone: result.ok ? 'success' : 'error',
     });
     if (result.ok && remote.updatedAt) setLastCloudSyncAt(remote.updatedAt);
+    // The other half of the same choice: taking the cloud copy settles the
+    // conflict exactly as pushing the local one does.
+    if (result.ok) {
+      unlockAutosaveAfterManualSync();
+      setCloudSyncState('idle', 'Cloud workspace ready.');
+    }
     setCloudBusy(false);
   };
 
@@ -799,10 +1141,10 @@ export default function Settings() {
           <button
             className="button button--primary button--compact"
             type="button"
-            onClick={handleExport}
-            disabled={!canManageSettings}
+            onClick={() => void handleExport()}
+            disabled={!canManageSettings || exportingBackup}
           >
-            Export backup
+            {exportingBackup ? 'Preparing backup...' : 'Export backup'}
           </button>
           <button
             className="button button--ghost button--compact"

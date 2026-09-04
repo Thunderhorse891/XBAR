@@ -17,6 +17,7 @@ import {
   nowStamp,
   todayStamp,
 } from '@/lib/xbarRuntime';
+import { clampSubscriptionToEntitlement, normalizeTier } from '@/lib/subscriptionDecision';
 import {
   countReservedSharedAccessSeats,
   countReservedWorkspaceSeats,
@@ -50,7 +51,23 @@ import type {
 import type { ExpenseReceiptInput, NewHorseInput } from '@/store/xbarStoreLogic';
 import type { PersistedXbarState, XbarStore } from '@/store/xbarStoreTypes';
 
-export const WORKSPACE_SCHEMA_VERSION = 8;
+/*
+ * Bumping this is what RUNS the migration, not just what labels it.
+ *
+ * Zustand calls `migrate` only when the stored version differs from this one,
+ * and `migrate` is `restorePersistedState` — which is where the entitlement
+ * clamp and the tier/usage normalization live. Left at 8 while every existing
+ * install was already stored at 8, an ordinary reload skipped all of it: a
+ * lapsed workspace kept showing the paid tier and paid limits it no longer had,
+ * and malformed persisted tier data kept reaching the billing screens. The
+ * clamp was written and shipped and never once ran for anyone who already had
+ * the app.
+ *
+ * So this number is part of the fix, not bookkeeping about it. Any change to
+ * what `restorePersistedState` normalizes needs it incremented in the same
+ * commit.
+ */
+export const WORKSPACE_SCHEMA_VERSION = 9;
 const legacyDemoHorseIds = new Set([
   'horse-wiggy',
   'horse-hancock',
@@ -138,6 +155,42 @@ export function syncDerivedValues(
   };
 }
 
+/*
+ * Every subscription usage counter, forced to a finite number.
+ *
+ * These were merged with `?? fallback`, which catches null and undefined and
+ * hands a truthy object straight through — and four of the thirteen counters
+ * were not mentioned in that merge at all, arriving through the spread
+ * untouched. `seatLimit` is one of them, and Settings.tsx:787 renders
+ * `{subscription.usage.seatsUsed}/{subscription.usage.seatLimit}` as bare React
+ * children. Settings is MOUNTED while an import lands, so the rerender crashes
+ * the screen the rancher is standing on, after the archive has been installed.
+ *
+ * `clampSubscriptionToEntitlement` does not save this: it returns the profile
+ * UNCHANGED when the billing state is entitled, which is precisely the case
+ * where a paid workspace keeps its own limits.
+ *
+ * Normalized rather than refused. Three of these are recomputed by
+ * `syncDerivedValues` moments later and two more are recounted here, so
+ * turning away a whole backup over a counter the app rebuilds anyway would be
+ * over-rejection. The fallback is the SEED, which is the Starter tier and
+ * therefore the smallest of the limits — a corrupt value can only ever shrink
+ * an entitlement, never widen one.
+ *
+ * Driven off the shape of the seed rather than a written-out list of field
+ * names, so a counter added later is covered without anyone remembering to add
+ * it here.
+ */
+function normalizeSubscriptionUsage(usage: Partial<SubscriptionProfile['usage']>): SubscriptionProfile['usage'] {
+  const defaults = initialState.subscription.usage;
+  const normalized = { ...defaults };
+  for (const key of Object.keys(defaults) as (keyof SubscriptionProfile['usage'])[]) {
+    const value = usage[key];
+    normalized[key] = Number.isFinite(value) ? (value as number) : defaults[key];
+  }
+  return normalized;
+}
+
 export function normalizeDocumentState(value: unknown): DocumentRecord['state'] {
   if (
     value === 'Queued' ||
@@ -159,10 +212,13 @@ export function normalizeBatchState(value: unknown): IntakeBatch['state'] {
 }
 
 export function normalizeBillingState(value: unknown): SubscriptionProfile['billingState'] {
-  if (value === 'Active' || value === 'Past Due' || value === 'Manual Billing') {
+  if (value === 'Active' || value === 'Past Due' || value === 'Manual Billing' || value === 'Inactive') {
     return value;
   }
-  return 'Manual Billing';
+  // An unreadable stored value falls to 'Inactive', not 'Manual Billing'.
+  // Manual Billing is an operator's deliberate grant of a paid tier, so it must
+  // never be what corrupt or unrecognized data decays into.
+  return 'Inactive';
 }
 
 export function restoreWorkspaceProfile(raw: unknown): WorkspaceProfile {
@@ -291,7 +347,9 @@ export function restoreWorkspaceInvitations(raw: unknown): WorkspaceInvitationRe
 
 export function createExpenseReceiptRecord(
   input: ExpenseReceiptInput,
-  patch?: Partial<Pick<ExpenseReceipt, 'fileUrl' | 'storagePath' | 'fileName' | 'mimeType' | 'fileSizeBytes'>>,
+  patch?: Partial<
+    Pick<ExpenseReceipt, 'fileUrl' | 'storagePath' | 'localFileKey' | 'fileName' | 'mimeType' | 'fileSizeBytes'>
+  >,
 ): ExpenseReceipt {
   const file = input.file ?? undefined;
   return {
@@ -306,6 +364,7 @@ export function createExpenseReceiptRecord(
     uploadedAt: nowStamp(),
     uploadedBy: input.uploadedBy.trim(),
     fileUrl: patch?.fileUrl,
+    localFileKey: patch?.localFileKey,
     storagePath: patch?.storagePath,
     fileName: patch?.fileName ?? file?.name,
     mimeType: patch?.mimeType ?? file?.type ?? undefined,
@@ -333,6 +392,1366 @@ export function selectPersistedState(state: PersistedXbarState): PersistedXbarSt
     workspaceInvitations: state.workspaceInvitations,
     workspaceProfile: state.workspaceProfile,
   };
+}
+
+/**
+ * Would this backup restore, in full?
+ *
+ * The shape check `workspaceBackupPayload` performs is a *precondition*, not a
+ * guarantee: `{ workspace: { horses: [null] } }` has a `horses` key and passes
+ * it, then `restorePersistedState` dereferences the null and throws. That
+ * mattered once restoring also wrote file bytes into the vault under keys the
+ * backup carries — the blobs of the workspace currently loaded were replaced
+ * before anything discovered the payload was unusable, and the UI then reported
+ * the import as blocked.
+ *
+ * Runs the real normalization rather than a deeper set of shape assertions, so
+ * this cannot drift from what the import actually does. It is pure, so running
+ * it twice costs only the work.
+ */
+/**
+ * Record collections whose entries the app looks up, keys and cascades by id.
+ *
+ * `workspaceProfile` and `subscription` are deliberately absent — they are
+ * single objects with defaults, not identified collections.
+ */
+const IDENTIFIED_COLLECTIONS = [
+  'horses',
+  'documents',
+  'intakeBatches',
+  'ownershipRecords',
+  'auditEvents',
+  'salePacketBuilds',
+  'buyerRoomEvents',
+  'expenseReceipts',
+  'ranchAssets',
+  'salesLeads',
+  'sharedListings',
+  'workspaceMembers',
+  'workspaceInvitations',
+] as const;
+
+export function canRestorePersistedState(raw: unknown): boolean {
+  let normalized: PersistedXbarState;
+  try {
+    normalized = restorePersistedState(raw);
+  } catch {
+    return false;
+  }
+
+  /*
+   * Not throwing is not the same as being usable.
+   *
+   * `{ horses: [{}] }` normalizes cleanly — the spread copies nothing and the
+   * migration adds `documentFacts: []` — and produces a horse with no id and no
+   * name. That payload passed both guards, the vault was overwritten with the
+   * archive's blobs, and the broken state was installed; screens that key or
+   * look up by id then crash on it.
+   *
+   * An id is the invariant the whole app rests on: lookups, React keys, and the
+   * cascades that delete a horse's receipts all assume one. Checking it here
+   * costs a pass over the records and refuses BEFORE anything is written.
+   */
+  const state = normalized as unknown as Record<string, unknown>;
+  for (const collection of IDENTIFIED_COLLECTIONS) {
+    const entries = state[collection];
+    if (!Array.isArray(entries)) return false;
+    /*
+     * Ids must be UNIQUE, not merely present.
+     *
+     * Every write path treats an id as naming exactly one record, and the
+     * destructive one is `deleteHorse`: it filters `h.id !== horseId`, so two
+     * horses sharing an id both disappear on a delete aimed at one of them —
+     * and the cascade then removes every lead and receipt carrying that
+     * `horseId`, which belonged to the horse nobody asked to delete. The
+     * rancher sees one deletion and loses two horses and their money.
+     *
+     * It also breaks the cloud: `replaceWorkspaceRows` upserts on a conflict
+     * key, and Postgres refuses a statement that would touch the same key twice
+     * in one command, so every autosave fails from then on — the same silent
+     * shape as an out-of-range `size_bytes`.
+     *
+     * PER COLLECTION rather than globally: ids are prefixed by kind, but
+     * nothing guarantees a horse and a document cannot coincide, and refusing
+     * that would turn away an archive nothing is wrong with.
+     */
+    const seen = new Set<string>();
+    for (const entry of entries) {
+      if (!entry || typeof entry !== 'object') return false;
+      const id = (entry as { id?: unknown }).id;
+      if (typeof id !== 'string' || id.trim() === '') return false;
+      if (seen.has(id)) return false;
+      seen.add(id);
+    }
+  }
+
+  /*
+   * Horses need more than an id, and "identity is the invariant" was too narrow.
+   *
+   * `{ id: 'horse-1', name: 'Horse' }` has an id and normalizes cleanly, but
+   * normalization does not supply the nested objects — so the state installs
+   * and the first route to reach `horse.readiness.packetStatus` or
+   * `horse.sale.askPrice` throws on a screen the rancher just opened.
+   *
+   * Only the shapes routes actually dereference are checked, and only on
+   * horses, which is the record with the deep reads. A full runtime schema for
+   * every collection is a second description of "valid" that would drift from
+   * the types — the trade the original comment was right about, and the reason
+   * this stops at the fields that actually crash.
+   */
+  /*
+   * Horses are not the only record with deep reads, which is what the previous
+   * version of this comment got wrong. `{ documents: [{ id: 'doc-1' }] }` has
+   * an id, normalizes, installs — and `Documents.tsx:724` immediately reads
+   * `document.entities.horseName`. A packet with only an id reaches
+   * `packet.documentIds.length` on two screens.
+   *
+   * Still only the shapes routes actually dereference WITHOUT a guard, and
+   * still not a full runtime schema: a second description of "valid" would
+   * drift from the types. The list is derived by searching the routes for
+   * unguarded dereferences on restored collections, which is how the receipt,
+   * lead, listing and `medicalTimeline` entries were found — the first two
+   * passes added only what a reviewer had named, and each time left siblings
+   * behind.
+   *
+   * Derived state is deliberately absent, and it is the ONLY thing that is.
+   * `packet.saleSlots` reads like one of these and is not:
+   * `buildHorsePacketCompleteness` constructs it, so it cannot arrive missing
+   * from a backup and requiring it would reject valid archives.
+   *
+   * "A read site normalizes it first" is NOT grounds for exclusion, though it
+   * was used as such here twice. `transferStatus` and `pendingDocuments` were
+   * both left out because one of their read sites guards — and both had other
+   * read sites that do not. One guarded read proves nothing about the rest.
+   *
+   * A caveat on how this list is built, since it has now grown four times. A
+   * text search finds `horse.name.toLowerCase()` but not `add(horse.owner)`,
+   * where the dereference happens one call away inside the helper — which is
+   * exactly how `owner` and `legalOwner` survived the previous sweep. Fields
+   * passed into helpers have to be read for, not grepped for.
+   */
+  /*
+   * `itemShapes` validates what is INSIDE an array, which `lists` cannot.
+   *
+   * `breedingTimeline: [null]` satisfies `Array.isArray` and then throws the
+   * moment Breeding reads `event.id`. Every array here holds objects whose
+   * fields are dereferenced somewhere, so each entry must at least be a plain
+   * object; `strings` adds the fields a route calls a string method on.
+   */
+  /*
+   * All three timeline collections — `activity`, `medicalTimeline` and
+   * `breedingTimeline` — hold TimelineEvent, so they share one item shape
+   * rather than each carrying a partial copy that drifts. Every field here is
+   * read without a guard somewhere:
+   *
+   *   id       React key — AnimalProfile.tsx:713; `ev.id === eventId` in
+   *            updateMedicalEvent — useXbarStore.ts:1858.
+   *   date     `formatDateLabel(event.date)` — Medical.tsx:106,
+   *            Breeding.tsx:311 — which calls `value?.trim()` (format.ts:19)
+   *            and throws on anything that is not a string.
+   *   title    `.toLowerCase()` — Medical.tsx:536, Breeding.tsx:293.
+   *   summary  rendered straight into JSX — AnimalProfile.tsx:719.
+   *   owner    drawer fact value, `{fact.value}` — InteractionSystem.tsx:452.
+   *   category drawer eyebrow, `{drawer.eyebrow}` — InteractionSystem.tsx:441.
+   *
+   * The last three are the "Objects are not valid as a React child" shape:
+   * they do not throw where they are read, they throw where React renders them.
+   *
+   * Requiring all six cannot turn away an older archive: TimelineEvent has
+   * carried every one of them as a required field since the first commit of
+   * types/xbar.ts, so no build of this app has ever written a timeline event
+   * without them. Over-rejection is as much a bug as under-rejection, and this
+   * is the check that rules it out.
+   */
+  /*
+   * `details` is optional and carries the medical/breeding specifics. Medical
+   * reads it with the `in` operator, which throws on a primitive rather than
+   * returning false — the one failure in this table that is not a render and
+   * not a NaN.
+   */
+  /*
+   * `details.followUpDue` is the one field INSIDE that bag whose type escapes
+   * the object check, and it escapes by coercion rather than by being ignored.
+   * `details: { followUpDue: ['2026-09-05'] }` survives `optionalObjects`,
+   * because the bag really is an object. Medical then compares the array
+   * against two date strings — Medical.tsx:56-57 — and JS coerces a
+   * single-element array to that element, so the comparisons behave exactly as
+   * if it were the string and the event lands in `dueSoonFollowUps`. Rendering
+   * that list calls `formatDateLabel(event.followUpDue)` at Medical.tsx:203,
+   * which reaches `value?.trim()` (format.ts:19) and throws on an array. The
+   * type survives every check between the backup and the crash.
+   *
+   * Optional, not required: most medical events schedule no follow-up, so
+   * requiring it would turn away almost every real archive.
+   *
+   * The other fields in the two detail bags stay out because nothing reads
+   * them unguarded — `practitioner`, `medication`, `dosage` and `documentId`
+   * have no readers at all; `recordType` and `result` reach comparisons and
+   * template literals, which coerce rather than throw.
+   */
+  const TIMELINE_EVENT_SHAPE = {
+    strings: ['id', 'date', 'title', 'summary', 'owner', 'category'],
+    optionalStrings: ['details.followUpDue'],
+    optionalObjects: ['details'],
+  };
+
+  const NESTED_SHAPES: Record<
+    string,
+    {
+      objects?: string[];
+      lists?: string[];
+      strings?: string[];
+      itemShapes?: Record<
+        string,
+        {
+          strings?: string[];
+          /*
+           * Numbers inside an array entry. `{o.share}%` renders exactly as a
+           * string does, so an object throws — and the entry's own comment
+           * named `stake.share` while nothing validated it.
+           */
+          numbers?: string[];
+          /*
+           * Fields that must be a string WHEN PRESENT.
+           *
+           * `strings` cannot express this: it demands presence, and demanding
+           * an optional field turns away every archive that legitimately omits
+           * it — over-rejection, which loses a valid backup rather than a
+           * broken one.
+           */
+          optionalStrings?: string[];
+          /*
+           * Fields that must be a plain OBJECT when present.
+           *
+           * `optionalStrings` cannot express this, and the failure is not a
+           * render: `event.details && 'followUpDue' in event.details` at
+           * Medical.tsx:53 throws `TypeError: Cannot use 'in' operator` when
+           * the right operand is a primitive. A string passes every check this
+           * table had, because nothing asked what SHAPE it was.
+           */
+          optionalObjects?: string[];
+        }
+      >;
+      /*
+       * Arrays whose entries are strings. `itemShapes` cannot express this —
+       * it requires every entry to be a plain object — and `lists` stops at
+       * the container, so a string array whose ENTRIES reach JSX had no way to
+       * be validated at all. Naming a list here also asserts it is an array,
+       * so it does not need repeating under `lists`.
+       */
+      stringItems?: string[];
+      /*
+       * Scalars that must be a FINITE NUMBER WHEN PRESENT, named by path.
+       *
+       * `numbers` cannot express this: `Number.isFinite(undefined)` is false,
+       * so naming an optional field there refuses every archive that simply
+       * omits it. `costBasis` is absent on every horse `createHorseRecord`
+       * makes, so requiring it would have turned away ordinary backups —
+       * over-rejection, which loses good data instead of bad.
+       */
+      optionalNumbers?: string[];
+      /*
+       * Scalars that must be a finite number AND NOT NEGATIVE when present.
+       *
+       * Separate from `optionalNumbers` because the constraint comes from the
+       * SCHEMA rather than from taste: `documents.size_bytes` is a bigint with
+       * a `documents_size_bytes_nonneg` CHECK (20260724), so a negative value
+       * is refused by the database exactly as a non-number is. Everything in
+       * `optionalNumbers` is clamped or merely displayed, and refusing a whole
+       * backup over a negative there would be over-rejection.
+       *
+       * That claim was not true when it was written. `pipelineValue` and
+       * `depositsHeld` summed the lead amounts raw through `|| 0` and `?? 0`,
+       * neither of which catches a negative — and the Sales screen stored
+       * `Number(value)` on a bare truthiness test, so `-500` was a figure a
+       * rancher could type and save. Both are fixed at the sites that own them:
+       * the screen refuses it now, and `ranchReport` clamps. The choice not to
+       * reject the archive stands, and it is the reason those fixes belong
+       * there rather than here — a workspace that already went through the old
+       * screen exists, and losing all of it is not a proportionate answer to
+       * one wrong figure.
+       */
+      optionalNonNegativeNumbers?: string[];
+      /*
+       * Scalars that must be a BOOLEAN when present.
+       *
+       * `Boolean(x)` is the usual reader for a flag, and it is not a guard: it
+       * turns `"false"`, `{}` and `[]` into `true`. Optional rather than
+       * required because absence is safe — `Boolean(undefined)` is `false`,
+       * which is the conservative answer for every flag here — while refusing
+       * an archive that merely omits one would be the over-rejection this
+       * table keeps having to avoid.
+       */
+      optionalBooleans?: string[];
+      /*
+       * Scalars that must be a string WHEN PRESENT, named by path.
+       *
+       * `strings` demands presence, and demanding an optional field turns away
+       * every archive that legitimately omits it — over-rejection, which loses
+       * a good backup rather than a broken one. Every DocumentEntities field is
+       * optional and almost all of them are read with `?.trim()`, which guards
+       * null and undefined and nothing else.
+       */
+      optionalStrings?: string[];
+      /*
+       * Fields that must be a finite number.
+       *
+       * `{batch.fileCount} files` renders the value as a React child exactly
+       * the way a string does, so an object throws "Objects are not valid as a
+       * React child" — a shape `strings` cannot describe and `objects` would
+       * accept. NaN and Infinity are refused too: they reach the same JSX and
+       * render as "NaN".
+       */
+      numbers?: string[];
+      /*
+       * Numbers that must be greater than zero, not merely finite.
+       *
+       * `numbers` asks whether a value is a usable number, which is the right
+       * question for a count, a score or a price — zero and, for some of them,
+       * a negative are legitimate values a real archive contains. It is the
+       * wrong question for a figure the app itself refuses to record as
+       * anything but positive, because then a value outside that range was
+       * never written by this app and cannot be honoured by it either.
+       */
+      positiveNumbers?: string[];
+    }
+  > = {
+    horses: {
+      // `horse.location.barn` / `.pasture` — Horses.tsx:121, Breeding.tsx:268.
+      objects: ['bloodline', 'assignments', 'sale', 'readiness', 'location'],
+      // `horse.medicalTimeline.map` — Medical.tsx:39.
+      // `horse.ownership.reduce` — features/ownership/selectors.ts:13.
+      // `horse.documents.includes` — this file, line ~883.
+      // `animal.activity.length` — AnimalProfile.tsx:710.
+      lists: [
+        'gallery',
+        'breedingTimeline',
+        'medicalTimeline',
+        'documentFacts',
+        'alerts',
+        'ownership',
+        'documents',
+        'activity',
+        /*
+         * `[nextNote, ...horse.notes]` — useXbarStore.ts:1591. Spreading
+         * `undefined` throws, and normalization backfills only
+         * `documentFacts`, so a backup that simply omits `notes` restores
+         * cleanly and then fails the first time someone adds a note.
+         *
+         * The CONTAINER only, deliberately: no `itemShapes` entry, because
+         * nothing ever reads an existing note. That spread is the single read
+         * of this array in the codebase — no route renders a note, nothing
+         * iterates them — so validating the entries would guard a crash that
+         * cannot happen and could only turn away a valid archive.
+         */
+        'notes',
+      ],
+      /*
+       * `horse.name.toLowerCase` — Breeding.tsx:292.
+       * `horse.owner` → `rawName.trim()` — commandPalette.ts:121.
+       * `h.segment.toLowerCase()` — Sales.tsx:320.
+       * `{horse.sex}` — Breeding.tsx:261, beside the bloodline.
+       *
+       * The dotted paths are the INSIDES of the objects listed above. Naming a
+       * field under `objects` proves only that the container is an object; the
+       * scalars in it went unchecked, so `bloodline: { sire: '', dam: '',
+       * family: {} }` restored and then crashed Breeding at :261, which renders
+       * `{horse.bloodline.family}` directly.
+       *
+       * Every one of these is read across the app rather than at a single site
+       * — `location.barn` alone appears at fifteen — and all have been required
+       * by their interfaces since the first commit of types/xbar.ts.
+       */
+      strings: [
+        'name',
+        'owner',
+        'segment',
+        'sex',
+        /*
+         * Found by a proactive sweep of every field on HorseRecord rather than
+         * by another round of review, since this class of finding had been
+         * arriving one collection at a time.
+         *
+         *   summary       `{horse.summary}` — Sales.tsx:390.
+         *   status        `{animal.status}` — AnimalProfile.tsx:230, and the
+         *                 same at Pastures.tsx:134 and Reports.tsx:362.
+         *   breed         `{animal.breed || 'Horse'}` — AnimalProfile.tsx:217.
+         *                 `||` passes a truthy object straight to JSX.
+         *   registry      `{horse.registry} · …` — Horses.tsx:651.
+         *   color         `{animal.color}` — AnimalProfile.tsx:315.
+         *   lastVetVisit  `formatDateLabel(horse.lastVetVisit)` — Medical.tsx:94
+         *                 and :257, which throws before React is reached.
+         *   barnName      `{row.horse.barnName ? <small>{row.horse.barnName}</small>
+         *                 : null}` — Ownership.tsx:586. I excluded this field
+         *                 twice as having "no unguarded read at all", which was
+         *                 wrong both times: a truthy object passes the ternary
+         *                 and lands in JSX as a bare child.
+         *   medicalNotes  `{horse.medicalTimeline[0]?.title ?? horse.medicalNotes}`
+         *                 — Medical.tsx:251, a bare React child. `?.[0]` is safe
+         *                 and `??` catches nothing, so on a horse with an empty
+         *                 timeline — the common case — an object goes straight
+         *                 to the renderer.
+         *
+         *   registrationNumber
+         *                 `norm(horse.registrationNumber)` — useXbarStore.ts:1033,
+         *                 where `norm` is `(value ?? '').trim()...`. This field
+         *                 was excluded on the grounds that it "appears only
+         *                 inside template strings", which was true of every
+         *                 site I looked at and false of the one I did not: the
+         *                 duplicate check that runs on "Create horse" for a
+         *                 document carrying a registration number. `?? ''`
+         *                 catches absence, never type, so the object reaches
+         *                 `.trim()` and the action throws instead of creating
+         *                 or matching the horse.
+         *
+         *   aqhaNumber    `{horse.aqhaNumber || horse.registrationNumber ||
+         *                 'Pending'}` — Horses.tsx:683, and the same expression
+         *                 as a drawer fact value at :189, which renders through
+         *                 `{fact.value}` (InteractionSystem.tsx:452). `||`
+         *                 selects the FIRST truthy operand, so an object wins
+         *                 the expression outright and reaches React as a bare
+         *                 child. Excluded twice — once as "template strings
+         *                 only", then again on a re-check that read the
+         *                 template-literal site at AnimalProfile.tsx:323 and
+         *                 stopped there.
+         *   readiness.packetStatus
+         *                 `{animal.readiness?.packetStatus ?? 'Review'}` —
+         *                 AnimalProfile.tsx:670, inside a StatusChip. Excluded
+         *                 as "every read is a comparison or a template string",
+         *                 which describes Breeding.tsx:100 and Sales.tsx:61 and
+         *                 not this one.
+         *
+         * Deliberately absent, and this time checked by looking for what
+         * actually breaks — a value reaching JSX as a bare child — rather than
+         * for a string method: `markings`, `microchipId`, `tags` and
+         * `profileImage` have no such read at all (`filled()`,
+         * animalPassport.ts:109, tests `typeof` before calling anything, `tags`
+         * has no reader in the app, and `profileImage` reaches an `img src`,
+         * where an object renders as a broken image); `foaledOn` appears only
+         * inside a template string — AnimalProfile.tsx:319 — which stringifies
+         * rather than throws.
+         *
+         * `ownerEntity` was excluded here on that same reasoning and the
+         * reasoning was wrong — not about the template string at
+         * AnimalProfile.tsx:341, which does stringify, but because a template
+         * string was never the only reader. Document intake reaches it twice,
+         * and both paths end at `normalizeToken`, which calls `.toLowerCase()`:
+         *
+         *   xbarRuntime.ts:350  `buildKnownOwners` collects
+         *                       `[horse.owner, horse.ownerEntity]`. `{}`
+         *                       survives `.filter(Boolean)` and reaches
+         *                       `includesNormalized`.
+         *   xbarRuntime.ts:435  `searchChecks` passes it straight in with no
+         *                       filter at all, so ABSENCE throws here as surely
+         *                       as a wrong type does — which is why this is a
+         *                       required string and not an optional one.
+         *
+         * Both run inside `buildDocumentRecord`, and useXbarStore.ts:802
+         * uploads the file to the cloud BEFORE :809 builds the record. So the
+         * throw does not merely fail an intake: it strands an uploaded asset
+         * that no document row will ever reference, on every attempt.
+         *
+         * The other five fields in that `searchChecks` array — `name`,
+         * `registrationNumber`, `aqhaNumber`, `barnName`, `owner` — are all
+         * already required here. Same array, same call, and this was the one
+         * that was missed.
+         */
+        'summary',
+        'barnName',
+        'ownerEntity',
+        'registrationNumber',
+        'aqhaNumber',
+        'status',
+        'breed',
+        'registry',
+        'color',
+        'lastVetVisit',
+        'medicalNotes',
+        'bloodline.sire',
+        'bloodline.dam',
+        'bloodline.family',
+        'assignments.trainer',
+        'assignments.ranchManager',
+        'assignments.veterinarian',
+        'assignments.farrier',
+        'location.ranch',
+        'location.barn',
+        'location.pasture',
+        'location.stall',
+        // `{horse.sale.listingState}` — Sales.tsx:380, SharedAccess.tsx:269.
+        'sale.listingState',
+        // `{animal.readiness?.packetStatus ?? 'Review'}` — AnimalProfile.tsx:670.
+        'readiness.packetStatus',
+      ],
+      /*
+       * `sale.askPrice` feeds `listedValue` and every margin figure, and
+       * `readiness.score` is rendered as a readiness percentage. Neither
+       * throws on an object — they yield NaN, which propagates silently into
+       * the screen, the CSV and the banker-facing PDF. `readiness.packetStatus`
+       * is not here because it is not a number — it is required above, as a
+       * string, after "every read of it is a comparison or a template string"
+       * turned out to describe every read but the one that renders it.
+       */
+      // `{animal.age} yrs` — AnimalProfile.tsx:217, rendered as a React child
+      // exactly as a string is.
+      //
+      // `insuredValue` is the fallback ask price — `horse.sale.askPrice ||
+      // horse.insuredValue` reaches `formatCompactCurrency` at Sales.tsx:134
+      // and :397 and Horses.tsx:664, and seeds the deal room's ask at
+      // buyerDealRoom.ts:145. `||` steps past a zero ask straight onto this
+      // field, so it is read precisely when the guarded one is empty.
+      //
+      // `sale.watchlistCount` and `sale.buyerConfidence` are rendered as bare
+      // React children — `{horse.sale.watchlistCount} watchers` at
+      // SharedAccess.tsx:277 and Sales.tsx:396, and both at AnimalProfile.tsx:701
+      // and :703, where `?? 0` catches absence and not type. `sale.inquiryCount`
+      // is NOT here: `syncDerivedValues` recomputes it from the lead list on
+      // every restore, so requiring it would guard a value the app rebuilds.
+      numbers: [
+        'age',
+        'insuredValue',
+        'sale.askPrice',
+        'sale.buyerConfidence',
+        'sale.watchlistCount',
+        'readiness.score',
+      ],
+      /*
+       * `registered` is the one flag on a horse that a SEAL asserts.
+       *
+       * `Boolean(horse.registered)` at salePacketDisclosure.ts:134 answers
+       * `true` for `"false"` and for `{}`, and that answer does not stop at the
+       * screen: it becomes `identity.registered` in the sale credential
+       * (saleCredential.ts:251, :300), which is hashed and signed. A damaged
+       * flag therefore does not degrade the packet — it makes the packet
+       * CERTIFY to a buyer that a horse is registered when nothing says it is,
+       * and the certificate is what gives that claim its weight.
+       * publicShare.ts:101 passes the raw value into a share payload without
+       * even a `Boolean()` around it.
+       *
+       * The other flags on a horse stay out deliberately. `sale.socialReady`
+       * and the lead flags decide whether a button is enabled; being wrong
+       * about one costs a click, not a false statement about the animal.
+       */
+      optionalBooleans: ['registered'],
+      /*
+       * The optional money on a horse. Each is read through a guard that
+       * catches absence and not type:
+       *
+       *   costBasis                    `Math.max(0, horse.costBasis ?? 0)` —
+       *                                ranchReport.ts:246, businessIntelligence.ts:214
+       *                                and profitIntelligence.ts:21. `Math.max`
+       *                                of an object is NaN, and from there it is
+       *                                acquisition cost, invested-to-date, every
+       *                                per-horse margin, and the CSV and PDF the
+       *                                banker reads.
+       *   breedingEconomics.*          spread over defaults at breedingRevenue.ts:12,
+       *                                so a supplied field overrides the zero and
+       *                                `economics.studFee * economics.bookedMares`
+       *                                and the ROI below it all go NaN. All five
+       *                                are required by BreedingEconomics, but the
+       *                                PARENT is optional, so they are optional here.
+       *
+       * `breedingEconomics` itself is deliberately not under `objects`: it is
+       * absent on most horses and requiring it would refuse them.
+       */
+      optionalNumbers: [
+        'costBasis',
+        'breedingEconomics.studFee',
+        'breedingEconomics.bookedMares',
+        'breedingEconomics.breedingCosts',
+        'breedingEconomics.mareProductionValue',
+        'breedingEconomics.foalProjectedValue',
+      ],
+      /*
+       * `horse.readiness.blockers.filter()` — useXbarStore.ts:1205, on the
+       * first qualifying photo upload, after the media file is stored — needs
+       * the container, and `{animal.readiness?.blockers?.[0] ?? …}` at
+       * AnimalProfile.tsx:353 needs the ENTRIES. `?.[0]` indexes safely and
+       * then renders whatever it found; `??` does not catch an object.
+       *
+       * `stringItems` asserts the array as well as its contents, so this is
+       * not repeated under `lists`.
+       */
+      stringItems: ['readiness.blockers'],
+      itemShapes: {
+        breedingTimeline: TIMELINE_EVENT_SHAPE,
+        medicalTimeline: TIMELINE_EVENT_SHAPE,
+        /*
+         * `activity` was added to `lists` without an entry here, which left
+         * `activity: [null]` passing validation and then throwing at
+         * AnimalProfile.tsx:713 — the container was checked, its contents were
+         * not. It is the same TimelineEvent as the two above.
+         */
+        activity: TIMELINE_EVENT_SHAPE,
+        /*
+         * `asset.status` / `asset.kind` — xbarPhaseTwo.ts:241,
+         * publicShare.ts:109 — plus `{asset.label}` and `src={asset.url}` at
+         * BuyerProfile.tsx:644-646, which the approved-photo path puts in front
+         * of a buyer. `id` is the React key.
+         */
+        gallery: { strings: ['id', 'label', 'kind', 'url', 'status'] },
+        /*
+         * `stake.share` / `stake.role` / `stake.name` — ownership/selectors.ts:13-14.
+         *
+         * `share` was named in this comment and validated by nothing: it is a
+         * number, and the table had no vocabulary for one inside an array
+         * entry. `{o.role} · {o.share}%` renders both at AnimalProfile.tsx:556.
+         */
+        // `{stake.contact ? <small>{stake.contact}</small> : null}` —
+        // Ownership.tsx:884, and `stake.contact.trim()` on a STORED stake at
+        // useXbarStore.ts:2473. Required by OwnershipStake since its first commit.
+        ownership: { strings: ['id', 'name', 'role', 'contact'], numbers: ['share'] },
+        /*
+         * `fact.id === factId` — useXbarStore.ts:2513 — and `{f.label}` /
+         * `{f.value}` rendered straight into JSX at AnimalProfile.tsx:528-529.
+         * Checking only `id` let `{ id: 'fact-1', label: {}, value: 'x' }`
+         * install and then throw "Objects are not valid as a React child" on
+         * the Documents tab of the restored horse.
+         *
+         * Both have been required by DocumentFact since the first commit of
+         * types/xbar.ts, so requiring them cannot turn away a real archive.
+         */
+        documentFacts: {
+          strings: ['id', 'label', 'value'],
+          /*
+           * `{f.decision ?? 'Review'}` — AnimalProfile.tsx:534. `??` catches
+           * null and undefined, not an object, so a non-string `decision`
+           * renders and crashes exactly like `label` does. It is optional in
+           * the type and genuinely absent on most facts, so it can only be
+           * checked when present.
+           */
+          optionalStrings: ['decision'],
+        },
+        /*
+         * `{a.title}` and `{a.summary} · {a.module}` are rendered on the Tasks
+         * tab — AnimalProfile.tsx:631-634 — and `a.id` is the React key. An
+         * entry that was merely a plain object satisfied this before, so
+         * `alerts: [{ title: {}, summary: '', module: '', severity: 'low' }]`
+         * installed and then crashed the tab. All five have been required by
+         * HorseAlert since the first commit of types/xbar.ts.
+         */
+        alerts: { strings: ['id', 'title', 'summary', 'severity', 'module'] },
+      },
+    },
+    // `document.entities.horseName` and four siblings — Documents.tsx:724.
+    // `document.title.trim()` — useXbarStore.ts:842, beside optional-chained
+    // siblings, which is what makes it easy to miss.
+    documents: {
+      objects: ['entities'],
+      /*
+       * `document.title.trim()` — useXbarStore.ts:842, beside optional-chained
+       * siblings, which is what makes it easy to miss — plus the five scalars
+       * the Documents queue renders directly: `{document.type} ·
+       * {document.source}` at :737, `{document.duplicateRisk}` at :1002,
+       * `formatDateTimeLabel(document.uploadedAt)` at :1042 (which throws
+       * before React is reached), and `{document.summary}` at
+       * BuyerProfile.tsx:625.
+       *
+       * `state` is excluded: `restorePersistedState` runs
+       * `normalizeDocumentState` over every document, so it cannot arrive
+       * malformed — the same ground as the intake batch's own `state`.
+       */
+      strings: ['id', 'title', 'type', 'source', 'duplicateRisk', 'uploadedAt', 'summary', 'uploadedBy'],
+      // `Math.round(document.confidence * 100)` — Documents.tsx:838. An object
+      // yields NaN and renders as "NaN% OCR confidence".
+      numbers: ['confidence'],
+      /*
+       * `fileSizeBytes` was excluded last round because nothing RENDERS it and
+       * the packet budgeter deliberately ignores it in favour of real bytes.
+       * Both of those are true and neither is the reader that matters:
+       * `saveWorkspaceBackupToRelationalCloud` forwards it as
+       * `size_bytes: document.fileSizeBytes ?? 0` (cloudWorkspace.ts:736) into
+       * a bigint column with a non-negative CHECK.
+       *
+       * A row the database refuses does not fail once. It fails every autosave
+       * from then on, so the workspace restores looking healthy and then
+       * quietly stops reaching the cloud — the worst shape of failure here,
+       * because nothing on screen says so.
+       */
+      optionalNonNegativeNumbers: ['fileSizeBytes'],
+      /*
+       * Every field of DocumentEntities, because every one of them is read
+       * without a type check and all of them are optional.
+       *
+       * Two shapes of crash, both after the archive and its files are
+       * installed. Documents.tsx:723-729 builds `entityRows` and filters on
+       * `Boolean(row.value)` — `{}` is truthy — then renders `{row.value}`:
+       * "Objects are not valid as a React child". And `entities.registry
+       * ?.trim()` in xbarStoreLogic.ts:319-354 and its ten siblings throw a
+       * TypeError, because optional chaining stops at null and undefined and
+       * says nothing about an object.
+       *
+       * The whole interface rather than only the five Documents.tsx displays:
+       * `sex`, `breed`, `color`, `foaledOn`, `sire`, `dam` and their
+       * registrations all reach `.trim()` through the enrichment path, which a
+       * grep for "rendered" would have walked straight past.
+       */
+      optionalStrings: [
+        /*
+         * Not rendered — given `.trim()` at storedFiles.ts:28 and
+         * cloudWorkspace.ts:1201, both through `?.`, which guards absence and
+         * not type.
+         */
+        'fileUrl',
+        /*
+         * `localFileKey` was excluded as "only compared or passed through",
+         * and that was wrong in the way this table keeps being wrong: passed
+         * through TO WHERE. `storedFileLocation` routes on truthiness —
+         * `if (record.localFileKey) return 'device'` at storedFiles.ts:29 — so
+         * an object sends the record down the on-device path, and
+         * `openLocalFile` hands it to IndexedDB's `store.get(key)`, whose key
+         * space is typed and refuses an object.
+         *
+         * The result is the shape this file cares about most: the import
+         * reports success, the record tells the rancher the file is on this
+         * device, and it can never be opened. A Coggins that is present,
+         * labelled and unreachable.
+         *
+         * `storagePath` is deliberately NOT added beside it, checked rather
+         * than assumed: nothing maps it into a column — it appears in no
+         * `replaceWorkspaceRows` mapper — and its one reader is
+         * `createSignedUrl`, a remote call that returns a handled error rather
+         * than a typed sink that refuses the value. `fileName` and `mimeType`
+         * are already coerced in the vault.
+         */
+        'localFileKey',
+        /*
+         * Not rendered either, and required by the same reader as the leads and
+         * ownership entries: `documents.horse_id` is `text not null`, and the
+         * write supplies `?? ''`, which fills in an absent value and passes a
+         * present object straight through to a column that refuses it.
+         */
+        'horseId',
+        'entities.horseName',
+        'entities.registrationNumber',
+        'entities.registry',
+        'entities.sex',
+        'entities.color',
+        'entities.breed',
+        'entities.foaledOn',
+        'entities.sire',
+        'entities.sireRegistration',
+        'entities.dam',
+        'entities.damRegistration',
+        'entities.ownerName',
+        'entities.examDate',
+        'entities.veterinarian',
+        'entities.transferStatus',
+      ],
+    },
+    /*
+     * `record.legalOwner` → `rawName.trim()` — commandPalette.ts:134.
+     * `selectedRecord.auditTrail.length` — Ownership.tsx:787.
+     * `o.pendingDocuments.length` — OwnershipChain.tsx:127.
+     * `ownershipRecord.transferStatus.toLowerCase()` — xbarPhaseTwo.ts:290.
+     *
+     * The last two were excluded here once, on the grounds that their reads are
+     * guarded — `record?.pendingDocuments ?? []` in the ownership selectors, and
+     * `normalizeOwnershipRecord` mapped over the records in Ownership.tsx. Both
+     * are true and neither generalises. OwnershipChain maps the RAW store
+     * records, and Horses.tsx hands a raw record to
+     * `buildHorsePacketCompleteness`, whose guard tests the record for
+     * truthiness and then reads the field.
+     *
+     * One guarded read site says nothing about the others. Nothing belongs in
+     * the excluded set unless EVERY read of it is guarded or the field cannot
+     * arrive from a backup at all.
+     */
+    ownershipRecords: {
+      /*
+       * `proofRequirements` is optional on the record, so it is NOT in `lists`
+       * — requiring it would turn away every record that has none, which is
+       * most of them. `itemShapes` skips an absent array and checks the entries
+       * of a present one, which is exactly the shape needed here.
+       *
+       * `{requirement.label}` renders at Ownership.tsx:410.
+       * `normalizeOwnershipRecord` does not catch it either: its confidence
+       * calculation reads only `status`.
+       */
+      itemShapes: {
+        /*
+         * `requirement.documentTitle ?? 'Linked document'` — Ownership.tsx:417
+         * and :995. `??` catches absence, never type, so a truthy object goes
+         * to JSX as a bare child. The three timestamps beside it are consumed
+         * as optional strings on the same panel.
+         */
+        proofRequirements: {
+          strings: ['id', 'kind', 'label', 'status'],
+          optionalStrings: ['documentTitle', 'linkedAt', 'verifiedAt', 'verifiedBy'],
+        },
+        /*
+         * `auditEvents` is optional too, and `auditEvents: [null]` threw on
+         * `event.id` at Ownership.tsx:749. `normalizeOwnershipRecord` does not
+         * help: it preserves the array untouched.
+         *
+         * `formatDateTimeLabel(event.at)` throws before React is reached;
+         * `{event.actor}` and `{event.summary}` render directly. `action`,
+         * `entityType` and `entityId` are not here — nothing in this view
+         * reads them.
+         */
+        auditEvents: { strings: ['id', 'at', 'actor', 'summary'] },
+      },
+      /*
+       * `complianceDeadline` reaches `formatDateLabel(row.deadline)` at
+       * Ownership.tsx:600 through `record?.complianceDeadline ?? ''` — a `??`
+       * that passes an object, and a truthiness check that an object also
+       * passes. `confidence` stays out: it is carried into the public-share
+       * payload and never dereferenced.
+       */
+      /*
+       * `horseId` is not rendered anywhere — it is a foreign key, and every
+       * screen read of it is an equality comparison. It is required here
+       * because the DATABASE reads it: `replaceWorkspaceRows` maps it into
+       * `ownership_records.horse_id`, declared `text not null`, so an object makes Postgres
+       * refuse the row. That failure is the quiet kind — the bulk write for the
+       * whole collection fails, the relational copy of the workspace goes
+       * stale, and the only thing that still succeeds is the legacy snapshot
+       * fallback, so nothing on screen says anything is wrong.
+       *
+       * A typed column is a reader. "Only compared, never dereferenced" is a
+       * claim about the app, and it stops being sufficient the moment the value
+       * leaves the app.
+       */
+      strings: ['id', 'legalOwner', 'transferStatus', 'complianceDeadline', 'horseId'],
+      // `<strong>{selectedRecord.confidence}%</strong>` — Ownership.tsx:680, a
+      // bare React child. The comparisons beside it at :684 are what made this
+      // look compared-only.
+      numbers: ['confidence'],
+      /*
+       * `auditTrail.map((entry) => <li key={entry}>{entry}</li>)` —
+       * Ownership.tsx:791-792. The entries are rendered, so checking only the
+       * container leaves `auditTrail: [{}]` crashing the record drawer.
+       *
+       * `pendingDocuments` sat under `lists` beside it, checked as a container
+       * and never as contents — the same miss, on the same record, one line
+       * apart. Its entries are read as strings in six places, and the two that
+       * matter are the ones a buyer sees:
+       *
+       *   localSalePacketGenerator.ts:323  `.join(', ') || ''` fills the
+       *       "Pending documents" row of the buyer sale packet, so `[{}]`
+       *       prints `[object Object]` where the outstanding legal releases
+       *       for a horse are supposed to be listed.
+       *   saleCredential.ts:266  `[...pendingDocuments].sort()` seals them
+       *       into the signed credential, so the malformed entry is not just
+       *       displayed but hashed into the packet's proof of integrity and
+       *       issued.
+       *
+       *   documentTemplateLibrary.ts:387  `.join(', ')` into a generated
+       *       document; ownership/selectors.ts:127 `.join(' ')` into the
+       *       search index; dashboardOps.ts:145 and saleTrustEngine.ts:27 copy
+       *       them into reason and blocker lists that render.
+       *
+       * `.join` does not throw on an object, and none of the guards above it
+       * catch one: `record?.pendingDocuments ?? []` tests absence, and
+       * `Array.from(new Set(pending))` at ownership/selectors.ts:35 dedupes by
+       * identity, so two identical malformed entries both survive. Nothing
+       * fails loudly — the packet is generated, sealed and sent.
+       *
+       * `string[]` since the first commit of types/xbar.ts, so requiring the
+       * contents cannot turn away an archive any build of this app wrote.
+       * `stringItems` asserts the array as well as its entries, which is why
+       * it is not repeated under `lists`.
+       */
+      stringItems: ['auditTrail', 'pendingDocuments'],
+    },
+    /*
+     * `packet.documentIds.length` — SalePacketStudio.tsx:174, Documents.tsx:1210
+     * — was the only thing checked, and the line that renders that count also
+     * renders three more fields beside it: `{packet.watermark}`,
+     * `formatDateTimeLabel(packet.createdAt)` — which reaches `value?.trim()`
+     * and throws before React is involved — and `{packet.createdBy}`.
+     *
+     * `fileName` is optional and rendered as `{packet.fileName ?? 'Sale
+     * packet'}`; `??` catches null and undefined, never an object.
+     *
+     * `status` stays out: every read of it is an equality comparison in a
+     * ternary, so an object falls to the else branch and crashes nothing.
+     */
+    salePacketBuilds: {
+      lists: ['documentIds'],
+      /*
+       * `status` was excluded as "compared only", which was true of the line I
+       * read — the Pill tone above it — and false of the line under it:
+       * `{packet.status}` is a bare React child at Documents.tsx:1242.
+       */
+      strings: ['id', 'watermark', 'createdAt', 'createdBy', 'status'],
+      // Same reader, same refusal — a packet whose bytes are on the device is
+      // reached through this key and nothing else.
+      optionalStrings: ['fileName', 'downloadUrl', 'localFileKey'],
+    },
+    /*
+     * `receipt.vendor.trim()` — Expenses.tsx:114 — was the only field checked,
+     * and it is not the only one dereferenced:
+     *
+     *   receiptDate  `(receipt.receiptDate ?? '').slice(0, 7)` — Expenses.tsx:101,
+     *                building the spend summary, and `??` does not catch an
+     *                object. `b.receiptDate.localeCompare(...)` —
+     *                FeedInventory.tsx:27 — has no guard at all.
+     *   category     `receipt.category.toLowerCase()` — useXbarStore.ts:1326.
+     *   title        rendered — Expenses.tsx:714.
+     *   amount       summed into every money total. It does not throw; it
+     *                yields NaN, which propagates silently into the invested
+     *                figures, the CSV and the banker-facing PDF. A number that
+     *                quietly corrupts the accounts is worse than one that
+     *                crashes.
+     */
+    expenseReceipts: {
+      strings: ['id', 'vendor', 'receiptDate', 'title', 'category'],
+      /*
+       * Positive, not merely finite, and this is the one field in the table
+       * where that distinction matters.
+       *
+       * `validateExpenseReceiptInput` refuses an amount that is not greater
+       * than zero, so no receipt this app created can hold one — but the
+       * preflight asked only `Number.isFinite`, and `-10000` passes that. It is
+       * the same failure as the NaN case described above and quieter: NaN at
+       * least renders as "NaN" somewhere, while a negative amount is a
+       * perfectly ordinary number that is summed into category totals,
+       * recorded spend, invested-to-date and per-horse economics. Twelve call
+       * sites across ranchReport, businessIntelligence and profitIntelligence
+       * add `receipt.amount` raw, none of them clamping. The result is
+       * understated costs and overstated margins on screen, in the CSV and in
+       * the banker-facing PDF, with nothing anywhere looking wrong.
+       *
+       * The other `numbers` fields stay as they are on purpose. `age`,
+       * `insuredValue`, `sale.askPrice`, `readiness.score` and the intake
+       * counts all have zero as a real value — a foal, an uninsured horse, a
+       * horse in Sale Prep with no price yet — and no validator forbids it.
+       * Requiring positives there would turn away ordinary archives.
+       */
+      positiveNumbers: ['amount'],
+      /*
+       * `{receipt.notes || 'No notes added.'}` — Expenses.tsx:718. `||` passes
+       * a truthy object to JSX exactly as `??` does.
+       *
+       * `fileUrl` is not rendered; it is given `.trim()` at storedFiles.ts:28
+       * and cloudWorkspace.ts:1201, both through `?.`, which guards absence and
+       * not type.
+       */
+      /*
+       * `horseId` is not rendered anywhere — it is a foreign key, and every
+       * screen read of it is an equality comparison. It is checked here
+       * because the DATABASE reads it: `replaceWorkspaceRows` maps it into
+       * `expense_receipts.horse_id`, declared `text not null`, so an object makes Postgres
+       * refuse the row. Optional, because the interface has always allowed a
+       * receipt with no horse and the write supplies `?? ''` for it — a guard
+       * that fills in an absent value and passes a present object straight
+       * through. That failure is the quiet kind — the bulk write for the
+       * whole collection fails, the relational copy of the workspace goes
+       * stale, and the only thing that still succeeds is the legacy snapshot
+       * fallback, so nothing on screen says anything is wrong.
+       *
+       * A typed column is a reader. "Only compared, never dereferenced" is a
+       * claim about the app, and it stops being sufficient the moment the value
+       * leaves the app.
+       */
+      // `localFileKey` for the same reason as documents: truthy routes the
+      // receipt to the device path, and IndexedDB refuses an object key.
+      optionalStrings: ['notes', 'fileUrl', 'horseId', 'localFileKey'],
+    },
+    /*
+     * Intake batches had no entry at all — only the shared id check — so
+     * `{ id: 'batch-1', label: {}, state: 'Queued' }` restored and then crashed
+     * the Documents route, which renders `{batch.label}`, `{batch.source}` and
+     * four counters straight into JSX (Documents.tsx:670-682) and passes
+     * `receivedAt` to `formatDateTimeLabel`, whose `value?.trim()` throws on an
+     * object.
+     *
+     * `state` is deliberately absent: `restorePersistedState` runs
+     * `normalizeBatchState` over every batch, so it cannot arrive malformed —
+     * the one ground for exclusion besides "nothing reads it".
+     *
+     * Every field here has been required by IntakeBatch since the first commit
+     * of types/xbar.ts, so requiring them cannot turn away a real archive.
+     */
+    intakeBatches: {
+      strings: ['id', 'label', 'source', 'receivedAt'],
+      numbers: ['fileCount', 'processedCount', 'matchedCount', 'needsReviewCount'],
+    },
+    /*
+     * `event.actor.trim()` — BuyerResponseQueue.tsx:142 — was the only field
+     * checked, and it is not the one that crashes first.
+     * `formatDateLabel(event.at)` at :163 reaches `value?.trim()` and throws a
+     * TypeError on an object before React is involved at all, and `{event.note
+     * || ...}` at :169 renders a truthy object straight into JSX.
+     *
+     * `note` is optional and genuinely absent on most events, so it is checked
+     * only when present.
+     *
+     * `horseId` is deliberately absent: it is compared, never dereferenced, so
+     * an object there matches nothing and crashes nothing. `amount` likewise —
+     * `formatCompactCurrency` renders it as "NaN" rather than throwing, which
+     * is wrong on screen but not a crash, and the table has no vocabulary for
+     * an optional number.
+     */
+    /*
+     * `amount` was excluded on the reasoning that a non-number only renders as
+     * NaN. That was checked against ONE of its two readers. buyerDealRoom.ts:77
+     * does filter on `typeof event.amount === 'number'` — but
+     * `captureBuyerRoomOffer` (useXbarStore.ts:2311) gates on
+     * `event.amount && event.amount > 0`, which a STRING passes by coercion,
+     * and then writes it verbatim into `SalesLead.offerAmount`. From there the
+     * report's `sum` concatenates instead of adding, so two captured offers of
+     * "1000" and "2000" become 10002000 in the pipeline figure and in the
+     * banker's export.
+     *
+     * `horseId` stays out: every read of it is a comparison.
+     */
+    buyerRoomEvents: {
+      strings: ['id', 'kind', 'at', 'actor'],
+      optionalStrings: ['note'],
+      optionalNumbers: ['amount'],
+    },
+    /*
+     * `a.name/.category/.assignedTo.toLowerCase()` — RanchAssets.tsx:176-178,
+     * evaluated only once someone types in the inventory search, so the route
+     * renders first and crashes on the keystroke.
+     */
+    ranchAssets: {
+      /*
+       * The three searchable strings were the whole entry, and Equipment
+       * renders five more: `{e.category} · {e.location}` at :111,
+       * `{e.notes || `${e.status}${…e.nextService…}`}` at :114 — a `||` that
+       * passes any truthy object — and `{e.condition}` at :117, which also
+       * indexes CONDITION_TONE.
+       */
+      strings: ['id', 'name', 'category', 'assignedTo', 'location', 'status', 'condition', 'nextService', 'notes'],
+    },
+    /*
+     * `lead.name.trim()` — BuyerResponseQueue.tsx:142 — plus `{lead.channel}`
+     * and `{lead.stage}` rendered straight into JSX at Sales.tsx:498 and :502.
+     * Validating only `name` let `{ id: 'lead-1', name: 'Buyer', channel: {} }`
+     * install and then crash the Sales route.
+     *
+     * `lastTouch` is deliberately absent: it is sorted and passed around as a
+     * due date, never given a string method, so requiring it would guard
+     * nothing and could only turn away a valid archive.
+     */
+    /*
+     * The offer money on a lead, all optional and all reaching the report:
+     *
+     *   counterOfferAmount / offerAmount  `lead.counterOfferAmount ||
+     *     lead.offerAmount || 0` — ranchReport.ts:325, summed into
+     *     `pipelineValue`, the "Open offers" figure. `||` hands a truthy
+     *     object to `sum`.
+     *   depositAmount  `lead.depositAmount ?? 0` — ranchReport.ts:339, summed
+     *     into `depositsHeld`.
+     *
+     * Also `salePrice` at profitIntelligence.ts:29, which is the accepted
+     * offer and therefore every realized margin.
+     *
+     * `lastTouch` and `nextFollowUp` were excluded on the claim that every read
+     * of them is a comparison. Neither is:
+     *
+     *   lastTouch     `formatDateLabel(lead.lastTouch)` — Sales.tsx:154 and
+     *                 :508. That parser calls `value?.trim()`, so an object
+     *                 throws before React is reached. Also rendered bare at
+     *                 BuyerDealRoom.tsx:171 and :185.
+     *   nextFollowUp  `lead.nextFollowUp ? formatDateLabel(lead.nextFollowUp)`
+     *                 — Sales.tsx:155. The truthiness check passes an object
+     *                 straight through. Bare at BuyerDealRoom.tsx:385.
+     *
+     * `outcome`, `offerStatus` and `depositStatus` do stay out — those really
+     * are only compared.
+     */
+    salesLeads: {
+      /*
+       * `horseId` is not rendered anywhere — it is a foreign key, and every
+       * screen read of it is an equality comparison. It is required here
+       * because the DATABASE reads it: `replaceWorkspaceRows` maps it into
+       * `sales_leads.horse_id`, declared `text not null`, so an object makes Postgres
+       * refuse the row. That failure is the quiet kind — the bulk write for the
+       * whole collection fails, the relational copy of the workspace goes
+       * stale, and the only thing that still succeeds is the legacy snapshot
+       * fallback, so nothing on screen says anything is wrong.
+       *
+       * A typed column is a reader. "Only compared, never dereferenced" is a
+       * claim about the app, and it stops being sufficient the moment the value
+       * leaves the app.
+       */
+      strings: ['id', 'name', 'channel', 'stage', 'lastTouch', 'horseId'],
+      /*
+       * `lead.notes || ...` becomes the drawer description at Sales.tsx:150,
+       * and `(right.offerUpdatedAt ?? '').localeCompare(...)` at
+       * profitIntelligence.ts:28 and :268 calls a string method on whatever
+       * `??` let through — during report construction, not on a screen.
+       */
+      optionalStrings: ['nextFollowUp', 'notes', 'offerUpdatedAt'],
+      optionalNumbers: ['offerAmount', 'counterOfferAmount', 'depositAmount'],
+    },
+    /*
+     * `listing.channels.includes()` — SharedAccess.tsx:33 — was the container
+     * check, and the two fields rendered beside it went unchecked:
+     * `{sharedListing?.state ?? horse.sale.listingState}` and
+     * `{sharedListing?.accessMode ?? 'Private Token'}` — SharedAccess.tsx:269
+     * and :272. `??` catches null and undefined; an object is truthy and
+     * renders.
+     *
+     * "A pass-through into a payload, never a dereference" was the reasoning
+     * that kept `sharePath`, `shareToken` and the timestamps out, and it is
+     * wrong for the same reason it was wrong about `documents.fileSizeBytes`:
+     * the payload is not free-form. `saveWorkspaceBackupToRelationalCloud`
+     * (cloudWorkspace.ts:831-843) forwards four of these into TYPED, NOT NULL
+     * columns on `shared_listings`:
+     *
+     *   horseId        -> horse_id        text
+     *   sharePath      -> share_path      text
+     *   shareToken     -> share_token     text
+     *   tokenIssuedAt  -> token_issued_at timestamptz
+     *
+     * And a FIFTH from the single-listing upsert at cloudWorkspace.ts:1418,
+     * which the bulk path does not share — it sends `listing.updatedAt` where
+     * the bulk one sends the caller's own timestamp:
+     *
+     *   updatedAt      -> updated_at      timestamptz
+     *
+     * Found by extending the sweep to treat a column write as a read, rather
+     * than by being told. `createdAt` is genuinely absent from both: it reaches
+     * only `payload`, and the column carries a default.
+     *
+     * The last is the strictest and the one that shows the shape of the bug:
+     * `listing.tokenIssuedAt || updatedAt` passes a truthy object straight
+     * through, Postgres refuses it, and EVERY autosave fails from then on —
+     * silently, with the workspace looking healthy. A column is a reader.
+     *
+     * `channels` moves from `lists` to `stringItems` for the same reason: it
+     * lands in a `text[]`, so the ENTRIES have to be strings and not merely the
+     * container an array. `stringItems` asserts both, which is why it is not
+     * repeated under `lists`.
+     *
+     * `lastSharedAt` stays out and is the only one that may: it reaches the
+     * `payload` jsonb column, which really does accept anything, and nothing
+     * reads it back — every occurrence in the app writes it.
+     *
+     * The two release-confirmation fields were excluded beside it on the same
+     * reasoning, and that reasoning was simply wrong about them. They are not
+     * decoration: `recordSharedChannel` gates the whole share on
+     * `!listing.releaseConfirmedAt || !listing.releaseConfirmedBy`
+     * (useXbarStore.ts), and a TRUTHINESS test passes anything that is not
+     * empty. A restored `releaseConfirmedAt: {}` therefore reads as an
+     * authorized seller release that never happened — the buyer packet goes
+     * out, and Sales.tsx disables the real Confirm action on
+     * `Boolean(releaseConfirmedAt)`, so nobody can even correct it.
+     *
+     * The question was never "is it rendered" or "is it a column". It is what
+     * READS the value, and a truthiness gate on a legal confirmation is the
+     * most consequential reader in this table.
+     */
+    sharedListings: {
+      stringItems: ['channels'],
+      strings: ['id', 'state', 'accessMode', 'horseId', 'sharePath', 'shareToken', 'tokenIssuedAt', 'updatedAt'],
+      optionalStrings: ['releaseConfirmedAt', 'releaseConfirmedBy'],
+    },
+    /*
+     * `workspace.primaryModules.length` and `workspace.permissions.map()` —
+     * Settings.tsx:1015 and :1019. This collection is covered by neither the id
+     * loop nor normalization, and Settings is already MOUNTED when an import
+     * lands, so the rerender crashes the screen the rancher is standing on.
+     *
+     * `role` and `label` are the same collection's scalar half, and validating
+     * only the two arrays left them open: `{ role: {}, primaryModules: [],
+     * permissions: [] }` passed, and `role` is rendered directly as a React
+     * child at Settings.tsx:1014 — "Objects are not valid as a React child",
+     * on the panel right beside the arrays this entry already protected.
+     * `label` is read unguarded off the current role workspace at
+     * Expenses.tsx:71 and seeds the receipt intake form.
+     *
+     * `summary` is deliberately absent: nothing reads it. The rule for leaving
+     * a field out is that NO site reads it, never that one read happens to be
+     * guarded.
+     */
+    /*
+     * `roleLabel(member.role)` returns the role itself for anything but Owner,
+     * straight into JSX — Settings.tsx:869. `{member.email}` renders at :867,
+     * and `formatDateLabel(member.joinedAt)` at :870 throws on an object.
+     *
+     * Settings is MOUNTED while an import lands, so this crashes the screen the
+     * rancher is standing on rather than one they might navigate to.
+     *
+     * `status` and `source` stay out: both are only ever compared.
+     */
+    workspaceMembers: { strings: ['id', 'email', 'role', 'joinedAt'] },
+    /*
+     * The same three, one panel down: `{invite.email}` at Settings.tsx:920,
+     * `roleLabel(invite.role)` and `formatDateLabel(invite.invitedAt)` at :922.
+     * `invitedBy` is stored and never read, so it is not required.
+     */
+    workspaceInvitations: { strings: ['id', 'email', 'role', 'invitedAt'] },
+    roleWorkspaces: {
+      strings: ['role', 'label'],
+      lists: ['primaryModules'],
+      // `permissions.map((permission) => <Pill key={permission}>{permission}</Pill>)`
+      // — Settings.tsx:1019-1021. Same shape as `auditTrail` above: the
+      // container was checked, the entries were not.
+      stringItems: ['permissions'],
+    },
+  };
+
+  /*
+   * Entries may name a nested path. `readiness` being an object does not make
+   * `readiness.blockers` an array, and `horse.readiness.blockers.filter(...)`
+   * runs when the first qualifying photo is uploaded — after the media file is
+   * already stored.
+   *
+   * Most paths here pass through a field this table also requires as an object,
+   * so an absent parent is refused before the child is ever read. The
+   * `optionalNumbers` paths under `breedingEconomics` are the exception — that
+   * parent is optional and must stay absent-able — which is why this walk
+   * returns `undefined` for a missing or non-object link rather than throwing.
+   * `optionalNumbers` then treats that `undefined` as "not supplied".
+   */
+  const valueAtPath = (record: Record<string, unknown>, path: string): unknown =>
+    path.split('.').reduce<unknown>((value, key) => {
+      if (!value || typeof value !== 'object') return undefined;
+      return (value as Record<string, unknown>)[key];
+    }, record);
+
+  for (const [collection, shape] of Object.entries(NESTED_SHAPES)) {
+    const entries = state[collection];
+    if (!Array.isArray(entries)) continue;
+
+    for (const entry of entries as unknown[]) {
+      const record = entry as Record<string, unknown>;
+      for (const nested of shape.objects ?? []) {
+        const value = valueAtPath(record, nested);
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+      }
+      for (const list of shape.lists ?? []) {
+        if (!Array.isArray(valueAtPath(record, list))) return false;
+      }
+      /*
+       * A missing PRIMITIVE crashes the same way a missing object does — the
+       * route calls a string method on `undefined`. The empty string is a valid
+       * value (`receipt.vendor.trim() || 'Unspecified vendor'` is written to
+       * expect it), so this checks the type, not the content.
+       */
+      for (const field of shape.strings ?? []) {
+        if (typeof valueAtPath(record, field) !== 'string') return false;
+      }
+      /*
+       * The entries, not just the container. A `null` in one of these arrays
+       * throws on the first property access, and the routes reach for these
+       * fields without checking.
+       */
+      for (const [list, itemShape] of Object.entries(shape.itemShapes ?? {})) {
+        const entries = valueAtPath(record, list);
+        /*
+         * Absent is allowed HERE; requiring the array is `lists`' job.
+         *
+         * That split is what lets an optional collection be validated at all:
+         * `ownershipRecords.proofRequirements` is optional and absent on most
+         * records, so putting it in `lists` would refuse them. Every array that
+         * must exist is named in `lists` as well, so nothing is weakened by
+         * this — a missing `activity` still fails there.
+         */
+        if (entries === undefined || entries === null) continue;
+        if (!Array.isArray(entries)) return false;
+        for (const item of entries as unknown[]) {
+          if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+          /*
+           * Resolved by path, exactly as the record-level loops are. Naming
+           * `details` under `optionalObjects` proves the BAG is an object and
+           * says nothing about what is in it, and these loops used to read
+           * `item[field]` directly — so a dotted name would have looked up a
+           * literal `'details.followUpDue'` key, found undefined, and passed
+           * everything. A guard that cannot fail is worse than none.
+           */
+          const itemRecord = item as Record<string, unknown>;
+          for (const field of itemShape.strings ?? []) {
+            if (typeof valueAtPath(itemRecord, field) !== 'string') return false;
+          }
+          /*
+           * Absent is fine, wrong-typed is not. An optional field a backup
+           * DOES supply still reaches the same render as a required one.
+           */
+          for (const field of itemShape.numbers ?? []) {
+            if (!Number.isFinite(valueAtPath(itemRecord, field))) return false;
+          }
+          for (const field of itemShape.optionalStrings ?? []) {
+            const value = valueAtPath(itemRecord, field);
+            if (value !== undefined && value !== null && typeof value !== 'string') return false;
+          }
+          // Absent is fine. Present-but-not-an-object is what `in` throws on,
+          // and an ARRAY is refused too: `'followUpDue' in []` is false rather
+          // than an error, but nothing in this app stores a detail bag as one.
+          for (const field of itemShape.optionalObjects ?? []) {
+            const value = valueAtPath(itemRecord, field);
+            if (value === undefined || value === null) continue;
+            if (typeof value !== 'object' || Array.isArray(value)) return false;
+          }
+        }
+      }
+      /*
+       * The string arrays. These entries are rendered directly — as a React
+       * child and as that child's own key — so a non-string throws "Objects
+       * are not valid as a React child" during the rerender, not at the read.
+       */
+      /*
+       * Optional scalars on the record itself, resolved by path so a field
+       * nested inside a validated object can be named.
+       */
+      for (const field of shape.optionalStrings ?? []) {
+        const value = valueAtPath(record, field);
+        if (value !== undefined && value !== null && typeof value !== 'string') return false;
+      }
+      /*
+       * Numbers reach JSX the same way strings do. NaN is refused with them:
+       * it is a number by `typeof` and renders as "NaN" on the screen.
+       */
+      for (const field of shape.numbers ?? []) {
+        if (!Number.isFinite(valueAtPath(record, field))) return false;
+      }
+      /*
+       * Finite is not enough for a figure the app refuses to record as
+       * anything but positive. `-10000` is a perfectly ordinary number, so it
+       * passes the check above and is then summed straight into the accounts.
+       */
+      for (const field of shape.positiveNumbers ?? []) {
+        const value = valueAtPath(record, field);
+        if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return false;
+      }
+      /*
+       * Absent is fine — the readers backfill it. Wrong-typed is not: `?? 0`
+       * and `|| 0` are the usual guards on these fields and neither catches an
+       * object, so it reaches the arithmetic and turns a money total into NaN.
+       */
+      for (const field of shape.optionalNumbers ?? []) {
+        const value = valueAtPath(record, field);
+        if (value === undefined || value === null) continue;
+        if (!Number.isFinite(value)) return false;
+      }
+      /*
+       * Absent is fine; a non-number or a negative is not. Both are rejected by
+       * the bigint CHECK on the way to the cloud, and a row the database
+       * refuses fails EVERY autosave from then on — the workspace installs and
+       * then silently stops syncing.
+       */
+      for (const field of shape.optionalNonNegativeNumbers ?? []) {
+        const value = valueAtPath(record, field);
+        if (value === undefined || value === null) continue;
+        if (!Number.isFinite(value) || (value as number) < 0) return false;
+      }
+      /*
+       * Absent is fine; present-but-not-a-boolean is not. `Boolean(x)` is what
+       * reads these, and it answers `true` for every non-empty string and every
+       * object — so a damaged flag does not fail, it ASSERTS.
+       */
+      for (const field of shape.optionalBooleans ?? []) {
+        const value = valueAtPath(record, field);
+        if (value === undefined || value === null) continue;
+        if (typeof value !== 'boolean') return false;
+      }
+      for (const list of shape.stringItems ?? []) {
+        const items = valueAtPath(record, list);
+        if (!Array.isArray(items)) return false;
+        for (const item of items as unknown[]) {
+          if (typeof item !== 'string') return false;
+        }
+      }
+    }
+  }
+
+  return true;
 }
 
 export function restorePersistedState(raw: unknown): PersistedXbarState {
@@ -376,11 +1795,21 @@ export function restorePersistedState(raw: unknown): PersistedXbarState {
       ? {
           ...(state.subscription as SubscriptionProfile),
           billingState: normalizeBillingState((state.subscription as SubscriptionProfile).billingState),
+          // Both tier fields, not just the entitled one. `purchasedTier` is
+          // what the billing screen indexes the plan tables with when a
+          // subscription has lapsed, so an unknown value there is as fatal as
+          // one in `tier` — and it is the field an old backup is most likely to
+          // carry, since it holds whatever was bought however long ago.
+          tier: normalizeTier((state.subscription as SubscriptionProfile).tier),
+          purchasedTier: normalizeTier(
+            (state.subscription as SubscriptionProfile).purchasedTier ??
+              (state.subscription as SubscriptionProfile).tier,
+          ),
           sharedAccessEnabled:
             (state.subscription as SubscriptionProfile).sharedAccessEnabled ??
             (state.subscription as SubscriptionProfile & { ownerPortalEnabled?: boolean }).ownerPortalEnabled ??
             initialState.subscription.sharedAccessEnabled,
-          usage: {
+          usage: normalizeSubscriptionUsage({
             ...(state.subscription as SubscriptionProfile).usage,
             horsesUsed: usage.horsesUsed ?? horses.length,
             horseLimit: usage.horseLimit ?? initialState.subscription.usage.horseLimit,
@@ -396,9 +1825,13 @@ export function restorePersistedState(raw: unknown): PersistedXbarState {
               usage.sharedAccessSeatLimit ??
               usage.portalSeatLimit ??
               initialState.subscription.usage.sharedAccessSeatLimit,
-          },
+          }),
         }
       : initialState.subscription;
+
+  // Policy lives in subscriptionDecision; this is the ingest point that applies
+  // it to the cloud import, the local rehydrate, and a hand-imported backup.
+  const entitledSubscription = clampSubscriptionToEntitlement(subscription);
   const legacySavedHorseIds = Array.isArray(state.savedHorseIds) ? (state.savedHorseIds as string[]) : [];
   const sharedListings = Array.isArray(state.sharedListings)
     ? (state.sharedListings as SharedListingRecord[]).map((listing) =>
@@ -428,7 +1861,7 @@ export function restorePersistedState(raw: unknown): PersistedXbarState {
       ? (state.expenseReceipts as ExpenseReceipt[])
       : initialState.expenseReceipts,
     ranchAssets: Array.isArray(state.ranchAssets) ? (state.ranchAssets as RanchAsset[]) : initialState.ranchAssets,
-    subscription,
+    subscription: entitledSubscription,
     roleWorkspaces: Array.isArray(state.roleWorkspaces)
       ? (state.roleWorkspaces as RoleWorkspace[])
       : initialState.roleWorkspaces,
