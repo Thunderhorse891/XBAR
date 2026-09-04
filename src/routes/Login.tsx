@@ -12,7 +12,7 @@ import './cleanEntryExperience.css';
 import { canPresentThirdPartySignIn, canPresentPurchaseFlow } from '@/lib/nativePlatform';
 
 type AuthMode = 'signin' | 'signup';
-type BusyState = 'password' | 'google' | 'facebook' | 'apple' | 'reset' | 'link' | '';
+type BusyState = 'password' | 'google' | 'facebook' | 'apple' | 'reset' | 'code' | 'verify' | '';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -127,26 +127,34 @@ export default function Login() {
     setBusy('');
   };
   /*
-   * The only way into a store build for an account that has no password.
+   * The only route into a store build for an account that has no password.
    *
    * Hiding the OAuth buttons on native (they cannot complete in a WebView)
    * removed the sole credential of every account created through Google, Apple
    * or Facebook. Those accounts have no password, so the password form cannot
-   * help them and "Forgot password?" resets a password that was never set.
-   * Without this control they could install the app and have no route in at
-   * all — which is both a lockout and a broken feature under Guideline 2.1.
+   * help them, and "Forgot password?" resets a password that was never set.
    *
-   * The emailed link resolves against the public site rather than
-   * capacitor://localhost (see authCallbackOrigin), so it signs them in on the
-   * web. That is a real limitation, not a fix: from there they can set a
-   * password and use it in the app. Returning into the app itself needs
-   * ASWebAuthenticationSession and a registered deep link, verified on a
-   * device.
+   * A CODE rather than a magic link, and the difference is the whole fix. A
+   * link signs the customer in wherever it opens, which is a browser -- the
+   * app never receives the session, so the account is still locked out of iOS.
+   * A code is typed in here and exchanged here, so the session lands in the
+   * app. This screen previously offered the link, which read like a solution
+   * and was not one.
    */
-  const emailSignInLink = async () => {
-    setBusy('link');
-    const result = await cloud.sendMagicLink(email);
-    toast(result.ok ? 'Sign-in link sent' : 'Sign-in link unavailable', result);
+  const [emailCode, setEmailCode] = useState('');
+  const [codeSent, setCodeSent] = useState(false);
+  const requestEmailCode = async () => {
+    setBusy('code');
+    const result = await cloud.sendEmailCode(email);
+    if (result.ok) setCodeSent(true);
+    toast(result.ok ? 'Sign-in code sent' : 'Sign-in code unavailable', result);
+    setBusy('');
+  };
+  const submitEmailCode = async () => {
+    setBusy('verify');
+    const result = await cloud.verifyEmailCode(email, emailCode);
+    toast(result.ok ? 'Welcome back' : 'That code did not work', result);
+    if (result.ok) setEmailCode('');
     setBusy('');
   };
   const reset = async () => {
@@ -284,13 +292,32 @@ export default function Login() {
                 <div className="clean-divider">
                   <span>or</span>
                 </div>
-                <button type="button" disabled={busy !== '' || !email.trim()} onClick={() => void emailSignInLink()}>
-                  {busy === 'link' ? 'Sending...' : 'Email me a sign-in link'}
+                <button type="button" disabled={busy !== '' || !email.trim()} onClick={() => void requestEmailCode()}>
+                  {busy === 'code' ? 'Sending...' : codeSent ? 'Send another code' : 'Email me a sign-in code'}
                 </button>
+                {codeSent && (
+                  <>
+                    <input
+                      className="field-input"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="6-digit code"
+                      value={emailCode}
+                      onChange={(event) => setEmailCode(event.target.value)}
+                    />
+                    <button
+                      type="button"
+                      disabled={busy !== '' || !emailCode.trim()}
+                      onClick={() => void submitEmailCode()}
+                    >
+                      {busy === 'verify' ? 'Checking...' : 'Sign in with code'}
+                    </button>
+                  </>
+                )}
                 {/*
                   Reachable is not the same as findable. Someone who signed up
                   with Google arrives here, finds their button gone, and has no
-                  reason to think an emailed link is the route in — so the
+                  reason to think an emailed code is the route in — so the
                   control has to say who it is for, or the app reads as broken.
                 */}
                 <p className="clean-auth-hint">

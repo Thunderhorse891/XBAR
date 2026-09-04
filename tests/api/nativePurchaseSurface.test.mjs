@@ -267,10 +267,19 @@ test('a store build that hides OAuth still offers a way in', () => {
     /!canPresentThirdPartySignIn\(\)/,
     'the store build hides OAuth with no branch offering anything in its place, stranding password-less accounts',
   );
+  // A CODE, not a magic link. A link signs the customer in wherever it opens,
+  // which is a browser -- the app never receives the session, so an OAuth-only
+  // account is still locked out of iOS. Only an in-app exchange fixes it, so
+  // both halves have to be here.
   assert.match(
     source,
-    /cloud\.sendMagicLink\(/,
-    'nothing on the login screen sends an emailed sign-in link, so an OAuth-only account has no route into the app',
+    /cloud\.sendEmailCode\(/,
+    'the login screen never requests an emailed sign-in code, so an OAuth-only account has no route into the app',
+  );
+  assert.match(
+    source,
+    /cloud\.verifyEmailCode\(/,
+    'a code can be requested but never exchanged in the app, so the session never reaches the store build',
   );
 
   // The control has to explain who it is for. An OAuth-only customer has no
@@ -279,5 +288,48 @@ test('a store build that hides OAuth still offers a way in', () => {
     source,
     /signed up with Google, Apple or Facebook/,
     'the emailed sign-in offers no explanation, so an OAuth-only customer will read the app as broken',
+  );
+});
+
+/*
+ * The native billing panel must not say where to buy either.
+ *
+ * Guideline 3.1.1 forbids calls to action that direct a customer to a
+ * purchasing mechanism other than In-App Purchase, and that covers a plain
+ * instruction as much as a link or a button. An earlier version of this panel
+ * read "To start or change a plan, sign in to XBAR in a web browser" -- which
+ * is precisely such a direction, written into the very screen whose purpose is
+ * not to have one.
+ */
+test('the native billing panel gives no instruction on where to purchase', () => {
+  const source = readFileSync(path.join(process.cwd(), 'src/routes/Subscriptions.tsx'), 'utf8');
+  // Comments stripped: the rule above is explained in prose that necessarily
+  // quotes the banned phrasing, and matching the raw file would flag it.
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+
+  for (const steer of [
+    /in a web browser/i,
+    /on the web(site)? to (start|change|subscribe)/i,
+    /visit .{0,40} to subscribe/i,
+  ]) {
+    assert.doesNotMatch(code, steer, `the billing screen tells customers where to buy: ${steer}`);
+  }
+});
+
+/*
+ * Configuring only the app URL has to keep a deployment on its own domain.
+ *
+ * .env.example promises this works. Without deriving the site from the app URL
+ * it did not: a custom domain that set only VITE_PUBLIC_APP_URL got the stock
+ * production host as its site, so Terms and Privacy left the customer's domain
+ * entirely. The runtime fallback could not rescue it, because the build always
+ * injects VITE_PUBLIC_SITE_URL and so overwrites the value it would derive.
+ */
+test('a custom app URL alone still yields a matching site origin', () => {
+  const source = readFileSync(path.join(process.cwd(), 'scripts/build-mobile.mjs'), 'utf8');
+  assert.match(
+    source,
+    /configuredAppUrl[\s\S]{0,80}\/app\$\//,
+    'the site origin is no longer derived from a configured app URL, so a custom domain gets the default host',
   );
 });
