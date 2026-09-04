@@ -5,10 +5,30 @@ import { getSupabaseClient } from '@/lib/supabaseClient';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import type { UserRole } from '@/types/xbar';
 import { authCallbackOrigin, isNativeApp } from '../lib/nativePlatform.js';
+import { describeAuthError } from '@/lib/authErrors';
 
 type CloudActionResult = {
   ok: boolean;
   message: string;
+};
+
+/*
+ * What a signup actually did, which is not knowable from `error` alone.
+ *
+ * Supabase deliberately does not fail a signup for an already-registered
+ * address: it returns "an obfuscated user response with no verification email
+ * sent" so an attacker cannot enumerate accounts. The app read only `error`,
+ * so that silence arrived here as success and the screen said "Account created.
+ * Check your inbox" about an email that was never sent. Every locked-out
+ * customer who then waited for it was waiting on our claim, not on Supabase.
+ */
+type SignUpOutcome =
+  | 'signed-in' // Autoconfirm is on; there is a session and nothing to confirm.
+  | 'confirmation-required' // A new account exists and Supabase sent the email.
+  | 'existing-account'; // Nothing was created and nothing was sent.
+
+type CloudSignUpResult = CloudActionResult & {
+  outcome?: SignUpOutcome;
 };
 
 type CloudStatus = 'unavailable' | 'loading' | 'signed-out' | 'signed-in';
@@ -73,7 +93,8 @@ type CloudStore = {
    */
   sendEmailCode: (email: string) => Promise<CloudActionResult>;
   verifyEmailCode: (email: string, code: string) => Promise<CloudActionResult>;
-  signUpWithPassword: (email: string, password: string) => Promise<CloudActionResult>;
+  signUpWithPassword: (email: string, password: string) => Promise<CloudSignUpResult>;
+  resendSignUpConfirmation: (email: string) => Promise<CloudActionResult>;
   sendPasswordReset: (email: string) => Promise<CloudActionResult>;
   signInWithFacebook: () => Promise<CloudActionResult>;
   signInWithGoogle: () => Promise<CloudActionResult>;
@@ -196,7 +217,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     });
 
     if (error) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: describeAuthError(error.message) };
     }
 
     return { ok: true, message: 'Magic link sent. Check your inbox to finish sign-in.' };
@@ -221,7 +242,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     });
 
     if (error) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: describeAuthError(error.message) };
     }
 
     return { ok: true, message: 'Signed in. Opening your workspace.' };
@@ -265,7 +286,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     });
 
     if (error) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: describeAuthError(error.message) };
     }
 
     return { ok: true, message: 'Check your email for a sign-in code.' };
@@ -290,7 +311,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     });
 
     if (error) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: describeAuthError(error.message) };
     }
 
     return { ok: true, message: 'Signed in.' };
@@ -310,7 +331,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     }
 
     const emailRedirectTo = currentAuthRedirectUrl();
-    const { error } = await client.auth.signUp({
+    const { data, error } = await client.auth.signUp({
       email: trimmedEmail,
       password,
       options: {
@@ -319,10 +340,64 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     });
 
     if (error) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: describeAuthError(error.message) };
     }
 
-    return { ok: true, message: 'Account created. Check your inbox if email confirmation is required.' };
+    if (data.session) {
+      return { ok: true, outcome: 'signed-in', message: 'Account created. Opening your workspace.' };
+    }
+
+    /*
+     * The obfuscated response for an address that is already registered: a user
+     * object with no identities on it. Supabase documents the obfuscation but
+     * not this shape, so treat a match as evidence and never as a guarantee --
+     * the message below is worded to hold either way, which is what keeps this
+     * honest if Supabase ever changes how it hides the fact.
+     */
+    const identities = data.user?.identities;
+    const existing = Array.isArray(identities) && identities.length === 0;
+
+    /*
+     * Both cases get the same sentence, on purpose.
+     *
+     * Supabase hides the existing-account case to stop an attacker probing
+     * addresses one at a time, and repeating the distinction here would hand
+     * back exactly what it withholds. So the copy is written to be true under
+     * either branch and to name the next step under both -- which is all the
+     * customer needed. The outcome above stays machine-readable for callers
+     * that must behave differently without saying anything different.
+     */
+    const message =
+      `Check ${trimmedEmail}. If that address is new to XBAR, a confirmation link is on its way and you ` +
+      `must open it before you can sign in. If it already has an account, nothing was sent -- sign in instead, ` +
+      `or use "Forgot password?".`;
+
+    return { ok: true, outcome: existing ? 'existing-account' : 'confirmation-required', message };
+  },
+  resendSignUpConfirmation: async (email) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      return { ok: false, message: 'Enter an email address first.' };
+    }
+
+    const { error } = await client.auth.resend({
+      type: 'signup',
+      email: trimmedEmail,
+      options: { emailRedirectTo: currentAuthRedirectUrl() },
+    });
+
+    if (error) {
+      return { ok: false, message: describeAuthError(error.message) };
+    }
+
+    // Resend is subject to the same anti-enumeration silence as signup, so this
+    // says what was asked for rather than what was delivered.
+    return { ok: true, message: `Requested another confirmation email for ${trimmedEmail}.` };
   },
   sendPasswordReset: async (email) => {
     const client = getSupabaseClient();
@@ -341,10 +416,15 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     });
 
     if (error) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: describeAuthError(error.message) };
     }
 
-    return { ok: true, message: 'Password reset email sent.' };
+    // Supabase answers the same way for an address it has never seen, so the
+    // only honest claim is about the request, not about a delivery.
+    return {
+      ok: true,
+      message: `If ${trimmedEmail} has an XBAR account, a reset link is on its way. Check spam before asking again.`,
+    };
   },
   signInWithFacebook: async () => {
     const client = getSupabaseClient();
@@ -361,7 +441,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     });
 
     if (error) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: describeAuthError(error.message) };
     }
 
     return { ok: true, message: 'Facebook sign-in started.' };
@@ -379,7 +459,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     });
 
     if (error) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: describeAuthError(error.message) };
     }
 
     return { ok: true, message: 'Google sign-in started.' };
@@ -397,7 +477,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     });
 
     if (error) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: describeAuthError(error.message) };
     }
 
     return { ok: true, message: 'Apple sign-in started.' };
@@ -410,7 +490,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
 
     const { error } = await client.auth.signOut();
     if (error) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: describeAuthError(error.message) };
     }
 
     set({

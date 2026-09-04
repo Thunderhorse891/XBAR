@@ -10,9 +10,11 @@ import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import './cleanEntryExperience.css';
 import { canPresentThirdPartySignIn, canPresentPurchaseFlow } from '@/lib/nativePlatform';
+import { presentableOAuthProviders } from '@/lib/authProviders';
 
 type AuthMode = 'signin' | 'signup';
-type BusyState = 'password' | 'google' | 'facebook' | 'apple' | 'reset' | 'code' | 'verify' | '';
+type BusyState = 'password' | 'google' | 'facebook' | 'apple' | 'reset' | 'code' | 'verify' | 'resend' | '';
+type FormMessage = { tone: 'success' | 'error'; text: string };
 
 export default function Login() {
   const navigate = useNavigate();
@@ -28,6 +30,10 @@ export default function Login() {
   const [remember, setRemember] = useState(() => localStorage.getItem('xbar-remember-me') === 'true');
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState<BusyState>('');
+  const [formMessage, setFormMessage] = useState<FormMessage | null>(null);
+  // Set only once a signup returns without a session, so the screen can stop
+  // being a form and start being instructions about an inbox.
+  const [confirmationEmail, setConfirmationEmail] = useState('');
   const authMode: AuthMode = params.get('mode') === 'signup' ? 'signup' : 'signin';
   const selectedPlan = params.get('plan') ?? '';
   const workspaceSetupPath = useMemo(() => {
@@ -46,8 +52,17 @@ export default function Login() {
     return selectedPlan ? billingPathForTier(selectedPlan) : billingPath;
   }, [authMode, location.state, selectedPlan, workspaceSetupPath]);
   const supabaseReady = isSupabaseConfigured();
+  // A button per provider this deployment has actually enabled in Supabase.
+  // Anything else redirects into `Unsupported provider: provider is not
+  // enabled`, which is a 400 the customer experiences as "the button does
+  // nothing".
+  const oauthProviders = useMemo(() => presentableOAuthProviders(), []);
 
   const setMode = (mode: AuthMode) => {
+    // A message about the previous mode is worse than no message: "Confirm
+    // your email" left standing over a sign-in form reads as an instruction.
+    setFormMessage(null);
+    setConfirmationEmail('');
     const next = new URLSearchParams();
     if (mode === 'signup') next.set('mode', 'signup');
     if (selectedPlan) next.set('plan', selectedPlan);
@@ -58,8 +73,20 @@ export default function Login() {
     if (cloud.session && cloud.status === 'signed-in') navigate(redirectTarget, { replace: true });
   }, [cloud.session, cloud.status, navigate, redirectTarget]);
 
-  const toast = (title: string, result: { ok: boolean; message: string }) =>
-    pushToast({ title, message: result.message, tone: result.ok ? 'success' : 'error' });
+  /*
+   * Every auth outcome has to land in the form, not only in a toast.
+   *
+   * Toasts are transient and live in a corner: a customer who mistypes a
+   * password watches the button go from "Authenticating..." back to "Sign In"
+   * with nothing to read, and concludes the button is broken. Reporting
+   * through one function is what guarantees it -- there is no path that can
+   * raise a toast and forget the panel, because the panel is not optional here.
+   */
+  const report = (title: string, result: { ok: boolean; message: string }) => {
+    const tone = result.ok ? 'success' : 'error';
+    pushToast({ title, message: result.message, tone });
+    setFormMessage({ tone, text: result.message });
+  };
   const rememberEmailPreference = () => {
     if (remember) {
       localStorage.setItem('xbar-remember-me', 'true');
@@ -110,14 +137,34 @@ export default function Login() {
       setBusy('');
       return;
     }
-    const result =
-      authMode === 'signin'
-        ? await cloud.signInWithPassword(email, password)
-        : await cloud.signUpWithPassword(email, password);
-    toast(
-      result.ok ? (authMode === 'signin' ? 'Welcome back' : 'Account created') : 'We could not complete that',
+    if (authMode === 'signin') {
+      const result = await cloud.signInWithPassword(email, password);
+      report(result.ok ? 'Welcome back' : 'We could not sign you in', result);
+      setBusy('');
+      return;
+    }
+
+    const result = await cloud.signUpWithPassword(email, password);
+    // "Account created" is only true when one was, and only a session proves
+    // it: the other successful outcomes are a request for a confirmation that
+    // has not happened yet, so the screen switches to waiting on the inbox.
+    report(
+      result.ok
+        ? result.outcome === 'signed-in'
+          ? 'Account created'
+          : 'Confirm your email'
+        : 'We could not create that account',
       result,
     );
+    if (result.ok && result.outcome !== 'signed-in') {
+      setConfirmationEmail(email.trim());
+    }
+    setBusy('');
+  };
+  const resendConfirmation = async () => {
+    setBusy('resend');
+    const result = await cloud.resendSignUpConfirmation(confirmationEmail || email);
+    report(result.ok ? 'Confirmation email requested' : 'We could not send that again', result);
     setBusy('');
   };
   const oauth = async (provider: 'google' | 'facebook' | 'apple') => {
@@ -128,7 +175,7 @@ export default function Login() {
         : provider === 'facebook'
           ? await cloud.signInWithFacebook()
           : await cloud.signInWithApple();
-    toast(result.ok ? `Continue with ${provider}` : `${provider} sign-in unavailable`, result);
+    report(result.ok ? `Continue with ${provider}` : `${provider} sign-in unavailable`, result);
     setBusy('');
   };
   /*
@@ -152,20 +199,20 @@ export default function Login() {
     setBusy('code');
     const result = await cloud.sendEmailCode(email);
     if (result.ok) setCodeSent(true);
-    toast(result.ok ? 'Sign-in code sent' : 'Sign-in code unavailable', result);
+    report(result.ok ? 'Sign-in code sent' : 'Sign-in code unavailable', result);
     setBusy('');
   };
   const submitEmailCode = async () => {
     setBusy('verify');
     const result = await cloud.verifyEmailCode(email, emailCode);
-    toast(result.ok ? 'Welcome back' : 'That code did not work', result);
+    report(result.ok ? 'Welcome back' : 'That code did not work', result);
     if (result.ok) setEmailCode('');
     setBusy('');
   };
   const reset = async () => {
     setBusy('reset');
     const result = await cloud.sendPasswordReset(email);
-    toast(result.ok ? 'Reset email sent' : 'Reset unavailable', result);
+    report(result.ok ? 'Check your inbox' : 'Reset unavailable', result);
     setBusy('');
   };
   const label = authMode === 'signin' ? 'System access' : selectedPlan ? `${selectedPlan} tier` : 'New workspace';
@@ -241,6 +288,25 @@ export default function Login() {
             <span>{description}</span>
           </div>
 
+          {confirmationEmail && (
+            <div className="clean-auth-callout" role="status">
+              <h2>Confirm {confirmationEmail}</h2>
+              <p>
+                Open the link in that email to activate the account. Signing in will keep failing until you do. If
+                nothing arrives in a few minutes, check spam -- and if that address already had an XBAR account, no
+                email was sent, so sign in instead.
+              </p>
+              <div className="clean-auth-callout__actions">
+                <button type="button" disabled={busy !== ''} onClick={() => void resendConfirmation()}>
+                  {busy === 'resend' ? 'Sending...' : 'Send it again'}
+                </button>
+                <button type="button" disabled={busy !== ''} onClick={() => setMode('signin')}>
+                  Back to sign in
+                </button>
+              </div>
+            </div>
+          )}
+
           <form className="clean-form" onSubmit={submit} aria-busy={busy !== ''}>
             <div className="clean-field">
               <label htmlFor={emailId}>Email or User ID</label>
@@ -248,7 +314,10 @@ export default function Login() {
                 id={emailId}
                 type="email"
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  if (formMessage?.tone === 'error') setFormMessage(null);
+                }}
                 autoComplete="email"
                 required
               />
@@ -260,7 +329,10 @@ export default function Login() {
                   id={passwordId}
                   type={showPassword ? 'text' : 'password'}
                   value={password}
-                  onChange={(event) => setPassword(event.target.value)}
+                  onChange={(event) => {
+                    setPassword(event.target.value);
+                    if (formMessage?.tone === 'error') setFormMessage(null);
+                  }}
                   autoComplete={authMode === 'signin' ? 'current-password' : 'new-password'}
                   minLength={8}
                   required
@@ -292,6 +364,14 @@ export default function Login() {
             >
               {busy === 'password' ? 'Authenticating...' : authMode === 'signin' ? 'Sign In' : 'Create Account'}
             </button>
+            {formMessage && (
+              <p
+                className={`clean-auth-message clean-auth-message--${formMessage.tone}`}
+                role={formMessage.tone === 'error' ? 'alert' : 'status'}
+              >
+                {formMessage.text}
+              </p>
+            )}
             {supabaseReady && !canPresentThirdPartySignIn() && authMode === 'signin' && (
               <>
                 <div className="clean-divider">
@@ -331,13 +411,13 @@ export default function Login() {
                 </p>
               </>
             )}
-            {supabaseReady && canPresentThirdPartySignIn() && (
+            {supabaseReady && oauthProviders.length > 0 && (
               <>
                 <div className="clean-divider">
                   <span>or continue with</span>
                 </div>
                 <div className="clean-social-grid">
-                  {(['google', 'facebook', 'apple'] as const).map((provider) => (
+                  {oauthProviders.map((provider) => (
                     <button key={provider} type="button" disabled={busy !== ''} onClick={() => oauth(provider)}>
                       {provider[0].toUpperCase() + provider.slice(1)}
                     </button>
