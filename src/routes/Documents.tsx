@@ -20,6 +20,7 @@ import type { DocumentRecord, DocumentSource, SalePacketBuild } from '@/types/xb
 import { documentSources } from '@/features/documents/constants';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 import { isNavigableFileUrl } from '@/lib/navigableFileUrl';
+import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 import {
   PIPELINE_STAGES,
   buildProofLinks,
@@ -329,11 +330,19 @@ export default function Documents() {
                   label: 'Go to OCR / Processing stage',
                   onSelect: () => goToStage('Processing'),
                 },
-                {
-                  id: 'open-subscriptions',
-                  label: 'Open Billing page',
-                  onSelect: () => navigate(billingPath),
-                },
+                // Neutral navigation, but gated for the same reason as the
+                // pitch above: a store build reaches billing from the nav, so
+                // nothing is lost, and leaving one route ungated in this file
+                // is how a real CTA slips back in beside it.
+                ...(canPresentPurchaseFlow()
+                  ? [
+                      {
+                        id: 'open-subscriptions',
+                        label: 'Open Billing page',
+                        onSelect: () => navigate(billingPath),
+                      },
+                    ]
+                  : []),
               ]
             : []),
           ...(menuState.surfaceId === 'batches'
@@ -1139,13 +1148,15 @@ export default function Documents() {
               <p className="panel__description" style={{ marginBottom: 12 }}>
                 Starter records the packet build. Upgrading to Professional unlocks the watermarked PDF and Buyer
                 follow-up.{' '}
-                <button
-                  className="button button--ghost button--compact"
-                  type="button"
-                  onClick={() => navigate(billingPathForTier('Professional'))}
-                >
-                  View Billing
-                </button>
+                {canPresentPurchaseFlow() ? (
+                  <button
+                    className="button button--ghost button--compact"
+                    type="button"
+                    onClick={() => navigate(billingPathForTier('Professional'))}
+                  >
+                    View Billing
+                  </button>
+                ) : null}
               </p>
             ) : null}
             {shareGroups.length ? (

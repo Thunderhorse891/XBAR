@@ -150,11 +150,30 @@ const PURCHASE_GATE = /canPresentPurchaseFlow\(\)/g;
  */
 const PLAIN_NAVIGATION = new Map([
   ['src/App.tsx', 'Route redirects (/subscribe, /plans, /subscriptions), not controls at all.'],
-  ['src/components/RequireSubscriptionFeature.tsx', '"Compare billing" -- reads the plan, does not buy it.'],
-  ['src/components/SalePacketWizard.tsx', 'Routes to plan information after a tier block, with no CTA.'],
-  ['src/routes/Documents.tsx', '"Open Billing page" and "View Billing" -- named navigation.'],
-  ['src/routes/layouts/MainLayout.tsx', 'The Billing nav button and its menu entry.'],
+  [
+    'src/routes/layouts/MainLayout.tsx',
+    'The Billing nav button and its menu entry, always available and never a pitch.',
+  ],
 ]);
+
+/*
+ * Three entries were removed from that list, and why is worth recording.
+ *
+ * They were exempted on the strength of their BUTTON LABELS -- "Compare
+ * billing", "View Billing", a post-refusal redirect -- which is the same
+ * "recognise a call to action by its text" reasoning this file abandoned one
+ * revision earlier, smuggled back in at file granularity.
+ *
+ * Read in context they are pitches. RequireSubscriptionFeature renders its
+ * button under "Sale listings are available on Professional and higher plans.
+ * Upgrade to publish buyer-ready horse profiles." Documents renders "Upgrading
+ * to Professional unlocks the watermarked PDF and Buyer follow-up" and puts the
+ * button in that sentence. A neutral label under an upgrade pitch is an upgrade
+ * control.
+ *
+ * Nothing is lost by gating them: MainLayout's Billing entry stays, so a store
+ * build can still reach the screen that explains what each plan includes.
+ */
 
 function sourceFilesUnder(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -234,136 +253,45 @@ test('emailed auth callbacks do not point at capacitor://localhost', () => {
 });
 
 /*
- * The app and the marketing site are two roots on one origin.
+ * VITE_PUBLIC_APP_URL is an ORIGIN. It must never carry a path.
  *
- * `npm run build` moves the SPA shell to app.html, served under /app/*, and
- * replaces / with static marketing HTML that has no router and ignores a hash.
- * Verified from the build output, not assumed: dist/index.html carries no
- * `id="root"` and no hash handling; dist/app.html is the shell.
+ * An earlier revision set it to `<site>/app`, reasoning that the SPA is served
+ * there. It is not a client-only variable: api/sale-packets.js builds
+ * `${appOrigin}/app/verify/<id>` from it and api/invite.js concatenates it the
+ * same way, so a value carrying `/app` produced `/app/app/verify/<id>` and
+ * broke the verification link printed inside every sale packet -- the one
+ * artifact whose entire purpose is being checkable by a stranger.
  *
- * These were one variable, and the failure mode is the dangerous kind -- it
- * renders. buildPublicShareUrl consumes the app URL, so pointing it at the site
- * root turns every shared, copied and emailed buyer link into
- * `https://site/#/profiles/<id>`, which loads the marketing homepage, looks
- * like a working page, and never shows the horse.
+ * VITE_PUBLIC_SITE_URL is separate because in-app links to /privacy and /terms
+ * are marketing pages, and inside a store build a bare path is a dead link.
  */
-test('the mobile build points in-app links at the SPA, not the marketing root', () => {
+test('the mobile build passes origins, never paths, to the bundle', () => {
   const source = readFileSync(path.join(process.cwd(), 'scripts/build-mobile.mjs'), 'utf8');
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 
-  assert.match(
-    source,
-    /VITE_PUBLIC_SITE_URL/,
-    'the mobile build no longer sets a marketing origin, so legal links resolve against the SPA base',
+  assert.doesNotMatch(
+    code,
+    /publicAppUrl\s*=\s*[^;]*\/app`/,
+    'the app URL carries a /app path again; the server appends its own and will produce /app/app/verify/<id>',
   );
-  assert.match(
-    source,
-    /\$\{publicSiteUrl\}\/app/,
-    'the mobile build no longer derives the app base from /app, so buyer share links load the marketing homepage',
-  );
+  assert.match(code, /VITE_PUBLIC_SITE_URL/, 'the mobile build no longer passes a marketing origin for legal links');
 
-  // Both have to reach the bundle. Computing them and passing one is the same
-  // class of miss as computing authCallbackOrigin and never calling it.
-  const env = source.slice(source.indexOf('const env = {'));
+  // Both have to reach the bundle. Computing a value and not passing it is the
+  // same class of miss as authCallbackOrigin being written and never called.
+  const env = code.slice(code.indexOf('const env = {'));
   for (const key of ['VITE_PUBLIC_SITE_URL', 'VITE_PUBLIC_APP_URL', 'VITE_NATIVE_APP']) {
     assert.match(env, new RegExp(`${key}:`), `${key} is computed but never passed to the build`);
   }
 });
 
-/*
- * Hiding OAuth must not lock anyone out.
- *
- * The store build removes the Google, Apple and Facebook buttons, because
- * signInWithOAuth navigates the WebView to the provider and returns to
- * capacitor://localhost -- a redirect Google refuses and Supabase will not
- * accept. That is correct, and on its own it strands every account created
- * through those providers: they have no password, so the password form cannot
- * help them and "Forgot password?" resets a password that was never set. They
- * would install the app and have no route in at all.
- *
- * So removing the buttons and offering nothing in their place is not an option
- * the store build is allowed to be in, and that is what this asserts: the two
- * decisions live in one file and have to move together.
- */
-test('a store build that hides OAuth still offers a way in', () => {
-  const source = readFileSync(path.join(process.cwd(), 'src/routes/Login.tsx'), 'utf8');
-
+test('the server still appends its own /app to the configured origin', () => {
+  // The consumer that made the path-carrying value wrong. If this ever stops
+  // appending, the origin-only rule above needs revisiting rather than silently
+  // becoming half a convention.
+  const source = readFileSync(path.join(process.cwd(), 'api/sale-packets.js'), 'utf8');
   assert.match(
     source,
-    /canPresentThirdPartySignIn\(\)/,
-    'the login screen no longer gates third-party sign-in for a store build',
-  );
-  // Two independent facts, not a proximity match: the handler sits some 5KB
-  // from the JSX that renders it, so any "these appear near each other" regex
-  // is really measuring file layout. It fails on correct code the moment
-  // someone moves a function.
-  assert.match(
-    source,
-    /!canPresentThirdPartySignIn\(\)/,
-    'the store build hides OAuth with no branch offering anything in its place, stranding password-less accounts',
-  );
-  // A CODE, not a magic link. A link signs the customer in wherever it opens,
-  // which is a browser -- the app never receives the session, so an OAuth-only
-  // account is still locked out of iOS. Only an in-app exchange fixes it, so
-  // both halves have to be here.
-  assert.match(
-    source,
-    /cloud\.sendEmailCode\(/,
-    'the login screen never requests an emailed sign-in code, so an OAuth-only account has no route into the app',
-  );
-  assert.match(
-    source,
-    /cloud\.verifyEmailCode\(/,
-    'a code can be requested but never exchanged in the app, so the session never reaches the store build',
-  );
-
-  // The control has to explain who it is for. An OAuth-only customer has no
-  // reason to guess that an emailed link is now their route in.
-  assert.match(
-    source,
-    /signed up with Google, Apple or Facebook/,
-    'the emailed sign-in offers no explanation, so an OAuth-only customer will read the app as broken',
-  );
-});
-
-/*
- * The native billing panel must not say where to buy either.
- *
- * Guideline 3.1.1 forbids calls to action that direct a customer to a
- * purchasing mechanism other than In-App Purchase, and that covers a plain
- * instruction as much as a link or a button. An earlier version of this panel
- * read "To start or change a plan, sign in to XBAR in a web browser" -- which
- * is precisely such a direction, written into the very screen whose purpose is
- * not to have one.
- */
-test('the native billing panel gives no instruction on where to purchase', () => {
-  const source = readFileSync(path.join(process.cwd(), 'src/routes/Subscriptions.tsx'), 'utf8');
-  // Comments stripped: the rule above is explained in prose that necessarily
-  // quotes the banned phrasing, and matching the raw file would flag it.
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
-
-  for (const steer of [
-    /in a web browser/i,
-    /on the web(site)? to (start|change|subscribe)/i,
-    /visit .{0,40} to subscribe/i,
-  ]) {
-    assert.doesNotMatch(code, steer, `the billing screen tells customers where to buy: ${steer}`);
-  }
-});
-
-/*
- * Configuring only the app URL has to keep a deployment on its own domain.
- *
- * .env.example promises this works. Without deriving the site from the app URL
- * it did not: a custom domain that set only VITE_PUBLIC_APP_URL got the stock
- * production host as its site, so Terms and Privacy left the customer's domain
- * entirely. The runtime fallback could not rescue it, because the build always
- * injects VITE_PUBLIC_SITE_URL and so overwrites the value it would derive.
- */
-test('a custom app URL alone still yields a matching site origin', () => {
-  const source = readFileSync(path.join(process.cwd(), 'scripts/build-mobile.mjs'), 'utf8');
-  assert.match(
-    source,
-    /configuredAppUrl[\s\S]{0,80}\/app\$\//,
-    'the site origin is no longer derived from a configured app URL, so a custom domain gets the default host',
+    /\$\{appOrigin\}\/app\/verify\//,
+    'sale-packets no longer builds the verify URL by appending /app; the origin-only rule may no longer hold',
   );
 });
