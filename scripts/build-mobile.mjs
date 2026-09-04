@@ -27,8 +27,23 @@ import { SITE_ORIGIN } from './marketing/render.mjs';
 // build would ship the default origin while looking configured.
 const fileEnv = loadEnv('production', process.cwd(), 'VITE_');
 const configuredSiteUrl = (process.env.VITE_PUBLIC_SITE_URL || fileEnv.VITE_PUBLIC_SITE_URL || '').trim();
-const publicSiteUrl = (configuredSiteUrl || SITE_ORIGIN).replace(/\/+$/, '');
 const configuredAppUrl = (process.env.VITE_PUBLIC_APP_URL || fileEnv.VITE_PUBLIC_APP_URL || '').trim();
+/*
+ * The site is derived from the app URL before falling back to the default.
+ *
+ * .env.example promises that configuring only one of these works, and without
+ * this line that promise was false in the direction people actually use: a
+ * custom domain setting only VITE_PUBLIC_APP_URL got SITE_ORIGIN as its site,
+ * so Terms and Privacy pointed at the stock production host rather than their
+ * own. The runtime fallback in publicSiteOrigin() could not save it either,
+ * because this script always injects VITE_PUBLIC_SITE_URL, so the value it
+ * would have derived was already overwritten.
+ */
+const publicSiteUrl = (
+  configuredSiteUrl ||
+  configuredAppUrl.replace(/\/+$/, '').replace(/\/app$/, '') ||
+  SITE_ORIGIN
+).replace(/\/+$/, '');
 // `/app` is where the built SPA is actually served, so that -- not the site
 // root -- is what an in-app link has to resolve against.
 const publicAppUrl = configuredAppUrl.replace(/\/+$/, '') || `${publicSiteUrl}/app`;

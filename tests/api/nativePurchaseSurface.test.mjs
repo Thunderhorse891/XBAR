@@ -113,29 +113,48 @@ test('the store build never presents the checkout panel', () => {
 });
 
 /*
- * A call to action to upgrade is forbidden too, wherever it appears -- and
- * "wherever" is the whole difficulty.
+ * Every route to the billing screen is gated, unless it is plainly navigation.
  *
- * These sit far from the billing screen: a usage meter, a locked financials
- * panel, a horse profile, the breeding screen, the reports hero, an expenses
- * panel. Gating the billing screen missed all of them.
+ * This assertion has now been wrong three times, each in a different way, and
+ * the shape of the fixes is the point.
  *
- * The first version of this test then listed the four that were known and
- * checked each for the gate. That is the same mistake one level up: an
- * allowlist cannot report the file nobody put in it, and review immediately
- * found two more. One of them read "Unlock with Ranch Ops", which the list's
- * own /Upgrade to/ pattern would not have matched even had the file been in it.
+ *   v1 listed four files and checked each for the gate. It could not report a
+ *      fifth, and review found two.
+ *   v2 discovered files by CTA copy -- /Upgrade|Unlock with/. It missed
+ *      "See Ranch Ops", because a conversion prompt does not have to contain
+ *      any particular word.
+ *   v3 (this) stops trying to recognise a call to action at all.
  *
- * So this DISCOVERS instead. Any source file that navigates to the billing
- * route and carries purchase-invitation copy has to consult the gate. A new
- * upgrade button anywhere in src/ fails here, without anyone remembering to
- * add it.
+ * Matching on copy cannot work: the set of ways to invite a purchase is not
+ * enumerable, and every miss ships. So the default is inverted. EVERY
+ * navigation to the billing route must be gated, and the only exceptions are
+ * the ones written down here with a reason. A new upgrade button fails by
+ * DEFAULT -- someone has to deliberately add it below to make it pass, and
+ * write down why it is not a call to action.
+ *
+ * Counted per navigation rather than per file, because that is how v2 let the
+ * second Reports CTA through: the file already imported the gate for its hero
+ * button, so a whole-file check was satisfied while a second, ungated button
+ * sat further down the same screen.
  */
-const BILLING_NAVIGATION = /navigate\(billingPath|to=\{billingPath/;
-// The invitation to BUY. Deliberately not "Billing" or "Compare billing":
-// showing what a plan includes is allowed under 3.1.1, and is what the store
-// build is for. Only the call to purchase is removed.
-const PURCHASE_CTA_COPY = /\b(?:Upgrade|Unlock with)\b/;
+const BILLING_NAVIGATION = /navigate\(billingPath|to=\{billingPath/g;
+const PURCHASE_GATE = /canPresentPurchaseFlow\(\)/g;
+
+/*
+ * Navigation to the billing SCREEN, which is not an invitation to buy.
+ *
+ * Showing what a plan includes is allowed under 3.1.1 and is exactly what the
+ * store build is for: it is the screen that explains billing is handled
+ * elsewhere. Removing these would strand a customer who hits a limit with no
+ * way to find out what they would need -- a worse app for no policy gain.
+ */
+const PLAIN_NAVIGATION = new Map([
+  ['src/App.tsx', 'Route redirects (/subscribe, /plans, /subscriptions), not controls at all.'],
+  ['src/components/RequireSubscriptionFeature.tsx', '"Compare billing" -- reads the plan, does not buy it.'],
+  ['src/components/SalePacketWizard.tsx', 'Routes to plan information after a tier block, with no CTA.'],
+  ['src/routes/Documents.tsx', '"Open Billing page" and "View Billing" -- named navigation.'],
+  ['src/routes/layouts/MainLayout.tsx', 'The Billing nav button and its menu entry.'],
+]);
 
 function sourceFilesUnder(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -145,28 +164,43 @@ function sourceFilesUnder(dir) {
   });
 }
 
-test('every upgrade call to action is hidden in a store build', () => {
+test('every route to billing is gated for a store build, or listed as plain navigation', () => {
   const offenders = [];
-  let found = 0;
+  let navigations = 0;
 
   for (const file of sourceFilesUnder(path.join(process.cwd(), 'src'))) {
+    const relative = path.relative(process.cwd(), file).split(path.sep).join('/');
     const source = readFileSync(file, 'utf8');
-    if (!BILLING_NAVIGATION.test(source) || !PURCHASE_CTA_COPY.test(source)) continue;
-    found += 1;
-    if (!source.includes('canPresentPurchaseFlow()')) {
-      offenders.push(path.relative(process.cwd(), file));
+    const navs = (source.match(BILLING_NAVIGATION) ?? []).length;
+    if (!navs) continue;
+    navigations += navs;
+    if (PLAIN_NAVIGATION.has(relative)) continue;
+
+    const gates = (source.match(PURCHASE_GATE) ?? []).length;
+    if (gates < navs) {
+      offenders.push(`${relative} (${navs} route(s) to billing, ${gates} gated)`);
     }
   }
 
-  // If this ever drops to zero the patterns have drifted and the test is
-  // silently passing over everything, which is worse than failing.
-  assert.ok(found > 0, 'no upgrade call to action was found at all; the detection patterns have gone stale');
-
+  assert.ok(navigations > 0, 'no billing navigation found at all; the detection pattern has gone stale');
   assert.deepEqual(
     offenders,
     [],
-    `these files invite a purchase without asking whether this is a store build: ${offenders.join(', ')}`,
+    `these send a customer to billing without asking whether this is a store build. Gate them with canPresentPurchaseFlow(), or add them to PLAIN_NAVIGATION with the reason they are not a call to action: ${offenders.join('; ')}`,
   );
+});
+
+test('the plain-navigation exceptions all still exist', () => {
+  // An allowlist that names a file nobody has touched in a year is how a real
+  // CTA gets in later under a stale exemption.
+  for (const [file] of PLAIN_NAVIGATION) {
+    const source = readFileSync(path.join(process.cwd(), file), 'utf8');
+    assert.match(
+      source,
+      /navigate\(billingPath|to=\{billingPath/,
+      `${file} is exempted from the billing gate but no longer navigates to billing; remove the exemption`,
+    );
+  }
 });
 
 /*
@@ -267,10 +301,19 @@ test('a store build that hides OAuth still offers a way in', () => {
     /!canPresentThirdPartySignIn\(\)/,
     'the store build hides OAuth with no branch offering anything in its place, stranding password-less accounts',
   );
+  // A CODE, not a magic link. A link signs the customer in wherever it opens,
+  // which is a browser -- the app never receives the session, so an OAuth-only
+  // account is still locked out of iOS. Only an in-app exchange fixes it, so
+  // both halves have to be here.
   assert.match(
     source,
-    /cloud\.sendMagicLink\(/,
-    'nothing on the login screen sends an emailed sign-in link, so an OAuth-only account has no route into the app',
+    /cloud\.sendEmailCode\(/,
+    'the login screen never requests an emailed sign-in code, so an OAuth-only account has no route into the app',
+  );
+  assert.match(
+    source,
+    /cloud\.verifyEmailCode\(/,
+    'a code can be requested but never exchanged in the app, so the session never reaches the store build',
   );
 
   // The control has to explain who it is for. An OAuth-only customer has no
@@ -279,5 +322,48 @@ test('a store build that hides OAuth still offers a way in', () => {
     source,
     /signed up with Google, Apple or Facebook/,
     'the emailed sign-in offers no explanation, so an OAuth-only customer will read the app as broken',
+  );
+});
+
+/*
+ * The native billing panel must not say where to buy either.
+ *
+ * Guideline 3.1.1 forbids calls to action that direct a customer to a
+ * purchasing mechanism other than In-App Purchase, and that covers a plain
+ * instruction as much as a link or a button. An earlier version of this panel
+ * read "To start or change a plan, sign in to XBAR in a web browser" -- which
+ * is precisely such a direction, written into the very screen whose purpose is
+ * not to have one.
+ */
+test('the native billing panel gives no instruction on where to purchase', () => {
+  const source = readFileSync(path.join(process.cwd(), 'src/routes/Subscriptions.tsx'), 'utf8');
+  // Comments stripped: the rule above is explained in prose that necessarily
+  // quotes the banned phrasing, and matching the raw file would flag it.
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+
+  for (const steer of [
+    /in a web browser/i,
+    /on the web(site)? to (start|change|subscribe)/i,
+    /visit .{0,40} to subscribe/i,
+  ]) {
+    assert.doesNotMatch(code, steer, `the billing screen tells customers where to buy: ${steer}`);
+  }
+});
+
+/*
+ * Configuring only the app URL has to keep a deployment on its own domain.
+ *
+ * .env.example promises this works. Without deriving the site from the app URL
+ * it did not: a custom domain that set only VITE_PUBLIC_APP_URL got the stock
+ * production host as its site, so Terms and Privacy left the customer's domain
+ * entirely. The runtime fallback could not rescue it, because the build always
+ * injects VITE_PUBLIC_SITE_URL and so overwrites the value it would derive.
+ */
+test('a custom app URL alone still yields a matching site origin', () => {
+  const source = readFileSync(path.join(process.cwd(), 'scripts/build-mobile.mjs'), 'utf8');
+  assert.match(
+    source,
+    /configuredAppUrl[\s\S]{0,80}\/app\$\//,
+    'the site origin is no longer derived from a configured app URL, so a custom domain gets the default host',
   );
 });

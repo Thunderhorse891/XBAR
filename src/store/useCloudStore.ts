@@ -62,6 +62,17 @@ type CloudStore = {
   unlockAutosaveAfterManualSync: () => void;
   signInWithPassword: (email: string, password: string) => Promise<CloudActionResult>;
   sendMagicLink: (email: string) => Promise<CloudActionResult>;
+  /**
+   * Email a one-time CODE, and verify it in place.
+   *
+   * Distinct from sendMagicLink, and the distinction is the whole point on
+   * native. A magic link signs the customer in wherever the link opens, which
+   * is a browser -- so it cannot deliver a session into the app. A code is
+   * typed into the app and exchanged there, which is why it is the only
+   * emailed route that actually gets an account INTO a store build.
+   */
+  sendEmailCode: (email: string) => Promise<CloudActionResult>;
+  verifyEmailCode: (email: string, code: string) => Promise<CloudActionResult>;
   signUpWithPassword: (email: string, password: string) => Promise<CloudActionResult>;
   sendPasswordReset: (email: string) => Promise<CloudActionResult>;
   signInWithFacebook: () => Promise<CloudActionResult>;
@@ -214,6 +225,65 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     }
 
     return { ok: true, message: 'Signed in. Opening your workspace.' };
+  },
+  /*
+   * No `emailRedirectTo`, and that omission is what makes this a code.
+   *
+   * Supabase's default template carries both a link and a `{{ .Token }}`; the
+   * link is useless here because it opens a browser, and the app needs the
+   * session itself. Omitting the redirect keeps the flow anchored in the app,
+   * where verifyEmailCode below exchanges the token for a session.
+   *
+   * `shouldCreateUser: false` because this is a sign-IN. Left at its default
+   * it silently creates an account for a typo'd address, and the customer sits
+   * waiting for a code on an inbox that was never theirs.
+   */
+  sendEmailCode: async (email) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      return { ok: false, message: 'Enter an email address first.' };
+    }
+
+    const { error } = await client.auth.signInWithOtp({
+      email: trimmedEmail,
+      options: { shouldCreateUser: false },
+    });
+
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    return { ok: true, message: 'Check your email for a sign-in code.' };
+  },
+  verifyEmailCode: async (email, code) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+
+    const trimmedEmail = email.trim();
+    const trimmedCode = code.trim();
+    if (!trimmedEmail || !trimmedCode) {
+      return { ok: false, message: 'Enter the email address and the code that was sent to it.' };
+    }
+
+    // 'email' covers both the sign-in code and the signup confirmation code.
+    const { error } = await client.auth.verifyOtp({
+      email: trimmedEmail,
+      token: trimmedCode,
+      type: 'email',
+    });
+
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    return { ok: true, message: 'Signed in.' };
   },
   signUpWithPassword: async (email, password) => {
     const client = getSupabaseClient();

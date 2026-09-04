@@ -557,10 +557,17 @@ export default function Subscriptions() {
                 <span>Billing</span>
                 <strong>Managed outside the app</strong>
               </div>
+              {/*
+                Deliberately says nothing about where a plan CAN be bought.
+                Guideline 3.1.1 forbids calls to action that direct customers to
+                a purchasing mechanism other than In-App Purchase, and that
+                covers plain instructions as much as links -- "sign in on the
+                web to subscribe" is exactly such a direction, which is what an
+                earlier version of this sentence said. Current plan state only.
+              */}
               <p>
                 Subscriptions are not sold in the app. Every tier is shown in full so you can compare what they include,
-                and your workspace and current plan are unchanged. To start or change a plan, sign in to XBAR in a web
-                browser.
+                and your workspace and current plan are unchanged.
               </p>
             </div>
           ) : (
