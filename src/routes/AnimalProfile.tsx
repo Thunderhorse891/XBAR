@@ -16,6 +16,7 @@ import { profitIntelligenceGate } from '@/lib/subscriptionGates';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 import type { ChipTone } from '@/types/saas';
 import type { HorseStatus } from '@/types/xbar';
+import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 
 // Stagger index for the motion system; the CSS var drives each child's delay.
 const motionIndex = (index: number): CSSProperties => ({ ['--motion-index' as string]: index }) as CSSProperties;
@@ -399,9 +400,11 @@ export default function AnimalProfile() {
               <p className="xs-muted" style={{ fontSize: 12.5, margin: '8px 0 12px' }}>
                 {profitGate}
               </p>
-              <ActionButton size="sm" variant="primary" onClick={() => navigate(billingPath)}>
-                Upgrade to Ranch Ops
-              </ActionButton>
+              {canPresentPurchaseFlow() ? (
+                <ActionButton size="sm" variant="primary" onClick={() => navigate(billingPath)}>
+                  Upgrade to Ranch Ops
+                </ActionButton>
+              ) : null}
             </Card>
           ) : money ? (
             <Card title="Money" link="Open Money view" onLink={() => navigate('/financials')}>

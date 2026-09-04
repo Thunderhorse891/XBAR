@@ -3,6 +3,7 @@ import { Panel, Pill, ProgressBar } from '@/components/app-ui';
 import { billingPathForTier } from '@/lib/billingRoutes';
 import { buildUsageMeters, highestUsagePressure, nextPlan, type UsagePressure } from '@/lib/commercialEngine';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
+import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 
 function pressureCopy(level: UsagePressure) {
   if (level === 'blocked') return 'Hard gate';
@@ -37,7 +38,11 @@ export function UsageMeterPanel({ compact = false }: { compact?: boolean }) {
         <Pill tone={pressureTone(pressure?.pressure ?? 'clear')}>{pressureCopy(pressure?.pressure ?? 'clear')}</Pill>
       }
       action={
-        !pressure || pressure.pressure === 'clear' ? null : (
+        // Guideline 3.1.1 forbids the call to action, not just the charge, so
+        // a store build shows the pressure without a button to buy out of it.
+        // The plans screen is still reachable from the nav for anyone who wants
+        // to see what a tier includes.
+        !pressure || pressure.pressure === 'clear' || !canPresentPurchaseFlow() ? null : (
           <Link className="button button--primary button--compact" to={billingPathForTier(upgradeTier)}>
             Upgrade to {upgradeTier}
           </Link>

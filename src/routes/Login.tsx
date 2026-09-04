@@ -9,9 +9,10 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import './cleanEntryExperience.css';
+import { canPresentThirdPartySignIn, canPresentPurchaseFlow } from '@/lib/nativePlatform';
 
 type AuthMode = 'signin' | 'signup';
-type BusyState = 'password' | 'google' | 'facebook' | 'apple' | 'reset' | '';
+type BusyState = 'password' | 'google' | 'facebook' | 'apple' | 'reset' | 'code' | 'verify' | '';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -39,6 +40,9 @@ export default function Login() {
     if (authMode === 'signup') return workspaceSetupPath;
     const from = (location.state as { from?: string } | null)?.from;
     if (from) return from;
+    // A store build has no purchase path, so sending someone to billing the
+    // moment they sign in is an arrival at a paywall they cannot act on.
+    if (!canPresentPurchaseFlow()) return '/';
     return selectedPlan ? billingPathForTier(selectedPlan) : billingPath;
   }, [authMode, location.state, selectedPlan, workspaceSetupPath]);
   const supabaseReady = isSupabaseConfigured();
@@ -80,7 +84,9 @@ export default function Login() {
   const openBrowserWorkspace = () => {
     markLocalWorkspaceIntent();
     setUpWorkspace({ businessName: 'XBAR Ranch', ranchName: 'XBAR Ranch' });
-    navigate(selectedPlan ? billingPathForTier(selectedPlan) : billingPath, { replace: true });
+    navigate(canPresentPurchaseFlow() ? (selectedPlan ? billingPathForTier(selectedPlan) : billingPath) : '/', {
+      replace: true,
+    });
   };
 
   const openWorkspaceSetup = () => {
@@ -123,6 +129,37 @@ export default function Login() {
           ? await cloud.signInWithFacebook()
           : await cloud.signInWithApple();
     toast(result.ok ? `Continue with ${provider}` : `${provider} sign-in unavailable`, result);
+    setBusy('');
+  };
+  /*
+   * The only route into a store build for an account that has no password.
+   *
+   * Hiding the OAuth buttons on native (they cannot complete in a WebView)
+   * removed the sole credential of every account created through Google, Apple
+   * or Facebook. Those accounts have no password, so the password form cannot
+   * help them, and "Forgot password?" resets a password that was never set.
+   *
+   * A CODE rather than a magic link, and the difference is the whole fix. A
+   * link signs the customer in wherever it opens, which is a browser -- the
+   * app never receives the session, so the account is still locked out of iOS.
+   * A code is typed in here and exchanged here, so the session lands in the
+   * app. This screen previously offered the link, which read like a solution
+   * and was not one.
+   */
+  const [emailCode, setEmailCode] = useState('');
+  const [codeSent, setCodeSent] = useState(false);
+  const requestEmailCode = async () => {
+    setBusy('code');
+    const result = await cloud.sendEmailCode(email);
+    if (result.ok) setCodeSent(true);
+    toast(result.ok ? 'Sign-in code sent' : 'Sign-in code unavailable', result);
+    setBusy('');
+  };
+  const submitEmailCode = async () => {
+    setBusy('verify');
+    const result = await cloud.verifyEmailCode(email, emailCode);
+    toast(result.ok ? 'Welcome back' : 'That code did not work', result);
+    if (result.ok) setEmailCode('');
     setBusy('');
   };
   const reset = async () => {
@@ -255,7 +292,46 @@ export default function Login() {
             >
               {busy === 'password' ? 'Authenticating...' : authMode === 'signin' ? 'Sign In' : 'Create Account'}
             </button>
-            {supabaseReady && (
+            {supabaseReady && !canPresentThirdPartySignIn() && authMode === 'signin' && (
+              <>
+                <div className="clean-divider">
+                  <span>or</span>
+                </div>
+                <button type="button" disabled={busy !== '' || !email.trim()} onClick={() => void requestEmailCode()}>
+                  {busy === 'code' ? 'Sending...' : codeSent ? 'Send another code' : 'Email me a sign-in code'}
+                </button>
+                {codeSent && (
+                  <>
+                    <input
+                      className="field-input"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="6-digit code"
+                      value={emailCode}
+                      onChange={(event) => setEmailCode(event.target.value)}
+                    />
+                    <button
+                      type="button"
+                      disabled={busy !== '' || !emailCode.trim()}
+                      onClick={() => void submitEmailCode()}
+                    >
+                      {busy === 'verify' ? 'Checking...' : 'Sign in with code'}
+                    </button>
+                  </>
+                )}
+                {/*
+                  Reachable is not the same as findable. Someone who signed up
+                  with Google arrives here, finds their button gone, and has no
+                  reason to think an emailed code is the route in — so the
+                  control has to say who it is for, or the app reads as broken.
+                */}
+                <p className="clean-auth-hint">
+                  If you first signed up with Google, Apple or Facebook, use this — those buttons cannot complete
+                  sign-in inside the app.
+                </p>
+              </>
+            )}
+            {supabaseReady && canPresentThirdPartySignIn() && (
               <>
                 <div className="clean-divider">
                   <span>or continue with</span>
@@ -287,7 +363,7 @@ export default function Login() {
                 </button>
               </div>
             )}
-            <a href="/pricing">View plans</a>
+            {canPresentPurchaseFlow() && <a href="/pricing">View plans</a>}
             <span>© 2026 XBAR</span>
           </div>
         </section>

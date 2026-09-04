@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { canUsePaymentLinkFallback, checkoutRouteFor, startManagedCheckout } from '@/lib/billingApi';
 import { formatCurrency } from '@/lib/format';
+import { isNativeApp } from '@/lib/nativePlatform';
 import {
   claimPendingHostedPurchase,
   clearPendingHostedPurchase,
@@ -75,7 +76,31 @@ export default function Subscriptions() {
   const hasManagedIdentity = Boolean(session?.access_token && workspaceId);
   const billingEnabled = stripeConfig.managedBillingEnabled;
   const selectedPaymentLink = Boolean(getStripePaymentLink(decisionTier));
-  const selectedCheckoutConfigured = billingEnabled || selectedPaymentLink;
+  /*
+   * Read once per render and passed to every billing decision below.
+   *
+   * App Store Review Guideline 3.1.1: a digital subscription sold inside the
+   * app has to go through In-App Purchase, so a store build offers no purchase
+   * path at all. The refusals live in getCheckoutReadiness and
+   * getBillingPortalAction rather than in this JSX, so all four call sites
+   * answer the same question and no role or Stripe configuration can reopen a
+   * way around it.
+   */
+  const nativeApp = isNativeApp();
+  /*
+   * "Is there a checkout on this screen at all", which in a store build there
+   * is not.
+   *
+   * Disabling the button was not enough, and this is the line that fixes the
+   * rest. This flag drives the whole payment panel: without the native term it
+   * still read "Due at checkout", "then monthly", "Payment: handled at
+   * checkout", and rendered a "Card details / Secure checkout" box with card
+   * number, expiration and CVC rows. Apple forbids PRESENTING the paywall, not
+   * only completing it, so a store build that displays a card form and calls
+   * the price "due at checkout" is the rejection even though nothing can be
+   * bought behind it.
+   */
+  const selectedCheckoutConfigured = !nativeApp && (billingEnabled || selectedPaymentLink);
   const starterSetup = subscription.tier === 'Starter' && subscription.monthlyRate === 0;
   // A workspace whose Stripe subscription can still bill it. Buying here would
   // open a second one beside it, so every checkout path is blocked.
@@ -108,11 +133,21 @@ export default function Subscriptions() {
    * subscription the way checkout would.
    */
   const hasBillingPortal = Boolean(stripeConfig.billingPortalUrl.trim());
+  /*
+   * Read once per render and passed to every readiness call below.
+   *
+   * App Store Review Guideline 3.1.1: a digital subscription sold inside the
+   * app has to go through In-App Purchase, so a store build offers no purchase
+   * path at all. The refusal lives in getCheckoutReadiness rather than in the
+   * JSX here, so all three call sites answer the same question and no role or
+   * Stripe configuration can reopen a way around it.
+   */
   const billingPortalAction = getBillingPortalAction({
     portalUrl: stripeConfig.billingPortalUrl,
     canManageBilling,
     subscriptionActive,
     subscriptionRecoverable,
+    nativeApp,
   });
   const continuePath = workspaceReady ? '/' : '/setup';
   const checkoutReadinessLabel = selectedCheckoutConfigured
@@ -130,6 +165,7 @@ export default function Subscriptions() {
     // was refused — all three have to answer the same question.
     subscriptionActive,
     hasBillingPortal,
+    nativeApp,
   });
   // Entitlement, not price. The stored rate is the price of the plan that was
   // bought and survives a cancellation, so using it as the "this is your
@@ -268,17 +304,26 @@ export default function Subscriptions() {
       subscriptionRecoverable,
       subscriptionActive,
       hasBillingPortal,
+      nativeApp,
     });
     if (!readiness.ready) {
       emit(productEventNames.checkoutFailed, { tier, reason: readiness.reason }, 'warning');
       pushToast({
         title:
-          readiness.mode === 'manual'
-            ? 'Billing not configured yet'
-            : readiness.mode === 'recover'
-              ? 'Payment needs to be settled first'
-              : 'Checkout needs attention',
-        message: `${readiness.reason} Your workspace and current plan were not changed.`,
+          readiness.mode === 'external'
+            ? 'Plans are managed outside the app'
+            : readiness.mode === 'manual'
+              ? 'Billing not configured yet'
+              : readiness.mode === 'recover'
+                ? 'Payment needs to be settled first'
+                : 'Checkout needs attention',
+        // The external refusal already says the workspace is unchanged, and
+        // saying it twice reads like something went wrong. Nothing did: a store
+        // build is not supposed to sell anything.
+        message:
+          readiness.mode === 'external'
+            ? readiness.reason
+            : `${readiness.reason} Your workspace and current plan were not changed.`,
         tone: 'warning',
       });
       setCheckoutTier(null);
@@ -366,6 +411,7 @@ export default function Subscriptions() {
       subscriptionRecoverable,
       subscriptionActive,
       hasBillingPortal,
+      nativeApp,
     });
     const chooseTier = () => {
       selectTier(tier);
@@ -505,6 +551,25 @@ export default function Subscriptions() {
                 and current plan are unchanged.
               </p>
             </div>
+          ) : selectedReadiness.mode === 'external' ? (
+            <div className="checkout-card-box" aria-label="Billing details">
+              <div className="checkout-card-box__top">
+                <span>Billing</span>
+                <strong>Managed outside the app</strong>
+              </div>
+              {/*
+                Deliberately says nothing about where a plan CAN be bought.
+                Guideline 3.1.1 forbids calls to action that direct customers to
+                a purchasing mechanism other than In-App Purchase, and that
+                covers plain instructions as much as links -- "sign in on the
+                web to subscribe" is exactly such a direction, which is what an
+                earlier version of this sentence said. Current plan state only.
+              */}
+              <p>
+                Subscriptions are not sold in the app. Every tier is shown in full so you can compare what they include,
+                and your workspace and current plan are unchanged.
+              </p>
+            </div>
           ) : (
             <div className="checkout-card-box" aria-label="Secure payment details">
               <div className="checkout-card-box__top">
@@ -584,9 +649,11 @@ export default function Subscriptions() {
                 ? 'Opening checkout...'
                 : selectedPaidCurrent
                   ? 'Current plan'
-                  : selectedReadiness.mode === 'manual'
-                    ? 'Billing not configured yet'
-                    : 'Continue to secure checkout'}
+                  : selectedReadiness.mode === 'external'
+                    ? 'Managed outside the app'
+                    : selectedReadiness.mode === 'manual'
+                      ? 'Billing not configured yet'
+                      : 'Continue to secure checkout'}
             </button>
           )}
           <button className="checkout-secondary-action" type="button" onClick={startTrial}>

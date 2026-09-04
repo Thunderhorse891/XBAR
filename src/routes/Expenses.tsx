@@ -17,6 +17,7 @@ import './operationsExperience.css';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
 import { openStoredFileInTab } from '@/lib/openStoredFile';
 import { hasStoredFile, storedFileLabel } from '@/lib/storedFiles';
+import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 
 const RANCH_WIDE = 'Ranch-wide';
 
@@ -352,13 +353,15 @@ export default function Expenses() {
             <div className="stack-item">
               <div className="stack-item__title">Turn receipts into pricing decisions</div>
               <div className="stack-item__copy">{profitGate}</div>
-              <button
-                className="button button--primary button--compact"
-                type="button"
-                onClick={() => navigate(billingPath)}
-              >
-                Upgrade to unlock
-              </button>
+              {canPresentPurchaseFlow() ? (
+                <button
+                  className="button button--primary button--compact"
+                  type="button"
+                  onClick={() => navigate(billingPath)}
+                >
+                  Upgrade to unlock
+                </button>
+              ) : null}
             </div>
           ) : (
             <div className="ops-form">

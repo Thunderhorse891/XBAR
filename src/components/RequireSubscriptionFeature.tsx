@@ -4,6 +4,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { billingPathForTier } from '@/lib/billingRoutes';
 import { sharedListingGate } from '@/lib/subscriptionGates';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
+import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 
 export function RequireSharedListings({ children }: { children: ReactNode }) {
   const subscription = useEffectiveSubscription();
@@ -16,9 +17,11 @@ export function RequireSharedListings({ children }: { children: ReactNode }) {
       title="Unlock sale listings"
       description={blocked}
       action={
-        <Link className="button button--primary" to={billingPathForTier('Professional')}>
-          Compare billing
-        </Link>
+        canPresentPurchaseFlow() ? (
+          <Link className="button button--primary" to={billingPathForTier('Professional')}>
+            Compare billing
+          </Link>
+        ) : null
       }
     />
   );

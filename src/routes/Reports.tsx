@@ -16,6 +16,7 @@ import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import './operationsExperience.css';
 import './reportsExperience.css';
+import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 
 /*
  * What the operation is worth, what it costs, and what is holding money up.
@@ -169,9 +170,14 @@ export default function Reports() {
           </p>
           <div className="ops-hero__actions">
             {locked ? (
-              <button className="button button--primary" type="button" onClick={() => navigate(billingPath)}>
-                Unlock with Ranch Ops
-              </button>
+              // Guideline 3.1.1 forbids the call to action, not just the
+              // charge. The locked explanation above stays; only the button
+              // that invites a purchase goes.
+              canPresentPurchaseFlow() ? (
+                <button className="button button--primary" type="button" onClick={() => navigate(billingPath)}>
+                  Unlock with Ranch Ops
+                </button>
+              ) : null
             ) : (
               <>
                 <button
@@ -232,10 +238,15 @@ export default function Reports() {
           <EmptyState
             title={locked}
             description="Ranch Ops turns the records you already keep into the numbers a banker, an accountant or a partner asks for."
+            // Same locked state as the hero button above, so it gets the same
+            // answer. Leaving this one lit while gating that one would put two
+            // different answers to one question on a single screen.
             action={
-              <button className="button button--primary" type="button" onClick={() => navigate(billingPath)}>
-                See Ranch Ops
-              </button>
+              canPresentPurchaseFlow() ? (
+                <button className="button button--primary" type="button" onClick={() => navigate(billingPath)}>
+                  See Ranch Ops
+                </button>
+              ) : null
             }
           />
         </Panel>

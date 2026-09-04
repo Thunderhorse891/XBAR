@@ -4,6 +4,7 @@ import { loadWorkspaceAccessProfile } from '@/lib/cloudWorkspace';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import type { UserRole } from '@/types/xbar';
+import { authCallbackOrigin, isNativeApp } from '../lib/nativePlatform.js';
 
 type CloudActionResult = {
   ok: boolean;
@@ -61,6 +62,17 @@ type CloudStore = {
   unlockAutosaveAfterManualSync: () => void;
   signInWithPassword: (email: string, password: string) => Promise<CloudActionResult>;
   sendMagicLink: (email: string) => Promise<CloudActionResult>;
+  /**
+   * Email a one-time CODE, and verify it in place.
+   *
+   * Distinct from sendMagicLink, and the distinction is the whole point on
+   * native. A magic link signs the customer in wherever the link opens, which
+   * is a browser -- so it cannot deliver a session into the app. A code is
+   * typed into the app and exchanged there, which is why it is the only
+   * emailed route that actually gets an account INTO a store build.
+   */
+  sendEmailCode: (email: string) => Promise<CloudActionResult>;
+  verifyEmailCode: (email: string, code: string) => Promise<CloudActionResult>;
   signUpWithPassword: (email: string, password: string) => Promise<CloudActionResult>;
   sendPasswordReset: (email: string) => Promise<CloudActionResult>;
   signInWithFacebook: () => Promise<CloudActionResult>;
@@ -70,7 +82,30 @@ type CloudStore = {
   deleteAccount: (confirmation: string) => Promise<CloudActionResult>;
 };
 
+/*
+ * Where an emailed auth link should send the customer back to.
+ *
+ * Every magic link, signup confirmation and password reset is built from this,
+ * and on the web the current page is exactly right.
+ *
+ * Inside a store build it is not. The page origin there is
+ * `capacitor://localhost` — a scheme no email client can open and that Supabase
+ * will not accept as a redirect — so every one of those emails arrived with a
+ * dead link. Signup could not be completed at all where email confirmation is
+ * required, and the visible "Forgot password?" action sent a link that goes
+ * nowhere. Both are broken features in their own right and rejections under
+ * Guideline 2.1.
+ *
+ * `authCallbackOrigin()` returns the configured public site in a store build,
+ * which at least lands the customer somewhere real. It signs them in on the web
+ * rather than in the app, which is why the one-time code path exists: a code is
+ * verified in-app and needs no callback at all. It returns undefined when there
+ * is nothing sensible to use, which tells the Supabase client to fall back to
+ * the project's configured Site URL rather than to a scheme it will reject.
+ */
 function currentAuthRedirectUrl() {
+  const nativeOrigin = authCallbackOrigin();
+  if (isNativeApp()) return nativeOrigin;
   return typeof window !== 'undefined'
     ? `${window.location.origin}${window.location.pathname}${window.location.search}`
     : undefined;
@@ -190,6 +225,75 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     }
 
     return { ok: true, message: 'Signed in. Opening your workspace.' };
+  },
+  /*
+   * REQUIRES the Supabase Magic Link email template to contain {{ .Token }}.
+   *
+   * An earlier version of this comment claimed that omitting `emailRedirectTo`
+   * is what makes Supabase send a code rather than a link. That is not true.
+   * Supabase decides from the TEMPLATE: {{ .ConfirmationURL }} sends a magic
+   * link, {{ .Token }} sends the six-digit code this screen asks for. The
+   * default template is the link, so on an unconfigured project this flow emails
+   * something the code input cannot accept — and the OAuth-only customer it
+   * exists for stays locked out, now with a form that looks like it should work.
+   *
+   * The omission still matters, just not for that reason: a redirect would send
+   * the customer to a browser, and the app needs the session itself.
+   *
+   * ios-submission/README.md carries this as a submission prerequisite, because
+   * it cannot be configured from code and a build that ships without it has a
+   * sign-in path that silently does not work.
+   *
+   * `shouldCreateUser: false` because this is a sign-IN. Left at its default it
+   * silently creates an account for a typo'd address, and the customer waits
+   * for a code on an inbox that was never theirs.
+   */
+  sendEmailCode: async (email) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      return { ok: false, message: 'Enter an email address first.' };
+    }
+
+    const { error } = await client.auth.signInWithOtp({
+      email: trimmedEmail,
+      options: { shouldCreateUser: false },
+    });
+
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    return { ok: true, message: 'Check your email for a sign-in code.' };
+  },
+  verifyEmailCode: async (email, code) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+
+    const trimmedEmail = email.trim();
+    const trimmedCode = code.trim();
+    if (!trimmedEmail || !trimmedCode) {
+      return { ok: false, message: 'Enter the email address and the code that was sent to it.' };
+    }
+
+    // 'email' covers both the sign-in code and the signup confirmation code.
+    const { error } = await client.auth.verifyOtp({
+      email: trimmedEmail,
+      token: trimmedCode,
+      type: 'email',
+    });
+
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    return { ok: true, message: 'Signed in.' };
   },
   signUpWithPassword: async (email, password) => {
     const client = getSupabaseClient();

@@ -69,9 +69,19 @@ test('paid signup creates the cloud workspace before billing checkout', () => {
    */
   assert.match(login, /if \(authMode === 'signup'\) return workspaceSetupPath;/);
   assert.match(login, /setupParams\.set\('plan', selectedPlan\)/);
+  /*
+   * Matched loosely on purpose. This pinned the exact expression, so adding the
+   * store-build check to it broke a test about workspace-before-checkout
+   * ordering -- a failure that says nothing about the ordering it guards. The
+   * two facts that matter are that the destination is derived from the selected
+   * plan and that it is computed after setup, not the shape of the ternary.
+   */
+  assert.match(setup, /const postSetupPath = useMemo\(/);
+  assert.match(setup, /selectedPlan && canPresentPurchaseFlow\(\)\s*\?\s*billingPathForTier\(selectedPlan\)/);
   assert.match(
     setup,
-    /const postSetupPath = useMemo\(\(\) => \(selectedPlan \? billingPathForTier\(selectedPlan\) : '\/'\)/,
+    /:\s*'\/'/,
+    'setup must fall back to the app root rather than to billing when no plan was selected',
   );
   assert.match(setup, /const cloudSaved = await persistCloudWorkspace\(\);/);
   assert.match(setup, /checkout needs the cloud workspace first/);

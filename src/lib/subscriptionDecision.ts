@@ -34,8 +34,10 @@ export type CheckoutReadiness = {
    * - 'recover': a subscription already exists and can still bill the customer.
    *   Buying again would create a second subscription beside it, so this mode
    *   never offers checkout.
+   * - 'external': this is a native store build, so no purchase happens in the
+   *   app at all. Never ready — see the nativeApp note below.
    */
-  mode: 'checkout' | 'manual' | 'recover';
+  mode: 'checkout' | 'manual' | 'recover' | 'external';
   reason: string;
 };
 
@@ -75,7 +77,32 @@ export function getCheckoutReadiness(params: {
    * deployment has no portal sends them looking for a door that is not there.
    */
   hasBillingPortal?: boolean;
+  /**
+   * True inside an iOS/Android store build.
+   *
+   * Checked before everything else and regardless of role or Stripe
+   * configuration: App Store Review Guideline 3.1.1 requires a digital
+   * subscription sold inside the app to go through In-App Purchase, so a store
+   * build offers no purchase path at all rather than sending the customer to
+   * Stripe. Apple forbids the call to action, not merely the charge, so this
+   * refuses the button as well as the navigation.
+   *
+   * The gate lives here, in the one function every purchase entry point
+   * already consults, so no combination of role and Stripe configuration can
+   * reopen a path around it — and so it is one tested decision rather than a
+   * condition scattered through JSX.
+   *
+   * Optional, so every web caller is unaffected: a test asserts the web result
+   * is identical with the flag absent and with it explicitly false.
+   */
+  nativeApp?: boolean;
 }): CheckoutReadiness {
+  if (params.nativeApp)
+    return {
+      ready: false,
+      mode: 'external',
+      reason: 'Plans are managed outside the app. Your current plan and workspace are unchanged.',
+    };
   if (!params.canManageBilling)
     return { ready: false, mode: 'checkout', reason: 'Ask a workspace owner to change plans.' };
   if (params.checkoutInProgress)
@@ -149,7 +176,26 @@ export function getBillingPortalAction(params: {
   canManageBilling: boolean;
   subscriptionActive?: boolean;
   subscriptionRecoverable?: boolean;
+  /**
+   * True inside an iOS/Android store build. Suppresses the portal entirely.
+   *
+   * Gating `getCheckoutReadiness` alone was not enough, and this is the hole it
+   * left. The portal is a SECOND external purchase path: `.env.example`
+   * describes it as where a workspace that already subscribes goes to "upgrade,
+   * downgrade, settle a failed payment, or cancel", and the upgrade half of
+   * that is a digital purchase. Worse, it is the PRIMARY action for exactly the
+   * customers the checkout gate turns away — an active or recoverable
+   * subscription — so closing checkout and leaving this open would have routed
+   * every paying native customer to Stripe through the one button still lit.
+   *
+   * Suppressed rather than relabelled because a single URL does both the
+   * purchase and the management, so there is no way to offer one without the
+   * other. A store build therefore shows plan state and says billing is handled
+   * outside the app, which is what it already tells anyone trying to buy.
+   */
+  nativeApp?: boolean;
 }): { url: string; label: string } | null {
+  if (params.nativeApp) return null;
   if (!params.canManageBilling) return null;
   const url = params.portalUrl.trim();
   if (!url) return null;

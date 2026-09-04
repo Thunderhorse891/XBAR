@@ -1562,3 +1562,141 @@ test('an expired marker on the destination does not shut out a live one', async 
     harness.restore();
   }
 });
+
+/*
+ * App Store Review Guideline 3.1.1.
+ *
+ * A digital subscription sold inside the app has to go through In-App
+ * Purchase. XBAR sells through Stripe, so the store build offers no purchase
+ * path at all. Apple forbids the call to action and the external link, not
+ * merely the charge, so the refusal has to hold for the BUTTON as well as the
+ * navigation -- and it has to hold no matter how billing is configured or who
+ * is asking, because a single reachable combination is a rejection.
+ */
+test('a store build refuses checkout under every billing and role combination', () => {
+  const combos = [true, false];
+  let checked = 0;
+  for (const billingEnabled of combos)
+    for (const canManageBilling of combos)
+      for (const hasManagedIdentity of combos)
+        for (const hasPaymentLink of combos)
+          for (const subscriptionRecoverable of combos)
+            for (const subscriptionActive of combos)
+              for (const hasBillingPortal of combos) {
+                const result = getCheckoutReadiness({
+                  billingEnabled,
+                  canManageBilling,
+                  hasManagedIdentity,
+                  hasPaymentLink,
+                  checkoutInProgress: false,
+                  subscriptionRecoverable,
+                  subscriptionActive,
+                  hasBillingPortal,
+                  nativeApp: true,
+                });
+                checked += 1;
+                assert.equal(
+                  result.ready,
+                  false,
+                  `a store build offered checkout with ${JSON.stringify({ billingEnabled, canManageBilling, hasManagedIdentity, hasPaymentLink, subscriptionRecoverable, subscriptionActive, hasBillingPortal })}`,
+                );
+                assert.equal(result.mode, 'external');
+              }
+  assert.equal(checked, 128, 'every combination must actually have been exercised');
+});
+
+test('the native gate is checked before every other refusal, so its reason is the one shown', () => {
+  // Otherwise a store build would explain itself as "ask a workspace owner" or
+  // "billing not configured", sending the customer to fix something that is
+  // not broken and is not why the button is off.
+  const result = getCheckoutReadiness({
+    billingEnabled: false,
+    canManageBilling: false,
+    hasManagedIdentity: false,
+    hasPaymentLink: false,
+    checkoutInProgress: true,
+    subscriptionRecoverable: true,
+    subscriptionActive: true,
+    nativeApp: true,
+  });
+  assert.equal(result.mode, 'external');
+  assert.match(result.reason, /managed outside the app/i);
+  assert.match(result.reason, /unchanged/i);
+});
+
+test('the web build is completely unaffected by the flag existing', () => {
+  // The gate is opt-in. Absent and explicitly false must be byte-identical, or
+  // adding it changed behavior for every existing web customer.
+  for (const params of [
+    {
+      billingEnabled: true,
+      canManageBilling: true,
+      hasManagedIdentity: true,
+      hasPaymentLink: true,
+      checkoutInProgress: false,
+    },
+    {
+      billingEnabled: false,
+      canManageBilling: true,
+      hasManagedIdentity: false,
+      hasPaymentLink: true,
+      checkoutInProgress: false,
+    },
+    {
+      billingEnabled: true,
+      canManageBilling: false,
+      hasManagedIdentity: true,
+      hasPaymentLink: false,
+      checkoutInProgress: false,
+    },
+    {
+      billingEnabled: false,
+      canManageBilling: false,
+      hasManagedIdentity: false,
+      hasPaymentLink: false,
+      checkoutInProgress: true,
+    },
+  ]) {
+    assert.deepEqual(
+      getCheckoutReadiness({ ...params, nativeApp: false }),
+      getCheckoutReadiness(params),
+      `the flag changed the web result for ${JSON.stringify(params)}`,
+    );
+  }
+});
+
+test('a store build offers no billing portal either, for every subscription state', () => {
+  // The hole that gating checkout alone left open. The portal is a second
+  // external purchase path -- .env.example calls it where a subscriber goes to
+  // "upgrade, downgrade, settle a failed payment, or cancel" -- and it is the
+  // PRIMARY action for exactly the customers checkout turns away. Closing one
+  // and leaving the other would have routed every paying native customer to
+  // Stripe through the one button still lit.
+  for (const canManageBilling of [true, false])
+    for (const subscriptionActive of [true, false])
+      for (const subscriptionRecoverable of [true, false]) {
+        assert.equal(
+          getBillingPortalAction({
+            portalUrl: 'https://billing.stripe.com/p/login/test',
+            canManageBilling,
+            subscriptionActive,
+            subscriptionRecoverable,
+            nativeApp: true,
+          }),
+          null,
+          `a store build offered the portal with ${JSON.stringify({ canManageBilling, subscriptionActive, subscriptionRecoverable })}`,
+        );
+      }
+
+  // And the web keeps it, or this "fix" would have removed the only route a
+  // paying customer has to change or cancel a plan.
+  assert.deepEqual(
+    getBillingPortalAction({
+      portalUrl: 'https://billing.stripe.com/p/login/test',
+      canManageBilling: true,
+      subscriptionActive: true,
+      nativeApp: false,
+    }),
+    { url: 'https://billing.stripe.com/p/login/test', label: 'Manage your subscription' },
+  );
+});

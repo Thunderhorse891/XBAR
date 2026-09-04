@@ -76,6 +76,40 @@ done on Linux/CI.
   ship iPad). Capture from the running app.
 - Sign-in demo account for App Review (the app is behind auth).
 
+## Required Supabase configuration (before the first store build)
+
+**The Magic Link email template must contain BOTH `{{ .ConfirmationURL }}` and
+`{{ .Token }}`.** Add the token; do not remove the link.
+
+Supabase chooses what to send from the template, not from the API call:
+`{{ .ConfirmationURL }}` renders a clickable link, `{{ .Token }}` renders a
+six-digit code. The default template has only the link.
+
+Both are needed because **this template is global** — every `signInWithOtp`
+email in the deployment uses it, not only the native request. Settings exposes
+a "Send magic link" button (`Settings.tsx`, `handleSendMagicLink`) and that
+screen has no code input, so a template carrying only the token would hand web
+users a code the flow that sent it cannot consume. A template carrying both
+serves each: the app's code input accepts the token, and the Settings link keeps
+working.
+
+The store build hides Google, Apple and Facebook sign-in, because
+`signInWithOAuth` navigates the WebView to the provider and returns to
+`capacitor://localhost` — a redirect Google refuses and Supabase will not
+accept. Those buttons are the ONLY credential an account created through them
+has, so the signed-out screen offers an emailed code instead: a code is typed
+into the app and exchanged there, which is the only emailed route that puts a
+session in the app rather than in a browser.
+
+If the template still sends a link, that customer receives something the code
+input cannot accept, and is locked out of iOS entirely — with a form in front of
+them that looks like it should work. This cannot be set from code, so it is a
+submission prerequisite rather than a deployment nicety.
+
+Set it in Supabase → Authentication → Email Templates → Magic Link.
+
+---
+
 ## Known App Review risk areas for this app
 
 - **Account deletion** — apps with account creation must offer in-app account
