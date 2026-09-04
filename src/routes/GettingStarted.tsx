@@ -4,6 +4,7 @@ import { Card, PageHead, ProgressRing } from '@/components/saas';
 import { billingPath } from '@/lib/billingRoutes';
 import { useXbarStore } from '@/store/useXbarStore';
 import { hasActivePaidPlan } from '@/lib/subscriptionDecision';
+import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 
 type Step = {
   id: string;
@@ -85,18 +86,27 @@ export default function GettingStarted() {
       action: 'Open sales',
       to: '/sales',
     },
-    {
-      id: 'plan',
-      title: 'Review billing',
-      detail: `${subscription.tier} billing is set for this workspace.`,
-      // Not just an entitled state: a new workspace is seeded as
-      // 'Manual Billing' at rate 0, which is a setup state rather than a
-      // purchase, so entitlement alone would tick this off before anyone had
-      // configured billing at all.
-      done: hasActivePaidPlan(subscription),
-      action: 'Open billing',
-      to: billingPath,
-    },
+    // Dropped entirely in a store build. `done` is hasActivePaidPlan, and a
+    // store build offers no way to start a paid plan, so this step can never be
+    // ticked: a permanent "you are not finished" with a button leading to a
+    // screen that cannot finish it. An unfinishable checklist item reads as a
+    // broken app, and its button is one more invitation to buy.
+    ...(canPresentPurchaseFlow()
+      ? [
+          {
+            id: 'plan',
+            title: 'Review billing',
+            detail: `${subscription.tier} billing is set for this workspace.`,
+            // Not just an entitled state: a new workspace is seeded as
+            // 'Manual Billing' at rate 0, which is a setup state rather than a
+            // purchase, so entitlement alone would tick this off before anyone had
+            // configured billing at all.
+            done: hasActivePaidPlan(subscription),
+            action: 'Open billing',
+            to: billingPath,
+          },
+        ]
+      : []),
   ];
 
   const doneCount = steps.filter((s) => s.done).length;

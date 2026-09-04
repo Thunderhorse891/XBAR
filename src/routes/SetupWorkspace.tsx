@@ -8,6 +8,7 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useWorkspaceHydrated, useWorkspaceReady, useXbarStore } from '@/store/useXbarStore';
 import './cleanEntryExperience.css';
+import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 
 const setupStages = [
   { label: 'Ranch identity', value: 'Business and ranch name' },
@@ -48,7 +49,18 @@ export default function SetupWorkspace() {
   const supabaseReady = isSupabaseConfigured();
   const canQuickStart = previewMode || !supabaseReady;
   const selectedPlan = params.get('plan') ?? '';
-  const postSetupPath = useMemo(() => (selectedPlan ? billingPathForTier(selectedPlan) : '/'), [selectedPlan]);
+  /*
+   * A ?plan= parameter sends the customer to billing once setup finishes. In a
+   * store build that is a forced arrival at a screen which cannot sell them
+   * anything -- the same objection as a button inviting them there, reached
+   * without a button. The parameter can still arrive by deep link even though
+   * the in-app pricing link is gone, so this is checked rather than assumed
+   * unreachable.
+   */
+  const postSetupPath = useMemo(
+    () => (selectedPlan && canPresentPurchaseFlow() ? billingPathForTier(selectedPlan) : '/'),
+    [selectedPlan],
+  );
   const cloudWorkspaceRequired = supabaseReady && status === 'signed-in' && !workspaceId;
 
   const accessLabel = useMemo(() => {
