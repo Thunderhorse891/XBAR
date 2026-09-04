@@ -137,7 +137,41 @@ test('the store build never presents the checkout panel', () => {
  * button, so a whole-file check was satisfied while a second, ungated button
  * sat further down the same screen.
  */
-const BILLING_NAVIGATION = /navigate\(billingPath|to=\{billingPath/g;
+/*
+ * Any REFERENCE to the billing route, not two particular call shapes.
+ *
+ * v3 matched `navigate(billingPath` and `to={billingPath`. GettingStarted.tsx
+ * put the destination in a data array -- `to: billingPath`, navigated later as
+ * `navigate(s.to)` -- and neither pattern saw it. A third syntax existed, so
+ * enumerating syntaxes fails for the same reason enumerating copy did.
+ *
+ * Now: if a file mentions the billing route at all, outside its imports, it
+ * must gate or be exempted. Naming the route in an import is not routing to it,
+ * so import lines are stripped first.
+ */
+/*
+ * Deliberately NOT /g. `assert.match` runs RegExp.test, which advances
+ * lastIndex on a global regex, so the second call against a different file
+ * starts mid-string and can report no match on a file that plainly has one.
+ * Counting below builds its own global copy instead.
+ */
+const BILLING_NAVIGATION = /\b(?:billingPath|billingPathForTier|subscriptionUpgradePath)\b/;
+/*
+ * One DESTINATION, not one identifier.
+ *
+ * `selectedPlan ? billingPathForTier(selectedPlan) : billingPath` names the
+ * route twice while being a single place the customer can be sent, and a
+ * single gate covers it. Counting raw identifiers made Login look like four
+ * destinations with three gates and reported a file that is fully gated.
+ *
+ * Collapsed first, so the count is of places rather than mentions.
+ */
+const collapseTernaries = (source) =>
+  source.replace(/billingPathForTier\([^)]*\)\s*:\s*billingPath\b/g, 'BILLING_DESTINATION');
+const countBillingRefs = (source) =>
+  (collapseTernaries(source).match(new RegExp(BILLING_NAVIGATION.source, 'g')) ?? []).length +
+  (collapseTernaries(source).match(/BILLING_DESTINATION/g) ?? []).length;
+const IMPORT_STATEMENT = /^import[\s\S]*?;\s*$/gm;
 const PURCHASE_GATE = /canPresentPurchaseFlow\(\)/g;
 
 /*
@@ -154,6 +188,9 @@ const PLAIN_NAVIGATION = new Map([
     'src/routes/layouts/MainLayout.tsx',
     'The Billing nav button and its menu entry, always available and never a pitch.',
   ],
+  ['src/lib/billingRoutes.ts', 'Defines the route. Nothing to gate; gating here would gate everything.'],
+  ['src/lib/subscriptionGates.ts', 'Re-exports the path and holds gate COPY. Renders nothing itself.'],
+  ['src/lib/activation.ts', 'Builds a checklist nothing renders -- only its own test imports it.'],
 ]);
 
 /*
@@ -189,8 +226,8 @@ test('every route to billing is gated for a store build, or listed as plain navi
 
   for (const file of sourceFilesUnder(path.join(process.cwd(), 'src'))) {
     const relative = path.relative(process.cwd(), file).split(path.sep).join('/');
-    const source = readFileSync(file, 'utf8');
-    const navs = (source.match(BILLING_NAVIGATION) ?? []).length;
+    const source = readFileSync(file, 'utf8').replace(IMPORT_STATEMENT, '');
+    const navs = countBillingRefs(source);
     if (!navs) continue;
     navigations += navs;
     if (PLAIN_NAVIGATION.has(relative)) continue;
@@ -213,11 +250,11 @@ test('the plain-navigation exceptions all still exist', () => {
   // An allowlist that names a file nobody has touched in a year is how a real
   // CTA gets in later under a stale exemption.
   for (const [file] of PLAIN_NAVIGATION) {
-    const source = readFileSync(path.join(process.cwd(), file), 'utf8');
+    const source = readFileSync(path.join(process.cwd(), file), 'utf8').replace(IMPORT_STATEMENT, '');
     assert.match(
       source,
-      /navigate\(billingPath|to=\{billingPath/,
-      `${file} is exempted from the billing gate but no longer navigates to billing; remove the exemption`,
+      BILLING_NAVIGATION,
+      `${file} is exempted from the billing gate but no longer references it; remove the exemption`,
     );
   }
 });
@@ -293,5 +330,26 @@ test('the server still appends its own /app to the configured origin', () => {
     source,
     /\$\{appOrigin\}\/app\/verify\//,
     'sale-packets no longer builds the verify URL by appending /app; the origin-only rule may no longer hold',
+  );
+});
+
+/*
+ * activation.ts is exempted because nothing renders it. That has to stay true.
+ *
+ * It builds a checklist with a "Review billing" step whose `complete` is the
+ * paid-plan check -- unfinishable in a store build, exactly like the one
+ * removed from GettingStarted. It is harmless only while no screen shows it.
+ */
+test('the unrendered activation checklist stays unrendered', () => {
+  const offenders = [];
+  for (const file of sourceFilesUnder(path.join(process.cwd(), 'src'))) {
+    const relative = path.relative(process.cwd(), file).split(path.sep).join('/');
+    if (relative === 'src/lib/activation.ts') continue;
+    if (/buildActivationSteps|summarizeActivation/.test(readFileSync(file, 'utf8'))) offenders.push(relative);
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `activation.ts is now rendered by ${offenders.join(', ')}; its billing step is unfinishable in a store build and needs gating like GettingStarted's`,
   );
 });

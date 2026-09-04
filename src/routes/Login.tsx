@@ -40,6 +40,9 @@ export default function Login() {
     if (authMode === 'signup') return workspaceSetupPath;
     const from = (location.state as { from?: string } | null)?.from;
     if (from) return from;
+    // A store build has no purchase path, so sending someone to billing the
+    // moment they sign in is an arrival at a paywall they cannot act on.
+    if (!canPresentPurchaseFlow()) return '/';
     return selectedPlan ? billingPathForTier(selectedPlan) : billingPath;
   }, [authMode, location.state, selectedPlan, workspaceSetupPath]);
   const supabaseReady = isSupabaseConfigured();
@@ -81,7 +84,9 @@ export default function Login() {
   const openBrowserWorkspace = () => {
     markLocalWorkspaceIntent();
     setUpWorkspace({ businessName: 'XBAR Ranch', ranchName: 'XBAR Ranch' });
-    navigate(selectedPlan ? billingPathForTier(selectedPlan) : billingPath, { replace: true });
+    navigate(canPresentPurchaseFlow() ? (selectedPlan ? billingPathForTier(selectedPlan) : billingPath) : '/', {
+      replace: true,
+    });
   };
 
   const openWorkspaceSetup = () => {
