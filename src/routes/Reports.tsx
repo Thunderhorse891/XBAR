@@ -97,7 +97,13 @@ export default function Reports() {
       // date printed on it; the screen refreshes at midnight, but an export
       // fired in the seconds before that must not carry yesterday's date and
       // last month's totals into a document that outlives the tab.
-      await downloadRanchReportPdf(buildRanchReport(reportInput), workspaceProfile.ranchName);
+      const saved = await downloadRanchReportPdf(buildRanchReport(reportInput), workspaceProfile.ranchName);
+      // A save that did not happen must not be reported as one. On iOS the
+      // anchor-download trick silently does nothing, and a cancelled share
+      // sheet leaves the file nowhere the customer chose.
+      if (!saved.ok) {
+        pushToast({ title: 'Report was not saved', message: saved.reason, tone: 'warning' });
+      }
     } catch {
       // Rendering happens in this tab with data already in memory, so the only
       // way here is a genuine failure. Say so rather than leaving a button that
@@ -112,9 +118,12 @@ export default function Reports() {
     }
   };
 
-  const handleCsv = () => {
+  const handleCsv = async () => {
     if (locked) return;
-    downloadRanchReportCsv(buildRanchReport(reportInput));
+    const saved = await downloadRanchReportCsv(buildRanchReport(reportInput));
+    if (!saved.ok) {
+      pushToast({ title: 'Spreadsheet was not saved', message: saved.reason, tone: 'warning' });
+    }
   };
 
   // Only truly empty when there is nothing to report on at all.

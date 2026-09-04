@@ -1,4 +1,5 @@
 import type { RanchReport } from './ranchReport.js';
+import { saveBlobAsFile, saveTextAsFile, type FileSaveResult } from './fileDownload.js';
 
 /*
  * Getting the report off the screen.
@@ -267,21 +268,11 @@ export function ranchReportFileName(report: RanchReport, extension: string): str
   return `xbar-ranch-report-${report.generatedOn}.${extension}`;
 }
 
-function downloadBlob(blob: Blob, fileName: string): void {
-  const url = URL.createObjectURL(blob);
-  const anchor = window.document.createElement('a');
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
-
-export function downloadRanchReportCsv(report: RanchReport): void {
+export function downloadRanchReportCsv(report: RanchReport): Promise<FileSaveResult> {
   // The BOM is what makes Excel read this as UTF-8. Without it a horse name
   // with an accent arrives mangled in the one program most of these files will
   // be opened in.
-  const blob = new Blob(['﻿', ranchReportToCsv(report)], { type: 'text/csv;charset=utf-8' });
-  downloadBlob(blob, ranchReportFileName(report, 'csv'));
+  return saveTextAsFile(ranchReportFileName(report, 'csv'), '﻿' + ranchReportToCsv(report), 'text/csv;charset=utf-8');
 }
 
 /**
@@ -291,8 +282,8 @@ export function downloadRanchReportCsv(report: RanchReport): void {
  * for every visitor — the Reports screen is not the first thing anyone opens,
  * and most sessions never export.
  */
-export async function downloadRanchReportPdf(report: RanchReport, ranchName: string): Promise<void> {
+export async function downloadRanchReportPdf(report: RanchReport, ranchName: string): Promise<FileSaveResult> {
   const { renderReportPdf } = await import('./ranchReportPdf.js');
   const bytes = await renderReportPdf(report, ranchName);
-  downloadBlob(new Blob([bytes as BlobPart], { type: 'application/pdf' }), ranchReportFileName(report, 'pdf'));
+  return saveBlobAsFile(ranchReportFileName(report, 'pdf'), new Blob([bytes as BlobPart], { type: 'application/pdf' }));
 }
