@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 
 /*
@@ -113,39 +113,60 @@ test('the store build never presents the checkout panel', () => {
 });
 
 /*
- * A call to action to upgrade is forbidden too, wherever it appears.
+ * A call to action to upgrade is forbidden too, wherever it appears -- and
+ * "wherever" is the whole difficulty.
  *
- * These sit far from the billing screen -- a usage meter, a locked financials
- * panel, a horse profile, the breeding screen -- which is exactly why gating
- * the billing screen alone missed them. Each one is a button reading "Upgrade
- * to ..." that leads to a flow a store build deliberately refuses: a call to
- * action under 3.1.1, and a dead end for the customer either way.
+ * These sit far from the billing screen: a usage meter, a locked financials
+ * panel, a horse profile, the breeding screen, the reports hero, an expenses
+ * panel. Gating the billing screen missed all of them.
  *
- * "Compare billing" and the Billing nav item are deliberately NOT in this list.
- * Showing what a plan includes is allowed and is what the store build is meant
- * to do; only the call to BUY is removed.
+ * The first version of this test then listed the four that were known and
+ * checked each for the gate. That is the same mistake one level up: an
+ * allowlist cannot report the file nobody put in it, and review immediately
+ * found two more. One of them read "Unlock with Ranch Ops", which the list's
+ * own /Upgrade to/ pattern would not have matched even had the file been in it.
+ *
+ * So this DISCOVERS instead. Any source file that navigates to the billing
+ * route and carries purchase-invitation copy has to consult the gate. A new
+ * upgrade button anywhere in src/ fails here, without anyone remembering to
+ * add it.
  */
-test('every upgrade call to action is hidden in a store build', () => {
-  const CTA_FILES = [
-    'src/components/UsageMeterPanel.tsx',
-    'src/routes/Financials.tsx',
-    'src/routes/AnimalProfile.tsx',
-    'src/routes/Breeding.tsx',
-  ];
+const BILLING_NAVIGATION = /navigate\(billingPath|to=\{billingPath/;
+// The invitation to BUY. Deliberately not "Billing" or "Compare billing":
+// showing what a plan includes is allowed under 3.1.1, and is what the store
+// build is for. Only the call to purchase is removed.
+const PURCHASE_CTA_COPY = /\b(?:Upgrade|Unlock with)\b/;
 
-  for (const file of CTA_FILES) {
-    const source = readFileSync(path.join(process.cwd(), file), 'utf8');
-    assert.match(
-      source,
-      /Upgrade to/,
-      `${file} no longer has an upgrade call to action; this guard list is stale and should be trimmed`,
-    );
-    assert.match(
-      source,
-      /canPresentPurchaseFlow\(\)/,
-      `${file} shows an upgrade call to action that a store build does not hide`,
-    );
+function sourceFilesUnder(dir) {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return sourceFilesUnder(full);
+    return /\.tsx?$/.test(entry.name) ? [full] : [];
+  });
+}
+
+test('every upgrade call to action is hidden in a store build', () => {
+  const offenders = [];
+  let found = 0;
+
+  for (const file of sourceFilesUnder(path.join(process.cwd(), 'src'))) {
+    const source = readFileSync(file, 'utf8');
+    if (!BILLING_NAVIGATION.test(source) || !PURCHASE_CTA_COPY.test(source)) continue;
+    found += 1;
+    if (!source.includes('canPresentPurchaseFlow()')) {
+      offenders.push(path.relative(process.cwd(), file));
+    }
   }
+
+  // If this ever drops to zero the patterns have drifted and the test is
+  // silently passing over everything, which is worse than failing.
+  assert.ok(found > 0, 'no upgrade call to action was found at all; the detection patterns have gone stale');
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `these files invite a purchase without asking whether this is a store build: ${offenders.join(', ')}`,
+  );
 });
 
 /*
