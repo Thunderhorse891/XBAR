@@ -5,6 +5,7 @@ import type {
   SubscriptionTier,
   WorkspaceProfile,
 } from '../types/xbar.js';
+import { saveTextAsFile, type FileSaveResult } from './fileDownload.js';
 
 export type DocumentTemplateTier = 'Basic' | 'Pro' | 'Business';
 
@@ -424,12 +425,6 @@ export function buildPrefilledDocument(params: {
   };
 }
 
-export function downloadHtmlFile(fileName: string, html: string) {
-  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.click();
-  URL.revokeObjectURL(url);
+export function downloadHtmlFile(fileName: string, html: string): Promise<FileSaveResult> {
+  return saveTextAsFile(fileName, html, 'text/html;charset=utf-8');
 }

@@ -463,14 +463,19 @@ export default function BuyerProfile() {
         (asset.kind === 'Hero' || asset.kind === 'Conformation' || asset.kind === 'Sale Still'),
     )
     .slice(0, 4);
-  const downloadBuyerPacket = () => {
-    downloadPublicBuyerPacketArtifact(
+  const downloadBuyerPacket = async () => {
+    const saved = await downloadPublicBuyerPacketArtifact(
       buildPublicBuyerPacketArtifact({
         horse,
         documents: visibleDocuments.map(({ document }) => document),
         sharedListing,
       }),
     );
+    // Silent before: the packet is what a buyer is asked to take away, and on
+    // iOS the anchor download produced nothing at all with no indication.
+    if (!saved.ok) {
+      pushToast({ title: 'Packet was not saved', message: saved.reason, tone: 'warning' });
+    }
   };
 
   return (

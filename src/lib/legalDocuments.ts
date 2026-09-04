@@ -1,3 +1,5 @@
+import { saveTextAsFile, type FileSaveResult } from './fileDownload.js';
+
 export type LegalDocumentId =
   'terms' | 'privacy' | 'subscription-billing' | 'equine-records-disclaimer' | 'trademark-notice' | 'acceptable-use';
 
@@ -300,12 +302,6 @@ export function openPrintableLegalDocument(legalDoc: LegalDocument) {
   return true;
 }
 
-export function downloadLegalHtml(legalDoc: LegalDocument) {
-  const blob = new Blob([legalDocumentToHtml(legalDoc)], { type: 'text/html;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const anchor = window.document.createElement('a');
-  anchor.href = url;
-  anchor.download = legalDoc.suggestedFileName;
-  anchor.click();
-  URL.revokeObjectURL(url);
+export function downloadLegalHtml(legalDoc: LegalDocument): Promise<FileSaveResult> {
+  return saveTextAsFile(legalDoc.suggestedFileName, legalDocumentToHtml(legalDoc), 'text/html;charset=utf-8');
 }

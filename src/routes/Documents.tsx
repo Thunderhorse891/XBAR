@@ -1300,11 +1300,25 @@ export default function Documents() {
                         className="button button--ghost button--compact"
                         type="button"
                         onClick={() => {
-                          downloadLegalHtml(legalDoc);
-                          pushToast({
-                            title: 'Legal document exported',
-                            message: `${legalDoc.shortTitle} downloaded as a print-ready file.`,
-                            tone: 'success',
+                          // The toast used to fire regardless of whether a file
+                          // appeared. In a store build none does -- WKWebView
+                          // ignores an anchor's download attribute -- so the
+                          // customer was told the export worked and then could
+                          // not find it.
+                          void downloadLegalHtml(legalDoc).then((saved) => {
+                            pushToast(
+                              saved.ok
+                                ? {
+                                    title: 'Legal document exported',
+                                    message: `${legalDoc.shortTitle} downloaded as a print-ready file.`,
+                                    tone: 'success',
+                                  }
+                                : {
+                                    title: 'Legal document was not saved',
+                                    message: saved.reason,
+                                    tone: 'warning',
+                                  },
+                            );
                           });
                         }}
                       >

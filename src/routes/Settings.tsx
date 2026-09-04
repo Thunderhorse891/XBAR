@@ -31,6 +31,7 @@ import { vaultOwnerId } from '@/lib/vaultOwner';
 import { promoteLocalVaultFiles } from '@/lib/workspacePromotion';
 import type { UserRole } from '@/types/xbar';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
+import { saveBlobAsFile } from '@/lib/fileDownload';
 
 function roleLabel(role: UserRole) {
   return role === 'Owner' ? 'Horse Owner / Client' : role;
@@ -107,7 +108,6 @@ export default function Settings() {
   const handleExport = async () => {
     if (exportingBackup) return;
     setExportingBackup(true);
-    let url = '';
     try {
       const backup = exportWorkspaceBackup();
       const workspace = backup.workspace as {
@@ -143,11 +143,22 @@ export default function Settings() {
       const blob = new Blob([JSON.stringify({ ...backup, files, omittedFiles: skipped }, null, 2)], {
         type: 'application/json',
       });
-      url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `xbar-workspace-${backup.exportedAt.slice(0, 10)}.json`;
-      anchor.click();
+      /*
+       * A backup that did not save must never report that it did.
+       *
+       * This wrote the file with an anchor click and then announced success
+       * unconditionally. iOS WKWebView ignores an anchor's `download`
+       * attribute, so in a store build the tap produced no file, no error, and
+       * a toast reading "Backup exported" — telling a rancher their proof was
+       * safe when nothing had been written anywhere. Of everything the anchor
+       * path got wrong, this is the one whose consequence is losing the
+       * records rather than losing a convenience.
+       */
+      const saved = await saveBlobAsFile(`xbar-workspace-${backup.exportedAt.slice(0, 10)}.json`, blob);
+      if (!saved.ok) {
+        pushToast({ title: 'Backup was not saved', message: saved.reason, tone: 'error' });
+        return;
+      }
 
       // What went in, and what did not. A backup that quietly omits files is
       // the failure this change exists to remove, so an incomplete one says so
@@ -169,7 +180,6 @@ export default function Settings() {
         tone: 'error',
       });
     } finally {
-      if (url) URL.revokeObjectURL(url);
       setExportingBackup(false);
     }
   };
