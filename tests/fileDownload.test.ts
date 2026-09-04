@@ -180,3 +180,68 @@ test('the report CSV keeps the BOM that makes Excel read it as UTF-8', async () 
     'the CSV lost its UTF-8 byte-order mark, so Excel will mangle accented names',
   );
 });
+
+/*
+ * The chunked native write, and the one property that makes it safe.
+ *
+ * Base64 maps three bytes to four characters. A chunk that is a multiple of
+ * three encodes with no padding, so encoded chunks concatenate into exactly the
+ * base64 of the whole file. Any other size pads mid-stream and corrupts
+ * everything after it -- and corrupts it SILENTLY, because the file still
+ * writes and the export still reports success. That is the same class of
+ * failure this module exists to remove, so it is asserted rather than assumed.
+ */
+test('base64 chunks concatenate into the whole file, and only because of the chunk size', async () => {
+  const { NATIVE_WRITE_CHUNK_BYTES } = await import('../src/lib/fileDownload.js');
+
+  assert.equal(
+    NATIVE_WRITE_CHUNK_BYTES % 3,
+    0,
+    'the native write chunk is no longer a multiple of 3, so appended base64 pads mid-file and corrupts it',
+  );
+
+  const encode = (bytes: Uint8Array) => {
+    let binary = '';
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return Buffer.from(binary, 'binary').toString('base64');
+  };
+
+  // A byte pattern that is not a multiple of the chunk size, so the last slice
+  // is short -- the only slice allowed to pad.
+  const source = new Uint8Array(3 * 7 + 2);
+  for (let index = 0; index < source.length; index += 1) source[index] = (index * 37) % 256;
+
+  const chunkOf3 = 3 * 2;
+  let joined = '';
+  for (let offset = 0; offset < source.length; offset += chunkOf3) {
+    joined += encode(source.subarray(offset, offset + chunkOf3));
+  }
+  assert.equal(joined, encode(source), 'multiple-of-3 chunks must reassemble exactly');
+
+  // And the negative: a chunk size that is not a multiple of 3 does not.
+  const chunkOf4 = 4;
+  let broken = '';
+  for (let offset = 0; offset < source.length; offset += chunkOf4) {
+    broken += encode(source.subarray(offset, offset + chunkOf4));
+  }
+  assert.notEqual(broken, encode(source), 'this test proves nothing if a bad chunk size also reassembles');
+});
+
+/*
+ * The hand-off file must not outlive the share.
+ *
+ * A workspace backup carries registration papers and receipts. Left in the
+ * cache it survives the share, a cancellation, and account deletion -- while
+ * that screen tells the customer their on-device files are gone.
+ */
+test('the native export deletes its temporary file on every path', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile('src/lib/fileDownload.ts', 'utf8');
+
+  assert.match(source, /deleteFile\(/, 'the native export no longer removes its cache file');
+  // In `finally`, so a cancelled or failed share cleans up too -- those are the
+  // paths where a forgotten file is most likely and least visible.
+  const shareFn = source.slice(source.indexOf('async function saveViaShareSheet'));
+  const finallyBlock = shareFn.slice(shareFn.indexOf('} finally {'));
+  assert.match(finallyBlock, /deleteFile\(/, 'cleanup is not in finally, so a cancelled share leaves the file behind');
+});
