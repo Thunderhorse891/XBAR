@@ -161,7 +161,16 @@ test('plans are not sold as buyer seats, which no limit actually counts', () => 
   // src/lib/workspaceAccess.ts. Buyers open a share link with no account, so
   // nothing limits how many of them view a listing — advertising "buyer seats"
   // described a restriction that does not exist while hiding the one that does.
-  const sources = ['api/_lib/subscription-plans.js', 'src/lib/xbarRuntime.ts', 'scripts/marketing/pricing-data.mjs'];
+  // scripts/marketing/pages.mjs is in this list because leaving it out is how
+  // the phrase survived: the three DATA files were cleaned and the template
+  // that RENDERS the public pricing table still headed that column "Buyer
+  // seats". The wrong label was live on /pricing while every test here passed.
+  const sources = [
+    'api/_lib/subscription-plans.js',
+    'src/lib/xbarRuntime.ts',
+    'scripts/marketing/pricing-data.mjs',
+    'scripts/marketing/pages.mjs',
+  ];
 
   for (const file of sources) {
     const contents = readFileSync(path.join(repoRoot, file), 'utf8');
