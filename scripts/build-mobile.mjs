@@ -26,8 +26,12 @@ import { SITE_ORIGIN } from './marketing/render.mjs';
 // operator had correctly set in .env.production or .env.local — a custom-domain
 // build would ship the default origin while looking configured.
 const fileEnv = loadEnv('production', process.cwd(), 'VITE_');
+const configuredSiteUrl = (process.env.VITE_PUBLIC_SITE_URL || fileEnv.VITE_PUBLIC_SITE_URL || '').trim();
+const publicSiteUrl = (configuredSiteUrl || SITE_ORIGIN).replace(/\/+$/, '');
 const configuredAppUrl = (process.env.VITE_PUBLIC_APP_URL || fileEnv.VITE_PUBLIC_APP_URL || '').trim();
-const publicAppUrl = configuredAppUrl || SITE_ORIGIN;
+// `/app` is where the built SPA is actually served, so that -- not the site
+// root -- is what an in-app link has to resolve against.
+const publicAppUrl = configuredAppUrl.replace(/\/+$/, '') || `${publicSiteUrl}/app`;
 
 const env = {
   ...process.env,
@@ -39,10 +43,25 @@ const env = {
   // rejects a paywall that sends customers to a non-IAP purchase (3.1.1), and
   // a paywall that flashes before disappearing is still a paywall.
   VITE_NATIVE_APP: 'true',
+  /*
+   * Two values, because the deployment has two roots on one origin.
+   *
+   * `npm run build` moves the SPA shell to `app.html`, served under `/app/*`,
+   * and replaces `/` with static marketing HTML that has no router and ignores
+   * a hash. So `/privacy` and `/terms` are marketing pages while every in-app
+   * route lives under `/app`.
+   *
+   * Setting one variable for both was wrong in a way that renders cleanly:
+   * `buildPublicShareUrl` consumes the app URL, so a single marketing origin
+   * turned every shared, copied and emailed buyer link into
+   * `https://site/#/profiles/<id>` — which loads the marketing homepage, looks
+   * like a working page, and never shows the horse.
+   */
+  VITE_PUBLIC_SITE_URL: publicSiteUrl,
   VITE_PUBLIC_APP_URL: publicAppUrl,
 };
 
-console.log(`[mobile] in-app marketing and legal links resolve to ${publicAppUrl}`);
+console.log(`[mobile] legal links resolve to ${publicSiteUrl}; in-app links resolve to ${publicAppUrl}`);
 
 const child = spawn('npm', ['run', 'build'], {
   stdio: 'inherit',

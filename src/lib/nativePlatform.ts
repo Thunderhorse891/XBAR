@@ -103,8 +103,32 @@ export function canPresentPurchaseFlow(): boolean {
  */
 export function publicSiteHref(path: string): string {
   if (!isNativeApp()) return path;
-  const origin = (env.VITE_PUBLIC_APP_URL ?? '').trim().replace(/\/+$/, '');
-  return origin ? `${origin}${path}` : path;
+  return publicSiteOrigin() ? `${publicSiteOrigin()}${path}` : path;
+}
+
+/**
+ * Origin of the MARKETING site, which is not the same thing as the app.
+ *
+ * These were one variable and that was wrong in a way only the deployed layout
+ * shows. `npm run build` moves the SPA shell to `app.html`, served under
+ * `/app/*`, and replaces `/` with static marketing HTML that has no router and
+ * does nothing with a hash. So the two live at different paths on one origin:
+ * `/privacy` and `/terms` are marketing pages, and every in-app route is under
+ * `/app`.
+ *
+ * Reusing one value meant whichever consumer was wrong stayed silently wrong —
+ * either legal links pointing into the SPA, or share links pointing at the
+ * marketing homepage, which renders and looks fine while showing the wrong page.
+ */
+function publicSiteOrigin(): string {
+  const site = (env.VITE_PUBLIC_SITE_URL ?? '').trim().replace(/\/+$/, '');
+  if (site) return site;
+  // Falls back to the app origin with any `/app` base removed, so a deployment
+  // that only sets the app URL still gets working legal links.
+  return (env.VITE_PUBLIC_APP_URL ?? '')
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\/app$/, '');
 }
 
 /**

@@ -76,7 +76,31 @@ export default function Subscriptions() {
   const hasManagedIdentity = Boolean(session?.access_token && workspaceId);
   const billingEnabled = stripeConfig.managedBillingEnabled;
   const selectedPaymentLink = Boolean(getStripePaymentLink(decisionTier));
-  const selectedCheckoutConfigured = billingEnabled || selectedPaymentLink;
+  /*
+   * Read once per render and passed to every billing decision below.
+   *
+   * App Store Review Guideline 3.1.1: a digital subscription sold inside the
+   * app has to go through In-App Purchase, so a store build offers no purchase
+   * path at all. The refusals live in getCheckoutReadiness and
+   * getBillingPortalAction rather than in this JSX, so all four call sites
+   * answer the same question and no role or Stripe configuration can reopen a
+   * way around it.
+   */
+  const nativeApp = isNativeApp();
+  /*
+   * "Is there a checkout on this screen at all", which in a store build there
+   * is not.
+   *
+   * Disabling the button was not enough, and this is the line that fixes the
+   * rest. This flag drives the whole payment panel: without the native term it
+   * still read "Due at checkout", "then monthly", "Payment: handled at
+   * checkout", and rendered a "Card details / Secure checkout" box with card
+   * number, expiration and CVC rows. Apple forbids PRESENTING the paywall, not
+   * only completing it, so a store build that displays a card form and calls
+   * the price "due at checkout" is the rejection even though nothing can be
+   * bought behind it.
+   */
+  const selectedCheckoutConfigured = !nativeApp && (billingEnabled || selectedPaymentLink);
   const starterSetup = subscription.tier === 'Starter' && subscription.monthlyRate === 0;
   // A workspace whose Stripe subscription can still bill it. Buying here would
   // open a second one beside it, so every checkout path is blocked.
@@ -118,7 +142,6 @@ export default function Subscriptions() {
    * JSX here, so all three call sites answer the same question and no role or
    * Stripe configuration can reopen a way around it.
    */
-  const nativeApp = isNativeApp();
   const billingPortalAction = getBillingPortalAction({
     portalUrl: stripeConfig.billingPortalUrl,
     canManageBilling,
@@ -526,6 +549,18 @@ export default function Subscriptions() {
                 Payment is not set up for this deployment, so no plan can be purchased here and no payment details are
                 collected. Every tier below is still shown in full so you can compare what they include. Your workspace
                 and current plan are unchanged.
+              </p>
+            </div>
+          ) : selectedReadiness.mode === 'external' ? (
+            <div className="checkout-card-box" aria-label="Billing details">
+              <div className="checkout-card-box__top">
+                <span>Billing</span>
+                <strong>Managed outside the app</strong>
+              </div>
+              <p>
+                Subscriptions are not sold in the app. Every tier is shown in full so you can compare what they include,
+                and your workspace and current plan are unchanged. To start or change a plan, sign in to XBAR in a web
+                browser.
               </p>
             </div>
           ) : (

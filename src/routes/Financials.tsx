@@ -16,6 +16,7 @@ import type { ChipTone } from '@/types/saas';
 import { useXbarStore } from '@/store/useXbarStore';
 import './moneyIntelligence.css';
 import { useEffectiveSubscription } from '@/hooks/useOwnerPreview';
+import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 
 const statusChip: Record<AnimalFinancialStatus, { tone: ChipTone; label: string }> = {
   sold: { tone: 'success', label: 'Sold' },
@@ -174,15 +175,17 @@ export default function Financials() {
                 </li>
               ))}
             </ul>
-            <div>
-              <button
-                type="button"
-                className="button button--primary motion-press"
-                onClick={() => navigate(billingPath)}
-              >
-                <TrendingUp size={16} /> Upgrade to Ranch Ops
-              </button>
-            </div>
+            {canPresentPurchaseFlow() ? (
+              <div>
+                <button
+                  type="button"
+                  className="button button--primary motion-press"
+                  onClick={() => navigate(billingPath)}
+                >
+                  <TrendingUp size={16} /> Upgrade to Ranch Ops
+                </button>
+              </div>
+            ) : null}
             <p className="fin-insight__detail">{locked}</p>
           </div>
         </Card>
