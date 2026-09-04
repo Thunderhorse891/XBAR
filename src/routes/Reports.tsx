@@ -238,10 +238,15 @@ export default function Reports() {
           <EmptyState
             title={locked}
             description="Ranch Ops turns the records you already keep into the numbers a banker, an accountant or a partner asks for."
+            // Same locked state as the hero button above, so it gets the same
+            // answer. Leaving this one lit while gating that one would put two
+            // different answers to one question on a single screen.
             action={
-              <button className="button button--primary" type="button" onClick={() => navigate(billingPath)}>
-                See Ranch Ops
-              </button>
+              canPresentPurchaseFlow() ? (
+                <button className="button button--primary" type="button" onClick={() => navigate(billingPath)}>
+                  See Ranch Ops
+                </button>
+              ) : null
             }
           />
         </Panel>
