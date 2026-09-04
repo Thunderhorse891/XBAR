@@ -81,3 +81,99 @@ test('both native gates are actually consulted by this screen', () => {
     }
   }
 });
+
+/*
+ * The paywall is what Apple reviews, not just the button at the end of it.
+ *
+ * The first version of this gate disabled the CTA and left the rest of the
+ * payment panel intact, so a store build with Stripe configured still read
+ * "Due at checkout" and rendered a "Card details / Secure checkout" box with
+ * card number, expiration and CVC rows. Guideline 3.1.1 forbids PRESENTING a
+ * non-IAP purchase, so a screen showing a card form is the rejection whether
+ * or not anything can be bought behind it.
+ */
+test('the store build never presents the checkout panel', () => {
+  const source = readFileSync(path.join(process.cwd(), 'src/routes/Subscriptions.tsx'), 'utf8');
+
+  // Everything that reads as "a purchase happens here" hangs off this one
+  // flag, so it is the flag that has to know about the store build.
+  assert.match(
+    source,
+    /const selectedCheckoutConfigured = !nativeApp &&/,
+    'the payment panel no longer accounts for a store build, so it will show card fields and "Due at checkout" on iOS',
+  );
+
+  // And the card-details box needs its own branch: it is rendered by the
+  // fall-through, which a disabled button does not affect.
+  assert.match(
+    source,
+    /selectedReadiness\.mode === 'external' \? \(/,
+    'the card-details box has no store-build branch, so a store build renders a card form',
+  );
+});
+
+/*
+ * A call to action to upgrade is forbidden too, wherever it appears.
+ *
+ * These sit far from the billing screen -- a usage meter, a locked financials
+ * panel, a horse profile, the breeding screen -- which is exactly why gating
+ * the billing screen alone missed them. Each one is a button reading "Upgrade
+ * to ..." that leads to a flow a store build deliberately refuses: a call to
+ * action under 3.1.1, and a dead end for the customer either way.
+ *
+ * "Compare billing" and the Billing nav item are deliberately NOT in this list.
+ * Showing what a plan includes is allowed and is what the store build is meant
+ * to do; only the call to BUY is removed.
+ */
+test('every upgrade call to action is hidden in a store build', () => {
+  const CTA_FILES = [
+    'src/components/UsageMeterPanel.tsx',
+    'src/routes/Financials.tsx',
+    'src/routes/AnimalProfile.tsx',
+    'src/routes/Breeding.tsx',
+  ];
+
+  for (const file of CTA_FILES) {
+    const source = readFileSync(path.join(process.cwd(), file), 'utf8');
+    assert.match(
+      source,
+      /Upgrade to/,
+      `${file} no longer has an upgrade call to action; this guard list is stale and should be trimmed`,
+    );
+    assert.match(
+      source,
+      /canPresentPurchaseFlow\(\)/,
+      `${file} shows an upgrade call to action that a store build does not hide`,
+    );
+  }
+});
+
+/*
+ * An emailed auth link has to point somewhere an email client can open.
+ *
+ * authCallbackOrigin() existed and was imported by nothing, so every magic
+ * link, signup confirmation and password reset was still built from
+ * window.location.origin -- `capacitor://localhost` in a store build. Supabase
+ * will not accept that as a redirect and no mail client can open it, so signup
+ * could not complete where confirmation is required and "Forgot password?" sent
+ * a dead link. Both are broken features under Guideline 2.1.
+ */
+test('emailed auth callbacks do not point at capacitor://localhost', () => {
+  const raw = readFileSync(path.join(process.cwd(), 'src/store/useCloudStore.ts'), 'utf8');
+  // Comments stripped first. The prose above this helper names
+  // authCallbackOrigin() to explain why it is there, so matching the raw file
+  // passes even when the CALL has been deleted -- a test that cannot fail for
+  // the reason it exists. This was caught by mutation-testing it.
+  const source = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
+  assert.match(
+    source,
+    /authCallbackOrigin\(\)/,
+    'auth redirects no longer consult the native callback origin, so emailed links die on capacitor://localhost',
+  );
+
+  // Every emailed redirect is built by this one helper. If a call site ever
+  // reads window.location.origin directly again, it bypasses the fix.
+  const direct = [...source.matchAll(/emailRedirectTo:\s*`\$\{window\.location\.origin/g)];
+  assert.equal(direct.length, 0, 'an auth redirect builds its URL from window.location.origin directly');
+});

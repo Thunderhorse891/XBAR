@@ -4,6 +4,7 @@ import { loadWorkspaceAccessProfile } from '@/lib/cloudWorkspace';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import type { UserRole } from '@/types/xbar';
+import { authCallbackOrigin, isNativeApp } from '../lib/nativePlatform.js';
 
 type CloudActionResult = {
   ok: boolean;
@@ -70,7 +71,30 @@ type CloudStore = {
   deleteAccount: (confirmation: string) => Promise<CloudActionResult>;
 };
 
+/*
+ * Where an emailed auth link should send the customer back to.
+ *
+ * Every magic link, signup confirmation and password reset is built from this,
+ * and on the web the current page is exactly right.
+ *
+ * Inside a store build it is not. The page origin there is
+ * `capacitor://localhost` — a scheme no email client can open and that Supabase
+ * will not accept as a redirect — so every one of those emails arrived with a
+ * dead link. Signup could not be completed at all where email confirmation is
+ * required, and the visible "Forgot password?" action sent a link that goes
+ * nowhere. Both are broken features in their own right and rejections under
+ * Guideline 2.1.
+ *
+ * `authCallbackOrigin()` returns the configured public site in a store build,
+ * which at least lands the customer somewhere real. It signs them in on the web
+ * rather than in the app, which is why the one-time code path exists: a code is
+ * verified in-app and needs no callback at all. It returns undefined when there
+ * is nothing sensible to use, which tells the Supabase client to fall back to
+ * the project's configured Site URL rather than to a scheme it will reject.
+ */
 function currentAuthRedirectUrl() {
+  const nativeOrigin = authCallbackOrigin();
+  if (isNativeApp()) return nativeOrigin;
   return typeof window !== 'undefined'
     ? `${window.location.origin}${window.location.pathname}${window.location.search}`
     : undefined;
