@@ -44,7 +44,16 @@ function BuyerActionPanel({
     note?: string;
     amount?: number;
   }) => void;
-  onDownloadPacket: () => void;
+  /**
+   * Attempts the save and reports whether it happened.
+   *
+   * Returns a result rather than void because the seller notification below is
+   * a claim about the buyer's device: "the packet was downloaded". A void
+   * callback cannot contradict that claim, so the panel recorded the event and
+   * announced success before the save was even attempted — and on iOS a
+   * cancelled share sheet meant no file, while the seller was told otherwise.
+   */
+  onDownloadPacket: () => Promise<{ ok: boolean; reason?: string }>;
 }) {
   const [mode, setMode] = useState<
     null | 'question' | 'call-requested' | 'proof-requested' | 'offer' | 'packet-downloaded'
@@ -78,6 +87,25 @@ function BuyerActionPanel({
     setSubmitting(true);
     setStatusText('');
 
+    /*
+     * The save is attempted BEFORE anything is recorded or sent, and only for
+     * this one kind.
+     *
+     * Every other kind is a message to the seller and is true the moment it is
+     * sent. `packet-downloaded` is different: it asserts something happened on
+     * the buyer's device. If the file never arrived, logging it tells the
+     * seller a buyer has their packet when they do not — which is worse than a
+     * failed download, because it is acted on.
+     */
+    if (mode === 'packet-downloaded') {
+      const saved = await onDownloadPacket();
+      if (!saved.ok) {
+        setSubmitting(false);
+        setStatusText(saved.reason ?? 'The packet could not be saved, so the seller was not notified.');
+        return;
+      }
+    }
+
     if (source === 'local') {
       onLocalLog({
         kind: mode,
@@ -87,9 +115,6 @@ function BuyerActionPanel({
           undefined,
         amount: mode === 'offer' ? offerAmount : undefined,
       });
-      if (mode === 'packet-downloaded') {
-        onDownloadPacket();
-      }
       setSubmitting(false);
       setStatusText(
         mode === 'packet-downloaded'
@@ -118,9 +143,6 @@ function BuyerActionPanel({
       const payload = (await response.json().catch(() => ({}))) as { ok?: boolean; message?: string };
       setSubmitting(false);
       if (response.ok && payload.ok) {
-        if (mode === 'packet-downloaded') {
-          onDownloadPacket();
-        }
         setStatusText(payload.message ?? 'Delivered to the seller.');
         setMode(null);
       } else {
@@ -463,20 +485,24 @@ export default function BuyerProfile() {
         (asset.kind === 'Hero' || asset.kind === 'Conformation' || asset.kind === 'Sale Still'),
     )
     .slice(0, 4);
-  const downloadBuyerPacket = async () => {
-    const saved = await downloadPublicBuyerPacketArtifact(
+  /*
+   * Returns the outcome instead of toasting it.
+   *
+   * The caller has to know: it records a "packet downloaded" event against the
+   * seller's listing, and that event is only true if the file reached the
+   * buyer. A toast here would tell the buyer it failed while the seller was
+   * still told it succeeded — two messages disagreeing about one fact. The
+   * panel now reports the outcome in the status line the buyer is already
+   * reading, and withholds the event.
+   */
+  const downloadBuyerPacket = () =>
+    downloadPublicBuyerPacketArtifact(
       buildPublicBuyerPacketArtifact({
         horse,
         documents: visibleDocuments.map(({ document }) => document),
         sharedListing,
       }),
     );
-    // Silent before: the packet is what a buyer is asked to take away, and on
-    // iOS the anchor download produced nothing at all with no indication.
-    if (!saved.ok) {
-      pushToast({ title: 'Packet was not saved', message: saved.reason, tone: 'warning' });
-    }
-  };
 
   return (
     <main className="buyer-shell">
