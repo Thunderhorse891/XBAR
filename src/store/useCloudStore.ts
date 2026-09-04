@@ -227,16 +227,26 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     return { ok: true, message: 'Signed in. Opening your workspace.' };
   },
   /*
-   * No `emailRedirectTo`, and that omission is what makes this a code.
+   * REQUIRES the Supabase Magic Link email template to contain {{ .Token }}.
    *
-   * Supabase's default template carries both a link and a `{{ .Token }}`; the
-   * link is useless here because it opens a browser, and the app needs the
-   * session itself. Omitting the redirect keeps the flow anchored in the app,
-   * where verifyEmailCode below exchanges the token for a session.
+   * An earlier version of this comment claimed that omitting `emailRedirectTo`
+   * is what makes Supabase send a code rather than a link. That is not true.
+   * Supabase decides from the TEMPLATE: {{ .ConfirmationURL }} sends a magic
+   * link, {{ .Token }} sends the six-digit code this screen asks for. The
+   * default template is the link, so on an unconfigured project this flow emails
+   * something the code input cannot accept — and the OAuth-only customer it
+   * exists for stays locked out, now with a form that looks like it should work.
    *
-   * `shouldCreateUser: false` because this is a sign-IN. Left at its default
-   * it silently creates an account for a typo'd address, and the customer sits
-   * waiting for a code on an inbox that was never theirs.
+   * The omission still matters, just not for that reason: a redirect would send
+   * the customer to a browser, and the app needs the session itself.
+   *
+   * ios-submission/README.md carries this as a submission prerequisite, because
+   * it cannot be configured from code and a build that ships without it has a
+   * sign-in path that silently does not work.
+   *
+   * `shouldCreateUser: false` because this is a sign-IN. Left at its default it
+   * silently creates an account for a typo'd address, and the customer waits
+   * for a code on an inbox that was never theirs.
    */
   sendEmailCode: async (email) => {
     const client = getSupabaseClient();

@@ -44,9 +44,25 @@ const publicSiteUrl = (
   configuredAppUrl.replace(/\/+$/, '').replace(/\/app$/, '') ||
   SITE_ORIGIN
 ).replace(/\/+$/, '');
-// `/app` is where the built SPA is actually served, so that -- not the site
-// root -- is what an in-app link has to resolve against.
-const publicAppUrl = configuredAppUrl.replace(/\/+$/, '') || `${publicSiteUrl}/app`;
+/*
+ * An ORIGIN, deliberately, with no `/app` appended.
+ *
+ * An earlier revision set this to `<site>/app` on the reasoning that the SPA is
+ * served there. That was wrong, because this variable is not the client's
+ * alone: api/sale-packets.js builds `${appOrigin}/app/verify/<id>` from it and
+ * api/invite.js concatenates it the same way, so a value carrying `/app`
+ * produced `/app/app/verify/<id>` — breaking the verification link printed
+ * inside every sale packet, which is the one artifact whose whole purpose is
+ * being checkable by a stranger.
+ *
+ * It also did not buy what it was meant to. buildPublicShareUrl still appends
+ * `#/profiles/...`, and the deployed web bundle runs BrowserRouter, which
+ * ignores a fragment — so the shared link was broken either way, before and
+ * after. Correcting that means changing how share URLs are built for a
+ * browser-routed target, which is web behavior this change has no business
+ * touching.
+ */
+const publicAppUrl = (configuredAppUrl || publicSiteUrl).replace(/\/+$/, '');
 
 const env = {
   ...process.env,

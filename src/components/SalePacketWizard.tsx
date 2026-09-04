@@ -23,6 +23,7 @@ import { useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import { useXbarStore } from '@/store/useXbarStore';
 import './confirmActionDialog.css';
+import { canPresentPurchaseFlow } from '@/lib/nativePlatform';
 
 /*
  * The core paid workflow: select horse → release gate (title/transfer is a
@@ -229,7 +230,11 @@ export function SalePacketWizard({
               tone: 'warning',
             });
             close();
-            navigate(billingPathForTier(remote.tierBlock.requiredPlan));
+            // The toast above already names the plan this needs. Dumping a
+            // store build onto the billing screen after refusing is a forced
+            // arrival at the paywall, which is not an improvement on a button
+            // that invites one.
+            if (canPresentPurchaseFlow()) navigate(billingPathForTier(remote.tierBlock.requiredPlan));
             return;
           }
           pushToast({ title: 'Packet PDF failed', message: remote.message, tone: 'error' });
