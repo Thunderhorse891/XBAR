@@ -5,10 +5,34 @@ import { getSupabaseClient } from '@/lib/supabaseClient';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import type { UserRole } from '@/types/xbar';
 import { authCallbackOrigin, isNativeApp } from '../lib/nativePlatform.js';
+import { describeAuthError } from '@/lib/authErrors';
+import { hasValidatedPasswordRecovery } from '@/lib/passwordRecovery';
+
+export { hasValidatedPasswordRecovery };
+import { authRedirectUrl, passwordResetPath, publicAppRouteUrl } from '@/lib/routeCanon';
 
 type CloudActionResult = {
   ok: boolean;
   message: string;
+};
+
+/*
+ * What a signup actually did, which is not knowable from `error` alone.
+ *
+ * Supabase deliberately does not fail a signup for an already-registered
+ * address: it returns "an obfuscated user response with no verification email
+ * sent" so an attacker cannot enumerate accounts. The app read only `error`,
+ * so that silence arrived here as success and the screen said "Account created.
+ * Check your inbox" about an email that was never sent. Every locked-out
+ * customer who then waited for it was waiting on our claim, not on Supabase.
+ */
+type SignUpOutcome =
+  | 'signed-in' // Autoconfirm is on; there is a session and nothing to confirm.
+  | 'confirmation-required' // A new account exists and Supabase sent the email.
+  | 'existing-account'; // Nothing was created and nothing was sent.
+
+type CloudSignUpResult = CloudActionResult & {
+  outcome?: SignUpOutcome;
 };
 
 type CloudStatus = 'unavailable' | 'loading' | 'signed-out' | 'signed-in';
@@ -73,7 +97,22 @@ type CloudStore = {
    */
   sendEmailCode: (email: string) => Promise<CloudActionResult>;
   verifyEmailCode: (email: string, code: string) => Promise<CloudActionResult>;
-  signUpWithPassword: (email: string, password: string) => Promise<CloudActionResult>;
+  signUpWithPassword: (email: string, password: string) => Promise<CloudSignUpResult>;
+  resendSignUpConfirmation: (email: string) => Promise<CloudActionResult>;
+  updatePassword: (password: string) => Promise<CloudActionResult>;
+  /*
+   * The user id Supabase validated a recovery link FOR, or '' for none.
+   *
+   * A bare boolean was wrong: it said a recovery was in progress without
+   * saying whose, so it outlived the session it was granted for. If that
+   * session ended -- an expired token, a sign-out in another tab -- the flag
+   * stayed set, and the next ordinary sign-in in this tab inherited it and
+   * could change THAT account's password with no recovery ever validated.
+   *
+   * Carrying the id makes the mismatch unrepresentable: authorization is only
+   * ever compared against the session actually holding it.
+   */
+  passwordRecoveryFor: string;
   sendPasswordReset: (email: string) => Promise<CloudActionResult>;
   signInWithFacebook: () => Promise<CloudActionResult>;
   signInWithGoogle: () => Promise<CloudActionResult>;
@@ -111,8 +150,45 @@ function currentAuthRedirectUrl() {
     : undefined;
 }
 
+/*
+ * A validated recovery has to survive a page refresh.
+ *
+ * auth-js clears the callback fragment once it has validated the link and
+ * persists the resulting session, so a reload arrives with a perfectly good
+ * recovery session and only an INITIAL_SESSION event. Held in memory alone,
+ * the authorization vanished there and the customer was told their valid link
+ * had expired.
+ *
+ * sessionStorage rather than localStorage: this is a one-time flow, and it
+ * should not outlive the tab. What is stored is the user id, never a token, so
+ * it grants nothing on its own -- it is only ever compared against the session
+ * Supabase itself established, and a mismatch authorizes nothing.
+ */
+const RECOVERY_USER_KEY = 'xbar-password-recovery-for';
+
+function readStoredRecoveryUser(): string {
+  try {
+    return typeof sessionStorage === 'undefined' ? '' : (sessionStorage.getItem(RECOVERY_USER_KEY) ?? '');
+  } catch {
+    // Private modes and blocked site data throw on access rather than return
+    // null; losing the marker costs a re-request, so it must never throw here.
+    return '';
+  }
+}
+
+function storeRecoveryUser(userId: string) {
+  try {
+    if (typeof sessionStorage === 'undefined') return;
+    if (userId) sessionStorage.setItem(RECOVERY_USER_KEY, userId);
+    else sessionStorage.removeItem(RECOVERY_USER_KEY);
+  } catch {
+    // Non-fatal: the in-memory flag still carries the current tab.
+  }
+}
+
 export const useCloudStore = create<CloudStore>((set, get) => ({
   initialized: false,
+  passwordRecoveryFor: readStoredRecoveryUser(),
   status: isSupabaseConfigured() ? 'loading' : 'unavailable',
   session: null,
   workspaceId: '',
@@ -158,16 +234,74 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       });
     };
 
+    /*
+     * Subscribed BEFORE anything is awaited.
+     *
+     * PASSWORD_RECOVERY is a one-shot notification, scheduled by the URL
+     * detection that getSession() waits on. Registering afterwards put it
+     * behind getSession AND a workspace network round trip, so it could fire
+     * with nobody listening -- and then a recovery arrival is indistinguishable
+     * from an ordinary sign-in again, which is the whole thing this flag
+     * exists to prevent.
+     */
+    let bootstrapped = false;
+    const { data: subscription } = client.auth.onAuthStateChange((event, session) => {
+      // The event was previously discarded entirely, which is why a recovery
+      // link used to look like a sign-in.
+      if (event === 'PASSWORD_RECOVERY' && session) {
+        // Supabase has validated the link; record WHO it was validated for.
+        set({ passwordRecoveryFor: session.user.id });
+        storeRecoveryUser(session.user.id);
+      }
+      if (event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+        /*
+         * SIGNED_OUT: otherwise the authorization survives the session it
+         * belonged to and is inherited by whoever signs in next in this tab.
+         *
+         * USER_UPDATED: a recovery ends when the password is actually set, and
+         * that can happen in a DIFFERENT tab. auth-js broadcasts the recovery
+         * to every open tab, but the store and sessionStorage that record it
+         * are tab-local, so clearing only where updatePassword ran left the
+         * other tabs holding a spent grant -- able to change the password again
+         * with no new link. auth-js broadcasts this event after the update, so
+         * every tab that took the grant hears that it is over.
+         *
+         * Clearing on any other user update is deliberate too: a grant should
+         * not outlive a change to the account it was issued against.
+         */
+        set({ passwordRecoveryFor: '' });
+        storeRecoveryUser('');
+      }
+      // The explicit getSession() below owns the first sync; skipping until it
+      // has run avoids loading the workspace twice on every startup.
+      if (!bootstrapped) return;
+      void syncSessionState(session);
+    });
+
+    /*
+     * There is deliberately NO fallback that reads `type=recovery` off the URL.
+     *
+     * A previous revision added one, meaning to be robust about the event's
+     * timing. It was the opposite: the URL is supplied by whoever opened the
+     * page, so any signed-in customer visiting /reset-password?type=recovery
+     * would have marked their own live session recovery-authorized without
+     * Supabase validating anything -- reopening, one commit later, exactly the
+     * hole that gating on this flag was added to close. The same happens with
+     * an EXPIRED fragment, where auth-js keeps the existing session after
+     * validation fails.
+     *
+     * Only Supabase can attest that a recovery link was genuine, and it says
+     * so by emitting PASSWORD_RECOVERY. That is why the subscriber above is
+     * registered before anything is awaited: the answer to a missed
+     * notification is to be listening earlier, not to believe the URL instead.
+     */
     const { data, error } = await client.auth.getSession();
     if (error) {
       set({ initialized: true, status: 'signed-out', session: null, workspaceId: '', workspaceRole: 'Owner' });
     } else {
       await syncSessionState(data.session, true);
     }
-
-    const { data: subscription } = client.auth.onAuthStateChange((_event, session) => {
-      void syncSessionState(session);
-    });
+    bootstrapped = true;
 
     return () => subscription.subscription.unsubscribe();
   },
@@ -196,7 +330,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     });
 
     if (error) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: describeAuthError(error.message) };
     }
 
     return { ok: true, message: 'Magic link sent. Check your inbox to finish sign-in.' };
@@ -221,7 +355,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     });
 
     if (error) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: describeAuthError(error.message) };
     }
 
     return { ok: true, message: 'Signed in. Opening your workspace.' };
@@ -265,7 +399,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     });
 
     if (error) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: describeAuthError(error.message) };
     }
 
     return { ok: true, message: 'Check your email for a sign-in code.' };
@@ -290,7 +424,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     });
 
     if (error) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: describeAuthError(error.message) };
     }
 
     return { ok: true, message: 'Signed in.' };
@@ -310,7 +444,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     }
 
     const emailRedirectTo = currentAuthRedirectUrl();
-    const { error } = await client.auth.signUp({
+    const { data, error } = await client.auth.signUp({
       email: trimmedEmail,
       password,
       options: {
@@ -319,10 +453,95 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     });
 
     if (error) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: describeAuthError(error.message) };
     }
 
-    return { ok: true, message: 'Account created. Check your inbox if email confirmation is required.' };
+    if (data.session) {
+      return { ok: true, outcome: 'signed-in', message: 'Account created. Opening your workspace.' };
+    }
+
+    /*
+     * The obfuscated response for an address that is already registered: a user
+     * object with no identities on it. Supabase documents the obfuscation but
+     * not this shape, so treat a match as evidence and never as a guarantee --
+     * the message below is worded to hold either way, which is what keeps this
+     * honest if Supabase ever changes how it hides the fact.
+     */
+    const identities = data.user?.identities;
+    const existing = Array.isArray(identities) && identities.length === 0;
+
+    /*
+     * Both cases get the same sentence, on purpose.
+     *
+     * Supabase hides the existing-account case to stop an attacker probing
+     * addresses one at a time, and repeating the distinction here would hand
+     * back exactly what it withholds. So the copy is written to be true under
+     * either branch and to name the next step under both -- which is all the
+     * customer needed. The outcome above stays machine-readable for callers
+     * that must behave differently without saying anything different.
+     */
+    const message =
+      `Check ${trimmedEmail}. If that address is new to XBAR, a confirmation link is on its way and you ` +
+      `must open it before you can sign in. If it already has an account, nothing was sent -- sign in instead, ` +
+      `or use "Forgot password?".`;
+
+    return { ok: true, outcome: existing ? 'existing-account' : 'confirmation-required', message };
+  },
+  resendSignUpConfirmation: async (email) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      return { ok: false, message: 'Enter an email address first.' };
+    }
+
+    const { error } = await client.auth.resend({
+      type: 'signup',
+      email: trimmedEmail,
+      options: { emailRedirectTo: currentAuthRedirectUrl() },
+    });
+
+    if (error) {
+      return { ok: false, message: describeAuthError(error.message) };
+    }
+
+    // Resend is subject to the same anti-enumeration silence as signup, so this
+    // says what was asked for rather than what was delivered.
+    return { ok: true, message: `Requested another confirmation email for ${trimmedEmail}.` };
+  },
+  /*
+   * The half of "forgot password" that did not exist.
+   *
+   * `resetPasswordForEmail` sends the link, and because `detectSessionInUrl`
+   * is on, opening it signs the customer in -- so it LOOKED like recovery
+   * worked. Nothing anywhere in the app called `auth.updateUser`, so the
+   * password itself was never changed: the customer got one session out of the
+   * email and was locked out again as soon as it expired.
+   */
+  updatePassword: async (password) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+
+    if (password.length < 8) {
+      return { ok: false, message: 'Use at least 8 characters for the password.' };
+    }
+
+    const { error } = await client.auth.updateUser({ password });
+
+    if (error) {
+      return { ok: false, message: describeAuthError(error.message) };
+    }
+
+    // Only now is the recovery finished; clearing it earlier would release the
+    // screen while the password was still the old one.
+    set({ passwordRecoveryFor: '' });
+    storeRecoveryUser('');
+    return { ok: true, message: 'Password updated. You are signed in.' };
   },
   sendPasswordReset: async (email) => {
     const client = getSupabaseClient();
@@ -335,16 +554,34 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'Enter the email address for this workspace.' };
     }
 
-    const redirectTo = currentAuthRedirectUrl();
+    /*
+     * Deliberately NOT currentAuthRedirectUrl(): that returns the page the
+     * request was made from, so the link dropped the customer back on the
+     * login screen, already signed in, with no way to set a password. It has
+     * to return them to the screen that can.
+     */
+    const nativePublicOrigin = authCallbackOrigin();
+    const redirectTo = isNativeApp()
+      ? // Undefined when VITE_PUBLIC_APP_URL is unset, which tells Supabase to
+        // fall back to the project's own Site URL rather than to a dead scheme.
+        nativePublicOrigin
+        ? publicAppRouteUrl(passwordResetPath, nativePublicOrigin)
+        : undefined
+      : authRedirectUrl(passwordResetPath);
     const { error } = await client.auth.resetPasswordForEmail(trimmedEmail, {
       redirectTo,
     });
 
     if (error) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: describeAuthError(error.message) };
     }
 
-    return { ok: true, message: 'Password reset email sent.' };
+    // Supabase answers the same way for an address it has never seen, so the
+    // only honest claim is about the request, not about a delivery.
+    return {
+      ok: true,
+      message: `If ${trimmedEmail} has an XBAR account, a reset link is on its way. Check spam before asking again.`,
+    };
   },
   signInWithFacebook: async () => {
     const client = getSupabaseClient();
@@ -361,7 +598,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     });
 
     if (error) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: describeAuthError(error.message) };
     }
 
     return { ok: true, message: 'Facebook sign-in started.' };
@@ -379,7 +616,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     });
 
     if (error) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: describeAuthError(error.message) };
     }
 
     return { ok: true, message: 'Google sign-in started.' };
@@ -397,7 +634,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     });
 
     if (error) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: describeAuthError(error.message) };
     }
 
     return { ok: true, message: 'Apple sign-in started.' };
@@ -410,12 +647,14 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
 
     const { error } = await client.auth.signOut();
     if (error) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: describeAuthError(error.message) };
     }
 
     set({
       session: null,
       status: 'signed-out',
+      // Otherwise a later ordinary sign-in inherits a recovery that is over.
+      passwordRecoveryFor: '',
       workspaceId: '',
       workspaceRole: 'Owner',
       syncState: 'idle',
@@ -457,6 +696,8 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     set({
       session: null,
       status: 'signed-out',
+      // Otherwise a later ordinary sign-in inherits a recovery that is over.
+      passwordRecoveryFor: '',
       workspaceId: '',
       workspaceRole: 'Owner',
       syncState: 'idle',
