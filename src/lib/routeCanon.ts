@@ -72,9 +72,41 @@ export function usesHashRouting(): boolean {
  * Used for links that leave the app and come back -- currently the Supabase
  * password-recovery email, which has to return the customer to a screen that
  * can actually set a new password.
+ *
+ * `basePath` is a defaulted parameter for the same reason the OAuth provider
+ * list is: import.meta.env does not exist under the node test runner, so the
+ * GitHub Pages base ('/XBAR') would otherwise be unreachable from a test and
+ * the branch that needs it could not be proven.
  */
-export function appRouteUrl(path: string, origin?: string): string {
+function deploymentBase(): string {
+  // vite.config.ts serves the GitHub Pages build from '/XBAR/', so the shell
+  // is not at the host root there and a '/#/...' link would request a page
+  // that does not exist.
+  const base = routeEnv.BASE_URL ?? '/';
+  return base.endsWith('/') ? base.slice(0, -1) : base;
+}
+
+export function appRouteUrl(path: string, origin?: string, basePath: string = deploymentBase()): string {
   const base = origin ?? (typeof window !== 'undefined' ? window.location.origin : '');
   const route = path.startsWith('/') ? path : `/${path}`;
-  return usesHashRouting() ? `${base}/#${route}` : `${base}${appBasePath}${route}`;
+  return usesHashRouting() ? `${base}${basePath}/#${route}` : `${base}${appBasePath}${route}`;
+}
+
+/**
+ * A link that will be opened in a BROWSER against the public web deployment,
+ * rather than inside whatever build produced it.
+ *
+ * The native recovery email is the case. It is composed inside the store build
+ * -- which runs on the hash router -- but the customer opens it in the phone's
+ * browser, where the public site runs the browser router under /app. Reusing
+ * appRouteUrl() there would emit this build's shape and send them to a hash
+ * the deployed site ignores.
+ *
+ * The origin is passed in because VITE_PUBLIC_APP_URL is deliberately an
+ * ORIGIN with no path (scripts/build-mobile.mjs) -- a '/app' suffix on it once
+ * broke the verify links in api/sale-packets.js -- so the path belongs here.
+ */
+export function publicAppRouteUrl(path: string, origin: string): string {
+  const route = path.startsWith('/') ? path : `/${path}`;
+  return `${origin.replace(/\/+$/, '')}${appBasePath}${route}`;
 }

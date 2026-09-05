@@ -175,3 +175,19 @@ test('one rule decides which router shape a link is built for', () => {
     );
   }
 });
+
+test('the native recovery link targets the reset screen, not a bare origin', () => {
+  /*
+   * VITE_PUBLIC_APP_URL is deliberately an ORIGIN with no path -- a '/app'
+   * suffix on it once broke the verify links in api/sale-packets.js -- so
+   * emailing that origin sends a native customer to the marketing homepage,
+   * which is static HTML that never mounts the router. They would still have
+   * no way to set a password, and nothing would report a fault.
+   */
+  const reset = body(store, /sendPasswordReset: async[\s\S]*?\n {2}\},/, 'sendPasswordReset');
+  assert.match(
+    reset,
+    /publicAppRouteUrl\(passwordResetPath, nativePublicOrigin\)/,
+    'the native branch must build a path onto the public origin, not send the origin itself',
+  );
+});

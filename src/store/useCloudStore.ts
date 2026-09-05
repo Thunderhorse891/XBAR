@@ -6,7 +6,7 @@ import { isSupabaseConfigured } from '@/lib/platformConfig';
 import type { UserRole } from '@/types/xbar';
 import { authCallbackOrigin, isNativeApp } from '../lib/nativePlatform.js';
 import { describeAuthError } from '@/lib/authErrors';
-import { appRouteUrl, passwordResetPath } from '@/lib/routeCanon';
+import { appRouteUrl, passwordResetPath, publicAppRouteUrl } from '@/lib/routeCanon';
 
 type CloudActionResult = {
   ok: boolean;
@@ -460,7 +460,14 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
      * login screen, already signed in, with no way to set a password. It has
      * to return them to the screen that can.
      */
-    const redirectTo = isNativeApp() ? authCallbackOrigin() : appRouteUrl(passwordResetPath);
+    const nativePublicOrigin = authCallbackOrigin();
+    const redirectTo = isNativeApp()
+      ? // Undefined when VITE_PUBLIC_APP_URL is unset, which tells Supabase to
+        // fall back to the project's own Site URL rather than to a dead scheme.
+        nativePublicOrigin
+        ? publicAppRouteUrl(passwordResetPath, nativePublicOrigin)
+        : undefined
+      : appRouteUrl(passwordResetPath);
     const { error } = await client.auth.resetPasswordForEmail(trimmedEmail, {
       redirectTo,
     });
