@@ -285,6 +285,17 @@ test('a recovery grant is released when its session ends', () => {
    */
   const initialize = body(store, /initialize: async[\s\S]*?\n {2}\},/, 'initialize');
   assert.match(initialize, /event === 'SIGNED_OUT'/, 'SIGNED_OUT must release the recovery grant');
+  /*
+   * A recovery ends when the password is set, and that can happen in a
+   * different tab: auth-js broadcasts the grant to every open tab, but the
+   * store and sessionStorage recording it are tab-local. Clearing only where
+   * updatePassword ran left other tabs holding a spent grant.
+   */
+  assert.match(
+    initialize,
+    /event === 'USER_UPDATED'/,
+    'a completed update must release the grant in every tab, not only the acting one',
+  );
 });
 
 test('a validated recovery survives a reload', () => {

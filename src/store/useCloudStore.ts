@@ -253,9 +253,22 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
         set({ passwordRecoveryFor: session.user.id });
         storeRecoveryUser(session.user.id);
       }
-      if (event === 'SIGNED_OUT') {
-        // Otherwise the authorization survives the session it belonged to and
-        // is inherited by whoever signs in next in this tab.
+      if (event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+        /*
+         * SIGNED_OUT: otherwise the authorization survives the session it
+         * belonged to and is inherited by whoever signs in next in this tab.
+         *
+         * USER_UPDATED: a recovery ends when the password is actually set, and
+         * that can happen in a DIFFERENT tab. auth-js broadcasts the recovery
+         * to every open tab, but the store and sessionStorage that record it
+         * are tab-local, so clearing only where updatePassword ran left the
+         * other tabs holding a spent grant -- able to change the password again
+         * with no new link. auth-js broadcasts this event after the update, so
+         * every tab that took the grant hears that it is over.
+         *
+         * Clearing on any other user update is deliberate too: a grant should
+         * not outlive a change to the account it was issued against.
+         */
         set({ passwordRecoveryFor: '' });
         storeRecoveryUser('');
       }
