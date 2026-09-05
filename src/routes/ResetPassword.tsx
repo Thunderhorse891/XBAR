@@ -38,7 +38,21 @@ export default function ResetPassword() {
   // paint. Treating "no session yet" as "link expired" would reject people
   // holding a perfectly good link.
   const settling = status === 'loading';
-  const canSubmit = Boolean(session) && supabaseReady;
+  /*
+   * A session is NOT proof that a valid reset link was followed.
+   *
+   * Gating on `session` alone meant that anyone already signed in who opened
+   * this screen -- following an expired or reused recovery link, or simply
+   * navigating here -- got a working form that changed the password of
+   * whatever account happened to be signed in. A dead link would silently
+   * succeed against the wrong premise instead of being refused.
+   *
+   * So the recovery itself has to be established: the PASSWORD_RECOVERY event,
+   * or `type=recovery` on the callback URL. Someone who wants to change a
+   * password they already know does it from Settings, which is a different
+   * thing from proving possession of an emailed link.
+   */
+  const canSubmit = Boolean(session) && supabaseReady && recoveryPending;
 
   useEffect(() => {
     if (!done) return;
@@ -86,11 +100,7 @@ export default function ResetPassword() {
           <div className="clean-auth-card__header">
             <p>Account recovery</p>
             <h1>New Password</h1>
-            <span>
-              {recoveryPending
-                ? 'Choose a new password for your workspace. Until you do, the old one still applies.'
-                : 'Choose a new password for your workspace.'}
-            </span>
+            <span>Choose a new password for your workspace. Until you do, the old one still applies.</span>
           </div>
 
           {!supabaseReady && (
@@ -99,10 +109,11 @@ export default function ResetPassword() {
             </p>
           )}
 
-          {supabaseReady && !session && !settling && (
+          {supabaseReady && !canSubmit && !settling && (
             <p className="clean-auth-message clean-auth-message--error" role="alert">
-              This reset link is no longer valid. Recovery links expire, and each new one cancels the last. Request
-              another from the sign-in screen.
+              This page needs a current password-reset link. Recovery links expire, and each new one cancels the last,
+              so request another from the sign-in screen. If you already know your password, change it from Settings
+              instead.
             </p>
           )}
 

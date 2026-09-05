@@ -220,3 +220,41 @@ test('an auth email link never claims the fragment Supabase needs', () => {
     'the hash branch puts the route in the fragment, where the session also lands',
   );
 });
+
+test('a session alone does not unlock the password form', () => {
+  /*
+   * Gating on `session` meant anyone already signed in who reached this screen
+   * -- via an expired or reused recovery link, or by navigating -- got a
+   * working form that changed the password of whatever account was signed in.
+   * A dead link would have succeeded quietly against the wrong premise.
+   */
+  const screen = read('src/routes/ResetPassword.tsx');
+  assert.match(
+    screen,
+    /const canSubmit = Boolean\(session\) && supabaseReady && recoveryPending;/,
+    'the form must require an established recovery, not merely a session',
+  );
+});
+
+test('the recovery subscriber is registered before anything is awaited', () => {
+  /*
+   * PASSWORD_RECOVERY is one-shot and is scheduled by the URL detection that
+   * getSession() waits on. Subscribing after it -- and after a workspace
+   * network round trip -- lets the notification fire with nobody listening.
+   */
+  const initialize = body(store, /initialize: async[\s\S]*?\n {2}\},/, 'initialize');
+  const subscribeAt = initialize.indexOf('onAuthStateChange');
+  const getSessionAt = initialize.indexOf('await client.auth.getSession()');
+  assert.ok(subscribeAt > -1 && getSessionAt > -1, 'could not locate both calls');
+  assert.ok(
+    subscribeAt < getSessionAt,
+    'onAuthStateChange must be registered before getSession, or the one-shot recovery event can be missed',
+  );
+});
+
+test('recovery is also read from the callback URL, not only from the event', () => {
+  // An event has a timing window; the URL is simply there. Supabase marks the
+  // callback with type=recovery, so this does not depend on subscribing at
+  // exactly the right moment.
+  assert.match(store, /=== 'recovery'/, 'the callback URL must be inspected for a recovery marker');
+});

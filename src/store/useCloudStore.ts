@@ -190,19 +190,51 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       });
     };
 
+    /*
+     * Subscribed BEFORE anything is awaited.
+     *
+     * PASSWORD_RECOVERY is a one-shot notification, scheduled by the URL
+     * detection that getSession() waits on. Registering afterwards put it
+     * behind getSession AND a workspace network round trip, so it could fire
+     * with nobody listening -- and then a recovery arrival is indistinguishable
+     * from an ordinary sign-in again, which is the whole thing this flag
+     * exists to prevent.
+     */
+    let bootstrapped = false;
+    const { data: subscription } = client.auth.onAuthStateChange((event, session) => {
+      // The event was previously discarded entirely, which is why a recovery
+      // link used to look like a sign-in.
+      if (event === 'PASSWORD_RECOVERY') set({ passwordRecoveryPending: true });
+      // The explicit getSession() below owns the first sync; skipping until it
+      // has run avoids loading the workspace twice on every startup.
+      if (!bootstrapped) return;
+      void syncSessionState(session);
+    });
+
+    /*
+     * A second, independent read of the same fact.
+     *
+     * The event is a notification with a timing window; the URL is a
+     * statement that is simply there. Supabase marks a recovery callback with
+     * `type=recovery`, in the fragment under the implicit flow and in the
+     * query under PKCE, so checking both means the screen does not depend on
+     * having been subscribed at exactly the right moment.
+     */
+    if (typeof window !== 'undefined') {
+      const fragment = new URLSearchParams(window.location.hash.replace(/^#\/?/, ''));
+      const query = new URLSearchParams(window.location.search);
+      if (fragment.get('type') === 'recovery' || query.get('type') === 'recovery') {
+        set({ passwordRecoveryPending: true });
+      }
+    }
+
     const { data, error } = await client.auth.getSession();
     if (error) {
       set({ initialized: true, status: 'signed-out', session: null, workspaceId: '', workspaceRole: 'Owner' });
     } else {
       await syncSessionState(data.session, true);
     }
-
-    const { data: subscription } = client.auth.onAuthStateChange((event, session) => {
-      // The event was previously discarded, which is why a recovery link was
-      // indistinguishable from a sign-in.
-      if (event === 'PASSWORD_RECOVERY') set({ passwordRecoveryPending: true });
-      void syncSessionState(session);
-    });
+    bootstrapped = true;
 
     return () => subscription.subscription.unsubscribe();
   },
