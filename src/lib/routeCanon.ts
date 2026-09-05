@@ -67,11 +67,20 @@ export function usesHashRouting(): boolean {
 }
 
 /**
- * An absolute URL to an in-app route, correct under either routing shape.
+ * Where a Supabase auth email should return the customer.
  *
- * Used for links that leave the app and come back -- currently the Supabase
- * password-recovery email, which has to return the customer to a screen that
- * can actually set a new password.
+ * Under the browser router this is the route itself, and Supabase appends its
+ * own fragment after it harmlessly.
+ *
+ * Under the HASH router it deliberately is NOT the route. The client runs on
+ * Supabase's default implicit flow, which returns the session in the URL
+ * fragment (`#access_token=...`), and on a hash router the route lives in that
+ * same fragment. A link ending `#/reset-password` would come back as
+ * `#/reset-password#access_token=...`: the browser treats everything after the
+ * FIRST '#' as the fragment, so Supabase cannot find its token and the router
+ * cannot match the route -- both halves lose, silently. So the link only has to
+ * load the app shell; PASSWORD_RECOVERY then carries the customer to the reset
+ * screen from inside the app, which is where that navigation belongs anyway.
  *
  * `basePath` is a defaulted parameter for the same reason the OAuth provider
  * list is: import.meta.env does not exist under the node test runner, so the
@@ -86,10 +95,10 @@ function deploymentBase(): string {
   return base.endsWith('/') ? base.slice(0, -1) : base;
 }
 
-export function appRouteUrl(path: string, origin?: string, basePath: string = deploymentBase()): string {
+export function authRedirectUrl(path: string, origin?: string, basePath: string = deploymentBase()): string {
   const base = origin ?? (typeof window !== 'undefined' ? window.location.origin : '');
   const route = path.startsWith('/') ? path : `/${path}`;
-  return usesHashRouting() ? `${base}${basePath}/#${route}` : `${base}${appBasePath}${route}`;
+  return usesHashRouting() ? `${base}${basePath}/` : `${base}${appBasePath}${route}`;
 }
 
 /**

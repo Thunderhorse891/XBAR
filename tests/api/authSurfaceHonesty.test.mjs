@@ -145,7 +145,7 @@ test('the recovery email points at the screen that can finish the job', () => {
     false,
     'the reset link returns to the requesting page, which cannot set a password',
   );
-  assert.match(reset, /appRouteUrl\(passwordResetPath\)/, 'the reset link must target the reset screen');
+  assert.match(reset, /authRedirectUrl\(passwordResetPath\)/, 'the reset link must target the reset screen');
 });
 
 test('the reset screen is routed and reachable without an existing session', () => {
@@ -189,5 +189,34 @@ test('the native recovery link targets the reset screen, not a bare origin', () 
     reset,
     /publicAppRouteUrl\(passwordResetPath, nativePublicOrigin\)/,
     'the native branch must build a path onto the public origin, not send the origin itself',
+  );
+});
+
+test('a recovery arrival is carried to the reset screen by the app, not the URL', () => {
+  /*
+   * The link cannot always name the screen: on the hash router the route and
+   * Supabase's implicit-flow session would have to share one fragment. So the
+   * app has to make that move itself once PASSWORD_RECOVERY fires -- which is
+   * also the more robust place for it, since it depends on the auth event
+   * rather than on a URL composed earlier by a possibly different build.
+   */
+  const app = read('src/App.tsx');
+  assert.match(app, /function PasswordRecoveryRedirect/, 'the recovery navigation must exist');
+  assert.match(app, /<PasswordRecoveryRedirect \/>/, 'it must be rendered inside the router');
+  assert.match(
+    app,
+    /navigate\(passwordResetPath, \{ replace: true \}\)/,
+    'it must send the customer to the reset screen',
+  );
+});
+
+test('an auth email link never claims the fragment Supabase needs', () => {
+  const routes = read('src/lib/routeCanon.ts');
+  const fn = body(routes, /export function authRedirectUrl[\s\S]*?\n\}/, 'authRedirectUrl');
+  // The hash branch must return a shell URL, not a routed one.
+  assert.equal(
+    /\/#\$\{route\}/.test(fn),
+    false,
+    'the hash branch puts the route in the fragment, where the session also lands',
   );
 });

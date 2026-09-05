@@ -1,5 +1,15 @@
 import { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter, HashRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
+import {
+  BrowserRouter,
+  HashRouter,
+  Navigate,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+} from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import { RequireCloudAuth } from './components/RequireCloudAuth';
 import { RequireSharedListings } from './components/RequireSubscriptionFeature';
@@ -152,6 +162,30 @@ function FollowUpsRedirect() {
   return <Navigate to={buyerFollowUpPath(leadId ?? undefined)} replace />;
 }
 
+/*
+ * Carries a password-recovery arrival to the reset screen.
+ *
+ * The recovery link cannot always name that screen itself: on the hash router
+ * the route and Supabase's implicit-flow session would have to share one URL
+ * fragment, so the email only loads the shell. This is also the more robust
+ * place for the decision -- it depends on the auth event rather than on a URL
+ * composed days earlier by a different build, which is exactly what went wrong
+ * twice in getting here.
+ */
+function PasswordRecoveryRedirect() {
+  const pending = useCloudStore((state) => state.passwordRecoveryPending);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (pending && location.pathname !== passwordResetPath) {
+      navigate(passwordResetPath, { replace: true });
+    }
+  }, [pending, location.pathname, navigate]);
+
+  return null;
+}
+
 export default function App() {
   const hashRouting = usesHashRouting();
   const Router = hashRouting ? HashRouter : BrowserRouter;
@@ -163,6 +197,7 @@ export default function App() {
         <InteractionShell />
         <SubscriptionEnforcement />
         <RouteTelemetry />
+        <PasswordRecoveryRedirect />
         {/* Renders nothing unless the viewer is an authorized owner. */}
         <OwnerTestModeBar />
         <Suspense

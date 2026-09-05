@@ -6,7 +6,7 @@ import { isSupabaseConfigured } from '@/lib/platformConfig';
 import type { UserRole } from '@/types/xbar';
 import { authCallbackOrigin, isNativeApp } from '../lib/nativePlatform.js';
 import { describeAuthError } from '@/lib/authErrors';
-import { appRouteUrl, passwordResetPath, publicAppRouteUrl } from '@/lib/routeCanon';
+import { authRedirectUrl, passwordResetPath, publicAppRouteUrl } from '@/lib/routeCanon';
 
 type CloudActionResult = {
   ok: boolean;
@@ -467,7 +467,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
         nativePublicOrigin
         ? publicAppRouteUrl(passwordResetPath, nativePublicOrigin)
         : undefined
-      : appRouteUrl(passwordResetPath);
+      : authRedirectUrl(passwordResetPath);
     const { error } = await client.auth.resetPasswordForEmail(trimmedEmail, {
       redirectTo,
     });
