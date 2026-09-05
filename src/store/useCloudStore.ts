@@ -6,6 +6,7 @@ import { isSupabaseConfigured } from '@/lib/platformConfig';
 import type { UserRole } from '@/types/xbar';
 import { authCallbackOrigin, isNativeApp } from '../lib/nativePlatform.js';
 import { describeAuthError } from '@/lib/authErrors';
+import { appRouteUrl, passwordResetPath } from '@/lib/routeCanon';
 
 type CloudActionResult = {
   ok: boolean;
@@ -95,6 +96,15 @@ type CloudStore = {
   verifyEmailCode: (email: string, code: string) => Promise<CloudActionResult>;
   signUpWithPassword: (email: string, password: string) => Promise<CloudSignUpResult>;
   resendSignUpConfirmation: (email: string) => Promise<CloudActionResult>;
+  updatePassword: (password: string) => Promise<CloudActionResult>;
+  /*
+   * True from the moment a recovery link establishes a session until a new
+   * password is actually set. `detectSessionInUrl` signs the customer in the
+   * instant they open that link, so without this the app cannot tell them
+   * apart from an ordinary sign-in -- and it used to route them straight into
+   * the workspace, password unchanged, with nothing left to click.
+   */
+  passwordRecoveryPending: boolean;
   sendPasswordReset: (email: string) => Promise<CloudActionResult>;
   signInWithFacebook: () => Promise<CloudActionResult>;
   signInWithGoogle: () => Promise<CloudActionResult>;
@@ -134,6 +144,7 @@ function currentAuthRedirectUrl() {
 
 export const useCloudStore = create<CloudStore>((set, get) => ({
   initialized: false,
+  passwordRecoveryPending: false,
   status: isSupabaseConfigured() ? 'loading' : 'unavailable',
   session: null,
   workspaceId: '',
@@ -186,7 +197,10 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       await syncSessionState(data.session, true);
     }
 
-    const { data: subscription } = client.auth.onAuthStateChange((_event, session) => {
+    const { data: subscription } = client.auth.onAuthStateChange((event, session) => {
+      // The event was previously discarded, which is why a recovery link was
+      // indistinguishable from a sign-in.
+      if (event === 'PASSWORD_RECOVERY') set({ passwordRecoveryPending: true });
       void syncSessionState(session);
     });
 
@@ -399,6 +413,36 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     // says what was asked for rather than what was delivered.
     return { ok: true, message: `Requested another confirmation email for ${trimmedEmail}.` };
   },
+  /*
+   * The half of "forgot password" that did not exist.
+   *
+   * `resetPasswordForEmail` sends the link, and because `detectSessionInUrl`
+   * is on, opening it signs the customer in -- so it LOOKED like recovery
+   * worked. Nothing anywhere in the app called `auth.updateUser`, so the
+   * password itself was never changed: the customer got one session out of the
+   * email and was locked out again as soon as it expired.
+   */
+  updatePassword: async (password) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { ok: false, message: 'Supabase is not configured for this build.' };
+    }
+
+    if (password.length < 8) {
+      return { ok: false, message: 'Use at least 8 characters for the password.' };
+    }
+
+    const { error } = await client.auth.updateUser({ password });
+
+    if (error) {
+      return { ok: false, message: describeAuthError(error.message) };
+    }
+
+    // Only now is the recovery finished; clearing it earlier would release the
+    // screen while the password was still the old one.
+    set({ passwordRecoveryPending: false });
+    return { ok: true, message: 'Password updated. You are signed in.' };
+  },
   sendPasswordReset: async (email) => {
     const client = getSupabaseClient();
     if (!client) {
@@ -410,7 +454,13 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'Enter the email address for this workspace.' };
     }
 
-    const redirectTo = currentAuthRedirectUrl();
+    /*
+     * Deliberately NOT currentAuthRedirectUrl(): that returns the page the
+     * request was made from, so the link dropped the customer back on the
+     * login screen, already signed in, with no way to set a password. It has
+     * to return them to the screen that can.
+     */
+    const redirectTo = isNativeApp() ? authCallbackOrigin() : appRouteUrl(passwordResetPath);
     const { error } = await client.auth.resetPasswordForEmail(trimmedEmail, {
       redirectTo,
     });
@@ -496,6 +546,8 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     set({
       session: null,
       status: 'signed-out',
+      // Otherwise a later ordinary sign-in inherits a recovery that is over.
+      passwordRecoveryPending: false,
       workspaceId: '',
       workspaceRole: 'Owner',
       syncState: 'idle',
@@ -537,6 +589,8 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     set({
       session: null,
       status: 'signed-out',
+      // Otherwise a later ordinary sign-in inherits a recovery that is over.
+      passwordRecoveryPending: false,
       workspaceId: '',
       workspaceRole: 'Owner',
       syncState: 'idle',

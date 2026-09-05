@@ -10,7 +10,7 @@ import { OwnerTestModeBar } from './components/OwnerTestModeBar';
 import { Toaster } from './components/ui/sonner';
 import { billingPath } from './lib/billingRoutes';
 import { buyerFollowUpPath } from './lib/buyerRoutes';
-import { appBasePath } from './lib/routeCanon';
+import { appBasePath, passwordResetPath, usesHashRouting } from './lib/routeCanon';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
 import { useCloudStore } from './store/useCloudStore';
 import './routes/operationsHierarchy.css';
@@ -24,6 +24,7 @@ import './styles/xbarSaas.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const GettingStarted = lazy(() => import('./routes/GettingStarted'));
+const ResetPassword = lazy(() => import('./routes/ResetPassword'));
 const BuyerDealRoom = lazy(() => import('./routes/BuyerDealRoom'));
 const SalePacketStudio = lazy(() => import('./routes/SalePacketStudio'));
 const Reports = lazy(() => import('./routes/Reports'));
@@ -97,11 +98,6 @@ function LegacyHorseRedirect() {
   return <Navigate to={id ? `/horses/${id}` : '/horses'} replace />;
 }
 
-function useHashRouting() {
-  if (typeof window === 'undefined' || import.meta.env.MODE === 'e2e') return false;
-  return import.meta.env.VITE_ROUTER_MODE === 'hash' || window.location.hostname.endsWith('.github.io');
-}
-
 function routeTitle(path: string) {
   if (path.startsWith('/profiles/')) return 'XBAR | Listings';
   if (path.startsWith('/horses/')) return 'XBAR | Horse';
@@ -157,7 +153,7 @@ function FollowUpsRedirect() {
 }
 
 export default function App() {
-  const hashRouting = useHashRouting();
+  const hashRouting = usesHashRouting();
   const Router = hashRouting ? HashRouter : BrowserRouter;
 
   return (
@@ -182,6 +178,7 @@ export default function App() {
             <Route path="/verify" element={<VerifyPacket />} />
             <Route path="/verify/:packetId" element={<VerifyPacket />} />
             <Route path="/login" element={<Login />} />
+            <Route path={passwordResetPath} element={<ResetPassword />} />
             <Route path="/subscribe" element={<Navigate to={billingPath} replace />} />
             <Route
               path="/setup"

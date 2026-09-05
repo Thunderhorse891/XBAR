@@ -114,3 +114,64 @@ test('no auth path claims an email was delivered', () => {
     'sendPasswordReset claims a delivery; Supabase answers the same for an unknown address',
   );
 });
+
+test('a password reset can actually be completed', () => {
+  /*
+   * The half that did not exist. `resetPasswordForEmail` sent the mail and,
+   * because the Supabase client runs with `detectSessionInUrl`, opening the
+   * link signed the customer in -- so the flow looked finished while the
+   * password was untouched. Nothing in src/ called `auth.updateUser`, and the
+   * borrowed session expires, so the customer was locked out again having been
+   * told the reset worked.
+   */
+  assert.match(
+    store,
+    /client\.auth\.updateUser\(\{ password \}\)/,
+    'nothing sets a new password; a reset that only sends mail cannot complete',
+  );
+  assert.match(
+    store,
+    /event === 'PASSWORD_RECOVERY'/,
+    'the recovery event must be distinguished from an ordinary sign-in',
+  );
+});
+
+test('the recovery email points at the screen that can finish the job', () => {
+  const reset = body(store, /sendPasswordReset: async[\s\S]*?\n {2}\},/, 'sendPasswordReset');
+  // currentAuthRedirectUrl() returns the page the request came FROM, so the
+  // link used to land back on the login form with nothing left to do.
+  assert.equal(
+    /redirectTo = currentAuthRedirectUrl\(\)/.test(reset),
+    false,
+    'the reset link returns to the requesting page, which cannot set a password',
+  );
+  assert.match(reset, /appRouteUrl\(passwordResetPath\)/, 'the reset link must target the reset screen');
+});
+
+test('the reset screen is routed and reachable without an existing session', () => {
+  const app = read('src/App.tsx');
+  assert.match(app, /path=\{passwordResetPath\}/, 'the reset route must be registered');
+  // It must NOT sit behind RequireCloudAuth: the session arrives in the link
+  // itself, and a guard would bounce the arrival to /login before it settles.
+  const route = app.match(/<Route path=\{passwordResetPath\}[\s\S]{0,200}?\/>/);
+  assert.ok(route, 'could not read the reset route');
+  assert.equal(
+    /RequireCloudAuth/.test(route[0]),
+    false,
+    'the reset route must not be auth-guarded; the recovery link carries the session',
+  );
+});
+
+test('one rule decides which router shape a link is built for', () => {
+  // App.tsx and main.tsx each had their own copy of this before, and a third
+  // for the recovery email is how copies start to disagree.
+  for (const file of ['src/App.tsx', 'src/main.tsx']) {
+    const source = read(file);
+    assert.match(source, /usesHashRouting/, `${file} must use the shared routing rule`);
+    assert.equal(
+      /VITE_ROUTER_MODE/.test(source),
+      false,
+      `${file} re-derives the routing mode instead of calling the shared rule`,
+    );
+  }
+});
