@@ -231,8 +231,13 @@ test('a session alone does not unlock the password form', () => {
   const screen = read('src/routes/ResetPassword.tsx');
   assert.match(
     screen,
-    /const canSubmit = Boolean\(session\) && supabaseReady && recoveryPending;/,
+    /const canSubmit = supabaseReady && recoveryPending;/,
     'the form must require an established recovery, not merely a session',
+  );
+  assert.match(
+    screen,
+    /hasValidatedPasswordRecovery/,
+    'the gate must compare the grant against the current session, not read a bare flag',
   );
 });
 
@@ -269,4 +274,23 @@ test('recovery is never inferred from the URL, which the visitor controls', () =
     'the recovery flag must not be derived from the URL; it is attacker-supplied',
   );
   assert.match(code, /event === 'PASSWORD_RECOVERY'/, 'only the validated Supabase event may set it');
+});
+
+test('a recovery grant is released when its session ends', () => {
+  /*
+   * The explicit signOut action only clears the tab that ran it. A token
+   * expiring, or a sign-out in another tab, arrives here as SIGNED_OUT -- and
+   * without this the grant outlived its session and was inherited by whoever
+   * signed in next.
+   */
+  const initialize = body(store, /initialize: async[\s\S]*?\n {2}\},/, 'initialize');
+  assert.match(initialize, /event === 'SIGNED_OUT'/, 'SIGNED_OUT must release the recovery grant');
+});
+
+test('a validated recovery survives a reload', () => {
+  // auth-js clears the callback fragment once it has validated the link, so a
+  // refresh arrives with a good session and no recovery event. Held only in
+  // memory, the grant vanished and a valid link was reported as expired.
+  assert.match(store, /sessionStorage/, 'the grant must outlive a page reload');
+  assert.match(store, /RECOVERY_USER_KEY/, 'the stored grant must be a user id, never a token');
 });

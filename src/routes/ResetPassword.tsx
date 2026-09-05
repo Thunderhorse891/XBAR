@@ -2,7 +2,7 @@ import { type FormEvent, useEffect, useId, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { XbarMark } from '@/components/BrandMark';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
-import { useCloudStore } from '@/store/useCloudStore';
+import { hasValidatedPasswordRecovery, useCloudStore } from '@/store/useCloudStore';
 import { useUiStore } from '@/store/useUiStore';
 import './cleanEntryExperience.css';
 
@@ -22,9 +22,8 @@ export default function ResetPassword() {
   const confirmId = useId();
   const pushToast = useUiStore((state) => state.pushToast);
   const updatePassword = useCloudStore((state) => state.updatePassword);
-  const session = useCloudStore((state) => state.session);
   const status = useCloudStore((state) => state.status);
-  const recoveryPending = useCloudStore((state) => state.passwordRecoveryPending);
+  const recoveryPending = useCloudStore(hasValidatedPasswordRecovery);
 
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -58,7 +57,7 @@ export default function ResetPassword() {
    * current password -- not this screen quietly accepting a live session as
    * proof of an emailed link.
    */
-  const canSubmit = Boolean(session) && supabaseReady && recoveryPending;
+  const canSubmit = supabaseReady && recoveryPending;
 
   useEffect(() => {
     if (!done) return;

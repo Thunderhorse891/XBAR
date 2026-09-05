@@ -22,7 +22,7 @@ import { billingPath } from './lib/billingRoutes';
 import { buyerFollowUpPath } from './lib/buyerRoutes';
 import { appBasePath, passwordResetPath, usesHashRouting } from './lib/routeCanon';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
-import { useCloudStore } from './store/useCloudStore';
+import { hasValidatedPasswordRecovery, useCloudStore } from './store/useCloudStore';
 import './routes/operationsHierarchy.css';
 import './routes/interactionSystem.css';
 import './routes/xbarCommandSystem.css';
@@ -173,7 +173,7 @@ function FollowUpsRedirect() {
  * twice in getting here.
  */
 function PasswordRecoveryRedirect() {
-  const pending = useCloudStore((state) => state.passwordRecoveryPending);
+  const pending = useCloudStore(hasValidatedPasswordRecovery);
   const location = useLocation();
   const navigate = useNavigate();
 

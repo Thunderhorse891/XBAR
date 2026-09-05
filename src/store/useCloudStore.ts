@@ -6,6 +6,9 @@ import { isSupabaseConfigured } from '@/lib/platformConfig';
 import type { UserRole } from '@/types/xbar';
 import { authCallbackOrigin, isNativeApp } from '../lib/nativePlatform.js';
 import { describeAuthError } from '@/lib/authErrors';
+import { hasValidatedPasswordRecovery } from '@/lib/passwordRecovery';
+
+export { hasValidatedPasswordRecovery };
 import { authRedirectUrl, passwordResetPath, publicAppRouteUrl } from '@/lib/routeCanon';
 
 type CloudActionResult = {
@@ -98,13 +101,18 @@ type CloudStore = {
   resendSignUpConfirmation: (email: string) => Promise<CloudActionResult>;
   updatePassword: (password: string) => Promise<CloudActionResult>;
   /*
-   * True from the moment a recovery link establishes a session until a new
-   * password is actually set. `detectSessionInUrl` signs the customer in the
-   * instant they open that link, so without this the app cannot tell them
-   * apart from an ordinary sign-in -- and it used to route them straight into
-   * the workspace, password unchanged, with nothing left to click.
+   * The user id Supabase validated a recovery link FOR, or '' for none.
+   *
+   * A bare boolean was wrong: it said a recovery was in progress without
+   * saying whose, so it outlived the session it was granted for. If that
+   * session ended -- an expired token, a sign-out in another tab -- the flag
+   * stayed set, and the next ordinary sign-in in this tab inherited it and
+   * could change THAT account's password with no recovery ever validated.
+   *
+   * Carrying the id makes the mismatch unrepresentable: authorization is only
+   * ever compared against the session actually holding it.
    */
-  passwordRecoveryPending: boolean;
+  passwordRecoveryFor: string;
   sendPasswordReset: (email: string) => Promise<CloudActionResult>;
   signInWithFacebook: () => Promise<CloudActionResult>;
   signInWithGoogle: () => Promise<CloudActionResult>;
@@ -142,9 +150,45 @@ function currentAuthRedirectUrl() {
     : undefined;
 }
 
+/*
+ * A validated recovery has to survive a page refresh.
+ *
+ * auth-js clears the callback fragment once it has validated the link and
+ * persists the resulting session, so a reload arrives with a perfectly good
+ * recovery session and only an INITIAL_SESSION event. Held in memory alone,
+ * the authorization vanished there and the customer was told their valid link
+ * had expired.
+ *
+ * sessionStorage rather than localStorage: this is a one-time flow, and it
+ * should not outlive the tab. What is stored is the user id, never a token, so
+ * it grants nothing on its own -- it is only ever compared against the session
+ * Supabase itself established, and a mismatch authorizes nothing.
+ */
+const RECOVERY_USER_KEY = 'xbar-password-recovery-for';
+
+function readStoredRecoveryUser(): string {
+  try {
+    return typeof sessionStorage === 'undefined' ? '' : (sessionStorage.getItem(RECOVERY_USER_KEY) ?? '');
+  } catch {
+    // Private modes and blocked site data throw on access rather than return
+    // null; losing the marker costs a re-request, so it must never throw here.
+    return '';
+  }
+}
+
+function storeRecoveryUser(userId: string) {
+  try {
+    if (typeof sessionStorage === 'undefined') return;
+    if (userId) sessionStorage.setItem(RECOVERY_USER_KEY, userId);
+    else sessionStorage.removeItem(RECOVERY_USER_KEY);
+  } catch {
+    // Non-fatal: the in-memory flag still carries the current tab.
+  }
+}
+
 export const useCloudStore = create<CloudStore>((set, get) => ({
   initialized: false,
-  passwordRecoveryPending: false,
+  passwordRecoveryFor: readStoredRecoveryUser(),
   status: isSupabaseConfigured() ? 'loading' : 'unavailable',
   session: null,
   workspaceId: '',
@@ -204,7 +248,17 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     const { data: subscription } = client.auth.onAuthStateChange((event, session) => {
       // The event was previously discarded entirely, which is why a recovery
       // link used to look like a sign-in.
-      if (event === 'PASSWORD_RECOVERY') set({ passwordRecoveryPending: true });
+      if (event === 'PASSWORD_RECOVERY' && session) {
+        // Supabase has validated the link; record WHO it was validated for.
+        set({ passwordRecoveryFor: session.user.id });
+        storeRecoveryUser(session.user.id);
+      }
+      if (event === 'SIGNED_OUT') {
+        // Otherwise the authorization survives the session it belonged to and
+        // is inherited by whoever signs in next in this tab.
+        set({ passwordRecoveryFor: '' });
+        storeRecoveryUser('');
+      }
       // The explicit getSession() below owns the first sync; skipping until it
       // has run avoids loading the workspace twice on every startup.
       if (!bootstrapped) return;
@@ -472,7 +526,8 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
 
     // Only now is the recovery finished; clearing it earlier would release the
     // screen while the password was still the old one.
-    set({ passwordRecoveryPending: false });
+    set({ passwordRecoveryFor: '' });
+    storeRecoveryUser('');
     return { ok: true, message: 'Password updated. You are signed in.' };
   },
   sendPasswordReset: async (email) => {
@@ -586,7 +641,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       session: null,
       status: 'signed-out',
       // Otherwise a later ordinary sign-in inherits a recovery that is over.
-      passwordRecoveryPending: false,
+      passwordRecoveryFor: '',
       workspaceId: '',
       workspaceRole: 'Owner',
       syncState: 'idle',
@@ -629,7 +684,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       session: null,
       status: 'signed-out',
       // Otherwise a later ordinary sign-in inherits a recovery that is over.
-      passwordRecoveryPending: false,
+      passwordRecoveryFor: '',
       workspaceId: '',
       workspaceRole: 'Owner',
       syncState: 'idle',
