@@ -47,10 +47,16 @@ export default function ResetPassword() {
    * whatever account happened to be signed in. A dead link would silently
    * succeed against the wrong premise instead of being refused.
    *
-   * So the recovery itself has to be established: the PASSWORD_RECOVERY event,
-   * or `type=recovery` on the callback URL. Someone who wants to change a
-   * password they already know does it from Settings, which is a different
-   * thing from proving possession of an emailed link.
+   * So the recovery itself has to be established, and only Supabase can attest
+   * to that -- it does so by emitting PASSWORD_RECOVERY. Reading the URL for a
+   * `type=recovery` marker instead would be forgeable by whoever opened the
+   * page, which is the same hole in a new coat.
+   *
+   * Note this app has no signed-in "change my password" screen at all, so this
+   * refusal is a genuine dead end for someone who merely wants one. That is a
+   * real gap, but the answer is a Settings capability that verifies the
+   * current password -- not this screen quietly accepting a live session as
+   * proof of an emailed link.
    */
   const canSubmit = Boolean(session) && supabaseReady && recoveryPending;
 
@@ -112,8 +118,7 @@ export default function ResetPassword() {
           {supabaseReady && !canSubmit && !settling && (
             <p className="clean-auth-message clean-auth-message--error" role="alert">
               This page needs a current password-reset link. Recovery links expire, and each new one cancels the last,
-              so request another from the sign-in screen. If you already know your password, change it from Settings
-              instead.
+              so request another from the sign-in screen.
             </p>
           )}
 

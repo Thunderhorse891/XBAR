@@ -252,9 +252,21 @@ test('the recovery subscriber is registered before anything is awaited', () => {
   );
 });
 
-test('recovery is also read from the callback URL, not only from the event', () => {
-  // An event has a timing window; the URL is simply there. Supabase marks the
-  // callback with type=recovery, so this does not depend on subscribing at
-  // exactly the right moment.
-  assert.match(store, /=== 'recovery'/, 'the callback URL must be inspected for a recovery marker');
+test('recovery is never inferred from the URL, which the visitor controls', () => {
+  /*
+   * A previous revision read `type=recovery` off the URL as a timing-robust
+   * fallback. It was forgeable: any signed-in customer opening
+   * /reset-password?type=recovery would have marked their own live session
+   * recovery-authorized with Supabase having validated nothing -- reopening the
+   * hole that gating on this flag exists to close. Only PASSWORD_RECOVERY, which
+   * Supabase emits after validating the callback, may set it.
+   */
+  const initialize = body(store, /initialize: async[\s\S]*?\n {2}\},/, 'initialize');
+  const code = initialize.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.equal(
+    /window\.location\.(hash|search)/.test(code),
+    false,
+    'the recovery flag must not be derived from the URL; it is attacker-supplied',
+  );
+  assert.match(code, /event === 'PASSWORD_RECOVERY'/, 'only the validated Supabase event may set it');
 });

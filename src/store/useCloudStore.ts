@@ -212,22 +212,22 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     });
 
     /*
-     * A second, independent read of the same fact.
+     * There is deliberately NO fallback that reads `type=recovery` off the URL.
      *
-     * The event is a notification with a timing window; the URL is a
-     * statement that is simply there. Supabase marks a recovery callback with
-     * `type=recovery`, in the fragment under the implicit flow and in the
-     * query under PKCE, so checking both means the screen does not depend on
-     * having been subscribed at exactly the right moment.
+     * A previous revision added one, meaning to be robust about the event's
+     * timing. It was the opposite: the URL is supplied by whoever opened the
+     * page, so any signed-in customer visiting /reset-password?type=recovery
+     * would have marked their own live session recovery-authorized without
+     * Supabase validating anything -- reopening, one commit later, exactly the
+     * hole that gating on this flag was added to close. The same happens with
+     * an EXPIRED fragment, where auth-js keeps the existing session after
+     * validation fails.
+     *
+     * Only Supabase can attest that a recovery link was genuine, and it says
+     * so by emitting PASSWORD_RECOVERY. That is why the subscriber above is
+     * registered before anything is awaited: the answer to a missed
+     * notification is to be listening earlier, not to believe the URL instead.
      */
-    if (typeof window !== 'undefined') {
-      const fragment = new URLSearchParams(window.location.hash.replace(/^#\/?/, ''));
-      const query = new URLSearchParams(window.location.search);
-      if (fragment.get('type') === 'recovery' || query.get('type') === 'recovery') {
-        set({ passwordRecoveryPending: true });
-      }
-    }
-
     const { data, error } = await client.auth.getSession();
     if (error) {
       set({ initialized: true, status: 'signed-out', session: null, workspaceId: '', workspaceRole: 'Owner' });
