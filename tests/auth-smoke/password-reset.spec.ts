@@ -393,35 +393,42 @@ test('a rejected update stays retryable and keeps the grant', async ({ page }) =
   expect(await heldGrant(page)).toBe(USER_ID);
 });
 
-test('spending the grant in one tab ends it in the other', async ({ context }) => {
-  /*
-   * The store and its sessionStorage marker are tab-local, but a recovery is
-   * not: auth-js broadcasts it to every open tab. Clearing the grant only where
-   * updatePassword ran left the other tab holding a spent one -- able to set
-   * the password again with no new link. auth-js broadcasts USER_UPDATED after
-   * the change, which is how the second tab learns its grant is over.
-   */
-  const first = await context.newPage();
-  const second = await context.newPage();
-  await stubGoTrueUser(first);
-  await stubGoTrueUser(second);
+for (const withoutBroadcastChannel of [false, true]) {
+  test(`spending the grant in one tab ends it in the other (BroadcastChannel absent: ${withoutBroadcastChannel})`, async ({
+    context,
+  }) => {
+    if (withoutBroadcastChannel) {
+      await context.addInitScript(() => {
+        Object.defineProperty(globalThis, 'BroadcastChannel', { value: undefined, configurable: true });
+      });
+    }
+    /*
+     * Each tab validates a recovery link. Completion must then clear the other
+     * tab's form, through the store announcement or the storage-event fallback
+     * when BroadcastChannel is unavailable.
+     */
+    const first = await context.newPage();
+    const second = await context.newPage();
+    await stubGoTrueUser(first);
+    await stubGoTrueUser(second);
 
-  await first.goto(recoveryLink());
-  await expect(newPassword(first)).toBeVisible({ timeout: 30_000 });
-  await second.goto(recoveryLink());
-  await expect(newPassword(second)).toBeVisible({ timeout: 30_000 });
-  expect(await heldGrant(second)).toBe(USER_ID);
+    await first.goto(recoveryLink());
+    await expect(newPassword(first)).toBeVisible({ timeout: 30_000 });
+    await second.goto(recoveryLink());
+    await expect(newPassword(second)).toBeVisible({ timeout: 30_000 });
+    expect(await heldGrant(second)).toBe(USER_ID);
 
-  await fillNewPassword(first, 'a-brand-new-password');
-  await submit(first).click();
-  await expect(first.getByText('Password updated. You are signed in.').first()).toBeVisible();
+    await fillNewPassword(first, 'a-brand-new-password');
+    await submit(first).click();
+    await expect(first.getByText('Password updated. You are signed in.').first()).toBeVisible();
 
-  // The second tab never submitted anything, so it is not "done" -- it is a tab
-  // holding an authorization that has been used up, and it has to say so.
-  await expect(refusal(second)).toBeVisible({ timeout: 15_000 });
-  await expect(newPassword(second)).toHaveCount(0);
-  expect(await heldGrant(second)).toBe('');
-});
+    // The second tab never submitted anything, so it is not "done" -- it is a tab
+    // holding an authorization that has been used up, and it has to say so.
+    await expect(refusal(second)).toBeVisible({ timeout: 15_000 });
+    await expect(newPassword(second)).toHaveCount(0);
+    expect(await heldGrant(second)).toBe('');
+  });
+}
 
 test('a spent grant cannot submit while its success broadcast is delayed', async ({ context }) => {
   const first = await context.newPage();

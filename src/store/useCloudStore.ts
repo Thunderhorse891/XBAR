@@ -374,8 +374,18 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
         });
       }
     } catch {
-      // Non-fatal: the durable record still retires the grant on reload.
+      // Fall back to storage events if the channel cannot be opened.
     }
+    const onRecoveryStorage = (event: StorageEvent) => {
+      const recoveryFor = get().passwordRecoveryFor;
+      if (!recoveryFor) return;
+      if (event.key !== RECOVERY_SPENT_KEY && event.key !== `${RECOVERY_SPENT_USER_PREFIX}${recoveryFor}`) return;
+      // Read current durable state: a delayed event may predate a new link.
+      if (!readSpentRecoveryUsers().includes(recoveryFor)) return;
+      set({ passwordRecoveryFor: '' });
+      storeRecoveryUser('');
+    };
+    if (!recoveryChannel && typeof window !== 'undefined') window.addEventListener('storage', onRecoveryStorage);
 
     let bootstrapped = false;
     // Track auth events immediately, before asynchronous workspace hydration.
@@ -539,6 +549,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
 
     return () => {
       recoveryChannel?.close();
+      if (typeof window !== 'undefined') window.removeEventListener('storage', onRecoveryStorage);
       subscription.subscription.unsubscribe();
     };
   },
