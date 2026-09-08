@@ -650,6 +650,101 @@ test('a grant spent by another tab mid-submission never shows this one a refusal
   }
 });
 
+test('two tabs submitting at the same instant still send one change', async ({ context }) => {
+  /*
+   * The half of the race the sequential case cannot reach.
+   *
+   * "two tabs cannot send the same recovery grant at the same time" stages the
+   * second submission AFTER the first has already written its claim, so it is
+   * refused by a claim that is durably there. That leaves the harder case
+   * untested: both tabs reading the record before either has written to it.
+   * localStorage has no compare-and-set, so the reservation handles this by
+   * writing, yielding, and re-reading -- whoever's token is still there owns
+   * the claim, and the overwritten tab stands down.
+   *
+   * Both clicks are started before either is awaited, so the two submissions
+   * are in flight together. That is as close to simultaneous as the browser
+   * can be driven from here; the assertion below holds either way, and how
+   * much of the mechanism this actually exercises is reported on the PR rather
+   * than assumed.
+   */
+  const first = await context.newPage();
+  const second = await context.newPage();
+  const sent: string[] = [];
+
+  for (const page of [first, second]) {
+    // Counted across both pages: the claim is about how many changes reach
+    // GoTrue in total, so a request from either tab has to be visible here.
+    await page.route('**/auth/v1/user*', async (route) => {
+      if (route.request().method() === 'PUT') sent.push(route.request().postData() ?? '');
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+    });
+  }
+
+  await first.goto(recoveryLink());
+  await expect(newPassword(first)).toBeVisible({ timeout: 30_000 });
+  await second.goto(recoveryLink());
+  await expect(newPassword(second)).toBeVisible({ timeout: 30_000 });
+
+  await fillNewPassword(first, 'first-tab-password');
+  await fillNewPassword(second, 'second-tab-password');
+
+  await Promise.all([submit(first).click(), submit(second).click()]);
+
+  // Exactly one change, and it is one of the two that were actually typed --
+  // not a count that would also be satisfied by both submissions failing.
+  await expect.poll(() => sent.length, { timeout: 30_000 }).toBe(1);
+  expect(sent[0]).toMatch(/first-tab-password|second-tab-password/);
+
+  // One tab succeeded and the other was told, rather than both claiming success.
+  const succeeded = await Promise.all(
+    [first, second].map((page) => page.getByText('Password updated. You are signed in.').count()),
+  );
+  expect(succeeded.filter((count) => count > 0)).toHaveLength(1);
+
+  // Settle, then confirm nothing arrived late.
+  await expect.poll(() => sent.length, { timeout: 5_000 }).toBe(1);
+});
+
+test('a change that never reached GoTrue does not leave the link usable', async ({ page }) => {
+  /*
+   * The request fails in flight, so whether GoTrue applied it is genuinely
+   * unknown. The grant is spent anyway: a retry on the same link could race a
+   * request that did arrive, and the two would disagree about the password.
+   *
+   * That is a deliberate fail-closed choice made when the reservation went in,
+   * and it had no test -- the screen wording for it existed while nothing ever
+   * drove the screen into that state.
+   */
+  await stubGoTrueUser(page, async (route) => {
+    await route.abort('failed');
+  });
+
+  await page.goto(recoveryLink());
+  await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
+  expect(await heldGrant(page)).toBe(USER_ID);
+
+  await fillNewPassword(page, 'a-brand-new-password');
+  await submit(page).click();
+
+  // Told honestly: neither "it worked" nor "it definitely did not".
+  await expect(page.getByText(/could not confirm that change/i).first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText('Password updated. You are signed in.')).toHaveCount(0);
+
+  // And the link is finished durably, not just cleared in this tab: a tab that
+  // still holds the grant has to be refused too, and this tab must stay
+  // refused after a reload.
+  await expect.poll(async () => heldGrant(page), { timeout: 15_000 }).toBe('');
+  await expect
+    .poll(async () => page.evaluate((key) => window.localStorage.getItem(key), recoverySpentKeyFor(USER_ID)), {
+      timeout: 15_000,
+    })
+    .toBe('spent');
+  await page.reload();
+  await expect(refusal(page)).toBeVisible({ timeout: 30_000 });
+  await expect(newPassword(page)).toHaveCount(0);
+});
+
 test('a recovery link does not drag every other tab to the reset screen', async ({ context }) => {
   /*
    * auth-js broadcasts PASSWORD_RECOVERY to every open tab, so every tab
