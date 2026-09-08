@@ -177,6 +177,7 @@ const RECOVERY_USER_KEY = 'xbar-password-recovery-for';
  * every one of them. What is stored is a user id, never a token.
  */
 const RECOVERY_SPENT_KEY = 'xbar-password-recovery-spent';
+const RECOVERY_SPENT_USER_PREFIX = `${RECOVERY_SPENT_KEY}:user:`;
 
 function normalizeRecoveryUsers(users: Iterable<unknown>): string[] {
   return [...new Set([...users].filter((user): user is string => typeof user === 'string' && user.length > 0))].sort();
@@ -186,39 +187,49 @@ function readSpentRecoveryUsers(): string[] {
   try {
     if (typeof localStorage === 'undefined') return [];
     const raw = localStorage.getItem(RECOVERY_SPENT_KEY) ?? '';
-    if (!raw) return [];
-    try {
-      const parsed = JSON.parse(raw) as unknown;
-      if (Array.isArray(parsed)) return normalizeRecoveryUsers(parsed);
-      if (parsed && typeof parsed === 'object') return normalizeRecoveryUsers(Object.keys(parsed));
-    } catch {
-      // Older builds stored one bare user id. Treat it as one revoked grant.
+    let legacyUsers = raw ? [raw] : [];
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as unknown;
+        if (Array.isArray(parsed)) legacyUsers = normalizeRecoveryUsers(parsed);
+        else if (parsed && typeof parsed === 'object') legacyUsers = normalizeRecoveryUsers(Object.keys(parsed));
+      } catch {
+        // Older builds stored one bare user id. Treat it as one revoked grant.
+      }
     }
-    return [raw];
+    const spent = new Set(legacyUsers);
+    for (const key of Object.keys(localStorage)) {
+      if (!key.startsWith(RECOVERY_SPENT_USER_PREFIX)) continue;
+      const userId = key.slice(RECOVERY_SPENT_USER_PREFIX.length);
+      const state = localStorage.getItem(key);
+      if (state === 'spent') spent.add(userId);
+      else if (state === 'active') spent.delete(userId);
+    }
+    return normalizeRecoveryUsers(spent);
   } catch {
     return [];
   }
 }
 
-function writeSpentRecoveryUsers(users: Iterable<string>) {
+function writeRecoveryUserState(userId: string, state: 'spent' | 'active') {
+  if (!userId) return;
   try {
     if (typeof localStorage === 'undefined') return;
-    const normalized = normalizeRecoveryUsers(users);
-    if (normalized.length) localStorage.setItem(RECOVERY_SPENT_KEY, JSON.stringify(normalized));
-    else localStorage.removeItem(RECOVERY_SPENT_KEY);
+    // One atomic write per account: concurrent writers for different accounts
+    // cannot replace each other's revocations. An explicit active value
+    // overrides legacy list entries without rewriting that shared list.
+    localStorage.setItem(`${RECOVERY_SPENT_USER_PREFIX}${userId}`, state);
   } catch {
     // Non-fatal; the transient event still clears live tabs.
   }
 }
 
 function recordSpentRecoveryUser(userId: string) {
-  if (!userId) return;
-  writeSpentRecoveryUsers([...readSpentRecoveryUsers(), userId]);
+  writeRecoveryUserState(userId, 'spent');
 }
 
 function clearSpentRecoveryUser(userId: string) {
-  if (!userId) return;
-  writeSpentRecoveryUsers(readSpentRecoveryUsers().filter((spentUser) => spentUser !== userId));
+  writeRecoveryUserState(userId, 'active');
 }
 
 function readStoredRecoveryUser(): string {

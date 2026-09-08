@@ -270,8 +270,8 @@ test('a sign-out event without a local grant revokes an unloaded recovery tab', 
     channel.close();
   });
   await expect
-    .poll(() => other.evaluate(() => localStorage.getItem('xbar-password-recovery-spent')))
-    .toContain(USER_ID);
+    .poll(() => other.evaluate((id) => localStorage.getItem(`xbar-password-recovery-spent:user:${id}`), USER_ID))
+    .toBe('spent');
 
   await other.goto(sessionLink('signin'));
   await expect(refusal(other)).toBeVisible({ timeout: 30_000 });
