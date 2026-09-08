@@ -403,9 +403,29 @@ test('the account about to be changed is confirmed against the live session', ()
   const update = body(store, /updatePassword: async[\s\S]*?\n {2}\},/, 'updatePassword');
   assert.match(
     update,
-    /await client\.auth\.getSession\(\)[\s\S]*?hasValidatedPasswordRecovery\(\{[\s\S]*?session: live\.session[\s\S]*?\}\)[\s\S]*?client\.auth\.updateUser/,
-    'the live session must be re-read and matched against the grant immediately before updateUser',
+    /await client\.auth\.getSession\(\)[\s\S]*?hasValidatedPasswordRecovery\(\{[\s\S]*?session: live\.data\.session[\s\S]*?\}\)[\s\S]*?client\.auth\.updateUser/,
+    'the live session must be re-read and matched against the grant before updateUser',
   );
+});
+
+test('every awaited auth call in updatePassword is inside a try', () => {
+  /*
+   * ResetPassword only clears its busy flag after this function settles, so any
+   * rejection that escapes leaves the screen disabled on "Saving..." for good.
+   * d56fc53 closed that for updateUser; a865963 then added a getSession call
+   * OUTSIDE the try and reopened it -- and getSession takes the same Web Lock,
+   * so it fails for the same reasons. Both calls, or neither.
+   */
+  const update = body(store, /updatePassword: async[\s\S]*?\n {2}\},/, 'updatePassword');
+  const awaited = update.match(/await client\.auth\.\w+\(/g) ?? [];
+  assert.equal(awaited.length, 2, 'expected exactly getSession and updateUser -- a new call needs its own guard');
+  for (const call of ['getSession', 'updateUser']) {
+    assert.match(
+      update,
+      new RegExp(`try \\{\\s*\\w+ = await client\\.auth\\.${call}\\(`),
+      `${call} must be awaited inside a try, or its rejection strands the screen`,
+    );
+  }
 });
 
 test('a recovery grant is released when its session ends', () => {

@@ -658,11 +658,32 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
      * auth-js for the live session immediately before the mutation closes the
      * window, because there is then nothing between the check and the call.
      */
-    const { data: live, error: liveError } = await client.auth.getSession();
-    if (liveError || !live.session) {
+    /*
+     * Inside a try because getSession TAKES THE SAME LOCK updateUser does, and
+     * can therefore reject for the same reasons. Adding this call outside one
+     * reopened the exact defect d56fc53 closed: the rejection propagated,
+     * ResetPassword never cleared its busy flag, and the screen sat disabled on
+     * "Saving..." for good. A fix for one hazard must not reintroduce another.
+     *
+     * The wording differs from the post-mutation case on purpose. This failed
+     * BEFORE any password request was sent, so nothing is uncertain here and
+     * saying "we could not confirm" would invent a doubt that does not exist.
+     * Uncertainty is reserved for a mutation that may already have been applied.
+     */
+    let live: Awaited<ReturnType<typeof client.auth.getSession>>;
+    try {
+      live = await client.auth.getSession();
+    } catch {
+      return {
+        ok: false,
+        message: 'We could not check who is signed in, so nothing was changed. Try again.',
+      };
+    }
+
+    if (live.error || !live.data.session) {
       return { ok: false, message: 'Your session has ended. Request a new reset link from the sign-in screen.' };
     }
-    if (!hasValidatedPasswordRecovery({ session: live.session, passwordRecoveryFor: get().passwordRecoveryFor })) {
+    if (!hasValidatedPasswordRecovery({ session: live.data.session, passwordRecoveryFor: get().passwordRecoveryFor })) {
       return {
         ok: false,
         message: 'This reset link was issued for a different account than the one signed in here. Request a new link.',
