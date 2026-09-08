@@ -361,12 +361,12 @@ test('a durable grant has a durable revocation', () => {
     /reconcileStoredRecovery\(\{/,
     'startup must reconcile the stored grant against a recorded completion',
   );
-  assert.match(store, /recordSpentRecoveryUser\(session\.user\.id\)/, 'the completed account must be recorded durably');
+  assert.match(store, /recordSpentRecoveryUser\(session\.user\.id/, 'the completed account must be recorded durably');
   // A later genuine link must clear that account's mark, or one reset would bar
   // every future one for that account. Other accounts' revocations survive.
   const initialize = body(store, /initialize: async[\s\S]*?\n {2}\},/, 'initialize');
   const recoveryEventIndex = initialize.indexOf("event === 'PASSWORD_RECOVERY'");
-  const clearCurrentAccountIndex = initialize.indexOf('clearSpentRecoveryUser(session.user.id)');
+  const clearCurrentAccountIndex = initialize.indexOf('clearSpentRecoveryUser(session.user.id');
   assert.ok(
     recoveryEventIndex >= 0 && clearCurrentAccountIndex > recoveryEventIndex,
     "a newly validated link must supersede that account's earlier completion without wiping the others",
@@ -437,13 +437,18 @@ test('a recovery password update is claimed before it reaches GoTrue', () => {
   assert.match(store, /RECOVERY_UPDATE_CLAIM_PREFIX/, 'recovery updates need a per-account in-flight claim');
   assert.match(
     store,
-    /localStorage\.setItem\(\s*recoveryUpdateClaimKey\(userId\)[\s\S]*await delay\(RECOVERY_UPDATE_CLAIM_SETTLE_MS\)[\s\S]*owned\?\.token !== claim\.token/,
+    /writeRecoveryUpdateClaim\(claim\);[\s\S]*await delay\(RECOVERY_UPDATE_CLAIM_SETTLE_MS\)[\s\S]*owned\?\.token !== claim\.token/,
     'claiming must write then re-read ownership before any password request can proceed',
   );
   assert.match(
     update,
-    /const claim = await claimRecoveryUpdate\(recoverySession\.user\.id\);[\s\S]*?if \(!claim\.ok\)[\s\S]*?let response: Response;[\s\S]*?response = await fetch\(/,
+    /const recoveryGrant = recoveryGrantToken\(recoverySession\);[\s\S]*?const claim = await claimRecoveryUpdate\(recoverySession\.user\.id, recoveryGrant\);[\s\S]*?if \(!claim\.ok\)[\s\S]*?let response: Response;[\s\S]*?response = await fetch\(/,
     'the recovery grant must be claimed before the PUT reaches GoTrue',
+  );
+  assert.match(
+    update,
+    /const stopRenewingClaim = startRecoveryUpdateClaimRenewal\(claim\.claim\);[\s\S]*?try \{\s*response = await fetch\(/,
+    'a live password request must keep renewing its claim so another tab cannot steal it after the TTL',
   );
   assert.match(
     update,
@@ -454,6 +459,32 @@ test('a recovery password update is claimed before it reaches GoTrue', () => {
     update,
     /completeRecoveryUpdateClaim\(claim\.claim\)/,
     'a successful or uncertain in-flight update must durably spend the grant',
+  );
+});
+
+test('recovery completion is bound to the validated link', () => {
+  /*
+   * A user can request another reset email for the same account while an older
+   * password PUT is still in flight. When the older request later settles, its
+   * completion must not overwrite the fresh link's active state with a
+   * user-only spent marker.
+   */
+  const initialize = body(store, /initialize: async[\s\S]*?\n {2}\},/, 'initialize');
+  assert.match(store, /RECOVERY_GRANT_KEY/, 'the validated link needs a tab-local grant identity');
+  assert.match(
+    initialize,
+    /const grantToken = recoveryGrantToken\(session\);[\s\S]*?storeRecoveryUser\(session\.user\.id, grantToken\);[\s\S]*?clearSpentRecoveryUser\(session\.user\.id, grantToken\)/,
+    'a fresh PASSWORD_RECOVERY event must mark that specific link active',
+  );
+  assert.match(
+    store,
+    /function completeRecoveryUpdateClaim\(claim: RecoveryUpdateClaim\) \{[\s\S]*?recordSpentRecoveryUser\(claim\.userId, claim\.grantToken\)/,
+    'completion must spend the grant that submitted, not every link for that account',
+  );
+  assert.match(
+    store,
+    /function isRecoveryGrantSpent\(userId: string, grantToken: string\): boolean \{[\s\S]*?marker\?\.state === 'active'[\s\S]*?marker\?\.state === 'spent'[\s\S]*?recoveryMarkerAppliesToGrant/,
+    'spent checks must compare the durable marker with the current grant',
   );
 });
 
@@ -486,7 +517,7 @@ test('a recovery grant is released when its session ends', () => {
   assert.match(initialize, /event === 'SIGNED_OUT'/, 'SIGNED_OUT must release the recovery grant');
   assert.match(
     initialize,
-    /event === 'SIGNED_OUT' && recoveryFor[\s\S]*?recordSpentRecoveryUser\(recoveryFor\)/,
+    /event === 'SIGNED_OUT' && recoveryFor[\s\S]*?recordSpentRecoveryUser\(recoveryFor/,
     'SIGNED_OUT must durably revoke the grant for tabs that miss the transient event',
   );
   /*

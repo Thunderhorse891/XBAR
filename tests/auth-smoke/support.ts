@@ -17,6 +17,7 @@ export const RECOVERY_EMAIL = 'owner@xbar.test';
 // grant never cleared, so of course it did not refuse" -- the success case is
 // only meaningful if the grant really is gone underneath it.
 export const RECOVERY_KEY = 'xbar-password-recovery-for';
+export const RECOVERY_GRANT_KEY = 'xbar-password-recovery-grant';
 
 /*
  * The durable, cross-tab record of grants that are over. Shared rather than
@@ -32,6 +33,7 @@ export const RECOVERY_SPENT_KEY = 'xbar-password-recovery-spent';
  * and overrides an entry inherited from the older shared list.
  */
 export const recoverySpentKeyFor = (userId: string) => `${RECOVERY_SPENT_KEY}:user:${userId}`;
+export const recoveryUpdateClaimKeyFor = (userId: string) => `${RECOVERY_SPENT_KEY}:updating:user:${userId}`;
 
 export function base64url(value: object) {
   return Buffer.from(JSON.stringify(value)).toString('base64url');
@@ -43,7 +45,9 @@ export function base64url(value: object) {
  * exactly what these tests stand in for. The claims are real because auth-js
  * reads them.
  */
-export function accessToken() {
+let sessionSequence = 0;
+
+export function accessToken(sessionId = 'auth-smoke-session') {
   const now = Math.floor(Date.now() / 1000);
   return [
     base64url({ alg: 'HS256', typ: 'JWT' }),
@@ -54,7 +58,7 @@ export function accessToken() {
       email: RECOVERY_EMAIL,
       iat: now,
       exp: now + 3600,
-      session_id: 'auth-smoke-session',
+      session_id: sessionId,
     }),
     'auth-smoke-unsigned',
   ].join('.');
@@ -67,9 +71,10 @@ export function accessToken() {
  * which is the difference this screen has to act on.
  */
 export function sessionLink(type: 'recovery' | 'signin') {
+  const sessionId = `auth-smoke-${type}-${Date.now().toString(36)}-${(sessionSequence += 1).toString(36)}`;
   const fragment = new URLSearchParams({
-    access_token: accessToken(),
-    refresh_token: 'auth-smoke-refresh-token',
+    access_token: accessToken(sessionId),
+    refresh_token: `${sessionId}-refresh-token`,
     expires_in: '3600',
     token_type: 'bearer',
     ...(type === 'recovery' ? { type: 'recovery' } : {}),

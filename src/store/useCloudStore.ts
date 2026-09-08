@@ -168,6 +168,7 @@ function currentAuthRedirectUrl() {
  * Supabase itself established, and a mismatch authorizes nothing.
  */
 const RECOVERY_USER_KEY = 'xbar-password-recovery-for';
+const RECOVERY_GRANT_KEY = 'xbar-password-recovery-grant';
 
 /*
  * The tab-local grant is durable across a reload, so its revocation has to be
@@ -180,10 +181,19 @@ const RECOVERY_SPENT_KEY = 'xbar-password-recovery-spent';
 const RECOVERY_SPENT_USER_PREFIX = `${RECOVERY_SPENT_KEY}:user:`;
 const RECOVERY_UPDATE_CLAIM_PREFIX = `${RECOVERY_SPENT_KEY}:updating:user:`;
 const RECOVERY_UPDATE_CLAIM_TTL_MS = 2 * 60 * 1000;
+const RECOVERY_UPDATE_CLAIM_RENEW_MS = 1000;
 const RECOVERY_UPDATE_CLAIM_SETTLE_MS = 50;
+
+type RecoveryUserState = 'spent' | 'active';
+
+type StoredRecoveryUserMarker = {
+  state: RecoveryUserState;
+  grantToken?: string;
+};
 
 type RecoveryUpdateClaim = {
   userId: string;
+  grantToken: string;
   token: string;
 };
 
@@ -193,13 +203,56 @@ type RecoveryUpdateClaimResult =
 type StoredRecoveryUpdateClaim = {
   token: string;
   expiresAt: number;
+  grantToken?: string;
 };
+
+function stableRecoveryGrantId(seed: string): string {
+  if (!seed) return '';
+  let primary = 2166136261;
+  let secondary = 0x9e3779b9;
+  for (let index = 0; index < seed.length; index += 1) {
+    const code = seed.charCodeAt(index);
+    primary ^= code;
+    primary = Math.imul(primary, 16777619) >>> 0;
+    secondary ^= code + index;
+    secondary = Math.imul(secondary, 1597334677) >>> 0;
+  }
+  return `${seed.length.toString(36)}-${primary.toString(36)}-${secondary.toString(36)}`;
+}
+
+function decodeJwtClaims(accessToken = ''): Record<string, unknown> {
+  try {
+    const payload = accessToken.split('.')[1];
+    if (!payload || typeof atob === 'undefined') return {};
+    const padded = payload
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
+      .padEnd(Math.ceil(payload.length / 4) * 4, '=');
+    const parsed = JSON.parse(atob(padded));
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function recoveryGrantToken(session: Session | null): string {
+  if (!session) return '';
+  const claims = decodeJwtClaims(session.access_token);
+  const sessionId = typeof claims.session_id === 'string' ? claims.session_id : '';
+  const issuedAt = typeof claims.iat === 'number' ? claims.iat.toString(36) : '';
+  const expiresAt = typeof claims.exp === 'number' ? claims.exp.toString(36) : '';
+  const subject = typeof claims.sub === 'string' ? claims.sub : session.user.id;
+  const seed = sessionId
+    ? `${subject}:${sessionId}`
+    : [subject, issuedAt, expiresAt, session.expires_at ? session.expires_at.toString(36) : ''].join(':');
+  return stableRecoveryGrantId(seed);
+}
 
 function normalizeRecoveryUsers(users: Iterable<unknown>): string[] {
   return [...new Set([...users].filter((user): user is string => typeof user === 'string' && user.length > 0))].sort();
 }
 
-function readSpentRecoveryUsers(): string[] {
+function readLegacySpentRecoveryUsers(): string[] {
   try {
     if (typeof localStorage === 'undefined') return [];
     const raw = localStorage.getItem(RECOVERY_SPENT_KEY) ?? '';
@@ -213,13 +266,63 @@ function readSpentRecoveryUsers(): string[] {
         // Older builds stored one bare user id. Treat it as one revoked grant.
       }
     }
-    const spent = new Set(legacyUsers);
+    return normalizeRecoveryUsers(legacyUsers);
+  } catch {
+    return [];
+  }
+}
+
+function parseRecoveryUserMarker(raw: string | null): StoredRecoveryUserMarker | null {
+  if (raw === 'spent' || raw === 'active') return { state: raw };
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<StoredRecoveryUserMarker>;
+    if (parsed.state !== 'spent' && parsed.state !== 'active') return null;
+    return {
+      state: parsed.state,
+      ...(typeof parsed.grantToken === 'string' && parsed.grantToken ? { grantToken: parsed.grantToken } : {}),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function readRecoveryUserMarker(userId: string): StoredRecoveryUserMarker | null {
+  try {
+    if (typeof localStorage === 'undefined' || !userId) return null;
+    return parseRecoveryUserMarker(localStorage.getItem(`${RECOVERY_SPENT_USER_PREFIX}${userId}`));
+  } catch {
+    return null;
+  }
+}
+
+function recoveryMarkerAppliesToGrant(marker: StoredRecoveryUserMarker, grantToken: string) {
+  return !marker.grantToken || !grantToken || marker.grantToken === grantToken;
+}
+
+function isRecoveryGrantSpent(userId: string, grantToken: string): boolean {
+  if (!userId) return false;
+  try {
+    if (typeof localStorage === 'undefined') return false;
+    const marker = readRecoveryUserMarker(userId);
+    if (marker?.state === 'active') return !recoveryMarkerAppliesToGrant(marker, grantToken);
+    if (marker?.state === 'spent') return recoveryMarkerAppliesToGrant(marker, grantToken);
+    return readLegacySpentRecoveryUsers().includes(userId);
+  } catch {
+    return false;
+  }
+}
+
+function readSpentRecoveryUsers(): string[] {
+  try {
+    if (typeof localStorage === 'undefined') return [];
+    const spent = new Set(readLegacySpentRecoveryUsers());
     for (const key of Object.keys(localStorage)) {
       if (!key.startsWith(RECOVERY_SPENT_USER_PREFIX)) continue;
       const userId = key.slice(RECOVERY_SPENT_USER_PREFIX.length);
-      const state = localStorage.getItem(key);
-      if (state === 'spent') spent.add(userId);
-      else if (state === 'active') spent.delete(userId);
+      const marker = parseRecoveryUserMarker(localStorage.getItem(key));
+      if (marker?.state === 'spent') spent.add(userId);
+      else if (marker?.state === 'active') spent.delete(userId);
     }
     return normalizeRecoveryUsers(spent);
   } catch {
@@ -227,25 +330,31 @@ function readSpentRecoveryUsers(): string[] {
   }
 }
 
-function writeRecoveryUserState(userId: string, state: 'spent' | 'active') {
+function writeRecoveryUserState(userId: string, state: RecoveryUserState, grantToken = '') {
   if (!userId) return;
   try {
     if (typeof localStorage === 'undefined') return;
-    // One atomic write per account: concurrent writers for different accounts
-    // cannot replace each other's revocations. An explicit active value
-    // overrides legacy list entries without rewriting that shared list.
-    localStorage.setItem(`${RECOVERY_SPENT_USER_PREFIX}${userId}`, state);
+    /*
+     * One atomic write per account: concurrent writers for different accounts
+     * cannot replace each other's revocations. When we know the specific link,
+     * bind the marker to that link so an older completion cannot burn a newer
+     * reset email for the same account.
+     */
+    localStorage.setItem(
+      `${RECOVERY_SPENT_USER_PREFIX}${userId}`,
+      grantToken ? JSON.stringify({ state, grantToken }) : state,
+    );
   } catch {
     // Non-fatal; the transient event still clears live tabs.
   }
 }
 
-function recordSpentRecoveryUser(userId: string) {
-  writeRecoveryUserState(userId, 'spent');
+function recordSpentRecoveryUser(userId: string, grantToken = '') {
+  writeRecoveryUserState(userId, 'spent', grantToken);
 }
 
-function clearSpentRecoveryUser(userId: string) {
-  writeRecoveryUserState(userId, 'active');
+function clearSpentRecoveryUser(userId: string, grantToken = '') {
+  writeRecoveryUserState(userId, 'active', grantToken);
 }
 
 function recoveryUpdateClaimKey(userId: string) {
@@ -266,10 +375,25 @@ function readRecoveryUpdateClaim(userId: string): StoredRecoveryUpdateClaim | nu
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<StoredRecoveryUpdateClaim>;
     if (typeof parsed.token !== 'string' || typeof parsed.expiresAt !== 'number') return null;
-    return { token: parsed.token, expiresAt: parsed.expiresAt };
+    return {
+      token: parsed.token,
+      expiresAt: parsed.expiresAt,
+      ...(typeof parsed.grantToken === 'string' && parsed.grantToken ? { grantToken: parsed.grantToken } : {}),
+    };
   } catch {
     return null;
   }
+}
+
+function writeRecoveryUpdateClaim(claim: RecoveryUpdateClaim) {
+  localStorage.setItem(
+    recoveryUpdateClaimKey(claim.userId),
+    JSON.stringify({
+      token: claim.token,
+      grantToken: claim.grantToken,
+      expiresAt: Date.now() + RECOVERY_UPDATE_CLAIM_TTL_MS,
+    }),
+  );
 }
 
 function clearRecoveryUpdateClaim(claim: RecoveryUpdateClaim) {
@@ -283,31 +407,52 @@ function clearRecoveryUpdateClaim(claim: RecoveryUpdateClaim) {
 }
 
 function completeRecoveryUpdateClaim(claim: RecoveryUpdateClaim) {
-  recordSpentRecoveryUser(claim.userId);
+  recordSpentRecoveryUser(claim.userId, claim.grantToken);
   clearRecoveryUpdateClaim(claim);
+}
+
+function renewRecoveryUpdateClaim(claim: RecoveryUpdateClaim): boolean {
+  try {
+    if (typeof localStorage === 'undefined') return false;
+    const current = readRecoveryUpdateClaim(claim.userId);
+    if (current?.token !== claim.token) return false;
+    writeRecoveryUpdateClaim(claim);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function startRecoveryUpdateClaimRenewal(claim: RecoveryUpdateClaim) {
+  try {
+    const interval = setInterval(() => {
+      if (!renewRecoveryUpdateClaim(claim)) clearInterval(interval);
+    }, RECOVERY_UPDATE_CLAIM_RENEW_MS);
+    return () => clearInterval(interval);
+  } catch {
+    return () => {};
+  }
 }
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function claimRecoveryUpdate(userId: string): Promise<RecoveryUpdateClaimResult> {
+async function claimRecoveryUpdate(userId: string, grantToken: string): Promise<RecoveryUpdateClaimResult> {
   if (!userId) return { ok: false, reason: 'unavailable' };
   try {
     if (typeof localStorage === 'undefined') return { ok: false, reason: 'unavailable' };
-    if (readSpentRecoveryUsers().includes(userId)) return { ok: false, reason: 'spent' };
+    if (isRecoveryGrantSpent(userId, grantToken)) return { ok: false, reason: 'spent' };
 
     const existing = readRecoveryUpdateClaim(userId);
     if (existing && existing.expiresAt > Date.now()) return { ok: false, reason: 'busy' };
 
     const claim = {
       userId,
+      grantToken,
       token: newRecoveryUpdateClaimToken(),
     };
-    localStorage.setItem(
-      recoveryUpdateClaimKey(userId),
-      JSON.stringify({ token: claim.token, expiresAt: Date.now() + RECOVERY_UPDATE_CLAIM_TTL_MS }),
-    );
+    writeRecoveryUpdateClaim(claim);
 
     /*
      * localStorage has atomic reads and writes, not an atomic "set if absent".
@@ -319,7 +464,7 @@ async function claimRecoveryUpdate(userId: string): Promise<RecoveryUpdateClaimR
 
     const owned = readRecoveryUpdateClaim(userId);
     if (owned?.token !== claim.token) return { ok: false, reason: 'busy' };
-    if (readSpentRecoveryUsers().includes(userId)) {
+    if (isRecoveryGrantSpent(userId, grantToken)) {
       clearRecoveryUpdateClaim(claim);
       return { ok: false, reason: 'spent' };
     }
@@ -339,11 +484,33 @@ function readStoredRecoveryUser(): string {
   }
 }
 
-function storeRecoveryUser(userId: string) {
+function readStoredRecoveryGrantToken(): string {
+  try {
+    return typeof sessionStorage === 'undefined' ? '' : (sessionStorage.getItem(RECOVERY_GRANT_KEY) ?? '');
+  } catch {
+    return '';
+  }
+}
+
+function reconcileStoredRecoveryGrant(storedGrant: string, grantToken: string) {
+  if (!grantToken) return reconcileStoredRecovery({ storedGrant, spentFor: readSpentRecoveryUsers() });
+  return reconcileStoredRecovery({
+    storedGrant,
+    spentFor: isRecoveryGrantSpent(storedGrant, grantToken) ? storedGrant : '',
+  });
+}
+
+function storeRecoveryUser(userId: string, grantToken = '') {
   try {
     if (typeof sessionStorage === 'undefined') return;
-    if (userId) sessionStorage.setItem(RECOVERY_USER_KEY, userId);
-    else sessionStorage.removeItem(RECOVERY_USER_KEY);
+    if (userId) {
+      sessionStorage.setItem(RECOVERY_USER_KEY, userId);
+      if (grantToken) sessionStorage.setItem(RECOVERY_GRANT_KEY, grantToken);
+      else sessionStorage.removeItem(RECOVERY_GRANT_KEY);
+    } else {
+      sessionStorage.removeItem(RECOVERY_USER_KEY);
+      sessionStorage.removeItem(RECOVERY_GRANT_KEY);
+    }
   } catch {
     // Non-fatal: the in-memory flag still carries the current tab.
   }
@@ -359,11 +526,11 @@ function storeRecoveryUser(userId: string) {
  */
 const RECOVERY_CHANNEL = 'xbar-password-recovery';
 
-function announceSpentRecovery(userId: string) {
+function announceSpentRecovery(userId: string, grantToken = '') {
   try {
     if (typeof BroadcastChannel === 'undefined' || !userId) return;
     const channel = new BroadcastChannel(RECOVERY_CHANNEL);
-    channel.postMessage({ type: 'recovery-spent', userId });
+    channel.postMessage({ type: 'recovery-spent', userId, grantToken });
     channel.close();
   } catch {
     // Non-fatal: the durable record still retires the grant on reload.
@@ -372,10 +539,7 @@ function announceSpentRecovery(userId: string) {
 
 export const useCloudStore = create<CloudStore>((set, get) => ({
   initialized: false,
-  passwordRecoveryFor: reconcileStoredRecovery({
-    storedGrant: readStoredRecoveryUser(),
-    spentFor: readSpentRecoveryUsers(),
-  }),
+  passwordRecoveryFor: reconcileStoredRecoveryGrant(readStoredRecoveryUser(), readStoredRecoveryGrantToken()),
   status: isSupabaseConfigured() ? 'loading' : 'unavailable',
   session: null,
   workspaceId: '',
@@ -462,12 +626,12 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       if (typeof BroadcastChannel !== 'undefined') {
         recoveryChannel = new BroadcastChannel(RECOVERY_CHANNEL);
         recoveryChannel.addEventListener('message', (event: MessageEvent) => {
-          const message = event.data as { type?: string; userId?: string } | null;
+          const message = event.data as { type?: string; userId?: string; grantToken?: string } | null;
           if (message?.type !== 'recovery-spent' || !message.userId) return;
           // Only the account whose grant was spent.
           if (get().passwordRecoveryFor !== message.userId) return;
           // A newly validated link can supersede a queued spent announcement.
-          if (!readSpentRecoveryUsers().includes(message.userId)) return;
+          if (!isRecoveryGrantSpent(message.userId, readStoredRecoveryGrantToken())) return;
           set({ passwordRecoveryFor: '' });
           storeRecoveryUser('');
         });
@@ -480,7 +644,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       if (!recoveryFor) return;
       if (event.key !== RECOVERY_SPENT_KEY && event.key !== `${RECOVERY_SPENT_USER_PREFIX}${recoveryFor}`) return;
       // Read current durable state: a delayed event may predate a new link.
-      if (!readSpentRecoveryUsers().includes(recoveryFor)) return;
+      if (!isRecoveryGrantSpent(recoveryFor, readStoredRecoveryGrantToken())) return;
       set({ passwordRecoveryFor: '' });
       storeRecoveryUser('');
     };
@@ -504,6 +668,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return queued;
     };
     const { data: subscription } = client.auth.onAuthStateChange((event, session) => {
+      const endedRecoveryGrant = event === 'SIGNED_OUT' ? recoveryGrantToken(get().session) : '';
       /*
        * SIGNED_OUT arrives with a null session, so the account whose session
        * ended has to have been remembered from the last one this tab saw. It
@@ -522,13 +687,14 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       // The event was previously discarded entirely, which is why a recovery
       // link used to look like a sign-in.
       if (event === 'PASSWORD_RECOVERY' && session) {
+        const grantToken = recoveryGrantToken(session);
         // Supabase has validated the link; record WHO it was validated for.
         set({ passwordRecoveryFor: session.user.id });
-        storeRecoveryUser(session.user.id);
+        storeRecoveryUser(session.user.id, grantToken);
         // Supabase has just validated a NEW link, so an earlier completion no
         // longer says anything about this account. Other account revocations
         // must survive.
-        clearSpentRecoveryUser(session.user.id);
+        clearSpentRecoveryUser(session.user.id, grantToken);
       }
       if (event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
         const recoveryFor = get().passwordRecoveryFor;
@@ -556,12 +722,12 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
            * fact from the signed-out account revoked above: a grant can outlive
            * the session it was issued for, so neither one covers the other.
            */
-          recordSpentRecoveryUser(recoveryFor);
+          recordSpentRecoveryUser(recoveryFor, endedRecoveryGrant);
         }
         if (event === 'USER_UPDATED' && session) {
           // Durably, so a tab that was reloading through this broadcast does
           // not come back holding the grant it just missed the end of.
-          recordSpentRecoveryUser(session.user.id);
+          recordSpentRecoveryUser(session.user.id, recoveryFor === session.user.id ? recoveryGrantToken(session) : '');
         }
       }
       /*
@@ -630,10 +796,9 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
      * transient broadcast could have reached it.
      */
     const currentRecoveryFor = get().passwordRecoveryFor;
-    const spentFor = readSpentRecoveryUsers();
     if (
       currentRecoveryFor &&
-      (!get().session || reconcileStoredRecovery({ storedGrant: currentRecoveryFor, spentFor }) === '')
+      (!get().session || reconcileStoredRecoveryGrant(currentRecoveryFor, readStoredRecoveryGrantToken()) === '')
     ) {
       set({ passwordRecoveryFor: '' });
     }
@@ -907,7 +1072,9 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
 
     // A preceding tab can spend this grant before its announcement reaches us,
     // so the durable record is consulted rather than the tab's cached grant.
-    if (readSpentRecoveryUsers().includes(recoverySession.user.id)) {
+    const recoveryGrant = recoveryGrantToken(recoverySession);
+
+    if (isRecoveryGrantSpent(recoverySession.user.id, recoveryGrant)) {
       set({ passwordRecoveryFor: '' });
       storeRecoveryUser('');
       return { ok: false, message: 'This reset link has already been used. Request a new reset link.' };
@@ -946,7 +1113,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       password,
     });
 
-    const claim = await claimRecoveryUpdate(recoverySession.user.id);
+    const claim = await claimRecoveryUpdate(recoverySession.user.id, recoveryGrant);
     if (!claim.ok) {
       if (claim.reason === 'spent') {
         set({ passwordRecoveryFor: '' });
@@ -963,63 +1130,69 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     }
 
     let response: Response;
+    const stopRenewingClaim = startRecoveryUpdateClaimRenewal(claim.claim);
     try {
-      response = await fetch(request.url, { method: request.method, headers: request.headers, body: request.body });
-    } catch {
-      /*
-       * In flight when it failed, so whether the server applied it is genuinely
-       * unknown -- claiming either outcome would be a guess. The grant is
-       * spent conservatively: retrying this same link could race against a
-       * request that actually reached GoTrue.
-       */
-      const spentFor = recoverySession.user.id;
-      set({ passwordRecoveryFor: '' });
-      storeRecoveryUser('');
-      completeRecoveryUpdateClaim(claim.claim);
-      announceSpentRecovery(spentFor);
-      return {
-        ok: false,
-        message: 'We could not confirm that change. Try the new password; if it does not work, request another link.',
-      };
-    }
-
-    if (!response.ok) {
-      if (response.status >= 500) {
-        // A gateway/server failure can follow an applied update. Do not allow
-        // a retry to race a password change whose outcome is still unknown.
+      try {
+        response = await fetch(request.url, { method: request.method, headers: request.headers, body: request.body });
+      } catch {
+        /*
+         * In flight when it failed, so whether the server applied it is genuinely
+         * unknown -- claiming either outcome would be a guess. The grant is
+         * spent conservatively: retrying this same link could race against a
+         * request that actually reached GoTrue.
+         */
         const spentFor = recoverySession.user.id;
         set({ passwordRecoveryFor: '' });
         storeRecoveryUser('');
         completeRecoveryUpdateClaim(claim.claim);
-        announceSpentRecovery(spentFor);
+        announceSpentRecovery(spentFor, claim.claim.grantToken);
         return {
           ok: false,
           message: 'We could not confirm that change. Try the new password; if it does not work, request another link.',
         };
       }
-      const payload: unknown = await response.json().catch(() => null);
-      const explained = readPasswordUpdateError(payload);
-      clearRecoveryUpdateClaim(claim.claim);
-      return {
-        ok: false,
-        // GoTrue's own words when it gave any: "New password should be
-        // different from the old password" IS the answer the customer needs.
-        message: explained
-          ? describeAuthError(explained)
-          : 'That change was refused and no reason was given. Try again, or request another link.',
-      };
-    }
 
-    // Only now is the recovery finished; clearing it earlier would release the
-    // screen while the password was still the old one.
-    const spentFor = recoverySession.user.id;
-    set({ passwordRecoveryFor: '' });
-    storeRecoveryUser('');
-    completeRecoveryUpdateClaim(claim.claim);
-    // auth-js is no longer in this path, so its USER_UPDATED broadcast will not
-    // release the grant in other tabs. This module makes that announcement.
-    announceSpentRecovery(spentFor);
-    return { ok: true, message: 'Password updated. You are signed in.' };
+      if (!response.ok) {
+        if (response.status >= 500) {
+          // A gateway/server failure can follow an applied update. Do not allow
+          // a retry to race a password change whose outcome is still unknown.
+          const spentFor = recoverySession.user.id;
+          set({ passwordRecoveryFor: '' });
+          storeRecoveryUser('');
+          completeRecoveryUpdateClaim(claim.claim);
+          announceSpentRecovery(spentFor, claim.claim.grantToken);
+          return {
+            ok: false,
+            message:
+              'We could not confirm that change. Try the new password; if it does not work, request another link.',
+          };
+        }
+        const payload: unknown = await response.json().catch(() => null);
+        const explained = readPasswordUpdateError(payload);
+        clearRecoveryUpdateClaim(claim.claim);
+        return {
+          ok: false,
+          // GoTrue's own words when it gave any: "New password should be
+          // different from the old password" IS the answer the customer needs.
+          message: explained
+            ? describeAuthError(explained)
+            : 'That change was refused and no reason was given. Try again, or request another link.',
+        };
+      }
+
+      // Only now is the recovery finished; clearing it earlier would release the
+      // screen while the password was still the old one.
+      const spentFor = recoverySession.user.id;
+      set({ passwordRecoveryFor: '' });
+      storeRecoveryUser('');
+      completeRecoveryUpdateClaim(claim.claim);
+      // auth-js is no longer in this path, so its USER_UPDATED broadcast will not
+      // release the grant in other tabs. This module makes that announcement.
+      announceSpentRecovery(spentFor, claim.claim.grantToken);
+      return { ok: true, message: 'Password updated. You are signed in.' };
+    } finally {
+      stopRenewingClaim();
+    }
   },
   sendPasswordReset: async (email) => {
     const client = getSupabaseClient();
@@ -1124,13 +1297,15 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     }
 
     const recoveryFor = get().passwordRecoveryFor;
-    const signedOutUserId = get().session?.user.id;
+    const signingOutSession = get().session;
+    const signedOutUserId = signingOutSession?.user.id;
+    const recoveryGrant = recoveryFor && recoveryFor === signedOutUserId ? recoveryGrantToken(signingOutSession) : '';
     const { error } = await client.auth.signOut();
     if (error) {
       return { ok: false, message: describeAuthError(error.message) };
     }
 
-    if (recoveryFor) recordSpentRecoveryUser(recoveryFor);
+    if (recoveryFor) recordSpentRecoveryUser(recoveryFor, recoveryGrant);
     if (signedOutUserId) recordSpentRecoveryUser(signedOutUserId);
     set({
       session: null,
@@ -1175,8 +1350,11 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     // The server has already deleted the auth user; clear the local session so
     // the app returns to the signed-out state. Caller purges the local workspace.
     const recoveryFor = get().passwordRecoveryFor;
+    const deletingSession = get().session;
+    const recoveryGrant =
+      recoveryFor && recoveryFor === deletingSession?.user.id ? recoveryGrantToken(deletingSession) : '';
     await client.auth.signOut().catch(() => {});
-    if (recoveryFor) recordSpentRecoveryUser(recoveryFor);
+    if (recoveryFor) recordSpentRecoveryUser(recoveryFor, recoveryGrant);
     set({
       session: null,
       status: 'signed-out',

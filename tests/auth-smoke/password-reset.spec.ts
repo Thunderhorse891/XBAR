@@ -2,8 +2,10 @@ import { expect, test, type Page } from '@playwright/test';
 import {
   blockWebfonts,
   recoveryLink,
+  RECOVERY_GRANT_KEY,
   RECOVERY_KEY,
   recoverySpentKeyFor,
+  recoveryUpdateClaimKeyFor,
   sessionLink,
   stubGoTrueUser,
   USER_ID,
@@ -131,6 +133,34 @@ function recordPageErrors(page: Page) {
 
 async function heldGrant(page: Page) {
   return page.evaluate((key) => window.sessionStorage.getItem(key) ?? '', RECOVERY_KEY);
+}
+
+async function heldGrantToken(page: Page) {
+  return page.evaluate((key) => window.sessionStorage.getItem(key) ?? '', RECOVERY_GRANT_KEY);
+}
+
+async function recoverySpentState(page: Page, userId = USER_ID) {
+  return page.evaluate((key) => {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return '';
+    try {
+      const parsed = JSON.parse(raw) as { state?: string };
+      return parsed.state ?? raw;
+    } catch {
+      return raw;
+    }
+  }, recoverySpentKeyFor(userId));
+}
+
+async function expireRecoveryUpdateClaim(page: Page, userId = USER_ID) {
+  return page.evaluate((key) => {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return false;
+    const claim = JSON.parse(raw) as { expiresAt?: number };
+    claim.expiresAt = Date.now() - 1;
+    window.localStorage.setItem(key, JSON.stringify(claim));
+    return true;
+  }, recoveryUpdateClaimKeyFor(userId));
 }
 
 async function fillNewPassword(page: Page, value: string) {
@@ -270,9 +300,7 @@ test('a sign-out event without a local grant revokes an unloaded recovery tab', 
     channel.postMessage({ event: 'SIGNED_OUT', session: null });
     channel.close();
   });
-  await expect
-    .poll(() => other.evaluate((id) => localStorage.getItem(`xbar-password-recovery-spent:user:${id}`), USER_ID))
-    .toBe('spent');
+  await expect.poll(() => recoverySpentState(other)).toBe('spent');
 
   await other.goto(sessionLink('signin'));
   await expect(refusal(other)).toBeVisible({ timeout: 30_000 });
@@ -428,6 +456,62 @@ test('a delayed spent announcement cannot revoke a newly validated recovery', as
   await expect(page.getByText('Password updated. You are signed in.').first()).toBeVisible();
 });
 
+test('completion of an older reset does not retire a newly validated link', async ({ context }) => {
+  /*
+   * The durable marker is per account, but the thing being spent is a specific
+   * recovery link. If an older password request finishes after a fresh email has
+   * already validated for the same account, that older completion must not burn
+   * the newer unused link.
+   */
+  const first = await context.newPage();
+  const second = await context.newPage();
+
+  let releaseFirst: () => void = () => {};
+  const firstUpdateHeld = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  let sawFirstUpdate: () => void = () => {};
+  const firstUpdateStarted = new Promise<void>((resolve) => {
+    sawFirstUpdate = resolve;
+  });
+
+  try {
+    await stubGoTrueUser(first, async (route) => {
+      sawFirstUpdate();
+      await firstUpdateHeld;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+    });
+    await stubGoTrueUser(second);
+
+    const firstLink = recoveryLink();
+    const secondLink = recoveryLink();
+
+    await first.goto(firstLink);
+    await expect(newPassword(first)).toBeVisible({ timeout: 30_000 });
+    const firstGrantToken = await heldGrantToken(first);
+    expect(firstGrantToken).not.toBe('');
+
+    await fillNewPassword(first, 'first-reset-password');
+    await submit(first).click();
+    await firstUpdateStarted;
+
+    await second.goto(secondLink);
+    await expect(newPassword(second)).toBeVisible({ timeout: 30_000 });
+    await expect.poll(() => heldGrantToken(second), { timeout: 15_000 }).not.toBe(firstGrantToken);
+
+    releaseFirst();
+    await expect(first.getByText('Password updated. You are signed in.').first()).toBeVisible({ timeout: 30_000 });
+
+    expect(await heldGrant(second)).toBe(USER_ID);
+    await expect(newPassword(second)).toBeVisible();
+    await fillNewPassword(second, 'second-reset-password');
+    await submit(second).click();
+    await expect(second.getByText('Password updated. You are signed in.').first()).toBeVisible({ timeout: 30_000 });
+  } finally {
+    releaseFirst();
+  }
+});
+
 for (const withoutBroadcastChannel of [false, true]) {
   test(`spending the grant in one tab ends it in the other (BroadcastChannel absent: ${withoutBroadcastChannel})`, async ({
     context,
@@ -447,9 +531,10 @@ for (const withoutBroadcastChannel of [false, true]) {
     await stubGoTrueUser(first);
     await stubGoTrueUser(second);
 
-    await first.goto(recoveryLink());
+    const link = recoveryLink();
+    await first.goto(link);
     await expect(newPassword(first)).toBeVisible({ timeout: 30_000 });
-    await second.goto(recoveryLink());
+    await second.goto(link);
     await expect(newPassword(second)).toBeVisible({ timeout: 30_000 });
     expect(await heldGrant(second)).toBe(USER_ID);
 
@@ -495,9 +580,10 @@ test('a spent grant cannot submit while its success broadcast is delayed', async
     secondUpdates += 1;
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
   });
-  await first.goto(recoveryLink());
+  const link = recoveryLink();
+  await first.goto(link);
   await expect(newPassword(first)).toBeVisible({ timeout: 30_000 });
-  await second.goto(recoveryLink());
+  await second.goto(link);
   await expect(newPassword(second)).toBeVisible({ timeout: 30_000 });
   await fillNewPassword(second, 'second-tab-password');
   await fillNewPassword(first, 'first-tab-password');
@@ -544,9 +630,10 @@ test('two tabs cannot send the same recovery grant at the same time', async ({ c
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
     });
 
-    await first.goto(recoveryLink());
+    const link = recoveryLink();
+    await first.goto(link);
     await expect(newPassword(first)).toBeVisible({ timeout: 30_000 });
-    await second.goto(recoveryLink());
+    await second.goto(link);
     await expect(newPassword(second)).toBeVisible({ timeout: 30_000 });
 
     await fillNewPassword(first, 'first-tab-password');
@@ -610,9 +697,10 @@ test('a grant spent by another tab mid-submission never shows this one a refusal
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
     });
 
-    await first.goto(recoveryLink());
+    const link = recoveryLink();
+    await first.goto(link);
     await expect(newPassword(first)).toBeVisible({ timeout: 30_000 });
-    await second.goto(recoveryLink());
+    await second.goto(link);
     await expect(newPassword(second)).toBeVisible({ timeout: 30_000 });
 
     await fillNewPassword(first, 'a-brand-new-password');
@@ -681,9 +769,10 @@ test('two tabs submitting at the same instant still send one change', async ({ c
     });
   }
 
-  await first.goto(recoveryLink());
+  const link = recoveryLink();
+  await first.goto(link);
   await expect(newPassword(first)).toBeVisible({ timeout: 30_000 });
-  await second.goto(recoveryLink());
+  await second.goto(link);
   await expect(newPassword(second)).toBeVisible({ timeout: 30_000 });
 
   await fillNewPassword(first, 'first-tab-password');
@@ -704,6 +793,73 @@ test('two tabs submitting at the same instant still send one change', async ({ c
 
   // Settle, then confirm nothing arrived late.
   await expect.poll(() => sent.length, { timeout: 5_000 }).toBe(1);
+});
+
+test('an in-flight recovery claim is renewed until the password request settles', async ({ context }) => {
+  /*
+   * A claim needs a TTL so a crashed tab does not block recovery forever, but a
+   * live request must keep extending it. Otherwise a slow mobile PUT can age
+   * past the TTL and let another tab send a second password.
+   */
+  const first = await context.newPage();
+  const second = await context.newPage();
+
+  let releaseFirst: () => void = () => {};
+  const firstUpdateHeld = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  let sawFirstUpdate: () => void = () => {};
+  const firstUpdateStarted = new Promise<void>((resolve) => {
+    sawFirstUpdate = resolve;
+  });
+
+  try {
+    await stubGoTrueUser(first, async (route) => {
+      sawFirstUpdate();
+      await firstUpdateHeld;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+    });
+    let secondUpdates = 0;
+    await stubGoTrueUser(second, async (route) => {
+      secondUpdates += 1;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+    });
+
+    const link = recoveryLink();
+    await first.goto(link);
+    await expect(newPassword(first)).toBeVisible({ timeout: 30_000 });
+    await second.goto(link);
+    await expect(newPassword(second)).toBeVisible({ timeout: 30_000 });
+
+    await fillNewPassword(first, 'first-tab-password');
+    await fillNewPassword(second, 'second-tab-password');
+    await submit(first).click();
+    await firstUpdateStarted;
+
+    expect(await expireRecoveryUpdateClaim(second)).toBe(true);
+    await expect
+      .poll(
+        () =>
+          second.evaluate((key) => {
+            const raw = window.localStorage.getItem(key);
+            if (!raw) return false;
+            return (JSON.parse(raw) as { expiresAt?: number }).expiresAt! > Date.now();
+          }, recoveryUpdateClaimKeyFor(USER_ID)),
+        { timeout: 5_000 },
+      )
+      .toBe(true);
+
+    await submit(second).click();
+    await expect(second.getByText('This reset link is already being used in another tab.').first()).toBeVisible({
+      timeout: 15_000,
+    });
+    expect(secondUpdates).toBe(0);
+
+    releaseFirst();
+    await expect(first.getByText('Password updated. You are signed in.').first()).toBeVisible({ timeout: 30_000 });
+  } finally {
+    releaseFirst();
+  }
 });
 
 for (const failure of ['network', 500, 502, 504] as const) {
@@ -737,11 +893,7 @@ for (const failure of ['network', 500, 502, 504] as const) {
     // still holds the grant has to be refused too, and this tab must stay
     // refused after a reload.
     await expect.poll(async () => heldGrant(page), { timeout: 15_000 }).toBe('');
-    await expect
-      .poll(async () => page.evaluate((key) => window.localStorage.getItem(key), recoverySpentKeyFor(USER_ID)), {
-        timeout: 15_000,
-      })
-      .toBe('spent');
+    await expect.poll(() => recoverySpentState(page), { timeout: 15_000 }).toBe('spent');
     await page.reload();
     await expect(refusal(page)).toBeVisible({ timeout: 30_000 });
     await expect(newPassword(page)).toHaveCount(0);
@@ -886,11 +1038,7 @@ test('a session ending in a tab that holds no grant still ends the recovery', as
     .toBe(false);
 
   // And the account was revoked durably, by a tab that never held the grant.
-  await expect
-    .poll(async () => otherTab.evaluate((key) => window.localStorage.getItem(key), recoverySpentKeyFor(USER_ID)), {
-      timeout: 30_000,
-    })
-    .toBe('spent');
+  await expect.poll(() => recoverySpentState(otherTab), { timeout: 30_000 }).toBe('spent');
 
   // An ordinary sign-in to the same account, with no recovery link of any kind.
   await otherTab.goto(sessionLink('signin'));
@@ -911,7 +1059,5 @@ test('a session ending in a tab that holds no grant still ends the recovery', as
   ).toBe(true);
 
   // The other account's revocation survived this one.
-  expect(await recoveryTab.evaluate((key) => window.localStorage.getItem(key), recoverySpentKeyFor(otherAccount))).toBe(
-    'spent',
-  );
+  expect(await recoverySpentState(recoveryTab, otherAccount)).toBe('spent');
 });
