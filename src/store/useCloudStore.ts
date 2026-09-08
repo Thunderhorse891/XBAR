@@ -367,6 +367,9 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     }
 
     let bootstrapped = false;
+    // Track auth events immediately, before asynchronous workspace hydration.
+    // A tab opened after recovery still knows the account it later signs out.
+    let lastAuthUserId = get().session?.user.id ?? '';
     /*
      * An event that arrived before the first sync finished, kept rather than
      * dropped. `null` means none; a queued entry may itself carry a null
@@ -381,6 +384,12 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return queued;
     };
     const { data: subscription } = client.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        if (lastAuthUserId) recordSpentRecoveryUser(lastAuthUserId);
+        lastAuthUserId = '';
+      } else if (session) {
+        lastAuthUserId = session.user.id;
+      }
       // The event was previously discarded entirely, which is why a recovery
       // link used to look like a sign-in.
       if (event === 'PASSWORD_RECOVERY' && session) {
@@ -938,12 +947,14 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     }
 
     const recoveryFor = get().passwordRecoveryFor;
+    const signedOutUserId = get().session?.user.id;
     const { error } = await client.auth.signOut();
     if (error) {
       return { ok: false, message: describeAuthError(error.message) };
     }
 
     if (recoveryFor) recordSpentRecoveryUser(recoveryFor);
+    if (signedOutUserId) recordSpentRecoveryUser(signedOutUserId);
     set({
       session: null,
       status: 'signed-out',

@@ -247,6 +247,39 @@ test('restoring a recovery tab without a session discards its old grant', async 
   expect(await heldGrant(page)).toBe('');
 });
 
+test('a sign-out event without a local grant revokes an unloaded recovery tab', async ({ context }) => {
+  const recovery = await context.newPage();
+  await stubGoTrueUser(recovery);
+  await recovery.goto(recoveryLink());
+  await expect(newPassword(recovery)).toBeVisible({ timeout: 30_000 });
+  await recovery.goto('about:blank');
+
+  const other = await context.newPage();
+  await stubGoTrueUser(other);
+  await other.goto('/app/reset-password');
+  await expect(refusal(other)).toBeVisible({ timeout: 30_000 });
+  expect(await heldGrant(other)).toBe('');
+  // Deliver the auth-js sign-out protocol while the recovery tab is unloaded.
+  // This covers the subscriber and durable revocation, not the sign-out UI.
+  await other.evaluate(() => {
+    const key = Object.keys(localStorage).find((key) => key.startsWith('sb-') && key.endsWith('-auth-token'));
+    if (!key) throw new Error('Expected the shared authenticated session');
+    localStorage.removeItem(key);
+    const channel = new BroadcastChannel(key);
+    channel.postMessage({ event: 'SIGNED_OUT', session: null });
+    channel.close();
+  });
+  await expect
+    .poll(() => other.evaluate(() => localStorage.getItem('xbar-password-recovery-spent')))
+    .toContain(USER_ID);
+
+  await other.goto(sessionLink('signin'));
+  await expect(refusal(other)).toBeVisible({ timeout: 30_000 });
+  await recovery.goto('/app/reset-password');
+  await expect(refusal(recovery)).toBeVisible({ timeout: 30_000 });
+  await expect(newPassword(recovery)).toHaveCount(0);
+});
+
 test('submitting actually sends a password request', async ({ page }) => {
   /*
    * The one check no screen assertion can stand in for: that a request left
