@@ -478,6 +478,61 @@ test('a spent grant cannot submit while its success broadcast is delayed', async
   expect(secondUpdates).toBe(0);
 });
 
+test('two tabs cannot send the same recovery grant at the same time', async ({ context }) => {
+  /*
+   * Carrying the validated token fixes the account-selection bug, but it means
+   * the mutation no longer passes through auth-js serialization. The app has to
+   * reserve the grant before the PUT leaves the browser, or two tabs can race
+   * different new passwords and both report success.
+   */
+  const first = await context.newPage();
+  const second = await context.newPage();
+
+  let releaseFirst: () => void = () => {};
+  const firstUpdateHeld = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  let sawFirstUpdate: () => void = () => {};
+  const firstUpdateStarted = new Promise<void>((resolve) => {
+    sawFirstUpdate = resolve;
+  });
+
+  try {
+    await stubGoTrueUser(first, async (route) => {
+      sawFirstUpdate();
+      await firstUpdateHeld;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+    });
+    let secondUpdates = 0;
+    await stubGoTrueUser(second, async (route) => {
+      secondUpdates += 1;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+    });
+
+    await first.goto(recoveryLink());
+    await expect(newPassword(first)).toBeVisible({ timeout: 30_000 });
+    await second.goto(recoveryLink());
+    await expect(newPassword(second)).toBeVisible({ timeout: 30_000 });
+
+    await fillNewPassword(first, 'first-tab-password');
+    await fillNewPassword(second, 'second-tab-password');
+    await submit(first).click();
+    await firstUpdateStarted;
+
+    await submit(second).click();
+    await expect(second.getByText('This reset link is already being used in another tab.').first()).toBeVisible({
+      timeout: 15_000,
+    });
+    expect(secondUpdates).toBe(0);
+
+    releaseFirst();
+    await expect(first.getByText('Password updated. You are signed in.').first()).toBeVisible({ timeout: 30_000 });
+    await expect(refusal(second)).toBeVisible({ timeout: 15_000 });
+  } finally {
+    releaseFirst();
+  }
+});
+
 test('a grant spent by another tab mid-submission never shows this one a refusal', async ({ context }) => {
   /*
    * The window `saving` outranking `refused` exists for, which only became
@@ -490,8 +545,10 @@ test('a grant spent by another tab mid-submission never shows this one a refusal
    * so nothing serializes the two tabs -- and asserting it would be asserting a
    * defect that can no longer occur.
    *
-   * What that removal makes possible is the case reported twice as unstageable:
-   * the second tab can finish and announce WHILE the first is still submitting.
+   * That case is still stageable without reintroducing the defect: another tab
+   * can announce the durable grant revocation WHILE the first request is still
+   * submitting, and the first screen still must not flip from Saving to
+   * "expired link" before its request settles.
    */
   const first = await context.newPage();
   const second = await context.newPage();
@@ -512,7 +569,11 @@ test('a grant spent by another tab mid-submission never shows this one a refusal
       await firstUpdateHeld;
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
     });
-    await stubGoTrueUser(second);
+    let secondUpdates = 0;
+    await stubGoTrueUser(second, async (route) => {
+      secondUpdates += 1;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+    });
 
     await first.goto(recoveryLink());
     await expect(newPassword(first)).toBeVisible({ timeout: 30_000 });
@@ -529,9 +590,14 @@ test('a grant spent by another tab mid-submission never shows this one a refusal
     await submit(first).click();
     await firstUpdateStarted;
 
-    await submit(second).click();
-    await expect(second.getByText('Password updated. You are signed in.').first()).toBeVisible({ timeout: 30_000 });
+    await second.evaluate((id) => {
+      localStorage.setItem(`xbar-password-recovery-spent:user:${id}`, 'spent');
+      const channel = new BroadcastChannel('xbar-password-recovery');
+      channel.postMessage({ type: 'recovery-spent', userId: id });
+      channel.close();
+    }, USER_ID);
     await expect.poll(async () => heldGrant(first), { timeout: 15_000 }).toBe('');
+    expect(secondUpdates).toBe(0);
 
     // Grant gone, request still in flight: the moment `saving` has to outrank
     // `refused`.

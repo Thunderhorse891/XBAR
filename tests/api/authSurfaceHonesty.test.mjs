@@ -426,6 +426,37 @@ test('the account about to be changed is confirmed against the live session', ()
   );
 });
 
+test('a recovery password update is claimed before it reaches GoTrue', () => {
+  /*
+   * Carrying the validated token fixes the wrong-account mutation, but removing
+   * auth-js from the mutation path also removes its serialization. Two tabs
+   * holding the same grant must not both reach GoTrue with different
+   * passwords; the grant is reserved before the PUT can leave this browser.
+   */
+  const update = body(store, /updatePassword: async[\s\S]*?\n {2}\},/, 'updatePassword');
+  assert.match(store, /RECOVERY_UPDATE_CLAIM_PREFIX/, 'recovery updates need a per-account in-flight claim');
+  assert.match(
+    store,
+    /localStorage\.setItem\(\s*recoveryUpdateClaimKey\(userId\)[\s\S]*await delay\(RECOVERY_UPDATE_CLAIM_SETTLE_MS\)[\s\S]*owned\?\.token !== claim\.token/,
+    'claiming must write then re-read ownership before any password request can proceed',
+  );
+  assert.match(
+    update,
+    /const claim = await claimRecoveryUpdate\(recoverySession\.user\.id\);[\s\S]*?if \(!claim\.ok\)[\s\S]*?let response: Response;[\s\S]*?response = await fetch\(/,
+    'the recovery grant must be claimed before the PUT reaches GoTrue',
+  );
+  assert.match(
+    update,
+    /clearRecoveryUpdateClaim\(claim\.claim\);[\s\S]*?return \{[\s\S]*?message: explained/,
+    'an explicit GoTrue refusal must release the claim so the customer can choose a different password',
+  );
+  assert.match(
+    update,
+    /completeRecoveryUpdateClaim\(claim\.claim\)/,
+    'a successful or uncertain in-flight update must durably spend the grant',
+  );
+});
+
 test('every awaited call in updatePassword is inside a try', () => {
   /*
    * ResetPassword only clears its busy flag after this function settles, so any

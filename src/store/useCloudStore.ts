@@ -178,6 +178,22 @@ const RECOVERY_USER_KEY = 'xbar-password-recovery-for';
  */
 const RECOVERY_SPENT_KEY = 'xbar-password-recovery-spent';
 const RECOVERY_SPENT_USER_PREFIX = `${RECOVERY_SPENT_KEY}:user:`;
+const RECOVERY_UPDATE_CLAIM_PREFIX = `${RECOVERY_SPENT_KEY}:updating:user:`;
+const RECOVERY_UPDATE_CLAIM_TTL_MS = 2 * 60 * 1000;
+const RECOVERY_UPDATE_CLAIM_SETTLE_MS = 50;
+
+type RecoveryUpdateClaim = {
+  userId: string;
+  token: string;
+};
+
+type RecoveryUpdateClaimResult =
+  { ok: true; claim: RecoveryUpdateClaim } | { ok: false; reason: 'busy' | 'spent' | 'unavailable' };
+
+type StoredRecoveryUpdateClaim = {
+  token: string;
+  expiresAt: number;
+};
 
 function normalizeRecoveryUsers(users: Iterable<unknown>): string[] {
   return [...new Set([...users].filter((user): user is string => typeof user === 'string' && user.length > 0))].sort();
@@ -230,6 +246,87 @@ function recordSpentRecoveryUser(userId: string) {
 
 function clearSpentRecoveryUser(userId: string) {
   writeRecoveryUserState(userId, 'active');
+}
+
+function recoveryUpdateClaimKey(userId: string) {
+  return `${RECOVERY_UPDATE_CLAIM_PREFIX}${userId}`;
+}
+
+function newRecoveryUpdateClaimToken() {
+  const randomUUID = globalThis.crypto?.randomUUID;
+  return typeof randomUUID === 'function'
+    ? randomUUID.call(globalThis.crypto)
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function readRecoveryUpdateClaim(userId: string): StoredRecoveryUpdateClaim | null {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const raw = localStorage.getItem(recoveryUpdateClaimKey(userId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredRecoveryUpdateClaim>;
+    if (typeof parsed.token !== 'string' || typeof parsed.expiresAt !== 'number') return null;
+    return { token: parsed.token, expiresAt: parsed.expiresAt };
+  } catch {
+    return null;
+  }
+}
+
+function clearRecoveryUpdateClaim(claim: RecoveryUpdateClaim) {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const current = readRecoveryUpdateClaim(claim.userId);
+    if (current?.token === claim.token) localStorage.removeItem(recoveryUpdateClaimKey(claim.userId));
+  } catch {
+    // Non-fatal; the short TTL retires stale claims.
+  }
+}
+
+function completeRecoveryUpdateClaim(claim: RecoveryUpdateClaim) {
+  recordSpentRecoveryUser(claim.userId);
+  clearRecoveryUpdateClaim(claim);
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function claimRecoveryUpdate(userId: string): Promise<RecoveryUpdateClaimResult> {
+  if (!userId) return { ok: false, reason: 'unavailable' };
+  try {
+    if (typeof localStorage === 'undefined') return { ok: false, reason: 'unavailable' };
+    if (readSpentRecoveryUsers().includes(userId)) return { ok: false, reason: 'spent' };
+
+    const existing = readRecoveryUpdateClaim(userId);
+    if (existing && existing.expiresAt > Date.now()) return { ok: false, reason: 'busy' };
+
+    const claim = {
+      userId,
+      token: newRecoveryUpdateClaimToken(),
+    };
+    localStorage.setItem(
+      recoveryUpdateClaimKey(userId),
+      JSON.stringify({ token: claim.token, expiresAt: Date.now() + RECOVERY_UPDATE_CLAIM_TTL_MS }),
+    );
+
+    /*
+     * localStorage has atomic reads and writes, not an atomic "set if absent".
+     * Yield once so racing tabs can overwrite each other before anyone sends a
+     * password request; only the token still present after the settle window
+     * owns the claim.
+     */
+    await delay(RECOVERY_UPDATE_CLAIM_SETTLE_MS);
+
+    const owned = readRecoveryUpdateClaim(userId);
+    if (owned?.token !== claim.token) return { ok: false, reason: 'busy' };
+    if (readSpentRecoveryUsers().includes(userId)) {
+      clearRecoveryUpdateClaim(claim);
+      return { ok: false, reason: 'spent' };
+    }
+    return { ok: true, claim };
+  } catch {
+    return { ok: false, reason: 'unavailable' };
+  }
 }
 
 function readStoredRecoveryUser(): string {
@@ -847,15 +944,37 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       password,
     });
 
+    const claim = await claimRecoveryUpdate(recoverySession.user.id);
+    if (!claim.ok) {
+      if (claim.reason === 'spent') {
+        set({ passwordRecoveryFor: '' });
+        storeRecoveryUser('');
+        return { ok: false, message: 'This reset link has already been used. Request a new reset link.' };
+      }
+      return {
+        ok: false,
+        message:
+          claim.reason === 'busy'
+            ? 'This reset link is already being used in another tab. Wait for that attempt to finish, then request another link if it did not work.'
+            : 'We could not safely reserve this reset link, so nothing was changed. Try again.',
+      };
+    }
+
     let response: Response;
     try {
       response = await fetch(request.url, { method: request.method, headers: request.headers, body: request.body });
     } catch {
       /*
        * In flight when it failed, so whether the server applied it is genuinely
-       * unknown -- claiming either outcome would be a guess. The grant stays:
-       * this is not a finished recovery and a retry is reasonable.
+       * unknown -- claiming either outcome would be a guess. The grant is
+       * spent conservatively: retrying this same link could race against a
+       * request that actually reached GoTrue.
        */
+      const spentFor = recoverySession.user.id;
+      set({ passwordRecoveryFor: '' });
+      storeRecoveryUser('');
+      completeRecoveryUpdateClaim(claim.claim);
+      announceSpentRecovery(spentFor);
       return {
         ok: false,
         message: 'We could not confirm that change. Try the new password; if it does not work, request another link.',
@@ -865,6 +984,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     if (!response.ok) {
       const payload: unknown = await response.json().catch(() => null);
       const explained = readPasswordUpdateError(payload);
+      clearRecoveryUpdateClaim(claim.claim);
       return {
         ok: false,
         // GoTrue's own words when it gave any: "New password should be
@@ -880,7 +1000,7 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     const spentFor = recoverySession.user.id;
     set({ passwordRecoveryFor: '' });
     storeRecoveryUser('');
-    recordSpentRecoveryUser(spentFor);
+    completeRecoveryUpdateClaim(claim.claim);
     // auth-js is no longer in this path, so its USER_UPDATED broadcast will not
     // release the grant in other tabs. This module makes that announcement.
     announceSpentRecovery(spentFor);
