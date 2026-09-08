@@ -288,6 +288,41 @@ test('spending the grant in one tab ends it in the other', async ({ context }) =
   expect(await heldGrant(second)).toBe('');
 });
 
+test('a spent grant cannot submit while its success broadcast is delayed', async ({ context }) => {
+  const first = await context.newPage();
+  const second = await context.newPage();
+  // Model the interval after durable revocation but before broadcast delivery.
+  // Keep real auth-js, shared storage and Web Locks; suppress only this event.
+  await first.addInitScript(() => {
+    const postMessage = BroadcastChannel.prototype.postMessage;
+    BroadcastChannel.prototype.postMessage = function (message) {
+      if (message?.event !== 'USER_UPDATED') postMessage.call(this, message);
+    };
+  });
+  await stubGoTrueUser(first);
+  let secondUpdates = 0;
+  await stubGoTrueUser(second, async (route) => {
+    secondUpdates += 1;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+  });
+  await first.goto(recoveryLink());
+  await expect(newPassword(first)).toBeVisible({ timeout: 30_000 });
+  await second.goto(recoveryLink());
+  await expect(newPassword(second)).toBeVisible({ timeout: 30_000 });
+  await fillNewPassword(second, 'second-tab-password');
+  await fillNewPassword(first, 'first-tab-password');
+  await submit(first).click();
+  await expect(first.getByText('Password updated. You are signed in.').first()).toBeVisible();
+  // Confirm the stale grant exists: this must exercise the mutation guard,
+  // rather than pass because the notification already disabled the form.
+  expect(await heldGrant(second)).toBe(USER_ID);
+  await expect(submit(second)).toBeEnabled();
+  await submit(second).click();
+  await expect(refusal(second)).toBeVisible();
+  expect(await heldGrant(second)).toBe('');
+  expect(secondUpdates).toBe(0);
+});
+
 test('a submission cut short by another tab is told so, not left on Saving', async ({ context }) => {
   /*
    * Two tabs submitting at once, which auth-js resolves by force: it guards

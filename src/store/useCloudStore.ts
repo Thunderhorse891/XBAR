@@ -759,6 +759,14 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
         if (live.error || !live.data.session) {
           return { ok: false, message: 'Your session has ended. Request a new reset link from the sign-in screen.' };
         }
+        // A preceding tab can spend this grant before its USER_UPDATED message
+        // reaches us. Reconcile durable revocation while holding the same lock
+        // as the mutation, rather than trusting the tab's cached grant.
+        if (readSpentRecoveryUsers().includes(live.data.session.user.id)) {
+          set({ passwordRecoveryFor: '' });
+          storeRecoveryUser('');
+          return { ok: false, message: 'This reset link has already been used. Request a new reset link.' };
+        }
         if (
           !hasValidatedPasswordRecovery({ session: live.data.session, passwordRecoveryFor: get().passwordRecoveryFor })
         ) {
