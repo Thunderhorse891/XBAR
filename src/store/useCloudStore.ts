@@ -1,7 +1,9 @@
 import { create } from 'zustand';
-import type { Session, SupabaseClient } from '@supabase/supabase-js';
+import type { Session } from '@supabase/supabase-js';
 import { loadWorkspaceAccessProfile } from '@/lib/cloudWorkspace';
 import { getSupabaseClient } from '@/lib/supabaseClient';
+import { buildPasswordUpdateRequest, readPasswordUpdateError } from '@/lib/passwordUpdateRequest';
+import { supabaseConfig } from '@/lib/platformConfig';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
 import type { UserRole } from '@/types/xbar';
 import { authCallbackOrigin, isNativeApp } from '../lib/nativePlatform.js';
@@ -239,60 +241,25 @@ function storeRecoveryUser(userId: string) {
   }
 }
 
-type SupabaseAuth = SupabaseClient['auth'];
-type SupabaseAuthSessionResult = Awaited<ReturnType<SupabaseAuth['getSession']>>;
-type SupabaseUpdateUserAttributes = Parameters<SupabaseAuth['updateUser']>[0];
-type SupabaseUpdateUserOptions = Parameters<SupabaseAuth['updateUser']>[1];
-type SupabaseUpdateUserResult = Awaited<ReturnType<SupabaseAuth['updateUser']>>;
-type SupabaseAuthWithInternalLock = {
-  lockAcquireTimeout?: unknown;
-  _acquireLock?: unknown;
-  _useSession?: unknown;
-  _updateUser?: unknown;
-};
+/*
+ * Our own cross-tab signal that a grant is spent.
+ *
+ * auth-js made this announcement for us as a side effect of updateUser
+ * emitting USER_UPDATED. The mutation no longer goes through auth-js -- it
+ * carries the validated token instead, so the correct-account invariant holds
+ * without Web Locks -- so this module makes the announcement itself.
+ */
+const RECOVERY_CHANNEL = 'xbar-password-recovery';
 
-async function withAuthSessionLock<Result>(
-  auth: SupabaseAuth,
-  run: (lockedAuth: SupabaseAuthWithInternalLock) => Promise<Result>,
-): Promise<Result> {
-  const lockedAuth = auth as unknown as SupabaseAuthWithInternalLock;
-  const acquireLock = lockedAuth._acquireLock;
-  const acquireTimeout = lockedAuth.lockAcquireTimeout;
-  if (typeof acquireLock !== 'function' || typeof acquireTimeout !== 'number') {
-    throw new Error('Supabase auth session lock unavailable.');
+function announceSpentRecovery(userId: string) {
+  try {
+    if (typeof BroadcastChannel === 'undefined' || !userId) return;
+    const channel = new BroadcastChannel(RECOVERY_CHANNEL);
+    channel.postMessage({ type: 'recovery-spent', userId });
+    channel.close();
+  } catch {
+    // Non-fatal: the durable record still retires the grant on reload.
   }
-  return (
-    acquireLock as <LockedResult>(timeout: number, callback: () => Promise<LockedResult>) => Promise<LockedResult>
-  ).call(lockedAuth, acquireTimeout, () => run(lockedAuth)) as Promise<Result>;
-}
-
-async function readLockedAuthSession(lockedAuth: SupabaseAuthWithInternalLock): Promise<SupabaseAuthSessionResult> {
-  const useSession = lockedAuth._useSession;
-  if (typeof useSession !== 'function') {
-    throw new Error('Supabase auth session reader unavailable.');
-  }
-  return (
-    useSession as <LockedResult>(
-      callback: (result: SupabaseAuthSessionResult) => Promise<LockedResult>,
-    ) => Promise<LockedResult>
-  ).call(lockedAuth, async (result) => result) as Promise<SupabaseAuthSessionResult>;
-}
-
-async function updateLockedAuthUser(
-  lockedAuth: SupabaseAuthWithInternalLock,
-  attributes: SupabaseUpdateUserAttributes,
-  options?: SupabaseUpdateUserOptions,
-): Promise<SupabaseUpdateUserResult> {
-  const updateUser = lockedAuth._updateUser;
-  if (typeof updateUser !== 'function') {
-    throw new Error('Supabase auth user updater unavailable.');
-  }
-  return (
-    updateUser as (
-      attributes: SupabaseUpdateUserAttributes,
-      options?: SupabaseUpdateUserOptions,
-    ) => Promise<SupabaseUpdateUserResult>
-  ).call(lockedAuth, attributes, options) as Promise<SupabaseUpdateUserResult>;
 }
 
 export const useCloudStore = create<CloudStore>((set, get) => ({
@@ -378,6 +345,27 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
      * from an ordinary sign-in again, which is the whole thing this flag
      * exists to prevent.
      */
+    /*
+     * The receiving half of announceSpentRecovery: the durable record retires a
+     * grant for a tab that was reloading, this retires it in tabs that are open.
+     */
+    let recoveryChannel: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        recoveryChannel = new BroadcastChannel(RECOVERY_CHANNEL);
+        recoveryChannel.addEventListener('message', (event: MessageEvent) => {
+          const message = event.data as { type?: string; userId?: string } | null;
+          if (message?.type !== 'recovery-spent' || !message.userId) return;
+          // Only the account whose grant was spent.
+          if (get().passwordRecoveryFor !== message.userId) return;
+          set({ passwordRecoveryFor: '' });
+          storeRecoveryUser('');
+        });
+      }
+    } catch {
+      // Non-fatal: the durable record still retires the grant on reload.
+    }
+
     let bootstrapped = false;
     /*
      * An event that arrived before the first sync finished, kept rather than
@@ -509,7 +497,10 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       storeRecoveryUser('');
     }
 
-    return () => subscription.subscription.unsubscribe();
+    return () => {
+      recoveryChannel?.close();
+      subscription.subscription.unsubscribe();
+    };
   },
   setLastSyncAt: (value) => set({ lastSyncAt: value }),
   setSyncState: (state, message = '') => set({ syncState: state, syncMessage: message }),
@@ -737,102 +728,112 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'Use at least 8 characters for the password.' };
     }
 
-    let mutationStarted = false;
+    /*
+     * Whose password is about to change, asked of the authority rather than of
+     * a cached copy. The screen's gate compares the grant against the store's
+     * `session`, which is written after a network round trip, while auth-js
+     * persists a new session the instant one arrives.
+     */
+    let live: Awaited<ReturnType<typeof client.auth.getSession>>;
     try {
-      return await withAuthSessionLock(client.auth, async (lockedAuth) => {
-        /*
-         * Whose password is about to change, asked of the authority rather than
-         * of a cached copy, then mutated through auth-js's no-lock internal
-         * path while one outer auth lock is held.
-         *
-         * The screen's gate compares the grant against the store's `session`,
-         * and that is a COPY: it is written after `loadWorkspaceAccessProfile`,
-         * a network round trip. auth-js saves a new session as soon as one
-         * arrives. Public getSession()/updateUser() both acquire this same
-         * lock, so they cannot be nested here; the internal methods are the
-         * library's own path for reading and writing while already serialized.
-         */
-        let live: SupabaseAuthSessionResult;
-        try {
-          live = await readLockedAuthSession(lockedAuth);
-        } catch {
-          return {
-            ok: false,
-            message: 'We could not check who is signed in, so nothing was changed. Try again.',
-          };
-        }
-
-        if (live.error || !live.data.session) {
-          return { ok: false, message: 'Your session has ended. Request a new reset link from the sign-in screen.' };
-        }
-        // A preceding tab can spend this grant before its USER_UPDATED message
-        // reaches us. Reconcile durable revocation while holding the same lock
-        // as the mutation, rather than trusting the tab's cached grant.
-        if (readSpentRecoveryUsers().includes(live.data.session.user.id)) {
-          set({ passwordRecoveryFor: '' });
-          storeRecoveryUser('');
-          return { ok: false, message: 'This reset link has already been used. Request a new reset link.' };
-        }
-        if (
-          !hasValidatedPasswordRecovery({ session: live.data.session, passwordRecoveryFor: get().passwordRecoveryFor })
-        ) {
-          return {
-            ok: false,
-            message:
-              'This reset link was issued for a different account than the one signed in here. Request a new link.',
-          };
-        }
-
-        /*
-         * updateUser can REJECT, not just return an error, and this function
-         * promising to resolve is load-bearing: ResetPassword only clears its
-         * busy flag after awaiting it.
-         */
-        let outcome: SupabaseUpdateUserResult;
-        try {
-          mutationStarted = true;
-          outcome = await updateLockedAuthUser(lockedAuth, { password });
-        } catch {
-          /*
-           * The request was abandoned in flight, so whether the server applied
-           * it is genuinely unknown here -- and saying either "done" or
-           * "failed" would be a guess. The grant is deliberately left in place:
-           * this is not a finished recovery, and the customer may simply try
-           * again.
-           */
-          return {
-            ok: false,
-            message:
-              'We could not confirm that change. Try the new password; if it does not work, request another link.',
-          };
-        }
-
-        if (outcome.error) {
-          return { ok: false, message: describeAuthError(outcome.error.message) };
-        }
-
-        // Only now is the recovery finished; clearing it earlier would release
-        // the screen while the password was still the old one.
-        set({ passwordRecoveryFor: '' });
-        storeRecoveryUser('');
-        // Recorded here as well as on USER_UPDATED: this is the tab that knows
-        // the update succeeded, and it must not depend on hearing its own
-        // broadcast.
-        if (outcome.data.user) recordSpentRecoveryUser(outcome.data.user.id);
-        return { ok: true, message: 'Password updated. You are signed in.' };
-      });
+      live = await client.auth.getSession();
     } catch {
-      return mutationStarted
-        ? {
-            ok: false,
-            message:
-              'We could not confirm that change. Try the new password; if it does not work, request another link.',
-          }
-        : {
-            ok: false,
-            message: 'We could not safely lock this reset session, so nothing was changed. Try again.',
-          };
+      /*
+       * getSession takes auth-js's lock and can reject for the same reasons the
+       * mutation can. Uncaught, that rejection leaves ResetPassword's busy flag
+       * set and the screen disabled on "Saving..." for good.
+       *
+       * Definite wording: this failed BEFORE any password request was sent, so
+       * nothing is uncertain and inventing a doubt would be its own dishonesty.
+       */
+      return { ok: false, message: 'We could not check who is signed in, so nothing was changed. Try again.' };
     }
+
+    if (live.error || !live.data.session) {
+      return { ok: false, message: 'Your session has ended. Request a new reset link from the sign-in screen.' };
+    }
+
+    const recoverySession = live.data.session;
+
+    // A preceding tab can spend this grant before its announcement reaches us,
+    // so the durable record is consulted rather than the tab's cached grant.
+    if (readSpentRecoveryUsers().includes(recoverySession.user.id)) {
+      set({ passwordRecoveryFor: '' });
+      storeRecoveryUser('');
+      return { ok: false, message: 'This reset link has already been used. Request a new reset link.' };
+    }
+
+    if (!hasValidatedPasswordRecovery({ session: recoverySession, passwordRecoveryFor: get().passwordRecoveryFor })) {
+      return {
+        ok: false,
+        message: 'This reset link was issued for a different account than the one signed in here. Request a new link.',
+      };
+    }
+
+    /*
+     * The change is CARRIED to the account it was validated for, rather than
+     * aimed at whoever auth-js holds when it runs.
+     *
+     * Holding auth-js's session lock around the check and the mutation was the
+     * previous answer, and it cannot hold this invariant. auth-js only uses a
+     * real lock when `navigator.locks` exists; otherwise it selects `lockNoOp`,
+     * which runs the callback immediately with no exclusion whatsoever. This
+     * build targets safari13 (vite.config.ts), so that fallback is not
+     * hypothetical -- on a browser we ship to, the lock protects nothing and
+     * another tab can save a different session between the check and the
+     * mutation's own reread.
+     *
+     * So the ambient read is removed rather than fenced. This request carries
+     * the access token of the session the grant was validated against, and the
+     * server applies the change to whoever that token belongs to. A switch
+     * elsewhere can change what auth-js holds; it cannot change what was sent.
+     * That holds with or without Web Locks, which is the point.
+     */
+    const request = buildPasswordUpdateRequest({
+      supabaseUrl: supabaseConfig.url,
+      anonKey: supabaseConfig.anonKey,
+      accessToken: recoverySession.access_token,
+      password,
+    });
+
+    let response: Response;
+    try {
+      response = await fetch(request.url, { method: request.method, headers: request.headers, body: request.body });
+    } catch {
+      /*
+       * In flight when it failed, so whether the server applied it is genuinely
+       * unknown -- claiming either outcome would be a guess. The grant stays:
+       * this is not a finished recovery and a retry is reasonable.
+       */
+      return {
+        ok: false,
+        message: 'We could not confirm that change. Try the new password; if it does not work, request another link.',
+      };
+    }
+
+    if (!response.ok) {
+      const payload: unknown = await response.json().catch(() => null);
+      const explained = readPasswordUpdateError(payload);
+      return {
+        ok: false,
+        // GoTrue's own words when it gave any: "New password should be
+        // different from the old password" IS the answer the customer needs.
+        message: explained
+          ? describeAuthError(explained)
+          : 'That change was refused and no reason was given. Try again, or request another link.',
+      };
+    }
+
+    // Only now is the recovery finished; clearing it earlier would release the
+    // screen while the password was still the old one.
+    const spentFor = recoverySession.user.id;
+    set({ passwordRecoveryFor: '' });
+    storeRecoveryUser('');
+    recordSpentRecoveryUser(spentFor);
+    // auth-js is no longer in this path, so its USER_UPDATED broadcast will not
+    // release the grant in other tabs. This module makes that announcement.
+    announceSpentRecovery(spentFor);
+    return { ok: true, message: 'Password updated. You are signed in.' };
   },
   sendPasswordReset: async (email) => {
     const client = getSupabaseClient();

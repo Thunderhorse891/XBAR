@@ -126,12 +126,12 @@ test('a password reset can actually be completed', () => {
    * borrowed session expires, so the customer was locked out again having been
    * told the reset worked.
    */
-  assert.match(store, /_updateUser/, 'nothing sets a new password; a reset that only sends mail cannot complete');
   assert.match(
     store,
-    /updateLockedAuthUser\(lockedAuth, \{ password \}\)/,
-    'the reset flow must call the password mutation path',
+    /buildPasswordUpdateRequest\(\{/,
+    'nothing sets a new password; a reset that only sends mail cannot complete',
   );
+  assert.match(store, /await fetch\(request\.url/, 'the password request must actually be sent');
   assert.match(
     store,
     /event === 'PASSWORD_RECOVERY'/,
@@ -401,50 +401,47 @@ test('the account about to be changed is confirmed against the live session', ()
    * nesting public auth methods that take the same lock again.
    */
   const update = body(store, /updatePassword: async[\s\S]*?\n {2}\},/, 'updatePassword');
-  assert.match(update, /withAuthSessionLock\(client\.auth/, 'the recovery check and mutation must share the auth lock');
-  assert.match(
-    store,
-    /async function withAuthSessionLock[\s\S]*[.]call[(][\s\S]*lockedAuth,/,
-    'the internal auth lock must be called with its Supabase auth instance as this',
-  );
-  assert.match(store, /readLockedAuthSession/, 'the session must be read by the no-lock internal path');
-  assert.match(store, /updateLockedAuthUser/, 'the mutation must use the no-lock internal update path');
-  assert.match(store, /_useSession/, 'the locked reader must use auth-js _useSession, not public getSession');
-  assert.match(store, /_updateUser/, 'the locked mutation must use auth-js _updateUser, not public updateUser');
   assert.match(
     update,
-    /await readLockedAuthSession\(lockedAuth\)[\s\S]*?hasValidatedPasswordRecovery\(\{[\s\S]*?session: live\.data\.session[\s\S]*?\}\)[\s\S]*?await updateLockedAuthUser\(lockedAuth, \{ password \}\)/,
-    'the locked live session must be matched against the grant before the locked password update',
+    /accessToken: recoverySession\.access_token/,
+    'the request must carry the token of the session the grant was validated against',
   );
   assert.equal(
-    /await client\.auth\.(getSession|updateUser)\(/.test(update),
+    /client\.auth\.updateUser\(/.test(update),
     false,
-    'public getSession/updateUser take the auth lock themselves and must not be nested under withAuthSessionLock',
+    'updateUser acts on the ambient session; that is the defect, not the fix',
+  );
+  /*
+   * And NOT by holding auth-js's session lock around the check and the
+   * mutation. auth-js only uses a real lock when `navigator.locks` exists and
+   * otherwise selects `lockNoOp`, which runs the callback with no exclusion at
+   * all -- and this build targets safari13 (vite.config.ts), so that fallback
+   * ships. A lock that is absent on a supported browser cannot carry a
+   * correct-account invariant.
+   */
+  assert.equal(
+    /_acquireLock|withAuthSessionLock/.test(store),
+    false,
+    "auth-js's lock is a no-op without navigator.locks; the invariant must not depend on it",
   );
 });
 
-test('every awaited reset auth primitive in updatePassword is inside a try', () => {
+test('every awaited call in updatePassword is inside a try', () => {
   /*
    * ResetPassword only clears its busy flag after this function settles, so any
    * rejection that escapes leaves the screen disabled on "Saving..." for good.
-   * d56fc53 closed that for updateUser; a865963 then added a session read
-   * OUTSIDE the try and reopened it. The current path uses internal no-lock
-   * primitives under one outer lock, but each awaited primitive still has to
-   * resolve into a customer-visible result.
+   * d56fc53 closed that for the mutation; a865963 then added a session read
+   * OUTSIDE the try and reopened it. Both halves, or neither.
    */
   const update = body(store, /updatePassword: async[\s\S]*?\n {2}\},/, 'updatePassword');
-  assert.equal(
-    /await client\.auth\.\w+\(/.test(update),
-    false,
-    'updatePassword must not await public auth methods under the session lock',
+  const awaitedAuth = update.match(/await client\.auth\.\w+\(/g) ?? [];
+  assert.equal(awaitedAuth.length, 1, 'expected exactly getSession -- a new auth call needs its own guard here');
+  assert.match(
+    update,
+    /try \{\s*live = await client\.auth\.getSession\(/,
+    'getSession must be awaited inside a try, or its rejection strands the screen',
   );
-  for (const call of ['readLockedAuthSession', 'updateLockedAuthUser']) {
-    assert.match(
-      update,
-      new RegExp(`try \\{[\\s\\S]{0,200}?\\w+ = await ${call}\\(`),
-      `${call} must be awaited inside a try, or its rejection strands the screen`,
-    );
-  }
+  assert.match(update, /try \{\s*response = await fetch\(/, 'the password request must be awaited inside a try too');
 });
 
 test('a recovery grant is released when its session ends', () => {
