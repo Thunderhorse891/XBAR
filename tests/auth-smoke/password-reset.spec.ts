@@ -393,6 +393,41 @@ test('a rejected update stays retryable and keeps the grant', async ({ page }) =
   expect(await heldGrant(page)).toBe(USER_ID);
 });
 
+test('a delayed spent announcement cannot revoke a newly validated recovery', async ({ page }) => {
+  await stubGoTrueUser(page);
+  await page.goto(recoveryLink());
+  await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
+  await fillNewPassword(page, 'first-reset-password');
+  await submit(page).click();
+  await expect(page.getByText('Password updated. You are signed in.').first()).toBeVisible();
+
+  // Open the new email link in a fresh document, so auth-js parses it again.
+  await page.goto('about:blank');
+  await page.goto(recoveryLink());
+  await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
+  // Deliver an old completion after the new PASSWORD_RECOVERY event. Wait
+  // for delivery and rendering before asserting that the fresh form survives.
+  await page.evaluate(
+    (userId) =>
+      new Promise<void>((resolve) => {
+        const observer = new BroadcastChannel('xbar-password-recovery');
+        const sender = new BroadcastChannel('xbar-password-recovery');
+        observer.onmessage = () => {
+          observer.close();
+          sender.close();
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        };
+        sender.postMessage({ type: 'recovery-spent', userId });
+      }),
+    USER_ID,
+  );
+  expect(await heldGrant(page)).toBe(USER_ID);
+  await expect(newPassword(page)).toBeVisible();
+  await fillNewPassword(page, 'second-reset-password');
+  await submit(page).click();
+  await expect(page.getByText('Password updated. You are signed in.').first()).toBeVisible();
+});
+
 for (const withoutBroadcastChannel of [false, true]) {
   test(`spending the grant in one tab ends it in the other (BroadcastChannel absent: ${withoutBroadcastChannel})`, async ({
     context,

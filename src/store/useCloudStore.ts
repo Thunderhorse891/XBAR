@@ -466,6 +466,8 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
           if (message?.type !== 'recovery-spent' || !message.userId) return;
           // Only the account whose grant was spent.
           if (get().passwordRecoveryFor !== message.userId) return;
+          // A newly validated link can supersede a queued spent announcement.
+          if (!readSpentRecoveryUsers().includes(message.userId)) return;
           set({ passwordRecoveryFor: '' });
           storeRecoveryUser('');
         });
