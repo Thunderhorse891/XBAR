@@ -459,6 +459,29 @@ test('a recovery grant is released when its session ends', () => {
     'SIGNED_OUT must durably revoke the grant for tabs that miss the transient event',
   );
   /*
+   * And for the account whose session ended, whether or not THIS tab holds a
+   * grant. A tab opened after the recovery shares the session but has no
+   * `recoveryFor`, so revoking only the local grant recorded nothing at all
+   * there -- and a later ordinary sign-in let the unloaded recovery tab come
+   * back to a matching session and a grant nobody had retired.
+   *
+   * SIGNED_OUT carries a null session, so the id has to have been kept from
+   * the last session this tab saw. The behaviour itself is proved by
+   * "a session ending in a tab that holds no grant still ends the recovery"
+   * in tests/auth-smoke/password-reset.spec.ts; this only pins that both ids
+   * are still what gets revoked.
+   */
+  assert.match(
+    initialize,
+    /if \(event === 'SIGNED_OUT'\) \{\s*if \(lastAuthUserId\) recordSpentRecoveryUser\(lastAuthUserId\);/,
+    'the account signed out here must be revoked whether or not this tab holds a grant',
+  );
+  assert.match(
+    initialize,
+    /\} else if \(session\) \{\s*lastAuthUserId = session\.user\.id;/,
+    'the account must be remembered from the last session seen, since SIGNED_OUT arrives empty',
+  );
+  /*
    * A recovery ends when the password is set, and that can happen in a
    * different tab: auth-js broadcasts the grant to every open tab, but the
    * store and sessionStorage recording it are tab-local. Clearing only where

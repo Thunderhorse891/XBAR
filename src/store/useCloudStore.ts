@@ -395,6 +395,15 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return queued;
     };
     const { data: subscription } = client.auth.onAuthStateChange((event, session) => {
+      /*
+       * SIGNED_OUT arrives with a null session, so the account whose session
+       * ended has to have been remembered from the last one this tab saw. It
+       * need not be a tab holding a grant: one opened after the recovery shares
+       * the session and has no `passwordRecoveryFor` of its own, and revoking
+       * only the local grant there recorded nothing at all -- so an ordinary
+       * same-account sign-in afterwards left an unloaded recovery tab with a
+       * live session matching its stale grant.
+       */
       if (event === 'SIGNED_OUT') {
         if (lastAuthUserId) recordSpentRecoveryUser(lastAuthUserId);
         lastAuthUserId = '';
@@ -432,8 +441,12 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
         set({ passwordRecoveryFor: '' });
         storeRecoveryUser('');
         if (event === 'SIGNED_OUT' && recoveryFor) {
-          // Durably, so a tab that misses this transient sign-out cannot revive
-          // its old grant after an ordinary same-account sign-in.
+          /*
+           * Durably, so a tab that misses this transient sign-out cannot revive
+           * its old grant after an ordinary same-account sign-in. A separate
+           * fact from the signed-out account revoked above: a grant can outlive
+           * the session it was issued for, so neither one covers the other.
+           */
           recordSpentRecoveryUser(recoveryFor);
         }
         if (event === 'USER_UPDATED' && session) {
@@ -514,8 +527,15 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       (!get().session || reconcileStoredRecovery({ storedGrant: currentRecoveryFor, spentFor }) === '')
     ) {
       set({ passwordRecoveryFor: '' });
-      storeRecoveryUser('');
     }
+    /*
+     * And the tab-local marker is kept in step with the grant itself, including
+     * where the store's own initializer already reconciled a spent grant away
+     * before this ran. Otherwise a revoked id sits in sessionStorage and is
+     * harmless only because every reader re-checks the durable revocation --
+     * which is a fact about today's readers, not a property of the record.
+     */
+    if (!get().passwordRecoveryFor) storeRecoveryUser('');
 
     return () => {
       recoveryChannel?.close();

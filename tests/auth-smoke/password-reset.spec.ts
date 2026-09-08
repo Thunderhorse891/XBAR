@@ -3,6 +3,7 @@ import {
   blockWebfonts,
   recoveryLink,
   RECOVERY_KEY,
+  recoverySpentKeyFor,
   sessionLink,
   stubGoTrueUser,
   USER_ID,
@@ -581,4 +582,130 @@ test('a recovery link does not drag every other tab to the reset screen', async 
   await expect(bystander).toHaveURL(/\/app\/verify$/);
   await expect(bystander.getByText('Verify a sale packet')).toBeVisible();
   await expect(newPassword(bystander)).toHaveCount(0);
+});
+
+test('a session ending in a tab that holds no grant still ends the recovery', async ({ context }) => {
+  /*
+   * The tab whose session ends is often not the tab holding the grant.
+   *
+   * A tab opened AFTER a recovery shares the session but has no
+   * `passwordRecoveryFor` of its own, so revoking only the grant that tab holds
+   * recorded nothing at all. An ordinary same-account sign-in afterwards then
+   * restored a session, and the recovery tab -- unloaded throughout, and so
+   * reachable by no broadcast -- came back to a live session matching its stale
+   * grant, able to set the password again with no new link.
+   *
+   * The session is deliberately present at the end. Clearing a grant when the
+   * bootstrap settles with no session is a different guard, covered by
+   * "restoring a recovery tab without a session discards its old grant"; it
+   * cannot help here, and this test fails if that is all that stands behind the
+   * refusal.
+   *
+   * The session is ended by a refresh that GoTrue rejects -- what a customer
+   * sees when the account is signed out from another device, or the refresh
+   * token is revoked. auth-js reaches SIGNED_OUT through its own code here,
+   * which is what distinguishes this from "a sign-out event without a local
+   * grant revokes an unloaded recovery tab" above: that one delivers the
+   * cross-tab message directly and so pins the protocol, while this one holds
+   * only if auth-js really does end the session on a refusal the test did not
+   * shape. The Settings sign-out button is not used because it sits behind
+   * workspace setup, which would drag a cloud workspace save into a test about
+   * recovery grants.
+   */
+  const otherAccount = '9f0a1c22-0000-4000-8000-0000000000ff';
+  const recoveryTab = await context.newPage();
+  await stubGoTrueUser(recoveryTab);
+  await recoveryTab.goto(recoveryLink());
+  await expect(newPassword(recoveryTab)).toBeVisible({ timeout: 30_000 });
+  expect(await heldGrant(recoveryTab)).toBe(USER_ID);
+
+  // A revocation already on record for a DIFFERENT account. Revoking this one
+  // must not take that one with it -- a single durable slot did exactly that
+  // once already.
+  await recoveryTab.evaluate((key) => window.localStorage.setItem(key, 'spent'), recoverySpentKeyFor(otherAccount));
+
+  /*
+   * The recovery tab is unloaded: backgrounded and discarded, the one state in
+   * which no broadcast, storage event or channel message can reach it. Its
+   * sessionStorage -- and so its grant -- survives that, which is exactly why
+   * the revocation has to be recorded somewhere durable and shared.
+   */
+  await recoveryTab.goto('about:blank');
+
+  const otherTab = await context.newPage();
+  await stubGoTrueUser(otherTab);
+  // GoTrue refusing the refresh token: the session is over and cannot be renewed.
+  await otherTab.route('**/auth/v1/token*', (route) =>
+    route.fulfill({
+      status: 400,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'invalid_grant', error_description: 'Invalid Refresh Token' }),
+    }),
+  );
+
+  // Public, and opened after the recovery: it shares the session and holds no
+  // grant of its own -- the exact tab whose sign-out used to record nothing.
+  await otherTab.goto('/app/verify');
+  await expect(otherTab.getByText('Verify a sale packet')).toBeVisible({ timeout: 30_000 });
+  expect(await heldGrant(otherTab)).toBe('');
+
+  const expired = await otherTab.evaluate(() => {
+    const key = Object.keys(window.localStorage).find(
+      (entry) => entry.startsWith('sb-') && entry.endsWith('-auth-token'),
+    );
+    if (!key) return false;
+    const stored = JSON.parse(window.localStorage.getItem(key) ?? '{}') as { expires_at?: number; expires_in?: number };
+    stored.expires_at = Math.floor(Date.now() / 1000) - 60;
+    stored.expires_in = 0;
+    window.localStorage.setItem(key, JSON.stringify(stored));
+    // What the browser does when the customer returns to a backgrounded tab:
+    // auth-js recovers the stored session, finds it expired, and tries to renew.
+    window.dispatchEvent(new Event('visibilitychange'));
+    return true;
+  });
+  // It really was signed in here, or there would have been no session to end.
+  expect(expired).toBe(true);
+
+  // auth-js gave up on the session: this tab is signed out.
+  await expect
+    .poll(
+      async () =>
+        otherTab.evaluate(() =>
+          Object.keys(window.localStorage).some((key) => key.startsWith('sb-') && key.endsWith('-auth-token')),
+        ),
+      {
+        timeout: 30_000,
+      },
+    )
+    .toBe(false);
+
+  // And the account was revoked durably, by a tab that never held the grant.
+  await expect
+    .poll(async () => otherTab.evaluate((key) => window.localStorage.getItem(key), recoverySpentKeyFor(USER_ID)), {
+      timeout: 30_000,
+    })
+    .toBe('spent');
+
+  // An ordinary sign-in to the same account, with no recovery link of any kind.
+  await otherTab.goto(sessionLink('signin'));
+  await expect(refusal(otherTab)).toBeVisible({ timeout: 30_000 });
+
+  // And the recovery tab comes back.
+  await recoveryTab.goto('/app/reset-password');
+  await expect(refusal(recoveryTab)).toBeVisible({ timeout: 30_000 });
+  await expect(newPassword(recoveryTab)).toHaveCount(0);
+  expect(await heldGrant(recoveryTab)).toBe('');
+
+  // It really did come back to a live session, so the refusal is the
+  // revocation's doing and not the absence of a session.
+  expect(
+    await recoveryTab.evaluate(() =>
+      Object.keys(window.localStorage).some((key) => key.startsWith('sb-') && key.endsWith('-auth-token')),
+    ),
+  ).toBe(true);
+
+  // The other account's revocation survived this one.
+  expect(await recoveryTab.evaluate((key) => window.localStorage.getItem(key), recoverySpentKeyFor(otherAccount))).toBe(
+    'spent',
+  );
 });

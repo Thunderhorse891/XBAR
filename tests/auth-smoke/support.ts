@@ -18,6 +18,21 @@ export const RECOVERY_EMAIL = 'owner@xbar.test';
 // only meaningful if the grant really is gone underneath it.
 export const RECOVERY_KEY = 'xbar-password-recovery-for';
 
+/*
+ * The durable, cross-tab record of grants that are over. Shared rather than
+ * tab-local, because the tab that ends a recovery is often not the tab holding
+ * it -- and a tab that was unloaded at the time has nowhere else to learn of it.
+ */
+export const RECOVERY_SPENT_KEY = 'xbar-password-recovery-spent';
+
+/*
+ * One key per account rather than one shared list, so two tabs revoking
+ * different accounts at the same time cannot overwrite each other. 'spent'
+ * means the grant is over; 'active' says a new link has been validated since,
+ * and overrides an entry inherited from the older shared list.
+ */
+export const recoverySpentKeyFor = (userId: string) => `${RECOVERY_SPENT_KEY}:user:${userId}`;
+
 export function base64url(value: object) {
   return Buffer.from(JSON.stringify(value)).toString('base64url');
 }
