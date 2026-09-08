@@ -222,6 +222,39 @@ test('a completed reset reports success and does not also claim the link expired
   expect(await heldGrant(page)).toBe('');
 });
 
+test('submitting actually sends a password request', async ({ page }) => {
+  /*
+   * The one check no screen assertion can stand in for: that a request left
+   * the browser at all.
+   *
+   * This is not hypothetical. An earlier attempt to make the check and the
+   * mutation atomic wrapped both in auth-js's own lock, and `_acquireLock`
+   * pushes the outer callback into `pendingInLock` before running it -- so a
+   * nested getSession awaited the very promise waiting on it. Every submission
+   * deadlocked and NO request was ever sent, while the entire source-level
+   * suite stayed green, because nothing in it asserted the wire.
+   *
+   * Deliberately blind to HOW the request is made, so it keeps its value
+   * whichever way the mutation is implemented.
+   */
+  const sent: string[] = [];
+  await page.route('**/auth/v1/user*', async (route) => {
+    if (route.request().method() === 'PUT') sent.push(route.request().headers()['authorization'] ?? '');
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userRecord()) });
+  });
+
+  await page.goto(recoveryLink());
+  await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
+  await fillNewPassword(page, 'a-brand-new-password');
+  await submit(page).click();
+  await expect(page.getByText('Password updated. You are signed in.').first()).toBeVisible();
+
+  expect(sent).toHaveLength(1);
+  // Carrying a bearer token: the credential the change is applied under,
+  // observed on the wire rather than inferred from the source.
+  expect(sent[0]).toMatch(/^Bearer .+/);
+});
+
 test('a rejected update stays retryable and keeps the grant', async ({ page }) => {
   await stubGoTrueUser(page, async (route) => {
     await route.fulfill({
