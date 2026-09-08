@@ -31,6 +31,7 @@ const read = (file) => stripComments(readFileSync(path.join(process.cwd(), file)
 const login = read('src/routes/Login.tsx');
 const store = read('src/store/useCloudStore.ts');
 const app = read('src/App.tsx');
+const authCallbackArrival = read('src/lib/authCallbackArrival.ts');
 
 function body(source, signature, label) {
   const match = source.match(signature);
@@ -303,8 +304,8 @@ test('the tab-arrival signal cannot become an authorization signal', () => {
   // guard first read while the redirect still fired in every tab.
   assert.match(
     app,
-    /if \(pending && openedTheLink && location\.pathname !== passwordResetPath\)/,
-    'the redirect must be limited to the tab that opened the link',
+    /if \(!pending \|\| !consumeRecoveryCallbackNavigation\(\)\) return;/,
+    'the redirect must consume the tab-local link arrival intent before navigating',
   );
   assert.equal(
     /authCallbackArrival/.test(store),
@@ -359,19 +360,17 @@ test('a durable grant has a durable revocation', () => {
     /reconcileStoredRecovery\(\{/,
     'startup must reconcile the stored grant against a recorded completion',
   );
-  assert.match(
-    store,
-    /event === 'USER_UPDATED' && session/,
-    'the completion is what marks the grant spent, not a sign-out',
-  );
-  // A later genuine link must clear the mark, or one reset would bar every
-  // future one for that account.
+  assert.match(store, /recordSpentRecoveryUser\(session\.user\.id\)/, 'the completed account must be recorded durably');
+  // A later genuine link must clear that account's mark, or one reset would bar
+  // every future one for that account. Other accounts' revocations survive.
   const initialize = body(store, /initialize: async[\s\S]*?\n {2}\},/, 'initialize');
-  assert.match(
-    initialize,
-    /event === 'PASSWORD_RECOVERY'[\s\S]*?storeSpentRecoveryUser\(''\)/,
-    'a newly validated link must supersede an earlier completion',
+  const recoveryEventIndex = initialize.indexOf("event === 'PASSWORD_RECOVERY'");
+  const clearCurrentAccountIndex = initialize.indexOf('clearSpentRecoveryUser(session.user.id)');
+  assert.ok(
+    recoveryEventIndex >= 0 && clearCurrentAccountIndex > recoveryEventIndex,
+    "a newly validated link must supersede that account's earlier completion without wiping the others",
   );
+  assert.match(store, /normalizeRecoveryUsers/, 'durable revocations must preserve more than the most recent account');
 });
 
 test('queueing a newer event retires the bootstrap sync in flight', () => {
@@ -397,10 +396,16 @@ test('the account about to be changed is confirmed against the live session', ()
    * another tab left a window where the form was still enabled on the old
    * session and updateUser would have changed the NEW account's password.
    *
-   * The check has to sit immediately before the call, with nothing awaited in
-   * between, or the window simply moves.
+   * The check and mutation have to share auth-js's own session lock, or the
+   * window simply moves between getSession and updateUser.
    */
   const update = body(store, /updatePassword: async[\s\S]*?\n {2}\},/, 'updatePassword');
+  assert.match(update, /withAuthSessionLock\(client\.auth/, 'the recovery check and mutation must share the auth lock');
+  assert.match(
+    store,
+    /async function withAuthSessionLock[\s\S]*[.]call[(][\s\S]*lockedAuth,/,
+    'the internal auth lock must be called with its Supabase auth instance as this',
+  );
   assert.match(
     update,
     /await client\.auth\.getSession\(\)[\s\S]*?hasValidatedPasswordRecovery\(\{[\s\S]*?session: live\.data\.session[\s\S]*?\}\)[\s\S]*?client\.auth\.updateUser/,
@@ -422,7 +427,7 @@ test('every awaited auth call in updatePassword is inside a try', () => {
   for (const call of ['getSession', 'updateUser']) {
     assert.match(
       update,
-      new RegExp(`try \\{\\s*\\w+ = await client\\.auth\\.${call}\\(`),
+      new RegExp(`try \\{[\\s\\S]{0,200}?\\w+ = await client\\.auth\\.${call}\\(`),
       `${call} must be awaited inside a try, or its rejection strands the screen`,
     );
   }
@@ -437,6 +442,11 @@ test('a recovery grant is released when its session ends', () => {
    */
   const initialize = body(store, /initialize: async[\s\S]*?\n {2}\},/, 'initialize');
   assert.match(initialize, /event === 'SIGNED_OUT'/, 'SIGNED_OUT must release the recovery grant');
+  assert.match(
+    initialize,
+    /event === 'SIGNED_OUT' && recoveryFor[\s\S]*?recordSpentRecoveryUser\(recoveryFor\)/,
+    'SIGNED_OUT must durably revoke the grant for tabs that miss the transient event',
+  );
   /*
    * A recovery ends when the password is set, and that can happen in a
    * different tab: auth-js broadcasts the grant to every open tab, but the
@@ -447,6 +457,24 @@ test('a recovery grant is released when its session ends', () => {
     initialize,
     /event === 'USER_UPDATED'/,
     'a completed update must release the grant in every tab, not only the acting one',
+  );
+});
+
+test('the recovery callback navigation marker is consumed', () => {
+  /*
+   * A module-level boolean made the first tab that ever opened a recovery link
+   * a permanent opener. A later recovery link in another tab could then yank it
+   * back to reset-password even though its old callback was long gone.
+   */
+  assert.match(
+    authCallbackArrival,
+    /createRecoveryCallbackNavigationIntent/,
+    'the callback marker must be represented as a consumable intent',
+  );
+  assert.match(
+    app,
+    /consumeRecoveryCallbackNavigation\(\)/,
+    'the redirect must consume the current callback rather than ask a lifetime boolean',
   );
 });
 

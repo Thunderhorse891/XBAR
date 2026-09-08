@@ -25,9 +25,20 @@ export function isRecoveryCallbackUrl(url: string): boolean {
   return RECOVERY_CALLBACK.test(url);
 }
 
-const arrivedWithRecoveryCallback = typeof window === 'undefined' ? false : isRecoveryCallbackUrl(window.location.href);
+export function createRecoveryCallbackNavigationIntent(url: string | null): () => boolean {
+  let canNavigate = Boolean(url && isRecoveryCallbackUrl(url));
+  return () => {
+    const shouldNavigate = canNavigate;
+    canNavigate = false;
+    return shouldNavigate;
+  };
+}
 
-/** True only in the tab whose own URL carried the recovery callback. */
-export function tabOpenedRecoveryCallback(): boolean {
-  return arrivedWithRecoveryCallback;
+const consumeNavigationIntent = createRecoveryCallbackNavigationIntent(
+  typeof window === 'undefined' ? null : window.location.href,
+);
+
+/** True once, only in the tab whose own URL carried the recovery callback. */
+export function consumeRecoveryCallbackNavigation(): boolean {
+  return consumeNavigationIntent();
 }

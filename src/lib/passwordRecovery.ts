@@ -32,9 +32,10 @@ export type RecoveryGateState = {
  * Supabase validates it, so this only ever retires a grant that has actually
  * been used.
  */
-export function reconcileStoredRecovery(input: { storedGrant: string; spentFor: string }): string {
+export function reconcileStoredRecovery(input: { storedGrant: string; spentFor: string | readonly string[] }): string {
   if (!input.storedGrant) return '';
-  return input.storedGrant === input.spentFor ? '' : input.storedGrant;
+  const spentFor = Array.isArray(input.spentFor) ? input.spentFor : [input.spentFor];
+  return spentFor.includes(input.storedGrant) ? '' : input.storedGrant;
 }
 
 export function hasValidatedPasswordRecovery(state: RecoveryGateState): boolean {

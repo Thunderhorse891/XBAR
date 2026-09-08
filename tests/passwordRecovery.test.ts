@@ -125,6 +125,15 @@ test('a grant already spent elsewhere does not come back after a reload', () => 
   assert.equal(reconcileStoredRecovery({ storedGrant: 'user-a', spentFor: 'user-a' }), '');
 });
 
+test('a grant already spent for any earlier account does not come back', () => {
+  /*
+   * A single durable slot let a later reset for B overwrite the revocation for
+   * A. An unloaded A tab could then reload, sign in as A, and reuse its old
+   * grant without a new link.
+   */
+  assert.equal(reconcileStoredRecovery({ storedGrant: 'user-a', spentFor: ['user-b', 'user-a'] }), '');
+});
+
 test('a grant survives a completion recorded for a different account', () => {
   assert.equal(reconcileStoredRecovery({ storedGrant: 'user-a', spentFor: 'user-b' }), 'user-a');
 });

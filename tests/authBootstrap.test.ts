@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { bootstrapEventDisposition, createLatestWriteGate } from '../src/lib/authBootstrap.js';
-import { isRecoveryCallbackUrl } from '../src/lib/authCallbackArrival.js';
+import { createRecoveryCallbackNavigationIntent, isRecoveryCallbackUrl } from '../src/lib/authCallbackArrival.js';
 
 /*
  * Two decisions that both exist because auth-js broadcasts to every tab, and
@@ -58,6 +58,23 @@ test('an ordinary URL is not a recovery callback', () => {
   // Not a bare substring match: `type=recovery` has to be its own parameter.
   assert.equal(isRecoveryCallbackUrl('https://x.test/app/?prototype=recovery-plan'), false);
   assert.equal(isRecoveryCallbackUrl('https://x.test/app/?type=recovery-lite'), false);
+});
+
+test('recovery callback navigation is consumed after one use', () => {
+  /*
+   * A tab that opened one recovery link must not stay permanently classified as
+   * the callback tab. Otherwise the next link opened in another tab can pull
+   * this old tab back to reset-password.
+   */
+  const consume = createRecoveryCallbackNavigationIntent('https://x.test/app/#access_token=abc&type=recovery');
+  assert.equal(consume(), true);
+  assert.equal(consume(), false);
+});
+
+test('non-callback tabs never get a recovery navigation intent', () => {
+  const consume = createRecoveryCallbackNavigationIntent('https://x.test/app/horses');
+  assert.equal(consume(), false);
+  assert.equal(consume(), false);
 });
 
 test('a single write commits', () => {

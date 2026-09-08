@@ -22,7 +22,7 @@ import { billingPath } from './lib/billingRoutes';
 import { buyerFollowUpPath } from './lib/buyerRoutes';
 import { appBasePath, passwordResetPath, usesHashRouting } from './lib/routeCanon';
 import { trackRuntimeEvent } from './lib/runtimeEvents';
-import { tabOpenedRecoveryCallback } from '@/lib/authCallbackArrival';
+import { consumeRecoveryCallbackNavigation } from '@/lib/authCallbackArrival';
 import { hasValidatedPasswordRecovery, useCloudStore } from './store/useCloudStore';
 import './routes/operationsHierarchy.css';
 import './routes/interactionSystem.css';
@@ -187,13 +187,12 @@ function PasswordRecoveryRedirect() {
    * Routing only. The grant still comes from Supabase's validated event, so a
    * forged fragment moves someone to a screen that then refuses them.
    */
-  const openedTheLink = tabOpenedRecoveryCallback();
-
   useEffect(() => {
-    if (pending && openedTheLink && location.pathname !== passwordResetPath) {
+    if (!pending || !consumeRecoveryCallbackNavigation()) return;
+    if (location.pathname !== passwordResetPath) {
       navigate(passwordResetPath, { replace: true });
     }
-  }, [pending, openedTheLink, location.pathname, navigate]);
+  }, [pending, location.pathname, navigate]);
 
   return null;
 }

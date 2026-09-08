@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Session } from '@supabase/supabase-js';
+import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import { loadWorkspaceAccessProfile } from '@/lib/cloudWorkspace';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { isSupabaseConfigured } from '@/lib/platformConfig';
@@ -176,22 +176,47 @@ const RECOVERY_USER_KEY = 'xbar-password-recovery-for';
  */
 const RECOVERY_SPENT_KEY = 'xbar-password-recovery-spent';
 
-function readSpentRecoveryUser(): string {
+function normalizeRecoveryUsers(users: Iterable<unknown>): string[] {
+  return [...new Set([...users].filter((user): user is string => typeof user === 'string' && user.length > 0))].sort();
+}
+
+function readSpentRecoveryUsers(): string[] {
   try {
-    return typeof localStorage === 'undefined' ? '' : (localStorage.getItem(RECOVERY_SPENT_KEY) ?? '');
+    if (typeof localStorage === 'undefined') return [];
+    const raw = localStorage.getItem(RECOVERY_SPENT_KEY) ?? '';
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) return normalizeRecoveryUsers(parsed);
+      if (parsed && typeof parsed === 'object') return normalizeRecoveryUsers(Object.keys(parsed));
+    } catch {
+      // Older builds stored one bare user id. Treat it as one revoked grant.
+    }
+    return [raw];
   } catch {
-    return '';
+    return [];
   }
 }
 
-function storeSpentRecoveryUser(userId: string) {
+function writeSpentRecoveryUsers(users: Iterable<string>) {
   try {
     if (typeof localStorage === 'undefined') return;
-    if (userId) localStorage.setItem(RECOVERY_SPENT_KEY, userId);
+    const normalized = normalizeRecoveryUsers(users);
+    if (normalized.length) localStorage.setItem(RECOVERY_SPENT_KEY, JSON.stringify(normalized));
     else localStorage.removeItem(RECOVERY_SPENT_KEY);
   } catch {
     // Non-fatal; the transient event still clears live tabs.
   }
+}
+
+function recordSpentRecoveryUser(userId: string) {
+  if (!userId) return;
+  writeSpentRecoveryUsers([...readSpentRecoveryUsers(), userId]);
+}
+
+function clearSpentRecoveryUser(userId: string) {
+  if (!userId) return;
+  writeSpentRecoveryUsers(readSpentRecoveryUsers().filter((spentUser) => spentUser !== userId));
 }
 
 function readStoredRecoveryUser(): string {
@@ -214,11 +239,29 @@ function storeRecoveryUser(userId: string) {
   }
 }
 
+type SupabaseAuth = SupabaseClient['auth'];
+type SupabaseAuthWithInternalLock = {
+  lockAcquireTimeout?: unknown;
+  _acquireLock?: unknown;
+};
+
+async function withAuthSessionLock<Result>(auth: SupabaseAuth, run: () => Promise<Result>): Promise<Result> {
+  const lockedAuth = auth as unknown as SupabaseAuthWithInternalLock;
+  const acquireLock = lockedAuth._acquireLock;
+  const acquireTimeout = lockedAuth.lockAcquireTimeout;
+  if (typeof acquireLock !== 'function' || typeof acquireTimeout !== 'number') {
+    throw new Error('Supabase auth session lock unavailable.');
+  }
+  return (
+    acquireLock as <LockedResult>(timeout: number, callback: () => Promise<LockedResult>) => Promise<LockedResult>
+  ).call(lockedAuth, acquireTimeout, run) as Promise<Result>;
+}
+
 export const useCloudStore = create<CloudStore>((set, get) => ({
   initialized: false,
   passwordRecoveryFor: reconcileStoredRecovery({
     storedGrant: readStoredRecoveryUser(),
-    spentFor: readSpentRecoveryUser(),
+    spentFor: readSpentRecoveryUsers(),
   }),
   status: isSupabaseConfigured() ? 'loading' : 'unavailable',
   session: null,
@@ -319,10 +362,12 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
         set({ passwordRecoveryFor: session.user.id });
         storeRecoveryUser(session.user.id);
         // Supabase has just validated a NEW link, so an earlier completion no
-        // longer says anything about this one.
-        storeSpentRecoveryUser('');
+        // longer says anything about this account. Other account revocations
+        // must survive.
+        clearSpentRecoveryUser(session.user.id);
       }
       if (event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+        const recoveryFor = get().passwordRecoveryFor;
         /*
          * SIGNED_OUT: otherwise the authorization survives the session it
          * belonged to and is inherited by whoever signs in next in this tab.
@@ -340,10 +385,15 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
          */
         set({ passwordRecoveryFor: '' });
         storeRecoveryUser('');
+        if (event === 'SIGNED_OUT' && recoveryFor) {
+          // Durably, so a tab that misses this transient sign-out cannot revive
+          // its old grant after an ordinary same-account sign-in.
+          recordSpentRecoveryUser(recoveryFor);
+        }
         if (event === 'USER_UPDATED' && session) {
           // Durably, so a tab that was reloading through this broadcast does
           // not come back holding the grant it just missed the end of.
-          storeSpentRecoveryUser(session.user.id);
+          recordSpentRecoveryUser(session.user.id);
         }
       }
       /*
@@ -408,8 +458,9 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
      * other tab records the completion, and it is past the point where the
      * transient broadcast could have reached it.
      */
-    const spentFor = readSpentRecoveryUser();
-    if (spentFor && get().passwordRecoveryFor === spentFor) {
+    const currentRecoveryFor = get().passwordRecoveryFor;
+    const spentFor = readSpentRecoveryUsers();
+    if (currentRecoveryFor && reconcileStoredRecovery({ storedGrant: currentRecoveryFor, spentFor }) === '') {
       set({ passwordRecoveryFor: '' });
       storeRecoveryUser('');
     }
@@ -642,96 +693,94 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'Use at least 8 characters for the password.' };
     }
 
-    /*
-     * Whose password is about to change, asked of the authority rather than of
-     * a cached copy.
-     *
-     * The screen's gate compares the grant against the store's `session`, and
-     * that is a COPY: it is written after `loadWorkspaceAccessProfile`, a
-     * network round trip. auth-js saves a new session as soon as one arrives.
-     * So if another tab signs into a DIFFERENT account while this form is
-     * open, there is a window where the store still holds the old session --
-     * the form stays enabled and the gate still says yes -- while updateUser
-     * would act on the newly signed-in account and change ITS password.
-     *
-     * The predicate was never wrong; it was being fed a stale input. Asking
-     * auth-js for the live session immediately before the mutation closes the
-     * window, because there is then nothing between the check and the call.
-     */
-    /*
-     * Inside a try because getSession TAKES THE SAME LOCK updateUser does, and
-     * can therefore reject for the same reasons. Adding this call outside one
-     * reopened the exact defect d56fc53 closed: the rejection propagated,
-     * ResetPassword never cleared its busy flag, and the screen sat disabled on
-     * "Saving..." for good. A fix for one hazard must not reintroduce another.
-     *
-     * The wording differs from the post-mutation case on purpose. This failed
-     * BEFORE any password request was sent, so nothing is uncertain here and
-     * saying "we could not confirm" would invent a doubt that does not exist.
-     * Uncertainty is reserved for a mutation that may already have been applied.
-     */
-    let live: Awaited<ReturnType<typeof client.auth.getSession>>;
+    let mutationStarted = false;
     try {
-      live = await client.auth.getSession();
+      return await withAuthSessionLock(client.auth, async () => {
+        /*
+         * Whose password is about to change, asked of the authority rather than
+         * of a cached copy, and held under auth-js's own session lock until the
+         * mutation has chosen its session too.
+         *
+         * The screen's gate compares the grant against the store's `session`,
+         * and that is a COPY: it is written after `loadWorkspaceAccessProfile`,
+         * a network round trip. auth-js saves a new session as soon as one
+         * arrives. Reading and mutating inside one auth lock prevents another
+         * tab's session change from landing between the check and updateUser's
+         * internal session reread.
+         */
+        let live: Awaited<ReturnType<typeof client.auth.getSession>>;
+        try {
+          live = await client.auth.getSession();
+        } catch {
+          return {
+            ok: false,
+            message: 'We could not check who is signed in, so nothing was changed. Try again.',
+          };
+        }
+
+        if (live.error || !live.data.session) {
+          return { ok: false, message: 'Your session has ended. Request a new reset link from the sign-in screen.' };
+        }
+        if (
+          !hasValidatedPasswordRecovery({ session: live.data.session, passwordRecoveryFor: get().passwordRecoveryFor })
+        ) {
+          return {
+            ok: false,
+            message:
+              'This reset link was issued for a different account than the one signed in here. Request a new link.',
+          };
+        }
+
+        /*
+         * updateUser can REJECT, not just return an error, and this function
+         * promising to resolve is load-bearing: ResetPassword only clears its
+         * busy flag after awaiting it.
+         */
+        let outcome: Awaited<ReturnType<typeof client.auth.updateUser>>;
+        try {
+          mutationStarted = true;
+          outcome = await client.auth.updateUser({ password });
+        } catch {
+          /*
+           * The request was abandoned in flight, so whether the server applied
+           * it is genuinely unknown here -- and saying either "done" or
+           * "failed" would be a guess. The grant is deliberately left in place:
+           * this is not a finished recovery, and the customer may simply try
+           * again.
+           */
+          return {
+            ok: false,
+            message:
+              'We could not confirm that change. Try the new password; if it does not work, request another link.',
+          };
+        }
+
+        if (outcome.error) {
+          return { ok: false, message: describeAuthError(outcome.error.message) };
+        }
+
+        // Only now is the recovery finished; clearing it earlier would release
+        // the screen while the password was still the old one.
+        set({ passwordRecoveryFor: '' });
+        storeRecoveryUser('');
+        // Recorded here as well as on USER_UPDATED: this is the tab that knows
+        // the update succeeded, and it must not depend on hearing its own
+        // broadcast.
+        if (outcome.data.user) recordSpentRecoveryUser(outcome.data.user.id);
+        return { ok: true, message: 'Password updated. You are signed in.' };
+      });
     } catch {
-      return {
-        ok: false,
-        message: 'We could not check who is signed in, so nothing was changed. Try again.',
-      };
+      return mutationStarted
+        ? {
+            ok: false,
+            message:
+              'We could not confirm that change. Try the new password; if it does not work, request another link.',
+          }
+        : {
+            ok: false,
+            message: 'We could not safely lock this reset session, so nothing was changed. Try again.',
+          };
     }
-
-    if (live.error || !live.data.session) {
-      return { ok: false, message: 'Your session has ended. Request a new reset link from the sign-in screen.' };
-    }
-    if (!hasValidatedPasswordRecovery({ session: live.data.session, passwordRecoveryFor: get().passwordRecoveryFor })) {
-      return {
-        ok: false,
-        message: 'This reset link was issued for a different account than the one signed in here. Request a new link.',
-      };
-    }
-
-    /*
-     * updateUser can REJECT, not just return an error, and this function
-     * promising to resolve is load-bearing: ResetPassword only clears its busy
-     * flag after awaiting it, so a rejection left the screen disabled on
-     * "Saving..." for good -- no success, no error, no retry. Nothing told the
-     * customer whether their password had changed.
-     *
-     * It is reachable without anything exotic. auth-js guards this call with a
-     * cross-tab Web Lock and hands the lock over after five seconds, so a
-     * second tab submitting during a slow request steals it and throws
-     * "Lock ... was released because another request stole it" here. auth-js
-     * returns its own AuthErrors but rethrows anything else, and that is
-     * anything else.
-     */
-    let outcome: Awaited<ReturnType<typeof client.auth.updateUser>>;
-    try {
-      outcome = await client.auth.updateUser({ password });
-    } catch {
-      /*
-       * The request was abandoned in flight, so whether the server applied it
-       * is genuinely unknown here -- and saying either "done" or "failed" would
-       * be a guess. The grant is deliberately left in place: this is not a
-       * finished recovery, and the customer may simply try again.
-       */
-      return {
-        ok: false,
-        message: 'We could not confirm that change. Try the new password; if it does not work, request another link.',
-      };
-    }
-
-    if (outcome.error) {
-      return { ok: false, message: describeAuthError(outcome.error.message) };
-    }
-
-    // Only now is the recovery finished; clearing it earlier would release the
-    // screen while the password was still the old one.
-    set({ passwordRecoveryFor: '' });
-    storeRecoveryUser('');
-    // Recorded here as well as on USER_UPDATED: this is the tab that knows the
-    // update succeeded, and it must not depend on hearing its own broadcast.
-    if (outcome.data.user) storeSpentRecoveryUser(outcome.data.user.id);
-    return { ok: true, message: 'Password updated. You are signed in.' };
   },
   sendPasswordReset: async (email) => {
     const client = getSupabaseClient();
@@ -835,11 +884,13 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
       return { ok: false, message: 'Supabase is not configured for this build.' };
     }
 
+    const recoveryFor = get().passwordRecoveryFor;
     const { error } = await client.auth.signOut();
     if (error) {
       return { ok: false, message: describeAuthError(error.message) };
     }
 
+    if (recoveryFor) recordSpentRecoveryUser(recoveryFor);
     set({
       session: null,
       status: 'signed-out',
@@ -882,7 +933,9 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
 
     // The server has already deleted the auth user; clear the local session so
     // the app returns to the signed-out state. Caller purges the local workspace.
+    const recoveryFor = get().passwordRecoveryFor;
     await client.auth.signOut().catch(() => {});
+    if (recoveryFor) recordSpentRecoveryUser(recoveryFor);
     set({
       session: null,
       status: 'signed-out',
