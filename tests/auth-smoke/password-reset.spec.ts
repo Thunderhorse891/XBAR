@@ -222,6 +222,31 @@ test('a completed reset reports success and does not also claim the link expired
   expect(await heldGrant(page)).toBe('');
 });
 
+test('restoring a recovery tab without a session discards its old grant', async ({ page }) => {
+  await stubGoTrueUser(page);
+  await page.goto(recoveryLink());
+  await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
+  expect(await heldGrant(page)).toBe(USER_ID);
+
+  // Model a missed sign-out while unloaded: shared auth storage is gone,
+  // but the tab-local grant survives and no spent-user record was written.
+  const removed = await page.evaluate(() => {
+    const keys = Object.keys(localStorage).filter((key) => key.startsWith('sb-') && key.endsWith('-auth-token'));
+    keys.forEach((key) => localStorage.removeItem(key));
+    return keys.length;
+  });
+  expect(removed).toBe(1);
+  await page.reload();
+  await expect(refusal(page)).toBeVisible({ timeout: 30_000 });
+  expect(await heldGrant(page)).toBe('');
+
+  // An ordinary sign-in to the same account must not revive the old grant.
+  await page.goto(sessionLink('signin'));
+  await expect(refusal(page)).toBeVisible({ timeout: 30_000 });
+  await expect(newPassword(page)).toHaveCount(0);
+  expect(await heldGrant(page)).toBe('');
+});
+
 test('submitting actually sends a password request', async ({ page }) => {
   /*
    * The one check no screen assertion can stand in for: that a request left

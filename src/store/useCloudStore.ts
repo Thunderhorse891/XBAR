@@ -491,14 +491,20 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     }
 
     /*
-     * Re-read the durable revocation once startup has settled. A tab that was
+     * Reconcile the grant once startup and queued events have settled. A tab
+     * without a session must discard its stored grant even if it missed the
+     * sign-out broadcast and no other tab recorded durable revocation.
+     * Re-read the durable revocation too. A tab that was
      * reloading while another finished the reset can read its grant before the
      * other tab records the completion, and it is past the point where the
      * transient broadcast could have reached it.
      */
     const currentRecoveryFor = get().passwordRecoveryFor;
     const spentFor = readSpentRecoveryUsers();
-    if (currentRecoveryFor && reconcileStoredRecovery({ storedGrant: currentRecoveryFor, spentFor }) === '') {
+    if (
+      currentRecoveryFor &&
+      (!get().session || reconcileStoredRecovery({ storedGrant: currentRecoveryFor, spentFor }) === '')
+    ) {
       set({ passwordRecoveryFor: '' });
       storeRecoveryUser('');
     }
