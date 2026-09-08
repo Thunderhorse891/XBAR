@@ -240,12 +240,21 @@ function storeRecoveryUser(userId: string) {
 }
 
 type SupabaseAuth = SupabaseClient['auth'];
+type SupabaseAuthSessionResult = Awaited<ReturnType<SupabaseAuth['getSession']>>;
+type SupabaseUpdateUserAttributes = Parameters<SupabaseAuth['updateUser']>[0];
+type SupabaseUpdateUserOptions = Parameters<SupabaseAuth['updateUser']>[1];
+type SupabaseUpdateUserResult = Awaited<ReturnType<SupabaseAuth['updateUser']>>;
 type SupabaseAuthWithInternalLock = {
   lockAcquireTimeout?: unknown;
   _acquireLock?: unknown;
+  _useSession?: unknown;
+  _updateUser?: unknown;
 };
 
-async function withAuthSessionLock<Result>(auth: SupabaseAuth, run: () => Promise<Result>): Promise<Result> {
+async function withAuthSessionLock<Result>(
+  auth: SupabaseAuth,
+  run: (lockedAuth: SupabaseAuthWithInternalLock) => Promise<Result>,
+): Promise<Result> {
   const lockedAuth = auth as unknown as SupabaseAuthWithInternalLock;
   const acquireLock = lockedAuth._acquireLock;
   const acquireTimeout = lockedAuth.lockAcquireTimeout;
@@ -254,7 +263,36 @@ async function withAuthSessionLock<Result>(auth: SupabaseAuth, run: () => Promis
   }
   return (
     acquireLock as <LockedResult>(timeout: number, callback: () => Promise<LockedResult>) => Promise<LockedResult>
-  ).call(lockedAuth, acquireTimeout, run) as Promise<Result>;
+  ).call(lockedAuth, acquireTimeout, () => run(lockedAuth)) as Promise<Result>;
+}
+
+async function readLockedAuthSession(lockedAuth: SupabaseAuthWithInternalLock): Promise<SupabaseAuthSessionResult> {
+  const useSession = lockedAuth._useSession;
+  if (typeof useSession !== 'function') {
+    throw new Error('Supabase auth session reader unavailable.');
+  }
+  return (
+    useSession as <LockedResult>(
+      callback: (result: SupabaseAuthSessionResult) => Promise<LockedResult>,
+    ) => Promise<LockedResult>
+  ).call(lockedAuth, async (result) => result) as Promise<SupabaseAuthSessionResult>;
+}
+
+async function updateLockedAuthUser(
+  lockedAuth: SupabaseAuthWithInternalLock,
+  attributes: SupabaseUpdateUserAttributes,
+  options?: SupabaseUpdateUserOptions,
+): Promise<SupabaseUpdateUserResult> {
+  const updateUser = lockedAuth._updateUser;
+  if (typeof updateUser !== 'function') {
+    throw new Error('Supabase auth user updater unavailable.');
+  }
+  return (
+    updateUser as (
+      attributes: SupabaseUpdateUserAttributes,
+      options?: SupabaseUpdateUserOptions,
+    ) => Promise<SupabaseUpdateUserResult>
+  ).call(lockedAuth, attributes, options) as Promise<SupabaseUpdateUserResult>;
 }
 
 export const useCloudStore = create<CloudStore>((set, get) => ({
@@ -695,22 +733,22 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
 
     let mutationStarted = false;
     try {
-      return await withAuthSessionLock(client.auth, async () => {
+      return await withAuthSessionLock(client.auth, async (lockedAuth) => {
         /*
          * Whose password is about to change, asked of the authority rather than
-         * of a cached copy, and held under auth-js's own session lock until the
-         * mutation has chosen its session too.
+         * of a cached copy, then mutated through auth-js's no-lock internal
+         * path while one outer auth lock is held.
          *
          * The screen's gate compares the grant against the store's `session`,
          * and that is a COPY: it is written after `loadWorkspaceAccessProfile`,
          * a network round trip. auth-js saves a new session as soon as one
-         * arrives. Reading and mutating inside one auth lock prevents another
-         * tab's session change from landing between the check and updateUser's
-         * internal session reread.
+         * arrives. Public getSession()/updateUser() both acquire this same
+         * lock, so they cannot be nested here; the internal methods are the
+         * library's own path for reading and writing while already serialized.
          */
-        let live: Awaited<ReturnType<typeof client.auth.getSession>>;
+        let live: SupabaseAuthSessionResult;
         try {
-          live = await client.auth.getSession();
+          live = await readLockedAuthSession(lockedAuth);
         } catch {
           return {
             ok: false,
@@ -736,10 +774,10 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
          * promising to resolve is load-bearing: ResetPassword only clears its
          * busy flag after awaiting it.
          */
-        let outcome: Awaited<ReturnType<typeof client.auth.updateUser>>;
+        let outcome: SupabaseUpdateUserResult;
         try {
           mutationStarted = true;
-          outcome = await client.auth.updateUser({ password });
+          outcome = await updateLockedAuthUser(lockedAuth, { password });
         } catch {
           /*
            * The request was abandoned in flight, so whether the server applied
