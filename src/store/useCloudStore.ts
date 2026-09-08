@@ -984,6 +984,19 @@ export const useCloudStore = create<CloudStore>((set, get) => ({
     }
 
     if (!response.ok) {
+      if (response.status >= 500) {
+        // A gateway/server failure can follow an applied update. Do not allow
+        // a retry to race a password change whose outcome is still unknown.
+        const spentFor = recoverySession.user.id;
+        set({ passwordRecoveryFor: '' });
+        storeRecoveryUser('');
+        completeRecoveryUpdateClaim(claim.claim);
+        announceSpentRecovery(spentFor);
+        return {
+          ok: false,
+          message: 'We could not confirm that change. Try the new password; if it does not work, request another link.',
+        };
+      }
       const payload: unknown = await response.json().catch(() => null);
       const explained = readPasswordUpdateError(payload);
       clearRecoveryUpdateClaim(claim.claim);

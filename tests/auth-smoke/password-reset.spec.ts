@@ -706,44 +706,47 @@ test('two tabs submitting at the same instant still send one change', async ({ c
   await expect.poll(() => sent.length, { timeout: 5_000 }).toBe(1);
 });
 
-test('a change that never reached GoTrue does not leave the link usable', async ({ page }) => {
-  /*
-   * The request fails in flight, so whether GoTrue applied it is genuinely
-   * unknown. The grant is spent anyway: a retry on the same link could race a
-   * request that did arrive, and the two would disagree about the password.
-   *
-   * That is a deliberate fail-closed choice made when the reservation went in,
-   * and it had no test -- the screen wording for it existed while nothing ever
-   * drove the screen into that state.
-   */
-  await stubGoTrueUser(page, async (route) => {
-    await route.abort('failed');
+for (const failure of ['network', 500, 502, 504] as const) {
+  test(`an ambiguous password update (${failure}) does not leave the link usable`, async ({ page }) => {
+    /*
+     * The request fails in flight, so whether GoTrue applied it is genuinely
+     * unknown. The grant is spent anyway: a retry on the same link could race a
+     * request that did arrive, and the two would disagree about the password.
+     *
+     * That is a deliberate fail-closed choice made when the reservation went in,
+     * and it had no test -- the screen wording for it existed while nothing ever
+     * drove the screen into that state.
+     */
+    await stubGoTrueUser(page, async (route) => {
+      if (failure === 'network') await route.abort('failed');
+      else await route.fulfill({ status: failure, contentType: 'text/html', body: '<h1>Upstream error</h1>' });
+    });
+
+    await page.goto(recoveryLink());
+    await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
+    expect(await heldGrant(page)).toBe(USER_ID);
+
+    await fillNewPassword(page, 'a-brand-new-password');
+    await submit(page).click();
+
+    // Told honestly: neither "it worked" nor "it definitely did not".
+    await expect(page.getByText(/could not confirm that change/i).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('Password updated. You are signed in.')).toHaveCount(0);
+
+    // And the link is finished durably, not just cleared in this tab: a tab that
+    // still holds the grant has to be refused too, and this tab must stay
+    // refused after a reload.
+    await expect.poll(async () => heldGrant(page), { timeout: 15_000 }).toBe('');
+    await expect
+      .poll(async () => page.evaluate((key) => window.localStorage.getItem(key), recoverySpentKeyFor(USER_ID)), {
+        timeout: 15_000,
+      })
+      .toBe('spent');
+    await page.reload();
+    await expect(refusal(page)).toBeVisible({ timeout: 30_000 });
+    await expect(newPassword(page)).toHaveCount(0);
   });
-
-  await page.goto(recoveryLink());
-  await expect(newPassword(page)).toBeVisible({ timeout: 30_000 });
-  expect(await heldGrant(page)).toBe(USER_ID);
-
-  await fillNewPassword(page, 'a-brand-new-password');
-  await submit(page).click();
-
-  // Told honestly: neither "it worked" nor "it definitely did not".
-  await expect(page.getByText(/could not confirm that change/i).first()).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText('Password updated. You are signed in.')).toHaveCount(0);
-
-  // And the link is finished durably, not just cleared in this tab: a tab that
-  // still holds the grant has to be refused too, and this tab must stay
-  // refused after a reload.
-  await expect.poll(async () => heldGrant(page), { timeout: 15_000 }).toBe('');
-  await expect
-    .poll(async () => page.evaluate((key) => window.localStorage.getItem(key), recoverySpentKeyFor(USER_ID)), {
-      timeout: 15_000,
-    })
-    .toBe('spent');
-  await page.reload();
-  await expect(refusal(page)).toBeVisible({ timeout: 30_000 });
-  await expect(newPassword(page)).toHaveCount(0);
-});
+}
 
 test('a recovery link does not drag every other tab to the reset screen', async ({ context }) => {
   /*
