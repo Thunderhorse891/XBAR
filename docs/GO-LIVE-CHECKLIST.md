@@ -108,3 +108,54 @@ curl -s  https://xbar.app/robots.txt  # Disallow: /app
 Then run Lighthouse (or PageSpeed Insights) against `/` and `/pricing` —
 both are static HTML and should score high; regressions mean something broke
 in the generator.
+
+## 7. Auth launch gates — audited state, 9 Sep 2026
+
+Read directly from the live `xbar-records` Supabase project
+(`uxvwfepyothlakhqazwv`). Nothing here was changed; this is what was found.
+
+### Verified against the real project
+
+- **RLS is on everywhere it matters.** All 25 public tables have row-level
+  security enabled with at least one policy. Supabase advisor lints 0026/0027
+  flag those same 25 as visible in the GraphQL schema to `anon` and to
+  `authenticated` — that is _schema discoverability_, not row access, and it
+  is not a data-exposure finding. Worth tightening for tidiness, not a gate.
+- **Two `SECURITY DEFINER` functions are callable by `anon`** (advisor 0028):
+  `xbar_resolve_public_listing` and `xbar_track_public_share_view`. Both are
+  how a buyer opens a shared sale packet without an account, so this reads as
+  intentional — confirm it is, and that neither can be made to return rows for
+  a packet the caller has no share token for.
+- **Leaked-password protection is DISABLED** (advisor `auth_leaked_password_protection`).
+  One toggle: Authentication → Policies → enable the HaveIBeenPwned check.
+  This is the cheapest gate on the list and it governs every password the
+  reset flow sets. Turn it on before launch.
+- **The end-to-end path has never completed here.** `auth.users` = 1 (confirmed),
+  `workspaces` = 0, `horses` = 0, `workspace_subscription_profiles` = 0. So
+  signup → workspace → horse → tier → checkout is not "untested by us"; it has
+  never run against this project at all. That is the launch gate.
+
+### Cannot be verified from a sandboxed session — a human with a browser needs to
+
+Egress to `xbar-horse-management-app.vercel.app` is denied by the agent
+network policy (403 on CONNECT), and the Supabase MCP surface exposes no
+auth-configuration or Vercel environment read. So these stay open:
+
+1. **Auth → URL Configuration → Site URL.** If it is still `localhost`,
+   confirmation and recovery emails point at a machine the customer does not
+   have. Set it to `https://xbar-horse-management-app.vercel.app` and add both
+   that origin and the preview-deployment origins to Redirect URLs, or links
+   opened from a preview build are rejected.
+2. **Send yourself one real signup and one real recovery email.** Confirm they
+   arrive at all (the default Supabase SMTP is rate-limited and is not a launch
+   sender), that the link lands on `/app/reset-password`, and that setting a
+   password works end to end.
+3. **Enable a provider in Supabase before adding it to `VITE_AUTH_OAUTH_PROVIDERS`.**
+   The sign-in screen renders only what that variable lists; listing a provider
+   that Supabase has not enabled produces a button that fails on click.
+4. **Stripe:** `VITE_MANAGED_BILLING_ENABLED` stays `false` until the secret
+   key, webhook secret and all four price IDs are set — see the billing note in
+   section 0.
+
+Everything under "Verified" is machine-checked and repeatable. Everything under
+"Cannot be verified" is genuinely unverified — not assumed working.
