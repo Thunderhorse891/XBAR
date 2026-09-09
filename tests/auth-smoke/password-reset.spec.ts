@@ -992,15 +992,26 @@ for (const withoutWebLocks of [false, true]) {
 
 test('a stale claim writer cannot send a second change', async ({ context }) => {
   /*
-   * The adversarial schedule, staged deterministically instead of raced.
+   * The adversarial schedule, as closely as it can be staged from outside.
    *
    * Two tabs read the claim as absent; one is paused there while the other
    * writes, survives its settle window and starts its request; the paused tab
    * resumes, overwrites the live claim with its stale acquisition, passes its
-   * own settle check and sends a second password change. Clicking two buttons
-   * cannot reproduce that reliably, so the paused tab's effect is produced
-   * directly: clearing the claim key leaves exactly the state its stale write
-   * creates, with the first request still in flight and still renewing.
+   * own settle check and sends a second password change.
+   *
+   * A page cannot be suspended mid-function from out here, so what is
+   * reproduced is the second tab's POSITION in that schedule rather than the
+   * pause itself: clearing the claim key puts this tab past its "is anyone
+   * holding it?" read while the first request is in flight, which is the state
+   * its stale write would leave behind, and it then walks the rest of the
+   * protocol -- write, settle, re-read, conclude it won -- for real.
+   *
+   * What this does NOT reproduce: the first tab's record is removed rather
+   * than overwritten, so its renewal stops instead of losing ownership. That
+   * is immaterial to the property under test, since its request is already in
+   * flight and it is the lock rather than the claim that refuses the second
+   * tab -- but it is the difference between this and the literal schedule, and
+   * it is why this is bounded evidence rather than the race itself.
    *
    * The Web Lock is what refuses it. The lock is held across the whole
    * critical section, so a tab resuming mid-protocol cannot acquire one no
